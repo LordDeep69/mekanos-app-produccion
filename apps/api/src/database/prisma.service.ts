@@ -27,8 +27,9 @@ export class PrismaService
    * Conecta a la base de datos al inicializar el módulo
    */
   async onModuleInit() {
-    await this.$connect();
-    console.log('✅ Database connection established');
+    // Desactivado mientras no tengamos acceso a BD real
+    // await this.$connect();
+    console.log('⚠️  PrismaService: Conexión desactivada (red bloqueada)');
   }
 
   /**
