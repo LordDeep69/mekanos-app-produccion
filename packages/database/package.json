@@ -1,0 +1,23 @@
+{
+  "name": "@mekanos/database",
+  "version": "0.1.0",
+  "description": "Mekanos Database Layer - Prisma + Repositories",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "db:pull": "prisma db pull",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "db:migrate": "prisma migrate dev",
+    "build": "tsc",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.20.0",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.0"
+  }
+}

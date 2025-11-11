@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "NestJS TypeScript Config - Mekanos",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "removeComments": false,
+    "baseUrl": "./",
+    "paths": {
+      "@mekanos/core/*": ["../../core/src/*"],
+      "@mekanos/database/*": ["../../database/src/*"],
+      "@mekanos/shared/*": ["../../shared/src/*"]
+    }
+  }
+}

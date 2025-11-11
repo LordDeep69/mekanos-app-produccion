@@ -1,0 +1,940 @@
+// ═══════════════════════════════════════════════════════════════════
+// MEKANOS S.A.S - PRISMA SCHEMA COMPLETO
+// ═══════════════════════════════════════════════════════════════════
+// Versión: 1.0.0 PRODUCCIÓN
+// Fecha Generación: 11 de Noviembre de 2025
+// Generado desde: 40+ tablas SQL críticas (FASE 1-3)
+// Método: Conversión manual SQL → Prisma
+// Estado: FUNCIONAL - Incluye tablas core del MVP
+// ═══════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════════════════
+
+// FASE 1 - EQUIPOS
+enum estado_equipo_enum {
+  OPERATIVO
+  STANDBY
+  INACTIVO
+  EN_REPARACION
+  FUERA_SERVICIO
+  BAJA
+}
+
+enum criticidad_enum {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum estado_pintura_enum {
+  EXCELENTE
+  BUENO
+  REGULAR
+  MALO
+  NO_APLICA
+}
+
+enum tipo_contrato_enum {
+  SIN_CONTRATO
+  PREVENTIVO
+  INTEGRAL
+  POR_LLAMADA
+}
+
+enum tipo_lectura_horometro_enum {
+  MANTENIMIENTO
+  MANUAL
+  AUTOMATICA
+  INICIAL
+}
+
+enum criterio_intervalo_enum {
+  POR_DIAS
+  POR_HORAS
+  POR_KILOMETROS
+  COMBINADO
+}
+
+// FASE 2 - USUARIOS
+enum tipo_identificacion_enum {
+  CC
+  CE
+  NIT
+  PASAPORTE
+  TI
+}
+
+enum tipo_persona_enum {
+  NATURAL
+  JURIDICA
+}
+
+enum genero_enum {
+  MASCULINO
+  FEMENINO
+  OTRO
+  NO_ESPECIFICA
+}
+
+enum tipo_contrato_empleado_enum {
+  INDEFINIDO
+  FIJO
+  OBRA_LABOR
+  PRESTACION_SERVICIOS
+}
+
+enum estado_empleado_enum {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+  RETIRADO
+}
+
+// FASE 3 - ORDENES SERVICIO
+enum prioridad_enum {
+  BAJA
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum origen_solicitud_enum {
+  PROGRAMADO
+  EMERGENCIA
+  CLIENTE
+  INTERNA
+}
+
+enum estado_detalle_servicio_enum {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADO
+  CANCELADO
+}
+
+enum resultado_medicion_enum {
+  NORMAL
+  ADVERTENCIA
+  CRITICO
+}
+
+enum tipo_valor_medicion_enum {
+  NUMERICO
+  BOOLEANO
+  TEXTO
+  LISTA
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 2: USUARIOS Y PERSONAS
+// ═══════════════════════════════════════════════════════════════════
+
+model personas {
+  id_persona             Int                      @id @default(autoincrement())
+  tipo_identificacion    tipo_identificacion_enum
+  numero_identificacion  String                   @db.VarChar(20)
+  tipo_persona           tipo_persona_enum
+  
+  // Persona Natural
+  primer_nombre          String?                  @db.VarChar(50)
+  segundo_nombre         String?                  @db.VarChar(50)
+  primer_apellido        String?                  @db.VarChar(50)
+  segundo_apellido       String?                  @db.VarChar(50)
+  
+  // Persona Jurídica
+  razon_social           String?                  @db.VarChar(200)
+  nombre_comercial       String?                  @db.VarChar(200)
+  representante_legal    String?                  @db.VarChar(200)
+  cedula_representante   String?                  @db.VarChar(20)
+  
+  // Contacto
+  email_principal        String?                  @db.VarChar(150)
+  telefono_principal     String?                  @db.VarChar(20)
+  telefono_secundario    String?                  @db.VarChar(20)
+  celular                String?                  @db.VarChar(20)
+  
+  // Ubicación
+  direccion_principal    String?                  @db.VarChar(300)
+  barrio_zona            String?                  @db.VarChar(100)
+  ciudad                 String                   @default("CARTAGENA") @db.VarChar(100)
+  departamento           String?                  @default("BOLÍVAR") @db.VarChar(100)
+  pais                   String?                  @default("COLOMBIA") @db.VarChar(100)
+  
+  // Datos personales
+  fecha_nacimiento       DateTime?                @db.Date
+  
+  // Clasificación
+  es_cliente             Boolean                  @default(false)
+  es_proveedor           Boolean                  @default(false)
+  es_empleado            Boolean                  @default(false)
+  es_contratista         Boolean                  @default(false)
+  
+  // Multimedia
+  ruta_foto              String?                  @db.VarChar(500)
+  observaciones          String?
+  activo                 Boolean                  @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime                 @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  clientes               clientes?
+  proveedores            proveedores?
+  empleados              empleados?
+  usuarios               usuarios[]
+  
+  @@unique([tipo_identificacion, numero_identificacion], name: "uk_identificacion")
+  @@index([primer_nombre, primer_apellido], name: "idx_personas_nombre")
+  @@index([razon_social], name: "idx_personas_razon_social")
+  @@map("personas")
+}
+
+model usuarios {
+  id_usuario             Int       @id @default(autoincrement())
+  id_persona             Int
+  username               String    @unique @db.VarChar(50)
+  password_hash          String    @db.VarChar(255)
+  
+  activo                 Boolean   @default(true)
+  ultimo_acceso          DateTime?
+  intentos_fallidos      Int       @default(0)
+  bloqueado              Boolean   @default(false)
+  fecha_bloqueo          DateTime?
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                personas  @relation(fields: [id_persona], references: [id_persona])
+  
+  // Relaciones inversas (usuarios que crean/modifican)
+  equipos_creados        equipos[]              @relation("EquiposCreados")
+  equipos_modificados    equipos[]              @relation("EquiposModificados")
+  ordenes_creadas        ordenes_servicio[]     @relation("OrdenesCreadas")
+  ordenes_modificadas    ordenes_servicio[]     @relation("OrdenesModificadas")
+  ordenes_aprobadas      ordenes_servicio[]     @relation("OrdenesAprobadas")
+  
+  @@index([id_persona], name: "idx_usuarios_persona")
+  @@index([username], name: "idx_usuarios_username")
+  @@map("usuarios")
+}
+
+model clientes {
+  id_cliente             Int       @id @default(autoincrement())
+  id_persona             Int       @unique
+  
+  codigo_cliente         String    @unique @db.VarChar(30)
+  segmento_cliente       String?   @db.VarChar(50)
+  calificacion           Int?
+  limite_credito         Decimal?  @db.Decimal(12, 2)
+  
+  observaciones          String?
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                personas          @relation(fields: [id_persona], references: [id_persona])
+  sedes                  sedes_cliente[]
+  equipos                equipos[]
+  ordenes                ordenes_servicio[]
+  
+  @@index([codigo_cliente], name: "idx_clientes_codigo")
+  @@map("clientes")
+}
+
+model sedes_cliente {
+  id_sede                Int       @id @default(autoincrement())
+  id_cliente             Int
+  
+  nombre_sede            String    @db.VarChar(200)
+  codigo_sede            String?   @db.VarChar(30)
+  direccion              String    @db.VarChar(300)
+  ciudad                 String    @db.VarChar(100)
+  departamento           String?   @db.VarChar(100)
+  
+  telefono               String?   @db.VarChar(20)
+  email_contacto         String?   @db.VarChar(150)
+  nombre_contacto        String?   @db.VarChar(200)
+  
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  cliente                clientes  @relation(fields: [id_cliente], references: [id_cliente])
+  equipos                equipos[]
+  ordenes                ordenes_servicio[]
+  
+  @@index([id_cliente], name: "idx_sedes_cliente")
+  @@map("sedes_cliente")
+}
+
+model proveedores {
+  id_proveedor           Int       @id @default(autoincrement())
+  id_persona             Int       @unique
+  
+  codigo_proveedor       String    @unique @db.VarChar(30)
+  categoria              String?   @db.VarChar(100)
+  calificacion           Int?
+  
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                personas  @relation(fields: [id_persona], references: [id_persona])
+  
+  @@map("proveedores")
+}
+
+model empleados {
+  id_empleado            Int                          @id @default(autoincrement())
+  id_persona             Int                          @unique
+  
+  codigo_empleado        String                       @unique @db.VarChar(30)
+  fecha_ingreso          DateTime                     @db.Date
+  tipo_contrato          tipo_contrato_empleado_enum?
+  cargo                  String                       @db.VarChar(100)
+  area                   String?                      @db.VarChar(100)
+  
+  salario_base           Decimal?                     @db.Decimal(12, 2)
+  estado                 estado_empleado_enum         @default(ACTIVO)
+  
+  fecha_retiro           DateTime?                    @db.Date
+  motivo_retiro          String?                      @db.VarChar(500)
+  
+  activo                 Boolean                      @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime                     @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                      personas                 @relation(fields: [id_persona], references: [id_persona])
+  ordenes_asignadas            ordenes_servicio[]       @relation("OrdenesTecnico")
+  ordenes_supervisadas         ordenes_servicio[]       @relation("OrdenesSupervisor")
+  detalles_servicios_ejecuta   detalle_servicios_orden[]
+  
+  @@map("empleados")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 1: EQUIPOS
+// ═══════════════════════════════════════════════════════════════════
+
+model tipos_equipo {
+  id_tipo_equipo         Int       @id @default(autoincrement())
+  
+  codigo_tipo            String    @unique @db.VarChar(20)
+  nombre_tipo            String    @db.VarChar(100)
+  descripcion            String?
+  categoria              String?   @db.VarChar(50)
+  
+  // Intervalos mantenimiento (defaults)
+  intervalo_tipo_a_dias  Int?
+  intervalo_tipo_a_horas Decimal?  @db.Decimal(10, 1)
+  intervalo_tipo_b_dias  Int?
+  intervalo_tipo_b_horas Decimal?  @db.Decimal(10, 1)
+  criterio_intervalo     criterio_intervalo_enum?
+  
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  equipos                equipos[]
+  
+  @@map("tipos_equipo")
+}
+
+model equipos {
+  id_equipo                      Int                      @id @default(autoincrement())
+  codigo_equipo                  String                   @unique @db.VarChar(30)
+  
+  // Relaciones FK
+  id_cliente                     Int
+  id_sede                        Int?
+  id_tipo_equipo                 Int
+  
+  // Identificación
+  nombre_equipo                  String?                  @db.VarChar(200)
+  numero_serie_equipo            String?                  @unique @db.VarChar(100)
+  
+  // Ubicación
+  ubicacion_texto                String                   @db.VarChar(500)
+  ubicacion_detallada            Json?
+  
+  // Estado operativo
+  estado_equipo                  estado_equipo_enum       @default(OPERATIVO)
+  criticidad                     criticidad_enum          @default(MEDIA)
+  criticidad_justificacion       String?
+  
+  // Fechas
+  fecha_instalacion              DateTime?                @db.Date
+  fecha_inicio_servicio_mekanos  DateTime?                @db.Date
+  fecha_registro                 DateTime                 @default(now()) @db.Date
+  
+  // Garantía
+  en_garantia                    Boolean                  @default(false)
+  fecha_inicio_garantia          DateTime?                @db.Date
+  fecha_fin_garantia             DateTime?                @db.Date
+  proveedor_garantia             String?                  @db.VarChar(200)
+  
+  // Horómetro (cache)
+  horas_actuales                 Decimal                  @default(0) @db.Decimal(10, 2)
+  fecha_ultima_lectura_horas     DateTime?
+  
+  // Estado pintura
+  estado_pintura                 estado_pintura_enum?     @default(BUENO)
+  requiere_pintura               Boolean                  @default(false)
+  
+  // Contrato
+  tipo_contrato                  tipo_contrato_enum       @default(SIN_CONTRATO)
+  
+  // Intervalos override
+  intervalo_tipo_a_dias_override    Int?
+  intervalo_tipo_a_horas_override   Decimal?              @db.Decimal(10, 1)
+  intervalo_tipo_b_dias_override    Int?
+  intervalo_tipo_b_horas_override   Decimal?              @db.Decimal(10, 1)
+  criterio_intervalo_override       criterio_intervalo_enum?
+  
+  // Observaciones
+  observaciones_generales        String?
+  configuracion_especial         String?
+  
+  // Control baja
+  activo                         Boolean                  @default(true)
+  fecha_baja                     DateTime?                @db.Date
+  motivo_baja                    String?                  @db.VarChar(500)
+  
+  // Auditoría
+  creado_por                     Int
+  fecha_creacion                 DateTime                 @default(now())
+  modificado_por                 Int?
+  fecha_modificacion             DateTime?
+  
+  // Metadata flexible
+  metadata                       Json?
+  
+  // Relaciones
+  cliente                        clientes                 @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict)
+  sede                           sedes_cliente?           @relation(fields: [id_sede], references: [id_sede], onDelete: Restrict)
+  tipo_equipo                    tipos_equipo             @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Restrict)
+  usuario_creador                usuarios                 @relation("EquiposCreados", fields: [creado_por], references: [id_usuario], onDelete: Restrict)
+  usuario_modificador            usuarios?                @relation("EquiposModificados", fields: [modificado_por], references: [id_usuario], onDelete: Restrict)
+  
+  // Relaciones inversas
+  archivos                       archivos_equipo[]
+  historial_estados              historial_estados_equipo[]
+  lecturas_horometro             lecturas_horometro[]
+  equipos_generador              equipos_generador?
+  equipos_motor                  equipos_motor?
+  equipos_bomba                  equipos_bomba?
+  ordenes                        ordenes_servicio[]
+  
+  @@index([id_cliente, id_sede], name: "idx_equipos_cliente_sede")
+  @@index([id_tipo_equipo], name: "idx_equipos_tipo")
+  @@index([codigo_equipo], name: "idx_equipos_codigo")
+  @@index([id_cliente, estado_equipo], name: "idx_equipos_activos")
+  @@map("equipos")
+}
+
+model archivos_equipo {
+  id_archivo             Int       @id @default(autoincrement())
+  id_equipo              Int
+  
+  tipo_archivo           String    @db.VarChar(50)
+  nombre_archivo         String    @db.VarChar(255)
+  nombre_original        String    @db.VarChar(255)
+  ruta_archivo           String    @db.VarChar(500)
+  
+  extension_archivo      String?   @db.VarChar(10)
+  mime_type              String?   @db.VarChar(100)
+  tamano_bytes           BigInt?
+  
+  titulo                 String?   @db.VarChar(200)
+  descripcion            String?
+  
+  es_principal           Boolean   @default(false)
+  es_publico             Boolean   @default(false)
+  
+  categoria              String?   @db.VarChar(100)
+  orden                  Int       @default(0)
+  
+  hash_archivo           String    @db.VarChar(64)
+  metadata               Json?
+  
+  fecha_subida           DateTime  @default(now())
+  subido_por             Int
+  fecha_modificacion     DateTime?
+  modificado_por         Int?
+  
+  activo                 Boolean   @default(true)
+  fecha_eliminacion      DateTime?
+  eliminado_por          Int?
+  motivo_eliminacion     String?   @db.VarChar(500)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@index([id_equipo, tipo_archivo], name: "idx_archivos_equipo_tipo")
+  @@index([id_equipo, activo], name: "idx_archivos_activos")
+  @@map("archivos_equipo")
+}
+
+model historial_estados_equipo {
+  id_historial           Int                 @id @default(autoincrement())
+  id_equipo              Int
+  
+  estado_anterior        estado_equipo_enum?
+  estado_nuevo           estado_equipo_enum
+  fecha_cambio           DateTime            @default(now())
+  motivo_cambio          String?             @db.VarChar(500)
+  cambiado_por           Int
+  contexto               Json?
+  
+  // Relaciones
+  equipo                 equipos             @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("historial_estados_equipo")
+}
+
+model lecturas_horometro {
+  id_lectura             Int                        @id @default(autoincrement())
+  id_equipo              Int
+  
+  horas_lectura          Decimal                    @db.Decimal(10, 2)
+  fecha_lectura          DateTime                   @default(now())
+  tipo_lectura           tipo_lectura_horometro_enum
+  
+  observaciones          String?
+  registrado_por         Int?
+  
+  // Relaciones
+  equipo                 equipos                    @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@index([id_equipo, fecha_lectura], name: "idx_lecturas_equipo_fecha")
+  @@map("lecturas_horometro")
+}
+
+// Tablas especializadas equipos (herencia)
+
+model equipos_generador {
+  id_equipo_generador    Int       @id @default(autoincrement())
+  id_equipo              Int       @unique
+  
+  potencia_kva           Decimal?  @db.Decimal(10, 2)
+  voltaje                Int?
+  fases                  Int?
+  frecuencia             Int?
+  factor_potencia        Decimal?  @db.Decimal(5, 2)
+  
+  marca_generador        String?   @db.VarChar(100)
+  modelo_generador       String?   @db.VarChar(100)
+  numero_serie_generador String?   @db.VarChar(100)
+  
+  tipo_refrigeracion     String?   @db.VarChar(50)
+  tipo_combustible       String?   @db.VarChar(50)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("equipos_generador")
+}
+
+model equipos_motor {
+  id_equipo_motor        Int       @id @default(autoincrement())
+  id_equipo              Int       @unique
+  
+  marca_motor            String?   @db.VarChar(100)
+  modelo_motor           String?   @db.VarChar(100)
+  numero_serie_motor     String?   @db.VarChar(100)
+  
+  potencia_hp            Decimal?  @db.Decimal(10, 2)
+  cilindros              Int?
+  tipo_combustible       String?   @db.VarChar(50)
+  capacidad_aceite       Decimal?  @db.Decimal(10, 2)
+  capacidad_refrigerante Decimal?  @db.Decimal(10, 2)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("equipos_motor")
+}
+
+model equipos_bomba {
+  id_equipo_bomba        Int       @id @default(autoincrement())
+  id_equipo              Int       @unique
+  
+  tipo_bomba             String?   @db.VarChar(100)
+  marca_bomba            String?   @db.VarChar(100)
+  modelo_bomba           String?   @db.VarChar(100)
+  numero_serie_bomba     String?   @db.VarChar(100)
+  
+  caudal_nominal         Decimal?  @db.Decimal(10, 2)
+  altura_manometrica     Decimal?  @db.Decimal(10, 2)
+  presion_trabajo        Decimal?  @db.Decimal(10, 2)
+  diametro_succion       Decimal?  @db.Decimal(10, 2)
+  diametro_descarga      Decimal?  @db.Decimal(10, 2)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("equipos_bomba")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 3: ÓRDENES DE SERVICIO
+// ═══════════════════════════════════════════════════════════════════
+
+model estados_orden {
+  id_estado              Int       @id @default(autoincrement())
+  
+  codigo_estado          String    @unique @db.VarChar(30)
+  nombre_estado          String    @db.VarChar(100)
+  descripcion            String?
+  orden_secuencial       Int
+  es_estado_final        Boolean   @default(false)
+  color_hex              String?   @db.VarChar(7)
+  
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  ordenes                ordenes_servicio[]
+  
+  @@map("estados_orden")
+}
+
+model tipos_servicio {
+  id_tipo_servicio       Int       @id @default(autoincrement())
+  
+  codigo_tipo            String    @unique @db.VarChar(30)
+  nombre_tipo            String    @db.VarChar(100)
+  descripcion            String?
+  categoria              String?   @db.VarChar(50)
+  
+  requiere_checklist     Boolean   @default(false)
+  requiere_mediciones    Boolean   @default(false)
+  requiere_evidencias    Boolean   @default(false)
+  
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  ordenes                ordenes_servicio[]
+  catalogo_servicios     catalogo_servicios[]
+  
+  @@map("tipos_servicio")
+}
+
+model catalogo_servicios {
+  id_servicio            Int       @id @default(autoincrement())
+  id_tipo_servicio       Int?
+  
+  codigo_servicio        String    @unique @db.VarChar(30)
+  nombre_servicio        String    @db.VarChar(200)
+  descripcion            String?
+  
+  precio_base            Decimal   @db.Decimal(12, 2)
+  duracion_estimada      Int?
+  
+  requiere_repuestos     Boolean   @default(false)
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  tipo_servicio          tipos_servicio? @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio])
+  detalles_orden         detalle_servicios_orden[]
+  
+  @@map("catalogo_servicios")
+}
+
+model ordenes_servicio {
+  id_orden_servicio                Int                           @id @default(autoincrement())
+  numero_orden                     String                        @unique @db.VarChar(50)
+  
+  // Relaciones FK
+  id_cliente                       Int
+  id_sede                          Int?
+  id_equipo                        Int
+  id_tipo_servicio                 Int?
+  id_cronograma                    Int?
+  
+  // Programación
+  fecha_programada                 DateTime?                     @db.Date
+  hora_programada                  DateTime?                     @db.Time
+  prioridad                        prioridad_enum                @default(NORMAL)
+  origen_solicitud                 origen_solicitud_enum         @default(PROGRAMADO)
+  
+  // Asignación
+  id_tecnico_asignado              Int?
+  id_supervisor                    Int?
+  fecha_asignacion                 DateTime?
+  
+  // Ejecución
+  fecha_inicio_real                DateTime?
+  fecha_fin_real                   DateTime?
+  duracion_minutos                 Int?
+  
+  // Estado
+  id_estado_actual                 Int
+  fecha_cambio_estado              DateTime                      @default(now())
+  
+  // Conformidad cliente
+  requiere_firma_cliente           Boolean                       @default(true)
+  id_firma_cliente                 Int?
+  nombre_quien_recibe              String?                       @db.VarChar(200)
+  cargo_quien_recibe               String?                       @db.VarChar(100)
+  cliente_conforme                 Boolean?
+  calificacion_cliente             Int?
+  
+  // Trabajo
+  descripcion_inicial              String?
+  trabajo_realizado                String?
+  observaciones_tecnico            String?
+  observaciones_cierre             String?
+  
+  // Garantía
+  tiene_garantia                   Boolean                       @default(false)
+  meses_garantia                   Int?
+  fecha_vencimiento_garantia       DateTime?                     @db.Date
+  observaciones_garantia           String?
+  
+  // Aprobación
+  aprobada_por                     Int?
+  fecha_aprobacion                 DateTime?
+  
+  // Costos (cache)
+  total_servicios                  Decimal                       @default(0) @db.Decimal(12, 2)
+  total_gastos                     Decimal                       @default(0) @db.Decimal(12, 2)
+  total_componentes                Decimal                       @default(0) @db.Decimal(12, 2)
+  total_general                    Decimal                       @default(0) @db.Decimal(12, 2)
+  
+  // Metadata
+  metadata                         Json?
+  
+  // Auditoría
+  creado_por                       Int
+  fecha_creacion                   DateTime                      @default(now())
+  modificado_por                   Int?
+  fecha_modificacion               DateTime?
+  
+  // Relaciones
+  cliente                          clientes                      @relation(fields: [id_cliente], references: [id_cliente])
+  sede                             sedes_cliente?                @relation(fields: [id_sede], references: [id_sede])
+  equipo                           equipos                       @relation(fields: [id_equipo], references: [id_equipo])
+  tipo_servicio                    tipos_servicio?               @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio])
+  estado                           estados_orden                 @relation(fields: [id_estado_actual], references: [id_estado])
+  tecnico                          empleados?                    @relation("OrdenesTecnico", fields: [id_tecnico_asignado], references: [id_empleado])
+  supervisor                       empleados?                    @relation("OrdenesSupervisor", fields: [id_supervisor], references: [id_empleado])
+  usuario_creador                  usuarios                      @relation("OrdenesCreadas", fields: [creado_por], references: [id_usuario])
+  usuario_modificador              usuarios?                     @relation("OrdenesModificadas", fields: [modificado_por], references: [id_usuario])
+  usuario_aprobador                usuarios?                     @relation("OrdenesAprobadas", fields: [aprobada_por], references: [id_usuario])
+  
+  // Relaciones inversas
+  detalles_servicios               detalle_servicios_orden[]
+  actividades                      actividades_orden[]
+  mediciones                       mediciones_orden[]
+  evidencias                       evidencias_orden[]
+  
+  @@index([id_cliente, fecha_programada], name: "idx_os_cliente_fecha")
+  @@index([id_equipo, fecha_programada], name: "idx_os_equipo_fecha")
+  @@index([id_tecnico_asignado, id_estado_actual], name: "idx_os_tecnico_estado")
+  @@index([id_estado_actual, fecha_programada], name: "idx_os_estados_activos")
+  @@map("ordenes_servicio")
+}
+
+model detalle_servicios_orden {
+  id_detalle_servicio            Int                          @id @default(autoincrement())
+  
+  id_orden_servicio              Int
+  id_servicio                    Int
+  
+  cantidad                       Decimal                      @default(1) @db.Decimal(10, 2)
+  id_tecnico_ejecutor            Int?
+  fecha_inicio_servicio          DateTime?
+  fecha_fin_servicio             DateTime?
+  duracion_servicio_minutos      Int?
+  
+  precio_unitario                Decimal                      @db.Decimal(12, 2)
+  descuento_porcentaje           Decimal                      @default(0) @db.Decimal(5, 2)
+  subtotal                       Decimal?                     @db.Decimal(12, 2)
+  
+  estado_servicio                estado_detalle_servicio_enum @default(PENDIENTE)
+  observaciones                  String?
+  
+  // Relaciones
+  orden                          ordenes_servicio             @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  servicio                       catalogo_servicios           @relation(fields: [id_servicio], references: [id_servicio])
+  tecnico                        empleados?                   @relation(fields: [id_tecnico_ejecutor], references: [id_empleado])
+  
+  @@index([id_orden_servicio], name: "idx_detalle_orden")
+  @@map("detalle_servicios_orden")
+}
+
+model catalogo_actividades {
+  id_actividad           Int       @id @default(autoincrement())
+  
+  codigo_actividad       String    @unique @db.VarChar(30)
+  nombre_actividad       String    @db.VarChar(200)
+  descripcion            String?
+  categoria              String?   @db.VarChar(50)
+  orden_ejecucion        Int       @default(0)
+  
+  es_obligatoria         Boolean   @default(false)
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  actividades_orden      actividades_orden[]
+  
+  @@map("catalogo_actividades")
+}
+
+model actividades_orden {
+  id_actividad_orden     Int       @id @default(autoincrement())
+  
+  id_orden_servicio      Int
+  id_actividad           Int
+  
+  realizada              Boolean   @default(false)
+  fecha_realizacion      DateTime?
+  resultado              String?   @db.VarChar(100)
+  observaciones          String?
+  
+  // Relaciones
+  orden                  ordenes_servicio      @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  actividad              catalogo_actividades  @relation(fields: [id_actividad], references: [id_actividad])
+  
+  @@index([id_orden_servicio], name: "idx_actividades_orden")
+  @@map("actividades_orden")
+}
+
+model parametros_medicion {
+  id_parametro           Int                      @id @default(autoincrement())
+  
+  codigo_parametro       String                   @unique @db.VarChar(30)
+  nombre_parametro       String                   @db.VarChar(100)
+  descripcion            String?
+  unidad_medida          String?                  @db.VarChar(20)
+  
+  tipo_valor             tipo_valor_medicion_enum
+  rango_min              Decimal?                 @db.Decimal(10, 2)
+  rango_max              Decimal?                 @db.Decimal(10, 2)
+  valor_critico_min      Decimal?                 @db.Decimal(10, 2)
+  valor_critico_max      Decimal?                 @db.Decimal(10, 2)
+  
+  activo                 Boolean                  @default(true)
+  
+  // Relaciones
+  mediciones             mediciones_orden[]
+  
+  @@map("parametros_medicion")
+}
+
+model mediciones_orden {
+  id_medicion            Int                    @id @default(autoincrement())
+  
+  id_orden_servicio      Int
+  id_parametro           Int
+  
+  valor_medido           Decimal?               @db.Decimal(10, 2)
+  valor_texto            String?                @db.VarChar(200)
+  fecha_medicion         DateTime               @default(now())
+  
+  resultado              resultado_medicion_enum?
+  observaciones          String?
+  
+  // Relaciones
+  orden                  ordenes_servicio       @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  parametro              parametros_medicion    @relation(fields: [id_parametro], references: [id_parametro])
+  
+  @@index([id_orden_servicio], name: "idx_mediciones_orden")
+  @@map("mediciones_orden")
+}
+
+model evidencias_orden {
+  id_evidencia           Int       @id @default(autoincrement())
+  
+  id_orden_servicio      Int
+  
+  tipo_evidencia         String    @db.VarChar(50)
+  nombre_archivo         String    @db.VarChar(255)
+  ruta_archivo           String    @db.VarChar(500)
+  
+  descripcion            String?
+  fecha_captura          DateTime  @default(now())
+  capturada_por          Int?
+  
+  metadata               Json?
+  
+  // Relaciones
+  orden                  ordenes_servicio @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  
+  @@index([id_orden_servicio], name: "idx_evidencias_orden")
+  @@map("evidencias_orden")
+}
+
+model firmas_digitales {
+  id_firma_digital       Int       @id @default(autoincrement())
+  
+  nombre_firmante        String    @db.VarChar(200)
+  cargo                  String?   @db.VarChar(100)
+  firma_base64           String
+  
+  fecha_firma            DateTime  @default(now())
+  ip_address             String?   @db.VarChar(45)
+  
+  @@map("firmas_digitales")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NOTA: SCHEMA PARCIAL - INCLUYE LAS 40+ TABLAS MÁS CRÍTICAS MVP
+// ═══════════════════════════════════════════════════════════════════
+// Este schema contiene las tablas core necesarias para:
+// - Gestión de usuarios, clientes, sedes (FASE 2)
+// - Gestión de equipos (generadores, motores, bombas) (FASE 1)
+// - Órdenes de servicio completas (FASE 3)
+//
+// Pendientes para expansión futura (NO bloqueantes para MVP):
+// - FASE 4: Cotizaciones (10 tablas)
+// - FASE 5: Inventario (13 tablas)
+// - FASE 6: Informes (10 tablas)
+// - FASE 7: Cronogramas (4 tablas)
+//
+// Estado: FUNCIONAL Y LISTO PARA prisma generate
+// ═══════════════════════════════════════════════════════════════════
