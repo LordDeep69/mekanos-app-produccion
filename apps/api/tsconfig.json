@@ -2,10 +2,14 @@
   "extends": "../../packages/config/typescript/nestjs.json",
   "compilerOptions": {
     "outDir": "./dist",
+    "rootDir": "./src",
     "baseUrl": "./",
     "paths": {
-      "@mekanos/core/*": ["../../packages/core/domain/*", "../../packages/core/application/*"],
+      "@mekanos/core": ["../../packages/core/src/index.ts"],
+      "@mekanos/core/*": ["../../packages/core/*"],
+      "@mekanos/database": ["../../packages/database/src/index.ts"],
       "@mekanos/database/*": ["../../packages/database/src/*"],
+      "@mekanos/shared": ["../../packages/shared/src/index.ts"],
       "@mekanos/shared/*": ["../../packages/shared/src/*"]
     }
   },

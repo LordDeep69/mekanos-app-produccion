@@ -1,24 +1,33 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { GraphQLModule } from '@nestjs/graphql';
-import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+// import { GraphQLModule } from '@nestjs/graphql';
+// import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PrismaModule } from './database/prisma.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '../../packages/database/.env',
+      envFilePath: join(__dirname, '../../.env'), // ← Path absoluto al .env
+      // validate: validateEnv, // ← TODO: Reactivar después de validar que carga el .env
     }),
-    GraphQLModule.forRoot<ApolloDriverConfig>({
-      driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
-      sortSchema: true,
-      playground: true,
-      introspection: true,
-    }),
+    // GraphQL temporalmente desactivado - necesitamos al menos un resolver
+    // GraphQLModule.forRoot<ApolloDriverConfig>({
+    //   driver: ApolloDriver,
+    //   autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+    //   sortSchema: true,
+    //   playground: true,
+    //   introspection: true,
+    //   formatError: (error) => ({
+    //     message: error.message,
+    //     code: error.extensions?.code || 'INTERNAL_SERVER_ERROR',
+    //     timestamp: new Date().toISOString(),
+    //   }),
+    // }),
+    PrismaModule, // ← PrismaService disponible globalmente
   ],
   controllers: [AppController],
   providers: [AppService],

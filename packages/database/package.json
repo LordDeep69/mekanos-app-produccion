@@ -13,11 +13,12 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@nestjs/common": "^10.2.10",
     "@prisma/client": "^5.20.0"
   },
   "devDependencies": {
+    "@types/node": "^20.10.0",
     "prisma": "^5.20.0",
-    "typescript": "^5.3.3",
-    "@types/node": "^20.10.0"
+    "typescript": "^5.3.3"
   }
 }
