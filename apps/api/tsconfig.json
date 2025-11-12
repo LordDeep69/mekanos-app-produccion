@@ -5,8 +5,8 @@
     "rootDir": "./src",
     "baseUrl": "./",
     "paths": {
-      "@mekanos/core": ["../../packages/core/src/index.ts"],
-      "@mekanos/core/*": ["../../packages/core/*"],
+      "@mekanos/core": ["../../packages/core/dist"],
+      "@mekanos/core/*": ["../../packages/core/dist/*"],
       "@mekanos/database": ["../../packages/database/src/index.ts"],
       "@mekanos/database/*": ["../../packages/database/src/*"],
       "@mekanos/shared": ["../../packages/shared/src/index.ts"],

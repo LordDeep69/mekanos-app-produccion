@@ -2,11 +2,11 @@
   "extends": "../config/typescript/base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "./src",
     "paths": {
       "@mekanos/shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["domain/**/*", "application/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
