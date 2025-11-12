@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { EquiposModule } from './equipos/equipos.module';
+import { OrdenesModule } from './ordenes/ordenes.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { EquiposModule } from './equipos/equipos.module';
     PrismaModule, // ← PrismaService disponible globalmente
     AuthModule, // ← Auth JWT con usuarios mock
     EquiposModule, // ← Módulo de Equipos con DDD/CQRS
+    OrdenesModule, // ← Módulo de Órdenes de Servicio con workflow completo
   ],
   controllers: [AppController],
   providers: [AppService],
