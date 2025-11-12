@@ -9,10 +9,15 @@ import {
   Query,
   // UseGuards,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  StreamableFile,
+  Header,
+  NotFoundException,
+  Inject
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 // import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'; // TODO: Activar cuando exista
+import { OrdenServicioId, IOrdenServicioRepository } from '@mekanos/core';
 
 // Commands
 import { CreateOrdenCommand } from './commands/create-orden.command';
@@ -33,6 +38,9 @@ import { AsignarTecnicoDto } from './dto/asignar-tecnico.dto';
 import { FinalizarOrdenDto } from './dto/finalizar-orden.dto';
 import { FilterOrdenesDto } from './dto/filter-ordenes.dto';
 
+// Services
+import { PdfService } from '../pdf/pdf.service';
+
 /**
  * OrdenesController
  * Endpoints REST para gestión de Órdenes de Servicio
@@ -44,7 +52,10 @@ import { FilterOrdenesDto } from './dto/filter-ordenes.dto';
 export class OrdenesController {
   constructor(
     private readonly commandBus: CommandBus,
-    private readonly queryBus: QueryBus
+    private readonly queryBus: QueryBus,
+    private readonly pdfService: PdfService,
+    @Inject('IOrdenServicioRepository')
+    private readonly ordenRepository: IOrdenServicioRepository
   ) {}
 
   /**
@@ -151,12 +162,54 @@ export class OrdenesController {
   /**
    * PUT /ordenes/:id/finalizar
    * Transición: EN_PROCESO → EJECUTADA
+   * TRIGGER: Genera PDF automáticamente y envía email
    */
   @Put(':id/finalizar')
   async finalizar(@Param('id') id: string, @Body() dto: FinalizarOrdenDto) {
     const command = new FinalizarOrdenCommand(id, dto.observaciones);
     const orden = await this.commandBus.execute(command);
     return orden.toObject();
+  }
+
+  /**
+   * GET /ordenes/:id/pdf
+   * Genera y descarga PDF de la orden manualmente
+   */
+  @Get(':id/pdf')
+  @Header('Content-Type', 'application/pdf')
+  async downloadPdf(@Param('id') id: string): Promise<StreamableFile> {
+    // Obtener orden del repositorio
+    const orden = await this.ordenRepository.findById(OrdenServicioId.from(id));
+    
+    if (!orden) {
+      throw new NotFoundException(`Orden ${id} no encontrada`);
+    }
+
+    const ordenObj = orden.toObject();
+
+    // Preparar datos para el PDF
+    const pdfData = {
+      numeroOrden: ordenObj.numeroOrden,
+      estado: ordenObj.estado,
+      prioridad: ordenObj.prioridad,
+      clienteNombre: String(ordenObj.clienteId),
+      equipoNombre: String(ordenObj.equipoId),
+      fechaCreacion: ordenObj.createdAt,
+      fechaProgramada: ordenObj.fechaProgramada,
+      fechaInicio: ordenObj.fechaInicio,
+      fechaFinalizacion: ordenObj.fechaFin,
+      tecnicoAsignado: ordenObj.tecnicoAsignadoId ? String(ordenObj.tecnicoAsignadoId) : null,
+      descripcion: ordenObj.descripcion,
+      observaciones: ordenObj.observaciones,
+      firmaDigital: ordenObj.firmaClienteUrl
+    };
+
+    const pdfBuffer = await this.pdfService.generateOrdenServicioPdf(pdfData);
+    
+    return new StreamableFile(pdfBuffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="orden-${ordenObj.numeroOrden}.pdf"`
+    });
   }
 
   /**

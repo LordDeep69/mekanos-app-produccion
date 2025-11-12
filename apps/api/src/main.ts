@@ -40,4 +40,7 @@ async function bootstrap(): Promise<void> {
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('❌ Fatal error during bootstrap:', error);
+  process.exit(1);
+});

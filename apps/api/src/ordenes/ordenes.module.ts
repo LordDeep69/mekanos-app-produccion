@@ -19,12 +19,22 @@ import { GetOrdenesTecnicoHandler } from './queries/get-ordenes-tecnico.handler'
 // Infrastructure
 import { MockOrdenServicioRepository } from './infrastructure/mock-orden-servicio.repository';
 
+// External Modules
+import { PdfModule } from '../pdf/pdf.module';
+import { EmailModule } from '../email/email.module';
+import { StorageModule } from '../storage/storage.module';
+
 /**
  * OrdenesModule
- * Módulo completo de Órdenes de Servicio con CQRS
+ * Módulo completo de Órdenes de Servicio con CQRS + PDF + Email
  */
 @Module({
-  imports: [CqrsModule],
+  imports: [
+    CqrsModule,
+    PdfModule,
+    EmailModule,
+    StorageModule
+  ],
   controllers: [OrdenesController],
   providers: [
     // Command Handlers
