@@ -101,7 +101,9 @@ export interface IOrdenServicioRepository {
 
   /**
    * Obtiene el último número correlativo del mes actual
+   * @param anio Año
+   * @param mes Mes (1-12)
    * @returns Último correlativo usado o 0 si no hay órdenes
    */
-  getUltimoCorrelativoMes(): Promise<number>;
+  getUltimoCorrelativoMes(anio: number, mes: number): Promise<number>;
 }

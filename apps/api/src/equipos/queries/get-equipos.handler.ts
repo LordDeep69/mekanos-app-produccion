@@ -1,13 +1,13 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
 import { GetEquiposQuery } from './get-equipos.query';
-import { IEquipoRepository, EquipoEntity } from '@mekanos/core';
+import { PrismaEquipoRepository } from '../infrastructure/prisma-equipo.repository';
 
 /**
  * Resultado paginado de equipos
  */
 export interface GetEquiposResult {
-  equipos: EquipoEntity[];
+  items: any[];
   total: number;
   page: number;
   limit: number;
@@ -16,12 +16,13 @@ export interface GetEquiposResult {
 
 /**
  * Handler para la query GetEquipos
+ * ✅ FASE 2: Usa PrismaEquipoRepository con campos snake_case
  */
 @QueryHandler(GetEquiposQuery)
 export class GetEquiposHandler implements IQueryHandler<GetEquiposQuery> {
   constructor(
     @Inject('IEquipoRepository')
-    private readonly equipoRepository: IEquipoRepository
+    private readonly equipoRepository: PrismaEquipoRepository
   ) {}
 
   async execute(query: GetEquiposQuery): Promise<GetEquiposResult> {
@@ -30,21 +31,20 @@ export class GetEquiposHandler implements IQueryHandler<GetEquiposQuery> {
     const skip = (page - 1) * limit;
 
     const filters = {
-      clienteId: query.clienteId,
-      sedeId: query.sedeId,
-      estado: query.estado,
-      tipoEquipoId: query.tipoEquipoId,
+      id_cliente: query.id_cliente,
+      id_sede: query.id_sede,
+      estado_equipo: query.estado_equipo,
+      id_tipo_equipo: query.id_tipo_equipo,
+      activo: query.activo !== undefined ? query.activo : true, // Por defecto solo activos
       skip,
       take: limit
     };
 
-    const [equipos, total] = await Promise.all([
-      this.equipoRepository.findAll(filters),
-      this.equipoRepository.count(filters)
-    ]);
+    // findAll retorna { items, total }
+    const { items, total } = await this.equipoRepository.findAll(filters);
 
     return {
-      equipos,
+      items,
       total,
       page,
       limit,

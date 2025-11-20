@@ -1,20 +1,22 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
+import { PrismaModule } from '../database/prisma.module';
 import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { MockPrismaService } from '../common/mocks/mock-prisma.service';
 
 /**
  * AuthModule configura JWT authentication con Passport
- * Usa MockPrismaService mientras la BD real no esté disponible
- * 
- * TODO: Reemplazar MockPrismaService por PrismaModule cuando BD esté disponible
+ * ✅ CORREGIDO FASE 1: Usa PrismaModule real con Supabase
+ * ✅ REFACTORIZADO FASE 2: Exporta guards para uso en otros módulos
  */
 @Module({
   imports: [
+    PrismaModule, // ✅ CORREGIDO: PrismaModule real
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -31,8 +33,9 @@ import { MockPrismaService } from '../common/mocks/mock-prisma.service';
   providers: [
     AuthService,
     JwtStrategy,
-    MockPrismaService, // TODO: Reemplazar con PrismaService real
+    JwtAuthGuard, // ✅ AGREGADO FASE 2
+    RolesGuard,   // ✅ AGREGADO FASE 2
   ],
-  exports: [AuthService, JwtStrategy, PassportModule],
+  exports: [AuthService, JwtStrategy, PassportModule, JwtAuthGuard, RolesGuard], // ✅ EXPORTADOS
 })
 export class AuthModule {}

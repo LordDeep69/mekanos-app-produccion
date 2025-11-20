@@ -12,6 +12,7 @@ export class CreateOrdenCommand {
     public readonly sedeClienteId?: number,
     public readonly descripcion?: string,
     public readonly prioridad?: PrioridadOrdenEnum,
-    public readonly fechaProgramada?: Date
+    public readonly fechaProgramada?: Date,
+    public readonly userId?: number
   ) {}
 }

@@ -16,7 +16,7 @@ export class PrismaService
   constructor() {
     super({
       log: [
-        { emit: 'stdout', level: 'query' },
+        // { emit: 'stdout', level: 'query' }, // ⚠️ DISABLED para evitar encoding issues
         { emit: 'stdout', level: 'error' },
         { emit: 'stdout', level: 'warn' },
       ],
@@ -27,9 +27,8 @@ export class PrismaService
    * Conecta a la base de datos al inicializar el módulo
    */
   async onModuleInit() {
-    // Desactivado mientras no tengamos acceso a BD real
-    // await this.$connect();
-    console.log('⚠️  PrismaService: Conexión desactivada (red bloqueada)');
+    await this.$connect();
+    console.log('✅ PrismaService: Conexión establecida con Supabase');
   }
 
   /**

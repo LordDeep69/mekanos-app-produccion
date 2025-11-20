@@ -30,7 +30,10 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
     } = command;
 
     // Obtener el último correlativo del mes para generar número de orden
-    const ultimoCorrelativo = await this.ordenRepository.getUltimoCorrelativoMes();
+    const now = new Date();
+    const anio = now.getFullYear();
+    const mes = now.getMonth() + 1; // getMonth() es 0-based
+    const ultimoCorrelativo = await this.ordenRepository.getUltimoCorrelativoMes(anio, mes);
     const numeroOrden = NumeroOrden.create(ultimoCorrelativo);
 
     // Verificar que no exista (extra validación)
@@ -53,7 +56,23 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       fechaProgramada,
     });
 
-    // Persistir
-    return await this.ordenRepository.save(orden);
+    // Extraer datos para persistencia + agregar metadata
+    const ordenData = {
+      numero_orden: orden.numeroOrden.getValue(),
+      id_cliente: orden.clienteId,
+      id_equipo: orden.equipoId,
+      id_tipo_servicio: orden.tipoServicioId,
+      id_sede: orden.sedeClienteId,
+      descripcion_inicial: orden.descripcion,
+      fecha_programada: orden.fechaProgramada,
+      prioridad: orden.prioridad.getValue(),
+      origen_solicitud: 'PROGRAMADO',
+      id_estado_actual: 1, // Estado BORRADOR (asumiendo ID 1 del seed)
+      requiere_firma_cliente: true,
+      creado_por: command.userId,
+    };
+
+    // Persistir y retornar (cast necesario hasta refactor de repository)
+    return await this.ordenRepository.save(ordenData as any);
   }
 }

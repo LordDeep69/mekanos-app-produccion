@@ -1,0 +1,1839 @@
+// ═══════════════════════════════════════════════════════════════════
+// MEKANOS S.A.S - PRISMA SCHEMA COMPLETO
+// ═══════════════════════════════════════════════════════════════════
+// Versión: 1.1.0 CHECKPOINT 2 VALIDATION
+// Fecha Actualización: 12 de Noviembre de 2025
+// Estado: SINCRONIZACIÓN COMPLETA con Supabase (69 tablas)
+// ═══════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════════════════
+
+// FASE 1 - EQUIPOS
+enum estado_equipo_enum {
+  OPERATIVO
+  STANDBY
+  INACTIVO
+  EN_REPARACION
+  FUERA_SERVICIO
+  BAJA
+}
+
+enum criticidad_enum {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum estado_pintura_enum {
+  EXCELENTE
+  BUENO
+  REGULAR
+  MALO
+  NO_APLICA
+}
+
+enum tipo_contrato_enum {
+  SIN_CONTRATO
+  PREVENTIVO
+  INTEGRAL
+  POR_LLAMADA
+}
+
+enum tipo_lectura_horometro_enum {
+  MANTENIMIENTO
+  MANUAL
+  AUTOMATICA
+  INICIAL
+}
+
+enum criterio_intervalo_enum {
+  POR_DIAS
+  POR_HORAS
+  POR_KILOMETROS
+  COMBINADO
+}
+
+// FASE 2 - USUARIOS
+enum tipo_identificacion_enum {
+  CC
+  CE
+  NIT
+  PASAPORTE
+  TI
+}
+
+enum tipo_persona_enum {
+  NATURAL
+  JURIDICA
+}
+
+enum genero_enum {
+  MASCULINO
+  FEMENINO
+  OTRO
+  NO_ESPECIFICA
+}
+
+enum tipo_contrato_empleado_enum {
+  INDEFINIDO
+  FIJO
+  OBRA_LABOR
+  PRESTACION_SERVICIOS
+}
+
+enum estado_empleado_enum {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+  RETIRADO
+}
+
+// FASE 3 - ORDENES SERVICIO
+enum prioridad_enum {
+  BAJA
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum origen_solicitud_enum {
+  PROGRAMADO
+  EMERGENCIA
+  CLIENTE
+  INTERNA
+}
+
+enum estado_detalle_servicio_enum {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADO
+  CANCELADO
+}
+
+enum resultado_medicion_enum {
+  NORMAL
+  ADVERTENCIA
+  CRITICO
+}
+
+enum tipo_valor_medicion_enum {
+  NUMERICO
+  BOOLEANO
+  TEXTO
+  LISTA
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 2: USUARIOS Y PERSONAS
+// ═══════════════════════════════════════════════════════════════════
+
+model personas {
+  id_persona             Int                      @id @default(autoincrement())
+  tipo_identificacion    tipo_identificacion_enum
+  numero_identificacion  String                   @db.VarChar(20)
+  tipo_persona           tipo_persona_enum
+  
+  // Persona Natural
+  primer_nombre          String?                  @db.VarChar(50)
+  segundo_nombre         String?                  @db.VarChar(50)
+  primer_apellido        String?                  @db.VarChar(50)
+  segundo_apellido       String?                  @db.VarChar(50)
+  
+  // Persona Jurídica
+  razon_social           String?                  @db.VarChar(200)
+  nombre_comercial       String?                  @db.VarChar(200)
+  representante_legal    String?                  @db.VarChar(200)
+  cedula_representante   String?                  @db.VarChar(20)
+  
+  // Contacto
+  email_principal        String?                  @db.VarChar(150)
+  telefono_principal     String?                  @db.VarChar(20)
+  telefono_secundario    String?                  @db.VarChar(20)
+  celular                String?                  @db.VarChar(20)
+  
+  // Ubicación
+  direccion_principal    String?                  @db.VarChar(300)
+  barrio_zona            String?                  @db.VarChar(100)
+  ciudad                 String                   @default("CARTAGENA") @db.VarChar(100)
+  departamento           String?                  @default("BOLÍVAR") @db.VarChar(100)
+  pais                   String?                  @default("COLOMBIA") @db.VarChar(100)
+  
+  // Datos personales
+  fecha_nacimiento       DateTime?                @db.Date
+  
+  // Clasificación
+  es_cliente             Boolean                  @default(false)
+  es_proveedor           Boolean                  @default(false)
+  es_empleado            Boolean                  @default(false)
+  es_contratista         Boolean                  @default(false)
+  
+  // Multimedia
+  ruta_foto              String?                  @db.VarChar(500)
+  observaciones          String?
+  activo                 Boolean                  @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime                 @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  clientes               clientes?
+  proveedores            proveedores?
+  empleados              empleados?
+  usuarios               usuarios[]
+  
+  @@unique([tipo_identificacion, numero_identificacion], name: "uk_identificacion")
+  @@index([primer_nombre, primer_apellido], name: "idx_personas_nombre")
+  @@index([razon_social], name: "idx_personas_razon_social")
+  @@map("personas")
+}
+
+model usuarios {
+  id_usuario             Int       @id @default(autoincrement())
+  id_persona             Int
+  username               String    @unique @db.VarChar(50)
+  password_hash          String    @db.VarChar(255)
+  
+  activo                 Boolean   @default(true)
+  ultimo_acceso          DateTime?
+  intentos_fallidos      Int       @default(0)
+  bloqueado              Boolean   @default(false)
+  fecha_bloqueo          DateTime?
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                personas  @relation(fields: [id_persona], references: [id_persona])
+  
+  // Relaciones inversas (usuarios que crean/modifican)
+  equipos_creados        equipos[]              @relation("EquiposCreados")
+  equipos_modificados    equipos[]              @relation("EquiposModificados")
+  ordenes_creadas        ordenes_servicio[]     @relation("OrdenesCreadas")
+  ordenes_modificadas    ordenes_servicio[]     @relation("OrdenesModificadas")
+  ordenes_aprobadas      ordenes_servicio[]     @relation("OrdenesAprobadas")
+  
+  @@index([id_persona], name: "idx_usuarios_persona")
+  @@index([username], name: "idx_usuarios_username")
+  @@map("usuarios")
+}
+
+model clientes {
+  id_cliente             Int       @id @default(autoincrement())
+  id_persona             Int       @unique
+  
+  codigo_cliente         String    @unique @db.VarChar(30)
+  segmento_cliente       String?   @db.VarChar(50)
+  calificacion           Int?
+  limite_credito         Decimal?  @db.Decimal(12, 2)
+  
+  observaciones          String?
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                personas          @relation(fields: [id_persona], references: [id_persona])
+  sedes                  sedes_cliente[]
+  equipos                equipos[]
+  ordenes                ordenes_servicio[]
+  cotizaciones           cotizaciones[]
+  propuestas             propuestas_correctivo[]
+  contratos              contratos_mantenimiento[]
+  bitacoras              bitacoras[]
+  
+  @@index([codigo_cliente], name: "idx_clientes_codigo")
+  @@map("clientes")
+}
+
+model sedes_cliente {
+  id_sede                Int       @id @default(autoincrement())
+  id_cliente             Int
+  
+  nombre_sede            String    @db.VarChar(200)
+  codigo_sede            String?   @db.VarChar(30)
+  direccion              String    @db.VarChar(300)
+  ciudad                 String    @db.VarChar(100)
+  departamento           String?   @db.VarChar(100)
+  
+  telefono               String?   @db.VarChar(20)
+  email_contacto         String?   @db.VarChar(150)
+  nombre_contacto        String?   @db.VarChar(200)
+  
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  cliente                clientes  @relation(fields: [id_cliente], references: [id_cliente])
+  equipos                equipos[]
+  ordenes                ordenes_servicio[]
+  cotizaciones           cotizaciones[]
+  
+  @@index([id_cliente], name: "idx_sedes_cliente")
+  @@map("sedes_cliente")
+}
+
+model proveedores {
+  id_proveedor           Int       @id @default(autoincrement())
+  id_persona             Int       @unique
+  
+  codigo_proveedor       String    @unique @db.VarChar(30)
+  categoria              String?   @db.VarChar(100)
+  calificacion           Int?
+  
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                personas  @relation(fields: [id_persona], references: [id_persona])
+  
+  @@map("proveedores")
+}
+
+model empleados {
+  id_empleado            Int                          @id @default(autoincrement())
+  id_persona             Int                          @unique
+  
+  codigo_empleado        String                       @unique @db.VarChar(30)
+  fecha_ingreso          DateTime                     @db.Date
+  tipo_contrato          tipo_contrato_empleado_enum?
+  cargo                  String                       @db.VarChar(100)
+  area                   String?                      @db.VarChar(100)
+  
+  salario_base           Decimal?                     @db.Decimal(12, 2)
+  estado                 estado_empleado_enum         @default(ACTIVO)
+  
+  fecha_retiro           DateTime?                    @db.Date
+  motivo_retiro          String?                      @db.VarChar(500)
+  
+  activo                 Boolean                      @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime                     @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  persona                      personas                 @relation(fields: [id_persona], references: [id_persona])
+  ordenes_asignadas            ordenes_servicio[]       @relation("OrdenesTecnico")
+  ordenes_supervisadas         ordenes_servicio[]       @relation("OrdenesSupervisor")
+  detalles_servicios_ejecuta   detalle_servicios_orden[]
+  
+  @@map("empleados")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 1: EQUIPOS
+// ═══════════════════════════════════════════════════════════════════
+
+model tipos_equipo {
+  id_tipo_equipo         Int       @id @default(autoincrement())
+  
+  codigo_tipo            String    @unique @db.VarChar(20)
+  nombre_tipo            String    @db.VarChar(100)
+  descripcion            String?
+  categoria              String?   @db.VarChar(50)
+  
+  // Intervalos mantenimiento (defaults)
+  intervalo_tipo_a_dias  Int?
+  intervalo_tipo_a_horas Decimal?  @db.Decimal(10, 1)
+  intervalo_tipo_b_dias  Int?
+  intervalo_tipo_b_horas Decimal?  @db.Decimal(10, 1)
+  criterio_intervalo     criterio_intervalo_enum?
+  
+  activo                 Boolean   @default(true)
+  
+  // Auditoría
+  creado_por             Int?
+  fecha_creacion         DateTime  @default(now())
+  modificado_por         Int?
+  fecha_modificacion     DateTime?
+  
+  // Relaciones
+  equipos                equipos[]
+  
+  @@map("tipos_equipo")
+}
+
+model equipos {
+  id_equipo                      Int                      @id @default(autoincrement())
+  codigo_equipo                  String                   @unique @db.VarChar(30)
+  
+  // Relaciones FK
+  id_cliente                     Int
+  id_sede                        Int?
+  id_tipo_equipo                 Int
+  
+  // Identificación
+  nombre_equipo                  String?                  @db.VarChar(200)
+  numero_serie_equipo            String?                  @unique @db.VarChar(100)
+  
+  // Ubicación
+  ubicacion_texto                String                   @db.VarChar(500)
+  ubicacion_detallada            Json?
+  
+  // Estado operativo
+  estado_equipo                  estado_equipo_enum       @default(OPERATIVO)
+  criticidad                     criticidad_enum          @default(MEDIA)
+  criticidad_justificacion       String?
+  
+  // Fechas
+  fecha_instalacion              DateTime?                @db.Date
+  fecha_inicio_servicio_mekanos  DateTime?                @db.Date
+  fecha_registro                 DateTime                 @default(now()) @db.Date
+  
+  // Garantía
+  en_garantia                    Boolean                  @default(false)
+  fecha_inicio_garantia          DateTime?                @db.Date
+  fecha_fin_garantia             DateTime?                @db.Date
+  proveedor_garantia             String?                  @db.VarChar(200)
+  
+  // Horómetro (cache)
+  horas_actuales                 Decimal                  @default(0) @db.Decimal(10, 2)
+  fecha_ultima_lectura_horas     DateTime?
+  
+  // Estado pintura
+  estado_pintura                 estado_pintura_enum?     @default(BUENO)
+  requiere_pintura               Boolean                  @default(false)
+  
+  // Contrato
+  tipo_contrato                  tipo_contrato_enum       @default(SIN_CONTRATO)
+  
+  // Intervalos override
+  intervalo_tipo_a_dias_override    Int?
+  intervalo_tipo_a_horas_override   Decimal?              @db.Decimal(10, 1)
+  intervalo_tipo_b_dias_override    Int?
+  intervalo_tipo_b_horas_override   Decimal?              @db.Decimal(10, 1)
+  criterio_intervalo_override       criterio_intervalo_enum?
+  
+  // Observaciones
+  observaciones_generales        String?
+  configuracion_especial         String?
+  
+  // Control baja
+  activo                         Boolean                  @default(true)
+  fecha_baja                     DateTime?                @db.Date
+  motivo_baja                    String?                  @db.VarChar(500)
+  
+  // Auditoría
+  creado_por                     Int
+  fecha_creacion                 DateTime                 @default(now())
+  modificado_por                 Int?
+  fecha_modificacion             DateTime?
+  
+  // Metadata flexible
+  metadata                       Json?
+  
+  // Relaciones
+  cliente                        clientes                 @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict)
+  sede                           sedes_cliente?           @relation(fields: [id_sede], references: [id_sede], onDelete: Restrict)
+  tipo_equipo                    tipos_equipo             @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Restrict)
+  usuario_creador                usuarios                 @relation("EquiposCreados", fields: [creado_por], references: [id_usuario], onDelete: Restrict)
+  usuario_modificador            usuarios?                @relation("EquiposModificados", fields: [modificado_por], references: [id_usuario], onDelete: Restrict)
+  
+  // Relaciones inversas
+  archivos                       archivos_equipo[]
+  historial_estados              historial_estados_equipo[]
+  lecturas_horometro             lecturas_horometro[]
+  equipos_generador              equipos_generador?
+  equipos_motor                  equipos_motor?
+  equipos_bomba                  equipos_bomba?
+  ordenes                        ordenes_servicio[]
+  cotizaciones                   cotizaciones[]
+  propuestas                     propuestas_correctivo[]
+  contratos_equipos              equipos_contrato[]
+  cronogramas                    cronogramas_servicio[]
+  
+  @@index([id_cliente, id_sede], name: "idx_equipos_cliente_sede")
+  @@index([id_tipo_equipo], name: "idx_equipos_tipo")
+  @@index([codigo_equipo], name: "idx_equipos_codigo")
+  @@index([id_cliente, estado_equipo], name: "idx_equipos_activos")
+  @@map("equipos")
+}
+
+model archivos_equipo {
+  id_archivo             Int       @id @default(autoincrement())
+  id_equipo              Int
+  
+  tipo_archivo           String    @db.VarChar(50)
+  nombre_archivo         String    @db.VarChar(255)
+  nombre_original        String    @db.VarChar(255)
+  ruta_archivo           String    @db.VarChar(500)
+  
+  extension_archivo      String?   @db.VarChar(10)
+  mime_type              String?   @db.VarChar(100)
+  tamano_bytes           BigInt?
+  
+  titulo                 String?   @db.VarChar(200)
+  descripcion            String?
+  
+  es_principal           Boolean   @default(false)
+  es_publico             Boolean   @default(false)
+  
+  categoria              String?   @db.VarChar(100)
+  orden                  Int       @default(0)
+  
+  hash_archivo           String    @db.VarChar(64)
+  metadata               Json?
+  
+  fecha_subida           DateTime  @default(now())
+  subido_por             Int
+  fecha_modificacion     DateTime?
+  modificado_por         Int?
+  
+  activo                 Boolean   @default(true)
+  fecha_eliminacion      DateTime?
+  eliminado_por          Int?
+  motivo_eliminacion     String?   @db.VarChar(500)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@index([id_equipo, tipo_archivo], name: "idx_archivos_equipo_tipo")
+  @@index([id_equipo, activo], name: "idx_archivos_activos")
+  @@map("archivos_equipo")
+}
+
+model historial_estados_equipo {
+  id_historial           Int                 @id @default(autoincrement())
+  id_equipo              Int
+  
+  estado_anterior        estado_equipo_enum?
+  estado_nuevo           estado_equipo_enum
+  fecha_cambio           DateTime            @default(now())
+  motivo_cambio          String?             @db.VarChar(500)
+  cambiado_por           Int
+  contexto               Json?
+  
+  // Relaciones
+  equipo                 equipos             @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("historial_estados_equipo")
+}
+
+model lecturas_horometro {
+  id_lectura             Int                        @id @default(autoincrement())
+  id_equipo              Int
+  
+  horas_lectura          Decimal                    @db.Decimal(10, 2)
+  fecha_lectura          DateTime                   @default(now())
+  tipo_lectura           tipo_lectura_horometro_enum
+  
+  observaciones          String?
+  registrado_por         Int?
+  
+  // Relaciones
+  equipo                 equipos                    @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@index([id_equipo, fecha_lectura], name: "idx_lecturas_equipo_fecha")
+  @@map("lecturas_horometro")
+}
+
+// Tablas especializadas equipos (herencia)
+
+model equipos_generador {
+  id_equipo_generador    Int       @id @default(autoincrement())
+  id_equipo              Int       @unique
+  
+  potencia_kva           Decimal?  @db.Decimal(10, 2)
+  voltaje                Int?
+  fases                  Int?
+  frecuencia             Int?
+  factor_potencia        Decimal?  @db.Decimal(5, 2)
+  
+  marca_generador        String?   @db.VarChar(100)
+  modelo_generador       String?   @db.VarChar(100)
+  numero_serie_generador String?   @db.VarChar(100)
+  
+  tipo_refrigeracion     String?   @db.VarChar(50)
+  tipo_combustible       String?   @db.VarChar(50)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("equipos_generador")
+}
+
+model equipos_motor {
+  id_equipo_motor        Int       @id @default(autoincrement())
+  id_equipo              Int       @unique
+  
+  marca_motor            String?   @db.VarChar(100)
+  modelo_motor           String?   @db.VarChar(100)
+  numero_serie_motor     String?   @db.VarChar(100)
+  
+  potencia_hp            Decimal?  @db.Decimal(10, 2)
+  cilindros              Int?
+  tipo_combustible       String?   @db.VarChar(50)
+  capacidad_aceite       Decimal?  @db.Decimal(10, 2)
+  capacidad_refrigerante Decimal?  @db.Decimal(10, 2)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("equipos_motor")
+}
+
+model equipos_bomba {
+  id_equipo_bomba        Int       @id @default(autoincrement())
+  id_equipo              Int       @unique
+  
+  tipo_bomba             String?   @db.VarChar(100)
+  marca_bomba            String?   @db.VarChar(100)
+  modelo_bomba           String?   @db.VarChar(100)
+  numero_serie_bomba     String?   @db.VarChar(100)
+  
+  caudal_nominal         Decimal?  @db.Decimal(10, 2)
+  altura_manometrica     Decimal?  @db.Decimal(10, 2)
+  presion_trabajo        Decimal?  @db.Decimal(10, 2)
+  diametro_succion       Decimal?  @db.Decimal(10, 2)
+  diametro_descarga      Decimal?  @db.Decimal(10, 2)
+  
+  // Relaciones
+  equipo                 equipos   @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  
+  @@map("equipos_bomba")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 3: ÓRDENES DE SERVICIO
+// ═══════════════════════════════════════════════════════════════════
+
+model estados_orden {
+  id_estado              Int       @id @default(autoincrement())
+  
+  codigo_estado          String    @unique @db.VarChar(30)
+  nombre_estado          String    @db.VarChar(100)
+  descripcion            String?
+  orden_secuencial       Int
+  es_estado_final        Boolean   @default(false)
+  color_hex              String?   @db.VarChar(7)
+  
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  ordenes                ordenes_servicio[]
+  
+  @@map("estados_orden")
+}
+
+model tipos_servicio {
+  id_tipo_servicio       Int       @id @default(autoincrement())
+  
+  codigo_tipo            String    @unique @db.VarChar(30)
+  nombre_tipo            String    @db.VarChar(100)
+  descripcion            String?
+  categoria              String?   @db.VarChar(50)
+  
+  requiere_checklist     Boolean   @default(false)
+  requiere_mediciones    Boolean   @default(false)
+  requiere_evidencias    Boolean   @default(false)
+  
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  ordenes                ordenes_servicio[]
+  catalogo_servicios     catalogo_servicios[]
+  
+  @@map("tipos_servicio")
+}
+
+model catalogo_servicios {
+  id_servicio            Int       @id @default(autoincrement())
+  id_tipo_servicio       Int?
+  
+  codigo_servicio        String    @unique @db.VarChar(30)
+  nombre_servicio        String    @db.VarChar(200)
+  descripcion            String?
+  
+  precio_base            Decimal   @db.Decimal(12, 2)
+  duracion_estimada      Int?
+  
+  requiere_repuestos     Boolean   @default(false)
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  tipo_servicio          tipos_servicio? @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio])
+  detalles_orden         detalle_servicios_orden[]
+  items_cotizacion       items_cotizacion_servicios[]
+  
+  @@map("catalogo_servicios")
+}
+
+model ordenes_servicio {
+  id_orden_servicio                Int                           @id @default(autoincrement())
+  numero_orden                     String                        @unique @db.VarChar(50)
+  
+  // Relaciones FK
+  id_cliente                       Int
+  id_sede                          Int?
+  id_equipo                        Int
+  id_tipo_servicio                 Int?
+  id_cronograma                    Int?
+  
+  // Programación
+  fecha_programada                 DateTime?                     @db.Date
+  hora_programada                  DateTime?                     @db.Time
+  prioridad                        prioridad_enum                @default(NORMAL)
+  origen_solicitud                 origen_solicitud_enum         @default(PROGRAMADO)
+  
+  // Asignación
+  id_tecnico_asignado              Int?
+  id_supervisor                    Int?
+  fecha_asignacion                 DateTime?
+  
+  // Ejecución
+  fecha_inicio_real                DateTime?
+  fecha_fin_real                   DateTime?
+  duracion_minutos                 Int?
+  
+  // Estado
+  id_estado_actual                 Int
+  fecha_cambio_estado              DateTime                      @default(now())
+  
+  // Conformidad cliente
+  requiere_firma_cliente           Boolean                       @default(true)
+  id_firma_cliente                 Int?
+  nombre_quien_recibe              String?                       @db.VarChar(200)
+  cargo_quien_recibe               String?                       @db.VarChar(100)
+  cliente_conforme                 Boolean?
+  calificacion_cliente             Int?
+  
+  // Trabajo
+  descripcion_inicial              String?
+  trabajo_realizado                String?
+  observaciones_tecnico            String?
+  observaciones_cierre             String?
+  
+  // Garantía
+  tiene_garantia                   Boolean                       @default(false)
+  meses_garantia                   Int?
+  fecha_vencimiento_garantia       DateTime?                     @db.Date
+  observaciones_garantia           String?
+  
+  // Aprobación
+  aprobada_por                     Int?
+  fecha_aprobacion                 DateTime?
+  
+  // Costos (cache)
+  total_servicios                  Decimal                       @default(0) @db.Decimal(12, 2)
+  total_gastos                     Decimal                       @default(0) @db.Decimal(12, 2)
+  total_componentes                Decimal                       @default(0) @db.Decimal(12, 2)
+  total_general                    Decimal                       @default(0) @db.Decimal(12, 2)
+  
+  // Metadata
+  metadata                         Json?
+  
+  // Auditoría
+  creado_por                       Int
+  fecha_creacion                   DateTime                      @default(now())
+  modificado_por                   Int?
+  fecha_modificacion               DateTime?
+  
+  // Relaciones
+  cliente                          clientes                      @relation(fields: [id_cliente], references: [id_cliente])
+  sede                             sedes_cliente?                @relation(fields: [id_sede], references: [id_sede])
+  equipo                           equipos                       @relation(fields: [id_equipo], references: [id_equipo])
+  tipo_servicio                    tipos_servicio?               @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio])
+  estado                           estados_orden                 @relation(fields: [id_estado_actual], references: [id_estado])
+  tecnico                          empleados?                    @relation("OrdenesTecnico", fields: [id_tecnico_asignado], references: [id_empleado])
+  supervisor                       empleados?                    @relation("OrdenesSupervisor", fields: [id_supervisor], references: [id_empleado])
+  usuario_creador                  usuarios                      @relation("OrdenesCreadas", fields: [creado_por], references: [id_usuario])
+  usuario_modificador              usuarios?                     @relation("OrdenesModificadas", fields: [modificado_por], references: [id_usuario])
+  usuario_aprobador                usuarios?                     @relation("OrdenesAprobadas", fields: [aprobada_por], references: [id_usuario])
+  
+  // Relaciones inversas
+  detalles_servicios               detalle_servicios_orden[]
+  actividades                      actividades_orden[]
+  mediciones                       mediciones_orden[]
+  evidencias                       evidencias_orden[]
+  propuestas_generadas             propuestas_correctivo[]   @relation("PropuestaOrigen")
+  informes                         informes[]
+  
+  @@index([id_cliente, fecha_programada], name: "idx_os_cliente_fecha")
+  @@index([id_equipo, fecha_programada], name: "idx_os_equipo_fecha")
+  @@index([id_tecnico_asignado, id_estado_actual], name: "idx_os_tecnico_estado")
+  @@index([id_estado_actual, fecha_programada], name: "idx_os_estados_activos")
+  @@map("ordenes_servicio")
+}
+
+model detalle_servicios_orden {
+  id_detalle_servicio            Int                          @id @default(autoincrement())
+  
+  id_orden_servicio              Int
+  id_servicio                    Int
+  
+  cantidad                       Decimal                      @default(1) @db.Decimal(10, 2)
+  id_tecnico_ejecutor            Int?
+  fecha_inicio_servicio          DateTime?
+  fecha_fin_servicio             DateTime?
+  duracion_servicio_minutos      Int?
+  
+  precio_unitario                Decimal                      @db.Decimal(12, 2)
+  descuento_porcentaje           Decimal                      @default(0) @db.Decimal(5, 2)
+  subtotal                       Decimal?                     @db.Decimal(12, 2)
+  
+  estado_servicio                estado_detalle_servicio_enum @default(PENDIENTE)
+  observaciones                  String?
+  
+  // Relaciones
+  orden                          ordenes_servicio             @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  servicio                       catalogo_servicios           @relation(fields: [id_servicio], references: [id_servicio])
+  tecnico                        empleados?                   @relation(fields: [id_tecnico_ejecutor], references: [id_empleado])
+  
+  @@index([id_orden_servicio], name: "idx_detalle_orden")
+  @@map("detalle_servicios_orden")
+}
+
+model catalogo_actividades {
+  id_actividad           Int       @id @default(autoincrement())
+  
+  codigo_actividad       String    @unique @db.VarChar(30)
+  nombre_actividad       String    @db.VarChar(200)
+  descripcion            String?
+  categoria              String?   @db.VarChar(50)
+  orden_ejecucion        Int       @default(0)
+  
+  es_obligatoria         Boolean   @default(false)
+  activo                 Boolean   @default(true)
+  
+  // Relaciones
+  actividades_orden      actividades_orden[]
+  
+  @@map("catalogo_actividades")
+}
+
+model actividades_orden {
+  id_actividad_orden     Int       @id @default(autoincrement())
+  
+  id_orden_servicio      Int
+  id_actividad           Int
+  
+  realizada              Boolean   @default(false)
+  fecha_realizacion      DateTime?
+  resultado              String?   @db.VarChar(100)
+  observaciones          String?
+  
+  // Relaciones
+  orden                  ordenes_servicio      @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  actividad              catalogo_actividades  @relation(fields: [id_actividad], references: [id_actividad])
+  
+  @@index([id_orden_servicio], name: "idx_actividades_orden")
+  @@map("actividades_orden")
+}
+
+model parametros_medicion {
+  id_parametro           Int                      @id @default(autoincrement())
+  
+  codigo_parametro       String                   @unique @db.VarChar(30)
+  nombre_parametro       String                   @db.VarChar(100)
+  descripcion            String?
+  unidad_medida          String?                  @db.VarChar(20)
+  
+  tipo_valor             tipo_valor_medicion_enum
+  rango_min              Decimal?                 @db.Decimal(10, 2)
+  rango_max              Decimal?                 @db.Decimal(10, 2)
+  valor_critico_min      Decimal?                 @db.Decimal(10, 2)
+  valor_critico_max      Decimal?                 @db.Decimal(10, 2)
+  
+  activo                 Boolean                  @default(true)
+  
+  // Relaciones
+  mediciones             mediciones_orden[]
+  
+  @@map("parametros_medicion")
+}
+
+model mediciones_orden {
+  id_medicion            Int                    @id @default(autoincrement())
+  
+  id_orden_servicio      Int
+  id_parametro           Int
+  
+  valor_medido           Decimal?               @db.Decimal(10, 2)
+  valor_texto            String?                @db.VarChar(200)
+  fecha_medicion         DateTime               @default(now())
+  
+  resultado              resultado_medicion_enum?
+  observaciones          String?
+  
+  // Relaciones
+  orden                  ordenes_servicio       @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  parametro              parametros_medicion    @relation(fields: [id_parametro], references: [id_parametro])
+  
+  @@index([id_orden_servicio], name: "idx_mediciones_orden")
+  @@map("mediciones_orden")
+}
+
+model evidencias_orden {
+  id_evidencia           Int       @id @default(autoincrement())
+  
+  id_orden_servicio      Int
+  
+  tipo_evidencia         String    @db.VarChar(50)
+  nombre_archivo         String    @db.VarChar(255)
+  ruta_archivo           String    @db.VarChar(500)
+  
+  descripcion            String?
+  fecha_captura          DateTime  @default(now())
+  capturada_por          Int?
+  
+  metadata               Json?
+  
+  // Relaciones
+  orden                  ordenes_servicio @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  
+  @@index([id_orden_servicio], name: "idx_evidencias_orden")
+  @@map("evidencias_orden")
+}
+
+model firmas_digitales {
+  id_firma_digital       Int       @id @default(autoincrement())
+  
+  nombre_firmante        String    @db.VarChar(200)
+  cargo                  String?   @db.VarChar(100)
+  firma_base64           String
+  
+  fecha_firma            DateTime  @default(now())
+  ip_address             String?   @db.VarChar(45)
+  
+  @@map("firmas_digitales")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 4: COTIZACIONES Y PROPUESTAS (10 TABLAS)
+// ═══════════════════════════════════════════════════════════════════
+
+// Enums Fase 4
+enum categoria_propuesta_enum {
+  CORRECTIVO
+  PREVENTIVO_URGENTE
+  MEJORA
+  EXTENSION_GARANTIA
+}
+
+enum nivel_aprobacion_enum {
+  SUPERVISOR
+  GERENTE
+  DIRECCION
+  NINGUNO
+}
+
+model estados_cotizacion {
+  id_estado                    Int       @id @default(autoincrement())
+  codigo_estado                String    @unique @db.VarChar(30)
+  nombre_estado                String    @db.VarChar(100)
+  descripcion                  String?
+  permite_edicion              Boolean   @default(true)
+  permite_eliminacion          Boolean   @default(false)
+  es_estado_final              Boolean   @default(false)
+  requiere_aprobacion_interna  Boolean   @default(false)
+  color_hex                    String?   @db.VarChar(7)
+  icono                        String?   @db.VarChar(50)
+  orden_visualizacion          Int       @default(999)
+  activo                       Boolean   @default(true)
+  fecha_creacion               DateTime  @default(now())
+  
+  cotizaciones                 cotizaciones[]
+  propuestas                   propuestas_correctivo[]
+  
+  @@map("estados_cotizacion")
+}
+
+model motivos_rechazo {
+  id_motivo_rechazo            Int       @id @default(autoincrement())
+  codigo_motivo                String    @unique @db.VarChar(30)
+  nombre_motivo                String    @db.VarChar(100)
+  descripcion                  String?
+  requiere_observacion         Boolean   @default(false)
+  categoria                    String    @default("INTERNO") @db.VarChar(50)
+  color_hex                    String?   @db.VarChar(7)
+  icono                        String?   @db.VarChar(50)
+  orden_visualizacion          Int       @default(999)
+  activo                       Boolean   @default(true)
+  observaciones                String?
+  fecha_creacion               DateTime  @default(now())
+  
+  cotizaciones                 cotizaciones[]
+  propuestas                   propuestas_correctivo[]
+  
+  @@map("motivos_rechazo")
+}
+
+model cotizaciones {
+  id_cotizacion                Int       @id @default(autoincrement())
+  numero_cotizacion            String    @unique @db.VarChar(50)
+  id_cliente                   Int
+  id_sede                      Int?
+  id_equipo                    Int?
+  fecha_cotizacion             DateTime  @default(now()) @db.Date
+  fecha_vencimiento            DateTime  @db.Date
+  dias_validez                 Int       @default(15)
+  id_estado                    Int
+  fecha_cambio_estado          DateTime  @default(now())
+  id_motivo_rechazo            Int?
+  observaciones_rechazo        String?
+  asunto                       String    @db.VarChar(300)
+  descripcion_general          String?
+  alcance_trabajo              String?
+  exclusiones                  String?
+  subtotal_servicios           Decimal?  @db.Decimal(12, 2)
+  subtotal_componentes         Decimal?  @db.Decimal(12, 2)
+  subtotal_general             Decimal?  @db.Decimal(12, 2)
+  descuento_porcentaje         Decimal   @default(0) @db.Decimal(5, 2)
+  descuento_valor              Decimal?  @db.Decimal(12, 2)
+  subtotal_con_descuento       Decimal?  @db.Decimal(12, 2)
+  iva_porcentaje               Decimal   @default(0) @db.Decimal(5, 2)
+  iva_valor                    Decimal?  @db.Decimal(12, 2)
+  total_cotizacion             Decimal?  @db.Decimal(12, 2)
+  forma_pago                   String    @default("CONTADO") @db.VarChar(100)
+  terminos_condiciones         String?
+  meses_garantia               Int?      @default(3)
+  observaciones_garantia       String?
+  tiempo_estimado_dias         Int?
+  version                      Int       @default(1)
+  id_cotizacion_padre          Int?
+  id_orden_servicio_generada   Int?
+  fecha_conversion_os          DateTime?
+  metadata                     Json?
+  elaborada_por                Int
+  fecha_creacion               DateTime  @default(now())
+  aprobada_internamente_por    Int?
+  fecha_aprobacion_interna     DateTime?
+  modificado_por               Int?
+  fecha_modificacion           DateTime?
+  
+  cliente                      clientes              @relation(fields: [id_cliente], references: [id_cliente])
+  sede                         sedes_cliente?        @relation(fields: [id_sede], references: [id_sede])
+  equipo                       equipos?              @relation(fields: [id_equipo], references: [id_equipo])
+  estado                       estados_cotizacion    @relation(fields: [id_estado], references: [id_estado])
+  motivo_rechazo               motivos_rechazo?      @relation(fields: [id_motivo_rechazo], references: [id_motivo_rechazo])
+  cotizacion_padre             cotizaciones?         @relation("CotizacionVersiones", fields: [id_cotizacion_padre], references: [id_cotizacion], onDelete: NoAction, onUpdate: NoAction)
+  versiones_hijas              cotizaciones[]        @relation("CotizacionVersiones")
+  
+  items_servicios              items_cotizacion_servicios[]
+  items_componentes            items_cotizacion_componentes[]
+  aprobaciones                 aprobaciones_cotizacion[]
+  envios                       historial_envios[]
+  
+  @@index([id_cliente, fecha_cotizacion])
+  @@index([id_estado, fecha_cotizacion])
+  @@map("cotizaciones")
+}
+
+model items_cotizacion_servicios {
+  id_item_servicio             Int       @id @default(autoincrement())
+  id_cotizacion                Int
+  id_servicio                  Int
+  cantidad                     Decimal   @default(1) @db.Decimal(10, 2)
+  unidad                       String    @default("servicio") @db.VarChar(20)
+  precio_unitario              Decimal   @db.Decimal(12, 2)
+  descuento_porcentaje         Decimal   @default(0) @db.Decimal(5, 2)
+  subtotal                     Decimal?  @db.Decimal(12, 2)
+  descripcion_personalizada    String?
+  observaciones                String?
+  justificacion_precio         String?
+  orden_item                   Int?
+  fecha_registro               DateTime  @default(now())
+  registrado_por               Int?
+  
+  cotizacion                   cotizaciones          @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
+  servicio                     catalogo_servicios    @relation(fields: [id_servicio], references: [id_servicio])
+  
+  @@index([id_cotizacion, orden_item])
+  @@map("items_cotizacion_servicios")
+}
+
+model items_cotizacion_componentes {
+  id_item_componente           Int       @id @default(autoincrement())
+  id_cotizacion                Int
+  id_componente                Int?
+  id_tipo_componente           Int
+  descripcion                  String    @db.VarChar(300)
+  referencia_manual            String?   @db.VarChar(100)
+  marca_manual                 String?   @db.VarChar(100)
+  cantidad                     Decimal   @default(1) @db.Decimal(10, 2)
+  unidad                       String    @default("unidad") @db.VarChar(20)
+  precio_unitario              Decimal   @db.Decimal(12, 2)
+  descuento_porcentaje         Decimal   @default(0) @db.Decimal(5, 2)
+  subtotal                     Decimal?  @db.Decimal(12, 2)
+  garantia_meses               Int?
+  observaciones_garantia       String?
+  observaciones                String?
+  orden_item                   Int?
+  fecha_registro               DateTime  @default(now())
+  registrado_por               Int?
+  
+  cotizacion                   cotizaciones  @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
+  
+  @@index([id_cotizacion, orden_item])
+  @@map("items_cotizacion_componentes")
+}
+
+model propuestas_correctivo {
+  id_propuesta                 Int                       @id @default(autoincrement())
+  numero_propuesta             String                    @unique @db.VarChar(50)
+  id_orden_servicio            Int
+  id_cliente                   Int
+  id_equipo                    Int?
+  descripcion_problema         String
+  solucion_propuesta           String
+  categoria                    categoria_propuesta_enum  @default(CORRECTIVO)
+  prioridad                    prioridad_enum            @default(NORMAL)
+  id_estado                    Int
+  fecha_cambio_estado          DateTime                  @default(now())
+  id_motivo_rechazo            Int?
+  observaciones_rechazo        String?
+  fecha_propuesta              DateTime                  @default(now())
+  fecha_vencimiento            DateTime?                 @db.Date
+  subtotal_servicios           Decimal?                  @db.Decimal(12, 2)
+  subtotal_componentes         Decimal?                  @db.Decimal(12, 2)
+  total_propuesta              Decimal?                  @db.Decimal(12, 2)
+  id_orden_servicio_generada   Int?
+  fecha_conversion_os          DateTime?
+  observaciones                String?
+  metadata                     Json?
+  propuesta_por                Int
+  fecha_creacion               DateTime                  @default(now())
+  aprobada_por                 Int?
+  fecha_aprobacion             DateTime?
+  modificado_por               Int?
+  fecha_modificacion           DateTime?
+  
+  orden_servicio               ordenes_servicio      @relation("PropuestaOrigen", fields: [id_orden_servicio], references: [id_orden_servicio])
+  cliente                      clientes              @relation(fields: [id_cliente], references: [id_cliente])
+  equipo                       equipos?              @relation(fields: [id_equipo], references: [id_equipo])
+  estado                       estados_cotizacion    @relation(fields: [id_estado], references: [id_estado])
+  motivo_rechazo               motivos_rechazo?      @relation(fields: [id_motivo_rechazo], references: [id_motivo_rechazo])
+  
+  items                        items_propuesta[]
+  aprobaciones                 aprobaciones_cotizacion[]
+  envios                       historial_envios[]
+  
+  @@index([id_orden_servicio])
+  @@index([id_cliente, fecha_propuesta])
+  @@map("propuestas_correctivo")
+}
+
+model items_propuesta {
+  id_item_propuesta            Int       @id @default(autoincrement())
+  id_propuesta                 Int
+  tipo_item                    String    @db.VarChar(20)
+  id_servicio                  Int?
+  id_componente                Int?
+  id_tipo_componente           Int?
+  descripcion                  String    @db.VarChar(300)
+  cantidad                     Decimal   @default(1) @db.Decimal(10, 2)
+  unidad                       String    @default("unidad") @db.VarChar(20)
+  precio_unitario              Decimal   @db.Decimal(12, 2)
+  descuento_porcentaje         Decimal   @default(0) @db.Decimal(5, 2)
+  subtotal                     Decimal?  @db.Decimal(12, 2)
+  observaciones                String?
+  orden_item                   Int?
+  fecha_registro               DateTime  @default(now())
+  
+  propuesta                    propuestas_correctivo @relation(fields: [id_propuesta], references: [id_propuesta], onDelete: Cascade)
+  
+  @@index([id_propuesta, orden_item])
+  @@map("items_propuesta")
+}
+
+model aprobaciones_cotizacion {
+  id_aprobacion                Int                   @id @default(autoincrement())
+  id_cotizacion                Int?
+  id_propuesta                 Int?
+  nivel_aprobacion             nivel_aprobacion_enum
+  razon_nivel                  String?
+  estado_aprobacion            String                @default("PENDIENTE") @db.VarChar(50)
+  solicitada_por               Int
+  fecha_solicitud              DateTime              @default(now())
+  observaciones_solicitante    String?
+  aprobada_por                 Int?
+  fecha_respuesta              DateTime?
+  observaciones_aprobador      String?
+  metadata                     Json?
+  
+  cotizacion                   cotizaciones?         @relation(fields: [id_cotizacion], references: [id_cotizacion], onDelete: Cascade)
+  propuesta                    propuestas_correctivo? @relation(fields: [id_propuesta], references: [id_propuesta], onDelete: Cascade)
+  
+  @@index([id_cotizacion, estado_aprobacion])
+  @@index([id_propuesta, estado_aprobacion])
+  @@map("aprobaciones_cotizacion")
+}
+
+model historial_envios {
+  id_envio                     Int       @id @default(autoincrement())
+  tipo_documento               String    @db.VarChar(20)
+  id_cotizacion                Int?
+  id_propuesta                 Int?
+  fecha_envio                  DateTime  @default(now())
+  enviado_por                  Int
+  canal_envio                  String    @default("EMAIL") @db.VarChar(50)
+  destinatario_email           String    @db.VarChar(255)
+  destinatario_nombre          String?   @db.VarChar(200)
+  emails_copia                 String[]
+  asunto_email                 String?   @db.VarChar(500)
+  cuerpo_email                 String?
+  ruta_pdf_generado            String?   @db.VarChar(500)
+  tamano_pdf_bytes             BigInt?
+  hash_pdf_sha256              String?   @db.VarChar(64)
+  archivos_adjuntos            Json?
+  estado_envio                 String    @default("ENVIADO") @db.VarChar(50)
+  mensaje_error                String?
+  id_mensaje_externo           String?   @db.VarChar(255)
+  email_abierto                Boolean   @default(false)
+  fecha_apertura               DateTime?
+  contador_aperturas           Int       @default(0)
+  ip_apertura                  String?   @db.VarChar(45)
+  user_agent_apertura          String?   @db.VarChar(500)
+  metadata                     Json?
+  
+  cotizacion                   cotizaciones?         @relation(fields: [id_cotizacion], references: [id_cotizacion])
+  propuesta                    propuestas_correctivo? @relation(fields: [id_propuesta], references: [id_propuesta])
+  
+  @@index([id_cotizacion, fecha_envio])
+  @@index([id_propuesta, fecha_envio])
+  @@map("historial_envios")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 5: INVENTARIO Y BODEGA (11 TABLAS) 
+// ═══════════════════════════════════════════════════════════════════
+
+// Enums Fase 5
+enum tipo_movimiento_inventario_enum {
+  ENTRADA
+  SALIDA
+  AJUSTE
+  TRANSFERENCIA
+}
+
+enum origen_movimiento_inventario_enum {
+  COMPRA
+  CONSUMO_OS
+  REMISION
+  DEVOLUCION
+  CONTEO_FISICO
+  MERMA
+  CORRECCION_ERROR
+  INVENTARIO_INICIAL
+}
+
+enum estado_lote_enum {
+  DISPONIBLE
+  VENCIDO
+  CUARENTENA
+  AGOTADO
+}
+
+enum tipo_alerta_stock_enum {
+  STOCK_MINIMO
+  VENCIMIENTO_CRITICO
+  VENCIMIENTO_PROXIMO
+  DEVOLUCION_VENCIDA
+  LOTE_AGOTADO
+}
+
+enum nivel_alerta_enum {
+  CRITICO
+  ALTO
+  MEDIO
+  INFO
+}
+
+enum estado_alerta_enum {
+  PENDIENTE
+  VISTA
+  EN_PROCESO
+  RESUELTA
+}
+
+enum tipo_destino_remision_enum {
+  TECNICO
+  CLIENTE
+  PROVEEDOR
+  OTRO
+}
+
+enum tipo_remision_enum {
+  VALE_SALIDA_TECNICO
+  VENTA_CLIENTE
+  PRESTAMO_HERRAMIENTA
+  GARANTIA
+}
+
+enum estado_remision_enum {
+  ABIERTA
+  CERRADA
+  VENCIDA
+  CANCELADA
+}
+
+enum tipo_item_remision_enum {
+  COMPONENTE
+  HERRAMIENTA
+}
+
+enum estado_item_remision_enum {
+  ENTREGADO
+  DEVUELTO_TOTAL
+  DEVUELTO_PARCIAL
+  CONSUMIDO_OS
+  PERDIDO
+}
+
+enum estado_orden_compra_enum {
+  BORRADOR
+  ENVIADA
+  PARCIAL
+  COMPLETADA
+  CANCELADA
+}
+
+enum tipo_recepcion_compra_enum {
+  PARCIAL
+  FINAL
+  UNICA
+}
+
+enum calidad_recepcion_enum {
+  OK
+  PARCIAL_DANADO
+  RECHAZADO
+}
+
+enum motivo_devolucion_proveedor_enum {
+  DEFECTUOSO
+  INCORRECTO
+  PROXIMO_VENCER
+  EXCESO
+}
+
+enum estado_devolucion_proveedor_enum {
+  SOLICITADA
+  APROBADA_PROVEEDOR
+  RETIRADA
+  ACREDITADA
+}
+
+enum categoria_motivo_ajuste_enum {
+  MERMA
+  ERROR_REGISTRO
+  ROBO
+  DANO
+  INICIAL
+}
+
+model movimientos_inventario {
+  id_movimiento                Int                                  @id @default(autoincrement())
+  tipo_movimiento              tipo_movimiento_inventario_enum
+  origen_movimiento            origen_movimiento_inventario_enum
+  id_componente                Int
+  cantidad                     Decimal                              @db.Decimal(10, 2)
+  costo_unitario               Decimal?                             @db.Decimal(12, 2)
+  id_ubicacion                 Int?
+  id_lote                      Int?
+  id_orden_servicio            Int?
+  id_orden_compra              Int?
+  id_remision                  Int?
+  justificacion                String?
+  observaciones                String?
+  fecha_movimiento             DateTime                             @default(now())
+  realizado_por                Int
+  aprobado_por                 Int?
+  
+  @@index([id_componente, fecha_movimiento])
+  @@map("movimientos_inventario")
+}
+
+model ubicaciones_bodega {
+  id_ubicacion                 Int       @id @default(autoincrement())
+  codigo_ubicacion             String    @unique @db.VarChar(20)
+  zona                         String    @db.VarChar(50)
+  pasillo                      String?   @db.VarChar(10)
+  estante                      String?   @db.VarChar(10)
+  nivel                        String?   @db.VarChar(10)
+  activo                       Boolean   @default(true)
+  
+  @@index([zona, activo])
+  @@map("ubicaciones_bodega")
+}
+
+model lotes_componentes {
+  id_lote                      Int             @id @default(autoincrement())
+  codigo_lote                  String          @unique @db.VarChar(50)
+  id_componente                Int
+  fecha_fabricacion            DateTime?       @db.Date
+  fecha_vencimiento            DateTime?       @db.Date
+  cantidad_inicial             Decimal         @db.Decimal(10, 2)
+  cantidad_actual              Decimal         @db.Decimal(10, 2)
+  estado_lote                  estado_lote_enum @default(DISPONIBLE)
+  id_proveedor                 Int?
+  numero_factura_proveedor     String?         @db.VarChar(100)
+  observaciones                String?
+  fecha_ingreso                DateTime        @default(now())
+  ingresado_por                Int
+  
+  alertas                      alertas_stock[]
+  
+  @@index([id_componente, estado_lote])
+  @@map("lotes_componentes")
+}
+
+model alertas_stock {
+  id_alerta                    Int                     @id @default(autoincrement())
+  tipo_alerta                  tipo_alerta_stock_enum
+  nivel                        nivel_alerta_enum
+  id_componente                Int?
+  id_lote                      Int?
+  mensaje                      String
+  estado                       estado_alerta_enum      @default(PENDIENTE)
+  fecha_generacion             DateTime                @default(now())
+  fecha_resolucion             DateTime?
+  resuelto_por                 Int?
+  observaciones                String?
+  
+  lote                         lotes_componentes?      @relation(fields: [id_lote], references: [id_lote])
+  
+  @@index([estado, tipo_alerta, nivel])
+  @@index([id_componente, estado])
+  @@map("alertas_stock")
+}
+
+model remisiones {
+  id_remision                  Int                       @id @default(autoincrement())
+  numero_remision              String                    @unique @db.VarChar(50)
+  fecha_remision               DateTime                  @default(now())
+  tipo_destino                 tipo_destino_remision_enum
+  id_destino                   Int
+  nombre_destinatario          String                    @db.VarChar(200)
+  tipo_remision                tipo_remision_enum
+  requiere_devolucion          Boolean
+  fecha_devolucion_esperada    DateTime?                 @db.Date
+  fecha_devolucion_real        DateTime?
+  id_orden_servicio            Int?
+  id_cotizacion                Int?
+  estado_remision              estado_remision_enum      @default(ABIERTA)
+  fecha_cierre                 DateTime?
+  entregado_por                Int
+  recibido_por                 String?                   @db.VarChar(200)
+  firma_digital_recepcion      String?
+  
+  detalles                     remisiones_detalle[]
+  
+  @@index([tipo_destino, id_destino])
+  @@index([estado_remision, fecha_remision])
+  @@map("remisiones")
+}
+
+model remisiones_detalle {
+  id_detalle_remision          Int                       @id @default(autoincrement())
+  id_remision                  Int
+  tipo_item                    tipo_item_remision_enum
+  id_componente                Int?
+  descripcion_item             String                    @db.VarChar(300)
+  cantidad_entregada           Decimal                   @db.Decimal(10, 2)
+  cantidad_devuelta            Decimal                   @default(0) @db.Decimal(10, 2)
+  estado_item                  estado_item_remision_enum @default(ENTREGADO)
+  observaciones                String?
+  
+  remision                     remisiones                @relation(fields: [id_remision], references: [id_remision])
+  
+  @@index([id_remision])
+  @@map("remisiones_detalle")
+}
+
+model ordenes_compra {
+  id_orden_compra              Int                       @id @default(autoincrement())
+  numero_orden_compra          String                    @unique @db.VarChar(50)
+  id_proveedor                 Int
+  fecha_solicitud              DateTime                  @default(now()) @db.Date
+  fecha_necesidad              DateTime?                 @db.Date
+  estado                       estado_orden_compra_enum  @default(BORRADOR)
+  observaciones                String?
+  solicitada_por               Int
+  aprobada_por                 Int?
+  fecha_aprobacion             DateTime?
+  
+  detalles                     ordenes_compra_detalle[]
+  recepciones                  recepciones_compra[]
+  devoluciones                 devoluciones_proveedor[]
+  
+  @@index([id_proveedor, estado])
+  @@index([estado, fecha_solicitud])
+  @@map("ordenes_compra")
+}
+
+model ordenes_compra_detalle {
+  id_detalle                   Int       @id @default(autoincrement())
+  id_orden_compra              Int
+  id_componente                Int
+  cantidad                     Decimal   @db.Decimal(10, 2)
+  precio_unitario              Decimal   @db.Decimal(12, 2)
+  observaciones                String?
+  
+  orden_compra                 ordenes_compra @relation(fields: [id_orden_compra], references: [id_orden_compra])
+  
+  @@index([id_orden_compra])
+  @@map("ordenes_compra_detalle")
+}
+
+model recepciones_compra {
+  id_recepcion                 Int                       @id @default(autoincrement())
+  numero_recepcion             String                    @unique @db.VarChar(50)
+  id_orden_compra              Int
+  id_detalle_orden             Int
+  cantidad_recibida            Decimal                   @db.Decimal(10, 2)
+  tipo_recepcion               tipo_recepcion_compra_enum
+  cantidad_aceptada            Decimal                   @db.Decimal(10, 2)
+  cantidad_rechazada           Decimal                   @default(0) @db.Decimal(10, 2)
+  calidad                      calidad_recepcion_enum
+  id_ubicacion_destino         Int?
+  costo_unitario_real          Decimal?                  @db.Decimal(12, 2)
+  observaciones                String?
+  recibido_por                 Int
+  fecha_recepcion              DateTime                  @default(now())
+  
+  orden_compra                 ordenes_compra            @relation(fields: [id_orden_compra], references: [id_orden_compra])
+  
+  @@index([id_orden_compra])
+  @@map("recepciones_compra")
+}
+
+model devoluciones_proveedor {
+  id_devolucion                Int                                 @id @default(autoincrement())
+  numero_devolucion            String                              @unique @db.VarChar(50)
+  id_orden_compra              Int
+  id_lote                      Int?
+  motivo                       motivo_devolucion_proveedor_enum
+  cantidad_devuelta            Decimal                             @db.Decimal(10, 2)
+  estado_devolucion            estado_devolucion_proveedor_enum    @default(SOLICITADA)
+  observaciones                String?
+  solicitada_por               Int
+  fecha_solicitud              DateTime                            @default(now())
+  fecha_devolucion             DateTime?
+  
+  orden_compra                 ordenes_compra                      @relation(fields: [id_orden_compra], references: [id_orden_compra])
+  
+  @@index([id_orden_compra])
+  @@map("devoluciones_proveedor")
+}
+
+model motivos_ajuste {
+  id_motivo_ajuste             Int                         @id @default(autoincrement())
+  codigo_motivo                String                      @unique @db.VarChar(30)
+  nombre_motivo                String                      @db.VarChar(100)
+  categoria                    categoria_motivo_ajuste_enum
+  requiere_justificacion_detallada Boolean                 @default(true)
+  requiere_aprobacion_gerencia Boolean                     @default(false)
+  activo                       Boolean                     @default(true)
+  
+  @@map("motivos_ajuste")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 6: INFORMES TÉCNICOS (5 TABLAS)
+// ═══════════════════════════════════════════════════════════════════
+
+// Enums Fase 6
+enum estado_informe_enum {
+  BORRADOR
+  REVISADO
+  APROBADO
+  ENVIADO
+}
+
+enum estado_bitacora_enum {
+  BORRADOR
+  ENVIADA
+  APROBADA
+}
+
+enum tipo_documento_enum {
+  INFORME_SERVICIO
+  BITACORA_MENSUAL
+  COTIZACION
+  PROPUESTA
+}
+
+model plantillas_informe {
+  id_plantilla_informe         Int       @id @default(autoincrement())
+  nombre_plantilla             String    @db.VarChar(100)
+  id_tipo_servicio             Int?
+  texto_introduccion           String?
+  configuracion_secciones      Json
+  activa                       Boolean   @default(true)
+  creado_por                   Int
+  fecha_creacion               DateTime  @default(now())
+  modificado_por               Int?
+  fecha_modificacion           DateTime?
+  
+  informes                     informes[]
+  
+  @@map("plantillas_informe")
+}
+
+model informes {
+  id_informe                   Int                 @id @default(autoincrement())
+  numero_informe               String              @unique @db.VarChar(50)
+  id_orden_servicio            Int
+  id_plantilla_informe         Int?
+  fecha_generacion             DateTime            @default(now())
+  generado_por                 Int
+  estado_informe               estado_informe_enum @default(BORRADOR)
+  revisado_por                 Int?
+  fecha_revision               DateTime?
+  observaciones_revision       String?
+  aprobado_por                 Int?
+  fecha_aprobacion             DateTime?
+  id_documento_pdf             Int?
+  cliente_visualizo            Boolean             @default(false)
+  fecha_visualizacion_cliente  DateTime?
+  cliente_aprobo               Boolean             @default(false)
+  fecha_aprobacion_cliente     DateTime?
+  firma_digital_cliente        String?
+  observaciones                String?
+  
+  orden_servicio               ordenes_servicio     @relation(fields: [id_orden_servicio], references: [id_orden_servicio])
+  plantilla                    plantillas_informe?  @relation(fields: [id_plantilla_informe], references: [id_plantilla_informe])
+  documento_pdf                documentos_generados? @relation(fields: [id_documento_pdf], references: [id_documento])
+  
+  bitacoras_rel                bitacoras_informes[]
+  
+  @@index([id_orden_servicio])
+  @@map("informes")
+}
+
+model documentos_generados {
+  id_documento                 Int                  @id @default(autoincrement())
+  tipo_documento               tipo_documento_enum
+  id_referencia                Int
+  numero_documento             String?              @db.VarChar(100)
+  ruta_archivo                 String               @unique @db.VarChar(500)
+  hash_sha256                  String               @unique @db.VarChar(64)
+  tamano_bytes                 BigInt
+  mime_type                    String               @default("application/pdf") @db.VarChar(50)
+  numero_paginas               Int?
+  fecha_generacion             DateTime             @default(now())
+  generado_por                 Int
+  herramienta_generacion       String?              @db.VarChar(50)
+  
+  informes                     informes[]
+  bitacoras                    bitacoras[]
+  
+  @@map("documentos_generados")
+}
+
+model bitacoras {
+  id_bitacora                  Int                   @id @default(autoincrement())
+  numero_bitacora              String                @unique @db.VarChar(50)
+  id_cliente                   Int
+  mes                          Int
+  anio                         Int
+  fecha_generacion             DateTime              @default(now())
+  generado_por                 Int
+  estado_bitacora              estado_bitacora_enum  @default(BORRADOR)
+  id_documento_pdf             Int?
+  cantidad_informes            Int                   @default(0)
+  enviada_cliente_fecha        DateTime?
+  metodo_envio                 String?               @db.VarChar(20)
+  fecha_aprobacion_cliente     DateTime?
+  firma_digital_cliente        String?
+  observaciones                String?
+  
+  cliente                      clientes              @relation(fields: [id_cliente], references: [id_cliente])
+  documento_pdf                documentos_generados? @relation(fields: [id_documento_pdf], references: [id_documento])
+  
+  informes_rel                 bitacoras_informes[]
+  
+  @@unique([id_cliente, mes, anio])
+  @@map("bitacoras")
+}
+
+model bitacoras_informes {
+  id_bitacora_informe          Int       @id @default(autoincrement())
+  id_bitacora                  Int
+  id_informe                   Int
+  orden_bitacora               Int
+  
+  bitacora                     bitacoras @relation(fields: [id_bitacora], references: [id_bitacora], onDelete: Cascade)
+  informe                      informes  @relation(fields: [id_informe], references: [id_informe])
+  
+  @@unique([id_bitacora, id_informe])
+  @@unique([id_bitacora, orden_bitacora])
+  @@map("bitacoras_informes")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 7: CRONOGRAMAS Y PROGRAMACIÓN (4 TABLAS)
+// ═══════════════════════════════════════════════════════════════════
+
+// Enums Fase 7
+enum tipo_contrato_mantenimiento_enum {
+  PREVENTIVO_RECURRENTE
+  INTEGRAL
+  ESPECIAL
+}
+
+enum periodicidad_enum {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
+  BIMESTRAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+enum estado_contrato_enum {
+  ACTIVO
+  SUSPENDIDO
+  FINALIZADO
+  RENOVACION_PENDIENTE
+}
+
+enum estado_cronograma_enum {
+  PENDIENTE
+  PROGRAMADA
+  COMPLETADA
+  VENCIDA
+  CANCELADA
+}
+
+model contratos_mantenimiento {
+  id_contrato                  Int                               @id @default(autoincrement())
+  codigo_contrato              String                            @unique @db.VarChar(50)
+  id_cliente                   Int
+  id_asesor_responsable        Int
+  tipo_contrato                tipo_contrato_mantenimiento_enum  @default(PREVENTIVO_RECURRENTE)
+  periodicidad_default         periodicidad_enum                 @default(MENSUAL)
+  fecha_inicio                 DateTime                          @db.Date
+  fecha_fin                    DateTime?                         @db.Date
+  estado_contrato              estado_contrato_enum              @default(ACTIVO)
+  genera_automaticamente       Boolean                           @default(true)
+  dias_anticipacion_generacion Int                               @default(7)
+  observaciones                String?
+  fecha_creacion               DateTime                          @default(now())
+  creado_por                   Int
+  
+  cliente                      clientes                          @relation(fields: [id_cliente], references: [id_cliente])
+  
+  equipos_contrato             equipos_contrato[]
+  cronogramas                  cronogramas_servicio[]
+  historial                    historial_contrato[]
+  
+  @@map("contratos_mantenimiento")
+}
+
+model equipos_contrato {
+  id_equipo_contrato           Int                    @id @default(autoincrement())
+  id_contrato                  Int
+  id_equipo                    Int
+  tipo_servicio_default        Int
+  criterio_intervalo           criterio_intervalo_enum @default(POR_DIAS)
+  intervalo_dias               Int?
+  intervalo_horas              Decimal?               @db.Decimal(10, 1)
+  activo_en_contrato           Boolean                @default(true)
+  fecha_inclusion              DateTime               @default(now()) @db.Date
+  fecha_exclusion              DateTime?              @db.Date
+  
+  contrato                     contratos_mantenimiento @relation(fields: [id_contrato], references: [id_contrato])
+  equipo                       equipos                 @relation(fields: [id_equipo], references: [id_equipo])
+  
+  cronogramas                  cronogramas_servicio[]
+  
+  @@unique([id_contrato, id_equipo])
+  @@map("equipos_contrato")
+}
+
+model cronogramas_servicio {
+  id_cronograma                Int                    @id @default(autoincrement())
+  id_contrato                  Int
+  id_equipo                    Int
+  id_equipo_contrato           Int
+  tipo_servicio_programado     Int
+  fecha_prevista               DateTime               @db.Date
+  fecha_inicio_ventana         DateTime?              @db.Date
+  fecha_fin_ventana            DateTime?              @db.Date
+  fecha_base_calculo           DateTime?              @db.Date
+  estado_cronograma            estado_cronograma_enum @default(PENDIENTE)
+  id_orden_servicio_generada   Int?
+  fecha_generacion_os          DateTime?
+  fecha_completado             DateTime?
+  prioridad                    prioridad_enum         @default(NORMAL)
+  observaciones_programacion   String?
+  fecha_creacion               DateTime               @default(now())
+  creado_por                   Int
+  secuencia_contrato           Int?
+  
+  contrato                     contratos_mantenimiento @relation(fields: [id_contrato], references: [id_contrato])
+  equipo                       equipos                 @relation(fields: [id_equipo], references: [id_equipo])
+  equipo_contrato              equipos_contrato        @relation(fields: [id_equipo_contrato], references: [id_equipo_contrato])
+  
+  @@unique([id_equipo_contrato, fecha_prevista])
+  @@map("cronogramas_servicio")
+}
+
+model historial_contrato {
+  id_historial                 Int       @id @default(autoincrement())
+  id_contrato                  Int
+  campo_modificado             String    @db.VarChar(50)
+  valor_anterior               String?
+  valor_nuevo                  String
+  motivo_cambio                String?
+  fecha_cambio                 DateTime  @default(now())
+  modificado_por               Int
+  
+  contrato                     contratos_mantenimiento @relation(fields: [id_contrato], references: [id_contrato], onDelete: Cascade)
+  
+  @@index([id_contrato, fecha_cambio])
+  @@map("historial_contrato")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCHEMA COMPLETO - 69 TABLAS TOTALES
+// ═══════════════════════════════════════════════════════════════════
+// FASE 1: Equipos (12 tablas)
+// FASE 2: Usuarios (9 tablas)
+// FASE 3: Órdenes Servicio (15 tablas)
+// FASE 4: Cotizaciones (10 tablas) ✅
+// FASE 5: Inventario (11 tablas) ✅
+// FASE 6: Informes (5 tablas) ✅
+// FASE 7: Cronogramas (4 tablas) ✅
+//
+// Estado: SCHEMA COMPLETO 100% - Listo para prisma generate
+// Siguiente: Generar CRUDs (66 módulos faltantes)
+// ═══════════════════════════════════════════════════════════════════

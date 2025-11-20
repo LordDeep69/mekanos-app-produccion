@@ -54,20 +54,7 @@ export class AuthController {
     };
   }
 
-  /**
-   * GET /auth/mock-users
-   * Lista todos los usuarios mock disponibles (solo para desarrollo)
-   * Requiere rol ADMIN
-   */
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  @Get('mock-users')
-  async getMockUsers() {
-    return {
-      message: 'Usuarios mock disponibles para testing',
-      users: this.authService.getMockUsers(),
-    };
-  }
+  // ✅ FASE 1: Método getMockUsers eliminado (ya no usamos mocks)
 
   /**
    * GET /auth/admin-test

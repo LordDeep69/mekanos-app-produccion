@@ -330,11 +330,8 @@ export class MockOrdenServicioRepository implements IOrdenServicioRepository {
     return found !== null;
   }
 
-  async getUltimoCorrelativoMes(): Promise<number> {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const prefix = `OS-${currentYear}${String(currentMonth).padStart(2, '0')}`;
+  async getUltimoCorrelativoMes(anio: number, mes: number): Promise<number> {
+    const prefix = `OS-${anio}${String(mes).padStart(2, '0')}`;
 
     const ordenesDelMes = Array.from(this.ordenes.values())
       .filter(o => o.numeroOrden.getValue().startsWith(prefix))

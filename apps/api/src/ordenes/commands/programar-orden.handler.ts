@@ -1,25 +1,36 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { ProgramarOrdenCommand } from './programar-orden.command';
-import { OrdenServicioEntity, IOrdenServicioRepository, OrdenServicioId } from '@mekanos/core';
+import { PrismaOrdenServicioRepository } from '../infrastructure/prisma-orden-servicio.repository';
 
 @CommandHandler(ProgramarOrdenCommand)
 export class ProgramarOrdenHandler implements ICommandHandler<ProgramarOrdenCommand> {
   constructor(
-    @Inject('IOrdenServicioRepository')
-    private readonly ordenRepository: IOrdenServicioRepository
+    private readonly repository: PrismaOrdenServicioRepository
   ) {}
 
-  async execute(command: ProgramarOrdenCommand): Promise<OrdenServicioEntity> {
-    const { ordenId, fechaProgramada, observaciones } = command;
+  async execute(command: ProgramarOrdenCommand): Promise<any> {
+    const { ordenId, fechaProgramada } = command;
 
-    const orden = await this.ordenRepository.findById(OrdenServicioId.from(ordenId));
-    if (!orden) {
+    // 1. Verificar existencia
+    const ordenExistente = await this.repository.findById(parseInt(ordenId, 10));
+    if (!ordenExistente) {
       throw new NotFoundException(`Orden con ID ${ordenId} no encontrada`);
     }
 
-    orden.programar(fechaProgramada, observaciones);
+    // 2. Obtener estado PROGRAMADA
+    const estadoProgramada = await this.repository.findEstadoByCodigo('PROGRAMADA');
+    if (!estadoProgramada) {
+      throw new NotFoundException('No se encontró el estado PROGRAMADA en el catálogo');
+    }
 
-    return await this.ordenRepository.save(orden);
+    // 3. Programar orden
+    return await this.repository.programar(
+      parseInt(ordenId, 10),
+      fechaProgramada,
+      null, // hora_programada
+      estadoProgramada.id_estado,
+      1 // TODO: obtener userId desde JWT
+    );
   }
 }

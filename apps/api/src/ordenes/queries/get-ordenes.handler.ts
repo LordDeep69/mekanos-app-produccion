@@ -1,7 +1,6 @@
-import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
 import { GetOrdenesQuery } from './get-ordenes.query';
-import { IOrdenServicioRepository, FindOrdenesFilters } from '@mekanos/core';
 
 interface PaginatedResponse {
   ordenes: any[];
@@ -15,33 +14,32 @@ interface PaginatedResponse {
 export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
   constructor(
     @Inject('IOrdenServicioRepository')
-    private readonly ordenRepository: IOrdenServicioRepository
+    private readonly ordenRepository: any // Usa PrismaOrdenServicioRepository directamente (not interfaz)
   ) {}
 
   async execute(query: GetOrdenesQuery): Promise<PaginatedResponse> {
-    const { page, limit, clienteId, equipoId, tecnicoId, estado, prioridad } = query;
+    const { page, limit, clienteId, equipoId, tecnicoId, prioridad } = query;
 
-    const filters: FindOrdenesFilters = {
+    const filters: any = {
       skip: (page - 1) * limit,
       take: limit,
-      clienteId,
-      equipoId,
-      tecnicoAsignadoId: tecnicoId,
-      estado,
-      prioridad
+      id_cliente: clienteId,
+      id_equipo: equipoId,
+      id_tecnico_asignado: tecnicoId,
+      // estado y prioridad NO son filtros directos en repository (requieren lookup de IDs)
+      // TODO: Agregar resolución de estado string → id_estado_actual
+      prioridad,
     };
 
-    const [ordenes, total] = await Promise.all([
-      this.ordenRepository.findAll(filters),
-      this.ordenRepository.count(filters)
-    ]);
+    // findAll() devuelve { items, total } directamente
+    const result = await this.ordenRepository.findAll(filters);
 
     return {
-      ordenes: ordenes.map(o => o.toObject()),
-      total,
+      ordenes: result.items, // Ya son objetos Prisma serializables
+      total: result.total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(result.total / limit)
     };
   }
 }

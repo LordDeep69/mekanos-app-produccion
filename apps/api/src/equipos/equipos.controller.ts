@@ -1,33 +1,33 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  ParseIntPipe
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Param,
+    ParseIntPipe,
+    Post,
+    Put,
+    Query,
+    UseGuards
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CreateEquipoCommand } from './commands/create-equipo.command';
+import { DeleteEquipoCommand } from './commands/delete-equipo.command';
+import { UpdateEquipoCommand } from './commands/update-equipo.command';
+import { UserId } from './decorators/user-id.decorator';
 import { CreateEquipoDto } from './dto/create-equipo.dto';
 import { UpdateEquipoDto } from './dto/update-equipo.dto';
-import { GetEquiposQueryDto } from './queries/get-equipos.query';
-import { CreateEquipoCommand } from './commands/create-equipo.command';
-import { UpdateEquipoCommand } from './commands/update-equipo.command';
-import { DeleteEquipoCommand } from './commands/delete-equipo.command';
 import { GetEquipoQuery } from './queries/get-equipo.query';
-import { GetEquiposQuery } from './queries/get-equipos.query';
-import { GetEquiposResult } from './queries/get-equipos.handler';
-import { EquipoEntity } from '@mekanos/core';
+import { GetEquiposQuery, GetEquiposQueryDto } from './queries/get-equipos.query';
 
 /**
  * Controller para endpoints REST de Equipos
  * Todos los endpoints requieren autenticación JWT
  */
-@Controller('api/equipos')
+@Controller('equipos')
+@Public()
 @UseGuards(JwtAuthGuard)
 export class EquiposController {
   constructor(
@@ -40,14 +40,17 @@ export class EquiposController {
    * Crear un nuevo equipo
    */
   @Post()
-  async create(@Body() dto: CreateEquipoDto) {
-    const command = new CreateEquipoCommand(dto);
-    const equipo: EquipoEntity = await this.commandBus.execute(command);
+  async create(
+    @Body() dto: CreateEquipoDto,
+    @UserId() userId: number
+  ) {
+    const command = new CreateEquipoCommand(dto, userId);
+    const equipo = await this.commandBus.execute(command);
     
     return {
       success: true,
       message: 'Equipo creado exitosamente',
-      data: equipo.toObject()
+      data: equipo
     };
   }
 
@@ -58,19 +61,20 @@ export class EquiposController {
   @Get()
   async findAll(@Query() queryDto: GetEquiposQueryDto) {
     const query = new GetEquiposQuery(
-      queryDto.clienteId,
-      queryDto.sedeId,
-      queryDto.estado,
-      queryDto.tipoEquipoId,
+      queryDto.id_cliente,
+      queryDto.id_sede,
+      queryDto.estado_equipo,
+      queryDto.id_tipo_equipo,
+      queryDto.activo,
       queryDto.page,
       queryDto.limit
     );
     
-    const result: GetEquiposResult = await this.queryBus.execute(query);
+    const result = await this.queryBus.execute(query);
     
     return {
       success: true,
-      data: result.equipos.map((e) => e.toObject()),
+      data: result.items,
       pagination: {
         total: result.total,
         page: result.page,
@@ -87,11 +91,11 @@ export class EquiposController {
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const query = new GetEquipoQuery(id);
-    const equipo: EquipoEntity = await this.queryBus.execute(query);
+    const equipo = await this.queryBus.execute(query);
     
     return {
       success: true,
-      data: equipo.toObject()
+      data: equipo
     };
   }
 
@@ -102,15 +106,16 @@ export class EquiposController {
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateEquipoDto
+    @Body() dto: UpdateEquipoDto,
+    @UserId() userId: number
   ) {
-    const command = new UpdateEquipoCommand(id, dto);
-    const equipo: EquipoEntity = await this.commandBus.execute(command);
+    const command = new UpdateEquipoCommand(id, dto, userId);
+    const equipo = await this.commandBus.execute(command);
     
     return {
       success: true,
       message: 'Equipo actualizado exitosamente',
-      data: equipo.toObject()
+      data: equipo
     };
   }
 
@@ -119,8 +124,11 @@ export class EquiposController {
    * Eliminar un equipo
    */
   @Delete(':id')
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    const command = new DeleteEquipoCommand(id);
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @UserId() userId: number
+  ) {
+    const command = new DeleteEquipoCommand(id, userId);
     await this.commandBus.execute(command);
     
     return {
@@ -129,3 +137,4 @@ export class EquiposController {
     };
   }
 }
+

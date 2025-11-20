@@ -1,0 +1,110 @@
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { PrismaService } from '@mekanos/database';
+import { CreateBitacorasDto } from './dto/create-bitacoras.dto';
+import { UpdateBitacorasDto } from './dto/update-bitacoras.dto';
+
+@Injectable()
+export class BitacorasService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(createDto: CreateBitacorasDto) {
+    try {
+      return await this.prisma.bitacoras.create({
+        data: createDto as any,
+      });
+    } catch (error: unknown) {
+      throw new InternalServerErrorException(
+        `Error al crear bitacoras: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async findAll(page: number = 1, limit: number = 10) {
+    try {
+      const skip = (page - 1) * limit;
+      
+      const [data, total] = await Promise.all([
+        this.prisma.bitacoras.findMany({
+          skip,
+          take: limit,
+          orderBy: { id_bitacora: 'desc' },
+        }),
+        this.prisma.bitacoras.count(),
+      ]);
+
+      return {
+        data,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error: unknown) {
+      throw new InternalServerErrorException(
+        `Error al obtener bitacoras: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async findOne(id: number) {
+    try {
+      const record = await this.prisma.bitacoras.findUnique({
+        where: { id_bitacora: id },
+      });
+
+      if (!record) {
+        throw new NotFoundException(`Bitacoras con ID ${id} no encontrado`);
+      }
+
+      return record;
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error al obtener bitacoras: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async update(id: number, updateDto: UpdateBitacorasDto) {
+    try {
+      await this.findOne(id); // Verifica existencia
+
+      return await this.prisma.bitacoras.update({
+        where: { id_bitacora: id },
+        data: updateDto as any,
+      });
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error al actualizar bitacoras: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async remove(id: number) {
+    try {
+      await this.findOne(id); // Verifica existencia
+
+      return await this.prisma.bitacoras.delete({
+        where: { id_bitacora: id },
+      });
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error al eliminar bitacoras: ${(error as Error).message}`,
+      );
+    }
+  }
+}

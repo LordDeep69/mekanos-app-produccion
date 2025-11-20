@@ -1,0 +1,25 @@
+export class CrearTipoEquipoCommand {
+  constructor(
+    public readonly codigo_tipo: string,
+    public readonly nombre_tipo: string,
+    public readonly categoria: string,
+    public readonly formato_ficha_tecnica: string,
+    public readonly descripcion?: string,
+    public readonly tiene_motor?: boolean,
+    public readonly tiene_generador?: boolean,
+    public readonly tiene_bomba?: boolean,
+    public readonly requiere_horometro?: boolean,
+    public readonly permite_mantenimiento_tipo_a?: boolean,
+    public readonly permite_mantenimiento_tipo_b?: boolean,
+    public readonly intervalo_tipo_a_dias?: number,
+    public readonly intervalo_tipo_a_horas?: number,
+    public readonly intervalo_tipo_b_dias?: number,
+    public readonly intervalo_tipo_b_horas?: number,
+    public readonly criterio_intervalo?: string,
+    public readonly formato_mantenimiento_tipo_a?: string,
+    public readonly formato_mantenimiento_tipo_b?: string,
+    public readonly orden?: number,
+    public readonly metadata?: any,
+    public readonly creado_por?: number,
+  ) {}
+}

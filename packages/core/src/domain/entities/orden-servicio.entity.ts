@@ -15,6 +15,7 @@ export interface CreateOrdenServicioProps {
   descripcion?: string;
   prioridad?: PrioridadOrdenEnum;
   fechaProgramada?: Date;
+  userId?: number;
 }
 
 /**
@@ -38,6 +39,7 @@ export interface OrdenServicioProps {
   firmaClienteUrl?: string;
   createdAt: Date;
   updatedAt?: Date;
+  userId?: number;
 }
 
 /**
@@ -65,7 +67,8 @@ export class OrdenServicioEntity {
     private _observaciones: string | null,
     private _firmaClienteUrl: string | null,
     private readonly _createdAt: Date,
-    private _updatedAt: Date | null
+    private _updatedAt: Date | null,
+    private readonly _userId: number | null
   ) {}
 
   /**
@@ -92,7 +95,8 @@ export class OrdenServicioEntity {
       null, // Sin observaciones
       null, // Sin firma
       new Date(),
-      null
+      null,
+      props.userId || null
     );
   }
 
@@ -117,7 +121,8 @@ export class OrdenServicioEntity {
       props.observaciones || null,
       props.firmaClienteUrl || null,
       props.createdAt,
-      props.updatedAt || null
+      props.updatedAt || null,
+      props.userId || null
     );
   }
 
@@ -438,6 +443,7 @@ export class OrdenServicioEntity {
       firmaClienteUrl: this._firmaClienteUrl,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt,
+      userId: this._userId,
     };
   }
 }

@@ -1,0 +1,1839 @@
+﻿
+> @mekanos/api@0.1.0 dev C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\apps\api
+> nest start --watch
+
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 1592 ms
+Type-checking in progress...
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +40ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDatabaseModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +23ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCqrsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCloudinaryModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsServiciosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsComponentesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCotizacionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEquiposModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActividadesEjecutadasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMedicionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mOrdenesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEvidenciasModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/api}:[39m[38;5;3m +7ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api, GET} route[39m[38;5;3m +3ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/api/health}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health/detailed, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/auth}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/login, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/me, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/admin-test, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/tech-test, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEquiposController {/api/equipos}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mOrdenesController {/api/ordenes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/programar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/asignar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/iniciar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/aprobar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/cancelar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActividadesController {/api/actividades-ejecutadas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, PUT} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mMedicionesController {/api/mediciones-servicio}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEvidenciasController {/api/evidencias-fotograficas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCotizacionesController {/api/cotizaciones}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsServiciosController {/api/cotizaciones/:idCotizacion/servicios}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsComponentesController {/api/cotizaciones/:idCotizacion/componentes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:03 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+Ô£à PrismaService: Conexi├│n establecida con Supabase
+Ô£à Database connection established
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:05 p.┬ám. [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2091ms[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:05 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒÜÇ Mekanos API running on: http://localhost:3000/api[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:05 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒôè GraphQL Playground: http://localhost:3000/graphql[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:05 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32mÔØñ´©Å  Health check: http://localhost:3000/api/health[39m
+[32m[Nest] 12964  - [39m14/11/2025, 2:09:05 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒîì Environment: development[39m
+node.exe : ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+En C:\Users\Usuario\AppData\Roaming\npm\pnpm.ps1: 24 Carácter: 5
++     & "node$exe"  "$basedir/node_modules/pnpm/bin/pnpm.cjs" $args
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ERROR in ./src/...s-demo.ts:109:7:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 9411 ms.
+­ƒöÉ [DEBUG] Login attempt: { email: 'admin@mekanos.com' }
+­ƒôØ [DEBUG] Usuario encontrado: {
+  exists: true,
+  id: 1,
+  estado: 'ACTIVO',
+  hasPassword: true,
+  hasPersona: true
+}
+Ô£à [DEBUG] Usuario activo validado
+­ƒöæ [DEBUG] Validando password...
+­ƒöæ [DEBUG] Password v├ílido: true
+­ƒÄ½ [DEBUG] Generando tokens JWT...
+Ô£à [DEBUG] Tokens generados exitosamente
+­ƒÄë [DEBUG] Login exitoso: { userId: 1, email: 'admin@mekanos.com' }
+prisma:query SELECT 1
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query INSERT INTO "public"."items_cotizacion_servicios" ("id_cotizacion","id_servicio","cantidad","unidad","precio_unitario","descuento_porcentaje","subtotal","descripcion_personalizada","fecha_registro") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT SUM("subtotal") FROM (SELECT "public"."items_cotizacion_servicios"."subtotal" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 OFFSET $2) AS "sub"
+prisma:query COMMIT
+prisma:query SELECT 1
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 ORDER BY "public"."items_cotizacion_servicios"."orden_item" ASC OFFSET $2
+prisma:query SELECT "public"."catalogo_servicios"."id_servicio", "public"."catalogo_servicios"."codigo_servicio", "public"."catalogo_servicios"."nombre_servicio", "public"."catalogo_servicios"."descripcion", "public"."catalogo_servicios"."categoria"::text, "public"."catalogo_servicios"."id_tipo_servicio", "public"."catalogo_servicios"."id_tipo_equipo", "public"."catalogo_servicios"."duracion_estimada_horas", "public"."catalogo_servicios"."requiere_certificacion", "public"."catalogo_servicios"."tipo_certificacion_requerida", "public"."catalogo_servicios"."precio_base", "public"."catalogo_servicios"."incluye_repuestos", "public"."catalogo_servicios"."activo", "public"."catalogo_servicios"."observaciones", "public"."catalogo_servicios"."creado_por", "public"."catalogo_servicios"."fecha_creacion", "public"."catalogo_servicios"."modificado_por", "public"."catalogo_servicios"."fecha_modificacion" FROM "public"."catalogo_servicios" WHERE "public"."catalogo_servicios"."id_servicio" IN ($1) OFFSET $2
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query UPDATE "public"."items_cotizacion_servicios" SET "cantidad" = $1, "descuento_porcentaje" = $2, "subtotal" = $3 WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $4 AND 1=1) RETURNING "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por"
+prisma:query COMMIT
+prisma:query SELECT 1
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT SUM("subtotal") FROM (SELECT "public"."items_cotizacion_servicios"."subtotal" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 OFFSET $2) AS "sub"
+prisma:query COMMIT
+prisma:query SELECT 1
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query INSERT INTO "public"."items_cotizacion_componentes" ("id_cotizacion","id_tipo_componente","descripcion","referencia_manual","marca_manual","cantidad","unidad","precio_unitario","descuento_porcentaje","subtotal","garantia_meses","fecha_registro") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING "public"."items_cotizacion_componentes"."id_item_componente", "public"."items_cotizacion_componentes"."id_cotizacion", "public"."items_cotizacion_componentes"."id_componente", "public"."items_cotizacion_componentes"."id_tipo_componente", "public"."items_cotizacion_componentes"."descripcion", "public"."items_cotizacion_componentes"."referencia_manual", "public"."items_cotizacion_componentes"."marca_manual", "public"."items_cotizacion_componentes"."cantidad", "public"."items_cotizacion_componentes"."unidad", "public"."items_cotizacion_componentes"."precio_unitario", "public"."items_cotizacion_componentes"."descuento_porcentaje", "public"."items_cotizacion_componentes"."subtotal", "public"."items_cotizacion_componentes"."garantia_meses", "public"."items_cotizacion_componentes"."observaciones_garantia", "public"."items_cotizacion_componentes"."observaciones", "public"."items_cotizacion_componentes"."orden_item", "public"."items_cotizacion_componentes"."fecha_registro", "public"."items_cotizacion_componentes"."registrado_por"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT SUM("subtotal") FROM (SELECT "public"."items_cotizacion_componentes"."subtotal" FROM "public"."items_cotizacion_componentes" WHERE "public"."items_cotizacion_componentes"."id_cotizacion" = $1 OFFSET $2) AS "sub"
+prisma:query COMMIT
+prisma:query SELECT 1
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_componentes"."id_item_componente", "public"."items_cotizacion_componentes"."id_cotizacion", "public"."items_cotizacion_componentes"."id_componente", "public"."items_cotizacion_componentes"."id_tipo_componente", "public"."items_cotizacion_componentes"."descripcion", "public"."items_cotizacion_componentes"."referencia_manual", "public"."items_cotizacion_componentes"."marca_manual", "public"."items_cotizacion_componentes"."cantidad", "public"."items_cotizacion_componentes"."unidad", "public"."items_cotizacion_componentes"."precio_unitario", "public"."items_cotizacion_componentes"."descuento_porcentaje", "public"."items_cotizacion_componentes"."subtotal", "public"."items_cotizacion_componentes"."garantia_meses", "public"."items_cotizacion_componentes"."observaciones_garantia", "public"."items_cotizacion_componentes"."observaciones", "public"."items_cotizacion_componentes"."orden_item", "public"."items_cotizacion_componentes"."fecha_registro", "public"."items_cotizacion_componentes"."registrado_por" FROM "public"."items_cotizacion_componentes" WHERE "public"."items_cotizacion_componentes"."id_cotizacion" = $1 ORDER BY "public"."items_cotizacion_componentes"."orden_item" ASC OFFSET $2
+prisma:query SELECT "public"."tipos_componente"."id_tipo_componente", "public"."tipos_componente"."codigo_tipo", "public"."tipos_componente"."nombre_componente", "public"."tipos_componente"."categoria"::text, "public"."tipos_componente"."subcategoria", "public"."tipos_componente"."es_consumible", "public"."tipos_componente"."es_inventariable", "public"."tipos_componente"."aplica_a"::text, "public"."tipos_componente"."descripcion", "public"."tipos_componente"."activo", "public"."tipos_componente"."creado_por", "public"."tipos_componente"."fecha_creacion" FROM "public"."tipos_componente" WHERE "public"."tipos_componente"."id_tipo_componente" IN ($1) OFFSET $2
+prisma:query COMMIT
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 218 ms
+Type-checking in progress...
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 413 ms.
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +36ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDatabaseModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +24ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCqrsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCloudinaryModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsServiciosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsComponentesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCotizacionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEquiposModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActividadesEjecutadasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMedicionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mOrdenesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEvidenciasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/api}:[39m[38;5;3m +6ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/api/health}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health/detailed, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/auth}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/login, POST} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/me, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/admin-test, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/tech-test, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEquiposController {/api/equipos}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, DELETE} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mOrdenesController {/api/ordenes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/programar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/asignar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/iniciar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/aprobar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/cancelar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActividadesController {/api/actividades-ejecutadas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mMedicionesController {/api/mediciones-servicio}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEvidenciasController {/api/evidencias-fotograficas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCotizacionesController {/api/cotizaciones}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsServiciosController {/api/cotizaciones/:idCotizacion/servicios}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsComponentesController {/api/cotizaciones/:idCotizacion/componentes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 11516  - [39m14/11/2025, 2:11:55 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+Ô£à PrismaService: Conexi├│n establecida con Supabase
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 78 ms
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 121 ms.
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +38ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDatabaseModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +28ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCqrsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCloudinaryModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsServiciosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsComponentesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCotizacionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEquiposModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActividadesEjecutadasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMedicionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mOrdenesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEvidenciasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/api}:[39m[38;5;3m +6ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/api/health}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health/detailed, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/auth}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/login, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/me, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/admin-test, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/tech-test, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEquiposController {/api/equipos}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mOrdenesController {/api/ordenes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/programar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/asignar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/iniciar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/aprobar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/cancelar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActividadesController {/api/actividades-ejecutadas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, PUT} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mMedicionesController {/api/mediciones-servicio}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEvidenciasController {/api/evidencias-fotograficas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCotizacionesController {/api/cotizaciones}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsServiciosController {/api/cotizaciones/:idCotizacion/servicios}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsComponentesController {/api/cotizaciones/:idCotizacion/componentes}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:11:58 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+Ô£à PrismaService: Conexi├│n establecida con Supabase
+Ô£à Database connection established
+[32m[Nest] 21172  - [39m14/11/2025, 2:12:00 p.┬ám. [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2084ms[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:12:00 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒÜÇ Mekanos API running on: http://localhost:3000/api[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:12:00 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒôè GraphQL Playground: http://localhost:3000/graphql[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:12:00 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32mÔØñ´©Å  Health check: http://localhost:3000/api/health[39m
+[32m[Nest] 21172  - [39m14/11/2025, 2:12:00 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒîì Environment: development[39m
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 92 ms
+Type-checking in progress...
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 326 ms.
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +39ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDatabaseModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +25ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCqrsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCloudinaryModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsServiciosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsComponentesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCotizacionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEquiposModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActividadesEjecutadasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMedicionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mOrdenesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEvidenciasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/api}:[39m[38;5;3m +7ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api, GET} route[39m[38;5;3m +3ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/api/health}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health/detailed, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/auth}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/login, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/me, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/admin-test, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/tech-test, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEquiposController {/api/equipos}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, POST} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, DELETE} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mOrdenesController {/api/ordenes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/programar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/asignar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/iniciar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/aprobar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/cancelar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActividadesController {/api/actividades-ejecutadas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mMedicionesController {/api/mediciones-servicio}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEvidenciasController {/api/evidencias-fotograficas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCotizacionesController {/api/cotizaciones}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsServiciosController {/api/cotizaciones/:idCotizacion/servicios}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsComponentesController {/api/cotizaciones/:idCotizacion/componentes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 22748  - [39m14/11/2025, 2:12:14 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+Ô£à PrismaService: Conexi├│n establecida con Supabase
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 88 ms
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 130 ms.
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +37ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDatabaseModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +24ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCqrsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCloudinaryModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsServiciosModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mItemsComponentesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCotizacionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEquiposModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActividadesEjecutadasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mMedicionesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mOrdenesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEvidenciasModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/api}:[39m[38;5;3m +7ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/api/health}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/health/detailed, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/auth}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/login, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/me, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/admin-test, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/auth/tech-test, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEquiposController {/api/equipos}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/equipos/:id, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mOrdenesController {/api/ordenes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/programar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/asignar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/iniciar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/aprobar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/ordenes/:id/cancelar, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActividadesController {/api/actividades-ejecutadas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/orden/:ordenId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/actividades-ejecutadas/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mMedicionesController {/api/mediciones-servicio}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/mediciones-servicio/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEvidenciasController {/api/evidencias-fotograficas}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/evidencias-fotograficas/orden/:ordenId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCotizacionesController {/api/cotizaciones}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:id, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsServiciosController {/api/cotizaciones/:idCotizacion/servicios}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/servicios/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mItemsComponentesController {/api/cotizaciones/:idCotizacion/componentes}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, PUT} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:17 p.┬ám. [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/cotizaciones/:idCotizacion/componentes/:idItem, DELETE} route[39m[38;5;3m +0ms[39m
+Ô£à PrismaService: Conexi├│n establecida con Supabase
+Ô£à Database connection established
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:19 p.┬ám. [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2083ms[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:19 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒÜÇ Mekanos API running on: http://localhost:3000/api[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:19 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒôè GraphQL Playground: http://localhost:3000/graphql[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:19 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32mÔØñ´©Å  Health check: http://localhost:3000/api/health[39m
+[32m[Nest] 9496  - [39m14/11/2025, 2:12:19 p.┬ám. [32m    LOG[39m [38;5;3m[Bootstrap] [39m[32m­ƒîì Environment: development[39m
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 ORDER BY "public"."items_cotizacion_servicios"."orden_item" ASC OFFSET $2
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query DELETE FROM "public"."items_cotizacion_servicios" WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $1 AND 1=1) RETURNING "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT SUM("subtotal") FROM (SELECT "public"."items_cotizacion_servicios"."subtotal" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 OFFSET $2) AS "sub"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_componentes"."id_item_componente", "public"."items_cotizacion_componentes"."id_cotizacion", "public"."items_cotizacion_componentes"."id_componente", "public"."items_cotizacion_componentes"."id_tipo_componente", "public"."items_cotizacion_componentes"."descripcion", "public"."items_cotizacion_componentes"."referencia_manual", "public"."items_cotizacion_componentes"."marca_manual", "public"."items_cotizacion_componentes"."cantidad", "public"."items_cotizacion_componentes"."unidad", "public"."items_cotizacion_componentes"."precio_unitario", "public"."items_cotizacion_componentes"."descuento_porcentaje", "public"."items_cotizacion_componentes"."subtotal", "public"."items_cotizacion_componentes"."garantia_meses", "public"."items_cotizacion_componentes"."observaciones_garantia", "public"."items_cotizacion_componentes"."observaciones", "public"."items_cotizacion_componentes"."orden_item", "public"."items_cotizacion_componentes"."fecha_registro", "public"."items_cotizacion_componentes"."registrado_por" FROM "public"."items_cotizacion_componentes" WHERE "public"."items_cotizacion_componentes"."id_cotizacion" = $1 ORDER BY "public"."items_cotizacion_componentes"."orden_item" ASC OFFSET $2
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_componentes"."id_item_componente", "public"."items_cotizacion_componentes"."id_cotizacion", "public"."items_cotizacion_componentes"."id_componente", "public"."items_cotizacion_componentes"."id_tipo_componente", "public"."items_cotizacion_componentes"."descripcion", "public"."items_cotizacion_componentes"."referencia_manual", "public"."items_cotizacion_componentes"."marca_manual", "public"."items_cotizacion_componentes"."cantidad", "public"."items_cotizacion_componentes"."unidad", "public"."items_cotizacion_componentes"."precio_unitario", "public"."items_cotizacion_componentes"."descuento_porcentaje", "public"."items_cotizacion_componentes"."subtotal", "public"."items_cotizacion_componentes"."garantia_meses", "public"."items_cotizacion_componentes"."observaciones_garantia", "public"."items_cotizacion_componentes"."observaciones", "public"."items_cotizacion_componentes"."orden_item", "public"."items_cotizacion_componentes"."fecha_registro", "public"."items_cotizacion_componentes"."registrado_por" FROM "public"."items_cotizacion_componentes" WHERE ("public"."items_cotizacion_componentes"."id_item_componente" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query DELETE FROM "public"."items_cotizacion_componentes" WHERE ("public"."items_cotizacion_componentes"."id_item_componente" = $1 AND 1=1) RETURNING "public"."items_cotizacion_componentes"."id_item_componente", "public"."items_cotizacion_componentes"."id_cotizacion", "public"."items_cotizacion_componentes"."id_componente", "public"."items_cotizacion_componentes"."id_tipo_componente", "public"."items_cotizacion_componentes"."descripcion", "public"."items_cotizacion_componentes"."referencia_manual", "public"."items_cotizacion_componentes"."marca_manual", "public"."items_cotizacion_componentes"."cantidad", "public"."items_cotizacion_componentes"."unidad", "public"."items_cotizacion_componentes"."precio_unitario", "public"."items_cotizacion_componentes"."descuento_porcentaje", "public"."items_cotizacion_componentes"."subtotal", "public"."items_cotizacion_componentes"."garantia_meses", "public"."items_cotizacion_componentes"."observaciones_garantia", "public"."items_cotizacion_componentes"."observaciones", "public"."items_cotizacion_componentes"."orden_item", "public"."items_cotizacion_componentes"."fecha_registro", "public"."items_cotizacion_componentes"."registrado_por"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT SUM("subtotal") FROM (SELECT "public"."items_cotizacion_componentes"."subtotal" FROM "public"."items_cotizacion_componentes" WHERE "public"."items_cotizacion_componentes"."id_cotizacion" = $1 OFFSET $2) AS "sub"
+prisma:query COMMIT
+prisma:query SELECT 1
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query INSERT INTO "public"."items_cotizacion_servicios" ("id_cotizacion","id_servicio","cantidad","unidad","precio_unitario","descuento_porcentaje","subtotal","descripcion_personalizada","fecha_registro") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT SUM("subtotal") FROM (SELECT "public"."items_cotizacion_servicios"."subtotal" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 OFFSET $2) AS "sub"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query INSERT INTO "public"."items_cotizacion_servicios" ("id_cotizacion","id_servicio","cantidad","unidad","precio_unitario","descuento_porcentaje","subtotal","fecha_registro") VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por"
+prisma:query ROLLBACK
+prisma:error 
+Invalid `this.prisma.items_cotizacion_servicios.create()` invocation in
+C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\apps\api\dist\main.js:5845:73
+
+  5842 // Calcular subtotal antes de guardar
+  5843 const itemTemp = new item_cotizacion_servicio_entity_1.ItemCotizacionServicio(data);
+  5844 const subtotalCalculado = itemTemp.calcularSubtotal();
+ÔåÆ 5845 const itemCreado = await this.prisma.items_cotizacion_servicios.create(
+Foreign key constraint violated: `items_cotizacion_servicios_id_servicio_fkey (index)`
+[31m[Nest] 9496  - [39m14/11/2025, 2:30:03 p.┬ám. [31m  ERROR[39m [38;5;3m[AllExceptionsFilter] [39m[31mPOST 
+/api/cotizaciones/2/servicios - Status: 500[39m
+PrismaClientKnownRequestError: 
+Invalid `this.prisma.items_cotizacion_servicios.create()` invocation in
+C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\apps\api\dist\main.js:5845:73
+
+  5842 // Calcular subtotal antes de guardar
+  5843 const itemTemp = new item_cotizacion_servicio_entity_1.ItemCotizacionServicio(data);
+  5844 const subtotalCalculado = itemTemp.calcularSubtotal();
+ÔåÆ 5845 const itemCreado = await this.prisma.items_cotizacion_servicios.create(
+Foreign key constraint violated: `items_cotizacion_servicios_id_servicio_fkey (index)`
+    at $n.handleRequestError (C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\n
+ode_modules\.pnpm\@prisma+client@5.22.0_prisma@5.22.0\node_modules\@prisma\client\runtime\library.js:121:7315)
+    at $n.handleAndLogRequestError (C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\mono
+repo\node_modules\.pnpm\@prisma+client@5.22.0_prisma@5.22.0\node_modules\@prisma\client\runtime\library.js:121:6623)
+    at $n.request (C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\node_modules
+\.pnpm\@prisma+client@5.22.0_prisma@5.22.0\node_modules\@prisma\client\runtime\library.js:121:6307)
+    at async l (C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\node_modules\.p
+npm\@prisma+client@5.22.0_prisma@5.22.0\node_modules\@prisma\client\runtime\library.js:130:9633)
+    at async PrismaItemsServiciosRepository.save (C:\Users\Usuario\Downloads\mekanosApp\BASE DE 
+DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\apps\api\dist\main.js:5845:28)
+    at async CreateItemServicioHandler.execute (C:\Users\Usuario\Downloads\mekanosApp\BASE DE 
+DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\apps\api\dist\main.js:5010:28)
+    at async ItemsServiciosController.create (C:\Users\Usuario\Downloads\mekanosApp\BASE DE 
+DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\apps\api\dist\main.js:5986:16)
+    at async C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\node_modules\.pnpm
+\@nestjs+core@10.4.20_@nestjs+common@10.4.20_@nestjs+platform-express@10.4.20_reflect-metadata@0.1.14_rxjs@7.8.2\node_m
+odules\@nestjs\core\router\router-execution-context.js:46:28
+    at async C:\Users\Usuario\Downloads\mekanosApp\BASE DE DATOS\MEKANOS_DB\REFACTORIZATION\monorepo\node_modules\.pnpm
+\@nestjs+core@10.4.20_@nestjs+common@10.4.20_@nestjs+platform-express@10.4.20_reflect-metadata@0.1.14_rxjs@7.8.2\node_m
+odules\@nestjs\core\router\router-proxy.js:9:17
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query UPDATE "public"."items_cotizacion_servicios" SET "descuento_porcentaje" = $1, "subtotal" = $2 WHERE ("public"."items_cotizacion_servicios"."id_item_servicio" = $3 AND 1=1) RETURNING "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT SUM("subtotal") FROM (SELECT "public"."items_cotizacion_servicios"."subtotal" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 OFFSET $2) AS "sub"
+prisma:query COMMIT
+prisma:query BEGIN
+prisma:query DEALLOCATE ALL
+prisma:query SELECT "public"."items_cotizacion_servicios"."id_item_servicio", "public"."items_cotizacion_servicios"."id_cotizacion", "public"."items_cotizacion_servicios"."id_servicio", "public"."items_cotizacion_servicios"."cantidad", "public"."items_cotizacion_servicios"."unidad", "public"."items_cotizacion_servicios"."precio_unitario", "public"."items_cotizacion_servicios"."descuento_porcentaje", "public"."items_cotizacion_servicios"."subtotal", "public"."items_cotizacion_servicios"."descripcion_personalizada", "public"."items_cotizacion_servicios"."observaciones", "public"."items_cotizacion_servicios"."justificacion_precio", "public"."items_cotizacion_servicios"."orden_item", "public"."items_cotizacion_servicios"."fecha_registro", "public"."items_cotizacion_servicios"."registrado_por" FROM "public"."items_cotizacion_servicios" WHERE "public"."items_cotizacion_servicios"."id_cotizacion" = $1 ORDER BY "public"."items_cotizacion_servicios"."orden_item" ASC OFFSET $2
+prisma:query COMMIT
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 257 ms
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+Found 11 errors in 313 ms.
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 94 ms
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 150 ms.
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 110 ms
+Type-checking in progress...
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 247 ms.
+
+ Info  Webpack is building your sources...
+
+webpack 5.97.1 compiled [1m[32msuccessfully[39m[22m in 89 ms
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:109:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 107 |[39m       nit[33m:[39m [32m'900123456-1'[39m[33m,[39m
+   [90m 108 |[39m       sector_economico[33m:[39m [32m'HOTELERIA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 109 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 110 |[39m       calificacion_crediticia[33m:[39m [32m'A'[39m[33m,[39m
+   [90m 111 |[39m       dias_credito[33m:[39m [35m30[39m[33m,[39m
+   [90m 112 |[39m       limite_credito[33m:[39m [35m50000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:128:7
+TS2322: Type '"CORPORATIVO"' is not assignable to type 'tipo_cliente_enum | undefined'.
+  [0m [90m 126 |[39m       nit[33m:[39m [32m'800987654-3'[39m[33m,[39m
+   [90m 127 |[39m       sector_economico[33m:[39m [32m'SALUD'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 128 |[39m       tipo_cliente[33m:[39m [32m'CORPORATIVO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 129 |[39m       calificacion_crediticia[33m:[39m [32m'A+'[39m[33m,[39m
+   [90m 130 |[39m       dias_credito[33m:[39m [35m60[39m[33m,[39m
+   [90m 131 |[39m       limite_credito[33m:[39m [35m100000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:152:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 150 |[39m       id_cliente[33m:[39m [35m1[39m[33m,[39m
+   [90m 151 |[39m       nombre_sede[33m:[39m [32m'Sede Principal - Hotel Caribe'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 152 |[39m       direccion[33m:[39m [32m'Carrera 1 # 2-87, Bocagrande'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 153 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 154 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 155 |[39m       telefono[33m:[39m [32m'6651234'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:169:7
+TS2353: Object literal may only specify known properties, and 'direccion' does not exist in type 
+'Without<sedes_clienteCreateInput, sedes_clienteUncheckedCreateInput> & sedes_clienteUncheckedCreateInput'.
+  [0m [90m 167 |[39m       id_cliente[33m:[39m [35m2[39m[33m,[39m
+   [90m 168 |[39m       nombre_sede[33m:[39m [32m'Cl├¡nica Bocagrande - Torre A'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 169 |[39m       direccion[33m:[39m [32m'Avenida San Mart├¡n # 7-123'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 170 |[39m       ciudad[33m:[39m [32m'Cartagena'[39m[33m,[39m
+   [90m 171 |[39m       departamento[33m:[39m [32m'Bol├¡var'[39m[33m,[39m
+   [90m 172 |[39m       telefono[33m:[39m [32m'6659876'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:196:7
+TS2353: Object literal may only specify known properties, and 'salario_base' does not exist in type 
+'Without<empleadosCreateInput, empleadosUncheckedCreateInput> & empleadosUncheckedCreateInput'.
+  [0m [90m 194 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 195 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2020-01-15'[39m)[33m,[39m
+  [31m[1m>[22m[39m[90m 196 |[39m       salario_base[33m:[39m [35m2500000[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m
+   [90m 197 |[39m       disponible_campo[33m:[39m [36mfalse[39m[33m,[39m
+   [90m 198 |[39m       activo[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 199 |[39m       creado_por[33m:[39m [35m1[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:210:7
+TS2322: Type '"TECNICO_ELECTRICO"' is not assignable to type 'cargo_empleado_enum'.
+  [0m [90m 208 |[39m       id_persona[33m:[39m [35m4[39m[33m,[39m
+   [90m 209 |[39m       codigo_empleado[33m:[39m [32m'MEK-002'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 210 |[39m       cargo[33m:[39m [32m'TECNICO_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       
+[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 211 |[39m       tipo_contrato[33m:[39m [32m'INDEFINIDO'[39m[33m,[39m
+   [90m 212 |[39m       fecha_ingreso[33m:[39m [36mnew[39m [33mDate[39m([32m'2019-06-01'[39m)[33m,[39m
+   [90m 213 |[39m       salario_base[33m:[39m [35m3000000[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:232:7
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<tipos_equipoCreateInput, tipos_equipoUncheckedCreateInput> & tipos_equipoUncheckedCreateInput'.
+  [0m [90m 230 |[39m     create[33m:[39m {
+   [90m 231 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 232 |[39m       nombre[33m:[39m [32m'GENERADOR_ELECTRICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m
+   [90m 233 |[39m       categoria[33m:[39m [32m'ENERGIA'[39m[33m,[39m
+   [90m 234 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 235 |[39m     }[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:244:7
+TS2820: Type '"HIDRAULICO"' is not assignable to type 'categoria_equipo_enum'. Did you mean '"HIDRAULICA"'?
+  [0m [90m 242 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+   [90m 243 |[39m       nombre[33m:[39m [32m'MOTOBOMBA'[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 244 |[39m       categoria[33m:[39m [32m'HIDRAULICO'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 245 |[39m       requiere_especificaciones[33m:[39m [36mtrue[39m[33m,[39m
+   [90m 246 |[39m     }[33m,[39m
+   [90m 247 |[39m   })[33m;[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:264:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 262 |[39m       id_sede[33m:[39m [35m1[39m[33m,[39m
+   [90m 263 |[39m       id_tipo_equipo[33m:[39m [35m1[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 264 |[39m       codigo_interno[33m:[39m [32m'GEN-HC-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 265 |[39m       marca[33m:[39m [32m'CATERPILLAR'[39m[33m,[39m
+   [90m 266 |[39m       modelo[33m:[39m [32m'C18'[39m[33m,[39m
+   [90m 267 |[39m       numero_serie[33m:[39m [32m'CAT12345XYZ'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:286:7
+TS2353: Object literal may only specify known properties, and 'codigo_interno' does not exist in type 
+'Without<equiposCreateInput, equiposUncheckedCreateInput> & equiposUncheckedCreateInput'.
+  [0m [90m 284 |[39m       id_sede[33m:[39m [35m2[39m[33m,[39m
+   [90m 285 |[39m       id_tipo_equipo[33m:[39m [35m2[39m[33m,[39m
+  [31m[1m>[22m[39m[90m 286 |[39m       codigo_interno[33m:[39m [32m'BMB-CB-001'[39m[33m,[39m
+   [90m     |[39m       [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 287 |[39m       marca[33m:[39m [32m'FLOWSERVE'[39m[33m,[39m
+   [90m 288 |[39m       modelo[33m:[39m [32m'D-3000'[39m[33m,[39m
+   [90m 289 |[39m       numero_serie[33m:[39m [32m'FLS98765ABC'[39m[33m,[39m[0m
+
+ERROR in ./src/database/seeds/seed-clientes-demo.ts:322:9
+TS2353: Object literal may only specify known properties, and 'nombre' does not exist in type 
+'Without<estados_cotizacionCreateInput, estados_cotizacionUncheckedCreateInput> & 
+estados_cotizacionUncheckedCreateInput'.
+  [0m [90m 320 |[39m       create[33m:[39m {
+   [90m 321 |[39m         id_estado[33m:[39m estado[33m.[39mid[33m,[39m
+  [31m[1m>[22m[39m[90m 322 |[39m         nombre[33m:[39m estado[33m.[39mnombre[33m,[39m
+   [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m
+   [90m 323 |[39m         color_hex[33m:[39m estado[33m.[39mcolor[33m,[39m
+   [90m 324 |[39m         permite_edicion[33m:[39m estado[33m.[39medicion[33m,[39m
+   [90m 325 |[39m         requiere_aprobacion[33m:[39m estado[33m.[39maprobacion[33m,[39m[0m
+
+Found 11 errors in 141 ms.

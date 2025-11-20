@@ -1,25 +1,34 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { IniciarOrdenCommand } from './iniciar-orden.command';
-import { OrdenServicioEntity, IOrdenServicioRepository, OrdenServicioId } from '@mekanos/core';
+import { PrismaOrdenServicioRepository } from '../infrastructure/prisma-orden-servicio.repository';
 
 @CommandHandler(IniciarOrdenCommand)
 export class IniciarOrdenHandler implements ICommandHandler<IniciarOrdenCommand> {
   constructor(
-    @Inject('IOrdenServicioRepository')
-    private readonly ordenRepository: IOrdenServicioRepository
+    private readonly repository: PrismaOrdenServicioRepository
   ) {}
 
-  async execute(command: IniciarOrdenCommand): Promise<OrdenServicioEntity> {
+  async execute(command: IniciarOrdenCommand): Promise<any> {
     const { ordenId } = command;
 
-    const orden = await this.ordenRepository.findById(OrdenServicioId.from(ordenId));
-    if (!orden) {
+    // 1. Verificar existencia
+    const ordenExistente = await this.repository.findById(parseInt(ordenId, 10));
+    if (!ordenExistente) {
       throw new NotFoundException(`Orden con ID ${ordenId} no encontrada`);
     }
 
-    orden.iniciar();
+    // 2. Obtener estado EN_PROCESO
+    const estadoEnProceso = await this.repository.findEstadoByCodigo('EN_PROCESO');
+    if (!estadoEnProceso) {
+      throw new NotFoundException('No se encontró el estado EN_PROCESO en el catálogo');
+    }
 
-    return await this.ordenRepository.save(orden);
+    // 3. Iniciar orden
+    return await this.repository.iniciar(
+      parseInt(ordenId, 10),
+      estadoEnProceso.id_estado,
+      1 // TODO: obtener userId desde JWT
+    );
   }
 }

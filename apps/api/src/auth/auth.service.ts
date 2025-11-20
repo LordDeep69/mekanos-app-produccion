@@ -1,19 +1,19 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { MockPrismaService } from '../common/mocks/mock-prisma.service';
-import { LoginDto } from './dto/login.dto';
+import { PrismaService } from '../database/prisma.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { LoginDto } from './dto/login.dto';
 
 /**
- * AuthService maneja la autenticación JWT con usuarios mock
- * TODO: Reemplazar MockPrismaService por PrismaService real cuando BD esté disponible
+ * AuthService maneja la autenticación JWT con Supabase
+ * ✅ CORREGIDO FASE 1: Usa PrismaService real con schema correcto
  */
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: MockPrismaService,
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -22,40 +22,75 @@ export class AuthService {
    * Login: valida credenciales y retorna tokens JWT
    */
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
-    // 1. Buscar usuario por email
-    const usuario = await this.prisma.usuarios.findUnique({
-      where: { email: loginDto.email },
-    });
+    try {
+      console.log('🔐 [DEBUG] Login attempt:', { email: loginDto.email, username: loginDto.username });
 
-    if (!usuario) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      // 1. Buscar usuario por email ó por username (aceptamos ambos)
+      const whereClause: any = loginDto.email ? { email: loginDto.email } : loginDto.username ? { username: loginDto.username } : null;
+      if (!whereClause) {
+        throw new UnauthorizedException('El email o username es requerido');
+      }
+
+      const usuario = await this.prisma.usuarios.findUnique({
+        where: whereClause,
+        include: {
+          persona: true, // ✅ Relación 'persona' → tabla 'personas'
+        },
+      });
+
+      console.log('📝 [DEBUG] Usuario encontrado:', {
+        exists: !!usuario,
+        id: usuario?.id_usuario,
+        estado: usuario?.estado,
+        hasPassword: !!usuario?.password_hash,
+        hasPersona: !!usuario?.persona,
+      });
+
+      if (!usuario) {
+        console.log('❌ [DEBUG] Usuario no existe');
+        throw new UnauthorizedException('Credenciales inválidas');
+      }
+
+      // 2. Validar usuario activo (campo real: estado = 'ACTIVO')
+      if (usuario.estado !== 'ACTIVO') {
+        console.log('❌ [DEBUG] Usuario inactivo:', usuario.estado);
+        throw new UnauthorizedException('Usuario inactivo. Contacte al administrador');
+      }
+
+      console.log('✅ [DEBUG] Usuario activo validado');
+
+      // 3. Validar contraseña (campo real: password_hash)
+      console.log('🔑 [DEBUG] Validando password...');
+      const isPasswordValid = await bcrypt.compare(loginDto.password, usuario.password_hash);
+      console.log('🔑 [DEBUG] Password válido:', isPasswordValid);
+
+      if (!isPasswordValid) {
+        console.log('❌ [DEBUG] Password inválido');
+        throw new UnauthorizedException('Credenciales inválidas');
+      }
+
+      // 4. Generar tokens JWT
+      console.log('🎫 [DEBUG] Generando tokens JWT...');
+      const tokens = await this.generateTokens(usuario);
+      console.log('✅ [DEBUG] Tokens generados exitosamente');
+
+      // 5. Retornar respuesta (usar nombre_completo de persona)
+      const response = {
+        ...tokens,
+        user: {
+          id: usuario.id_usuario,
+          email: usuario.email,
+          nombre: usuario.persona?.nombre_completo || 'Usuario',
+          rol: 'USER', // TODO: Implementar sistema de roles desde usuarios_roles
+        },
+      };
+
+      console.log('🎉 [DEBUG] Login exitoso:', { userId: usuario.id_usuario, email: usuario.email });
+      return response;
+    } catch (error) {
+      console.error('💥 [DEBUG] Error en login:', error instanceof Error ? error.message : String(error));
+      throw error;
     }
-
-    // 2. Validar usuario activo
-    if (!usuario.activo) {
-      throw new UnauthorizedException('Usuario inactivo. Contacte al administrador');
-    }
-
-    // 3. Validar contraseña
-    const isPasswordValid = await bcrypt.compare(loginDto.password, usuario.passwordHash);
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
-
-    // 4. Generar tokens JWT
-    const tokens = await this.generateTokens(usuario);
-
-    // 5. Retornar respuesta
-    return {
-      ...tokens,
-      user: {
-        id: usuario.id,
-        email: usuario.email,
-        nombre: `${usuario.persona.nombre} ${usuario.persona.apellido}`,
-        rol: usuario.rol,
-      },
-    };
   }
 
   /**
@@ -68,12 +103,12 @@ export class AuthService {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
 
-      // 2. Buscar usuario
+      // 2. Buscar usuario (PK real: id_usuario)
       const usuario = await this.prisma.usuarios.findUnique({
-        where: { id: payload.sub },
+        where: { id_usuario: payload.sub },
       });
 
-      if (!usuario || !usuario.activo) {
+      if (!usuario || usuario.estado !== 'ACTIVO') {
         throw new UnauthorizedException('Usuario no encontrado o inactivo');
       }
 
@@ -89,19 +124,22 @@ export class AuthService {
    */
   async validateUser(userId: number) {
     const usuario = await this.prisma.usuarios.findUnique({
-      where: { id: userId },
+      where: { id_usuario: userId },
+      include: {
+        persona: true, // ✅ CORREGIDO: Relación 'persona' → tabla 'personas'
+      },
     });
 
-    if (!usuario || !usuario.activo) {
+    if (!usuario || usuario.estado !== 'ACTIVO') {
       throw new UnauthorizedException('Usuario no encontrado o inactivo');
     }
 
     return {
-      id: usuario.id,
+      id: usuario.id_usuario,
       email: usuario.email,
-      nombre: `${usuario.persona.nombre} ${usuario.persona.apellido}`,
-      rol: usuario.rol,
-      personaId: usuario.personaId,
+      nombre: usuario.persona?.nombre_completo || 'Usuario',
+      rol: 'USER', // TODO: Implementar sistema de roles
+      personaId: usuario.id_persona,
     };
   }
 
@@ -110,19 +148,18 @@ export class AuthService {
    */
   private async generateTokens(usuario: any): Promise<{ access_token: string; refresh_token: string }> {
     const payload = {
-      sub: usuario.id,
+      sub: usuario.id_usuario,
       email: usuario.email,
-      rol: usuario.rol,
-      personaId: usuario.personaId,
+      rol: 'USER', // TODO: Implementar roles
+      personaId: usuario.id_persona,
     };
 
     const [access_token, refresh_token] = await Promise.all([
-      // Access token (15 minutos)
+      // Access token (15 minutos) - usa secret del JwtModule
       this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_SECRET'),
         expiresIn: '15m',
       }),
-      // Refresh token (7 días)
+      // Refresh token (7 días) - override secret
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
         expiresIn: '7d',
@@ -130,17 +167,5 @@ export class AuthService {
     ]);
 
     return { access_token, refresh_token };
-  }
-
-  /**
-   * Helper para obtener usuarios mock (útil para testing)
-   */
-  getMockUsers() {
-    return this.prisma.getAllMockUsers().map((u) => ({
-      id: u.id,
-      email: u.email,
-      nombre: `${u.persona.nombre} ${u.persona.apellido}`,
-      rol: u.rol,
-    }));
   }
 }

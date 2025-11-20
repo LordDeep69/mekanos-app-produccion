@@ -3,68 +3,69 @@ import {
   Get,
   Post,
   Put,
-  Delete,
   Body,
   Param,
   Query,
-  // UseGuards,
   HttpCode,
   HttpStatus,
-  StreamableFile,
-  Header,
-  NotFoundException,
-  Inject
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-// import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'; // TODO: Activar cuando exista
-import { OrdenServicioId, IOrdenServicioRepository } from '@mekanos/core';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 // Commands
 import { CreateOrdenCommand } from './commands/create-orden.command';
 import { ProgramarOrdenCommand } from './commands/programar-orden.command';
 import { AsignarTecnicoCommand } from './commands/asignar-tecnico.command';
 import { IniciarOrdenCommand } from './commands/iniciar-orden.command';
-import { FinalizarOrdenCommand } from './commands/finalizar-orden.command';
+import { AprobarOrdenCommand } from './commands/aprobar-orden.command';
+import { CancelarOrdenCommand } from './commands/cancelar-orden.command';
 
 // Queries
-import { GetOrdenQuery } from './queries/get-orden.query';
+import { GetOrdenByIdQuery } from './queries/get-orden-by-id.query';
 import { GetOrdenesQuery } from './queries/get-ordenes.query';
-import { GetOrdenesTecnicoQuery } from './queries/get-ordenes-tecnico.query';
 
 // DTOs
 import { CreateOrdenDto } from './dto/create-orden.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
 import { AsignarTecnicoDto } from './dto/asignar-tecnico.dto';
-import { FinalizarOrdenDto } from './dto/finalizar-orden.dto';
-import { FilterOrdenesDto } from './dto/filter-ordenes.dto';
 
-// Services
-import { PdfService } from '../pdf/pdf.service';
+// Decorators
+import { UserId } from './decorators/user-id.decorator';
 
 /**
- * OrdenesController
- * Endpoints REST para gestión de Órdenes de Servicio
+ * OrdenesController - FASE 3
  * 
- * Workflow: BORRADOR → PROGRAMADA → ASIGNADA → EN_PROCESO → EJECUTADA → EN_REVISION → APROBADA
+ * Controlador REST para órdenes de servicio
+ * Endpoints: 9 operaciones CRUD + Workflow
+ * 
+ * POST   /api/ordenes          - Crear orden
+ * GET    /api/ordenes          - Listar con filtros
+ * GET    /api/ordenes/:id      - Detalle orden
+ * PUT    /api/ordenes/:id/programar  - Programar fecha/hora
+ * PUT    /api/ordenes/:id/asignar    - Asignar técnico
+ * PUT    /api/ordenes/:id/iniciar    - Iniciar ejecución
+ * PUT    /api/ordenes/:id/aprobar    - Aprobar cierre
+ * PUT    /api/ordenes/:id/cancelar   - Cancelar orden
  */
 @Controller('ordenes')
-// @UseGuards(JwtAuthGuard) // TODO: Activar cuando JwtAuthGuard exista
 export class OrdenesController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
-    private readonly pdfService: PdfService,
-    @Inject('IOrdenServicioRepository')
-    private readonly ordenRepository: IOrdenServicioRepository
   ) {}
 
   /**
-   * POST /ordenes
-   * Crea nueva orden en estado BORRADOR
+   * POST /api/ordenes
+   * Crea una nueva orden de servicio en estado PROGRAMADA
    */
   @Post()
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreateOrdenDto) {
+  async create(
+    @Body() dto: CreateOrdenDto,
+    @UserId() userId: number
+  ) {
     const command = new CreateOrdenCommand(
       dto.equipoId,
       dto.clienteId,
@@ -72,58 +73,77 @@ export class OrdenesController {
       dto.sedeClienteId,
       dto.descripcion,
       dto.prioridad,
-      dto.fechaProgramada ? new Date(dto.fechaProgramada) : undefined
+      dto.fechaProgramada ? new Date(dto.fechaProgramada) : undefined,
+      userId
     );
 
-    const orden = await this.commandBus.execute(command);
-    return orden.toObject();
+    const result = await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Orden de servicio creada exitosamente',
+      data: result, // Ya es objeto plain desde Prisma repository
+    };
   }
 
   /**
-   * GET /ordenes
+   * GET /api/ordenes
    * Lista órdenes con paginación y filtros
    */
   @Get()
-  async findAll(@Query() filters: FilterOrdenesDto) {
+  async findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('idCliente') idCliente?: string,
+    @Query('idEquipo') idEquipo?: string,
+    @Query('idTecnico') idTecnico?: string,
+    @Query('estado') estado?: string,
+    @Query('prioridad') prioridad?: string,
+  ) {
     const query = new GetOrdenesQuery(
-      filters.page,
-      filters.limit,
-      filters.clienteId,
-      filters.equipoId,
-      filters.tecnicoId,
-      filters.estado,
-      filters.prioridad
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+      idCliente ? parseInt(idCliente, 10) : undefined,
+      idEquipo ? parseInt(idEquipo, 10) : undefined,
+      idTecnico ? parseInt(idTecnico, 10) : undefined,
+      estado,
+      prioridad,
     );
 
-    return await this.queryBus.execute(query);
+    const result = await this.queryBus.execute(query);
+
+    return {
+      success: true,
+      message: 'Órdenes obtenidas exitosamente',
+      data: result.ordenes,
+      pagination: {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages,
+      },
+    };
   }
 
   /**
-   * GET /ordenes/:id
-   * Obtiene una orden por ID
+   * GET /api/ordenes/:id
+   * Obtiene detalle de una orden por ID
    */
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    const query = new GetOrdenQuery(id);
-    return await this.queryBus.execute(query);
+    const result = await this.queryBus.execute(new GetOrdenByIdQuery(parseInt(id, 10)));
+
+    return {
+      success: true,
+      message: 'Orden obtenida exitosamente',
+      data: result,
+    };
   }
 
   /**
-   * GET /ordenes/tecnico/:tecnicoId
-   * Obtiene órdenes asignadas a un técnico
-   */
-  @Get('tecnico/:tecnicoId')
-  async findByTecnico(
-    @Param('tecnicoId') tecnicoId: string,
-    @Query('estado') estado?: string
-  ) {
-    const query = new GetOrdenesTecnicoQuery(parseInt(tecnicoId, 10), estado);
-    return await this.queryBus.execute(query);
-  }
-
-  /**
-   * PUT /ordenes/:id/programar
-   * Transición: BORRADOR → PROGRAMADA
+   * PUT /api/ordenes/:id/programar
+   * Programa fecha y hora de la orden
+   * Estado: PROGRAMADA → PROGRAMADA (actualiza fecha)
    */
   @Put(':id/programar')
   async programar(@Param('id') id: string, @Body() dto: ProgramarOrdenDto) {
@@ -133,93 +153,97 @@ export class OrdenesController {
       dto.observaciones
     );
 
-    const orden = await this.commandBus.execute(command);
-    return orden.toObject();
+    const result = await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Orden programada exitosamente',
+      data: result,
+    };
   }
 
   /**
-   * PUT /ordenes/:id/asignar
-   * Transición: PROGRAMADA → ASIGNADA
+   * PUT /api/ordenes/:id/asignar
+   * Asigna técnico y supervisor a la orden
+   * Estado: PROGRAMADA → ASIGNADA
    */
   @Put(':id/asignar')
   async asignarTecnico(@Param('id') id: string, @Body() dto: AsignarTecnicoDto) {
-    const command = new AsignarTecnicoCommand(id, dto.tecnicoId);
-    const orden = await this.commandBus.execute(command);
-    return orden.toObject();
+    const command = new AsignarTecnicoCommand(
+      id,
+      dto.tecnicoId
+    );
+
+    const result = await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Técnico asignado exitosamente',
+      data: result,
+    };
   }
 
   /**
-   * PUT /ordenes/:id/iniciar
-   * Transición: ASIGNADA → EN_PROCESO
+   * PUT /api/ordenes/:id/iniciar
+   * Inicia la ejecución de la orden
+   * Estado: ASIGNADA → EN_PROCESO
    */
   @Put(':id/iniciar')
   async iniciar(@Param('id') id: string) {
     const command = new IniciarOrdenCommand(id);
-    const orden = await this.commandBus.execute(command);
-    return orden.toObject();
-  }
 
-  /**
-   * PUT /ordenes/:id/finalizar
-   * Transición: EN_PROCESO → EJECUTADA
-   * TRIGGER: Genera PDF automáticamente y envía email
-   */
-  @Put(':id/finalizar')
-  async finalizar(@Param('id') id: string, @Body() dto: FinalizarOrdenDto) {
-    const command = new FinalizarOrdenCommand(id, dto.observaciones);
-    const orden = await this.commandBus.execute(command);
-    return orden.toObject();
-  }
+    const result = await this.commandBus.execute(command);
 
-  /**
-   * GET /ordenes/:id/pdf
-   * Genera y descarga PDF de la orden manualmente
-   */
-  @Get(':id/pdf')
-  @Header('Content-Type', 'application/pdf')
-  async downloadPdf(@Param('id') id: string): Promise<StreamableFile> {
-    // Obtener orden del repositorio
-    const orden = await this.ordenRepository.findById(OrdenServicioId.from(id));
-    
-    if (!orden) {
-      throw new NotFoundException(`Orden ${id} no encontrada`);
-    }
-
-    const ordenObj = orden.toObject();
-
-    // Preparar datos para el PDF
-    const pdfData = {
-      numeroOrden: ordenObj.numeroOrden,
-      estado: ordenObj.estado,
-      prioridad: ordenObj.prioridad,
-      clienteNombre: String(ordenObj.clienteId),
-      equipoNombre: String(ordenObj.equipoId),
-      fechaCreacion: ordenObj.createdAt,
-      fechaProgramada: ordenObj.fechaProgramada,
-      fechaInicio: ordenObj.fechaInicio,
-      fechaFinalizacion: ordenObj.fechaFin,
-      tecnicoAsignado: ordenObj.tecnicoAsignadoId ? String(ordenObj.tecnicoAsignadoId) : null,
-      descripcion: ordenObj.descripcion,
-      observaciones: ordenObj.observaciones,
-      firmaDigital: ordenObj.firmaClienteUrl
+    return {
+      success: true,
+      message: 'Orden iniciada exitosamente',
+      data: result,
     };
-
-    const pdfBuffer = await this.pdfService.generateOrdenServicioPdf(pdfData);
-    
-    return new StreamableFile(pdfBuffer, {
-      type: 'application/pdf',
-      disposition: `attachment; filename="orden-${ordenObj.numeroOrden}.pdf"`
-    });
   }
 
   /**
-   * DELETE /ordenes/:id
-   * Elimina una orden (soft delete)
+   * PUT /api/ordenes/:id/aprobar
+   * Aprueba el cierre de la orden
+   * Estado: COMPLETADA → APROBADA
    */
-  @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@Param('id') _id: string) {
-    // TODO: Implementar DeleteOrdenCommand si se requiere
-    return { message: 'Delete endpoint - to be implemented' };
+  @Put(':id/aprobar')
+  async aprobar(@Param('id') id: string) {
+    const command = new AprobarOrdenCommand(
+      parseInt(id, 10),
+      1, // TODO: obtener userId desde JWT
+    );
+
+    const result = await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Orden aprobada exitosamente',
+      data: result,
+    };
+  }
+
+  /**
+   * PUT /api/ordenes/:id/cancelar
+   * Cancela la orden con motivo
+   * Estado: CUALQUIERA → CANCELADA
+   */
+  @Put(':id/cancelar')
+  async cancelar(
+    @Param('id') id: string,
+    @Body() dto: { motivo?: string },
+  ) {
+    const command = new CancelarOrdenCommand(
+      parseInt(id, 10),
+      dto.motivo || 'Sin motivo especificado',
+      1, // TODO: obtener userId desde JWT
+    );
+
+    const result = await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Orden cancelada exitosamente',
+      data: result,
+    };
   }
 }

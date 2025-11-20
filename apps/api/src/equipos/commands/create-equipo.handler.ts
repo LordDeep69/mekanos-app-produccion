@@ -1,41 +1,40 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { ConflictException, Inject } from '@nestjs/common';
 import { CreateEquipoCommand } from './create-equipo.command';
-import { IEquipoRepository, EquipoEntity } from '@mekanos/core';
+import { PrismaEquipoRepository } from '../infrastructure/prisma-equipo.repository';
 
 /**
  * Handler para el comando CreateEquipo
- * Implementa la lógica de creación de equipos
+ * ✅ FASE 2: Usa PrismaEquipoRepository con schema real
  */
 @CommandHandler(CreateEquipoCommand)
 export class CreateEquipoHandler implements ICommandHandler<CreateEquipoCommand> {
   constructor(
     @Inject('IEquipoRepository')
-    private readonly equipoRepository: IEquipoRepository
+    private readonly equipoRepository: PrismaEquipoRepository
   ) {}
 
-  async execute(command: CreateEquipoCommand): Promise<EquipoEntity> {
-    const { dto } = command;
+  async execute(command: CreateEquipoCommand): Promise<any> {
+    const { dto, userId } = command;
 
     // Validar que el código no exista
-    const existeCodigo = await this.equipoRepository.existsByCodigo(dto.codigo);
+    const existeCodigo = await this.equipoRepository.existsByCodigo(dto.codigo_equipo);
     if (existeCodigo) {
-      throw new ConflictException(`Ya existe un equipo con el código ${dto.codigo}`);
+      throw new ConflictException(`Ya existe un equipo con el código ${dto.codigo_equipo}`);
     }
 
-    // Crear entity de dominio (contiene validaciones de negocio)
-    const equipo = EquipoEntity.create({
-      codigo: dto.codigo,
-      marca: dto.marca,
-      modelo: dto.modelo,
-      serie: dto.serie,
-      clienteId: dto.clienteId,
-      sedeId: dto.sedeId,
-      tipoEquipoId: dto.tipoEquipoId,
-      nombreEquipo: dto.nombreEquipo
+    // Persistir con campos reales
+    return await this.equipoRepository.save({
+      codigo_equipo: dto.codigo_equipo,
+      id_cliente: dto.id_cliente,
+      id_tipo_equipo: dto.id_tipo_equipo,
+      ubicacion_texto: dto.ubicacion_texto,
+      id_sede: dto.id_sede || null,
+      nombre_equipo: dto.nombre_equipo || null,
+      numero_serie_equipo: dto.numero_serie_equipo || null,
+      estado_equipo: dto.estado_equipo || 'OPERATIVO',
+      criticidad: dto.criticidad || 'MEDIA',
+      creado_por: userId,
     });
-
-    // Persistir
-    return await this.equipoRepository.save(equipo);
   }
 }
