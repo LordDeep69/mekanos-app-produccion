@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CatalogoComponentesModule } from './catalogo-componentes/catalogo-componentes.module';
 import { CatalogoSistemasModule } from './catalogo-sistemas/catalogo-sistemas.module';
+import { ClientesModule } from './clientes/clientes.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module'; // ✅ FASE 4.3: CloudinaryService global
 import { ComponentesEquipoModule } from './componentes-equipo/componentes-equipo.module';
 import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
@@ -16,6 +17,7 @@ import { ItemsServiciosModule } from './cotizaciones/items-servicios/items-servi
 import { PropuestasCorrectivoModule } from './cotizaciones/propuestas-correctivo/propuestas-correctivo.module';
 import { PrismaModule } from './database/prisma.module';
 import { DevolucionesProveedorModule } from './devoluciones-proveedor/devoluciones-proveedor.module';
+import { EmpleadosModule } from './empleados/empleados.module';
 import { EquiposBombaModule } from './equipos-bomba/equipos-bomba.module';
 import { EquiposGeneradorModule } from './equipos-generador/equipos-generador.module';
 import { EquiposMotorModule } from './equipos-motor/equipos-motor.module';
@@ -51,6 +53,8 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     AuthModule, // ✅ FASE 1: REACTIVADO con schema corregido
     // ✅ FASE 2: USUARIOS - Módulos prerequisitos activados (Sesión 22)
     PersonasModule, // ✅ FASE 2.1: ACTIVADO - Base para proveedores/empleados/clientes
+    ClientesModule, // ✅ FASE 2.3: NUEVO - Clientes (Sesión 27)
+    EmpleadosModule, // ✅ FASE 2.4: NUEVO - Empleados (Sesión 27)
     ProveedoresModule, // ✅ FASE 2.2: ACTIVADO - Prerequisito para órdenes de compra
     SedesClienteModule, // ✅ FASE 2.5: ACTIVADO - Ubicaciones de clientes
     UsuariosModule, // ✅ FASE 2.7: ACTIVADO - Gestión de usuarios y roles
