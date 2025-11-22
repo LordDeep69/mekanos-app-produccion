@@ -6,11 +6,15 @@ import { AlertasStockModule } from './alertas-stock/alertas-stock.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CatalogoActividadesModule } from './catalogo-actividades/catalogo-actividades.module';
 import { CatalogoComponentesModule } from './catalogo-componentes/catalogo-componentes.module';
+import { CatalogoServiciosModule } from './catalogo-servicios/catalogo-servicios.module';
 import { CatalogoSistemasModule } from './catalogo-sistemas/catalogo-sistemas.module';
+import { CertificacionesTecnicasModule } from './certificaciones-tecnicas/certificaciones-tecnicas.module';
 import { ClientesModule } from './clientes/clientes.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module'; // ✅ FASE 4.3: CloudinaryService global
 import { ComponentesEquipoModule } from './componentes-equipo/componentes-equipo.module';
+import { ContactosAdicionalesModule } from './contactos-adicionales/contactos-adicionales.module';
 import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
 import { ItemsComponentesModule } from './cotizaciones/items-componentes/items-componentes.module';
 import { ItemsServiciosModule } from './cotizaciones/items-servicios/items-servicios.module';
@@ -22,7 +26,10 @@ import { EquiposBombaModule } from './equipos-bomba/equipos-bomba.module';
 import { EquiposGeneradorModule } from './equipos-generador/equipos-generador.module';
 import { EquiposMotorModule } from './equipos-motor/equipos-motor.module';
 import { EquiposModule } from './equipos/equipos.module';
+import { EstadosOrdenModule } from './estados-orden/estados-orden.module';
 import { EvidenciasModule } from './evidencias-fotograficas/evidencias.module';
+import { FirmasAdministrativasModule } from './firmas-administrativas/firmas-administrativas.module';
+import { FirmasDigitalesModule } from './firmas-digitales/firmas-digitales.module';
 import { HealthModule } from './health/health.module';
 import { HistorialEnviosModule } from './historial-envios/historial-envios.module';
 import { LotesComponentesModule } from './lotes-componentes/lotes-componentes.module';
@@ -31,14 +38,20 @@ import { MotivosAjusteModule } from './motivos-ajuste/motivos-ajuste.module';
 import { MovimientosInventarioModule } from './movimientos-inventario/movimientos-inventario.module';
 import { OrdenesCompraModule } from './ordenes-compra/ordenes-compra.module';
 import { OrdenesModule } from './ordenes/ordenes.module';
+import { ParametrosMedicionModule } from './parametros-medicion/parametros-medicion.module';
+import { PermisosModule } from './permisos/permisos.module';
 import { PersonasModule } from './personas/personas.module';
 import { ProveedoresModule } from './proveedores/proveedores.module';
 import { RecepcionesCompraModule } from './recepciones-compra/recepciones-compra.module';
 import { RemisionesModule } from './remisiones/remisiones.module';
+import { RolesPermisosModule } from './roles-permisos/roles-permisos.module';
+import { RolesModule } from './roles/roles.module';
 import { SedesClienteModule } from './sedes-cliente/sedes-cliente.module';
 import { TiposComponenteModule } from './tipos-componente/tipos-componente.module';
 import { TiposEquipoModule } from './tipos-equipo/tipos-equipo.module';
+import { TiposServicioModule } from './tipos-servicio/tipos-servicio.module';
 import { UbicacionesBodegaModule } from './ubicaciones-bodega/ubicaciones-bodega.module';
+import { UsuariosRolesModule } from './usuarios-roles/usuarios-roles.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 
 @Module({
@@ -58,6 +71,14 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     ProveedoresModule, // ✅ FASE 2.2: ACTIVADO - Prerequisito para órdenes de compra
     SedesClienteModule, // ✅ FASE 2.5: ACTIVADO - Ubicaciones de clientes
     UsuariosModule, // ✅ FASE 2.7: ACTIVADO - Gestión de usuarios y roles
+    RolesModule, // ✅ FASE 2.8: NUEVO - RBAC Core (Sesión 27)
+    PermisosModule, // ✅ FASE 2.9: NUEVO - RBAC Core (Sesión 27)
+    RolesPermisosModule, // ✅ FASE 2.10: NUEVO - RBAC Junction (Sesión 27)
+    UsuariosRolesModule, // ✅ FASE 2.11: NUEVO - RBAC Junction (Sesión 27)
+    ContactosAdicionalesModule, // ✅ FASE 2.12: NUEVO - Contactos (Sesión 27)
+    CertificacionesTecnicasModule, // ✅ FASE 2.13: NUEVO - Certificaciones (Sesión 27)
+    FirmasAdministrativasModule, // ✅ FASE 2.14: NUEVO - Firmas Admin (Sesión 27)
+    FirmasDigitalesModule, // ✅ FASE 2.15: NUEVO - Firmas Digitales
     EquiposModule, // ✅ FASE 2: REACTIVADO con schema corregido y PrismaEquipoRepository
     TiposEquipoModule, // ✅ FASE 1: Tipos Equipo CQRS completo (Sesión 25 - Refactorizado de legacy)
     TiposComponenteModule, // ✅ FASE 1: Tipos Componente CQRS completo (Sesión 25 - BLOQUE 1 Catálogos)
@@ -67,6 +88,11 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     EquiposMotorModule, // ✅ FASE 1 BLOQUE 2: Equipos Motor CQRS completo (Sesión 25 - 45+ campos, 5 enums, 11 Decimals)
     EquiposGeneradorModule, // ✅ FASE 1 BLOQUE 2: Equipos Generador CQRS completo (Sesión 25 - 38 campos, 6 Decimals)
     EquiposBombaModule, // ✅ FASE 1 BLOQUE 2: Equipos Bomba CQRS completo (Sesión 25 - 50+ campos, 2 enums, 11 Decimals)
+    TiposServicioModule, // ✅ FASE 3.1: Tipos Servicio CQRS completo (Sesión 28 - Refactorizado arquitectura completa)
+    CatalogoServiciosModule, // ✅ FASE 3.2: Catálogo Servicios CQRS completo (Sesión 30 - 8 endpoints, includes personas corregidos)
+    EstadosOrdenModule, // ✅ FASE 3.3: Estados Orden CQRS completo (Sesión 30 - Catálogo metadata estados, 8 endpoints)
+    ParametrosMedicionModule, // ✅ FASE 3.4: Parámetros Medición CQRS completo (Sesión 31 - 8 endpoints, 23 campos, validaciones rangos)
+    CatalogoActividadesModule, // ✅ FASE 3.5: Catálogo Actividades CQRS completo (Sesión ACTUAL - 20 campos, 5 FKs, 1 ENUM, includes con nombres largos)
     OrdenesModule, // ✅ FASE 3: REACTIVADO con workflow completo
     ActividadesEjecutadasModule, // ✅ FASE 4.1: REACTIVADO - Actividades ejecutadas
     MedicionesModule, // ✅ FASE 4.2: REACTIVADO - Mediciones con rangos automáticos

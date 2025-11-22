@@ -32,12 +32,17 @@ export class OrdenServicioId {
   }
 
   private validate(value: string): void {
+    // Allow numeric IDs for legacy compatibility
+    if (/^\d+$/.test(value)) {
+      return;
+    }
+
     // Formato: OS-YYYYMM-UUID
     const regex = /^OS-\d{6}-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
     
     if (!regex.test(value)) {
       throw new Error(
-        `OrdenServicioId debe tener formato OS-YYYYMM-UUID (ejemplo: OS-202411-a3f4c2d1-...)`
+        `OrdenServicioId debe tener formato OS-YYYYMM-UUID (ejemplo: OS-202411-a3f4c2d1-...) o ser un ID numérico.`
       );
     }
 

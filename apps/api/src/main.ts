@@ -3,11 +3,16 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
+// ✅ FIX: Serialización de BigInt para JSON
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   
   try {
-    console.log('🔧 [DEBUG 1/10] Iniciando bootstrap...');
+    console.log('🔧 [DEBUG 1/10] Iniciando bootstrap... ');
     
     console.log('🔧 [DEBUG 2/10] Creando NestApplication...');
     const app = await NestFactory.create(AppModule, {

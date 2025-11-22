@@ -44,6 +44,13 @@ export class EmpleadosService {
     return this.prisma.empleados.create({
       data: {
         ...createDto,
+        fecha_ingreso: new Date(createDto.fecha_ingreso),
+        fecha_retiro: createDto.fecha_retiro
+          ? new Date(createDto.fecha_retiro)
+          : undefined,
+        fecha_vencimiento_licencia: createDto.fecha_vencimiento_licencia
+          ? new Date(createDto.fecha_vencimiento_licencia)
+          : undefined,
         creado_por: userId,
         fecha_creacion: new Date(),
       },

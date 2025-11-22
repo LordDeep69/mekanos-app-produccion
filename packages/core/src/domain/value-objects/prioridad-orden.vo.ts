@@ -1,12 +1,13 @@
 /**
  * Enum: PrioridadOrdenEnum
  * Niveles de prioridad para una Orden de Servicio
+ * ALINEADO CON schema.prisma prioridad_enum
  */
 export enum PrioridadOrdenEnum {
-  BAJA = 'BAJA',
-  MEDIA = 'MEDIA',
+  NORMAL = 'NORMAL',
   ALTA = 'ALTA',
   URGENTE = 'URGENTE',
+  EMERGENCIA = 'EMERGENCIA',
 }
 
 /**
@@ -16,10 +17,10 @@ export enum PrioridadOrdenEnum {
  */
 export class PrioridadOrden {
   private static readonly SLA_DIAS: Record<PrioridadOrdenEnum, number> = {
-    [PrioridadOrdenEnum.BAJA]: 15,
-    [PrioridadOrdenEnum.MEDIA]: 7,
-    [PrioridadOrdenEnum.ALTA]: 3,
-    [PrioridadOrdenEnum.URGENTE]: 1,
+    [PrioridadOrdenEnum.NORMAL]: 15,
+    [PrioridadOrdenEnum.ALTA]: 5,
+    [PrioridadOrdenEnum.URGENTE]: 2,
+    [PrioridadOrdenEnum.EMERGENCIA]: 1,
   };
 
   private constructor(private readonly value: PrioridadOrdenEnum) {
@@ -27,17 +28,10 @@ export class PrioridadOrden {
   }
 
   /**
-   * Crea prioridad BAJA
+   * Crea prioridad NORMAL (por defecto)
    */
-  static baja(): PrioridadOrden {
-    return new PrioridadOrden(PrioridadOrdenEnum.BAJA);
-  }
-
-  /**
-   * Crea prioridad MEDIA (por defecto)
-   */
-  static media(): PrioridadOrden {
-    return new PrioridadOrden(PrioridadOrdenEnum.MEDIA);
+  static normal(): PrioridadOrden {
+    return new PrioridadOrden(PrioridadOrdenEnum.NORMAL);
   }
 
   /**
@@ -52,6 +46,13 @@ export class PrioridadOrden {
    */
   static urgente(): PrioridadOrden {
     return new PrioridadOrden(PrioridadOrdenEnum.URGENTE);
+  }
+
+  /**
+   * Crea prioridad EMERGENCIA
+   */
+  static emergencia(): PrioridadOrden {
+    return new PrioridadOrden(PrioridadOrdenEnum.EMERGENCIA);
   }
 
   /**
@@ -107,10 +108,10 @@ export class PrioridadOrden {
    */
   compareTo(other: PrioridadOrden): number {
     const orden = [
-      PrioridadOrdenEnum.BAJA,
-      PrioridadOrdenEnum.MEDIA,
+      PrioridadOrdenEnum.NORMAL,
       PrioridadOrdenEnum.ALTA,
       PrioridadOrdenEnum.URGENTE,
+      PrioridadOrdenEnum.EMERGENCIA,
     ];
     const indexThis = orden.indexOf(this.value);
     const indexOther = orden.indexOf(other.value);
@@ -119,12 +120,8 @@ export class PrioridadOrden {
 
   // Helper methods
 
-  esBaja(): boolean {
-    return this.value === PrioridadOrdenEnum.BAJA;
-  }
-
-  esMedia(): boolean {
-    return this.value === PrioridadOrdenEnum.MEDIA;
+  esNormal(): boolean {
+    return this.value === PrioridadOrdenEnum.NORMAL;
   }
 
   esAlta(): boolean {
@@ -135,10 +132,14 @@ export class PrioridadOrden {
     return this.value === PrioridadOrdenEnum.URGENTE;
   }
 
+  esEmergencia(): boolean {
+    return this.value === PrioridadOrdenEnum.EMERGENCIA;
+  }
+
   /**
-   * Verifica si es prioridad crítica (ALTA o URGENTE)
+   * Verifica si es prioridad crítica (URGENTE o EMERGENCIA)
    */
   esCritica(): boolean {
-    return this.value === PrioridadOrdenEnum.ALTA || this.value === PrioridadOrdenEnum.URGENTE;
+    return this.value === PrioridadOrdenEnum.URGENTE || this.value === PrioridadOrdenEnum.EMERGENCIA;
   }
 }

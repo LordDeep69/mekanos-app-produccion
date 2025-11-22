@@ -1,13 +1,44 @@
-import { Prisma } from '@prisma/client';
+import {
+    IsBoolean,
+    IsEmail,
+    IsEnum,
+    IsInt,
+    IsOptional,
+    IsString,
+    MaxLength,
+    MinLength,
+} from 'class-validator';
 
-/**
- * DTO para crear usuarios
- * 
- * ⚠️ TEMPORAL: Usando tipos de Prisma directamente para MVP
- * TODO: Agregar validaciones con class-validator en fase de refinamiento
- * TODO: Documentar campos con @ApiProperty cuando se definan validaciones
- */
-export class CreateUsuariosDto implements Partial<Prisma.usuariosCreateInput> {
-  // Permisivo para MVP - Prisma valida tipos en runtime
-  [key: string]: any;
+export enum EstadoUsuarioEnum {
+  ACTIVO = 'ACTIVO',
+  INACTIVO = 'INACTIVO',
+  SUSPENDIDO = 'SUSPENDIDO',
+  PENDIENTE_ACTIVACION = 'PENDIENTE_ACTIVACION',
+}
+
+export class CreateUsuariosDto {
+  @IsInt()
+  id_persona: number;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(50)
+  username: string;
+
+  @IsEmail()
+  @MaxLength(255)
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  @MaxLength(255)
+  password: string;
+
+  @IsOptional()
+  @IsBoolean()
+  debe_cambiar_password?: boolean = true;
+
+  @IsOptional()
+  @IsEnum(EstadoUsuarioEnum)
+  estado?: EstadoUsuarioEnum = EstadoUsuarioEnum.PENDIENTE_ACTIVACION;
 }

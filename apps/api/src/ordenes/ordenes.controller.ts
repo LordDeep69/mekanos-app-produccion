@@ -1,34 +1,35 @@
+import { PrismaService } from '@mekanos/database';
 import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Body,
-  Param,
-  Query,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
+    Body,
+    Controller,
+    Get,
+    HttpCode,
+    HttpStatus,
+    Param,
+    Post,
+    Put,
+    Query,
+    UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 // Commands
-import { CreateOrdenCommand } from './commands/create-orden.command';
-import { ProgramarOrdenCommand } from './commands/programar-orden.command';
-import { AsignarTecnicoCommand } from './commands/asignar-tecnico.command';
-import { IniciarOrdenCommand } from './commands/iniciar-orden.command';
 import { AprobarOrdenCommand } from './commands/aprobar-orden.command';
+import { AsignarTecnicoCommand } from './commands/asignar-tecnico.command';
 import { CancelarOrdenCommand } from './commands/cancelar-orden.command';
+import { CreateOrdenCommand } from './commands/create-orden.command';
+import { IniciarOrdenCommand } from './commands/iniciar-orden.command';
+import { ProgramarOrdenCommand } from './commands/programar-orden.command';
 
 // Queries
 import { GetOrdenByIdQuery } from './queries/get-orden-by-id.query';
 import { GetOrdenesQuery } from './queries/get-ordenes.query';
 
 // DTOs
+import { AsignarTecnicoDto } from './dto/asignar-tecnico.dto';
 import { CreateOrdenDto } from './dto/create-orden.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
-import { AsignarTecnicoDto } from './dto/asignar-tecnico.dto';
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
@@ -53,7 +54,17 @@ export class OrdenesController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
+    private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * GET /api/ordenes/estados-debug
+   * DEBUG: Listar estados
+   */
+  @Get('estados-debug')
+  async getEstadosDebug() {
+    return this.prisma.estados_orden.findMany();
+  }
 
   /**
    * POST /api/ordenes
@@ -175,11 +186,21 @@ export class OrdenesController {
     );
 
     const result = await this.commandBus.execute(command);
+    console.log('[OrdenesController] Command executed, returning simplified response');
 
+    // SIMPLIFY RESPONSE TO AVOID CIRCULAR REFS OR HUGE PAYLOAD
     return {
       success: true,
       message: 'Técnico asignado exitosamente',
-      data: result,
+      data: {
+        id_orden_servicio: result.id_orden_servicio,
+        numero_orden: result.numero_orden,
+        estado: result.estado,
+        tecnico: result.tecnico ? {
+            id_empleado: result.tecnico.id_empleado,
+            persona: result.tecnico.persona
+        } : null
+      },
     };
   }
 
@@ -246,4 +267,5 @@ export class OrdenesController {
       data: result,
     };
   }
+
 }

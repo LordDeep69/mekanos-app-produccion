@@ -10,6 +10,7 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateFirmasDigitalesDto } from './dto/create-firmas-digitales.dto';
@@ -22,8 +23,11 @@ export class FirmasDigitalesController {
   constructor(private readonly firmasDigitalesService: FirmasDigitalesService) {}
 
   @Post()
-  create(@Body() createDto: CreateFirmasDigitalesDto) {
-    return this.firmasDigitalesService.create(createDto);
+  create(
+    @Body() createDto: CreateFirmasDigitalesDto,
+    @CurrentUser('id') userId: number,
+  ) {
+    return this.firmasDigitalesService.create(createDto, userId);
   }
 
   @Get()
