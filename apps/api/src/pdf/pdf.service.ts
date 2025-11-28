@@ -18,15 +18,15 @@
 import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import {
-    DatosCotizacionPDF,
-    DatosOrdenPDF,
-    generarCotizacionHTML,
-    generarTipoABombaHTML,
-    generarTipoAGeneradorHTML,
-    generarTipoBGeneradorHTML,
+  DatosCotizacionPDF,
+  DatosOrdenPDF,
+  generarCotizacionHTML,
+  generarTipoABombaHTML,
+  generarTipoAGeneradorHTML,
+  generarTipoBGeneradorHTML,
 } from './templates';
 
-export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'COTIZACION';
+export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
 
 export interface GenerarPDFOptions {
   tipoInforme: TipoInforme;
@@ -72,7 +72,7 @@ export class PdfService implements OnModuleDestroy {
     try {
       // Obtener el HTML según el tipo de informe
       const html = this.obtenerHTML(options.tipoInforme, options.datos);
-      
+
       // Inicializar browser si no existe
       if (!this.browser) {
         await this.initBrowser();
@@ -80,7 +80,7 @@ export class PdfService implements OnModuleDestroy {
 
       // Crear nueva página
       const page = await this.browser!.newPage();
-      
+
       try {
         // Configurar contenido con timeout extendido para imágenes
         await page.setContent(html, {
@@ -116,9 +116,10 @@ export class PdfService implements OnModuleDestroy {
       } finally {
         await page.close();
       }
-    } catch (error) {
-      this.logger.error(`❌ Error generando PDF: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Error generando PDF: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.error(`❌ Error generando PDF: ${err.message}`, err.stack);
+      throw new InternalServerErrorException(`Error generando PDF: ${err.message}`);
     }
   }
 
@@ -145,12 +146,17 @@ export class PdfService implements OnModuleDestroy {
    */
   private generarFilename(tipo: TipoInforme, numeroOrden: string): string {
     const fecha = new Date().toISOString().split('T')[0];
-    const tipoNombre = {
+    const tipoNombreMap: Record<TipoInforme, string> = {
       'GENERADOR_A': 'Preventivo_A_Generador',
       'GENERADOR_B': 'Preventivo_B_Generador',
       'BOMBA_A': 'Preventivo_A_Bomba',
+      'CORRECTIVO': 'Correctivo',
       'COTIZACION': 'Cotizacion',
-    }[tipo] || 'Informe';
+      'PROPUESTA_CORRECTIVO': 'Propuesta_Correctivo',
+      'REMISION': 'Remision',
+      'ORDEN_COMPRA': 'Orden_Compra',
+    };
+    const tipoNombre = tipoNombreMap[tipo] || 'Informe';
 
     return `MEKANOS_${tipoNombre}_${numeroOrden}_${fecha}.pdf`;
   }
@@ -160,7 +166,7 @@ export class PdfService implements OnModuleDestroy {
    */
   private async initBrowser(): Promise<void> {
     this.logger.log('🚀 Inicializando Puppeteer browser...');
-    
+
     this.browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -198,7 +204,7 @@ export class PdfService implements OnModuleDestroy {
     if (tipoEquipo === 'BOMBA') {
       return 'BOMBA_A';
     }
-    
+
     if (tipoEquipo === 'GENERADOR' || tipoEquipo === 'MOTOR') {
       return tipoServicio === 'PREVENTIVO_B' ? 'GENERADOR_B' : 'GENERADOR_A';
     }
@@ -274,7 +280,7 @@ export class PdfService implements OnModuleDestroy {
   }
 
   // ==================== MÉTODO LEGACY (compatibilidad) ====================
-  
+
   /**
    * @deprecated Use generarPDF() en su lugar
    * Método legacy para compatibilidad con código existente
@@ -331,9 +337,9 @@ export class PdfService implements OnModuleDestroy {
       const page = await this.browser!.newPage();
 
       try {
-        await page.setContent(html, { 
+        await page.setContent(html, {
           waitUntil: 'networkidle0',
-          timeout: 60000 
+          timeout: 60000
         });
 
         const pdfBuffer = await page.pdf({
@@ -387,7 +393,7 @@ export class PdfService implements OnModuleDestroy {
       numeroCotizacion: 'COT-2025-00001',
       fecha: new Date().toLocaleDateString('es-CO'),
       validezDias: 30,
-      
+
       // Cliente
       cliente: {
         nombre: 'HOTEL CARIBE S.A.S',
@@ -397,7 +403,7 @@ export class PdfService implements OnModuleDestroy {
         email: 'compras@hotelcaribe.com',
         contacto: 'María García - Gerente de Compras',
       },
-      
+
       // Vendedor
       vendedor: {
         nombre: 'Carlos Martínez',
@@ -405,7 +411,7 @@ export class PdfService implements OnModuleDestroy {
         telefono: '+57 301 234 5678',
         email: 'carlos.martinez@mekanosrep.com',
       },
-      
+
       // Items de servicio
       servicios: [
         {
@@ -430,7 +436,7 @@ export class PdfService implements OnModuleDestroy {
           subtotal: 900000,
         },
       ],
-      
+
       // Items de componentes/repuestos
       componentes: [
         {
@@ -466,7 +472,7 @@ export class PdfService implements OnModuleDestroy {
           subtotal: 950000,
         },
       ],
-      
+
       // Totales
       subtotalServicios: 4920000,
       subtotalComponentes: 2625500,
@@ -482,13 +488,13 @@ export class PdfService implements OnModuleDestroy {
         monto: 1361962,
       },
       total: 8530187,
-      
+
       // Términos
       formaPago: 'Crédito 30 días',
       tiempoEntrega: '5-7 días hábiles después de aprobación',
       garantia: '6 meses sobre repuestos instalados y mano de obra',
       notas: 'Esta cotización incluye transporte e instalación. Los precios pueden variar según condiciones de mercado.',
-      
+
       // Estado
       estado: 'BORRADOR',
     };
