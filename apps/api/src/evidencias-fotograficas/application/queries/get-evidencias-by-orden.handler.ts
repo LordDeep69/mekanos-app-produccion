@@ -1,7 +1,14 @@
-import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
-import { GetEvidenciasByOrdenQuery } from './get-evidencias-by-orden.query';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { IEvidenciasRepository } from '../../domain/evidencias.repository.interface';
+import { ResponseEvidenciaDto } from '../../dto/response-evidencia.dto';
+import { EvidenciaMapper } from '../mappers/evidencia.mapper';
+import { GetEvidenciasByOrdenQuery } from './get-evidencias-by-orden.query';
+
+/**
+ * Handler listar evidencias por orden
+ * FASE 3 - Tabla 11 - Con mapper
+ */
 
 @QueryHandler(GetEvidenciasByOrdenQuery)
 export class GetEvidenciasByOrdenHandler
@@ -10,25 +17,11 @@ export class GetEvidenciasByOrdenHandler
   constructor(
     @Inject('IEvidenciasRepository')
     private readonly repository: IEvidenciasRepository,
+    private readonly mapper: EvidenciaMapper,
   ) {}
 
-  async execute(query: GetEvidenciasByOrdenQuery): Promise<any> {
-    const evidencias = await this.repository.findByOrden(
-      query.id_orden_servicio,
-    );
-
-    // Serializar BigInt en evidencias
-    const evidenciasSerializadas = evidencias.map((ev: any) => ({
-      ...ev,
-      tama_o_bytes: ev.tama_o_bytes ? Number(ev.tama_o_bytes) : null,
-      tama_o_original_bytes: ev.tama_o_original_bytes
-        ? Number(ev.tama_o_original_bytes)
-        : null,
-    }));
-
-    return {
-      total: evidenciasSerializadas.length,
-      evidencias: evidenciasSerializadas,
-    };
+  async execute(query: GetEvidenciasByOrdenQuery): Promise<ResponseEvidenciaDto[]> {
+    const evidencias = await this.repository.findByOrden(query.ordenId);
+    return evidencias.map((ev) => this.mapper.toDto(ev));
   }
 }

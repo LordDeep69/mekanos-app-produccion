@@ -4,83 +4,121 @@ import { IEvidenciasRepository } from '../domain/evidencias.repository.interface
 
 /**
  * PrismaEvidenciasRepository - Implementación Prisma evidencias fotográficas
- * FASE 4.3 - CRUD con Cloudinary URL storage
+ * FASE 3 - Tabla 11 - CRUD Estándar refactorizado camelCase
  */
 
 @Injectable()
 export class PrismaEvidenciasRepository implements IEvidenciasRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async save(data: any): Promise<any> {
-    if (data.id_evidencia) {
-      // UPDATE
-      return await this.prisma.evidencias_fotograficas.update({
-        where: { id_evidencia: data.id_evidencia },
-        data: {
-          descripcion: data.descripcion,
-          orden_visualizacion: data.orden_visualizacion,
-          es_principal: data.es_principal,
-          metadata_exif: data.metadata_exif,
-        },
-        include: this.getFullIncludes(),
-      });
-    } else {
-      // CREATE
-      return await this.prisma.evidencias_fotograficas.create({
-        data: {
-          id_orden_servicio: data.id_orden_servicio,
-          id_actividad_ejecutada: data.id_actividad_ejecutada,
-          tipo_evidencia: data.tipo_evidencia,
-          descripcion: data.descripcion,
-          nombre_archivo: data.nombre_archivo,
-          ruta_archivo: data.ruta_archivo,
-          hash_sha256: data.hash_sha256,
-          tama_o_bytes: data.tama_o_bytes,
-          mime_type: data.mime_type ?? 'image/jpeg',
-          ancho_pixels: data.ancho_pixels,
-          alto_pixels: data.alto_pixels,
-          orden_visualizacion: data.orden_visualizacion,
-          es_principal: data.es_principal ?? false,
-          fecha_captura: data.fecha_captura ?? new Date(),
-          capturada_por: data.capturada_por,
-          latitud: data.latitud,
-          longitud: data.longitud,
-          metadata_exif: data.metadata_exif,
-          tiene_miniatura: data.tiene_miniatura ?? false,
-          ruta_miniatura: data.ruta_miniatura,
-          esta_comprimida: data.esta_comprimida ?? false,
-          tama_o_original_bytes: data.tama_o_original_bytes,
-          fecha_registro: new Date(),
-        },
-        include: this.getFullIncludes(),
-      });
-    }
+  private get fullIncludes() {
+    return {
+      ordenes_servicio: true,
+      actividades_ejecutadas: true,
+      empleados: true,
+    };
   }
 
-  async findById(id: number): Promise<any | null> {
-    return await this.prisma.evidencias_fotograficas.findUnique({
+  async create(data: {
+    idOrdenServicio: number;
+    idActividadEjecutada?: number | null;
+    tipoEvidencia: string;
+    descripcion?: string | null;
+    nombreArchivo: string;
+    rutaArchivo: string;
+    hashSha256: string;
+    sizeBytes: number;
+    mimeType?: string;
+    anchoPixels?: number | null;
+    altoPixels?: number | null;
+    ordenVisualizacion?: number | null;
+    esPrincipal?: boolean;
+    capturadaPor?: number;
+    latitud?: number | null;
+    longitud?: number | null;
+    metadataExif?: any;
+    tieneMiniatura?: boolean;
+    rutaMiniatura?: string | null;
+    estaComprimida?: boolean;
+    sizeOriginalBytes?: number | null;
+  }): Promise<any> {
+    return await this.prisma.evidencias_fotograficas.create({
+      data: {
+        id_orden_servicio: data.idOrdenServicio,
+        id_actividad_ejecutada: data.idActividadEjecutada ?? null,
+        tipo_evidencia: data.tipoEvidencia as any, // ✅ Cast to Prisma enum
+        descripcion: data.descripcion ?? null,
+        nombre_archivo: data.nombreArchivo,
+        ruta_archivo: data.rutaArchivo,
+        hash_sha256: data.hashSha256,
+        tama_o_bytes: BigInt(data.sizeBytes), // ✅ Convert to BigInt
+        mime_type: data.mimeType ?? 'image/jpeg',
+        ancho_pixels: data.anchoPixels ?? null,
+        alto_pixels: data.altoPixels ?? null,
+        orden_visualizacion: data.ordenVisualizacion ?? null,
+        es_principal: data.esPrincipal ?? false,
+        fecha_captura: new Date(),
+        capturada_por: data.capturadaPor ?? null,
+        latitud: data.latitud ?? null,
+        longitud: data.longitud ?? null,
+        metadata_exif: data.metadataExif ?? null,
+        tiene_miniatura: data.tieneMiniatura ?? false,
+        ruta_miniatura: data.rutaMiniatura ?? null,
+        esta_comprimida: data.estaComprimida ?? false,
+        tama_o_original_bytes: data.sizeOriginalBytes
+          ? BigInt(data.sizeOriginalBytes)
+          : null,
+        fecha_registro: new Date(),
+      },
+      include: this.fullIncludes,
+    });
+  }
+
+  async update(
+    id: number,
+    data: {
+      tipoEvidencia?: string;
+      descripcion?: string | null;
+      ordenVisualizacion?: number | null;
+      esPrincipal?: boolean;
+      latitud?: number | null;
+      longitud?: number | null;
+      metadataExif?: any;
+      tieneMiniatura?: boolean;
+      rutaMiniatura?: string | null;
+      estaComprimida?: boolean;
+      sizeOriginalBytes?: number | null;
+    },
+  ): Promise<any> {
+    const updateData: any = {};
+
+    if (data.tipoEvidencia !== undefined)
+      updateData.tipo_evidencia = data.tipoEvidencia;
+    if (data.descripcion !== undefined)
+      updateData.descripcion = data.descripcion;
+    if (data.ordenVisualizacion !== undefined)
+      updateData.orden_visualizacion = data.ordenVisualizacion;
+    if (data.esPrincipal !== undefined)
+      updateData.es_principal = data.esPrincipal;
+    if (data.latitud !== undefined) updateData.latitud = data.latitud;
+    if (data.longitud !== undefined) updateData.longitud = data.longitud;
+    if (data.metadataExif !== undefined)
+      updateData.metadata_exif = data.metadataExif;
+    if (data.tieneMiniatura !== undefined)
+      updateData.tiene_miniatura = data.tieneMiniatura;
+    if (data.rutaMiniatura !== undefined)
+      updateData.ruta_miniatura = data.rutaMiniatura;
+    if (data.estaComprimida !== undefined)
+      updateData.esta_comprimida = data.estaComprimida;
+    if (data.sizeOriginalBytes !== undefined)
+      updateData.tama_o_original_bytes = data.sizeOriginalBytes !== null
+        ? BigInt(data.sizeOriginalBytes)
+        : null; // ✅ Validate null before BigInt
+
+    return await this.prisma.evidencias_fotograficas.update({
       where: { id_evidencia: id },
-      include: this.getFullIncludes(),
-    });
-  }
-
-  async findByOrden(id_orden_servicio: number): Promise<any[]> {
-    return await this.prisma.evidencias_fotograficas.findMany({
-      where: { id_orden_servicio },
-      orderBy: [
-        { es_principal: 'desc' }, // Principal primero
-        { orden_visualizacion: 'asc' },
-        { fecha_captura: 'desc' },
-      ],
-      include: this.getFullIncludes(),
-    });
-  }
-
-  async findByActividad(id_actividad_ejecutada: number): Promise<any[]> {
-    return await this.prisma.evidencias_fotograficas.findMany({
-      where: { id_actividad_ejecutada },
-      orderBy: [{ fecha_captura: 'desc' }],
-      include: this.getFullIncludes(),
+      data: updateData,
+      include: this.fullIncludes,
     });
   }
 
@@ -90,15 +128,54 @@ export class PrismaEvidenciasRepository implements IEvidenciasRepository {
     });
   }
 
-  private getFullIncludes() {
-    return {
-      ordenes_servicio: true, // ✅ FIX: Simplificado
-      actividades_ejecutadas: true,
-      empleados: {
-        include: {
-          persona: true, // ✅ FIX: true en vez de select
-        },
+  async findById(id: number): Promise<any | null> {
+    return await this.prisma.evidencias_fotograficas.findUnique({
+      where: { id_evidencia: id },
+      include: this.fullIncludes,
+    });
+  }
+
+  async findByOrden(ordenId: number): Promise<any[]> {
+    return await this.prisma.evidencias_fotograficas.findMany({
+      where: { id_orden_servicio: ordenId },
+      orderBy: [
+        { es_principal: 'desc' },
+        { orden_visualizacion: 'asc' },
+        { fecha_captura: 'desc' },
+      ],
+      include: this.fullIncludes,
+    });
+  }
+
+  async findByActividad(actividadId: number): Promise<any[]> {
+    return await this.prisma.evidencias_fotograficas.findMany({
+      where: { id_actividad_ejecutada: actividadId },
+      orderBy: [{ fecha_captura: 'desc' }],
+      include: this.fullIncludes,
+    });
+  }
+
+  async findAll(): Promise<any[]> {
+    return await this.prisma.evidencias_fotograficas.findMany({
+      orderBy: [{ fecha_captura: 'desc' }],
+      include: this.fullIncludes,
+    });
+  }
+
+  async desactivarPrincipales(
+    ordenId: number,
+    exceptoId?: number,
+  ): Promise<void> {
+    await this.prisma.evidencias_fotograficas.updateMany({
+      where: {
+        id_orden_servicio: ordenId,
+        es_principal: true,
+        ...(exceptoId && { id_evidencia: { not: exceptoId } }),
       },
-    };
+      data: {
+        es_principal: false,
+      },
+    });
   }
 }
+

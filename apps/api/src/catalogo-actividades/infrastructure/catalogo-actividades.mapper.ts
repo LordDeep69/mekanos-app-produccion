@@ -37,8 +37,8 @@ export class CatalogoActividadesMapper {
       tipoServicio: entity.tipos_servicio
         ? {
             idTipoServicio: entity.tipos_servicio.id_tipo_servicio,
-            codigoTipoServicio: entity.tipos_servicio.codigo_tipo_servicio,
-            nombreTipoServicio: entity.tipos_servicio.nombre_tipo_servicio,
+            codigoTipoServicio: entity.tipos_servicio.codigo_tipo,
+            nombreTipoServicio: entity.tipos_servicio.nombre_tipo,
           }
         : undefined,
 

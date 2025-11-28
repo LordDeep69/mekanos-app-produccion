@@ -1,20 +1,20 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  ParseIntPipe,
-  UseGuards,
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Param,
+    ParseIntPipe,
+    Post,
+    Put,
+    Query,
+    UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { BitacorasInformesService } from './bitacoras-informes.service';
 import { CreateBitacorasInformesDto } from './dto/create-bitacoras-informes.dto';
 import { UpdateBitacorasInformesDto } from './dto/update-bitacoras-informes.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 
 @Controller('bitacoras-informes')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,9 +28,11 @@ export class BitacorasInformesController {
 
   @Get()
   findAll(
-    @Query('page', ParseIntPipe) page: number = 1,
-    @Query('limit', ParseIntPipe) limit: number = 10,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
   ) {
+    const page = pageStr ? parseInt(pageStr, 10) : 1;
+    const limit = limitStr ? parseInt(limitStr, 10) : 10;
     return this.bitacorasInformesService.findAll(page, limit);
   }
 

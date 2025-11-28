@@ -5,9 +5,8 @@ import { CatalogoActividadesRepository } from '../domain/catalogo-actividades.re
 
 @Injectable()
 export class PrismaCatalogoActividadesRepository implements CatalogoActividadesRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
-  // ⚠️ CRÍTICO: Usar nombres EXACTOS de relaciones Prisma
   private readonly INCLUDE_RELATIONS_LIST = {
     tipos_servicio: {
       select: {
@@ -50,8 +49,8 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
     tipos_componente: {
       select: {
         id_tipo_componente: true,
-        codigo_tipo_componente: true,
-        nombre_tipo_componente: true,
+        codigo_tipo: true,
+        nombre_componente: true,
       },
     },
     usuarios_catalogo_actividades_creado_porTousuarios: {

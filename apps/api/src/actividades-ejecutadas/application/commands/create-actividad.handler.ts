@@ -1,66 +1,53 @@
+import { BadRequestException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, BadRequestException } from '@nestjs/common';
-import { CreateActividadCommand } from './create-actividad.command';
+import { ResponseActividadDto } from '../../dto/response-actividad.dto';
 import { PrismaActividadesRepository } from '../../infrastructure/prisma-actividades.repository';
-
-/**
- * Handler para crear actividad ejecutada
- * Validaciones:
- * - Modo dual: Catálogo XOR Manual
- * - Si manual, sistema es obligatorio
- * - ejecutada_por = userId del JWT
- */
+import { ActividadMapper } from '../mappers/actividad.mapper';
+import { CreateActividadCommand } from './create-actividad.command';
 
 @CommandHandler(CreateActividadCommand)
-export class CreateActividadHandler
-  implements ICommandHandler<CreateActividadCommand>
-{
+export class CreateActividadHandler implements ICommandHandler<CreateActividadCommand> {
   constructor(
-    @Inject('IActividadesRepository')
     private readonly repository: PrismaActividadesRepository,
+    private readonly mapper: ActividadMapper,
   ) {}
 
-  async execute(command: CreateActividadCommand): Promise<any> {
-    const { dto, userId } = command;
-
-    // Validación modo dual: uno y solo uno
-    if (dto.id_actividad_catalogo && dto.descripcion_manual) {
+  async execute(command: CreateActividadCommand): Promise<ResponseActividadDto> {
+    // VALIDACIÓN 1: Modo dual XOR
+    const hasCatalogo = command.idActividadCatalogo !== undefined && command.idActividadCatalogo !== null;
+    const hasManual = command.descripcionManual !== undefined && command.descripcionManual !== null && command.descripcionManual.trim() !== '';
+    
+    if (hasCatalogo && hasManual) {
       throw new BadRequestException(
-        'Modo dual inválido: usar id_actividad_catalogo O descripcion_manual, no ambos',
+        'No se puede usar idActividadCatalogo y descripcionManual simultáneamente (modo dual XOR)'
+      );
+    }
+    
+    if (!hasCatalogo && !hasManual) {
+      throw new BadRequestException(
+        'Debe proporcionar idActividadCatalogo O descripcionManual (modo dual requerido)'
       );
     }
 
-    if (!dto.id_actividad_catalogo && !dto.descripcion_manual) {
+    // VALIDACIÓN 2: Modo manual requiere sistema
+    if (hasManual && (!command.sistema || command.sistema.trim() === '')) {
       throw new BadRequestException(
-        'Modo dual inválido: id_actividad_catalogo o descripcion_manual es obligatorio',
+        'El campo sistema es requerido cuando se usa descripcionManual (modo manual)'
       );
     }
 
-    // Si modo manual, sistema es obligatorio
-    if (dto.descripcion_manual && !dto.sistema) {
-      throw new BadRequestException(
-        'Modo manual: campo sistema es obligatorio cuando descripcion_manual está presente',
-      );
+    // VALIDACIÓN 3: ordenSecuencia > 0
+    if (command.ordenSecuencia !== undefined && command.ordenSecuencia !== null && command.ordenSecuencia <= 0) {
+      throw new BadRequestException('ordenSecuencia debe ser mayor a 0');
     }
 
-    const actividad = await this.repository.save({
-      id_orden_servicio: dto.id_orden_servicio,
-      id_actividad_catalogo: dto.id_actividad_catalogo || null,
-      descripcion_manual: dto.descripcion_manual || null,
-      sistema: dto.sistema || null,
-      orden_secuencia: dto.orden_secuencia || null,
-      estado: dto.estado || null,
-      observaciones: dto.observaciones || null,
-      ejecutada: dto.ejecutada ?? true,
-      fecha_ejecucion: dto.fecha_ejecucion
-        ? new Date(dto.fecha_ejecucion)
-        : new Date(),
-      ejecutada_por: userId, // Usuario desde JWT
-      tiempo_ejecucion_minutos: dto.tiempo_ejecucion_minutos || null,
-      requiere_evidencia: dto.requiere_evidencia ?? false,
-      evidencia_capturada: dto.evidencia_capturada ?? false,
-    });
+    // VALIDACIÓN 4: tiempoEjecucionMinutos > 0
+    if (command.tiempoEjecucionMinutos !== undefined && command.tiempoEjecucionMinutos !== null && command.tiempoEjecucionMinutos <= 0) {
+      throw new BadRequestException('tiempoEjecucionMinutos debe ser mayor a 0');
+    }
 
-    return actividad;
+    const entity = await this.repository.create(command);
+    return this.mapper.toDto(entity);
   }
 }
+

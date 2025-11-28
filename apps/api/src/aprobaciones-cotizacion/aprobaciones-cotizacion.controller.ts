@@ -1,20 +1,20 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  ParseIntPipe,
-  UseGuards,
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Param,
+    ParseIntPipe,
+    Post,
+    Put,
+    Query,
+    UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { AprobacionesCotizacionService } from './aprobaciones-cotizacion.service';
 import { CreateAprobacionesCotizacionDto } from './dto/create-aprobaciones-cotizacion.dto';
 import { UpdateAprobacionesCotizacionDto } from './dto/update-aprobaciones-cotizacion.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 
 @Controller('aprobaciones-cotizacion')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,10 +28,12 @@ export class AprobacionesCotizacionController {
 
   @Get()
   findAll(
-    @Query('page', ParseIntPipe) page: number = 1,
-    @Query('limit', ParseIntPipe) limit: number = 10,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.aprobacionesCotizacionService.findAll(page, limit);
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    return this.aprobacionesCotizacionService.findAll(pageNum, limitNum);
   }
 
   @Get(':id')

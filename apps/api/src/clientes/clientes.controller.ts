@@ -10,12 +10,15 @@ import {
     Query,
     UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ClientesService } from './clientes.service';
 import { CreateClientesDto } from './dto/create-clientes.dto';
 import { UpdateClientesDto } from './dto/update-clientes.dto';
 
+@ApiTags('FASE 2 - Clientes')
+@ApiBearerAuth('JWT-auth')
 @Controller('clientes')
 @UseGuards(JwtAuthGuard)
 export class ClientesController {

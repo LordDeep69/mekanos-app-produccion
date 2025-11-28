@@ -44,23 +44,29 @@ export class LotesComponentesController {
   @Get()
   async findAll(
     @Query('id_componente')
-    id_componente?: number,
+    id_componente?: string,
     @Query('estado_lote') estado_lote?: string,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    const query = new GetLotesQuery(id_componente, estado_lote, page, limit);
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    const componenteId = id_componente ? parseInt(id_componente, 10) : undefined;
+    const query = new GetLotesQuery(componenteId, estado_lote, pageNum, limitNum);
     return this.queryBus.execute(query);
   }
 
   @Get('proximos-a-vencer')
   async getProximosAVencer(
     @Query('dias')
-    dias: number = 30,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    dias?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    const query = new GetProximosAVencerQuery(dias, page, limit);
+    const diasNum = dias ? parseInt(dias, 10) : 30;
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    const query = new GetProximosAVencerQuery(diasNum, pageNum, limitNum);
     return this.queryBus.execute(query);
   }
 

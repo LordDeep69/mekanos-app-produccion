@@ -1,64 +1,75 @@
+import { BadRequestException, Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, BadRequestException } from '@nestjs/common';
-import { CreateMedicionCommand } from './create-medicion.command';
-import { PrismaMedicionesRepository } from '../../infrastructure/prisma-mediciones.repository';
 import { PrismaService } from '../../../database/prisma.service';
+import { ResponseMedicionDto } from '../../dto/response-medicion.dto';
+import { PrismaMedicionesRepository } from '../../infrastructure/prisma-mediciones.repository';
+import { NivelAlertaEnum } from '../enums/nivel-alerta.enum';
+import { MedicionMapper } from '../mappers/medicion.mapper';
+import { CreateMedicionCommand } from './create-medicion.command';
 
 /**
- * Handler para crear medición con DETECCIÓN AUTOMÁTICA DE RANGOS
- * FASE 4.2 - Lógica core: fuera_de_rango + nivel_alerta calculados
+ * Handler para crear medición con DETECCIÓN AUTOMÁTICA DE RANGOS - REFACTORIZADO
+ * Tabla 10/14 - FASE 3 - camelCase
+ * Lógica core: fueraDeRango (trigger BD) + nivelAlerta + mensajeAlerta (backend)
  */
 
 @CommandHandler(CreateMedicionCommand)
 export class CreateMedicionHandler
-  implements ICommandHandler<CreateMedicionCommand>
+  implements ICommandHandler<CreateMedicionCommand, ResponseMedicionDto>
 {
   constructor(
     @Inject('IMedicionesRepository')
     private readonly repository: PrismaMedicionesRepository,
     private readonly prisma: PrismaService,
+    private readonly mapper: MedicionMapper,
   ) {}
 
   async execute(command: CreateMedicionCommand): Promise<any> {
     const { dto, userId } = command;
 
-    // 1. Obtener parámetro para validar rangos
+    // 1. Validar que exista al menos valorNumerico O valorTexto
+    if (!dto.valorNumerico && !dto.valorTexto) {
+      throw new BadRequestException(
+        'Debe proporcionar valorNumerico o valorTexto (al menos uno requerido)',
+      );
+    }
+
+    // 2. Obtener parámetro para validar rangos
     const parametro = await this.prisma.parametros_medicion.findUnique({
-      where: { id_parametro_medicion: dto.id_parametro_medicion },
+      where: { id_parametro_medicion: dto.idParametroMedicion },
     });
 
     if (!parametro) {
       throw new BadRequestException(
-        `Parámetro de medición ID ${dto.id_parametro_medicion} no existe`,
+        `Parámetro de medición ID ${dto.idParametroMedicion} no existe`,
       );
     }
 
-    // 2. LÓGICA CORE: Detectar fuera de rango y nivel alerta
-    let fueraDeRango = false;
-    let nivelAlerta: 'OK' | 'ADVERTENCIA' | 'CRITICO' | 'INFORMATIVO' = 'OK';
+    // 3. LÓGICA CORE: Detectar nivel alerta y mensaje
+    // ⚠️ Nota: fuera_de_rango lo calcula el trigger BD comparando rangos críticos
+    // Backend calcula nivel_alerta (OK, ADVERTENCIA, CRITICO, INFORMATIVO)
+    let nivelAlerta: NivelAlertaEnum = NivelAlertaEnum.OK;
     let mensajeAlerta: string | null = null;
 
     if (
-      dto.valor_numerico !== null &&
-      dto.valor_numerico !== undefined &&
+      dto.valorNumerico !== null &&
+      dto.valorNumerico !== undefined &&
       parametro.tipo_dato === 'NUMERICO'
     ) {
-      const valor = Number(dto.valor_numerico);
+      const valor = Number(dto.valorNumerico);
 
       // Validar rangos críticos (priority 1)
       if (
         parametro.valor_minimo_critico !== null &&
         valor < Number(parametro.valor_minimo_critico)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'CRITICO';
+        nivelAlerta = NivelAlertaEnum.CRITICO;
         mensajeAlerta = `Valor ${valor} por debajo del mínimo crítico ${parametro.valor_minimo_critico} ${parametro.unidad_medida}`;
       } else if (
         parametro.valor_maximo_critico !== null &&
         valor > Number(parametro.valor_maximo_critico)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'CRITICO';
+        nivelAlerta = NivelAlertaEnum.CRITICO;
         mensajeAlerta = `Valor ${valor} por encima del máximo crítico ${parametro.valor_maximo_critico} ${parametro.unidad_medida}`;
       }
       // Validar rangos normales (priority 2)
@@ -66,56 +77,53 @@ export class CreateMedicionHandler
         parametro.valor_minimo_normal !== null &&
         valor < Number(parametro.valor_minimo_normal)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'ADVERTENCIA';
+        nivelAlerta = NivelAlertaEnum.ADVERTENCIA;
         mensajeAlerta = `Valor ${valor} por debajo del mínimo normal ${parametro.valor_minimo_normal} ${parametro.unidad_medida}`;
       } else if (
         parametro.valor_maximo_normal !== null &&
         valor > Number(parametro.valor_maximo_normal)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'ADVERTENCIA';
+        nivelAlerta = NivelAlertaEnum.ADVERTENCIA;
         mensajeAlerta = `Valor ${valor} por encima del máximo normal ${parametro.valor_maximo_normal} ${parametro.unidad_medida}`;
       }
       // Dentro de rango normal
       else {
-        nivelAlerta = 'OK';
+        nivelAlerta = NivelAlertaEnum.OK;
         mensajeAlerta = `Valor ${valor} dentro de rango normal`;
       }
     }
 
-    // 3. Si no es numérico, nivel INFORMATIVO
+    // 4. Si no es numérico, nivel INFORMATIVO
     if (
       parametro.tipo_dato !== 'NUMERICO' ||
-      dto.valor_numerico === null ||
-      dto.valor_numerico === undefined
+      dto.valorNumerico === null ||
+      dto.valorNumerico === undefined
     ) {
-      nivelAlerta = 'INFORMATIVO';
-      mensajeAlerta = dto.valor_texto
-        ? `Medición texto: ${dto.valor_texto}`
+      nivelAlerta = NivelAlertaEnum.INFORMATIVO;
+      mensajeAlerta = dto.valorTexto
+        ? `Medición texto: ${dto.valorTexto}`
         : 'Medición registrada sin valor numérico';
     }
 
-    // 4. Guardar medición con flags calculados
+    // 5. Guardar medición con flags calculados
+    // ⚠️ Trigger BD establecerá fuera_de_rango y copiará unidad_medida
     const medicion = await this.repository.save({
-      id_orden_servicio: dto.id_orden_servicio,
-      id_parametro_medicion: dto.id_parametro_medicion,
-      valor_numerico: dto.valor_numerico,
-      valor_texto: dto.valor_texto,
-      unidad_medida: dto.unidad_medida || parametro.unidad_medida,
-      fuera_de_rango: fueraDeRango,
-      nivel_alerta: nivelAlerta,
-      mensaje_alerta: mensajeAlerta ?? undefined, // ✅ FIX: Convert null to undefined
+      idOrdenServicio: dto.idOrdenServicio,
+      idParametroMedicion: dto.idParametroMedicion,
+      valorNumerico: dto.valorNumerico,
+      valorTexto: dto.valorTexto,
+      nivelAlerta: nivelAlerta,
+      mensajeAlerta: mensajeAlerta ?? undefined,
       observaciones: dto.observaciones,
-      temperatura_ambiente: dto.temperatura_ambiente,
-      humedad_relativa: dto.humedad_relativa,
-      fecha_medicion: dto.fecha_medicion
-        ? new Date(dto.fecha_medicion)
+      temperaturaAmbiente: dto.temperaturaAmbiente,
+      humedadRelativa: dto.humedadRelativa,
+      fechaMedicion: dto.fechaMedicion
+        ? new Date(dto.fechaMedicion)
         : new Date(),
-      medido_por: userId, // Usuario desde JWT
-      instrumento_medicion: dto.instrumento_medicion,
+      medidoPor: userId, // Usuario desde JWT
+      instrumentoMedicion: dto.instrumentoMedicion,
     });
 
-    return medicion;
+    return this.mapper.toDto(medicion);
   }
 }

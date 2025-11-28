@@ -20,8 +20,8 @@ export class CrearMotivoAjusteHandler
       nombre_motivo: command.nombre_motivo,
       categoria: command.categoria,
       requiere_justificacion_detallada:
-        command.requiere_justificacion_detallada,
-      requiere_aprobacion_gerencia: command.requiere_aprobacion_gerencia,
+        command.requiere_justificacion_detallada ?? true,
+      requiere_aprobacion_gerencia: command.requiere_aprobacion_gerencia ?? false,
     });
   }
 }

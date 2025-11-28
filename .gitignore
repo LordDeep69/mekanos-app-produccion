@@ -47,3 +47,23 @@ coverage/
 # Temp
 tmp/
 temp/
+
+# Testing files with credentials (keep only safe tests)
+apps/api/src/testing/*.js
+apps/api/src/testing/*.ts
+apps/api/src/testing/atomicos/
+!apps/api/src/testing/test-endpoint-finalizacion-completo.js
+
+# Test results
+**/test-*.txt
+**/test-*.json
+**/resultado-*.json
+**/*-result*.txt
+**/e2e-*.json
+
+# Generated PDFs and temp files
+**/*.pdf
+**/temp-*
+
+# Session logs with credentials
+**/REGISTRO_SESIONES_AGENTE_IA/

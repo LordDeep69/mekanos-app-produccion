@@ -1,63 +1,36 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException, BadRequestException } from '@nestjs/common';
-import { UpdateActividadCommand } from './update-actividad.command';
+import { ResponseActividadDto } from '../../dto/response-actividad.dto';
 import { PrismaActividadesRepository } from '../../infrastructure/prisma-actividades.repository';
-
-/**
- * Handler para actualizar actividad ejecutada
- */
+import { ActividadMapper } from '../mappers/actividad.mapper';
+import { UpdateActividadCommand } from './update-actividad.command';
 
 @CommandHandler(UpdateActividadCommand)
-export class UpdateActividadHandler
-  implements ICommandHandler<UpdateActividadCommand>
-{
+export class UpdateActividadHandler implements ICommandHandler<UpdateActividadCommand> {
   constructor(
-    @Inject('IActividadesRepository')
     private readonly repository: PrismaActividadesRepository,
+    private readonly mapper: ActividadMapper,
   ) {}
 
-  async execute(command: UpdateActividadCommand): Promise<any> {
-    const { dto } = command;
-
+  async execute(command: UpdateActividadCommand): Promise<ResponseActividadDto> {
     // Validar existencia
-    const existe = await this.repository.findById(dto.id_actividad_ejecutada);
+    const existe = await this.repository.findById(command.id);
     if (!existe) {
-      throw new NotFoundException(
-        `Actividad ${dto.id_actividad_ejecutada} no encontrada`,
-      );
+      throw new NotFoundException(`Actividad ${command.id} no encontrada`);
     }
 
-    // Validación modo dual si se está cambiando
-    if (dto.id_actividad_catalogo !== undefined && dto.descripcion_manual !== undefined) {
-      if (dto.id_actividad_catalogo && dto.descripcion_manual) {
-        throw new BadRequestException(
-          'Modo dual inválido: usar id_actividad_catalogo O descripcion_manual',
-        );
-      }
+    // VALIDACIÓN: ordenSecuencia > 0
+    if (command.ordenSecuencia !== undefined && command.ordenSecuencia !== null && command.ordenSecuencia <= 0) {
+      throw new BadRequestException('ordenSecuencia debe ser mayor a 0');
     }
 
-    // Si se actualiza a modo manual, sistema es obligatorio
-    if (dto.descripcion_manual && !dto.sistema && !existe.sistema) {
-      throw new BadRequestException(
-        'Modo manual: sistema es obligatorio con descripcion_manual',
-      );
+    // VALIDACIÓN: tiempoEjecucionMinutos > 0
+    if (command.tiempoEjecucionMinutos !== undefined && command.tiempoEjecucionMinutos !== null && command.tiempoEjecucionMinutos <= 0) {
+      throw new BadRequestException('tiempoEjecucionMinutos debe ser mayor a 0');
     }
 
-    const actividadActualizada = await this.repository.save({
-      id_actividad_ejecutada: dto.id_actividad_ejecutada,
-      id_orden_servicio: dto.id_orden_servicio || existe.id_orden_servicio,
-      id_actividad_catalogo: dto.id_actividad_catalogo ?? existe.id_actividad_catalogo,
-      descripcion_manual: dto.descripcion_manual ?? existe.descripcion_manual,
-      sistema: dto.sistema ?? existe.sistema,
-      orden_secuencia: dto.orden_secuencia ?? existe.orden_secuencia,
-      estado: dto.estado ?? existe.estado,
-      observaciones: dto.observaciones ?? existe.observaciones,
-      ejecutada: dto.ejecutada ?? existe.ejecutada,
-      tiempo_ejecucion_minutos: dto.tiempo_ejecucion_minutos ?? existe.tiempo_ejecucion_minutos,
-      requiere_evidencia: dto.requiere_evidencia ?? existe.requiere_evidencia,
-      evidencia_capturada: dto.evidencia_capturada ?? existe.evidencia_capturada,
-    });
-
-    return actividadActualizada;
+    const entity = await this.repository.update(command.id, command);
+    return this.mapper.toDto(entity);
   }
 }
+

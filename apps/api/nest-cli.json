@@ -4,6 +4,15 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "webpack": true,
-    "typeCheck": false
+    "plugins": [
+      {
+        "name": "@nestjs/swagger",
+        "options": {
+          "classValidatorShim": true,
+          "introspectComments": true,
+          "controllerKeyOfComment": "summary"
+        }
+      }
+    ]
   }
 }

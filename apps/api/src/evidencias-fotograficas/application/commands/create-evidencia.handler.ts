@@ -1,13 +1,14 @@
+import { Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, BadRequestException } from '@nestjs/common';
-import { createHash } from 'crypto';
-import { CreateEvidenciaCommand } from './create-evidencia.command';
 import { IEvidenciasRepository } from '../../domain/evidencias.repository.interface';
-import { CloudinaryService } from '../../../cloudinary/cloudinary.service';
+import { ResponseEvidenciaDto } from '../../dto/response-evidencia.dto';
+import { EvidenciaMapper } from '../mappers/evidencia.mapper';
+import { CreateEvidenciaCommand } from './create-evidencia.command';
 
 /**
- * Handler crear evidencia con UPLOAD REAL a Cloudinary
- * FASE 4.3 - Hash SHA256 + dimensiones + URL Cloudinary
+ * Handler crear evidencia fotográfica
+ * FASE 3 - Tabla 11 - CRUD Estándar con mapper
+ * Backend responsabilidad: validar dimensiones, gestionar es_principal único
  */
 
 @CommandHandler(CreateEvidenciaCommand)
@@ -17,73 +18,53 @@ export class CreateEvidenciaHandler
   constructor(
     @Inject('IEvidenciasRepository')
     private readonly repository: IEvidenciasRepository,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly mapper: EvidenciaMapper,
   ) {}
 
-  async execute(command: CreateEvidenciaCommand): Promise<any> {
-    const { dto, file, userId } = command;
+  async execute(command: CreateEvidenciaCommand): Promise<ResponseEvidenciaDto> {
+    const { dto, userId } = command;
 
-    // 1. Validar file upload
-    if (!file || !file.buffer) {
-      throw new BadRequestException('Archivo de imagen requerido');
-    }
-
-    // 2. Calcular hash SHA256 del archivo original
-    const hash = createHash('sha256').update(file.buffer).digest('hex');
-
-    // 3. Upload a Cloudinary
-    const folder = `mekanos/evidencias/orden-${dto.id_orden_servicio}`;
-    let cloudinaryResult;
-
-    try {
-      cloudinaryResult = await this.cloudinaryService.uploadImage(
-        file.buffer,
-        folder,
-      );
-    } catch (error: any) {
-      throw new BadRequestException(
-        `Error al subir imagen a Cloudinary: ${error?.message || 'Unknown error'}`,
+    // 1. Validar dimensiones (ambos NULL o ambos >0)
+    if (
+      (dto.anchoPixels !== undefined && dto.altoPixels === undefined) ||
+      (dto.anchoPixels === undefined && dto.altoPixels !== undefined)
+    ) {
+      throw new Error(
+        'Dimensiones inválidas: anchoPixels y altoPixels deben ser ambos NULL o ambos >0',
       );
     }
 
-    // 4. Generar thumbnail URL
-    const thumbnailUrl = this.cloudinaryService.generateThumbnailUrl(
-      cloudinaryResult.public_id,
-    );
+    // 2. Si es_principal=true, desactivar otras principales de esta orden
+    if (dto.esPrincipal === true) {
+      await this.repository.desactivarPrincipales(dto.idOrdenServicio);
+    }
 
-    // 5. Guardar evidencia con metadata completa
-    const evidencia = await this.repository.save({
-      id_orden_servicio: dto.id_orden_servicio,
-      id_actividad_ejecutada: dto.id_actividad_ejecutada ?? null,
-      tipo_evidencia: dto.tipo_evidencia,
+    // 3. Crear evidencia
+    const evidencia = await this.repository.create({
+      idOrdenServicio: dto.idOrdenServicio,
+      idActividadEjecutada: dto.idActividadEjecutada ?? null,
+      tipoEvidencia: dto.tipoEvidencia,
       descripcion: dto.descripcion ?? null,
-      nombre_archivo: file.originalname,
-      ruta_archivo: cloudinaryResult.secure_url, // ✅ URL Cloudinary
-      hash_sha256: hash,
-      tama_o_bytes: BigInt(file.size),
-      mime_type: file.mimetype,
-      ancho_pixels: cloudinaryResult.width,
-      alto_pixels: cloudinaryResult.height,
-      orden_visualizacion: dto.orden_visualizacion ?? 1,
-      es_principal: dto.es_principal ?? false,
-      fecha_captura: new Date(),
-      capturada_por: userId, // Usuario desde JWT
+      nombreArchivo: dto.nombreArchivo,
+      rutaArchivo: dto.rutaArchivo,
+      hashSha256: dto.hashSha256,
+      sizeBytes: dto.sizeBytes,
+      mimeType: dto.mimeType ?? 'image/jpeg',
+      anchoPixels: dto.anchoPixels ?? null,
+      altoPixels: dto.altoPixels ?? null,
+      ordenVisualizacion: dto.ordenVisualizacion ?? null,
+      esPrincipal: dto.esPrincipal ?? false,
+      capturadaPor: userId, // Usuario desde JWT
       latitud: dto.latitud ?? null,
       longitud: dto.longitud ?? null,
-      metadata_exif: null, // TODO: Extraer EXIF si necesario
-      tiene_miniatura: true,
-      ruta_miniatura: thumbnailUrl,
-      esta_comprimida: true, // Cloudinary comprime automáticamente
-      tama_o_original_bytes: BigInt(file.size),
+      metadataExif: dto.metadataExif ?? null,
+      tieneMiniatura: dto.tieneMiniatura ?? false,
+      rutaMiniatura: dto.rutaMiniatura ?? null,
+      estaComprimida: dto.estaComprimida ?? false,
+      sizeOriginalBytes: dto.sizeOriginalBytes ?? null,
     });
 
-    // Serializar BigInt antes de retornar (JSON no soporta BigInt nativamente)
-    return {
-      ...evidencia,
-      tama_o_bytes: Number(evidencia.tama_o_bytes),
-      tama_o_original_bytes: evidencia.tama_o_original_bytes
-        ? Number(evidencia.tama_o_original_bytes)
-        : null,
-    };
+    return this.mapper.toDto(evidencia);
   }
 }
+

@@ -1,65 +1,241 @@
-import { Injectable } from '@nestjs/common';
-import { Resend } from 'resend';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+import { Transporter } from 'nodemailer';
 
 /**
- * EmailService
- * Servicio para envío de emails con Resend.com
+ * ============================================================================
+ * EMAIL SERVICE - MEKANOS S.A.S
+ * ============================================================================
+ * Servicio profesional de envío de emails con Nodemailer.
+ * Soporta Gmail SMTP con App Passwords.
+ * 
+ * CONFIGURACIÓN:
+ * - EMAIL_SMTP_HOST: smtp.gmail.com
+ * - EMAIL_SMTP_PORT: 587
+ * - EMAIL_SMTP_USER: usuario@gmail.com
+ * - EMAIL_SMTP_PASS: App Password de Gmail
+ * - EMAIL_FROM: Email remitente
+ * 
+ * COLORES CORPORATIVOS MEKANOS:
+ * - #F2F2F2 (Blanco)
+ * - #244673 (Azul Oscuro)
+ * - #3290A6 (Azul Claro)
+ * - #56A672 (Verde)
+ * - #9EC23D (Verde Claro)
+ * ============================================================================
  */
+
+// Colores corporativos MEKANOS
+const MEKANOS_COLORS = {
+  white: '#F2F2F2',
+  blueDark: '#244673',
+  blueLight: '#3290A6',
+  green: '#56A672',
+  greenLight: '#9EC23D'
+};
+
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
+export interface SendEmailOptions {
+  to: string | string[];
+  subject: string;
+  html: string;
+  attachments?: EmailAttachment[];
+  cc?: string | string[];
+  bcc?: string | string[];
+}
+
+export interface OrdenEmailData {
+  ordenNumero: string;
+  clienteNombre: string;
+  equipoDescripcion: string;
+  tipoMantenimiento: string;
+  fechaServicio: string;
+  tecnicoNombre: string;
+  observaciones?: string;
+}
+
 @Injectable()
-export class EmailService {
-  private resend: Resend | null = null;
+export class EmailService implements OnModuleInit {
+  private readonly logger = new Logger(EmailService.name);
+  private transporter: Transporter | null = null;
   private fromEmail: string;
+  private isConfigured = false;
 
   constructor() {
-    const apiKey = process.env.RESEND_API_KEY;
-    
-    if (!apiKey) {
-      console.warn('⚠️ RESEND_API_KEY no configurado - Emails no se enviarán');
-    } else {
-      this.resend = new Resend(apiKey);
-    }
+    this.fromEmail = process.env.EMAIL_FROM || 'mekanossas2@gmail.com';
+  }
 
-    this.fromEmail = process.env.EMAIL_FROM || 'notificaciones@mekanos.com';
+  async onModuleInit() {
+    await this.initializeTransporter();
   }
 
   /**
-   * Envía email de orden completada con PDF adjunto
-   * @param ordenNumero - Número de la orden
-   * @param clienteEmail - Email del cliente
-   * @param pdfUrl - URL del PDF en R2
+   * Inicializa el transporter de Nodemailer
+   */
+  private async initializeTransporter(): Promise<void> {
+    const host = process.env.EMAIL_SMTP_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.EMAIL_SMTP_PORT || '587', 10);
+    const user = process.env.EMAIL_SMTP_USER;
+    const pass = process.env.EMAIL_SMTP_PASS;
+
+    if (!user || !pass) {
+      this.logger.warn('⚠️ Credenciales SMTP no configuradas - Modo MOCK activado');
+      this.logger.warn('   Configure EMAIL_SMTP_USER y EMAIL_SMTP_PASS en .env');
+      return;
+    }
+
+    try {
+      this.transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465, // true para 465, false para otros puertos
+        auth: {
+          user,
+          pass
+        },
+        tls: {
+          rejectUnauthorized: false // Para desarrollo
+        }
+      });
+
+      // Verificar conexión
+      await this.transporter.verify();
+      this.isConfigured = true;
+      this.logger.log('✅ Servicio de Email inicializado correctamente');
+      this.logger.log(`   📧 Remitente: ${this.fromEmail}`);
+      this.logger.log(`   📡 SMTP: ${host}:${port}`);
+
+    } catch (error) {
+      this.logger.error('❌ Error inicializando transporter:', error);
+      this.transporter = null;
+    }
+  }
+
+  /**
+   * =========================================================================
+   * ENVÍO DE EMAILS GENÉRICO
+   * =========================================================================
+   */
+  async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.transporter) {
+      this.logger.log(`📧 [MOCK] Email enviado a ${options.to}`);
+      this.logger.log(`   Asunto: ${options.subject}`);
+      if (options.attachments?.length) {
+        this.logger.log(`   Adjuntos: ${options.attachments.map(a => a.filename).join(', ')}`);
+      }
+      return { success: true, messageId: 'mock-' + Date.now() };
+    }
+
+    try {
+      const mailOptions = {
+        from: {
+          name: 'MEKANOS S.A.S',
+          address: this.fromEmail
+        },
+        to: options.to,
+        cc: options.cc,
+        bcc: options.bcc,
+        subject: options.subject,
+        html: options.html,
+        attachments: options.attachments?.map(att => ({
+          filename: att.filename,
+          content: att.content,
+          contentType: att.contentType || 'application/pdf'
+        }))
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`✅ Email enviado - ID: ${result.messageId}`);
+      
+      return { success: true, messageId: result.messageId };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error enviando email: ${errorMessage}`);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * =========================================================================
+   * ENVÍO DE ORDEN COMPLETADA CON PDF
+   * =========================================================================
    */
   async sendOrdenCompletadaEmail(
     ordenNumero: string,
     clienteEmail: string,
-    pdfUrl: string
-  ): Promise<void> {
-    if (!this.resend) {
-      console.log(`📧 [MOCK] Email enviado a ${clienteEmail} - Orden ${ordenNumero}`);
-      console.log(`   PDF: ${pdfUrl}`);
-      return;
-    }
-
+    pdfUrl: string,
+    pdfBuffer?: Buffer
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    
     const htmlContent = this.buildOrdenCompletadaTemplate(ordenNumero, pdfUrl);
-
-    try {
-      const result = await this.resend!.emails.send({
-        from: this.fromEmail,
-        to: clienteEmail,
-        subject: `Orden de Servicio ${ordenNumero} - Completada ✅`,
-        html: htmlContent
+    
+    const attachments: EmailAttachment[] = [];
+    if (pdfBuffer) {
+      attachments.push({
+        filename: `Orden_${ordenNumero.replace(/\s+/g, '_')}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
       });
-
-      console.log(`✅ Email enviado exitosamente - ID: ${result.data?.id}`);
-
-    } catch (error) {
-      console.error('❌ Error enviando email:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to send email: ${errorMessage}`);
     }
+
+    return this.sendEmail({
+      to: clienteEmail,
+      subject: `✅ Orden de Servicio ${ordenNumero} - Completada | MEKANOS S.A.S`,
+      html: htmlContent,
+      attachments
+    });
   }
 
   /**
-   * Construye el HTML del email de orden completada
+   * =========================================================================
+   * ENVÍO DE ORDEN CON INFORME TÉCNICO DETALLADO
+   * =========================================================================
+   */
+  async sendInformeTecnicoEmail(
+    data: OrdenEmailData,
+    clienteEmail: string,
+    pdfBuffer: Buffer
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    
+    const htmlContent = this.buildInformeTecnicoTemplate(data);
+    
+    return this.sendEmail({
+      to: clienteEmail,
+      subject: `📋 Informe Técnico ${data.ordenNumero} - ${data.tipoMantenimiento} | MEKANOS S.A.S`,
+      html: htmlContent,
+      attachments: [{
+        filename: `Informe_Tecnico_${data.ordenNumero.replace(/\s+/g, '_')}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }]
+    });
+  }
+
+  /**
+   * =========================================================================
+   * ENVÍO DE EMAIL DE PRUEBA
+   * =========================================================================
+   */
+  async sendTestEmail(to: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const htmlContent = this.buildTestEmailTemplate();
+    
+    return this.sendEmail({
+      to,
+      subject: '🧪 Email de Prueba - MEKANOS S.A.S',
+      html: htmlContent
+    });
+  }
+
+  /**
+   * =========================================================================
+   * TEMPLATE: ORDEN COMPLETADA
+   * =========================================================================
    */
   private buildOrdenCompletadaTemplate(ordenNumero: string, pdfUrl: string): string {
     return `
@@ -68,77 +244,88 @@ export class EmailService {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orden Completada</title>
+  <title>Orden Completada - MEKANOS</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f7;">
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: ${MEKANOS_COLORS.white};">
   <table role="presentation" style="width: 100%; border-collapse: collapse;">
     <tr>
       <td align="center" style="padding: 40px 0;">
-        <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 20px rgba(36, 70, 115, 0.15);">
           
-          <!-- Header -->
+          <!-- Header con Logo MEKANOS -->
           <tr>
-            <td style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 30px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">
+            <td style="background: linear-gradient(135deg, ${MEKANOS_COLORS.blueDark} 0%, ${MEKANOS_COLORS.blueLight} 100%); padding: 35px; text-align: center; border-radius: 12px 12px 0 0;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 32px; font-weight: bold; letter-spacing: 2px;">
                 MEKANOS S.A.S
               </h1>
-              <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 14px;">
+              <p style="color: ${MEKANOS_COLORS.greenLight}; margin: 10px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
                 Mantenimiento Industrial Profesional
               </p>
             </td>
           </tr>
 
-          <!-- Content -->
+          <!-- Contenido Principal -->
           <tr>
-            <td style="padding: 40px 30px;">
-              <h2 style="color: #1e293b; margin: 0 0 20px 0; font-size: 22px;">
-                ✅ Orden de Servicio Completada
+            <td style="padding: 40px 35px;">
+              
+              <!-- Badge de Estado -->
+              <div style="text-align: center; margin-bottom: 25px;">
+                <span style="background: linear-gradient(135deg, ${MEKANOS_COLORS.green} 0%, ${MEKANOS_COLORS.greenLight} 100%); color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px; font-weight: bold; text-transform: uppercase;">
+                  ✓ Servicio Completado
+                </span>
+              </div>
+
+              <h2 style="color: ${MEKANOS_COLORS.blueDark}; margin: 0 0 20px 0; font-size: 24px; text-align: center;">
+                Orden de Servicio ${ordenNumero}
               </h2>
 
-              <p style="color: #475569; line-height: 1.6; margin: 0 0 15px 0;">
+              <p style="color: #475569; line-height: 1.8; margin: 0 0 15px 0; font-size: 15px;">
                 Estimado cliente,
               </p>
 
-              <p style="color: #475569; line-height: 1.6; margin: 0 0 15px 0;">
-                Le informamos que la orden de servicio <strong style="color: #2563eb;">${ordenNumero}</strong> 
-                ha sido completada exitosamente por nuestro equipo técnico.
+              <p style="color: #475569; line-height: 1.8; margin: 0 0 20px 0; font-size: 15px;">
+                Le informamos que la orden de servicio <strong style="color: ${MEKANOS_COLORS.blueLight};">${ordenNumero}</strong> 
+                ha sido completada exitosamente por nuestro equipo técnico especializado.
               </p>
 
-              <div style="background-color: #f1f5f9; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0;">
-                <p style="color: #475569; margin: 0; font-size: 14px;">
-                  <strong>📄 Informe Técnico Disponible</strong><br>
-                  Su informe técnico detallado está listo para descarga.
+              <!-- Info Box -->
+              <div style="background: linear-gradient(135deg, ${MEKANOS_COLORS.white} 0%, #e8f4f8 100%); border-left: 4px solid ${MEKANOS_COLORS.blueLight}; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0;">
+                <p style="color: ${MEKANOS_COLORS.blueDark}; margin: 0; font-size: 14px;">
+                  <strong>📄 Informe Técnico Disponible</strong><br><br>
+                  Su informe técnico detallado con todas las mediciones, observaciones 
+                  y recomendaciones está listo para su descarga.
                 </p>
               </div>
 
-              <!-- CTA Button -->
-              <table role="presentation" style="margin: 30px 0;">
+              <!-- Botón de Descarga -->
+              <table role="presentation" style="margin: 30px auto;">
                 <tr>
                   <td align="center">
                     <a href="${pdfUrl}" 
-                       style="background-color: #2563eb; 
+                       style="background: linear-gradient(135deg, ${MEKANOS_COLORS.green} 0%, ${MEKANOS_COLORS.greenLight} 100%); 
                               color: #ffffff; 
-                              padding: 14px 32px; 
+                              padding: 16px 40px; 
                               text-decoration: none; 
                               border-radius: 8px; 
                               display: inline-block;
                               font-weight: bold;
-                              font-size: 16px;">
+                              font-size: 16px;
+                              box-shadow: 0 4px 15px rgba(86, 166, 114, 0.4);
+                              transition: all 0.3s ease;">
                       📥 Descargar Informe PDF
                     </a>
                   </td>
                 </tr>
               </table>
 
-              <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 25px 0 0 0;">
-                💡 <em>El enlace de descarga estará disponible por 7 días. 
-                Si necesita una copia adicional, no dude en contactarnos.</em>
+              <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin: 25px 0 0 0; text-align: center;">
+                💡 <em>Si el archivo viene adjunto en este correo, puede descargarlo directamente.</em>
               </p>
 
               <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
 
-              <p style="color: #475569; line-height: 1.6; margin: 0;">
-                Gracias por confiar en <strong>MEKANOS S.A.S</strong> para el mantenimiento 
+              <p style="color: #475569; line-height: 1.6; margin: 0; text-align: center;">
+                Gracias por confiar en <strong style="color: ${MEKANOS_COLORS.blueDark};">MEKANOS S.A.S</strong> para el mantenimiento 
                 de sus equipos industriales.
               </p>
             </td>
@@ -146,18 +333,18 @@ export class EmailService {
 
           <!-- Footer -->
           <tr>
-            <td style="background-color: #f8fafc; padding: 25px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-              <p style="color: #64748b; font-size: 14px; margin: 0 0 8px 0;">
-                <strong>MEKANOS S.A.S</strong>
+            <td style="background-color: ${MEKANOS_COLORS.blueDark}; padding: 30px; text-align: center; border-radius: 0 0 12px 12px;">
+              <p style="color: #ffffff; font-size: 16px; margin: 0 0 10px 0; font-weight: bold;">
+                MEKANOS S.A.S
               </p>
-              <p style="color: #94a3b8; font-size: 12px; margin: 0; line-height: 1.5;">
+              <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0; line-height: 1.8;">
                 Mantenimiento y Reparación de Equipos Industriales<br>
                 Cartagena de Indias, Colombia<br>
-                📞 Tel: 315-7083350 | ✉️ mekanossas2@gmail.com
+                📞 315-7083350 | ✉️ mekanossas2@gmail.com
               </p>
 
-              <div style="margin-top: 15px;">
-                <p style="color: #cbd5e1; font-size: 11px; margin: 0;">
+              <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                <p style="color: rgba(255,255,255,0.6); font-size: 11px; margin: 0;">
                   © ${new Date().getFullYear()} MEKANOS S.A.S. Todos los derechos reservados.
                 </p>
               </div>
@@ -174,32 +361,213 @@ export class EmailService {
   }
 
   /**
-   * Envía email de orden programada (futuro)
+   * =========================================================================
+   * TEMPLATE: INFORME TÉCNICO DETALLADO
+   * =========================================================================
    */
-  async sendOrdenProgramadaEmail(
-    ordenNumero: string,
-    clienteEmail: string,
-    _fechaProgramada: Date
-  ): Promise<void> {
-    // TODO: Implementar cuando se necesite
-    console.log(`📧 [TODO] Email de orden programada: ${ordenNumero} para ${clienteEmail}`);
+  private buildInformeTecnicoTemplate(data: OrdenEmailData): string {
+    return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Informe Técnico - MEKANOS</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: ${MEKANOS_COLORS.white};">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 20px rgba(36, 70, 115, 0.15);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, ${MEKANOS_COLORS.blueDark} 0%, ${MEKANOS_COLORS.blueLight} 100%); padding: 35px; text-align: center; border-radius: 12px 12px 0 0;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 32px; font-weight: bold; letter-spacing: 2px;">
+                MEKANOS S.A.S
+              </h1>
+              <p style="color: ${MEKANOS_COLORS.greenLight}; margin: 10px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+                Informe Técnico de Servicio
+              </p>
+            </td>
+          </tr>
+
+          <!-- Contenido -->
+          <tr>
+            <td style="padding: 40px 35px;">
+              
+              <h2 style="color: ${MEKANOS_COLORS.blueDark}; margin: 0 0 25px 0; font-size: 22px;">
+                📋 ${data.tipoMantenimiento}
+              </h2>
+
+              <p style="color: #475569; line-height: 1.8; font-size: 15px; margin-bottom: 25px;">
+                Estimado(a) <strong>${data.clienteNombre}</strong>,
+              </p>
+
+              <p style="color: #475569; line-height: 1.8; font-size: 15px; margin-bottom: 20px;">
+                Adjunto encontrará el informe técnico detallado del servicio realizado a su equipo.
+              </p>
+
+              <!-- Resumen del Servicio -->
+              <div style="background: ${MEKANOS_COLORS.white}; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin: 25px 0;">
+                <div style="background: ${MEKANOS_COLORS.blueDark}; color: white; padding: 12px 20px; font-weight: bold;">
+                  📊 Resumen del Servicio
+                </div>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: #64748b; width: 40%;">Orden No.</td>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: ${MEKANOS_COLORS.blueDark}; font-weight: bold;">${data.ordenNumero}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Equipo</td>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: #1e293b;">${data.equipoDescripcion}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Tipo de Servicio</td>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: #1e293b;">${data.tipoMantenimiento}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Fecha de Servicio</td>
+                    <td style="padding: 12px 20px; border-bottom: 1px solid #e2e8f0; color: #1e293b;">${data.fechaServicio}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 20px; color: #64748b;">Técnico Responsable</td>
+                    <td style="padding: 12px 20px; color: #1e293b;">${data.tecnicoNombre}</td>
+                  </tr>
+                </table>
+              </div>
+
+              ${data.observaciones ? `
+              <!-- Observaciones -->
+              <div style="background: linear-gradient(135deg, #fff8e6 0%, #fef3c7 100%); border-left: 4px solid #f59e0b; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0;">
+                <p style="color: #92400e; margin: 0; font-size: 14px;">
+                  <strong>⚠️ Observaciones Importantes:</strong><br><br>
+                  ${data.observaciones}
+                </p>
+              </div>
+              ` : ''}
+
+              <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin: 25px 0 0 0; text-align: center;">
+                📎 <em>El informe técnico completo se encuentra adjunto en formato PDF.</em>
+              </p>
+
+              <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+
+              <p style="color: #475569; line-height: 1.6; margin: 0; text-align: center;">
+                Gracias por confiar en <strong style="color: ${MEKANOS_COLORS.blueDark};">MEKANOS S.A.S</strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: ${MEKANOS_COLORS.blueDark}; padding: 30px; text-align: center; border-radius: 0 0 12px 12px;">
+              <p style="color: #ffffff; font-size: 16px; margin: 0 0 10px 0; font-weight: bold;">
+                MEKANOS S.A.S
+              </p>
+              <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0; line-height: 1.8;">
+                Cartagena de Indias, Colombia<br>
+                📞 315-7083350 | ✉️ mekanossas2@gmail.com
+              </p>
+              <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                <p style="color: rgba(255,255,255,0.6); font-size: 11px; margin: 0;">
+                  © ${new Date().getFullYear()} MEKANOS S.A.S. Todos los derechos reservados.
+                </p>
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim();
   }
 
   /**
-   * Envía email de orden asignada a técnico (futuro)
+   * =========================================================================
+   * TEMPLATE: EMAIL DE PRUEBA
+   * =========================================================================
    */
-  async sendOrdenAsignadaEmail(
-    ordenNumero: string,
-    tecnicoEmail: string
-  ): Promise<void> {
-    // TODO: Implementar cuando se necesite
-    console.log(`📧 [TODO] Email de orden asignada: ${ordenNumero} para técnico ${tecnicoEmail}`);
+  private buildTestEmailTemplate(): string {
+    return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email de Prueba - MEKANOS</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: ${MEKANOS_COLORS.white};">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 20px rgba(36, 70, 115, 0.15);">
+          
+          <tr>
+            <td style="background: linear-gradient(135deg, ${MEKANOS_COLORS.blueDark} 0%, ${MEKANOS_COLORS.blueLight} 100%); padding: 35px; text-align: center; border-radius: 12px 12px 0 0;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 32px; font-weight: bold;">
+                🧪 MEKANOS S.A.S
+              </h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 40px 35px; text-align: center;">
+              <div style="font-size: 60px; margin-bottom: 20px;">✅</div>
+              
+              <h2 style="color: ${MEKANOS_COLORS.green}; margin: 0 0 20px 0; font-size: 24px;">
+                ¡Configuración Exitosa!
+              </h2>
+
+              <p style="color: #475569; line-height: 1.8; font-size: 15px;">
+                El servicio de correo electrónico está funcionando correctamente.
+              </p>
+
+              <div style="background: ${MEKANOS_COLORS.white}; border: 2px dashed ${MEKANOS_COLORS.blueLight}; padding: 20px; margin: 25px 0; border-radius: 8px;">
+                <p style="color: ${MEKANOS_COLORS.blueDark}; margin: 0; font-size: 14px;">
+                  <strong>📅 Fecha:</strong> ${new Date().toLocaleString('es-CO', { 
+                    dateStyle: 'full', 
+                    timeStyle: 'short',
+                    timeZone: 'America/Bogota'
+                  })}
+                </p>
+              </div>
+
+              <p style="color: #64748b; font-size: 13px;">
+                Este es un email de prueba automático del sistema MEKANOS.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color: ${MEKANOS_COLORS.blueDark}; padding: 25px; text-align: center; border-radius: 0 0 12px 12px;">
+              <p style="color: rgba(255,255,255,0.8); font-size: 12px; margin: 0;">
+                MEKANOS S.A.S | Cartagena, Colombia
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim();
   }
 
   /**
-   * Verifica la configuración del servicio
+   * Verifica si el servicio está configurado
    */
-  isConfigured(): boolean {
-    return this.resend !== null;
+  checkConfiguration(): { configured: boolean; provider: string; from: string } {
+    return {
+      configured: this.isConfigured,
+      provider: this.isConfigured ? 'Nodemailer (SMTP)' : 'Mock Mode',
+      from: this.fromEmail
+    };
   }
+
 }

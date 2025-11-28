@@ -39,6 +39,7 @@ import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
 import { CreateVersionDto } from './dto/versiones/create-version.dto';
 import { GetVersionDetalleQuery } from './queries/versiones/get-version-detalle.query';
 import { GetVersionesQuery } from './queries/versiones/get-versiones.query';
+import { CotizacionCalculoService } from './services/cotizacion-calculo.service';
 
 /**
  * COTIZACIONES CONTROLLER
@@ -66,6 +67,7 @@ export class CotizacionesController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
+    private readonly calculoService: CotizacionCalculoService,
   ) {}
 
   @Post()
@@ -357,5 +359,75 @@ export class CotizacionesController {
     const query = new GetVersionDetalleQuery(idVersion);
 
     return await this.queryBus.execute(query);
+  }
+
+  // ==================== FASE 4 - CALCULO AUTOMATICO TOTALES ====================
+
+  @Post(':id/recalcular')
+  @ApiOperation({ 
+    summary: 'Recalcular todos los totales de la cotización',
+    description: 'Recalcula subtotales de items, descuentos, IVA y total. Actualiza la BD automáticamente.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Totales recalculados exitosamente',
+    schema: {
+      properties: {
+        subtotal_servicios: { type: 'string', example: '1500000.00' },
+        subtotal_componentes: { type: 'string', example: '500000.00' },
+        subtotal_general: { type: 'string', example: '2000000.00' },
+        descuento_valor: { type: 'string', example: '200000.00' },
+        subtotal_con_descuento: { type: 'string', example: '1800000.00' },
+        iva_valor: { type: 'string', example: '342000.00' },
+        total_cotizacion: { type: 'string', example: '2142000.00' },
+        cantidad_items_servicios: { type: 'number', example: 3 },
+        cantidad_items_componentes: { type: 'number', example: 5 },
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async recalcularTotales(
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const result = await this.calculoService.recalcularTotales(id);
+    return {
+      message: 'Totales recalculados exitosamente',
+      ...result,
+      // Convertir Decimal a string para serialización JSON
+      subtotal_servicios: result.subtotal_servicios.toString(),
+      subtotal_componentes: result.subtotal_componentes.toString(),
+      subtotal_general: result.subtotal_general.toString(),
+      descuento_valor: result.descuento_valor.toString(),
+      subtotal_con_descuento: result.subtotal_con_descuento.toString(),
+      iva_valor: result.iva_valor.toString(),
+      total_cotizacion: result.total_cotizacion.toString(),
+    };
+  }
+
+  @Get(':id/totales')
+  @ApiOperation({ 
+    summary: 'Obtener totales actuales de la cotización (sin recalcular)',
+    description: 'Retorna los valores guardados en BD. Use POST /recalcular para actualizar.'
+  })
+  @ApiResponse({ status: 200, description: 'Totales actuales' })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  async obtenerTotales(
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const result = await this.calculoService.obtenerTotalesActuales(id);
+    if (!result) {
+      return { error: 'Cotización no encontrada' };
+    }
+    return {
+      subtotal_servicios: result.subtotal_servicios.toString(),
+      subtotal_componentes: result.subtotal_componentes.toString(),
+      subtotal_general: result.subtotal_general.toString(),
+      descuento_valor: result.descuento_valor.toString(),
+      subtotal_con_descuento: result.subtotal_con_descuento.toString(),
+      iva_valor: result.iva_valor.toString(),
+      total_cotizacion: result.total_cotizacion.toString(),
+      cantidad_items_servicios: result.cantidad_items_servicios,
+      cantidad_items_componentes: result.cantidad_items_componentes,
+    };
   }
 }

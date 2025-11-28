@@ -1,8 +1,8 @@
 /**
  * Query listar evidencias por orden de servicio
- * FASE 4.3
+ * FASE 3 - Tabla 11 - camelCase
  */
 
 export class GetEvidenciasByOrdenQuery {
-  constructor(public readonly id_orden_servicio: number) {}
+  constructor(public readonly ordenId: number) {}
 }

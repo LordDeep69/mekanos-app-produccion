@@ -3,6 +3,7 @@ import {
     IsBoolean,
     IsEnum,
     IsNotEmpty,
+    IsOptional,
     IsString,
     MaxLength,
     MinLength,
@@ -29,8 +30,10 @@ export class CreateMotivosAjusteDto {
   categoria: categoria_motivo_ajuste_enum;
 
   @IsBoolean()
-  requiere_justificacion_detallada: boolean;
+  @IsOptional()
+  requiere_justificacion_detallada?: boolean;
 
   @IsBoolean()
-  requiere_aprobacion_gerencia: boolean;
+  @IsOptional()
+  requiere_aprobacion_gerencia?: boolean;
 }

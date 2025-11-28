@@ -1,3 +1,4 @@
+import { DatabaseModule } from '@mekanos/database';
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { CrearLoteHandler } from './commands/crear-lote.handler';
@@ -15,7 +16,7 @@ const QueryHandlers = [
 ];
 
 @Module({
-  imports: [CqrsModule],
+  imports: [CqrsModule, DatabaseModule],
   controllers: [LotesComponentesController],
   providers: [
     {

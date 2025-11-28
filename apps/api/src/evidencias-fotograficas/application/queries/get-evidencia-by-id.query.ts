@@ -1,8 +1,8 @@
 /**
  * Query obtener evidencia por ID
- * FASE 4.3
+ * FASE 3 - Tabla 11 - camelCase
  */
 
 export class GetEvidenciaByIdQuery {
-  constructor(public readonly id_evidencia: number) {}
+  constructor(public readonly id: number) {}
 }

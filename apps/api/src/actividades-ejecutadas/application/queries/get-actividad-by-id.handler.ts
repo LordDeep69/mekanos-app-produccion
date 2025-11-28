@@ -1,28 +1,25 @@
-import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException } from '@nestjs/common';
-import { GetActividadByIdQuery } from './get-actividad-by-id.query';
+import { NotFoundException } from '@nestjs/common';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
+import { ResponseActividadDto } from '../../dto/response-actividad.dto';
 import { PrismaActividadesRepository } from '../../infrastructure/prisma-actividades.repository';
-
-/**
- * Handler para obtener actividad por ID
- */
+import { ActividadMapper } from '../mappers/actividad.mapper';
+import { GetActividadByIdQuery } from './get-actividad-by-id.query';
 
 @QueryHandler(GetActividadByIdQuery)
-export class GetActividadByIdHandler
-  implements IQueryHandler<GetActividadByIdQuery>
-{
+export class GetActividadByIdHandler implements IQueryHandler<GetActividadByIdQuery> {
   constructor(
-    @Inject('IActividadesRepository')
     private readonly repository: PrismaActividadesRepository,
+    private readonly mapper: ActividadMapper,
   ) {}
 
-  async execute(query: GetActividadByIdQuery): Promise<any> {
-    const actividad = await this.repository.findById(query.id);
+  async execute(query: GetActividadByIdQuery): Promise<ResponseActividadDto> {
+    const entity = await this.repository.findById(query.id);
 
-    if (!actividad) {
+    if (!entity) {
       throw new NotFoundException(`Actividad ${query.id} no encontrada`);
     }
 
-    return actividad;
+    return this.mapper.toDto(entity);
   }
 }
+

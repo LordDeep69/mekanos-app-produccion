@@ -1,37 +1,62 @@
 /**
  * IEvidenciasRepository - Interface repository evidencias fotográficas
- * FASE 4.3 - Upload Cloudinary + metadata hash/exif
+ * FASE 3 - Tabla 11 - camelCase refactorizado
+ * NOTA: Usamos sizeBytes/sizeOriginalBytes en lugar de tamañoBytes para evitar
+ * problemas de encoding con ñ en PowerShell/terminal
  */
 
 export interface IEvidenciasRepository {
   /**
-   * CREATE/UPDATE evidencia fotográfica
+   * CREATE evidencia fotográfica
    */
-  save(data: {
-    id_evidencia?: number;
-    id_orden_servicio: number;
-    id_actividad_ejecutada?: number | null;
-    tipo_evidencia: string;
+  create(data: {
+    idOrdenServicio: number;
+    idActividadEjecutada?: number | null;
+    tipoEvidencia: string;
     descripcion?: string | null;
-    nombre_archivo: string;
-    ruta_archivo: string; // URL Cloudinary
-    hash_sha256: string;
-    tama_o_bytes: bigint;
-    mime_type?: string;
-    ancho_pixels?: number;
-    alto_pixels?: number;
-    orden_visualizacion?: number;
-    es_principal?: boolean;
-    fecha_captura?: Date;
-    capturada_por?: number;
+    nombreArchivo: string;
+    rutaArchivo: string;
+    hashSha256: string;
+    sizeBytes: number; // BigInt en Prisma (alias de tamañoBytes)
+    mimeType?: string;
+    anchoPixels?: number | null;
+    altoPixels?: number | null;
+    ordenVisualizacion?: number | null;
+    esPrincipal?: boolean;
+    capturadaPor?: number;
     latitud?: number | null;
     longitud?: number | null;
-    metadata_exif?: any;
-    tiene_miniatura?: boolean;
-    ruta_miniatura?: string | null;
-    esta_comprimida?: boolean;
-    tama_o_original_bytes?: bigint | null;
+    metadataExif?: any;
+    tieneMiniatura?: boolean;
+    rutaMiniatura?: string | null;
+    estaComprimida?: boolean;
+    sizeOriginalBytes?: number | null; // BigInt en Prisma (alias de tamañoOriginalBytes)
   }): Promise<any>;
+
+  /**
+   * UPDATE evidencia fotográfica
+   */
+  update(
+    id: number,
+    data: {
+      tipoEvidencia?: string;
+      descripcion?: string | null;
+      ordenVisualizacion?: number | null;
+      esPrincipal?: boolean;
+      latitud?: number | null;
+      longitud?: number | null;
+      metadataExif?: any;
+      tieneMiniatura?: boolean;
+      rutaMiniatura?: string | null;
+      estaComprimida?: boolean;
+      sizeOriginalBytes?: number | null;
+    },
+  ): Promise<any>;
+
+  /**
+   * DELETE evidencia fotográfica
+   */
+  delete(id: number): Promise<void>;
 
   /**
    * READ ONE - obtener evidencia por ID
@@ -41,15 +66,20 @@ export interface IEvidenciasRepository {
   /**
    * READ ALL por orden - listar evidencias de orden específica
    */
-  findByOrden(id_orden_servicio: number): Promise<any[]>;
+  findByOrden(ordenId: number): Promise<any[]>;
 
   /**
    * READ ALL por actividad - listar evidencias de actividad específica
    */
-  findByActividad(id_actividad_ejecutada: number): Promise<any[]>;
+  findByActividad(actividadId: number): Promise<any[]>;
 
   /**
-   * DELETE - eliminar evidencia (también borrar de Cloudinary)
+   * READ ALL - listar todas evidencias
    */
-  delete(id: number): Promise<void>;
+  findAll(): Promise<any[]>;
+
+  /**
+   * Desactivar es_principal de otras evidencias de la misma orden
+   */
+  desactivarPrincipales(ordenId: number, exceptoId?: number): Promise<void>;
 }
