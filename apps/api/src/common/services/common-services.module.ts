@@ -55,12 +55,14 @@ import { ProgramacionFacadeService } from './programacion-facade.service';
     MekanosFacadeService,
     CotizacionesFacadeService,
     ProgramacionFacadeService,
+    GeneradorDocumentosFacadeService,
   ],
   exports: [
     NumeracionService,
     MekanosFacadeService,
     CotizacionesFacadeService,
     ProgramacionFacadeService,
+    GeneradorDocumentosFacadeService,
   ],
 })
-export class CommonServicesModule {}
+export class CommonServicesModule { }
