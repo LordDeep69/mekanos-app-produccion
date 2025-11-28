@@ -175,6 +175,7 @@ model usuarios {
   usuarios_roles_usuarios_roles_asignado_porTousuarios                     usuarios_roles[]               @relation("usuarios_roles_asignado_porTousuarios")
   usuarios_roles_usuarios_roles_id_usuarioTousuarios                       usuarios_roles[]               @relation("usuarios_roles_id_usuarioTousuarios")
   versiones_cotizacion                                                     versiones_cotizacion[]
+  notificaciones                                                           notificaciones[]
 
   @@index([estado, fecha_creacion], map: "idx_usuarios_estado")
   @@map("usuarios")
@@ -2197,6 +2198,47 @@ model versiones_cotizacion {
   @@unique([id_cotizacion, numero_version], map: "uk_cotizacion_version")
   @@index([id_cotizacion, numero_version(sort: Desc)], map: "idx_versiones_cotizacion")
   @@index([fecha_version(sort: Desc)], map: "idx_versiones_fecha")
+}
+
+/// Contador de secuencias para numeración automática de documentos
+/// Mantiene el último número usado por tipo de documento y año
+model sequence_counter {
+  id           Int      @id @default(autoincrement())
+  type         String   @db.VarChar(20)  // ORD, COT, INF, CONT, REM, OC, FAC, REC
+  year         Int
+  currentValue Int      @default(0) @map("current_value")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@unique([type, year], name: "type_year", map: "uk_sequence_type_year")
+  @@index([type, year], map: "idx_sequence_type_year")
+  @@map("sequence_counter")
+}
+
+/// Sistema de notificaciones para usuarios
+/// FASE 6 POST-CRUD - Notificaciones y CRON
+model notificaciones {
+  id_notificacion           Int       @id @default(autoincrement())
+  id_usuario                Int
+  tipo_notificacion         String    @db.VarChar(50) // ORDEN_ASIGNADA, COTIZACION_APROBADA, etc.
+  titulo                    String    @db.VarChar(200)
+  mensaje                   String    @db.Text
+  prioridad                 String    @default("NORMAL") @db.VarChar(20) // BAJA, NORMAL, ALTA, URGENTE
+  leida                     Boolean   @default(false)
+  fecha_creacion            DateTime  @default(now()) @db.Timestamp(6)
+  fecha_lectura             DateTime? @db.Timestamp(6)
+  id_entidad_relacionada    Int?      // ID de orden, cotización, contrato, etc.
+  tipo_entidad_relacionada  String?   @db.VarChar(50) // ORDEN_SERVICIO, COTIZACION, CONTRATO
+  url_accion                String?   @db.VarChar(500) // URL para navegar al hacer clic
+  datos_extra               String?   @db.Text // JSON con datos adicionales
+
+  // Relaciones
+  usuario                   usuarios  @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([id_usuario, leida], map: "idx_notificaciones_usuario_leida")
+  @@index([id_usuario, fecha_creacion(sort: Desc)], map: "idx_notificaciones_usuario_fecha")
+  @@index([tipo_notificacion], map: "idx_notificaciones_tipo")
+  @@map("notificaciones")
 }
 
 enum estado_equipo_enum {

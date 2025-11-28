@@ -1,11 +1,11 @@
-import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject } from '@nestjs/common';
-import { CreateOrdenCommand } from './create-orden.command';
 import {
-  OrdenServicioEntity,
-  IOrdenServicioRepository,
-  NumeroOrden,
+    IOrdenServicioRepository,
+    NumeroOrden,
+    OrdenServicioEntity,
 } from '@mekanos/core';
+import { Inject } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { CreateOrdenCommand } from './create-orden.command';
 
 /**
  * Handler para CreateOrdenCommand
@@ -67,7 +67,7 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       fecha_programada: orden.fechaProgramada,
       prioridad: orden.prioridad.getValue(),
       origen_solicitud: 'PROGRAMADO',
-      id_estado_actual: 1, // Estado BORRADOR (asumiendo ID 1 del seed)
+      id_estado_actual: 3, // Estado PROGRAMADA (ID 3 verificado)
       requiere_firma_cliente: true,
       creado_por: command.userId,
     };

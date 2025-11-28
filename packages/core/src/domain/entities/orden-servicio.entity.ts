@@ -1,6 +1,6 @@
-import { OrdenServicioId } from '../value-objects/orden-servicio-id.vo';
-import { NumeroOrden } from '../value-objects/numero-orden.vo';
 import { EstadoOrden, EstadoOrdenEnum } from '../value-objects/estado-orden.vo';
+import { NumeroOrden } from '../value-objects/numero-orden.vo';
+import { OrdenServicioId } from '../value-objects/orden-servicio-id.vo';
 import { PrioridadOrden, PrioridadOrdenEnum } from '../value-objects/prioridad-orden.vo';
 
 /**
@@ -82,7 +82,7 @@ export class OrdenServicioEntity {
       OrdenServicioId.create(),
       NumeroOrden.from(props.numeroOrden),
       EstadoOrden.borrador(), // Estado inicial siempre BORRADOR
-      props.prioridad ? PrioridadOrden.from(props.prioridad) : PrioridadOrden.media(),
+      props.prioridad ? PrioridadOrden.from(props.prioridad) : PrioridadOrden.normal(),
       props.equipoId,
       props.clienteId,
       props.sedeClienteId || null,

@@ -1,9 +1,10 @@
 import {
-  Injectable,
-  NotFoundException,
-  InternalServerErrorException,
+    Injectable,
+    InternalServerErrorException,
+    NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '@mekanos/database';
+import { createHash } from 'crypto';
+import { PrismaService } from '../database/prisma.service';
 import { CreateFirmasDigitalesDto } from './dto/create-firmas-digitales.dto';
 import { UpdateFirmasDigitalesDto } from './dto/update-firmas-digitales.dto';
 
@@ -11,12 +12,33 @@ import { UpdateFirmasDigitalesDto } from './dto/update-firmas-digitales.dto';
 export class FirmasDigitalesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createDto: CreateFirmasDigitalesDto) {
+  async create(createDto: CreateFirmasDigitalesDto, userId: number) {
     try {
+      // Validar persona
+      const persona = await this.prisma.personas.findUnique({
+        where: { id_persona: createDto.id_persona },
+      });
+
+      if (!persona) {
+        throw new NotFoundException(
+          `Persona con ID ${createDto.id_persona} no existe`,
+        );
+      }
+
+      const hash_firma = createDto.hash_firma || createHash('sha256').update(createDto.firma_base64).digest('hex').substring(0, 64);
+
       return await this.prisma.firmas_digitales.create({
-        data: createDto as any,
+        data: {
+          ...(createDto as any),
+          hash_firma,
+          registrada_por: userId,
+          fecha_registro: new Date(),
+        },
       });
     } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         `Error al crear firmas_digitales: ${(error as Error).message}`,
       );

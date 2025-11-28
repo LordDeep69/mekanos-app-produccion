@@ -1,13 +1,50 @@
-import { Prisma } from '@prisma/client';
+import {
+    IsBoolean,
+    IsEnum,
+    IsInt,
+    IsOptional,
+    IsString,
+    MaxLength,
+} from 'class-validator';
 
-/**
- * DTO para crear firmas_digitales
- * 
- * ⚠️ TEMPORAL: Usando tipos de Prisma directamente para MVP
- * TODO: Agregar validaciones con class-validator en fase de refinamiento
- * TODO: Documentar campos con @ApiProperty cuando se definan validaciones
- */
-export class CreateFirmasDigitalesDto implements Partial<Prisma.firmas_digitalesCreateInput> {
-  // Permisivo para MVP - Prisma valida tipos en runtime
-  [key: string]: any;
+export enum TipoFirmaDigitalEnum {
+  TECNICO = 'TECNICO',
+  CLIENTE = 'CLIENTE',
+  ASESOR = 'ASESOR',
+  GERENTE = 'GERENTE',
+  ADMINISTRATIVA = 'ADMINISTRATIVA',
+  OTRO = 'OTRO',
+}
+
+export class CreateFirmasDigitalesDto {
+  @IsInt()
+  id_persona: number;
+
+  @IsEnum(TipoFirmaDigitalEnum)
+  tipo_firma: TipoFirmaDigitalEnum;
+
+  @IsString()
+  firma_base64: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  formato_firma?: string = 'PNG';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  hash_firma?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  es_firma_principal?: boolean = false;
+
+  @IsOptional()
+  @IsBoolean()
+  activa?: boolean = true;
+
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
 }

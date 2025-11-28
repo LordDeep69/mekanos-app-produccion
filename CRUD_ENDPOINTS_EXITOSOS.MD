@@ -521,6 +521,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 **Problema Resuelto:** PersonasModule no importaba AuthModule, causando que Guards no funcionaran.
 
 **Configuración Actual:**
+
 - ✅ `@UseGuards(JwtAuthGuard, RolesGuard)` activo
 - ✅ JWT requerido para POST, PUT, DELETE
 - ✅ `creado_por` y `modificado_por` extraídos automáticamente del token
@@ -529,6 +530,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 #### Enums Disponibles
 
 **tipo_identificacion_enum:**
+
 - `CC` - Cédula de Ciudadanía
 - `NIT` - Número de Identificación Tributaria
 - `CE` - Cédula de Extranjería
@@ -538,12 +540,14 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 - `DNI` - Documento Nacional de Identidad
 
 **tipo_persona_enum:**
+
 - `NATURAL` - Persona Natural
 - `JURIDICA` - Persona Jurídica
 
 #### POST `/api/personas` - Crear persona
 
 **Headers Requeridos:**
+
 ```json
 {
   "Authorization": "Bearer <JWT_TOKEN>"
@@ -551,6 +555,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 ```
 
 **Body - Persona NATURAL:**
+
 ```json
 {
   "tipo_identificacion": "CC",
@@ -569,6 +574,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 ```
 
 **Body - Persona JURIDICA:**
+
 ```json
 {
   "tipo_identificacion": "NIT",
@@ -585,6 +591,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 ```
 
 **Validaciones:**
+
 - `tipo_identificacion`: ENUM requerido
 - `numero_identificacion`: String max 20 caracteres, requerido
 - `tipo_persona`: ENUM requerido
@@ -592,6 +599,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 - Unique constraint: `(tipo_identificacion, numero_identificacion)`
 
 **Response 201 Created:**
+
 ```json
 {
   "id_persona": 26,
@@ -608,6 +616,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 ```
 
 **Notas:**
+
 - `nombre_completo` se genera automáticamente por DB:
   - NATURAL: `primer_nombre + segundo_nombre + primer_apellido + segundo_apellido`
   - JURIDICA: `razon_social`
@@ -617,12 +626,14 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 #### GET `/api/personas` - Listar personas
 
 **Query Params Opcionales:**
+
 - `page` (default: 1)
 - `limit` (default: 10)
 - `tipo_persona` (NATURAL | JURIDICA)
 - `activo` (true | false)
 
 **Response 200 OK:**
+
 ```json
 {
   "data": [
@@ -646,6 +657,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 #### GET `/api/personas/:id` - Obtener detalle persona
 
 **Response 200 OK:**
+
 ```json
 {
   "id_persona": 26,
@@ -674,6 +686,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 #### PUT `/api/personas/:id` - Actualizar persona
 
 **Headers Requeridos:**
+
 ```json
 {
   "Authorization": "Bearer <JWT_TOKEN>"
@@ -681,6 +694,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 ```
 
 **Body (Campos opcionales):**
+
 ```json
 {
   "telefono_principal": "3009998877",
@@ -690,6 +704,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 ```
 
 **Response 200 OK:**
+
 ```json
 {
   "id_persona": 26,
@@ -702,6 +717,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 ```
 
 **Notas:**
+
 - `modificado_por` se extrae del JWT automáticamente
 - `fecha_modificacion` se actualiza automáticamente
 - Solo los campos enviados se actualizan
@@ -711,6 +727,7 @@ PUT /api/personas/26 (con JWT) → { "modificado_por": 1, "fecha_modificacion": 
 **Tipo:** Soft Delete (activo = false)
 
 **Response 200 OK:**
+
 ```json
 {
   "message": "Persona desactivada exitosamente",

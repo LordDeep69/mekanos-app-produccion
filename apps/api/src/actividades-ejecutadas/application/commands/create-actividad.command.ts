@@ -1,13 +1,19 @@
-import { CreateActividadDto } from '../../dto/create-actividad.dto';
-
-/**
- * Command para crear actividad ejecutada
- * FASE 4.1 - CQRS Pattern
- */
+import { EstadoActividadEnum } from '../enums/estado-actividad.enum';
 
 export class CreateActividadCommand {
   constructor(
-    public readonly dto: CreateActividadDto,
-    public readonly userId: number, // Desde JWT
+    public readonly idOrdenServicio: number,
+    public readonly idActividadCatalogo?: number,
+    public readonly descripcionManual?: string,
+    public readonly sistema?: string,
+    public readonly ordenSecuencia?: number,
+    public readonly estado?: EstadoActividadEnum,
+    public readonly observaciones?: string,
+    public readonly ejecutada?: boolean,
+    public readonly ejecutadaPor?: number,
+    public readonly tiempoEjecucionMinutos?: number,
+    public readonly requiereEvidencia?: boolean,
+    public readonly evidenciaCapturada?: boolean,
   ) {}
 }
+

@@ -1,9 +1,11 @@
-import {
-  Injectable,
-  NotFoundException,
-  InternalServerErrorException,
-} from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
+import {
+    BadRequestException,
+    Injectable,
+    InternalServerErrorException,
+    NotFoundException,
+} from '@nestjs/common';
+import { Decimal } from '@prisma/client/runtime/library';
 import { CreateRemisionesDetalleDto } from './dto/create-remisiones-detalle.dto';
 import { UpdateRemisionesDetalleDto } from './dto/update-remisiones-detalle.dto';
 
@@ -13,10 +15,46 @@ export class RemisionesDetalleService {
 
   async create(createDto: CreateRemisionesDetalleDto) {
     try {
+      // Validar que la remisión existe
+      const remision = await this.prisma.remisiones.findUnique({
+        where: { id_remision: createDto.id_remision },
+      });
+      if (!remision) {
+        throw new BadRequestException(
+          `Remisión ${createDto.id_remision} no encontrada`,
+        );
+      }
+
+      // Si es tipo COMPONENTE, validar que el componente existe
+      if (createDto.tipo_item === 'COMPONENTE' && createDto.id_componente) {
+        const componente = await this.prisma.catalogo_componentes.findUnique({
+          where: { id_componente: createDto.id_componente },
+        });
+        if (!componente) {
+          throw new BadRequestException(
+            `Componente ${createDto.id_componente} no encontrado`,
+          );
+        }
+      }
+
       return await this.prisma.remisiones_detalle.create({
-        data: createDto as any,
+        data: {
+          id_remision: createDto.id_remision,
+          tipo_item: createDto.tipo_item,
+          id_componente: createDto.id_componente,
+          descripcion_item: createDto.descripcion_item,
+          cantidad_entregada: new Decimal(createDto.cantidad_entregada),
+          cantidad_devuelta: createDto.cantidad_devuelta
+            ? new Decimal(createDto.cantidad_devuelta)
+            : new Decimal(0),
+          estado_item: createDto.estado_item || 'ENTREGADO',
+          observaciones: createDto.observaciones,
+        },
       });
     } catch (error: unknown) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         `Error al crear remisiones_detalle: ${(error as Error).message}`,
       );
@@ -32,6 +70,11 @@ export class RemisionesDetalleService {
           skip,
           take: limit,
           orderBy: { id_detalle_remision: 'desc' },
+          include: {
+            catalogo_componentes: {
+              select: { descripcion_corta: true, codigo_interno: true },
+            },
+          },
         }),
         this.prisma.remisiones_detalle.count(),
       ]);

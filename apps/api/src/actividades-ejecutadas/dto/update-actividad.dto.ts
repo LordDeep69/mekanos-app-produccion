@@ -1,27 +1,20 @@
-import { IsInt, IsOptional, IsString, IsBoolean, MaxLength, IsEnum, IsISO8601 } from 'class-validator';
-import { EstadoActividadEnum } from './create-actividad.dto';
-
-/**
- * DTO para actualizar actividad ejecutada
- * Todos los campos opcionales excepto ID
- */
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
+import { EstadoActividadEnum } from '../application/enums/estado-actividad.enum';
 
 export class UpdateActividadDto {
+  @IsOptional()
   @IsInt()
-  id_actividad_ejecutada!: number;
+  @IsPositive()
+  idOrdenServicio?: number;
 
   @IsOptional()
   @IsInt()
-  id_orden_servicio?: number;
-
-  @IsOptional()
-  @IsInt()
-  id_actividad_catalogo?: number;
+  @IsPositive()
+  idActividadCatalogo?: number;
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
-  descripcion_manual?: string;
+  descripcionManual?: string;
 
   @IsOptional()
   @IsString()
@@ -30,7 +23,8 @@ export class UpdateActividadDto {
 
   @IsOptional()
   @IsInt()
-  orden_secuencia?: number;
+  @IsPositive()
+  ordenSecuencia?: number;
 
   @IsOptional()
   @IsEnum(EstadoActividadEnum)
@@ -38,7 +32,6 @@ export class UpdateActividadDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
   observaciones?: string;
 
   @IsOptional()
@@ -46,18 +39,21 @@ export class UpdateActividadDto {
   ejecutada?: boolean;
 
   @IsOptional()
-  @IsISO8601()
-  fecha_ejecucion?: string;
+  @IsInt()
+  @IsPositive()
+  ejecutadaPor?: number;
 
   @IsOptional()
   @IsInt()
-  tiempo_ejecucion_minutos?: number;
+  @IsPositive()
+  tiempoEjecucionMinutos?: number;
 
   @IsOptional()
   @IsBoolean()
-  requiere_evidencia?: boolean;
+  requiereEvidencia?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  evidencia_capturada?: boolean;
+  evidenciaCapturada?: boolean;
 }
+

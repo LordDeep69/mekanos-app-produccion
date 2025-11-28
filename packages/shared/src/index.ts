@@ -1,8 +1,10 @@
 /**
  * @mekanos/shared
- * Shared utilities, types and constants
+ * Shared utilities, types, constants and validators
  */
 
-export * from './types';
 export * from './constants';
+export * from './types';
 export * from './utils';
+export * from './validators';
+

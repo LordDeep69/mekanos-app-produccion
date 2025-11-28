@@ -13,9 +13,14 @@ export class PersonasService {
 
   async create(createDto: CreatePersonasDto, userId: number) {
     try {
+      const data = { ...createDto };
+      if (data.fecha_nacimiento) {
+        data.fecha_nacimiento = new Date(data.fecha_nacimiento) as any;
+      }
+
       return await this.prisma.personas.create({
         data: {
-          ...createDto,
+          ...data,
           creado_por: userId,
         } as any,
       });

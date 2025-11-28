@@ -1,8 +1,8 @@
 /**
  * GetMedicionByIdQuery - Query para obtener medición por ID
- * FASE 4.2 - Detalle con relaciones completas
+ * FASE 3 - Refactorizado camelCase
  */
 
 export class GetMedicionByIdQuery {
-  constructor(public readonly id_medicion: number) {}
+  constructor(public readonly id: number) {}
 }

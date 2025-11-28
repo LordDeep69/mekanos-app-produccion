@@ -1,30 +1,28 @@
-import { PartialType } from '@nestjs/mapped-types';
+import { PartialType } from '@nestjs/swagger';
 import { CreateMedicionDto } from './create-medicion.dto';
-import { IsInt } from 'class-validator'; // ✅ FIX: Removed unused IsOptional
 
 /**
- * DTO para actualizar medición de servicio
- * FASE 4.2 - Todos los campos opcionales excepto ID
+ * DTO para actualizar medición de servicio - REFACTORIZADO
+ * Tabla 10/14 - FASE 3 - camelCase
  */
 
 export class UpdateMedicionDto extends PartialType(CreateMedicionDto) {
-  @IsInt()
-  id_medicion!: number;
-
   // Heredados de PartialType (todos @IsOptional()):
-  // - valor_numerico
-  // - valor_texto
-  // - unidad_medida
+  // - valorNumerico
+  // - valorTexto
   // - observaciones
-  // - temperatura_ambiente
-  // - humedad_relativa
-  // - fecha_medicion
-  // - instrumento_medicion
+  // - temperaturaAmbiente
+  // - humedadRelativa
+  // - fechaMedicion
+  // - instrumentoMedicion
 
   // ⚠️ NO se pueden actualizar manualmente:
-  // - id_orden_servicio (inmutable)
-  // - id_parametro_medicion (inmutable)
-  // - fuera_de_rango (recalculado automáticamente)
-  // - nivel_alerta (recalculado automáticamente)
-  // - medido_por (JWT)
+  // - idOrdenServicio (inmutable - FK)
+  // - idParametroMedicion (inmutable - FK)
+  // - unidadMedida (trigger BD copia automáticamente)
+  // - fueraDeRango (trigger BD recalcula automáticamente)
+  // - nivelAlerta (backend recalcula automáticamente)
+  // - mensajeAlerta (backend regenera automáticamente)
+  // - medidoPor (auditoría inmutable - JWT original)
+  // - fechaRegistro (timestamp inmutable)
 }

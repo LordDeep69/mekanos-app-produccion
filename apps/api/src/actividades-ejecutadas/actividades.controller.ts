@@ -1,28 +1,18 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Put,
-  Body,
-  Param,
-  ParseIntPipe,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, UseGuards } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { UserId } from './decorators/user-id.decorator';
+import { CreateActividadCommand } from './application/commands/create-actividad.command';
+import { DeleteActividadCommand } from './application/commands/delete-actividad.command';
+import { UpdateActividadCommand } from './application/commands/update-actividad.command';
+import { GetActividadByIdQuery } from './application/queries/get-actividad-by-id.query';
+import { GetActividadesByOrdenQuery } from './application/queries/get-actividades-by-orden.query';
+import { GetAllActividadesQuery } from './application/queries/get-all-actividades.query';
 import { CreateActividadDto } from './dto/create-actividad.dto';
 import { UpdateActividadDto } from './dto/update-actividad.dto';
-import { CreateActividadCommand } from './application/commands/create-actividad.command';
-import { UpdateActividadCommand } from './application/commands/update-actividad.command';
-import { GetActividadesByOrdenQuery } from './application/queries/get-actividades-by-orden.query';
-import { GetActividadByIdQuery } from './application/queries/get-actividad-by-id.query';
 
-/**
- * Controller de actividades ejecutadas
- * FASE 4.1 - Módulos Relacionados a Órdenes
- */
-
+@ApiTags('Actividades Ejecutadas')
+@ApiBearerAuth()
 @Controller('actividades-ejecutadas')
 @UseGuards(JwtAuthGuard)
 export class ActividadesController {
@@ -31,76 +21,77 @@ export class ActividadesController {
     private readonly queryBus: QueryBus,
   ) {}
 
-  /**
-   * POST /actividades-ejecutadas
-   * Crear actividad ejecutada (catálogo o manual)
-   */
   @Post()
-  async create(
-    @Body() dto: CreateActividadDto,
-    @UserId() userId: number,
-  ) {
-    const command = new CreateActividadCommand(dto, userId);
-    const actividad = await this.commandBus.execute(command);
-
-    return {
-      success: true,
-      message: 'Actividad registrada exitosamente',
-      data: actividad,
-    };
-  }
-
-  /**
-   * PUT /actividades-ejecutadas/:id
-   * Actualizar actividad ejecutada
-   */
-  @Put(':id')
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: Omit<UpdateActividadDto, 'id_actividad_ejecutada'>,
-    @UserId() userId: number,
-  ) {
-    const command = new UpdateActividadCommand(
-      { ...dto, id_actividad_ejecutada: id },
-      userId,
+  @ApiOperation({ summary: 'Crear actividad ejecutada (modo catálogo o manual)' })
+  async create(@Body() dto: CreateActividadDto) {
+    const command = new CreateActividadCommand(
+      dto.idOrdenServicio,
+      dto.idActividadCatalogo,
+      dto.descripcionManual,
+      dto.sistema,
+      dto.ordenSecuencia,
+      dto.estado,
+      dto.observaciones,
+      dto.ejecutada,
+      dto.ejecutadaPor,
+      dto.tiempoEjecucionMinutos,
+      dto.requiereEvidencia,
+      dto.evidenciaCapturada,
     );
-    const actividad = await this.commandBus.execute(command);
-
-    return {
-      success: true,
-      message: 'Actividad actualizada exitosamente',
-      data: actividad,
-    };
+    return this.commandBus.execute(command);
   }
 
-  /**
-   * GET /actividades-ejecutadas/orden/:ordenId
-   * Listar actividades de una orden
-   */
+  @Get()
+  @ApiOperation({ summary: 'Listar todas las actividades ejecutadas' })
+  async findAll() {
+    const query = new GetAllActividadesQuery();
+    return this.queryBus.execute(query);
+  }
+
   @Get('orden/:ordenId')
+  @ApiOperation({ summary: 'Obtener actividades por orden de servicio' })
   async findByOrden(@Param('ordenId', ParseIntPipe) ordenId: number) {
     const query = new GetActividadesByOrdenQuery(ordenId);
-    const actividades = await this.queryBus.execute(query);
-
-    return {
-      success: true,
-      data: actividades,
-      total: actividades.length,
-    };
+    return this.queryBus.execute(query);
   }
 
-  /**
-   * GET /actividades-ejecutadas/:id
-   * Obtener actividad por ID
-   */
   @Get(':id')
-  async findById(@Param('id', ParseIntPipe) id: number) {
+  @ApiOperation({ summary: 'Obtener actividad por ID (con relaciones completas)' })
+  async findOne(@Param('id', ParseIntPipe) id: number) {
     const query = new GetActividadByIdQuery(id);
-    const actividad = await this.queryBus.execute(query);
+    return this.queryBus.execute(query);
+  }
 
-    return {
-      success: true,
-      data: actividad,
-    };
+  @Put(':id')
+  @ApiOperation({ summary: 'Actualizar actividad ejecutada' })
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateActividadDto,
+  ) {
+    const command = new UpdateActividadCommand(
+      id,
+      dto.idOrdenServicio,
+      dto.idActividadCatalogo,
+      dto.descripcionManual,
+      dto.sistema,
+      dto.ordenSecuencia,
+      dto.estado,
+      dto.observaciones,
+      dto.ejecutada,
+      dto.ejecutadaPor,
+      dto.tiempoEjecucionMinutos,
+      dto.requiereEvidencia,
+      dto.evidenciaCapturada,
+    );
+    return this.commandBus.execute(command);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Eliminar actividad (soft delete: ejecutada = false)' })
+  async delete(@Param('id', ParseIntPipe) id: number) {
+    const command = new DeleteActividadCommand(id);
+    await this.commandBus.execute(command);
+    return { message: 'Actividad eliminada exitosamente' };
   }
 }
+

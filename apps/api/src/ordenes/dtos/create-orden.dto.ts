@@ -1,59 +1,45 @@
-import { 
-  IsInt, 
-  IsString, 
-  IsOptional, 
-  IsDateString, 
-  IsEnum, 
-  IsBoolean, 
-  MaxLength,
-  MinLength,
+import {
+    IsDateString,
+    IsEnum,
+    IsInt,
+    IsOptional,
+    IsString,
+    MaxLength,
+    Min
 } from 'class-validator';
 
 /**
  * DTO: Crear nueva orden de servicio
+ * NOTA: Usa camelCase para alinear con Command y Controller
  */
 export class CreateOrdenDto {
-  @IsString()
-  @MinLength(5)
-  @MaxLength(50)
-  numero_orden: string;
+  @IsInt()
+  @Min(1)
+  equipoId!: number;
 
   @IsInt()
-  id_cliente: number;
+  @Min(1)
+  clienteId!: number;
 
   @IsInt()
-  id_equipo: number;
+  @Min(1)
+  tipoServicioId!: number;
 
   @IsInt()
+  @Min(1)
   @IsOptional()
-  id_sede?: number;
-
-  @IsInt()
-  @IsOptional()
-  id_tipo_servicio?: number;
-
-  @IsDateString()
-  @IsOptional()
-  fecha_programada?: string;
+  sedeClienteId?: number;
 
   @IsString()
+  @MaxLength(5000)
   @IsOptional()
-  hora_programada?: string; // Format: "HH:MM:SS"
+  descripcion?: string;
 
   @IsEnum(['NORMAL', 'ALTA', 'URGENTE', 'EMERGENCIA'])
   @IsOptional()
   prioridad?: string;
 
-  @IsEnum(['PROGRAMADO', 'CLIENTE', 'INTERNO', 'EMERGENCIA', 'GARANTIA'])
+  @IsDateString()
   @IsOptional()
-  origen_solicitud?: string;
-
-  @IsString()
-  @MaxLength(5000)
-  @IsOptional()
-  descripcion_inicial?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  requiere_firma_cliente?: boolean;
+  fechaProgramada?: string;
 }

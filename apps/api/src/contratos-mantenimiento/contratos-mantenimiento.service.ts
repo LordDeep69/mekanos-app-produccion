@@ -1,20 +1,31 @@
+import { PrismaService } from '@mekanos/database';
 import {
   Injectable,
-  NotFoundException,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '@mekanos/database';
+import { DocumentType, NumeracionService } from '../common/services/numeracion.service';
 import { CreateContratosMantenimientoDto } from './dto/create-contratos-mantenimiento.dto';
 import { UpdateContratosMantenimientoDto } from './dto/update-contratos-mantenimiento.dto';
 
 @Injectable()
 export class ContratosMantenimientoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly numeracionService: NumeracionService,
+  ) {}
 
   async create(createDto: CreateContratosMantenimientoDto) {
     try {
+      // Generar código de contrato automáticamente
+      const resultado = await this.numeracionService.generateNextNumber(DocumentType.CONTRATO);
+      const codigoContrato = resultado.code;
+      
       return await this.prisma.contratos_mantenimiento.create({
-        data: createDto as any,
+        data: {
+          ...createDto as any,
+          codigo_contrato: codigoContrato,
+        },
       });
     } catch (error: unknown) {
       throw new InternalServerErrorException(

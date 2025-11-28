@@ -1,5 +1,5 @@
 import { DatabaseModule } from '@mekanos/database';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 
 // Controller
@@ -7,6 +7,13 @@ import { CotizacionesController } from './cotizaciones.controller';
 
 // Repository
 import { PrismaCotizacionesRepository } from './infrastructure/prisma-cotizaciones.repository';
+
+// Services
+import { CotizacionCalculoService } from './services/cotizacion-calculo.service';
+
+// Módulos externos necesarios para envío de cotización
+import { EmailModule } from '../email/email.module';
+import { PdfModule } from '../pdf/pdf.module';
 
 // Command Handlers
 import { AprobarCotizacionHandler } from './application/commands/aprobar-cotizacion.handler';
@@ -47,9 +54,15 @@ const QueryHandlers = [
 ];
 
 @Module({
-  imports: [CqrsModule, DatabaseModule],
+  imports: [
+    CqrsModule, 
+    DatabaseModule,
+    forwardRef(() => PdfModule),    // Para generar PDF de cotización
+    forwardRef(() => EmailModule),  // Para enviar email con cotización
+  ],
   controllers: [CotizacionesController],
   providers: [
+    CotizacionCalculoService, // FASE 4 - Cálculo automático totales
     {
       provide: 'CotizacionesRepository',
       useClass: PrismaCotizacionesRepository,
@@ -57,6 +70,6 @@ const QueryHandlers = [
     ...CommandHandlers,
     ...QueryHandlers,
   ],
-  exports: ['CotizacionesRepository'],
+  exports: ['CotizacionesRepository', CotizacionCalculoService],
 })
 export class CotizacionesModule {}

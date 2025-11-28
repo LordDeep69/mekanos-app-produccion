@@ -3,160 +3,107 @@ import { PrismaService } from '../../database/prisma.service';
 import { IMedicionesRepository } from '../domain/mediciones.repository.interface';
 
 /**
- * PrismaMedicionesRepository - Implementación con Prisma ORM
- * FASE 4.2 - Mediciones con relaciones completas
+ * PrismaMedicionesRepository - Implementación con Prisma ORM - REFACTORIZADO
+ * Tabla 10/14 - FASE 3 - camelCase + 3 includes + conversión Decimal
  */
 
 @Injectable()
 export class PrismaMedicionesRepository implements IMedicionesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  private get fullIncludes() {
+    return {
+      empleados: true, // ⚠️ PLURAL (consistente con Tabla 9)
+      ordenes_servicio: true, // singular
+      parametros_medicion: true, // singular
+    };
+  }
+
   /**
-   * CREATE/UPDATE medición
+   * CREATE medición
    */
-  async save(data: {
-    id_medicion?: number;
-    id_orden_servicio: number;
-    id_parametro_medicion: number;
-    valor_numerico?: number;
-    valor_texto?: string;
-    unidad_medida?: string;
-    fuera_de_rango?: boolean;
-    nivel_alerta?: string;
-    mensaje_alerta?: string;
+  async create(data: {
+    idOrdenServicio: number;
+    idParametroMedicion: number;
+    valorNumerico?: number;
+    valorTexto?: string;
+    nivelAlerta?: string;
+    mensajeAlerta?: string;
     observaciones?: string;
-    temperatura_ambiente?: number;
-    humedad_relativa?: number;
-    fecha_medicion?: Date;
-    medido_por?: number;
-    instrumento_medicion?: string;
+    temperaturaAmbiente?: number;
+    humedadRelativa?: number;
+    fechaMedicion?: Date;
+    medidoPor?: number;
+    instrumentoMedicion?: string;
   }): Promise<any> {
-    if (data.id_medicion) {
-      // UPDATE
-      return await this.prisma.mediciones_servicio.update({
-        where: { id_medicion: data.id_medicion },
-        data: {
-          valor_numerico: data.valor_numerico,
-          valor_texto: data.valor_texto,
-          unidad_medida: data.unidad_medida,
-          fuera_de_rango: data.fuera_de_rango,
-          nivel_alerta: data.nivel_alerta as any,
-          mensaje_alerta: data.mensaje_alerta,
-          observaciones: data.observaciones,
-          temperatura_ambiente: data.temperatura_ambiente,
-          humedad_relativa: data.humedad_relativa,
-          fecha_medicion: data.fecha_medicion,
-          medido_por: data.medido_por,
-          instrumento_medicion: data.instrumento_medicion,
-        },
-        include: this.getFullIncludes(),
-      });
-    } else {
-      // CREATE
-      return await this.prisma.mediciones_servicio.create({
-        data: {
-          id_orden_servicio: data.id_orden_servicio,
-          id_parametro_medicion: data.id_parametro_medicion,
-          valor_numerico: data.valor_numerico,
-          valor_texto: data.valor_texto,
-          unidad_medida: data.unidad_medida,
-          fuera_de_rango: data.fuera_de_rango ?? false,
-          nivel_alerta: data.nivel_alerta as any,
-          mensaje_alerta: data.mensaje_alerta,
-          observaciones: data.observaciones,
-          temperatura_ambiente: data.temperatura_ambiente,
-          humedad_relativa: data.humedad_relativa,
-          fecha_medicion: data.fecha_medicion ?? new Date(),
-          medido_por: data.medido_por,
-          instrumento_medicion: data.instrumento_medicion,
-          fecha_registro: new Date(),
-        },
-        include: this.getFullIncludes(),
-      });
-    }
-  }
-
-  /**
-   * READ ONE - obtener medición por ID con relaciones completas
-   */
-  async findById(id: number): Promise<any | null> {
-    return await this.prisma.mediciones_servicio.findUnique({
-      where: { id_medicion: id },
-      include: this.getFullIncludes(),
-    });
-  }
-
-  /**
-   * READ ALL por orden - filtrar mediciones de orden específica
-   */
-  async findByOrden(id_orden_servicio: number): Promise<any[]> {
-    return await this.prisma.mediciones_servicio.findMany({
-      where: { id_orden_servicio },
-      include: {
-        parametros_medicion: {
-          select: {
-            id_parametro_medicion: true,
-            codigo_parametro: true,
-            nombre_parametro: true,
-            unidad_medida: true,
-            valor_minimo_normal: true,
-            valor_maximo_normal: true,
-            valor_minimo_critico: true,
-            valor_maximo_critico: true,
-          },
-        },
-        empleados: {
-          include: {
-            persona: {
-              select: {
-                id_persona: true,
-                nombre_completo: true,
-              },
-            },
-          },
-        },
+    return await this.prisma.mediciones_servicio.create({
+      data: {
+        id_orden_servicio: data.idOrdenServicio,
+        id_parametro_medicion: data.idParametroMedicion,
+        valor_numerico: data.valorNumerico,
+        valor_texto: data.valorTexto,
+        nivel_alerta: data.nivelAlerta as any,
+        mensaje_alerta: data.mensajeAlerta,
+        observaciones: data.observaciones,
+        temperatura_ambiente: data.temperaturaAmbiente,
+        humedad_relativa: data.humedadRelativa,
+        fecha_medicion: data.fechaMedicion ?? new Date(),
+        medido_por: data.medidoPor,
+        instrumento_medicion: data.instrumentoMedicion,
+        // ⚠️ Trigger BD establece: fuera_de_rango, unidad_medida
+        fecha_registro: new Date(),
       },
-      orderBy: [{ fecha_medicion: 'desc' }],
+      include: this.fullIncludes,
     });
   }
 
   /**
-   * READ ALL con paginación y filtros
+   * UPDATE medición
    */
-  async findAll(filters?: {
-    page?: number;
-    limit?: number;
-    id_orden_servicio?: number;
-    id_parametro_medicion?: number;
-    nivel_alerta?: string;
-  }): Promise<{ items: any[]; total: number }> {
-    const page = filters?.page || 1;
-    const limit = filters?.limit || 20;
-    const skip = (page - 1) * limit;
+  async update(
+    id: number,
+    data: {
+      valorNumerico?: number;
+      valorTexto?: string;
+      nivelAlerta?: string;
+      mensajeAlerta?: string;
+      observaciones?: string;
+      temperaturaAmbiente?: number;
+      humedadRelativa?: number;
+      fechaMedicion?: Date;
+      instrumentoMedicion?: string;
+    },
+  ): Promise<any> {
+    // Spread dinámico para solo actualizar campos provistos
+    const updateData: any = {};
+    if (data.valorNumerico !== undefined)
+      updateData.valor_numerico = data.valorNumerico;
+    if (data.valorTexto !== undefined)
+      updateData.valor_texto = data.valorTexto;
+    if (data.nivelAlerta !== undefined)
+      updateData.nivel_alerta = data.nivelAlerta;
+    if (data.mensajeAlerta !== undefined)
+      updateData.mensaje_alerta = data.mensajeAlerta;
+    if (data.observaciones !== undefined)
+      updateData.observaciones = data.observaciones;
+    if (data.temperaturaAmbiente !== undefined)
+      updateData.temperatura_ambiente = data.temperaturaAmbiente;
+    if (data.humedadRelativa !== undefined)
+      updateData.humedad_relativa = data.humedadRelativa;
+    if (data.fechaMedicion !== undefined)
+      updateData.fecha_medicion = data.fechaMedicion;
+    if (data.instrumentoMedicion !== undefined)
+      updateData.instrumento_medicion = data.instrumentoMedicion;
 
-    const where: any = {};
-    if (filters?.id_orden_servicio)
-      where.id_orden_servicio = filters.id_orden_servicio;
-    if (filters?.id_parametro_medicion)
-      where.id_parametro_medicion = filters.id_parametro_medicion;
-    if (filters?.nivel_alerta) where.nivel_alerta = filters.nivel_alerta;
-
-    const [items, total] = await Promise.all([
-      this.prisma.mediciones_servicio.findMany({
-        where,
-        include: this.getFullIncludes(),
-        orderBy: [{ fecha_medicion: 'desc' }],
-        skip,
-        take: limit,
-      }),
-      this.prisma.mediciones_servicio.count({ where }),
-    ]);
-
-    return { items, total };
+    return await this.prisma.mediciones_servicio.update({
+      where: { id_medicion: id },
+      data: updateData,
+      include: this.fullIncludes,
+    });
   }
 
   /**
-   * DELETE - eliminar medición
+   * DELETE medición (físico - NO soft delete)
    */
   async delete(id: number): Promise<void> {
     await this.prisma.mediciones_servicio.delete({
@@ -165,47 +112,43 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
   }
 
   /**
-   * Helper: Relaciones completas para includes
+   * READ ONE - por ID con includes
    */
-  private getFullIncludes() {
-    return {
-      ordenes_servicio: {
-        select: {
-          id_orden_servicio: true,
-          numero_orden: true,
-          estado: {
-            select: {
-              codigo_estado: true,
-              nombre_estado: true,
-            },
-          },
-        },
-      },
-      parametros_medicion: {
-        select: {
-          id_parametro_medicion: true,
-          codigo_parametro: true,
-          nombre_parametro: true,
-          unidad_medida: true,
-          valor_minimo_normal: true,
-          valor_maximo_normal: true,
-          valor_minimo_critico: true,
-          valor_maximo_critico: true,
-          valor_ideal: true,
-        },
-      },
-      empleados: {
-        include: {
-          persona: {
-            select: {
-              id_persona: true,
-              nombre_completo: true,
-              tipo_identificacion: true,
-              numero_identificacion: true,
-            },
-          },
-        },
-      },
-    };
+  async findById(id: number): Promise<any> {
+    return await this.prisma.mediciones_servicio.findUnique({
+      where: { id_medicion: id },
+      include: this.fullIncludes,
+    });
+  }
+
+  /**
+   * READ por orden de servicio con includes
+   * Ordenado por: fecha_medicion DESC
+   */
+  async findByOrden(ordenId: number): Promise<any[]> {
+    return await this.prisma.mediciones_servicio.findMany({
+      where: { id_orden_servicio: ordenId },
+      include: this.fullIncludes,
+      orderBy: [{ fecha_medicion: 'desc' }],
+    });
+  }
+
+  /**
+   * READ ALL con includes
+   * Ordenado por: fecha_registro DESC
+   */
+  async findAll(): Promise<any[]> {
+    return await this.prisma.mediciones_servicio.findMany({
+      include: this.fullIncludes,
+      orderBy: [{ fecha_registro: 'desc' }],
+    });
+  }
+
+  // Método legacy save() para compatibilidad con update-handler existente
+  async save(data: any): Promise<any> {
+    if (data.idMedicion) {
+      return this.update(data.idMedicion, data);
+    }
+    return this.create(data);
   }
 }

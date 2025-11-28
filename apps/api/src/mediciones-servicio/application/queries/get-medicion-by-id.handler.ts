@@ -1,33 +1,34 @@
-import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { Inject, NotFoundException } from '@nestjs/common';
-import { GetMedicionByIdQuery } from './get-medicion-by-id.query';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { IMedicionesRepository } from '../../domain/mediciones.repository.interface';
+import { ResponseMedicionDto } from '../../dto/response-medicion.dto';
+import { MedicionMapper } from '../mappers/medicion.mapper';
+import { GetMedicionByIdQuery } from './get-medicion-by-id.query';
 
 /**
- * Handler para obtener medición por ID con relaciones completas
- * FASE 4.2 - Retorna medicion con orden, parámetro (rangos), empleado
+ * Handler para obtener medición por ID con relaciones completas + mapper
+ * FASE 3 - Refactorizado camelCase con 3 includes (empleados, ordenes, parametros)
  */
 
 @QueryHandler(GetMedicionByIdQuery)
 export class GetMedicionByIdHandler
-  implements IQueryHandler<GetMedicionByIdQuery>
+  implements IQueryHandler<GetMedicionByIdQuery, ResponseMedicionDto>
 {
   constructor(
     @Inject('IMedicionesRepository')
     private readonly repository: IMedicionesRepository,
+    private readonly mapper: MedicionMapper,
   ) {}
 
-  async execute(query: GetMedicionByIdQuery): Promise<any> {
-    const { id_medicion } = query;
+  async execute(query: GetMedicionByIdQuery): Promise<ResponseMedicionDto> {
+    const { id } = query;
 
-    const medicion = await this.repository.findById(id_medicion);
+    const medicion = await this.repository.findById(id);
 
     if (!medicion) {
-      throw new NotFoundException(
-        `Medición ID ${id_medicion} no encontrada`,
-      );
+      throw new NotFoundException(`Medición ID ${id} no encontrada`);
     }
 
-    return medicion;
+    return this.mapper.toDto(medicion);
   }
 }

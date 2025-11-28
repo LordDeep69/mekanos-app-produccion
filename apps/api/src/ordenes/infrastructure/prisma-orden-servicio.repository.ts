@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@mekanos/database';
+import { Injectable } from '@nestjs/common';
 
 /**
  * Repository para ordenes_servicio
@@ -16,56 +16,18 @@ export class PrismaOrdenServicioRepository {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Includes completos para respuestas con relaciones
-   * Se usa en todas las consultas que devuelven órdenes
+   * Includes OPTIMIZADOS para respuestas rápidas
+   * SIMPLIFICADO para evitar queries recursivas masivas
    */
   private readonly INCLUDE_RELATIONS = {
-    cliente: {
-      include: { 
-        persona: true 
-      }
-    },
-    sede: true, // sedes_cliente NO tiene relación 'persona'
-    equipo: {
-      include: {
-        cliente: { include: { persona: true } },
-        tipo_equipo: true,
-        sede: true
-      }
-    },
+    cliente: { include: { persona: true } },
+    sede: true,
+    equipo: { include: { tipo_equipo: true } }, // Eliminada recursión de cliente
     tipo_servicio: true,
-    tecnico: {
-      include: { 
-        persona: true 
-      }
-    },
-    supervisor: {
-      include: { 
-        persona: true 
-      }
-    },
+    tecnico: { include: { persona: true } },
     estado: true,
-    usuario_creador: {
-      include: { 
-        persona: true 
-      }
-    },
-    usuario_modificador: {
-      include: { 
-        persona: true 
-      }
-    },
-    usuario_aprobador: {
-      include: { 
-        persona: true 
-      }
-    },
-    firmas_digitales: true,
-    // Relaciones one-to-many (opcional: incluir solo cuando se necesite)
-    // actividades_ejecutadas: true,
-    // mediciones_servicio: true,
-    // evidencias_fotograficas: true,
-    // detalles_servicios: true,
+    usuario_creador: { include: { persona: true } },
+    // Eliminados: supervisor, usuario_modificador, usuario_aprobador, firmas_digitales
   };
 
   // ============================================================================
@@ -109,7 +71,7 @@ export class PrismaOrdenServicioRepository {
           ...updateData,
           fecha_modificacion: new Date(),
         },
-        include: this.INCLUDE_RELATIONS,
+        // ❌ ELIMINADO include pesado - evita timeout
       });
     } else {
       // CREATE: Nueva orden
@@ -132,7 +94,7 @@ export class PrismaOrdenServicioRepository {
           requiere_firma_cliente: dbData.requiere_firma_cliente !== undefined ? dbData.requiere_firma_cliente : true,
           creado_por: dbData.creado_por,
         },
-        include: this.INCLUDE_RELATIONS,
+        // ❌ ELIMINADO include pesado - evita timeout en CREATE
       });
     }
   }
@@ -310,7 +272,10 @@ export class PrismaOrdenServicioRepository {
         modificado_por,
         fecha_modificacion: new Date(),
       },
-      include: this.INCLUDE_RELATIONS,
+      include: {
+        estado: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
+        tecnico: { include: { persona: true } }, // ✅ REQUERIDO: Controller necesita tecnico.persona.nombre_completo
+      },
     });
   }
 
@@ -332,7 +297,10 @@ export class PrismaOrdenServicioRepository {
         modificado_por,
         fecha_modificacion: new Date(),
       },
-      include: this.INCLUDE_RELATIONS,
+      include: {
+        estado: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
+        tecnico: { include: { persona: true } }, // ✅ REQUERIDO: Controller necesita tecnico para contexto
+      },
     });
   }
 
@@ -367,7 +335,7 @@ export class PrismaOrdenServicioRepository {
         modificado_por,
         fecha_modificacion: new Date(),
       },
-      include: this.INCLUDE_RELATIONS,
+      // ❌ ELIMINADO include pesado - evita timeout
     });
   }
 
@@ -390,7 +358,10 @@ export class PrismaOrdenServicioRepository {
         modificado_por: aprobada_por,
         fecha_modificacion: new Date(),
       },
-      include: this.INCLUDE_RELATIONS,
+      include: {
+        estado: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
+        usuario_aprobador: { include: { persona: true } }, // ✅ REQUERIDO: Para script test
+      },
     });
   }
 
@@ -413,7 +384,10 @@ export class PrismaOrdenServicioRepository {
         modificado_por,
         fecha_modificacion: new Date(),
       },
-      include: this.INCLUDE_RELATIONS,
+      include: {
+        estado: true, // ✅ REQUERIDO: Controller necesita estado.codigo_estado
+        tecnico: { include: { persona: true } }, // ✅ OPCIONAL: Contexto adicional
+      },
     });
   }
 

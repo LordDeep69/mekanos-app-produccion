@@ -1,0 +1,23 @@
+{
+  "asset_id": "cbc79abcb3b7d2a3d5ceeb14006411d2",
+  "public_id": "mekanos/evidencias/test_e2e/evidencia_test_1764268903409",
+  "version": 1764268904,
+  "version_id": "b25178e9088158aee635ef03d00ec764",
+  "signature": "927630c3ad19e829bad2e0fe4c4141f675ea3089",
+  "width": 1469,
+  "height": 981,
+  "format": "jpg",
+  "resource_type": "image",
+  "created_at": "2025-11-27T18:41:44Z",
+  "tags": [],
+  "bytes": 156117,
+  "type": "upload",
+  "etag": "1f04c8c6858599be94950b6fefe45457",
+  "placeholder": false,
+  "url": "http://res.cloudinary.com/dibw7aluj/image/upload/v1764268904/mekanos/evidencias/test_e2e/evidencia_test_1764268903409.jpg",
+  "secure_url": "https://res.cloudinary.com/dibw7aluj/image/upload/v1764268904/mekanos/evidencias/test_e2e/evidencia_test_1764268903409.jpg",
+  "folder": "mekanos/evidencias/test_e2e",
+  "access_mode": "public",
+  "original_filename": "PRUEBA_PARA_TEST_E2E_FASE3Y4",
+  "api_key": "643988218551617"
+}

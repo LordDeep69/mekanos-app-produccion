@@ -1,36 +1,39 @@
-import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, NotFoundException } from '@nestjs/common';
-import { UpdateMedicionCommand } from './update-medicion.command';
-import { PrismaMedicionesRepository } from '../../infrastructure/prisma-mediciones.repository';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaService } from '../../../database/prisma.service';
+import { ResponseMedicionDto } from '../../dto/response-medicion.dto';
+import { PrismaMedicionesRepository } from '../../infrastructure/prisma-mediciones.repository';
+import { NivelAlertaEnum } from '../enums/nivel-alerta.enum';
+import { MedicionMapper } from '../mappers/medicion.mapper';
+import { UpdateMedicionCommand } from './update-medicion.command';
 
 /**
  * Handler para actualizar medición con RECÁLCULO AUTOMÁTICO DE RANGOS
- * FASE 4.2 - Si cambia valor_numerico, recalcula fuera_de_rango + nivel_alerta
+ * FASE 3 - Refactorizado camelCase - Si cambia valorNumerico, recalcula nivel_alerta
+ * ⚠️ Trigger BD recalcula fuera_de_rango automáticamente
  */
 
 @CommandHandler(UpdateMedicionCommand)
 export class UpdateMedicionHandler
-  implements ICommandHandler<UpdateMedicionCommand>
+  implements ICommandHandler<UpdateMedicionCommand, ResponseMedicionDto>
 {
   constructor(
     @Inject('IMedicionesRepository')
     private readonly repository: PrismaMedicionesRepository,
     private readonly prisma: PrismaService,
+    private readonly mapper: MedicionMapper,
   ) {}
 
   async execute(command: UpdateMedicionCommand): Promise<any> {
-    const { dto } = command;
+    const { id, dto } = command;
 
     // 1. Verificar que medición exista
-    const medicionExistente = await this.repository.findById(dto.id_medicion);
+    const medicionExistente = await this.repository.findById(id);
     if (!medicionExistente) {
-      throw new NotFoundException(
-        `Medición ID ${dto.id_medicion} no encontrada`,
-      );
+      throw new NotFoundException(`Medición ID ${id} no encontrada`);
     }
 
-    // 2. Obtener parámetro para recalcular rangos
+    // 2. Obtener parámetro para recalcular rangos si cambia valorNumerico
     const parametro = await this.prisma.parametros_medicion.findUnique({
       where: {
         id_parametro_medicion: medicionExistente.id_parametro_medicion,
@@ -43,94 +46,78 @@ export class UpdateMedicionHandler
       );
     }
 
-    // 3. Determinar si recalcular (si cambia valor_numerico)
+    // 3. Determinar si recalcular nivel_alerta (si cambia valorNumerico)
     const valorNumericoFinal =
-      dto.valor_numerico !== undefined
-        ? dto.valor_numerico
-        : medicionExistente.valor_numerico;
+      dto.valorNumerico !== undefined
+        ? dto.valorNumerico
+        : Number(medicionExistente.valor_numerico);
 
-    let fueraDeRango = medicionExistente.fuera_de_rango;
     let nivelAlerta = medicionExistente.nivel_alerta;
     let mensajeAlerta = medicionExistente.mensaje_alerta;
 
-    // 4. RECÁLCULO si cambia valor o si es actualización de otro campo numérico
+    // 4. RECÁLCULO si cambia valor numérico
     if (
       valorNumericoFinal !== null &&
       valorNumericoFinal !== undefined &&
       parametro.tipo_dato === 'NUMERICO'
     ) {
       const valor = Number(valorNumericoFinal);
-      fueraDeRango = false;
-      nivelAlerta = 'OK';
+      nivelAlerta = NivelAlertaEnum.OK;
       mensajeAlerta = `Valor ${valor} dentro de rango normal`;
 
-      // Validar rangos críticos
+      // Validar rangos críticos (PRIORITY 1)
       if (
         parametro.valor_minimo_critico !== null &&
         valor < Number(parametro.valor_minimo_critico)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'CRITICO';
+        nivelAlerta = NivelAlertaEnum.CRITICO;
         mensajeAlerta = `Valor ${valor} por debajo del mínimo crítico ${parametro.valor_minimo_critico} ${parametro.unidad_medida}`;
       } else if (
         parametro.valor_maximo_critico !== null &&
         valor > Number(parametro.valor_maximo_critico)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'CRITICO';
+        nivelAlerta = NivelAlertaEnum.CRITICO;
         mensajeAlerta = `Valor ${valor} por encima del máximo crítico ${parametro.valor_maximo_critico} ${parametro.unidad_medida}`;
       }
-      // Validar rangos normales
+      // Validar rangos normales (PRIORITY 2)
       else if (
         parametro.valor_minimo_normal !== null &&
         valor < Number(parametro.valor_minimo_normal)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'ADVERTENCIA';
+        nivelAlerta = NivelAlertaEnum.ADVERTENCIA;
         mensajeAlerta = `Valor ${valor} por debajo del mínimo normal ${parametro.valor_minimo_normal} ${parametro.unidad_medida}`;
       } else if (
         parametro.valor_maximo_normal !== null &&
         valor > Number(parametro.valor_maximo_normal)
       ) {
-        fueraDeRango = true;
-        nivelAlerta = 'ADVERTENCIA';
+        nivelAlerta = NivelAlertaEnum.ADVERTENCIA;
         mensajeAlerta = `Valor ${valor} por encima del máximo normal ${parametro.valor_maximo_normal} ${parametro.unidad_medida}`;
       }
     }
 
     // 5. Si se elimina valor numérico, cambiar a INFORMATIVO
     if (valorNumericoFinal === null || valorNumericoFinal === undefined) {
-      nivelAlerta = 'INFORMATIVO';
-      mensajeAlerta = dto.valor_texto
-        ? `Medición texto: ${dto.valor_texto}`
+      nivelAlerta = NivelAlertaEnum.INFORMATIVO;
+      mensajeAlerta = dto.valorTexto
+        ? `Medición texto: ${dto.valorTexto}`
         : 'Medición sin valor numérico';
     }
 
-    // 6. Actualizar medición (preservar medido_por original)
-    const medicionActualizada = await this.repository.save({
-      id_medicion: dto.id_medicion,
-      id_orden_servicio: medicionExistente.id_orden_servicio, // Inmutable
-      id_parametro_medicion: medicionExistente.id_parametro_medicion, // Inmutable
-      valor_numerico: valorNumericoFinal,
-      valor_texto: dto.valor_texto ?? medicionExistente.valor_texto,
-      unidad_medida: dto.unidad_medida ?? medicionExistente.unidad_medida,
-      fuera_de_rango: fueraDeRango,
-      nivel_alerta: nivelAlerta,
-      mensaje_alerta: mensajeAlerta,
-      observaciones: dto.observaciones ?? medicionExistente.observaciones,
-      temperatura_ambiente:
-        dto.temperatura_ambiente ?? medicionExistente.temperatura_ambiente,
-      humedad_relativa:
-        dto.humedad_relativa ?? medicionExistente.humedad_relativa,
-      fecha_medicion:
-        dto.fecha_medicion !== undefined
-          ? new Date(dto.fecha_medicion)
-          : medicionExistente.fecha_medicion,
-      medido_por: medicionExistente.medido_por, // Preservar original
-      instrumento_medicion:
-        dto.instrumento_medicion ?? medicionExistente.instrumento_medicion,
+    // 6. Actualizar con repository refactorizado (camelCase)
+    const medicionActualizada = await this.repository.update(id, {
+      valorNumerico: valorNumericoFinal,
+      valorTexto: dto.valorTexto,
+      nivelAlerta: nivelAlerta as any,
+      mensajeAlerta: mensajeAlerta,
+      observaciones: dto.observaciones,
+      temperaturaAmbiente: dto.temperaturaAmbiente,
+      humedadRelativa: dto.humedadRelativa,
+      fechaMedicion: dto.fechaMedicion
+        ? new Date(dto.fechaMedicion)
+        : undefined,
+      instrumentoMedicion: dto.instrumentoMedicion,
     });
 
-    return medicionActualizada;
+    return this.mapper.toDto(medicionActualizada);
   }
 }

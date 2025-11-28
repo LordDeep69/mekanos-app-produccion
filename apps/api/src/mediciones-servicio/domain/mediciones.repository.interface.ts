@@ -1,29 +1,44 @@
 /**
  * IMedicionesRepository - Interface para repository de mediciones
- * FASE 4.2 - Mediciones con validación de rangos
+ * FASE 3 - Refactorizado camelCase
  */
 
 export interface IMedicionesRepository {
   /**
-   * CREATE/UPDATE medición (con detección automática rangos)
+   * CREATE medición
    */
-  save(data: {
-    id_medicion?: number;
-    id_orden_servicio: number;
-    id_parametro_medicion: number;
-    valor_numerico?: number;
-    valor_texto?: string;
-    unidad_medida?: string;
-    fuera_de_rango?: boolean;
-    nivel_alerta?: string;
-    mensaje_alerta?: string | null; // ✅ FIX: Acepta null explícito
+  create(data: {
+    idOrdenServicio: number;
+    idParametroMedicion: number;
+    valorNumerico?: number;
+    valorTexto?: string;
+    nivelAlerta?: string;
+    mensajeAlerta?: string;
     observaciones?: string;
-    temperatura_ambiente?: number;
-    humedad_relativa?: number;
-    fecha_medicion?: Date;
-    medido_por?: number;
-    instrumento_medicion?: string;
+    temperaturaAmbiente?: number;
+    humedadRelativa?: number;
+    fechaMedicion?: Date;
+    medidoPor?: number;
+    instrumentoMedicion?: string;
   }): Promise<any>;
+
+  /**
+   * UPDATE medición
+   */
+  update(
+    id: number,
+    data: {
+      valorNumerico?: number;
+      valorTexto?: string;
+      nivelAlerta?: string;
+      mensajeAlerta?: string;
+      observaciones?: string;
+      temperaturaAmbiente?: number;
+      humedadRelativa?: number;
+      fechaMedicion?: Date;
+      instrumentoMedicion?: string;
+    },
+  ): Promise<any>;
 
   /**
    * READ ONE - obtener medición por ID
@@ -33,21 +48,20 @@ export interface IMedicionesRepository {
   /**
    * READ ALL por orden - filtrar mediciones de orden específica
    */
-  findByOrden(id_orden_servicio: number): Promise<any[]>;
+  findByOrden(ordenId: number): Promise<any[]>;
 
   /**
-   * READ ALL con paginación y filtros
+   * READ ALL (simplificado sin paginación por ahora)
    */
-  findAll(filters?: {
-    page?: number;
-    limit?: number;
-    id_orden_servicio?: number;
-    id_parametro_medicion?: number;
-    nivel_alerta?: string;
-  }): Promise<{ items: any[]; total: number }>;
+  findAll(): Promise<any[]>;
 
   /**
    * DELETE - eliminar medición
    */
   delete(id: number): Promise<void>;
+
+  /**
+   * Legacy save() para compatibilidad (usa create/update internamente)
+   */
+  save(data: any): Promise<any>;
 }

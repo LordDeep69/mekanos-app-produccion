@@ -11,6 +11,7 @@ import {
     UseGuards
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateEquipoCommand } from './commands/create-equipo.command';
@@ -26,6 +27,8 @@ import { GetEquiposQuery, GetEquiposQueryDto } from './queries/get-equipos.query
  * Controller para endpoints REST de Equipos
  * Todos los endpoints requieren autenticación JWT
  */
+@ApiTags('FASE 1 - Equipos')
+@ApiBearerAuth('JWT-auth')
 @Controller('equipos')
 @Public()
 @UseGuards(JwtAuthGuard)

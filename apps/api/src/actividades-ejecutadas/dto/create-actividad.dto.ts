@@ -1,54 +1,35 @@
-import {
-  IsInt,
-  IsString,
-  IsOptional,
-  IsBoolean,
-  MaxLength,
-  IsEnum,
-  IsISO8601,
-  ValidateIf,
-} from 'class-validator';
-
-/**
- * DTO para crear actividad ejecutada
- * FASE 4.1 - Validación modo dual: Catálogo XOR Manual
- */
-
-export enum EstadoActividadEnum {
-  B = 'B', // Bueno
-  R = 'R', // Regular
-  M = 'M', // Malo
-  NF = 'NF', // No Funcional
-  NA = 'NA', // No Aplica
-}
+import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { EstadoActividadEnum } from '../application/enums/estado-actividad.enum';
 
 export class CreateActividadDto {
+  @IsNotEmpty()
   @IsInt()
-  id_orden_servicio!: number;
+  @IsPositive()
+  idOrdenServicio: number;
 
-  // MODO CATÁLOGO: id_actividad_catalogo (preferido para preventivos)
+  // MODO DUAL: Catálogo XOR Manual
+  @ValidateIf((o) => !o.descripcionManual)
   @IsOptional()
   @IsInt()
-  @ValidateIf((o) => !o.descripcion_manual)
-  id_actividad_catalogo?: number;
+  @IsPositive()
+  idActividadCatalogo?: number;
 
-  // MODO MANUAL: descripcion_manual + sistema (correctivos/emergencias)
+  @ValidateIf((o) => !o.idActividadCatalogo)
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
-  @ValidateIf((o) => !o.id_actividad_catalogo)
-  descripcion_manual?: string;
+  descripcionManual?: string;
 
-  @IsOptional()
+  // Sistema REQUERIDO si modo manual
+  @ValidateIf((o) => o.descripcionManual && !o.idActividadCatalogo)
+  @IsNotEmpty({ message: 'sistema es requerido en modo manual' })
   @IsString()
   @MaxLength(100)
-  @ValidateIf((o) => !!o.descripcion_manual) // Requerido si modo manual
   sistema?: string;
 
-  // Campos opcionales
   @IsOptional()
   @IsInt()
-  orden_secuencia?: number;
+  @IsPositive({ message: 'ordenSecuencia debe ser > 0' })
+  ordenSecuencia?: number;
 
   @IsOptional()
   @IsEnum(EstadoActividadEnum)
@@ -56,7 +37,6 @@ export class CreateActividadDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
   observaciones?: string;
 
   @IsOptional()
@@ -64,18 +44,21 @@ export class CreateActividadDto {
   ejecutada?: boolean;
 
   @IsOptional()
-  @IsISO8601()
-  fecha_ejecucion?: string;
+  @IsInt()
+  @IsPositive()
+  ejecutadaPor?: number;
 
   @IsOptional()
   @IsInt()
-  tiempo_ejecucion_minutos?: number;
+  @IsPositive({ message: 'tiempoEjecucionMinutos debe ser > 0' })
+  tiempoEjecucionMinutos?: number;
 
   @IsOptional()
   @IsBoolean()
-  requiere_evidencia?: boolean;
+  requiereEvidencia?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  evidencia_capturada?: boolean;
+  evidenciaCapturada?: boolean;
 }
+

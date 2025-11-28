@@ -1,9 +1,11 @@
 import {
-  Injectable,
-  NotFoundException,
-  InternalServerErrorException,
+    ConflictException,
+    Injectable,
+    InternalServerErrorException,
+    NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '@mekanos/database';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../database/prisma.service';
 import { CreateUsuariosDto } from './dto/create-usuarios.dto';
 import { UpdateUsuariosDto } from './dto/update-usuarios.dto';
 
@@ -13,10 +15,48 @@ export class UsuariosService {
 
   async create(createDto: CreateUsuariosDto) {
     try {
+      // Validar existencia de persona
+      const persona = await this.prisma.personas.findUnique({
+        where: { id_persona: createDto.id_persona },
+      });
+
+      if (!persona) {
+        throw new NotFoundException(
+          `Persona con ID ${createDto.id_persona} no existe`,
+        );
+      }
+
+      // Validar unicidad de username y email
+      const existingUser = await this.prisma.usuarios.findFirst({
+        where: {
+          OR: [{ username: createDto.username }, { email: createDto.email }],
+        },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Username o Email ya existen');
+      }
+
+      const salt = await bcrypt.genSalt();
+      const password_hash = await bcrypt.hash(createDto.password, salt);
+
+      // Remove password from dto
+      const { password, ...rest } = createDto;
+
       return await this.prisma.usuarios.create({
-        data: createDto as any,
+        data: {
+          ...rest,
+          password_hash,
+          fecha_creacion: new Date(),
+        },
       });
     } catch (error: unknown) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         `Error al crear usuarios: ${(error as Error).message}`,
       );

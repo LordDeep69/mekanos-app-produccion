@@ -1,0 +1,6 @@
+export enum EstadoDetalleServicioEnum {
+  PENDIENTE = 'PENDIENTE',
+  EN_PROCESO = 'EN_PROCESO',
+  COMPLETADO = 'COMPLETADO',
+  CANCELADO = 'CANCELADO',
+}

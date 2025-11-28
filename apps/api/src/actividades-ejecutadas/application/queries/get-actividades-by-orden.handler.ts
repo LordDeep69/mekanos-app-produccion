@@ -1,23 +1,19 @@
-import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { Inject } from '@nestjs/common';
-import { GetActividadesByOrdenQuery } from './get-actividades-by-orden.query';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
+import { ResponseActividadDto } from '../../dto/response-actividad.dto';
 import { PrismaActividadesRepository } from '../../infrastructure/prisma-actividades.repository';
-
-/**
- * Handler para obtener actividades por orden
- * Ordenadas por: orden_secuencia ASC, fecha_ejecucion ASC
- */
+import { ActividadMapper } from '../mappers/actividad.mapper';
+import { GetActividadesByOrdenQuery } from './get-actividades-by-orden.query';
 
 @QueryHandler(GetActividadesByOrdenQuery)
-export class GetActividadesByOrdenHandler
-  implements IQueryHandler<GetActividadesByOrdenQuery>
-{
+export class GetActividadesByOrdenHandler implements IQueryHandler<GetActividadesByOrdenQuery> {
   constructor(
-    @Inject('IActividadesRepository')
     private readonly repository: PrismaActividadesRepository,
+    private readonly mapper: ActividadMapper,
   ) {}
 
-  async execute(query: GetActividadesByOrdenQuery): Promise<any[]> {
-    return await this.repository.findByOrden(query.ordenId);
+  async execute(query: GetActividadesByOrdenQuery): Promise<ResponseActividadDto[]> {
+    const entities = await this.repository.findByOrden(query.ordenId);
+    return entities.map((entity) => this.mapper.toDto(entity));
   }
 }
+
