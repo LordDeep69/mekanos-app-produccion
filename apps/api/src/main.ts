@@ -11,10 +11,10 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
-  
+
   try {
     console.log('🔧 [DEBUG 1/10] Iniciando bootstrap... ');
-    
+
     console.log('🔧 [DEBUG 2/10] Creando NestApplication...');
     const app = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log', 'debug', 'verbose'],
@@ -65,11 +65,18 @@ async function bootstrap(): Promise<void> {
       .addTag('Auth', 'Autenticación y autorización')
       .addTag('FASE 1 - Equipos', 'Gestión de equipos, componentes y fichas técnicas')
       .addTag('FASE 2 - Usuarios', 'Clientes, empleados, proveedores y roles')
-      .addTag('FASE 3 - Órdenes', 'Órdenes de servicio, visitas y actividades')
-      .addTag('FASE 4 - Cotizaciones', 'Cotizaciones y propuestas comerciales')
-      .addTag('FASE 5 - Inventario', 'Productos, movimientos y stock')
-      .addTag('FASE 6 - Informes', 'Informes técnicos y bitácoras')
-      .addTag('FASE 7 - Cronogramas', 'Programación de mantenimientos')
+      .addTag('FASE 3 - Órdenes de Servicio', 'Órdenes de servicio, workflow y finalización completa')
+      .addTag('FASE 4 - Cotizaciones', 'Cotizaciones comerciales y flujo de aprobación')
+      .addTag('FASE 4 - Propuestas Correctivo', 'Propuestas de mantenimiento correctivo')
+      .addTag('FASE 5 - Inventario', 'Productos, movimientos y alertas de stock')
+      .addTag('FASE 5 - Remisiones', 'Remisiones de materiales a técnicos')
+      .addTag('FASE 5 - Órdenes de Compra', 'Órdenes de compra a proveedores')
+      .addTag('FASE 6 - Informes', 'Informes técnicos, PDFs y bitácoras')
+      .addTag('FASE 7 - Cronogramas', 'Programación de mantenimientos preventivos')
+      .addTag('Sync', 'Sincronización offline para app móvil')
+      .addTag('Dashboard', 'Métricas y estadísticas del sistema')
+      .addTag('Email', 'Envío de correos electrónicos')
+      .addTag('Notificaciones', 'Sistema de notificaciones push')
       .build();
 
     const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
@@ -110,10 +117,10 @@ async function bootstrap(): Promise<void> {
 
     const port = process.env.PORT || 3000;
     console.log(`🔧 [DEBUG 10/10] Iniciando listener puerto ${port} en 0.0.0.0 (todas las interfaces)...`);
-    
+
     // ✅ FIX Windows: Usar 0.0.0.0 para aceptar IPv4 e IPv6
     await app.listen(port, '0.0.0.0');
-    
+
     const address = app.getHttpServer().address();
     console.log('✅ [BOOTSTRAP COMPLETO] Server address:', JSON.stringify(address));
     console.log('✅ [BOOTSTRAP COMPLETO] Proceso Node PID:', process.pid);
@@ -123,14 +130,14 @@ async function bootstrap(): Promise<void> {
     logger.log(`📊 GraphQL Playground: http://localhost:${port}/graphql`);
     logger.log(`❤️  Health check: http://localhost:${port}/api/health`);
     logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-    
+
     console.log('✅ [SERVIDOR ACTIVO] Proceso manteniéndose vivo indefinidamente...');
-    
+
     // ✅ DEBUG Windows: Keep-alive explícito
     setInterval(() => {
       console.log(`[KEEPALIVE] ${new Date().toISOString()} - Server still running (PID: ${process.pid})`);
     }, 30000); // Log cada 30 segundos
-    
+
   } catch (error) {
     console.error('❌ [FATAL] Error en bootstrap:', error);
     console.error('❌ [FATAL] Stack trace:', (error as Error)?.stack);
