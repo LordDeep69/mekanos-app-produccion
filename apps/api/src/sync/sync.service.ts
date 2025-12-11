@@ -1,24 +1,24 @@
 import { PrismaService } from '@mekanos/database';
 import {
-    BadRequestException,
-    Injectable,
-    Logger,
-    NotFoundException
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException
 } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { validarTransicion } from '../ordenes/domain/workflow-estados';
 import {
-    SyncActividadCatalogoDto,
-    SyncBatchResponseDto,
-    SyncDownloadResponseDto,
-    SyncOrdenDownloadDto,
-    SyncOrdenResultDto,
-    SyncParametroMedicionDto,
+  SyncActividadCatalogoDto,
+  SyncBatchResponseDto,
+  SyncDownloadResponseDto,
+  SyncOrdenDownloadDto,
+  SyncOrdenResultDto,
+  SyncParametroMedicionDto,
 } from './dto/sync-response.dto';
 import {
-    SyncBatchUploadDto,
-    SyncMedicionDto,
-    SyncOrdenDto,
+  SyncBatchUploadDto,
+  SyncMedicionDto,
+  SyncOrdenDto,
 } from './dto/sync-upload-orden.dto';
 
 /**
@@ -41,7 +41,7 @@ export class SyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly commandBus: CommandBus,
-  ) {}
+  ) { }
 
   /**
    * UPLOAD: Sincronizar batch de órdenes desde móvil
@@ -389,13 +389,23 @@ export class SyncService {
   ): Promise<SyncDownloadResponseDto> {
     this.logger.log(`[Sync] Download para técnico ${tecnicoId}`);
 
-    // 1. Obtener órdenes asignadas al técnico (no finales)
+    // 1. Obtener órdenes asignadas al técnico
+    // ✅ FIX: Incluir órdenes completadas recientes (últimos 30 días) para historial
+    const treintaDiasAtras = new Date();
+    treintaDiasAtras.setDate(treintaDiasAtras.getDate() - 30);
+
     const ordenes = await this.prisma.ordenes_servicio.findMany({
       where: {
         id_tecnico_asignado: tecnicoId,
-        estado: {
-          es_estado_final: false,
-        },
+        OR: [
+          // Órdenes activas (no finales)
+          { estado: { es_estado_final: false } },
+          // Órdenes completadas en los últimos 30 días (para historial)
+          {
+            estado: { es_estado_final: true },
+            fecha_fin_real: { gte: treintaDiasAtras },
+          },
+        ],
       },
       include: {
         estado: true,
@@ -407,6 +417,22 @@ export class SyncService {
         sede: true,
         equipo: true,
         tipo_servicio: true,
+        // ✅ FIX: Incluir informes para obtener URL del PDF
+        informes: {
+          include: {
+            documento_pdf: true,
+          },
+          orderBy: { fecha_generacion: 'desc' },
+          take: 1,
+        },
+        // ✅ FIX: Incluir conteos para estadísticas
+        _count: {
+          select: {
+            actividades_ejecutadas: true,
+            mediciones_servicio: true,
+            evidencias_fotograficas: true,
+          },
+        },
       },
       orderBy: [
         { prioridad: 'desc' },
@@ -414,7 +440,162 @@ export class SyncService {
       ],
     });
 
-    // 2. Mapear a DTO de descarga
+    // 2. Obtener documentos PDF para las órdenes completadas
+    const ordenesIds = ordenes.map((o) => o.id_orden_servicio);
+    const documentosPdf = await this.prisma.documentos_generados.findMany({
+      where: {
+        tipo_documento: 'INFORME_SERVICIO',
+        id_referencia: { in: ordenesIds },
+      },
+      orderBy: { fecha_generacion: 'desc' },
+    });
+
+    // Crear mapa de id_referencia -> ruta_archivo (el más reciente)
+    const documentosMap = new Map<number, string>();
+    for (const doc of documentosPdf) {
+      if (!documentosMap.has(doc.id_referencia)) {
+        documentosMap.set(doc.id_referencia, doc.ruta_archivo);
+      }
+    }
+    this.logger.log(`[Sync] Documentos PDF encontrados: ${documentosMap.size}`);
+
+    // 2.5 Obtener conteos de estadísticas por orden (consulta directa más confiable)
+    const actividadesCount = await this.prisma.actividades_ejecutadas.groupBy({
+      by: ['id_orden_servicio'],
+      where: { id_orden_servicio: { in: ordenesIds } },
+      _count: { id_actividad_ejecutada: true },
+    });
+    const actividadesMap = new Map<number, number>();
+    for (const a of actividadesCount) {
+      actividadesMap.set(a.id_orden_servicio, a._count.id_actividad_ejecutada);
+    }
+
+    const medicionesCount = await this.prisma.mediciones_servicio.groupBy({
+      by: ['id_orden_servicio'],
+      where: { id_orden_servicio: { in: ordenesIds } },
+      _count: { id_medicion: true },
+    });
+    const medicionesMap = new Map<number, number>();
+    for (const m of medicionesCount) {
+      medicionesMap.set(m.id_orden_servicio, m._count.id_medicion);
+    }
+
+    const evidenciasCount = await this.prisma.evidencias_fotograficas.groupBy({
+      by: ['id_orden_servicio'],
+      where: { id_orden_servicio: { in: ordenesIds } },
+      _count: { id_evidencia: true },
+    });
+    const evidenciasMap = new Map<number, number>();
+    for (const e of evidenciasCount) {
+      evidenciasMap.set(e.id_orden_servicio, e._count.id_evidencia);
+    }
+
+    // ✅ FIX: Contar firmas desde la relación directa en ordenes_servicio
+    // La orden tiene id_firma_cliente (relación con firmas_digitales)
+    // Por ahora contamos 1 si hay firma cliente, 0 si no
+    // TODO: Agregar conteo de firma técnico cuando se implemente esa relación
+    const firmasMap = new Map<number, number>();
+    for (const o of ordenes) {
+      // Contar firmas: 1 por id_firma_cliente + 1 si hay nombre_quien_recibe (indica que hubo firma)
+      let firmasCount = 0;
+      if (o.id_firma_cliente) firmasCount++;
+      // Si hay nombre de quien recibe, probablemente hay firma técnico también
+      if (o.nombre_quien_recibe) firmasCount++;
+      firmasMap.set(o.id_orden_servicio, firmasCount);
+    }
+
+    // ✅ FIX: Desglose de actividades por estado (B=Buena, M=Mala, C=Corregida, NA=No Aplica)
+    const actividadesPorEstado = await this.prisma.actividades_ejecutadas.groupBy({
+      by: ['id_orden_servicio', 'estado'],
+      where: { id_orden_servicio: { in: ordenesIds } },
+      _count: { id_actividad_ejecutada: true },
+    });
+
+    // Crear maps para cada estado
+    const actividadesBuenasMap = new Map<number, number>();
+    const actividadesMalasMap = new Map<number, number>();
+    const actividadesCorregidasMap = new Map<number, number>();
+    const actividadesNAMap = new Map<number, number>();
+
+    for (const a of actividadesPorEstado) {
+      const ordenId = a.id_orden_servicio;
+      const count = a._count.id_actividad_ejecutada;
+      switch (a.estado) {
+        case 'B':
+          actividadesBuenasMap.set(ordenId, (actividadesBuenasMap.get(ordenId) || 0) + count);
+          break;
+        case 'M':
+          actividadesMalasMap.set(ordenId, (actividadesMalasMap.get(ordenId) || 0) + count);
+          break;
+        case 'C':
+          actividadesCorregidasMap.set(ordenId, (actividadesCorregidasMap.get(ordenId) || 0) + count);
+          break;
+        case 'NA':
+          actividadesNAMap.set(ordenId, (actividadesNAMap.get(ordenId) || 0) + count);
+          break;
+      }
+    }
+
+    // ✅ FIX: Desglose de mediciones por estado (NORMAL, ADVERTENCIA, CRITICO)
+    const medicionesPorEstado = await this.prisma.mediciones_servicio.findMany({
+      where: { id_orden_servicio: { in: ordenesIds } },
+      select: {
+        id_orden_servicio: true,
+        valor_numerico: true,
+        parametros_medicion: {
+          select: {
+            valor_minimo_normal: true,
+            valor_maximo_normal: true,
+            valor_minimo_critico: true,
+            valor_maximo_critico: true,
+          },
+        },
+      },
+    });
+
+    // Crear maps para cada estado de medición
+    const medicionesNormalesMap = new Map<number, number>();
+    const medicionesAdvertenciaMap = new Map<number, number>();
+    const medicionesCriticasMap = new Map<number, number>();
+
+    for (const m of medicionesPorEstado) {
+      const ordenId = m.id_orden_servicio;
+      const valor = m.valor_numerico?.toNumber() || 0;
+      const param = m.parametros_medicion;
+
+      let estado = 'NORMAL';
+      if (param) {
+        const minNormal = param.valor_minimo_normal?.toNumber();
+        const maxNormal = param.valor_maximo_normal?.toNumber();
+        const minCritico = param.valor_minimo_critico?.toNumber();
+        const maxCritico = param.valor_maximo_critico?.toNumber();
+
+        // Verificar si está fuera de rango crítico
+        if ((minCritico !== undefined && valor < minCritico) || (maxCritico !== undefined && valor > maxCritico)) {
+          estado = 'CRITICO';
+        }
+        // Verificar si está fuera de rango normal (advertencia)
+        else if ((minNormal !== undefined && valor < minNormal) || (maxNormal !== undefined && valor > maxNormal)) {
+          estado = 'ADVERTENCIA';
+        }
+      }
+
+      switch (estado) {
+        case 'NORMAL':
+          medicionesNormalesMap.set(ordenId, (medicionesNormalesMap.get(ordenId) || 0) + 1);
+          break;
+        case 'ADVERTENCIA':
+          medicionesAdvertenciaMap.set(ordenId, (medicionesAdvertenciaMap.get(ordenId) || 0) + 1);
+          break;
+        case 'CRITICO':
+          medicionesCriticasMap.set(ordenId, (medicionesCriticasMap.get(ordenId) || 0) + 1);
+          break;
+      }
+    }
+
+    this.logger.log(`[Sync] Estadísticas: ${actividadesMap.size} órdenes con actividades, ${evidenciasMap.size} con evidencias, ${firmasMap.size} con firmas`);
+
+    // 3. Mapear a DTO de descarga
     const ordenesDownload: SyncOrdenDownloadDto[] = ordenes.map((o) => ({
       idOrdenServicio: o.id_orden_servicio,
       numeroOrden: o.numero_orden,
@@ -442,7 +623,51 @@ export class SyncService {
       descripcionInicial: o.descripcion_inicial,
       trabajoRealizado: o.trabajo_realizado,
       observacionesTecnico: o.observaciones_tecnico,
-      fechaCreacion: o.fecha_creacion.toISOString(),
+      // ✅ FIX: Incluir URL del PDF desde documentos_generados (consulta directa)
+      urlPdf: documentosMap.get(o.id_orden_servicio) || undefined,
+      // ✅ FIX: Incluir horarios reales del servicio
+      fechaInicioReal: o.fecha_inicio_real?.toISOString(),
+      fechaFinReal: o.fecha_fin_real?.toISOString(),
+      // ✅ FIX: Horas como TEXTO PLANO (HH:mm) - ajustadas a Colombia (UTC-5)
+      // El servidor está en UTC, pero las horas se guardaron como hora local Colombia
+      // Por eso getHours() devuelve +5 horas. Restamos 5 para obtener hora Colombia.
+      horaEntrada: o.fecha_inicio_real
+        ? (() => {
+          const h = o.fecha_inicio_real.getHours();
+          const m = o.fecha_inicio_real.getMinutes();
+          // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
+          let horaCol = h - 5;
+          if (horaCol < 0) horaCol += 24;
+          return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        })()
+        : undefined,
+      horaSalida: o.fecha_fin_real
+        ? (() => {
+          const h = o.fecha_fin_real.getHours();
+          const m = o.fecha_fin_real.getMinutes();
+          // Ajustar a Colombia UTC-5 (restar 5 horas al UTC)
+          let horaCol = h - 5;
+          if (horaCol < 0) horaCol += 24;
+          return `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        })()
+        : undefined,
+      duracionMinutos: o.duracion_minutos || undefined,
+      // ✅ FIX: Incluir estadísticas de la orden (consulta directa, más confiable)
+      // totalActividades incluye actividades + mediciones para coincidir con el móvil
+      totalActividades: (actividadesMap.get(o.id_orden_servicio) || 0) + (medicionesMap.get(o.id_orden_servicio) || 0),
+      totalMediciones: medicionesMap.get(o.id_orden_servicio) || 0,
+      totalEvidencias: evidenciasMap.get(o.id_orden_servicio) || 0,
+      totalFirmas: firmasMap.get(o.id_orden_servicio) || 0,
+      // ✅ FIX: Desglose de actividades por estado
+      actividadesBuenas: actividadesBuenasMap.get(o.id_orden_servicio) || 0,
+      actividadesMalas: actividadesMalasMap.get(o.id_orden_servicio) || 0,
+      actividadesCorregidas: actividadesCorregidasMap.get(o.id_orden_servicio) || 0,
+      actividadesNA: actividadesNAMap.get(o.id_orden_servicio) || 0,
+      // ✅ FIX: Desglose de mediciones por estado
+      medicionesNormales: medicionesNormalesMap.get(o.id_orden_servicio) || 0,
+      medicionesAdvertencia: medicionesAdvertenciaMap.get(o.id_orden_servicio) || 0,
+      medicionesCriticas: medicionesCriticasMap.get(o.id_orden_servicio) || 0,
+      fechaCreacion: o.fecha_creacion?.toISOString() || new Date().toISOString(),
       fechaModificacion: o.fecha_modificacion?.toISOString(),
     }));
 
@@ -478,9 +703,10 @@ export class SyncService {
       }),
     );
 
-    // 4. Obtener catálogo de actividades activas
+    // 4. Obtener catálogo de actividades activas con sistema incluido
     const actividades = await this.prisma.catalogo_actividades.findMany({
       where: { activo: true },
+      include: { catalogo_sistemas: true }, // ✅ CORREGIDO: nombre correcto de la relación
       orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
     });
 
@@ -492,10 +718,12 @@ export class SyncService {
         tipoActividad: a.tipo_actividad as string,
         ordenEjecucion: a.orden_ejecucion,
         esObligatoria: a.es_obligatoria || false,
-        tiempoEstimadoMinutos: a.tiempo_estimado_minutos,
-        instrucciones: a.instrucciones,
-        precauciones: a.precauciones,
-        idParametroMedicion: a.id_parametro_medicion,
+        tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
+        instrucciones: a.instrucciones ?? undefined,
+        precauciones: a.precauciones ?? undefined,
+        idParametroMedicion: a.id_parametro_medicion ?? undefined,
+        idTipoServicio: a.id_tipo_servicio,  // ✅ CRÍTICO para vincular con órdenes
+        sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL', // ✅ CORREGIDO + Fallback a GENERAL
       }),
     );
 
@@ -512,6 +740,19 @@ export class SyncService {
       esEstadoFinal: e.es_estado_final || false,
     }));
 
+    // 6. Obtener tipos de servicio (CRÍTICO para FK en actividades_catalogo)
+    const tiposServicio = await this.prisma.tipos_servicio.findMany({
+      where: { activo: true },
+      orderBy: { nombre_tipo: 'asc' },
+    });
+
+    const tiposServicioDownload = tiposServicio.map((t) => ({
+      id: t.id_tipo_servicio,
+      codigo: t.codigo_tipo,
+      nombre: t.nombre_tipo,
+      descripcion: t.descripcion ?? undefined,
+    }));
+
     return {
       serverTimestamp: new Date().toISOString(),
       tecnicoId,
@@ -519,6 +760,7 @@ export class SyncService {
       parametrosMedicion: parametrosDownload,
       actividadesCatalogo: actividadesDownload,
       estadosOrden: estadosDownload,
+      tiposServicio: tiposServicioDownload, // ✅ AGREGADO para FK en mobile
     };
   }
 }

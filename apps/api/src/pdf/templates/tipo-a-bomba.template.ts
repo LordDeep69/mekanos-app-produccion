@@ -89,7 +89,7 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
     ${generarObservaciones(datos.observaciones)}
     
     <!-- FIRMAS -->
-    ${generarFirmas()}
+    ${generarFirmas(datos.firmaTecnico, datos.firmaCliente)}
     
     <!-- FOOTER -->
     ${generarFooter()}
@@ -159,7 +159,57 @@ const generarDatosCliente = (datos: DatosOrdenPDF): string => `
   </div>
 `;
 
-const generarChecklistBombas = (datos: DatosOrdenPDF): string => `
+/**
+ * Función auxiliar para obtener valor de medición por nombre EXACTO de parámetro
+ * ✅ CORREGIDO: Usa coincidencia exacta para evitar cruces de datos
+ */
+const obtenerMedicionExacta = (mediciones: any[], nombreExacto: string): { valor: string; unidad: string } => {
+  if (!mediciones || mediciones.length === 0) return { valor: '-', unidad: '' };
+
+  // Buscar coincidencia exacta (case-insensitive)
+  const med = mediciones.find((m: any) => {
+    const param = (m.parametro || '').toLowerCase().trim();
+    return param === nombreExacto.toLowerCase().trim();
+  });
+
+  if (med && med.valor !== null && med.valor !== undefined) {
+    return { valor: String(med.valor), unidad: med.unidad || '' };
+  }
+  return { valor: '-', unidad: '' };
+};
+
+/**
+ * Detecta si una actividad es realmente una medición (debe excluirse del checklist)
+ */
+const esActividadMedicion = (descripcion: string): boolean => {
+  const desc = descripcion.toLowerCase();
+  return desc.includes('medición') ||
+    desc.includes('presión') ||
+    desc.includes('voltaje') ||
+    desc.includes('amperaje') ||
+    desc.includes('temperatura') ||
+    desc.includes('rpm') ||
+    (desc.includes('medir') && !desc.includes('revisar'));
+};
+
+const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
+  // Filtrar actividades que NO son mediciones (las mediciones van en sección aparte)
+  const actividadesChecklist = (datos.actividades || []).filter(
+    (act: any) => !esActividadMedicion(act.descripcion || '')
+  );
+
+  // Obtener mediciones con NOMBRES EXACTOS del catálogo
+  // (Los nombres corresponden a los registros en parametros_medicion)
+  const presion = obtenerMedicionExacta(datos.mediciones, 'Medición de Presiones');
+  const voltaje = obtenerMedicionExacta(datos.mediciones, 'Medición de Voltaje');
+  const amperaje = obtenerMedicionExacta(datos.mediciones, 'Medición de Amperaje');
+  const temperatura = obtenerMedicionExacta(datos.mediciones, 'Temperatura');
+  const presionEncendido = obtenerMedicionExacta(datos.mediciones, 'Presostato Presión Encendido');
+  const presionApagado = obtenerMedicionExacta(datos.mediciones, 'Presostato Presión Apagado');
+  const presionTanques = obtenerMedicionExacta(datos.mediciones, 'Presión Tanques');
+  const vibracion = obtenerMedicionExacta(datos.mediciones, 'Análisis de Vibración');
+
+  return `
   <div class="section">
     <div class="section-title">LISTA DE ACTIVIDADES DE MANTENIMIENTO</div>
     <table class="checklist-table">
@@ -171,180 +221,93 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => `
         </tr>
       </thead>
       <tbody>
-        <!-- Inspección General -->
+        <!-- Actividades dinámicas del checklist -->
+        ${actividadesChecklist.map((act: any) => `
+          <tr>
+            <td>${act.descripcion || 'Actividad'}</td>
+            <td style="text-align: center;">
+              <span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span>
+            </td>
+            <td style="font-size: 9px;">${act.observaciones || ''}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  
+  <!-- SECCIÓN DE MEDICIONES -->
+  <div class="section">
+    <div class="section-title">📊 MEDICIONES TÉCNICAS</div>
+    <table class="checklist-table">
+      <thead>
         <tr>
-          <td>Limpieza general del sistema</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
+          <th style="width: 50%;">Parámetro</th>
+          <th style="width: 25%;">Valor</th>
+          <th style="width: 25%;">Unidad</th>
         </tr>
-        <tr>
-          <td>Análisis de vibración y ruido en rodamientos</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        
-        <!-- Mediciones -->
+      </thead>
+      <tbody>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Medición de las presiones</strong></td>
-          <td style="text-align: center;"><span class="presion-value">-- PSI</span></td>
-          <td></td>
+          <td style="text-align: center;"><span class="presion-value">${presion.valor}</span></td>
+          <td style="text-align: center;">PSI</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Medición de voltaje</strong></td>
-          <td style="text-align: center;"><span class="presion-value">-- V</span></td>
-          <td></td>
+          <td style="text-align: center;"><span class="presion-value">${voltaje.valor}</span></td>
+          <td style="text-align: center;">V</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Medición de amperaje</strong></td>
-          <td style="text-align: center;"><span class="presion-value">-- A</span></td>
-          <td></td>
+          <td style="text-align: center;"><span class="presion-value">${amperaje.valor}</span></td>
+          <td style="text-align: center;">A</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Temperatura</strong></td>
-          <td style="text-align: center;"><span class="presion-value">-- °C</span></td>
-          <td></td>
-        </tr>
-        
-        <!-- Inspecciones -->
-        <tr>
-          <td>Revisión de fugas en bombas, tanques y tubería inmediata</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Limpieza y revisión de funcionamiento del tablero de control</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Retorqueo de conexiones en el tablero</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Estado de juan omega</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Engrasar puntos de lubricación</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar Sello Mecánico</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Ajustar y revisar Sello Tipo Prensa</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        
-        <!-- Presostato -->
-        <tr>
-          <td>Revisar funcionamiento Presostato</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
+          <td style="text-align: center;"><span class="presion-value">${temperatura.valor}</span></td>
+          <td style="text-align: center;">°C</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
-          <td><strong>Presostato presión de encendido</strong></td>
-          <td style="text-align: center;"><span class="presion-value">-- PSI</span></td>
-          <td></td>
+          <td><strong>Vibración</strong></td>
+          <td style="text-align: center;"><span class="presion-value">${vibracion.valor}</span></td>
+          <td style="text-align: center;">mm/s</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
-          <td><strong>Presostato presión de apagado</strong></td>
-          <td style="text-align: center;"><span class="presion-value">-- PSI</span></td>
-          <td></td>
+          <td><strong>Presostato - Presión encendido</strong></td>
+          <td style="text-align: center;"><span class="presion-value">${presionEncendido.valor}</span></td>
+          <td style="text-align: center;">PSI</td>
         </tr>
-        <tr>
-          <td>Limpiar señal hidráulica de presostato</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Probar suiche nivel de protección encendido y apagado</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Abrir y cerrar válvulas de operación del sistema</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        
-        <!-- Tanques -->
         <tr style="background: ${MEKANOS_COLORS.background};">
-          <td><strong>Revisar presión de los tanques</strong></td>
-          <td style="text-align: center;"><span class="presion-value">-- PSI</span></td>
-          <td></td>
+          <td><strong>Presostato - Presión apagado</strong></td>
+          <td style="text-align: center;"><span class="presion-value">${presionApagado.valor}</span></td>
+          <td style="text-align: center;">PSI</td>
         </tr>
-        
-        <!-- Preguntas SI/NO -->
-        <tr>
-          <td>Verificar que las membranas no estén llenas de agua</td>
-          <td style="text-align: center;">
-            <span class="opcion-si-no">
-              <span class="opcion-si-no opcion-si">SÍ</span>
-              <span class="opcion-si-no opcion-inactive">NO</span>
-            </span>
-          </td>
-          <td></td>
+        <tr style="background: ${MEKANOS_COLORS.background};">
+          <td><strong>Presión de tanques</strong></td>
+          <td style="text-align: center;"><span class="presion-value">${presionTanques.valor}</span></td>
+          <td style="text-align: center;">PSI</td>
         </tr>
-        <tr>
-          <td>¿Se debe cambiar tanque? ¿Por qué?</td>
-          <td style="text-align: center;">
-            <span class="opcion-si-no">
-              <span class="opcion-si-no opcion-inactive">SÍ</span>
-              <span class="opcion-si-no opcion-no">NO</span>
-            </span>
-          </td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>¿El sistema tiene válvula de purga?</td>
-          <td style="text-align: center;">
-            <span class="opcion-si-no">
-              <span class="opcion-si-no opcion-si">SÍ</span>
-              <span class="opcion-si-no opcion-inactive">NO</span>
-            </span>
-          </td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>¿Las bombas tienen válvulas de purga y cebado?</td>
-          <td style="text-align: center;">
-            <span class="opcion-si-no">
-              <span class="opcion-si-no opcion-si">SÍ</span>
-              <span class="opcion-si-no opcion-inactive">NO</span>
-            </span>
-          </td>
-          <td></td>
-        </tr>
-        
-        <!-- Prueba final -->
-        <tr style="background: #E8F5E9;">
-          <td><strong>Prueba general del sistema</strong></td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">APROBADA</span></td>
-          <td></td>
-        </tr>
-        
-        ${datos.actividades
-          .map(
-            (act) => `
-          <tr>
-            <td>${act.descripcion}</td>
-            <td style="text-align: center;"><span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span></td>
-            <td>${act.observaciones || ''}</td>
+        ${(datos.mediciones || []).filter((m: any) => {
+    // Excluir mediciones que ya se mostraron arriba (coincidencia exacta)
+    const nombresMostrados = [
+      'medición de presiones', 'medición de voltaje', 'medición de amperaje',
+      'temperatura', 'presostato presión encendido', 'presostato presión apagado',
+      'presión tanques', 'análisis de vibración'
+    ];
+    const param = (m.parametro || '').toLowerCase().trim();
+    return !nombresMostrados.includes(param);
+  }).map((m: any) => `
+          <tr style="background: ${MEKANOS_COLORS.background};">
+            <td><strong>${m.parametro}</strong></td>
+            <td style="text-align: center;"><span class="presion-value">${m.valor ?? '-'}</span></td>
+            <td style="text-align: center;">${m.unidad || ''}</td>
           </tr>
-        `,
-          )
-          .join('')}
+        `).join('')}
       </tbody>
     </table>
   </div>
 `;
+};
 
 const generarSimbologia = (): string => `
   <div class="section">
@@ -354,7 +317,7 @@ const generarSimbologia = (): string => `
       <div class="simbologia-item"><span class="simbologia-code">R:</span> Regular</div>
       <div class="simbologia-item"><span class="simbologia-code">M:</span> Malo</div>
       <div class="simbologia-item"><span class="simbologia-code">I:</span> Inspeccionar</div>
-      <div class="simbologia-item"><span class="simbologia-code">C:</span> Cambiar</div>
+      <div class="simbologia-item"><span class="simbologia-code">C:</span> Cambiado</div>
       <div class="simbologia-item"><span class="simbologia-code">LI:</span> Limpiar</div>
       <div class="simbologia-item"><span class="simbologia-code">A:</span> Ajustar</div>
       <div class="simbologia-item"><span class="simbologia-code">L:</span> Lubricar</div>
@@ -370,32 +333,117 @@ const generarSimbologia = (): string => `
   </div>
 `;
 
+/**
+ * Detecta si una evidencia es de INSUMOS por su caption/descripción
+ */
+const esEvidenciaInsumos = (caption: string): boolean => {
+  const captionLower = caption.toLowerCase();
+  return captionLower.includes('insumo') ||
+    captionLower.includes('filtro') ||
+    captionLower.includes('aceite') ||
+    captionLower.includes('verificación y registro fotográfico de insumos');
+};
+
+/**
+ * Extrae el tipo de evidencia del caption (ANTES, DURANTE, DESPUÉS, GENERAL)
+ */
+const extraerTipoEvidencia = (caption: string): string => {
+  const tipoMatch = caption.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i);
+  if (tipoMatch) {
+    const tipo = tipoMatch[1].toUpperCase();
+    if (tipo === 'DESPUÉS') return 'DESPUES';
+    if (tipo === 'MEDICIÓN') return 'MEDICION';
+    return tipo;
+  }
+  return 'GENERAL';
+};
+
+/**
+ * Títulos para cada sección de evidencias
+ */
+const getTituloSeccionBomba = (tipo: string): { titulo: string; icono: string } => {
+  switch (tipo) {
+    case 'ANTES': return { titulo: 'Estado Inicial (Antes del Servicio)', icono: '📸' };
+    case 'DURANTE': return { titulo: 'Durante el Servicio', icono: '🔧' };
+    case 'DESPUES': return { titulo: 'Estado Final (Después del Servicio)', icono: '✅' };
+    case 'MEDICION': return { titulo: 'Mediciones y Verificaciones', icono: '📏' };
+    case 'GENERAL': return { titulo: 'Evidencias Generales', icono: '📷' };
+    default: return { titulo: 'Otras Evidencias', icono: '📎' };
+  }
+};
+
 const generarEvidencias = (evidencias: string[] | { url: string; caption?: string }[]): string => {
-  if (!evidencias || evidencias.length === 0) return '';
+  if (!evidencias || evidencias.length === 0) {
+    return `
+    <div class="section">
+      <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+      <div style="padding: 20px; text-align: center; color: #666;">
+        No se registraron evidencias fotográficas para este servicio.
+      </div>
+    </div>
+    `;
+  }
 
   // Normalizar formato - soportar array de strings o array de objetos
-  const evidenciasNormalizadas = evidencias.map((ev, idx) => {
+  const evidenciasNormalizadas = evidencias.map((ev: any, idx: number) => {
     if (typeof ev === 'string') {
       return { url: ev, caption: `Evidencia ${idx + 1}` };
     }
     return { url: ev.url, caption: ev.caption || `Evidencia ${idx + 1}` };
   });
 
+  // Separar evidencias de INSUMOS (para bombas no debería haber, pero por consistencia)
+  const evidenciasRegulares = evidenciasNormalizadas.filter((ev: any) => !esEvidenciaInsumos(ev.caption));
+
+  // Agrupar por tipo (ANTES, DURANTE, DESPUÉS)
+  const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+  const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
+
+  evidenciasRegulares.forEach((ev: any) => {
+    const tipo = extraerTipoEvidencia(ev.caption);
+    if (!grupos[tipo]) grupos[tipo] = [];
+    const captionLimpio = ev.caption.replace(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i, '');
+    grupos[tipo].push({ url: ev.url, caption: captionLimpio });
+  });
+
+  // Generar HTML agrupado por secciones
+  const seccionesHTML = ordenTipos
+    .filter(tipo => grupos[tipo] && grupos[tipo].length > 0)
+    .map(tipo => {
+      const { titulo, icono } = getTituloSeccionBomba(tipo);
+      const evidenciasTipo = grupos[tipo];
+
+      // ✅ FIX: Clase y estilo especial para Fotos Generales
+      const esGeneral = tipo === 'GENERAL';
+      const tituloMostrar = esGeneral ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
+      const colorFondo = esGeneral
+        ? 'linear-gradient(135deg, #0d9488 0%, #115e59 100%)'
+        : `linear-gradient(135deg, ${MEKANOS_COLORS.primary} 0%, ${MEKANOS_COLORS.secondary} 100%)`;
+      const bordeGrupo = esGeneral ? 'border: 2px solid #0d9488;' : '';
+      const fondoGrupo = esGeneral ? 'background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);' : '';
+
+      return `
+      <div class="evidencias-grupo" style="margin-bottom: 20px; ${bordeGrupo} ${fondoGrupo} border-radius: 8px; overflow: hidden;">
+        <div style="background: ${colorFondo}; color: white; padding: 8px 15px; font-weight: bold; margin-bottom: 0; ${esGeneral ? 'font-size: 12px; letter-spacing: 0.5px;' : ''}">
+          ${tituloMostrar} (${evidenciasTipo.length})
+        </div>
+        <div class="evidencias-grid" style="padding: 10px;">
+          ${evidenciasTipo.map((ev: any, idx: number) => `
+            <div class="evidencia-item">
+              <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+              <div class="evidencia-caption" style="${esGeneral ? 'background: #0d9488;' : ''}">${ev.caption || `Foto ${idx + 1}`}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    })
+    .join('');
+
   return `
   <div class="section">
-    <div class="section-title">📷 EVIDENCIAS FOTOGRÁFICAS</div>
-    <div class="evidencias-grid">
-      ${evidenciasNormalizadas
-        .map(
-          (ev, idx) => `
-        <div class="evidencia-item">
-          <img src="${ev.url}" alt="${ev.caption}" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'background:#f0f0f0;height:100%;display:flex;align-items:center;justify-content:center;color:#666;\\'>Imagen no disponible</div>';" />
-          <div class="evidencia-caption">${ev.caption}</div>
-        </div>
-      `,
-        )
-        .join('')}
-    </div>
+    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+    ${seccionesHTML}
   </div>
 `;
 };
@@ -409,14 +457,21 @@ const generarObservaciones = (observaciones: string): string => `
   </div>
 `;
 
-const generarFirmas = (): string => `
+// ✅ FIX: Unificar estilo de firmas con Tipo A Generador
+const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      <div class="firma-line"></div>
+      ${firmaTecnico
+    ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
+    : `<div class="firma-line"></div>`
+  }
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      <div class="firma-line"></div>
+      ${firmaCliente
+    ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
+    : `<div class="firma-line"></div>`
+  }
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
   </div>

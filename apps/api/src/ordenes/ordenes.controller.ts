@@ -445,11 +445,41 @@ export class OrdenesController {
     @Body() dto: FinalizarOrdenCompletoDto,
     @UserId() userId: number,
   ) {
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔬 LOG FORENSE - DATOS RECIBIDOS DEL MOBILE
+    // ═══════════════════════════════════════════════════════════════════
+    console.log('');
+    console.log('🔬 ═══════════════════════════════════════════════════════════════');
+    console.log('🔬 LOG FORENSE BACKEND - DATOS RECIBIDOS');
+    console.log('🔬 ═══════════════════════════════════════════════════════════════');
+    console.log('');
+    console.log('📋 EVIDENCIAS recibidas:', dto.evidencias?.length || 0);
+    dto.evidencias?.slice(0, 3).forEach((ev, i) => {
+      console.log(`   [${i}] tipo="${ev.tipo}", base64=${ev.base64?.length || 0} chars`);
+    });
+    console.log('');
+    console.log('✍️ FIRMAS:');
+    console.log(`   tecnico: tipo="${dto.firmas?.tecnico?.tipo}", idPersona=${dto.firmas?.tecnico?.idPersona}`);
+    console.log(`   cliente: ${dto.firmas?.cliente ? `tipo="${dto.firmas.cliente.tipo}"` : 'NO ENVIADA'}`);
+    console.log('');
+    console.log('📝 ACTIVIDADES recibidas:', dto.actividades?.length || 0);
+    dto.actividades?.slice(0, 3).forEach((act, i) => {
+      console.log(`   [${i}] sistema="${act.sistema}", resultado="${act.resultado}"`);
+    });
+    console.log('');
+    console.log('📏 MEDICIONES:', dto.mediciones?.length || 0);
+    console.log(`⏰ HORA ENTRADA: "${dto.horaEntrada}"`);
+    console.log(`⏰ HORA SALIDA: "${dto.horaSalida}"`);
+    console.log(`📝 OBSERVACIONES: "${dto.observaciones?.substring(0, 50)}..."`);
+    console.log('');
+    console.log('🔬 ═══════════════════════════════════════════════════════════════');
+    console.log('');
+
     // Construir DTO interno con ID de orden
     const finalizarDto = {
       idOrden: parseInt(id, 10),
       evidencias: dto.evidencias.map(e => ({
-        tipo: e.tipo as 'ANTES' | 'DURANTE' | 'DESPUES',
+        tipo: e.tipo as 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION',
         base64: e.base64,
         descripcion: e.descripcion,
         formato: e.formato,

@@ -18,15 +18,17 @@
 import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import {
-    DatosCotizacionPDF,
-    DatosOrdenPDF,
-    generarCotizacionHTML,
-    generarTipoABombaHTML,
-    generarTipoAGeneradorHTML,
-    generarTipoBGeneradorHTML,
+  DatosCorrectivoOrdenPDF,
+  DatosCotizacionPDF,
+  DatosOrdenPDF,
+  generarCorrectivoOrdenHTML,
+  generarCotizacionHTML,
+  generarTipoABombaHTML,
+  generarTipoAGeneradorHTML,
+  generarTipoBGeneradorHTML,
 } from './templates';
 
-export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'COTIZACION';
+export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
 
 export interface GenerarPDFOptions {
   tipoInforme: TipoInforme;
@@ -72,18 +74,28 @@ export class PdfService implements OnModuleDestroy {
     try {
       // Obtener el HTML según el tipo de informe
       const html = this.obtenerHTML(options.tipoInforme, options.datos);
-      
-      // Inicializar browser si no existe
-      if (!this.browser) {
-        await this.initBrowser();
-      }
+
+      // ✅ FIX: Verificar que browser esté activo y conectado
+      await this.ensureBrowserConnected();
 
       // Crear nueva página
       const page = await this.browser!.newPage();
-      
+
       try {
+        // ✅ FIX MEJORADO: Configurar encoding UTF-8 explícitamente
+        await page.setExtraHTTPHeaders({
+          'Content-Type': 'text/html; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+        });
+
+        // Inyectar meta http-equiv para reforzar encoding UTF-8
+        const htmlConEncoding = html.replace(
+          '<meta charset="UTF-8">',
+          '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
+        );
+
         // Configurar contenido con timeout extendido para imágenes
-        await page.setContent(html, {
+        await page.setContent(htmlConEncoding, {
           waitUntil: 'networkidle0',
           timeout: 60000, // 60 segundos para cargar imágenes
         });
@@ -116,9 +128,10 @@ export class PdfService implements OnModuleDestroy {
       } finally {
         await page.close();
       }
-    } catch (error) {
-      this.logger.error(`❌ Error generando PDF: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(`Error generando PDF: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.error(`❌ Error generando PDF: ${err.message}`, err.stack);
+      throw new InternalServerErrorException(`Error generando PDF: ${err.message}`);
     }
   }
 
@@ -133,6 +146,8 @@ export class PdfService implements OnModuleDestroy {
         return generarTipoBGeneradorHTML(datos);
       case 'BOMBA_A':
         return generarTipoABombaHTML(datos);
+      case 'CORRECTIVO':
+        return generarCorrectivoOrdenHTML(this.adaptarDatosParaCorrectivo(datos));
       case 'COTIZACION':
         return generarCotizacionHTML(datos as unknown as DatosCotizacionPDF);
       default:
@@ -141,18 +156,116 @@ export class PdfService implements OnModuleDestroy {
   }
 
   /**
+   * Adapta los datos genéricos de orden al formato específico de correctivo
+   */
+  private adaptarDatosParaCorrectivo(datos: DatosOrdenPDF): DatosCorrectivoOrdenPDF {
+    // Convertir actividades a trabajos ejecutados
+    const trabajosEjecutados = (datos.actividades || []).map((a, index) => ({
+      orden: index + 1,
+      descripcion: a.descripcion,
+      sistema: a.sistema || 'GENERAL',
+      tiempoHoras: 1,
+      resultado: a.resultado === 'B' ? 'COMPLETADO' as const :
+        a.resultado === 'R' ? 'PARCIAL' as const : 'COMPLETADO' as const,
+    }));
+
+    // Filtrar mediciones que tengan valor (para renderizado condicional)
+    const medicionesConValor = (datos.mediciones || []).filter(m =>
+      m.valor !== null && m.valor !== undefined && m.valor !== 0
+    ).map(m => ({
+      parametro: m.parametro,
+      valorDespues: String(m.valor),
+      unidad: m.unidad,
+      estado: (m.nivelAlerta === 'OK' ? 'OK' :
+        m.nivelAlerta === 'WARNING' ? 'ADVERTENCIA' : 'OK') as 'OK' | 'ADVERTENCIA' | 'CRITICO',
+    }));
+
+    return {
+      numeroOrden: datos.numeroOrden,
+      fecha: datos.fecha,
+      horaEntrada: datos.horaEntrada,
+      horaSalida: datos.horaSalida,
+      tipoServicio: 'CORRECTIVO',
+      cliente: datos.cliente,
+      direccion: datos.direccion,
+      tipoEquipo: datos.tipoEquipo || 'EQUIPO',
+      marcaEquipo: datos.marcaEquipo,
+      modeloEquipo: '',
+      serieEquipo: datos.serieEquipo,
+      tecnico: datos.tecnico,
+      problemaReportado: {
+        descripcion: datos.observaciones || 'Servicio de mantenimiento correctivo solicitado',
+        fechaReporte: datos.fecha,
+      },
+      diagnostico: {
+        descripcion: 'Diagnóstico realizado en sitio',
+        causaRaiz: 'Determinado durante la inspección técnica',
+        sistemasAfectados: [...new Set(trabajosEjecutados.map(t => t.sistema))],
+      },
+      trabajosEjecutados,
+      repuestosUtilizados: [],
+      mediciones: medicionesConValor.length > 0 ? medicionesConValor : undefined,
+      recomendaciones: ['Seguir plan de mantenimiento preventivo programado'],
+      observaciones: datos.observaciones,
+      evidencias: (datos.evidencias || []).map(e => ({
+        tipo: 'DURANTE' as const,
+        url: typeof e === 'string' ? e : e.url,
+        descripcion: typeof e === 'string' ? undefined : e.caption,
+      })),
+      firmaTecnico: datos.firmaTecnico,
+      firmaCliente: datos.firmaCliente,
+    };
+  }
+
+  /**
    * Genera nombre de archivo para el PDF
    */
   private generarFilename(tipo: TipoInforme, numeroOrden: string): string {
     const fecha = new Date().toISOString().split('T')[0];
-    const tipoNombre = {
+    const tipoNombreMap: Record<TipoInforme, string> = {
       'GENERADOR_A': 'Preventivo_A_Generador',
       'GENERADOR_B': 'Preventivo_B_Generador',
       'BOMBA_A': 'Preventivo_A_Bomba',
+      'CORRECTIVO': 'Correctivo',
       'COTIZACION': 'Cotizacion',
-    }[tipo] || 'Informe';
+      'PROPUESTA_CORRECTIVO': 'Propuesta_Correctivo',
+      'REMISION': 'Remision',
+      'ORDEN_COMPRA': 'Orden_Compra',
+    };
+    const tipoNombre = tipoNombreMap[tipo] || 'Informe';
 
     return `MEKANOS_${tipoNombre}_${numeroOrden}_${fecha}.pdf`;
+  }
+
+  /**
+   * ✅ FIX: Asegura que el browser esté conectado, reiniciando si es necesario
+   */
+  private async ensureBrowserConnected(): Promise<void> {
+    try {
+      // Verificar si browser existe y está conectado
+      if (this.browser && this.browser.connected) {
+        return; // Browser activo, nada que hacer
+      }
+
+      // Si existe pero no está conectado, cerrarlo
+      if (this.browser) {
+        this.logger.warn('⚠️ Browser desconectado, reiniciando...');
+        try {
+          await this.browser.close();
+        } catch (e) {
+          // Ignorar errores al cerrar browser muerto
+        }
+        this.browser = null;
+      }
+
+      // Inicializar nuevo browser
+      await this.initBrowser();
+    } catch (error) {
+      this.logger.error('❌ Error verificando conexión de browser', error);
+      // Forzar reinicio
+      this.browser = null;
+      await this.initBrowser();
+    }
   }
 
   /**
@@ -160,7 +273,7 @@ export class PdfService implements OnModuleDestroy {
    */
   private async initBrowser(): Promise<void> {
     this.logger.log('🚀 Inicializando Puppeteer browser...');
-    
+
     this.browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -198,7 +311,7 @@ export class PdfService implements OnModuleDestroy {
     if (tipoEquipo === 'BOMBA') {
       return 'BOMBA_A';
     }
-    
+
     if (tipoEquipo === 'GENERADOR' || tipoEquipo === 'MOTOR') {
       return tipoServicio === 'PREVENTIVO_B' ? 'GENERADOR_B' : 'GENERADOR_A';
     }
@@ -274,7 +387,7 @@ export class PdfService implements OnModuleDestroy {
   }
 
   // ==================== MÉTODO LEGACY (compatibilidad) ====================
-  
+
   /**
    * @deprecated Use generarPDF() en su lugar
    * Método legacy para compatibilidad con código existente
@@ -331,9 +444,9 @@ export class PdfService implements OnModuleDestroy {
       const page = await this.browser!.newPage();
 
       try {
-        await page.setContent(html, { 
+        await page.setContent(html, {
           waitUntil: 'networkidle0',
-          timeout: 60000 
+          timeout: 60000
         });
 
         const pdfBuffer = await page.pdf({
@@ -387,7 +500,7 @@ export class PdfService implements OnModuleDestroy {
       numeroCotizacion: 'COT-2025-00001',
       fecha: new Date().toLocaleDateString('es-CO'),
       validezDias: 30,
-      
+
       // Cliente
       cliente: {
         nombre: 'HOTEL CARIBE S.A.S',
@@ -397,7 +510,7 @@ export class PdfService implements OnModuleDestroy {
         email: 'compras@hotelcaribe.com',
         contacto: 'María García - Gerente de Compras',
       },
-      
+
       // Vendedor
       vendedor: {
         nombre: 'Carlos Martínez',
@@ -405,7 +518,7 @@ export class PdfService implements OnModuleDestroy {
         telefono: '+57 301 234 5678',
         email: 'carlos.martinez@mekanosrep.com',
       },
-      
+
       // Items de servicio
       servicios: [
         {
@@ -430,7 +543,7 @@ export class PdfService implements OnModuleDestroy {
           subtotal: 900000,
         },
       ],
-      
+
       // Items de componentes/repuestos
       componentes: [
         {
@@ -466,7 +579,7 @@ export class PdfService implements OnModuleDestroy {
           subtotal: 950000,
         },
       ],
-      
+
       // Totales
       subtotalServicios: 4920000,
       subtotalComponentes: 2625500,
@@ -482,13 +595,13 @@ export class PdfService implements OnModuleDestroy {
         monto: 1361962,
       },
       total: 8530187,
-      
+
       // Términos
       formaPago: 'Crédito 30 días',
       tiempoEntrega: '5-7 días hábiles después de aprobación',
       garantia: '6 meses sobre repuestos instalados y mano de obra',
       notas: 'Esta cotización incluye transporte e instalación. Los precios pueden variar según condiciones de mercado.',
-      
+
       // Estado
       estado: 'BORRADOR',
     };

@@ -16,9 +16,9 @@
  * @since FASE 6 POST-CRUD
  */
 
+import { PrismaService } from '@mekanos/database';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '@mekanos/database';
 import { NotificacionesService } from './notificaciones.service';
 
 @Injectable()
@@ -28,7 +28,7 @@ export class TareasProgramadasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificacionesService: NotificacionesService,
-  ) {}
+  ) { }
 
   /**
    * JOB 1: Enviar recordatorios de servicios programados para mañana
@@ -72,7 +72,7 @@ export class TareasProgramadasService {
         const tecnico = cronograma.orden_generada?.tecnico_asignado;
         if (tecnico) {
           const descripcion = `${cronograma.tipos_servicio?.nombre_servicio || 'Servicio'} - ${cronograma.equipo?.codigo_equipo || 'Equipo'}`;
-          
+
           await this.notificacionesService.notificarServicioProgramado(
             tecnico.id_usuario,
             descripcion,
@@ -167,7 +167,7 @@ export class TareasProgramadasService {
         },
         include: {
           cliente: { include: { persona: true } },
-          asesor_responsable: true,
+          empleados: { include: { persona: true } }, // asesor responsable via empleados
         },
       });
 
@@ -178,7 +178,7 @@ export class TareasProgramadasService {
           const diasRestantes = Math.ceil(
             (new Date(contrato.fecha_fin!).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
           );
-          
+
           const nombreCliente = contrato.cliente.persona.razon_social ||
             contrato.cliente.persona.nombre_completo || 'Cliente';
 
@@ -224,7 +224,7 @@ export class TareasProgramadasService {
     try {
       // Importar el servicio de programación dinámicamente
       const { ProgramacionFacadeService } = await import('../common/services/programacion-facade.service');
-      
+
       // Obtener instancia del servicio
       const programacionService = new ProgramacionFacadeService(
         this.prisma,

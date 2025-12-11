@@ -47,8 +47,8 @@ import { R2StorageService } from '../../storage/r2-storage.service';
  * Evidencia fotográfica enviada desde el frontend
  */
 export interface EvidenciaInput {
-    /** Tipo de evidencia: ANTES, DURANTE, DESPUES */
-    tipo: 'ANTES' | 'DURANTE' | 'DESPUES';
+    /** Tipo de evidencia: ANTES, DURANTE, DESPUES, MEDICION */
+    tipo: 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION';
     /** Imagen en Base64 (sin prefijo data:image) */
     base64: string;
     /** Descripción de la evidencia */
@@ -67,6 +67,10 @@ export interface FirmaInput {
     base64: string;
     /** ID de la persona que firma */
     idPersona: number;
+    /** Nombre de quien firma */
+    nombre?: string;
+    /** Cargo de quien firma (para cliente) */
+    cargo?: string;
     /** Formato de imagen (default: png) */
     formato?: 'png' | 'jpg' | 'jpeg';
 }
@@ -251,6 +255,45 @@ export class FinalizacionOrdenService {
                 dto.usuarioId,
             );
             recursosCreados.firmas = firmasResultado.map(f => f.id);
+            this.logger.log(`   ✓ ${firmasResultado.length} firmas registradas`);
+
+            // ✅ FIX: Vincular firma del cliente a la orden para conteo en sync
+            const firmaCliente = firmasResultado.find(f => f.tipo === 'CLIENTE');
+            if (firmaCliente) {
+                await this.prisma.ordenes_servicio.update({
+                    where: { id_orden_servicio: orden.id_orden_servicio },
+                    data: {
+                        id_firma_cliente: firmaCliente.id,
+                        nombre_quien_recibe: dto.firmas.cliente?.nombre || 'Cliente',
+                        cargo_quien_recibe: dto.firmas.cliente?.cargo || null,
+                    },
+                });
+                this.logger.log(`   ✓ Firma cliente vinculada a orden`);
+            }
+
+            // ========================================================================
+            // PASO 3.5: Persistir actividades ejecutadas en BD (para estadísticas)
+            // ========================================================================
+            this.logger.log('📋 Paso 3.5: Registrando actividades ejecutadas...');
+            const actividadesGuardadas = await this.persistirActividades(
+                orden.id_orden_servicio,
+                dto.actividades,
+                dto.usuarioId,
+            );
+            this.logger.log(`   ✓ ${actividadesGuardadas} actividades registradas`);
+
+            // ========================================================================
+            // PASO 3.6: Persistir mediciones en BD (para estadísticas)
+            // ========================================================================
+            if (dto.mediciones && dto.mediciones.length > 0) {
+                this.logger.log('📏 Paso 3.6: Registrando mediciones...');
+                const medicionesGuardadas = await this.persistirMediciones(
+                    orden.id_orden_servicio,
+                    dto.mediciones,
+                    dto.usuarioId,
+                );
+                this.logger.log(`   ✓ ${medicionesGuardadas} mediciones registradas`);
+            }
 
             // ========================================================================
             // PASO 4: Generar PDF con template real
@@ -305,6 +348,8 @@ export class FinalizacionOrdenService {
                 orden.id_orden_servicio,
                 dto.observaciones,
                 dto.usuarioId,
+                dto.horaEntrada,
+                dto.horaSalida,
             );
 
             // ========================================================================
@@ -369,8 +414,8 @@ export class FinalizacionOrdenService {
         if (!dto.evidencias || dto.evidencias.length === 0) {
             throw new BadRequestException('Debe incluir al menos una evidencia fotográfica');
         }
-        if (dto.evidencias.length > 10) {
-            throw new BadRequestException('Máximo 10 evidencias permitidas');
+        if (dto.evidencias.length > 100) {
+            throw new BadRequestException('Máximo 100 evidencias permitidas');
         }
 
         // Validar firma del técnico
@@ -393,7 +438,7 @@ export class FinalizacionOrdenService {
             if (!ev.base64) {
                 throw new BadRequestException(`Evidencia ${ev.tipo} sin imagen`);
             }
-            if (!['ANTES', 'DURANTE', 'DESPUES'].includes(ev.tipo)) {
+            if (!['ANTES', 'DURANTE', 'DESPUES', 'MEDICION'].includes(ev.tipo)) {
                 throw new BadRequestException(`Tipo de evidencia inválido: ${ev.tipo}`);
             }
         }
@@ -409,7 +454,9 @@ export class FinalizacionOrdenService {
                 cliente: {
                     include: { persona: true },
                 },
-                equipo: true,
+                equipo: {
+                    include: { tipo_equipo: true },
+                },
                 tecnico: {
                     include: { persona: true },
                 },
@@ -435,6 +482,7 @@ export class FinalizacionOrdenService {
 
     /**
      * Procesa y sube evidencias a Cloudinary + BD
+     * ✅ OPTIMIZADO: Subida paralela a Cloudinary con Promise.all
      */
     private async procesarEvidencias(
         evidencias: EvidenciaInput[],
@@ -442,20 +490,39 @@ export class FinalizacionOrdenService {
         numeroOrden: string,
         _usuarioId: number, // Reservado para auditoría futura
     ): Promise<Array<{ id: number; tipo: string; url: string }>> {
-        const resultados: Array<{ id: number; tipo: string; url: string }> = [];
+        if (evidencias.length === 0) return [];
 
-        for (let i = 0; i < evidencias.length; i++) {
-            const ev = evidencias[i];
+        const folder = `mekanos/evidencias/${numeroOrden}`;
 
-            // Convertir base64 a buffer
+        // PASO 1: Subir TODAS las imágenes a Cloudinary EN PARALELO
+        this.logger.log(`   📤 Subiendo ${evidencias.length} evidencias en paralelo...`);
+        const startUpload = Date.now();
+
+        const uploadPromises = evidencias.map(async (ev) => {
             const buffer = Buffer.from(ev.base64, 'base64');
-            const folder = `mekanos/evidencias/${numeroOrden}`;
-
-            // Subir a Cloudinary
-            const cloudinaryResult = await this.cloudinaryService.uploadImage(buffer, {
+            const result = await this.cloudinaryService.uploadImage(buffer, {
                 folder,
                 tags: [ev.tipo, numeroOrden],
             });
+            return { ev, buffer, result };
+        });
+
+        const uploadResults = await Promise.all(uploadPromises);
+        const uploadTime = Date.now() - startUpload;
+        this.logger.log(`   ⚡ Subida paralela completada en ${uploadTime}ms`);
+
+        // PASO 2: Validar resultados de Cloudinary
+        const ahora = new Date();
+        const datosValidados: Array<{
+            ev: EvidenciaInput;
+            buffer: Buffer;
+            url: string;
+            hash: string;
+            index: number;
+        }> = [];
+
+        for (let i = 0; i < uploadResults.length; i++) {
+            const { ev, buffer, result: cloudinaryResult } = uploadResults[i];
 
             if (!cloudinaryResult.success || !cloudinaryResult.url) {
                 throw new InternalServerErrorException(
@@ -463,35 +530,35 @@ export class FinalizacionOrdenService {
                 );
             }
 
-            // Calcular hash
             const hash = createHash('sha256').update(buffer).digest('hex');
+            datosValidados.push({ ev, buffer, url: cloudinaryResult.url, hash, index: i });
+        }
 
-            // Registrar en BD
-            const evidenciaDB = await this.prisma.evidencias_fotograficas.create({
+        // PASO 3: Registrar en BD EN PARALELO (necesitamos IDs individuales)
+        const dbPromises = datosValidados.map(({ ev, buffer, url, hash, index }) =>
+            this.prisma.evidencias_fotograficas.create({
                 data: {
                     id_orden_servicio: idOrden,
                     tipo_evidencia: ev.tipo,
                     descripcion: ev.descripcion || `Evidencia ${ev.tipo} del servicio`,
-                    nombre_archivo: `${ev.tipo.toLowerCase()}_${Date.now()}.${ev.formato || 'png'}`,
-                    ruta_archivo: cloudinaryResult.url,
+                    nombre_archivo: `${ev.tipo.toLowerCase()}_${ahora.getTime()}_${index}.${ev.formato || 'png'}`,
+                    ruta_archivo: url,
                     hash_sha256: hash,
                     tama_o_bytes: BigInt(buffer.length),
                     mime_type: `image/${ev.formato || 'png'}`,
-                    orden_visualizacion: i + 1,
-                    es_principal: i === 0,
-                    fecha_captura: new Date(),
+                    orden_visualizacion: index + 1,
+                    es_principal: index === 0,
+                    fecha_captura: ahora,
                 },
-            });
-
-            resultados.push({
+            }).then(evidenciaDB => ({
                 id: evidenciaDB.id_evidencia,
                 tipo: ev.tipo,
-                url: cloudinaryResult.url,
-            });
+                url,
+            }))
+        );
 
-            this.logger.debug(`  ✅ Evidencia ${ev.tipo} procesada (ID: ${evidenciaDB.id_evidencia})`);
-        }
-
+        const resultados = await Promise.all(dbPromises);
+        this.logger.log(`   ✅ ${resultados.length} evidencias procesadas`);
         return resultados;
     }
 
@@ -519,13 +586,43 @@ export class FinalizacionOrdenService {
 
     /**
      * Registra una firma digital en BD
+     * Busca primero para manejar el constraint único (id_persona, tipo_firma)
+     * Si idPersona es 0, usa el usuarioId como fallback
      */
     private async registrarFirma(firma: FirmaInput, usuarioId: number) {
         const hash = createHash('sha256').update(firma.base64).digest('hex');
 
+        // Si idPersona es 0, usar el usuarioId como fallback (técnico que registra)
+        const idPersonaReal = firma.idPersona > 0 ? firma.idPersona : usuarioId;
+
+        // Buscar firma existente
+        const firmaExistente = await this.prisma.firmas_digitales.findFirst({
+            where: {
+                id_persona: idPersonaReal,
+                tipo_firma: firma.tipo,
+            },
+        });
+
+        if (firmaExistente) {
+            // Actualizar firma existente
+            return this.prisma.firmas_digitales.update({
+                where: { id_firma_digital: firmaExistente.id_firma_digital },
+                data: {
+                    firma_base64: firma.base64,
+                    formato_firma: (firma.formato || 'PNG').toUpperCase(),
+                    hash_firma: hash,
+                    fecha_captura: new Date(),
+                    observaciones: `Firma de ${firma.tipo} - Actualizada en finalización`,
+                    registrada_por: usuarioId,
+                    fecha_registro: new Date(),
+                },
+            });
+        }
+
+        // Crear nueva firma
         return this.prisma.firmas_digitales.create({
             data: {
-                id_persona: firma.idPersona,
+                id_persona: idPersonaReal,
                 tipo_firma: firma.tipo,
                 firma_base64: firma.base64,
                 formato_firma: (firma.formato || 'PNG').toUpperCase(),
@@ -533,7 +630,7 @@ export class FinalizacionOrdenService {
                 fecha_captura: new Date(),
                 es_firma_principal: firma.tipo === 'TECNICO',
                 activa: true,
-                observaciones: `Firma de ${firma.tipo} - Finalización de orden`,
+                observaciones: `Firma de ${firma.tipo} - Finalización de orden${firma.idPersona === 0 ? ' (cliente sin registro)' : ''}`,
                 registrada_por: usuarioId,
                 fecha_registro: new Date(),
             },
@@ -541,22 +638,80 @@ export class FinalizacionOrdenService {
     }
 
     /**
+     * Mapea el array de mediciones del mobile al objeto datosModulo para el PDF
+     * Busca por nombre de parámetro y asigna al campo correspondiente
+     */
+    private mapearMedicionesADatosModulo(mediciones: Array<{ parametro: string; valor: number; unidad: string }>): {
+        rpm?: number;
+        presionAceite?: number;
+        temperaturaRefrigerante?: number;
+        cargaBateria?: number;
+        horasTrabajo?: number;
+        voltaje?: number;
+        frecuencia?: number;
+        corriente?: number;
+    } {
+        const datosModulo: any = {};
+
+        for (const m of mediciones) {
+            const param = m.parametro?.toLowerCase() || '';
+            const valor = m.valor;
+
+            // Mapeo flexible por palabras clave
+            if (param.includes('rpm') || param.includes('velocidad')) {
+                datosModulo.rpm = valor;
+            } else if (param.includes('presi') && param.includes('aceite')) {
+                datosModulo.presionAceite = valor;
+            } else if (param.includes('temp') && (param.includes('refrig') || param.includes('refrigerante'))) {
+                datosModulo.temperaturaRefrigerante = valor;
+            } else if (param.includes('bater') || param.includes('carga')) {
+                datosModulo.cargaBateria = valor;
+            } else if (param.includes('hora') && param.includes('trabajo')) {
+                datosModulo.horasTrabajo = valor;
+            } else if (param.includes('voltaje') || (param.includes('volt') && !param.includes('bater'))) {
+                datosModulo.voltaje = valor;
+            } else if (param.includes('frecuencia') || param.includes('hz')) {
+                datosModulo.frecuencia = valor;
+            } else if (param.includes('corriente') || param.includes('amper')) {
+                datosModulo.corriente = valor;
+            }
+        }
+
+        return datosModulo;
+    }
+
+    /**
      * Determina el tipo de informe según el equipo/servicio
      */
     private determinarTipoInforme(orden: any): TipoInforme {
-        // Determinar por tipo de equipo
-        const tipoEquipo = orden.equipo?.tipo?.toLowerCase() || '';
-        const tipoServicio = orden.tipo_servicio?.codigo || '';
+        // Determinar por tipo de equipo (usar tipo_equipo?.nombre_tipo, no tipo)
+        const tipoEquipoNombre = (orden.equipo?.tipo_equipo?.nombre_tipo || '').toLowerCase();
+        const tipoServicioCodigo = (orden.tipo_servicio?.codigo || '').toUpperCase();
+        const tipoServicioNombre = (orden.tipo_servicio?.nombre_tipo || '').toUpperCase();
 
-        if (tipoEquipo.includes('bomba')) {
+        this.logger.log(`🔍 Determinando tipo informe: tipoEquipo="${tipoEquipoNombre}", servicioCodigo="${tipoServicioCodigo}", servicioNombre="${tipoServicioNombre}"`);
+
+        // Si es CORRECTIVO → CORRECTIVO (independiente del equipo)
+        if (tipoServicioCodigo.includes('CORRECTIVO') || tipoServicioNombre.includes('CORRECTIVO')) {
+            this.logger.log(`📋 Tipo informe seleccionado: CORRECTIVO`);
+            return 'CORRECTIVO';
+        }
+
+        // Si es bomba → BOMBA_A
+        if (tipoEquipoNombre.includes('bomba')) {
+            this.logger.log(`📋 Tipo informe seleccionado: BOMBA_A`);
             return 'BOMBA_A';
         }
 
-        if (tipoServicio.includes('B') || tipoServicio.includes('TIPO_B')) {
+        // Si es Tipo B → GENERADOR_B
+        if (tipoServicioCodigo.includes('TIPO_B') || tipoServicioCodigo.includes('_B') ||
+            tipoServicioNombre.includes('TIPO B') || tipoServicioNombre.includes('B')) {
+            this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_B`);
             return 'GENERADOR_B';
         }
 
         // Default: Tipo A Generador
+        this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_A (default)`);
         return 'GENERADOR_A';
     }
 
@@ -571,19 +726,29 @@ export class FinalizacionOrdenService {
         tipoInforme: TipoInforme,
     ) {
         // Construir datos para el template
+
+        // Mapear mediciones del array a datosModulo para el PDF
+        const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
+
+        // Nombre del técnico (persona natural o nombre completo como fallback)
+        const tecnicoPersona = orden.tecnico?.persona;
+        const nombreTecnico = tecnicoPersona?.primer_nombre && tecnicoPersona?.primer_apellido
+            ? `${tecnicoPersona.primer_nombre} ${tecnicoPersona.primer_apellido}`
+            : tecnicoPersona?.nombre_completo || 'N/A';
+
         const datosPDF = {
             cliente: orden.cliente?.persona?.razon_social || orden.cliente?.persona?.nombre_completo || 'N/A',
-            direccion: orden.cliente?.persona?.direccion_principal || 'N/A',
-            marcaEquipo: orden.equipo?.marca || 'N/A',
-            serieEquipo: orden.equipo?.serie || 'N/A',
-            tipoEquipo: orden.equipo?.tipo || 'GENERADOR',
+            direccion: orden.cliente?.persona?.direccion_principal || orden.cliente?.persona?.ciudad || 'N/A',
+            marcaEquipo: orden.equipo?.nombre_equipo || 'N/A',
+            serieEquipo: orden.equipo?.numero_serie_equipo || 'N/A',
+            tipoEquipo: (orden.equipo as any)?.tipo_equipo?.nombre_tipo || 'GENERADOR',
             fecha: new Date().toLocaleDateString('es-CO'),
-            tecnico: `${orden.tecnico?.persona?.primer_nombre || ''} ${orden.tecnico?.persona?.primer_apellido || ''}`.trim() || 'N/A',
+            tecnico: nombreTecnico,
             horaEntrada: dto.horaEntrada,
             horaSalida: dto.horaSalida,
             tipoServicio: orden.tipo_servicio?.nombre || 'PREVENTIVO',
             numeroOrden: orden.numero_orden,
-            datosModulo: dto.datosModulo || {},
+            datosModulo: { ...datosModuloMapeado, ...(dto.datosModulo || {}) },
             actividades: dto.actividades.map(a => ({
                 sistema: a.sistema,
                 descripcion: a.descripcion,
@@ -596,9 +761,12 @@ export class FinalizacionOrdenService {
                 unidad: m.unidad,
                 nivelAlerta: m.nivelAlerta || 'OK',
             })),
-            evidencias: evidencias.map(e => ({
+            // Las evidencias están en el mismo orden que dto.evidencias
+            evidencias: evidencias.map((e, index) => ({
                 url: e.url,
-                caption: `${e.tipo}: ${dto.evidencias.find(ev => ev.tipo === e.tipo)?.descripcion || ''}`,
+                caption: dto.evidencias[index]?.descripcion
+                    ? `${e.tipo}: ${dto.evidencias[index].descripcion}`
+                    : `Evidencia ${e.tipo}`,
             })),
             observaciones: dto.observaciones,
             // Firmas como data URL para mostrar en el PDF
@@ -618,6 +786,7 @@ export class FinalizacionOrdenService {
 
     /**
      * Sube el PDF a Cloudflare R2
+     * Guarda URL base en BD (la URL requiere autenticación pero el PDF se envía por email)
      */
     private async subirPDFaR2(
         buffer: Buffer,
@@ -626,7 +795,10 @@ export class FinalizacionOrdenService {
         const timestamp = Date.now();
         const filename = `${numeroOrden}/informe_${timestamp}.pdf`;
 
+        // Subir el archivo y obtener URL base
         const url = await this.r2Service.uploadPDF(buffer, filename);
+
+        this.logger.log(`📎 PDF subido a R2: ${filename}`);
 
         return {
             url,
@@ -665,15 +837,28 @@ export class FinalizacionOrdenService {
     }
 
     /**
-     * Envía email con el informe adjunto
+     * Envía email con el informe adjunto al cliente
+     * 
+     * Usa el email_principal del cliente registrado en la BD.
+     * Para pruebas, actualizar el email de los clientes a lorddeep3@gmail.com
      */
     private async enviarEmailInforme(
         orden: any,
         pdfResult: any,
         emailAdicional?: string,
     ): Promise<{ enviado: boolean; destinatario: string; messageId?: string }> {
-        const emailCliente = orden.cliente?.persona?.email_principal;
-        const destinatarios = [emailCliente, emailAdicional].filter(Boolean);
+        const EMAIL_FALLBACK = 'notificaciones@mekanos.com';
+
+        // Usar email real del cliente
+        const emailCliente = orden.cliente?.persona?.email_principal || EMAIL_FALLBACK;
+
+        // Incluir email adicional si se proporciona
+        const destinatarios = [emailCliente];
+        if (emailAdicional && emailAdicional !== emailCliente) {
+            destinatarios.push(emailAdicional);
+        }
+
+        this.logger.log(`📧 Email destino: ${destinatarios.join(', ')}`);
 
         if (destinatarios.length === 0) {
             this.logger.warn('⚠️ No hay destinatarios de email configurados');
@@ -682,11 +867,15 @@ export class FinalizacionOrdenService {
 
         try {
             // Preparar datos para el email
+            const tipoEquipoNombre = orden.equipo?.tipo_equipo?.nombre_tipo || '';
+            const equipoNombre = orden.equipo?.nombre_equipo || '';
+            const equipoDesc = equipoNombre || tipoEquipoNombre || 'Equipo';
+
             const emailData: OrdenEmailData = {
                 ordenNumero: orden.numero_orden,
-                clienteNombre: orden.cliente?.persona?.razon_social || 'Cliente',
-                equipoDescripcion: `${orden.equipo?.marca || ''} ${orden.equipo?.modelo || ''}`.trim() || 'Equipo',
-                tipoMantenimiento: orden.tipo_servicio?.nombre || 'PREVENTIVO',
+                clienteNombre: orden.cliente?.persona?.razon_social || orden.cliente?.persona?.nombre_completo || 'Cliente',
+                equipoDescripcion: equipoDesc,
+                tipoMantenimiento: orden.tipo_servicio?.nombre_tipo || orden.tipo_servicio?.codigo_tipo || 'PREVENTIVO',
                 fechaServicio: new Date().toLocaleDateString('es-CO'),
                 tecnicoNombre: `${orden.tecnico?.persona?.primer_nombre || ''} ${orden.tecnico?.persona?.primer_apellido || ''}`.trim() || 'Técnico',
             };
@@ -717,6 +906,8 @@ export class FinalizacionOrdenService {
         idOrden: number,
         observaciones: string,
         usuarioId: number,
+        horaEntrada?: string,
+        horaSalida?: string,
     ): Promise<void> {
         // Obtener ID del estado COMPLETADA
         const estadoCompletada = await this.prisma.estados_orden.findFirst({
@@ -727,12 +918,53 @@ export class FinalizacionOrdenService {
             throw new InternalServerErrorException('Estado COMPLETADA no encontrado');
         }
 
+        //  FIX: Calcular fechas reales usando horas de entrada/salida
+        // IMPORTANTE: Guardar las horas TAL CUAL vienen del móvil (hora local Colombia)
+        // No hacer conversión a UTC porque Drift en el móvil pierde la info de zona horaria
+        const hoy = new Date();
+        let fechaInicioReal: Date | undefined;
+        let fechaFinReal: Date = hoy;
+
+        if (horaEntrada) {
+            const [horasE, minutosE] = horaEntrada.split(':').map(Number);
+            // Crear fecha SIN conversión UTC - guardar la hora local tal cual
+            fechaInicioReal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), horasE, minutosE, 0, 0);
+        }
+
+        if (horaSalida) {
+            const [horasS, minutosS] = horaSalida.split(':').map(Number);
+            fechaFinReal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), horasS, minutosS, 0, 0);
+        }
+
+        // Calcular duración en minutos
+        let duracionMinutos: number | undefined;
+        if (fechaInicioReal) {
+            const diffMs = fechaFinReal.getTime() - fechaInicioReal.getTime();
+            // Si la diferencia es negativa (hora entrada > hora salida), 
+            // puede ser cruce de medianoche - agregar 24 horas
+            if (diffMs < 0) {
+                // Ajustar: si es cruce de medianoche, sumar 24h
+                const diffAjustado = diffMs + (24 * 60 * 60 * 1000);
+                duracionMinutos = Math.round(diffAjustado / 60000);
+                this.logger.log(`   ⏰ Duración ajustada por cruce de medianoche: ${duracionMinutos} min`);
+            } else {
+                duracionMinutos = Math.round(diffMs / 60000);
+            }
+            // Validación final: duración debe ser positiva y razonable (max 24h)
+            if (duracionMinutos < 0 || duracionMinutos > 1440) {
+                this.logger.warn(`   ⚠️ Duración inválida (${duracionMinutos} min), usando null`);
+                duracionMinutos = undefined;
+            }
+        }
+
         // Actualizar orden
         await this.prisma.ordenes_servicio.update({
             where: { id_orden_servicio: idOrden },
             data: {
                 id_estado_actual: estadoCompletada.id_estado,
-                fecha_fin_real: new Date(),
+                fecha_inicio_real: fechaInicioReal,
+                fecha_fin_real: fechaFinReal,
+                duracion_minutos: duracionMinutos,
                 observaciones_cierre: observaciones,
                 modificado_por: usuarioId,
                 fecha_modificacion: new Date(),
@@ -788,5 +1020,143 @@ export class FinalizacionOrdenService {
             const err = error as Error;
             this.logger.error(`Error en rollback: ${err.message}`);
         }
+    }
+
+    /**
+     * Persiste las actividades ejecutadas en BD para estadísticas y trazabilidad
+     * ✅ OPTIMIZADO: Precarga catálogo + batch insert con createMany
+     */
+    private async persistirActividades(
+        idOrden: number,
+        actividades: ActividadInput[],
+        usuarioId: number,
+    ): Promise<number> {
+        if (actividades.length === 0) return 0;
+
+        // PASO 1: Precargar TODO el catálogo en UNA sola query
+        const catalogoCompleto = await this.prisma.catalogo_actividades.findMany({
+            select: { id_actividad_catalogo: true, descripcion_actividad: true },
+        });
+
+        // Crear mapa para búsqueda O(1)
+        const catalogoMap = new Map<string, number>();
+        for (const cat of catalogoCompleto) {
+            // Indexar por los primeros 50 chars en minúsculas para matching
+            const key = cat.descripcion_actividad.substring(0, 50).toLowerCase();
+            catalogoMap.set(key, cat.id_actividad_catalogo);
+        }
+
+        // PASO 2: Preparar datos para batch insert
+        const ahora = new Date();
+        const datosParaInsertar = actividades.map((act) => {
+            const keyBusqueda = act.descripcion.substring(0, 50).toLowerCase();
+            const idCatalogo = catalogoMap.get(keyBusqueda) || null;
+
+            return {
+                id_orden_servicio: idOrden,
+                id_actividad_catalogo: idCatalogo,
+                descripcion_manual: idCatalogo ? null : act.descripcion,
+                sistema: act.sistema || 'GENERAL',
+                estado: this.mapResultadoAEstado(act.resultado),
+                ejecutada: true,
+                fecha_ejecucion: ahora,
+                ejecutada_por: usuarioId,
+                observaciones: act.observaciones || null,
+            };
+        });
+
+        // PASO 3: Batch insert con createMany
+        const resultado = await this.prisma.actividades_ejecutadas.createMany({
+            data: datosParaInsertar,
+            skipDuplicates: true,
+        });
+
+        return resultado.count;
+    }
+
+    /**
+     * Persiste las mediciones en BD para estadísticas y trazabilidad
+     * ✅ OPTIMIZADO: Precarga parámetros + batch insert con createMany
+     */
+    private async persistirMediciones(
+        idOrden: number,
+        mediciones: MedicionInput[],
+        usuarioId: number,
+    ): Promise<number> {
+        if (mediciones.length === 0) return 0;
+
+        // PASO 1: Precargar TODOS los parámetros en UNA sola query
+        const parametrosCompletos = await this.prisma.parametros_medicion.findMany({
+            select: { id_parametro_medicion: true, nombre_parametro: true, unidad_medida: true },
+        });
+
+        // Crear mapas para búsqueda O(1) - exacta y parcial
+        const parametroMapExacto = new Map<string, { id: number; unidad: string }>();
+        const parametroMapParcial = new Map<string, { id: number; unidad: string }>();
+
+        for (const p of parametrosCompletos) {
+            const nombreLower = p.nombre_parametro.toLowerCase();
+            parametroMapExacto.set(nombreLower, { id: p.id_parametro_medicion, unidad: p.unidad_medida });
+            // También indexar primeros 20 chars para matching parcial
+            const nombreCorto = nombreLower.substring(0, 20);
+            parametroMapParcial.set(nombreCorto, { id: p.id_parametro_medicion, unidad: p.unidad_medida });
+        }
+
+        // PASO 2: Preparar datos para batch insert
+        const ahora = new Date();
+        const datosParaInsertar: Array<{
+            id_orden_servicio: number;
+            id_parametro_medicion: number;
+            valor_numerico: number;
+            unidad_medida: string;
+            fecha_medicion: Date;
+            medido_por: number;
+        }> = [];
+
+        for (const med of mediciones) {
+            const nombreLower = med.parametro.toLowerCase();
+            const nombreCorto = nombreLower.substring(0, 20);
+
+            // Buscar primero exacto, luego parcial
+            let parametro = parametroMapExacto.get(nombreLower) || parametroMapParcial.get(nombreCorto);
+
+            if (!parametro) {
+                this.logger.warn(`   ⚠️ Parámetro NO encontrado: "${med.parametro}"`);
+                continue;
+            }
+
+            datosParaInsertar.push({
+                id_orden_servicio: idOrden,
+                id_parametro_medicion: parametro.id,
+                valor_numerico: med.valor,
+                unidad_medida: med.unidad || parametro.unidad,
+                fecha_medicion: ahora,
+                medido_por: usuarioId,
+            });
+        }
+
+        if (datosParaInsertar.length === 0) return 0;
+
+        // PASO 3: Batch insert con createMany
+        const resultado = await this.prisma.mediciones_servicio.createMany({
+            data: datosParaInsertar,
+            skipDuplicates: true,
+        });
+
+        return resultado.count;
+    }
+
+    /**
+     * Mapea resultado a estado de actividad (enum del schema)
+     * B=Bueno, M=Malo, C=Corregido, NA=NoAplica, R=Regular, etc.
+     */
+    private mapResultadoAEstado(resultado: string): 'B' | 'M' | 'C' | 'NA' | 'R' {
+        const r = resultado.toUpperCase();
+        if (r === 'BUENO' || r === 'B' || r === 'OK') return 'B';
+        if (r === 'MALO' || r === 'M' || r === 'DEFICIENTE') return 'M';
+        if (r === 'CORREGIDO' || r === 'C' || r === 'REPARADO') return 'C';
+        if (r === 'N/A' || r === 'NA' || r === 'NO APLICA' || r === 'NO_APLICA') return 'NA';
+        if (r === 'REGULAR' || r === 'R') return 'R';
+        return 'B'; // Default
     }
 }

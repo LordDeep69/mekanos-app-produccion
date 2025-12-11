@@ -36,6 +36,8 @@ export enum TipoEvidencia {
     ANTES = 'ANTES',
     DURANTE = 'DURANTE',
     DESPUES = 'DESPUES',
+    DESPUÉS = 'DESPUÉS', // Con tilde
+    MEDICION = 'MEDICION', // Para evidencias de mediciones
 }
 
 export enum TipoFirma {
@@ -47,7 +49,8 @@ export enum ResultadoActividad {
     B = 'B',     // Bueno
     M = 'M',     // Malo
     C = 'C',     // Corregido
-    NA = 'N/A', // No Aplica
+    NA = 'N/A',  // No Aplica
+    NA2 = 'NA',  // No Aplica (sin slash)
 }
 
 export enum NivelAlerta {
@@ -64,10 +67,10 @@ export enum NivelAlerta {
  * Evidencia fotográfica
  */
 export class EvidenciaDto {
-    @ApiProperty({ enum: TipoEvidencia, description: 'Tipo de evidencia' })
-    @IsEnum(TipoEvidencia)
+    @ApiProperty({ description: 'Tipo de evidencia: ANTES, DURANTE, DESPUES' })
+    @IsString()
     @IsNotEmpty()
-    tipo: TipoEvidencia;
+    tipo: string; // Aceptar cualquier string para compatibilidad
 
     @ApiProperty({ description: 'Imagen en Base64 (sin prefijo data:image)' })
     @IsString()
@@ -100,9 +103,9 @@ export class FirmaDto {
     @IsNotEmpty()
     base64: string;
 
-    @ApiProperty({ description: 'ID de la persona que firma' })
+    @ApiProperty({ description: 'ID de la persona que firma (0 = sin registro específico)' })
     @IsNumber()
-    @Min(1)
+    @Min(0) // Permitir 0 para clientes sin registro específico
     idPersona: number;
 
     @ApiPropertyOptional({ description: 'Formato de imagen', default: 'png' })
@@ -144,10 +147,10 @@ export class ActividadDto {
     @MaxLength(500)
     descripcion: string;
 
-    @ApiProperty({ enum: ResultadoActividad, description: 'Resultado: B=Bueno, M=Malo, C=Corregido, N/A=No Aplica' })
-    @IsEnum(ResultadoActividad)
+    @ApiProperty({ description: 'Resultado: B=Bueno, M=Malo, C=Corregido, NA=No Aplica' })
+    @IsString()
     @IsNotEmpty()
-    resultado: ResultadoActividad;
+    resultado: string; // Aceptar cualquier string para compatibilidad
 
     @ApiPropertyOptional({ description: 'Observaciones adicionales' })
     @IsOptional()
@@ -244,15 +247,15 @@ export class DatosModuloDto {
 export class FinalizarOrdenCompletoDto {
     @ApiProperty({
         type: [EvidenciaDto],
-        description: 'Evidencias fotográficas (mínimo 1, máximo 10)',
+        description: 'Evidencias fotográficas (mínimo 1, máximo 50)',
         minItems: 1,
-        maxItems: 10,
+        maxItems: 50,
     })
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => EvidenciaDto)
     @ArrayMinSize(1, { message: 'Debe incluir al menos una evidencia fotográfica' })
-    @ArrayMaxSize(10, { message: 'Máximo 10 evidencias permitidas' })
+    @ArrayMaxSize(50, { message: 'Máximo 50 evidencias permitidas' })
     evidencias: EvidenciaDto[];
 
     @ApiProperty({

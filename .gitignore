@@ -49,10 +49,7 @@ tmp/
 temp/
 
 # Testing files with credentials (keep only safe tests)
-apps/api/src/testing/*.js
-apps/api/src/testing/*.ts
-apps/api/src/testing/atomicos/
-!apps/api/src/testing/test-endpoint-finalizacion-completo.js
+# NOTE: Atomicos tests excluded, use apps/api/test/ for committed tests
 
 # Test results
 **/test-*.txt

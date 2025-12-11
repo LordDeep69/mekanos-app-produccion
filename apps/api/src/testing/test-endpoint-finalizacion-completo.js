@@ -29,9 +29,9 @@ const CONFIG = {
     API_HOST: 'localhost',
     API_PORT: 3000,
     // ID de orden para testing (debe existir en BD con estado EN_PROCESO)
-    ORDEN_ID: 1,
-    // Token JWT de prueba (obtener de login o usar mock)
-    JWT_TOKEN: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsImlhdCI6MTcwMDAwMDAwMH0.test-signature',
+    ORDEN_ID: 41, // OS-202511-0033 en estado EN_PROCESO
+    // Token JWT REAL obtenido de login (admin@mekanos.com)
+    JWT_TOKEN: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiYWRtaW5AbWVrYW5vcy5jb20iLCJyb2wiOiJVU0VSIiwicGVyc29uYUlkIjoxLCJpYXQiOjE3NjQ4NTYzMTUsImV4cCI6MTc2NDg1NzIxNX0._rSSRvXF4M-ZoxRknbDdfp7wFXKAmG_GVgwhVzda-mU',
 };
 
 // ============================================================================

@@ -1,15 +1,23 @@
 import {
-    Body,
-    Controller,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserId } from '../common/decorators/user-id.decorator';
@@ -22,19 +30,27 @@ import { GetOrdenCompraByIdQuery } from './queries/get-orden-compra-by-id.query'
 import { GetOrdenesActivasProveedorQuery } from './queries/get-ordenes-activas-proveedor.query';
 import { GetOrdenesCompraQuery } from './queries/get-ordenes-compra.query';
 
+@ApiTags('FASE 5 - Órdenes de Compra')
+@ApiBearerAuth('JWT-auth')
 @Controller('ordenes-compra')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OrdenesCompraController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
-  ) {}
+  ) { }
 
   /**
    * POST /api/ordenes-compra
    * Crear orden compra con items (estado: BORRADOR)
    */
   @Post()
+  @ApiOperation({
+    summary: 'Crear orden de compra',
+    description: 'Crea una nueva orden de compra a proveedor con sus items. Estado inicial: BORRADOR.',
+  })
+  @ApiResponse({ status: 201, description: 'Orden de compra creada exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   async crearOrdenCompra(@Body() dto: CrearOrdenCompraDto, @UserId() userId: number) {
     const command = new CrearOrdenCompraCommand(
       dto.numero_orden_compra,
@@ -59,6 +75,13 @@ export class OrdenesCompraController {
    * Enviar orden compra: BORRADOR → ENVIADA
    */
   @Put(':id/enviar')
+  @ApiOperation({
+    summary: 'Enviar orden de compra al proveedor',
+    description: 'Cambia estado de BORRADOR a ENVIADA. Genera PDF y envía email al proveedor.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de compra', example: 1 })
+  @ApiResponse({ status: 200, description: 'Orden enviada exitosamente' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
   async enviarOrdenCompra(@Param('id', ParseIntPipe) id: number, @UserId() userId: number) {
     const command = new EnviarOrdenCompraCommand(id, userId);
     const result = await this.commandBus.execute(command);
@@ -75,6 +98,13 @@ export class OrdenesCompraController {
    * Cancelar orden compra
    */
   @Put(':id/cancelar')
+  @ApiOperation({
+    summary: 'Cancelar orden de compra',
+    description: 'Cancela una orden de compra con motivo de cancelación.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de compra', example: 1 })
+  @ApiResponse({ status: 200, description: 'Orden cancelada exitosamente' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
   async cancelarOrdenCompra(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CancelarOrdenCompraDto,
@@ -93,9 +123,20 @@ export class OrdenesCompraController {
   /**
    * GET /api/ordenes-compra
    * Listar órdenes compra con filtros
-   * Query params: id_proveedor, estado, fecha_desde, fecha_hasta, numero_orden, page, limit
    */
   @Get()
+  @ApiOperation({
+    summary: 'Listar órdenes de compra',
+    description: 'Obtiene lista de órdenes de compra con filtros opcionales.',
+  })
+  @ApiQuery({ name: 'id_proveedor', required: false, description: 'Filtrar por proveedor' })
+  @ApiQuery({ name: 'estado', required: false, description: 'Filtrar por estado (BORRADOR, ENVIADA, PARCIAL, COMPLETADA, CANCELADA)' })
+  @ApiQuery({ name: 'fecha_desde', required: false, description: 'Fecha inicio (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'fecha_hasta', required: false, description: 'Fecha fin (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'numero_orden', required: false, description: 'Buscar por número de orden' })
+  @ApiQuery({ name: 'page', required: false, description: 'Página actual', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items por página', example: 10 })
+  @ApiResponse({ status: 200, description: 'Lista de órdenes de compra' })
   async getOrdenesCompra(
     @Query('id_proveedor') idProveedorStr?: string,
     @Query('estado') estado?: string,
@@ -135,6 +176,13 @@ export class OrdenesCompraController {
    * Obtener orden compra completa por ID
    */
   @Get(':id')
+  @ApiOperation({
+    summary: 'Obtener orden de compra por ID',
+    description: 'Obtiene el detalle completo de una orden de compra incluyendo items y proveedor.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de compra', example: 1 })
+  @ApiResponse({ status: 200, description: 'Detalle de la orden de compra' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
   async getOrdenCompraById(@Param('id', ParseIntPipe) id: number) {
     const query = new GetOrdenCompraByIdQuery(id);
     const result = await this.queryBus.execute(query);
@@ -151,6 +199,12 @@ export class OrdenesCompraController {
    * Obtener órdenes activas (ENVIADA, PARCIAL) de un proveedor
    */
   @Get('proveedor/:id/activas')
+  @ApiOperation({
+    summary: 'Obtener órdenes activas de un proveedor',
+    description: 'Lista órdenes de compra en estado ENVIADA o PARCIAL para un proveedor específico.',
+  })
+  @ApiParam({ name: 'id', description: 'ID del proveedor', example: 1 })
+  @ApiResponse({ status: 200, description: 'Lista de órdenes activas del proveedor' })
   async getOrdenesActivasProveedor(@Param('id', ParseIntPipe) idProveedor: number) {
     const query = new GetOrdenesActivasProveedorQuery(idProveedor);
     const result = await this.queryBus.execute(query);
