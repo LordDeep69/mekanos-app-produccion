@@ -1,0 +1,563 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../api/api_client.dart';
+import '../database/app_database.dart';
+import '../database/database_service.dart';
+import 'connectivity_service.dart';
+
+/// Resultado del intento de sincronización offline
+class OfflineSyncResult {
+  final bool success;
+  final String mensaje;
+  final int ordenesSync;
+  final int ordenesFallidas;
+  final List<String> errores;
+
+  OfflineSyncResult({
+    required this.success,
+    required this.mensaje,
+    this.ordenesSync = 0,
+    this.ordenesFallidas = 0,
+    this.errores = const [],
+  });
+}
+
+/// Servicio de Sincronización Offline
+///
+/// Responsabilidades:
+/// 1. Guardar órdenes en cola cuando no hay conexión
+/// 2. Procesar la cola cuando hay conexión
+/// 3. Manejar reintentos con backoff exponencial
+/// 4. Notificar cambios a la UI
+class OfflineSyncService {
+  final AppDatabase _db;
+  final Dio _apiClient;
+  final ConnectivityService _connectivity;
+
+  // Máximo de reintentos antes de abandonar
+  static const int maxIntentos = 5;
+
+  OfflineSyncService(this._db, this._apiClient, this._connectivity);
+
+  /// Guarda una orden en la cola de sincronización pendiente
+  ///
+  /// [idOrdenLocal] - ID local de la orden
+  /// [idOrdenBackend] - ID en el backend
+  /// [payload] - Mapa con todos los datos para el request
+  Future<bool> guardarEnCola({
+    required int idOrdenLocal,
+    required int idOrdenBackend,
+    required Map<String, dynamic> payload,
+  }) async {
+    debugPrint(
+      '📥 [COLA] guardarEnCola() idLocal=$idOrdenLocal, idBackend=$idOrdenBackend',
+    );
+    try {
+      // Verificar si ya existe en cola
+      final existe = await _db.existeOrdenEnColaPendiente(idOrdenLocal);
+      debugPrint('📥 [COLA] ¿Ya existe en cola? $existe');
+      if (existe) {
+        // Actualizar payload existente
+        debugPrint('📥 [COLA] Actualizando entrada existente');
+        await (_db.update(
+          _db.ordenesPendientesSync,
+        )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).write(
+          OrdenesPendientesSyncCompanion(
+            payloadJson: Value(jsonEncode(payload)),
+            estadoSync: const Value('PENDIENTE'),
+            intentos: const Value(0),
+            ultimoError: const Value(null),
+          ),
+        );
+      } else {
+        // Insertar nuevo
+        debugPrint('📥 [COLA] Insertando nueva entrada');
+        await _db.insertOrdenPendienteSync(
+          idOrdenLocal: idOrdenLocal,
+          idOrdenBackend: idOrdenBackend,
+          payloadJson: jsonEncode(payload),
+        );
+      }
+      debugPrint('📥 [COLA] Guardado exitoso');
+      return true;
+    } catch (e) {
+      debugPrint('📥 [COLA] ERROR: $e');
+      return false;
+    }
+  }
+
+  /// Procesa todas las órdenes pendientes en la cola
+  ///
+  /// Retorna resultado con estadísticas de sincronización
+  Future<OfflineSyncResult> procesarCola() async {
+    debugPrint('🔄 [SYNC] procesarCola() INICIADO');
+
+    // Verificar conexión primero
+    final online = await _connectivity.checkConnection();
+    if (!online) {
+      debugPrint('🔄 [SYNC] Sin conexión - abortando');
+      return OfflineSyncResult(
+        success: false,
+        mensaje: 'Sin conexión a Internet',
+      );
+    }
+
+    // Obtener Y marcar órdenes pendientes atómicamente
+    // Esto previene race conditions donde múltiples procesos obtienen la misma orden
+    final pendientes = await _db.getYMarcarOrdenesPendientesSync();
+    debugPrint('🔄 [SYNC] Órdenes obtenidas: ${pendientes.length}');
+    for (final p in pendientes) {
+      debugPrint(
+        '🔄 [SYNC]   - idLocal=${p.idOrdenLocal}, idBackend=${p.idOrdenBackend}, estado=${p.estadoSync}',
+      );
+    }
+    if (pendientes.isEmpty) {
+      return OfflineSyncResult(
+        success: true,
+        mensaje: 'No hay órdenes pendientes',
+      );
+    }
+
+    int sincronizadas = 0;
+    int fallidas = 0;
+    final errores = <String>[];
+
+    for (final orden in pendientes) {
+      // Ya marcada como EN_PROCESO por getYMarcarOrdenesPendientesSync()
+      try {
+        // PASO 0: VERIFICAR SI LA ORDEN YA FUE COMPLETADA EN EL BACKEND
+        // Esto previene duplicación cuando el request anterior llegó pero la respuesta se perdió
+        final yaCompletada = await _verificarOrdenYaCompletada(
+          orden.idOrdenBackend,
+        );
+        if (yaCompletada) {
+          // La orden ya fue procesada - eliminar de cola sin reenviar
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, null);
+          sincronizadas++;
+          continue; // Saltar al siguiente
+        }
+
+        // Decodificar payload
+        final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
+
+        // CRÍTICO: Asegurar que la orden esté en EN_PROCESO en el backend
+        // Si esto falla, NO continuar con finalizar-completo
+        try {
+          final iniciarResponse = await _apiClient.put(
+            '/ordenes/${orden.idOrdenBackend}/iniciar',
+          );
+          // Si no es 200/201, verificar si ya está en proceso o completada
+          if (iniciarResponse.statusCode != 200 &&
+              iniciarResponse.statusCode != 201) {
+            // Verificar estado actual
+            final yaCompletada = await _verificarOrdenYaCompletada(
+              orden.idOrdenBackend,
+            );
+            if (yaCompletada) {
+              await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+              await _marcarOrdenSincronizada(orden.idOrdenLocal, null);
+              sincronizadas++;
+              continue;
+            }
+          }
+        } on DioException catch (iniciarError) {
+          // Si /iniciar falla con 400/409, la orden puede ya estar en proceso o completada
+          final statusCode = iniciarError.response?.statusCode;
+          if (statusCode == 400 || statusCode == 409) {
+            // Verificar si ya está completada
+            final yaCompletada = await _verificarOrdenYaCompletada(
+              orden.idOrdenBackend,
+            );
+            if (yaCompletada) {
+              await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+              await _marcarOrdenSincronizada(orden.idOrdenLocal, null);
+              sincronizadas++;
+              continue;
+            }
+            // Si no está completada, puede estar en proceso - continuar
+          } else {
+            // Otro error de red - marcar para reintento
+            await _db.marcarOrdenErrorSync(
+              orden.idOrdenLocal,
+              'Error iniciando orden: ${iniciarError.message}',
+            );
+            fallidas++;
+            errores.add('Orden ${orden.idOrdenBackend}: Error al iniciar');
+            continue;
+          }
+        }
+
+        // Enviar al backend
+        final response = await _apiClient.post(
+          '/ordenes/${orden.idOrdenBackend}/finalizar-completo',
+          data: payload,
+          options: Options(
+            sendTimeout: const Duration(minutes: 5),
+            receiveTimeout: const Duration(minutes: 5),
+          ),
+        );
+
+        if (response.statusCode == 200) {
+          // Éxito - eliminar de cola y actualizar orden local
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+
+          // CRÍTICO: El backend YA procesó la orden
+          // Si falla el guardado local, NO es crítico - la orden está en el servidor
+          try {
+            await _marcarOrdenSincronizada(orden.idOrdenLocal, response.data);
+          } catch (localError) {
+            debugPrint(
+              '⚠️ Error guardando estado local (no crítico): $localError',
+            );
+          }
+          sincronizadas++;
+        } else if (response.statusCode == 400 || response.statusCode == 409) {
+          // Error 400/409 = Orden ya completada o conflicto
+          // Verificar si realmente ya está completada en backend
+          final verificacion = await _verificarOrdenYaCompletada(
+            orden.idOrdenBackend,
+          );
+          if (verificacion['completada'] == true) {
+            // Sí estaba completada - eliminar de cola sin reintentar
+            await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+            await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+              'pdfUrl': verificacion['pdfUrl'],
+            });
+            sincronizadas++;
+          } else {
+            // Error 400 pero no está completada - error real, eliminar de cola
+            await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+            fallidas++;
+            errores.add(
+              'Orden ${orden.idOrdenBackend}: Error ${response.statusCode}',
+            );
+          }
+        } else {
+          // Otro error del servidor - marcar para posible reintento
+          await _db.marcarOrdenErrorSync(
+            orden.idOrdenLocal,
+            'Error ${response.statusCode}: ${response.data}',
+          );
+          fallidas++;
+          errores.add(
+            'Orden ${orden.idOrdenBackend}: Error ${response.statusCode}',
+          );
+        }
+      } on DioException catch (e) {
+        // CRÍTICO: Verificar si el error es 400/409 (orden ya completada)
+        final statusCode = e.response?.statusCode;
+        if (statusCode == 400 || statusCode == 409) {
+          // Error 400/409 = probablemente orden ya completada
+          final verificacion = await _verificarOrdenYaCompletada(
+            orden.idOrdenBackend,
+          );
+          if (verificacion['completada'] == true) {
+            await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+            await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+              'pdfUrl': verificacion['pdfUrl'],
+            });
+            sincronizadas++;
+            continue;
+          } else {
+            // Error 400 pero no está completada - eliminar de cola (error permanente)
+            await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+            fallidas++;
+            errores.add('Orden ${orden.idOrdenBackend}: Error $statusCode');
+            continue;
+          }
+        }
+
+        // CRÍTICO: El backend puede estar procesando aún (toma ~25s)
+        // Esperar y verificar múltiples veces antes de marcar como ERROR
+        debugPrint('⚠️ [SYNC] DioException DETALLADO:');
+        debugPrint('⚠️ [SYNC]   type=${e.type}');
+        debugPrint('⚠️ [SYNC]   statusCode=${e.response?.statusCode}');
+        debugPrint('⚠️ [SYNC]   message=${e.message}');
+        debugPrint('⚠️ [SYNC]   error=${e.error}');
+        debugPrint(
+          '⚠️ [SYNC]   stackTrace=${e.stackTrace.toString().split('\n').take(3).join(' | ')}',
+        );
+
+        Map<String, dynamic>? verificacionFinal;
+        for (int intento = 1; intento <= 3; intento++) {
+          debugPrint(
+            '🔍 [SYNC] Verificación idempotencia intento $intento/3...',
+          );
+
+          // Esperar antes de verificar (el backend puede estar procesando)
+          await Future.delayed(Duration(seconds: intento * 5)); // 5s, 10s, 15s
+
+          verificacionFinal = await _verificarOrdenYaCompletada(
+            orden.idOrdenBackend,
+          );
+          debugPrint(
+            '🔍 [SYNC] ¿Ya completada? ${verificacionFinal['completada']}',
+          );
+
+          if (verificacionFinal['completada'] == true) break;
+        }
+
+        if (verificacionFinal != null &&
+            verificacionFinal['completada'] == true) {
+          // El backend YA procesó la orden - eliminar de cola
+          debugPrint('✅ [SYNC] Backend ya procesó - eliminando de cola');
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          try {
+            await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+              'pdfUrl': verificacionFinal['pdfUrl'],
+            });
+          } catch (_) {}
+          sincronizadas++;
+          continue;
+        }
+
+        // Después de 30s de espera, si aún no está completada, marcar como error
+        debugPrint('❌ [SYNC] Marcando como ERROR para reintento posterior');
+        final errorMsg =
+            e.response?.data?.toString() ?? e.message ?? 'Error de conexión';
+        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
+        fallidas++;
+        errores.add('Orden ${orden.idOrdenBackend}: $errorMsg');
+      } catch (e) {
+        // Error inesperado
+        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, e.toString());
+        fallidas++;
+        errores.add('Orden ${orden.idOrdenBackend}: $e');
+      }
+    }
+
+    return OfflineSyncResult(
+      success: fallidas == 0,
+      mensaje: sincronizadas > 0
+          ? '$sincronizadas orden(es) sincronizada(s)'
+          : 'No se pudo sincronizar ninguna orden',
+      ordenesSync: sincronizadas,
+      ordenesFallidas: fallidas,
+      errores: errores,
+    );
+  }
+
+  /// Verifica si una orden ya fue completada en el backend
+  /// Retorna un Map con {completada: bool, pdfUrl: String?, datosOrden: Map?}
+  Future<Map<String, dynamic>> _verificarOrdenYaCompletada(
+    int idOrdenBackend,
+  ) async {
+    try {
+      final response = await _apiClient.get(
+        '/ordenes/$idOrdenBackend',
+        options: Options(
+          sendTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        final data = response.data;
+
+        // LOGGING COMPLETO - Ver TODOS los campos del backend
+        debugPrint('🔍 [VERIFICAR] TODOS los campos de orden $idOrdenBackend:');
+        debugPrint('🔍 [VERIFICAR] Keys: ${data.keys.toList()}');
+
+        // El backend puede envolver los datos en diferentes estructuras
+        final datos = data['datos'] ?? data['orden'] ?? data['data'] ?? data;
+        debugPrint(
+          '🔍 [VERIFICAR] datos.keys: ${datos is Map ? datos.keys.toList() : 'NO ES MAP'}',
+        );
+
+        // Buscar estado en múltiples ubicaciones posibles
+        final estadoObj =
+            datos['estado'] ?? datos['estadoActual'] ?? data['estado'];
+        final idEstadoActual =
+            datos['id_estado_actual'] ??
+            datos['idEstadoActual'] ??
+            data['id_estado_actual'];
+
+        debugPrint('🔍 [VERIFICAR]   estadoObj: $estadoObj');
+        debugPrint('🔍 [VERIFICAR]   idEstadoActual: $idEstadoActual');
+
+        // Extraer código del estado si es un objeto
+        String? estadoCodigo;
+        bool esEstadoFinal = false;
+
+        if (estadoObj is Map) {
+          // Backend usa codigo_estado, no codigo
+          estadoCodigo =
+              estadoObj['codigo_estado']?.toString() ??
+              estadoObj['codigo']?.toString();
+          esEstadoFinal =
+              estadoObj['es_estado_final'] == true ||
+              estadoObj['esEstadoFinal'] == true;
+        } else if (estadoObj is String) {
+          estadoCodigo = estadoObj;
+        }
+
+        debugPrint(
+          '🔍 [VERIFICAR]   estadoCodigo=$estadoCodigo, esEstadoFinal=$esEstadoFinal, idEstado=$idEstadoActual',
+        );
+
+        // Extraer URL del PDF si está disponible
+        String? pdfUrl;
+        if (datos is Map) {
+          // Buscar en documentos_generados o en campos directos
+          final documentos =
+              datos['documentos_generados'] ?? datos['documentos'];
+          if (documentos is List && documentos.isNotEmpty) {
+            pdfUrl =
+                documentos.last['ruta_archivo']?.toString() ??
+                documentos.last['url']?.toString();
+          }
+          // También buscar en campos directos
+          pdfUrl ??=
+              datos['url_pdf']?.toString() ?? datos['pdfUrl']?.toString();
+        }
+        debugPrint('🔍 [VERIFICAR]   pdfUrl: $pdfUrl');
+
+        // Verificar si está completada
+        if (estadoCodigo == 'COMPLETADA' ||
+            estadoCodigo == 'FINALIZADA' ||
+            estadoCodigo == 'FINALIZADO' ||
+            esEstadoFinal ||
+            idEstadoActual == 4 ||
+            idEstadoActual == '4') {
+          debugPrint('✅ [VERIFICAR] Orden YA completada');
+          return {'completada': true, 'pdfUrl': pdfUrl, 'datosOrden': datos};
+        }
+      }
+      debugPrint('❌ [VERIFICAR] Orden NO completada aún');
+      return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
+    } catch (e) {
+      debugPrint('❌ [VERIFICAR] Error verificando: $e');
+      return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
+    }
+  }
+
+  /// Reintenta sincronizar una orden específica
+  Future<bool> reintentarOrden(int idOrdenLocal) async {
+    final online = await _connectivity.checkConnection();
+    if (!online) return false;
+
+    final orden = await (_db.select(
+      _db.ordenesPendientesSync,
+    )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).getSingleOrNull();
+
+    if (orden == null) return false;
+
+    // Resetear intentos y estado
+    await (_db.update(
+      _db.ordenesPendientesSync,
+    )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).write(
+      const OrdenesPendientesSyncCompanion(
+        estadoSync: Value('PENDIENTE'),
+        intentos: Value(0),
+        ultimoError: Value(null),
+      ),
+    );
+
+    // Procesar cola (solo esta orden se procesará)
+    final result = await procesarCola();
+    return result.ordenesSync > 0;
+  }
+
+  /// Cancela una orden de la cola de sincronización
+  /// PRECAUCIÓN: La orden quedará sin sincronizar
+  Future<void> cancelarOrdenPendiente(int idOrdenLocal) async {
+    await _db.eliminarOrdenPendienteSync(idOrdenLocal);
+  }
+
+  /// Obtiene información de una orden pendiente
+  Future<OrdenesPendientesSyncData?> getOrdenPendiente(int idOrdenLocal) async {
+    return await (_db.select(
+      _db.ordenesPendientesSync,
+    )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).getSingleOrNull();
+  }
+
+  /// Marca una orden como sincronizada en BD local
+  /// TRANSACCIÓN ATÓMICA: Todo o nada para garantizar integridad
+  Future<void> _marcarOrdenSincronizada(
+    int idOrdenLocal,
+    dynamic responseData,
+  ) async {
+    // Extraer URL del PDF de la respuesta
+    String? pdfUrl;
+    if (responseData is Map) {
+      // Primero buscar en el campo directo pdfUrl (del verificador)
+      pdfUrl = responseData['pdfUrl']?.toString();
+      // Luego buscar en la estructura de respuesta del backend
+      pdfUrl ??= responseData['datos']?['documento']?['url'];
+      pdfUrl ??= responseData['datos']?['documento']?['ruta_archivo'];
+      pdfUrl ??= responseData['pdf_url'];
+      pdfUrl ??= responseData['data']?['pdfUrl'];
+      pdfUrl ??= responseData['data']?['documento']?['url'];
+      pdfUrl ??= responseData['data']?['documento']?['ruta_archivo'];
+    }
+    debugPrint('📄 [SYNC] URL PDF extraída: $pdfUrl');
+
+    // TRANSACCIÓN ATÓMICA: Actualizar orden + evidencias + firmas
+    await _db.transaction(() async {
+      // Obtener el ID del estado COMPLETADA
+      final estadoCompletada = await (_db.select(
+        _db.estadosOrden,
+      )..where((e) => e.codigo.equals('COMPLETADA'))).getSingleOrNull();
+
+      // 1. Actualizar estado de la orden
+      await (_db.update(
+        _db.ordenes,
+      )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
+        OrdenesCompanion(
+          isDirty: const Value(false),
+          fechaFin: Value(DateTime.now()),
+          idEstado: estadoCompletada != null
+              ? Value(estadoCompletada.id)
+              : const Value.absent(),
+          urlPdf: pdfUrl != null ? Value(pdfUrl) : const Value.absent(),
+        ),
+      );
+
+      // 2. Marcar evidencias como subidas
+      await (_db.update(
+        _db.evidencias,
+      )..where((e) => e.idOrden.equals(idOrdenLocal))).write(
+        const EvidenciasCompanion(subida: Value(true), isDirty: Value(false)),
+      );
+
+      // 3. Marcar firmas como subidas
+      await (_db.update(
+        _db.firmas,
+      )..where((f) => f.idOrden.equals(idOrdenLocal))).write(
+        const FirmasCompanion(subida: Value(true), isDirty: Value(false)),
+      );
+    });
+  }
+}
+
+// =============================================================================
+// PROVIDERS
+// =============================================================================
+
+/// Provider del servicio de sincronización offline
+final offlineSyncServiceProvider = Provider<OfflineSyncService>((ref) {
+  final db = ref.watch(databaseProvider);
+  final apiClient = ref.watch(apiClientProvider);
+  final connectivity = ref.watch(connectivityServiceProvider);
+  return OfflineSyncService(db, apiClient.dio, connectivity);
+});
+
+/// Provider del conteo de órdenes pendientes (reactivo para badge)
+final pendingSyncCountProvider = StreamProvider<int>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.watchCountOrdenesPendientesSync();
+});
+
+/// Provider de la lista de órdenes pendientes
+final pendingSyncListProvider = FutureProvider<List<OrdenesPendientesSyncData>>(
+  (ref) {
+    final db = ref.watch(databaseProvider);
+    return db.getOrdenesPendientesSync();
+  },
+);

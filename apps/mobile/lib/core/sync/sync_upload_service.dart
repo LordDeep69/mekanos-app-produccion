@@ -1,0 +1,553 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../api/api_client.dart';
+import '../database/app_database.dart';
+import '../database/database_service.dart';
+import 'connectivity_service.dart';
+import 'offline_sync_service.dart';
+
+/// Provider para el servicio de sync upload
+final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
+  final db = ref.watch(databaseProvider);
+  final apiClient = ref.watch(apiClientProvider);
+  final connectivity = ref.watch(connectivityServiceProvider);
+  final offlineSync = ref.watch(offlineSyncServiceProvider);
+  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync);
+});
+
+/// Resultado de la sincronización de subida
+class SyncUploadResult {
+  final bool success;
+  final String mensaje;
+  final Map<String, dynamic>? datos;
+  final String? error;
+
+  /// true si la orden se guardó para sync posterior (modo offline)
+  final bool guardadoOffline;
+
+  SyncUploadResult({
+    required this.success,
+    required this.mensaje,
+    this.datos,
+    this.error,
+    this.guardadoOffline = false,
+  });
+}
+
+/// Servicio de Sincronización de Subida - RUTA 9
+///
+/// Orquesta el envío de una orden completada al backend:
+/// 1. Recopila datos de BD local (actividades, mediciones, evidencias, firmas)
+/// 2. Convierte imágenes a Base64
+/// 3. Construye payload según FinalizarOrdenDto
+/// 4. Si hay conexión: Envía al endpoint POST /api/ordenes/{id}/finalizar-completo
+/// 5. Si NO hay conexión: Guarda en cola offline para sync posterior
+/// 6. Actualiza estado local tras éxito
+class SyncUploadService {
+  final AppDatabase _db;
+  final Dio _apiClient;
+  final ConnectivityService _connectivity;
+  final OfflineSyncService _offlineSync;
+
+  SyncUploadService(
+    this._db,
+    this._apiClient,
+    this._connectivity,
+    this._offlineSync,
+  );
+
+  /// Finaliza y sincroniza una orden completa al backend
+  ///
+  /// [idOrdenLocal] - ID de la orden en BD local
+  /// [idOrdenBackend] - ID de la orden en el backend
+  /// [observaciones] - Observaciones generales del servicio
+  /// [horaEntrada] - Hora de entrada al sitio (formato HH:mm)
+  /// [horaSalida] - Hora de salida del sitio (formato HH:mm)
+  /// [usuarioId] - ID del usuario/técnico que finaliza
+  /// [emailAdicional] - Email opcional para enviar copia
+  Future<SyncUploadResult> finalizarOrden({
+    required int idOrdenLocal,
+    required int idOrdenBackend,
+    required String observaciones,
+    required String horaEntrada,
+    required String horaSalida,
+    required int usuarioId,
+    String? emailAdicional,
+  }) async {
+    try {
+      // 1. Recopilar actividades ejecutadas (excluir MEDICION - van en array separado)
+      final actividades = await _db.getActividadesByOrden(idOrdenLocal);
+      final actividadesPayload = actividades
+          .where(
+            (a) => a.tipoActividad.toUpperCase() != 'MEDICION',
+          ) // ✅ FIX: Excluir mediciones
+          .map(
+            (a) => <String, dynamic>{
+              'sistema': a.sistema ?? 'Sin sistema',
+              'descripcion': a.descripcion,
+              'resultado': a.simbologia ?? 'N/A',
+              'observaciones': a.observacion,
+            },
+          )
+          .toList();
+
+      // 2. Recopilar mediciones
+      final mediciones = await _db.getMedicionesByOrden(idOrdenLocal);
+      final medicionesPayload = mediciones
+          .where((m) => m.valor != null)
+          .map(
+            (m) => <String, dynamic>{
+              'parametro': m.nombreParametro,
+              'valor': m.valor!,
+              'unidad': m.unidadMedida,
+              'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
+            },
+          )
+          .toList();
+
+      // 3. Recopilar evidencias y convertir a Base64
+      final evidencias = await (_db.select(
+        _db.evidencias,
+      )..where((e) => e.idOrden.equals(idOrdenLocal))).get();
+
+      final evidenciasPayload = <Map<String, dynamic>>[];
+      for (final ev in evidencias) {
+        final base64 = await _imageToBase64(ev.rutaLocal);
+        // ✅ FIX: Validar que base64 no esté vacío (archivo corrupto/0 KB)
+        if (base64 != null && base64.isNotEmpty) {
+          // ✅ FIX: Mapear tipo de evidencia - GENERAL no es válido en backend
+          // Backend acepta solo: ANTES, DURANTE, DESPUES, MEDICION
+          String tipoEvidencia = ev.tipoEvidencia.toUpperCase();
+          if (tipoEvidencia == 'GENERAL') {
+            tipoEvidencia = 'DURANTE'; // Mapear GENERAL a DURANTE como fallback
+          }
+          evidenciasPayload.add({
+            'tipo': tipoEvidencia,
+            'base64': base64,
+            'descripcion': ev.descripcion,
+          });
+        }
+      }
+
+      // 4. Recopilar firmas y convertir a Base64
+      final firmas = await _db.getFirmasByOrden(idOrdenLocal);
+      Map<String, dynamic>? firmasPayload;
+
+      final firmaTecnico = firmas
+          .where((f) => f.tipoFirma == 'TECNICO')
+          .firstOrNull;
+      final firmaCliente = firmas
+          .where((f) => f.tipoFirma == 'CLIENTE')
+          .firstOrNull;
+
+      if (firmaTecnico != null) {
+        final base64Tecnico = await _imageToBase64(firmaTecnico.rutaLocal);
+        if (base64Tecnico != null) {
+          firmasPayload = {
+            'tecnico': {
+              'tipo': 'TECNICO',
+              'base64': base64Tecnico,
+              'idPersona': usuarioId, // Usar ID del técnico
+            },
+          };
+
+          if (firmaCliente != null) {
+            final base64Cliente = await _imageToBase64(firmaCliente.rutaLocal);
+            if (base64Cliente != null) {
+              firmasPayload['cliente'] = {
+                'tipo': 'CLIENTE',
+                'base64': base64Cliente,
+                'idPersona': 0, // Cliente sin ID específico
+              };
+            }
+          }
+        }
+      }
+
+      // 5. Validar requisitos mínimos
+      if (firmasPayload == null) {
+        return SyncUploadResult(
+          success: false,
+          mensaje: 'Falta la firma del técnico',
+          error: 'MISSING_TECNICO_SIGNATURE',
+        );
+      }
+
+      if (evidenciasPayload.isEmpty) {
+        return SyncUploadResult(
+          success: false,
+          mensaje: 'Debe incluir al menos una evidencia fotográfica',
+          error: 'MISSING_EVIDENCIAS',
+        );
+      }
+
+      // 6. Construir payload completo
+      final payload = {
+        'idOrden': idOrdenBackend,
+        'evidencias': evidenciasPayload,
+        'firmas': firmasPayload,
+        'actividades': actividadesPayload,
+        'mediciones': medicionesPayload,
+        'observaciones': observaciones,
+        'horaEntrada': horaEntrada,
+        'horaSalida': horaSalida,
+        'usuarioId': usuarioId,
+        if (emailAdicional != null && emailAdicional.isNotEmpty)
+          'emailAdicional': emailAdicional,
+      };
+
+      // 7. GUARDAR ESTADO LOCAL PRIMERO (integridad garantizada)
+      await _guardarEstadoLocalCompletada(
+        idOrdenLocal,
+        observaciones,
+        horaEntrada,
+        horaSalida,
+      );
+
+      // 8. VERIFICAR CONECTIVIDAD
+      final isOnline = await _connectivity.checkConnection();
+
+      if (!isOnline) {
+        // SIN CONEXIÓN - Guardar en cola offline
+        final guardado = await _offlineSync.guardarEnCola(
+          idOrdenLocal: idOrdenLocal,
+          idOrdenBackend: idOrdenBackend,
+          payload: payload,
+        );
+
+        if (guardado) {
+          return SyncUploadResult(
+            success: true,
+            mensaje:
+                'Orden guardada. Se sincronizará automáticamente cuando haya conexión.',
+            guardadoOffline: true,
+          );
+        } else {
+          return SyncUploadResult(
+            success: false,
+            mensaje: 'Error guardando orden para sync posterior',
+            error: 'OFFLINE_SAVE_FAILED',
+          );
+        }
+      }
+
+      // 9. CON CONEXIÓN - Intentar sync normal
+      try {
+        // Asegurar que la orden esté en EN_PROCESO en el backend
+        try {
+          await _apiClient.put('/ordenes/$idOrdenBackend/iniciar');
+        } on DioException {
+          // Ignorar - puede ya estar en proceso
+        }
+
+        // Enviar al backend
+        final response = await _apiClient.post(
+          '/ordenes/$idOrdenBackend/finalizar-completo',
+          data: payload,
+          options: Options(
+            sendTimeout: const Duration(minutes: 5),
+            receiveTimeout: const Duration(minutes: 5),
+          ),
+        );
+
+        if (response.statusCode == 200) {
+          // Extraer URL del PDF de la respuesta
+          String? pdfUrl;
+          if (response.data is Map) {
+            pdfUrl = response.data['datos']?['documento']?['url'];
+            pdfUrl ??= response.data['pdfUrl'];
+            pdfUrl ??= response.data['pdf_url'];
+            pdfUrl ??= response.data['data']?['pdfUrl'];
+            pdfUrl ??= response.data['data']?['documento']?['url'];
+          }
+
+          // CRÍTICO: El backend YA procesó la orden exitosamente
+          // Si falla el guardado local, AÚN debemos retornar éxito
+          // para evitar que el usuario reintente y cause duplicación
+          try {
+            await _marcarOrdenSincronizada(idOrdenLocal, urlPdf: pdfUrl);
+          } catch (localError) {
+            // Error guardando localmente - pero el backend YA procesó
+            // No es crítico, la orden está sincronizada en el servidor
+            debugPrint(
+              '⚠️ Error guardando estado local (no crítico): $localError',
+            );
+          }
+
+          return SyncUploadResult(
+            success: true,
+            mensaje: 'Orden finalizada y sincronizada correctamente',
+            datos: response.data,
+          );
+        } else {
+          // Error del servidor - guardar en cola para retry
+          await _offlineSync.guardarEnCola(
+            idOrdenLocal: idOrdenLocal,
+            idOrdenBackend: idOrdenBackend,
+            payload: payload,
+          );
+          return SyncUploadResult(
+            success: false,
+            mensaje: 'Error del servidor. Se reintentará automáticamente.',
+            error: response.data?.toString(),
+            guardadoOffline: true,
+          );
+        }
+      } on DioException catch (e) {
+        debugPrint(
+          '⚠️ [SYNC] DioException: type=${e.type}, status=${e.response?.statusCode}, msg=${e.message}',
+        );
+
+        // CRÍTICO: El backend puede estar procesando aún (toma ~25s)
+        // Esperar y verificar múltiples veces antes de decidir si guardar en cola
+        bool yaCompletada = false;
+        for (int intento = 1; intento <= 3; intento++) {
+          debugPrint(
+            '🔍 [SYNC] Verificación idempotencia intento $intento/3...',
+          );
+
+          // Esperar antes de verificar (el backend puede estar procesando)
+          await Future.delayed(Duration(seconds: intento * 5)); // 5s, 10s, 15s
+
+          yaCompletada = await _verificarOrdenYaCompletadaEnBackend(
+            idOrdenBackend,
+          );
+          debugPrint('🔍 [SYNC] ¿Ya completada? $yaCompletada');
+
+          if (yaCompletada) break;
+        }
+
+        if (yaCompletada) {
+          // El backend YA procesó la orden - NO guardar en cola
+          debugPrint('✅ [SYNC] Backend ya procesó - NO guardar en cola');
+          try {
+            await _marcarOrdenSincronizada(idOrdenLocal);
+          } catch (_) {}
+          return SyncUploadResult(
+            success: true,
+            mensaje: 'Orden sincronizada correctamente',
+          );
+        }
+
+        // Si realmente no se completó después de 30s de espera, guardar en cola
+        debugPrint('📥 [SYNC] Guardando en cola para retry posterior');
+        await _offlineSync.guardarEnCola(
+          idOrdenLocal: idOrdenLocal,
+          idOrdenBackend: idOrdenBackend,
+          payload: payload,
+        );
+        return SyncUploadResult(
+          success: true,
+          mensaje: 'Error de conexión. Se sincronizará automáticamente.',
+          error: e.message,
+          guardadoOffline: true,
+        );
+      }
+    } catch (e) {
+      return SyncUploadResult(
+        success: false,
+        mensaje: 'Error inesperado: $e',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Guarda el estado local de la orden como COMPLETADA (antes de intentar sync)
+  /// Garantiza integridad: aunque falle el sync, el trabajo no se pierde
+  Future<void> _guardarEstadoLocalCompletada(
+    int idOrdenLocal,
+    String observaciones,
+    String horaEntrada,
+    String horaSalida,
+  ) async {
+    // Obtener el ID del estado COMPLETADA
+    final estadoCompletada = await (_db.select(
+      _db.estadosOrden,
+    )..where((e) => e.codigo.equals('COMPLETADA'))).getSingleOrNull();
+
+    await (_db.update(
+      _db.ordenes,
+    )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
+      OrdenesCompanion(
+        idEstado: estadoCompletada != null
+            ? Value(estadoCompletada.id)
+            : const Value.absent(),
+        observacionesTecnico: Value(observaciones),
+        horaEntradaTexto: Value(horaEntrada),
+        horaSalidaTexto: Value(horaSalida),
+        fechaFin: Value(DateTime.now()),
+        isDirty: const Value(true), // Marcado para sync
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Convierte una imagen local a Base64
+  /// Incluye logging detallado para debugging de evidencias faltantes
+  Future<String?> _imageToBase64(String rutaLocal) async {
+    try {
+      final file = File(rutaLocal);
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        return base64Encode(bytes);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Mapea el estado de medición al nivel de alerta del backend
+  String _mapEstadoToNivelAlerta(String? estado) {
+    switch (estado?.toUpperCase()) {
+      case 'NORMAL':
+        return 'OK';
+      case 'ADVERTENCIA':
+        return 'WARNING';
+      case 'CRITICO':
+        return 'CRITICAL';
+      default:
+        return 'OK';
+    }
+  }
+
+  /// Marca una orden como sincronizada en BD local
+  /// TRANSACCIÓN ATÓMICA: Garantiza integridad de datos
+  Future<void> _marcarOrdenSincronizada(
+    int idOrdenLocal, {
+    String? urlPdf,
+  }) async {
+    await _db.transaction(() async {
+      // Obtener el ID del estado COMPLETADA
+      final estadoCompletada = await (_db.select(
+        _db.estadosOrden,
+      )..where((e) => e.codigo.equals('COMPLETADA'))).getSingleOrNull();
+
+      // 1. Actualizar estado de la orden
+      await (_db.update(
+        _db.ordenes,
+      )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
+        OrdenesCompanion(
+          isDirty: const Value(false),
+          fechaFin: Value(DateTime.now()),
+          idEstado: estadoCompletada != null
+              ? Value(estadoCompletada.id)
+              : const Value.absent(),
+          urlPdf: urlPdf != null ? Value(urlPdf) : const Value.absent(),
+        ),
+      );
+
+      // 2. Marcar evidencias como subidas
+      await (_db.update(
+        _db.evidencias,
+      )..where((e) => e.idOrden.equals(idOrdenLocal))).write(
+        const EvidenciasCompanion(subida: Value(true), isDirty: Value(false)),
+      );
+
+      // 3. Marcar firmas como subidas
+      await (_db.update(
+        _db.firmas,
+      )..where((f) => f.idOrden.equals(idOrdenLocal))).write(
+        const FirmasCompanion(subida: Value(true), isDirty: Value(false)),
+      );
+    });
+  }
+
+  /// CRÍTICO: Verifica si una orden ya fue completada en el backend
+  /// Esto previene duplicación cuando el request llegó pero la respuesta se perdió
+  Future<bool> _verificarOrdenYaCompletadaEnBackend(int idOrdenBackend) async {
+    try {
+      final response = await _apiClient.get(
+        '/ordenes/$idOrdenBackend',
+        options: Options(
+          sendTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        // Buscar el estado en múltiples ubicaciones posibles
+        final data = response.data as Map<String, dynamic>;
+
+        // Opción 1: estado.codigo
+        final estadoCodigo =
+            data['estado']?['codigo'] ?? data['estadoActual']?['codigo'];
+        if (estadoCodigo == 'COMPLETADA' || estadoCodigo == 'FINALIZADA') {
+          return true;
+        }
+
+        // Opción 2: id_estado_actual numérico (4 = COMPLETADA típicamente)
+        final idEstado = data['id_estado_actual'] ?? data['idEstadoActual'];
+        if (idEstado == 4) {
+          return true;
+        }
+
+        // Opción 3: estado.es_estado_final
+        final esEstadoFinal =
+            data['estado']?['es_estado_final'] ??
+            data['estadoActual']?['esEstadoFinal'];
+        if (esEstadoFinal == true) {
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      // Si falla la verificación, asumir que NO está completada
+      // Es mejor duplicar que perder una orden
+      return false;
+    }
+  }
+
+  /// Verifica si una orden está lista para sincronizar
+  Future<Map<String, dynamic>> verificarRequisitos(int idOrdenLocal) async {
+    final actividades = await _db.getActividadesByOrden(idOrdenLocal);
+    final mediciones = await _db.getMedicionesByOrden(idOrdenLocal);
+    final evidencias = await (_db.select(
+      _db.evidencias,
+    )..where((e) => e.idOrden.equals(idOrdenLocal))).get();
+    final firmas = await _db.getFirmasByOrden(idOrdenLocal);
+
+    final actividadesCompletadas = actividades
+        .where((a) => a.simbologia != null && a.simbologia!.isNotEmpty)
+        .length;
+    final medicionesCompletadas = mediciones
+        .where((m) => m.valor != null)
+        .length;
+    final tieneFirmaTecnico = firmas.any((f) => f.tipoFirma == 'TECNICO');
+    final tieneFirmaCliente = firmas.any((f) => f.tipoFirma == 'CLIENTE');
+
+    final checklistCompleto = actividadesCompletadas == actividades.length;
+    final medicionesCompletas = medicionesCompletadas == mediciones.length;
+    final firmasCompletas = tieneFirmaTecnico && tieneFirmaCliente;
+    final tieneEvidencias = evidencias.isNotEmpty;
+
+    return {
+      'listo':
+          checklistCompleto &&
+          medicionesCompletas &&
+          firmasCompletas &&
+          tieneEvidencias,
+      'checklist': {
+        'completado': checklistCompleto,
+        'total': actividades.length,
+        'completadas': actividadesCompletadas,
+      },
+      'mediciones': {
+        'completado': medicionesCompletas,
+        'total': mediciones.length,
+        'completadas': medicionesCompletadas,
+      },
+      'firmas': {'tecnico': tieneFirmaTecnico, 'cliente': tieneFirmaCliente},
+      'evidencias': {
+        'cantidad': evidencias.length,
+        'tieneMinimo': tieneEvidencias,
+      },
+    };
+  }
+}
