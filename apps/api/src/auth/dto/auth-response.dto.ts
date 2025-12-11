@@ -6,5 +6,6 @@ export class AuthResponseDto {
     email: string;
     nombre: string;
     rol: string;
+    idEmpleado?: number; // ID del empleado para sincronización móvil
   };
 }

@@ -130,6 +130,63 @@ export class SyncOrdenDownloadDto {
   @ApiPropertyOptional()
   observacionesTecnico?: string;
 
+  // ✅ FIX: Agregar URL del PDF para sincronización
+  @ApiPropertyOptional({ description: 'URL del PDF generado (órdenes completadas)' })
+  urlPdf?: string;
+
+  // ✅ FIX: Campos de horarios para órdenes completadas
+  @ApiPropertyOptional({ description: 'Fecha/hora real de inicio del servicio' })
+  fechaInicioReal?: string;
+
+  @ApiPropertyOptional({ description: 'Fecha/hora real de finalización del servicio' })
+  fechaFinReal?: string;
+
+  // ✅ FIX: Horas como TEXTO PLANO (sin procesamiento de zona horaria)
+  @ApiPropertyOptional({ description: 'Hora de entrada (formato HH:mm)' })
+  horaEntrada?: string;
+
+  @ApiPropertyOptional({ description: 'Hora de salida (formato HH:mm)' })
+  horaSalida?: string;
+
+  @ApiPropertyOptional({ description: 'Duración del servicio en minutos' })
+  duracionMinutos?: number;
+
+  // ✅ FIX: Estadísticas para órdenes completadas (evita cargar datos pesados)
+  @ApiPropertyOptional({ description: 'Cantidad de actividades ejecutadas' })
+  totalActividades?: number;
+
+  @ApiPropertyOptional({ description: 'Cantidad de mediciones registradas' })
+  totalMediciones?: number;
+
+  @ApiPropertyOptional({ description: 'Cantidad de evidencias fotográficas' })
+  totalEvidencias?: number;
+
+  @ApiPropertyOptional({ description: 'Cantidad de firmas digitales' })
+  totalFirmas?: number;
+
+  // ✅ FIX: Desglose de actividades por estado para historial sincronizado
+  @ApiPropertyOptional({ description: 'Actividades en buen estado (B)' })
+  actividadesBuenas?: number;
+
+  @ApiPropertyOptional({ description: 'Actividades en mal estado (M)' })
+  actividadesMalas?: number;
+
+  @ApiPropertyOptional({ description: 'Actividades corregidas (C)' })
+  actividadesCorregidas?: number;
+
+  @ApiPropertyOptional({ description: 'Actividades no aplica (NA)' })
+  actividadesNA?: number;
+
+  // ✅ FIX: Desglose de mediciones por estado para historial sincronizado
+  @ApiPropertyOptional({ description: 'Mediciones en estado normal (dentro de rango)' })
+  medicionesNormales?: number;
+
+  @ApiPropertyOptional({ description: 'Mediciones en advertencia (cerca de límites)' })
+  medicionesAdvertencia?: number;
+
+  @ApiPropertyOptional({ description: 'Mediciones críticas (fuera de rango)' })
+  medicionesCriticas?: number;
+
   // Fechas
   @ApiProperty()
   fechaCreacion: string;
@@ -215,6 +272,29 @@ export class SyncActividadCatalogoDto {
 
   @ApiPropertyOptional()
   idParametroMedicion?: number;
+
+  @ApiPropertyOptional({ description: 'ID del tipo de servicio al que pertenece esta actividad' })
+  idTipoServicio?: number;
+
+  @ApiPropertyOptional({ description: 'Sistema al que pertenece (ENFRIAMIENTO, LUBRICACION, etc.)' })
+  sistema?: string;
+}
+
+/**
+ * Tipo de servicio para download
+ */
+export class SyncTipoServicioDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  codigo: string;
+
+  @ApiProperty()
+  nombre: string;
+
+  @ApiPropertyOptional()
+  descripcion?: string;
 }
 
 /**
@@ -238,4 +318,7 @@ export class SyncDownloadResponseDto {
 
   @ApiProperty({ description: 'Estados de orden disponibles' })
   estadosOrden: { id: number; codigo: string; nombre: string; esEstadoFinal: boolean }[];
+
+  @ApiProperty({ type: [SyncTipoServicioDto], description: 'Tipos de servicio disponibles' })
+  tiposServicio: SyncTipoServicioDto[];
 }

@@ -16,7 +16,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   /**
    * Login: valida credenciales y retorna tokens JWT
@@ -74,6 +74,12 @@ export class AuthService {
       const tokens = await this.generateTokens(usuario);
       console.log('✅ [DEBUG] Tokens generados exitosamente');
 
+      // 4.5 Buscar empleado asociado al usuario (por id_persona)
+      const empleado = await this.prisma.empleados.findFirst({
+        where: { id_persona: usuario.id_persona },
+      });
+      console.log('👷 [DEBUG] Empleado encontrado:', empleado?.id_empleado || 'NO');
+
       // 5. Retornar respuesta (usar nombre_completo de persona)
       const response = {
         ...tokens,
@@ -82,10 +88,11 @@ export class AuthService {
           email: usuario.email,
           nombre: usuario.persona?.nombre_completo || 'Usuario',
           rol: 'USER', // TODO: Implementar sistema de roles desde usuarios_roles
+          idEmpleado: empleado?.id_empleado, // Para sincronización móvil
         },
       };
 
-      console.log('🎉 [DEBUG] Login exitoso:', { userId: usuario.id_usuario, email: usuario.email });
+      console.log('🎉 [DEBUG] Login exitoso:', { userId: usuario.id_usuario, email: usuario.email, idEmpleado: empleado?.id_empleado });
       return response;
     } catch (error) {
       console.error('💥 [DEBUG] Error en login:', error instanceof Error ? error.message : String(error));
@@ -155,9 +162,9 @@ export class AuthService {
     };
 
     const [access_token, refresh_token] = await Promise.all([
-      // Access token (15 minutos) - usa secret del JwtModule
+      // Access token (1 hora) - aumentado para operaciones largas
       this.jwtService.signAsync(payload, {
-        expiresIn: '15m',
+        expiresIn: '1h',
       }),
       // Refresh token (7 días) - override secret
       this.jwtService.signAsync(payload, {

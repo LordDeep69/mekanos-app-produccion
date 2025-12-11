@@ -81,22 +81,22 @@ export interface ActividadPDF {
   sistema: string;
   descripcion: string;
   resultado:
-    | 'B'
-    | 'R'
-    | 'M'
-    | 'I'
-    | 'C'
-    | 'LI'
-    | 'A'
-    | 'L'
-    | 'NA'
-    | 'LA'
-    | 'S'
-    | 'NT'
-    | 'BA'
-    | 'F'
-    | 'RN'
-    | 'NF';
+  | 'B'
+  | 'R'
+  | 'M'
+  | 'I'
+  | 'C'
+  | 'LI'
+  | 'A'
+  | 'L'
+  | 'NA'
+  | 'LA'
+  | 'S'
+  | 'NT'
+  | 'BA'
+  | 'F'
+  | 'RN'
+  | 'NF';
   observaciones?: string;
 }
 
@@ -113,7 +113,7 @@ export const getResultadoLabel = (resultado: string): string => {
     R: 'Regular',
     M: 'Malo',
     I: 'Inspeccionar',
-    C: 'Cambiar',
+    C: 'Cambiado',
     LI: 'Limpiar',
     A: 'Ajustar',
     L: 'Lubricar',
@@ -155,6 +155,8 @@ export const getAlertaColor = (nivel: string): string => {
 };
 
 export const baseStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  
   * {
     margin: 0;
     padding: 0;
@@ -162,11 +164,12 @@ export const baseStyles = `
   }
   
   body {
-    font-family: 'Arial', 'Helvetica', sans-serif;
+    font-family: 'Inter', 'Segoe UI', 'Arial', sans-serif;
     font-size: 11px;
     line-height: 1.4;
     color: ${MEKANOS_COLORS.text};
     background: ${MEKANOS_COLORS.white};
+    -webkit-font-smoothing: antialiased;
   }
   
   .page {
@@ -192,6 +195,56 @@ export const baseStyles = `
     .page-break {
       page-break-before: always;
     }
+  }
+  
+  /* ✅ FIX MEJORADO: Reglas de saltos de página inteligentes */
+  
+  /* Las secciones grandes (checklist) PUEDEN romperse entre páginas */
+  .section {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+  
+  /* Secciones pequeñas que NO deben romperse */
+  .observaciones-box,
+  .firmas-container,
+  .simbologia-grid,
+  .mediciones-grid,
+  .info-grid {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  /* Las filas individuales de tabla NO deben cortarse */
+  .checklist-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  /* Los títulos de sección deben quedarse con su contenido */
+  .section-title,
+  .section-subtitle {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  
+  /* Evitar que el header de tabla quede solo al final de página */
+  .checklist-table thead {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  
+  /* Permitir que evidencias-grupo se rompa si es necesario */
+  .evidencias-grupo {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+  
+  /* Pero no romper filas individuales de evidencias */
+  .evidencia-item,
+  .evidencia-item-compacto {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   
   .header {
@@ -326,6 +379,21 @@ export const baseStyles = `
     background: ${MEKANOS_COLORS.background};
   }
   
+  /* ✅ FIX: Estilos mejorados para columna de Observaciones */
+  .checklist-table td:last-child {
+    font-size: 9px;
+    color: ${MEKANOS_COLORS.secondary};
+    font-style: italic;
+    max-width: 150px;
+    word-wrap: break-word;
+  }
+  
+  /* Columna de resultado (centrada con badge) */
+  .checklist-table td:nth-child(2) {
+    text-align: center;
+    padding: 4px;
+  }
+  
   .resultado-badge {
     display: inline-block;
     padding: 2px 8px;
@@ -431,51 +499,59 @@ export const baseStyles = `
     border-left: 3px solid ${MEKANOS_COLORS.secondary};
   }
   
+  /* ✅ FIX: Sección de Firmas - Más grande y profesional */
   .firmas-container {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 30px;
     margin-top: 20px;
     padding: 20px;
-    background: ${MEKANOS_COLORS.background};
+    background: ${MEKANOS_COLORS.white};
     border-radius: 8px;
     border: 2px solid ${MEKANOS_COLORS.primary};
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   
   .firma-box {
     text-align: center;
-    padding-top: 10px;
+    padding: 15px;
+    background: ${MEKANOS_COLORS.background};
+    border-radius: 6px;
   }
   
   .firma-line {
     border-bottom: 2px solid ${MEKANOS_COLORS.text};
-    height: 60px;
-    margin-bottom: 8px;
+    height: 70px;
+    margin-bottom: 10px;
     background: ${MEKANOS_COLORS.white};
+    border-radius: 4px;
   }
   
   .firma-imagen {
-    height: 60px;
-    margin-bottom: 8px;
+    height: 70px;
+    margin-bottom: 10px;
     background: ${MEKANOS_COLORS.white};
     border-bottom: 2px solid ${MEKANOS_COLORS.primary};
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 5px;
+    padding: 8px;
   }
   
-  .firma-imagen img {
-    max-height: 50px;
-    max-width: 150px;
+  .firma-imagen img, .firma-img {
+    max-height: 60px;
+    max-width: 180px;
     object-fit: contain;
   }
   
   .firma-label {
-    font-size: 10px;
+    font-size: 11px;
     color: ${MEKANOS_COLORS.primary};
     text-transform: uppercase;
     font-weight: bold;
+    margin-top: 5px;
   }
   
   .footer {
@@ -506,5 +582,87 @@ export const baseStyles = `
   .simbologia-code {
     font-weight: bold;
     color: ${MEKANOS_COLORS.primary};
+  }
+  
+  /* ═══════════════════════════════════════════════════════════════
+     EVIDENCIAS AGRUPADAS POR TIPO
+     ═══════════════════════════════════════════════════════════════ */
+  
+  .evidencias-section {
+    page-break-inside: avoid;
+  }
+  
+  .evidencias-grupo {
+    margin-bottom: 15px;
+    border: 1px solid ${MEKANOS_COLORS.border};
+    border-radius: 8px;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  
+  .evidencias-grupo-titulo {
+    background: ${MEKANOS_COLORS.primary};
+    color: ${MEKANOS_COLORS.white};
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: bold;
+  }
+  
+  /* ✅ FIX: Estilo diferenciador para Fotos Generales del Servicio */
+  .evidencias-grupo-general {
+    border: 2px solid #0d9488;
+    background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+  }
+  
+  .evidencias-grupo-general .evidencias-grupo-titulo {
+    background: linear-gradient(135deg, #0d9488 0%, #115e59 100%);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+  }
+  
+  .evidencias-grupo-general .evidencia-caption-compacto {
+    background: #0d9488;
+  }
+  
+  .evidencias-grid-compacto {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 10px;
+    background: ${MEKANOS_COLORS.background};
+  }
+  
+  .evidencia-item-compacto {
+    border-radius: 6px;
+    overflow: hidden;
+    background: ${MEKANOS_COLORS.white};
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  
+  .evidencia-item-compacto img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    display: block;
+  }
+  
+  .evidencia-caption-compacto {
+    background: ${MEKANOS_COLORS.secondary};
+    color: ${MEKANOS_COLORS.white};
+    padding: 4px 6px;
+    font-size: 8px;
+    text-align: center;
+    line-height: 1.2;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .evidencias-empty {
+    padding: 20px;
+    text-align: center;
+    color: ${MEKANOS_COLORS.text};
+    font-style: italic;
   }
 `;

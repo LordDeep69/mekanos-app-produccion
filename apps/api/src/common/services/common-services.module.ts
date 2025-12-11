@@ -38,6 +38,7 @@ import { CotizacionesModule } from '../../cotizaciones/cotizaciones.module';
 import { EmailModule } from '../../email/email.module';
 import { PdfModule } from '../../pdf/pdf.module';
 import { CotizacionesFacadeService } from './cotizaciones-facade.service';
+import { GeneradorDocumentosFacadeService } from './generador-documentos-facade.service';
 import { MekanosFacadeService } from './mekanos-facade.service';
 import { NumeracionService } from './numeracion.service';
 import { ProgramacionFacadeService } from './programacion-facade.service';

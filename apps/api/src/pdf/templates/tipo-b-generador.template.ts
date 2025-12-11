@@ -7,6 +7,8 @@
  * - CAMBIO DE FILTRO DE COMBUSTIBLE
  * - CAMBIO DE ACEITE
  * - CAMBIO DE FILTRO DE ACEITE
+ * 
+ * Estilo alineado con Tipo A para consistencia profesional
  */
 
 import { baseStyles, DatosOrdenPDF, MEKANOS_COLORS } from './mekanos-base.template';
@@ -24,34 +26,75 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
   <style>
     ${baseStyles}
     
-    .cambio-item {
-      background: ${MEKANOS_COLORS.highlight};
-      color: ${MEKANOS_COLORS.primary};
-      padding: 3px 8px;
+    .cambio-badge {
+      background: #4CAF50;
+      color: white;
+      padding: 2px 6px;
       border-radius: 3px;
       font-weight: bold;
-      font-size: 9px;
-      margin-right: 5px;
-    }
-    
-    .filtro-options {
-      display: flex;
-      gap: 5px;
-      margin-top: 4px;
-    }
-    
-    .filtro-option {
-      background: ${MEKANOS_COLORS.background};
-      padding: 2px 6px;
-      border-radius: 2px;
       font-size: 8px;
-      border: 1px solid ${MEKANOS_COLORS.border};
+      margin-left: 5px;
     }
     
-    .filtro-option.selected {
-      background: ${MEKANOS_COLORS.secondary};
+    .tipo-b-banner {
+      background: linear-gradient(135deg, ${MEKANOS_COLORS.primary} 0%, ${MEKANOS_COLORS.secondary} 100%);
       color: white;
-      border-color: ${MEKANOS_COLORS.secondary};
+      padding: 10px 15px;
+      border-radius: 4px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 12px;
+      font-size: 11px;
+    }
+    
+    /* ✅ FIX: Sección Insumos - Estilo limpio y profesional sin fondo verde */
+    .insumos-section {
+      background: ${MEKANOS_COLORS.white};
+      border: 2px solid ${MEKANOS_COLORS.primary};
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      page-break-inside: avoid;
+    }
+    
+    .insumos-title {
+      background: ${MEKANOS_COLORS.primary};
+      color: white;
+      padding: 8px 15px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 11px;
+      display: inline-block;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+    
+    .insumos-photo {
+      display: flex;
+      justify-content: center;
+      padding: 10px;
+      background: ${MEKANOS_COLORS.background};
+      border-radius: 6px;
+    }
+    
+    .insumos-photo img {
+      max-width: 280px;
+      max-height: 200px;
+      border-radius: 6px;
+      border: 2px solid ${MEKANOS_COLORS.secondary};
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .insumos-caption {
+      text-align: center;
+      font-size: 10px;
+      color: ${MEKANOS_COLORS.primary};
+      margin-top: 8px;
+      font-weight: 600;
+      padding: 4px 8px;
+      background: ${MEKANOS_COLORS.background};
+      border-radius: 4px;
+      display: inline-block;
     }
   </style>
 </head>
@@ -63,19 +106,16 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
     ${generarDatosCliente(datos)}
     
-    <!-- AVISO TIPO B -->
-    <div class="section">
-      <div style="background: ${MEKANOS_COLORS.highlight}; color: ${MEKANOS_COLORS.primary}; padding: 8px 12px; border-radius: 4px; font-weight: bold; text-align: center; margin-bottom: 10px;">
-        ⚙️ MANTENIMIENTO TIPO B - INCLUYE CAMBIO DE FILTROS Y FLUIDOS
-      </div>
+    <!-- BANNER TIPO B -->
+    <div class="tipo-b-banner">
+      ⚙️ MANTENIMIENTO PREVENTIVO TIPO B - INCLUYE CAMBIO DE FILTROS Y FLUIDOS
     </div>
     
+    <!-- SECCIÓN INSUMOS (VERIFICACIÓN FOTOGRÁFICA) -->
+    ${generarSeccionInsumos(datos.evidencias)}
+    
     <!-- LISTA DE ACTIVIDADES DE MANTENIMIENTO -->
-    ${generarSeccionEnfriamientoTipoB(actividadesPorSistema['ENFRIAMIENTO'] || [])}
-    ${generarSeccionAspiracionTipoB(actividadesPorSistema['ASPIRACION'] || [])}
-    ${generarSeccionCombustibleTipoB(actividadesPorSistema['COMBUSTIBLE'] || [])}
-    ${generarSeccionLubricacionTipoB(actividadesPorSistema['LUBRICACION'] || [])}
-    ${generarSeccionElectricoTipoB(actividadesPorSistema['ELECTRICO'] || [])}
+    ${generarTodasLasActividades(datos.actividades)}
     
     <!-- REGISTRO DE DATOS DEL MÓDULO DE CONTROL -->
     ${generarDatosModulo(datos)}
@@ -92,7 +132,7 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     ${generarObservaciones(datos.observaciones)}
     
     <!-- FIRMAS -->
-    ${generarFirmas()}
+    ${generarFirmas(datos.firmaTecnico, datos.firmaCliente)}
     
     <!-- FOOTER -->
     ${generarFooter()}
@@ -162,219 +202,118 @@ const generarDatosCliente = (datos: DatosOrdenPDF): string => `
   </div>
 `;
 
-const generarSeccionEnfriamientoTipoB = (actividades: any[]): string => `
-  <div class="section">
-    <div class="section-subtitle">SISTEMA DE ENFRIAMIENTO</div>
-    <table class="checklist-table">
-      <thead>
-        <tr>
-          <th style="width: 70%;">Actividad</th>
-          <th style="width: 15%;">Estado</th>
-          <th style="width: 15%;">Obs.</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Revisar tapa de radiador</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr style="background: #E8F5E9;">
-          <td><span class="cambio-item">CAMBIO</span> Realizar cambio de refrigerante</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar fugas en mangueras, abrazaderas, tuberías, radiador, etc.</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Inspeccionar aspas del ventilador, guardas y soportes</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar panal del radiador, limpieza, condición y estado</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar estado y tensión de las correas</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        ${actividades
-          .map(
-            (act) => `
-          <tr>
-            <td>${act.descripcion}</td>
-            <td style="text-align: center;"><span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span></td>
-            <td>${act.observaciones || ''}</td>
-          </tr>
-        `,
-          )
-          .join('')}
-      </tbody>
-    </table>
-  </div>
-`;
+/**
+ * Detecta si una actividad es realmente un parámetro de medición (debe excluirse del checklist)
+ * ✅ MEJORADO: Lista ampliada de términos para detectar mediciones
+ * ✅ FIX: Excluye actividades de revisión/inspección como "REVISAR SISTEMA DE CARGA DE BATERÍAS"
+ */
+const esActividadMedicion = (descripcion: string): boolean => {
+  const desc = descripcion.toLowerCase();
 
-const generarSeccionAspiracionTipoB = (actividades: any[]): string => `
-  <div class="section">
-    <div class="section-subtitle">SISTEMA DE ASPIRACIÓN</div>
-    <table class="checklist-table">
-      <thead>
-        <tr>
-          <th style="width: 70%;">Actividad</th>
-          <th style="width: 15%;">Estado</th>
-          <th style="width: 15%;">Obs.</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style="background: #E8F5E9;">
-          <td>
-            <span class="cambio-item">CAMBIO</span> Realizar cambio de filtros de aire
-            <div class="filtro-options">
-              <span class="filtro-option">FILTRO DOBLE</span>
-              <span class="filtro-option selected">FILTRO 1</span>
-              <span class="filtro-option">FILTRO 2</span>
-              <span class="filtro-option">FILTRO 3</span>
-            </div>
-          </td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">✓</span></td>
-          <td></td>
-        </tr>
-        ${actividades
-          .map(
-            (act) => `
-          <tr>
-            <td>${act.descripcion}</td>
-            <td style="text-align: center;"><span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span></td>
-            <td>${act.observaciones || ''}</td>
-          </tr>
-        `,
-          )
-          .join('')}
-      </tbody>
-    </table>
-  </div>
-`;
+  // Si es una actividad de revisión/inspección, NO es medición
+  if (desc.includes('revisar') || desc.includes('inspeccionar') || desc.includes('verificar estado')) {
+    return false;
+  }
 
-const generarSeccionCombustibleTipoB = (actividades: any[]): string => `
-  <div class="section">
-    <div class="section-subtitle">SISTEMA DE COMBUSTIBLE</div>
-    <table class="checklist-table">
-      <thead>
-        <tr>
-          <th style="width: 70%;">Actividad</th>
-          <th style="width: 15%;">Estado</th>
-          <th style="width: 15%;">Obs.</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Revisar mangueras, tuberías y abrazaderas del sistema de combustible</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Inspeccionar sistema riel común, fugas, acoples y tuberías</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar operación y estado de bomba de transferencia</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr style="background: #E8F5E9;">
-          <td>
-            <span class="cambio-item">CAMBIO</span> Realizar cambio de filtro de combustible
-            <div class="filtro-options">
-              <span class="filtro-option">TRAMPA SEPARADOR</span>
-              <span class="filtro-option selected">FILTRO 1</span>
-              <span class="filtro-option">FILTRO 2</span>
-              <span class="filtro-option">FILTRO 3</span>
-            </div>
-          </td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar nivel de combustible</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        ${actividades
-          .map(
-            (act) => `
-          <tr>
-            <td>${act.descripcion}</td>
-            <td style="text-align: center;"><span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span></td>
-            <td>${act.observaciones || ''}</td>
-          </tr>
-        `,
-          )
-          .join('')}
-      </tbody>
-    </table>
-  </div>
-`;
+  // Lista de términos que identifican mediciones (van en Módulo de Control)
+  // Estos términos deben ser específicos para evitar falsos positivos
+  const terminosMedicion = [
+    'rpm', 'r.p.m', 'velocidad motor', 'velocidad de motor',
+    'presión aceite', 'presión de aceite',
+    'temperatura refrigerante', 'temp refrigerante', 'temp. refrigerante',
+    'registrar carga batería', 'medir carga batería', 'voltaje batería',
+    'horas de trabajo', 'horómetro', 'horometro',
+    'voltaje generador', 'voltaje del generador', 'voltaje salida',
+    'frecuencia generador', 'frecuencia del generador',
+    'corriente generador', 'corriente del generador', 'amperaje',
+  ];
 
-const generarSeccionLubricacionTipoB = (actividades: any[]): string => `
-  <div class="section">
-    <div class="section-subtitle">SISTEMA DE LUBRICACIÓN</div>
-    <table class="checklist-table">
-      <thead>
-        <tr>
-          <th style="width: 70%;">Actividad</th>
-          <th style="width: 15%;">Estado</th>
-          <th style="width: 15%;">Obs.</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style="background: #E8F5E9;">
-          <td><span class="cambio-item">CAMBIO</span> Realizar cambio de aceite</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">✓</span></td>
-          <td></td>
-        </tr>
-        <tr style="background: #E8F5E9;">
-          <td>
-            <span class="cambio-item">CAMBIO</span> Realizar cambio de filtro de aceite
-            <div class="filtro-options">
-              <span class="filtro-option selected">FILTRO 1</span>
-              <span class="filtro-option">FILTRO 2</span>
-              <span class="filtro-option">FILTRO 3</span>
-            </div>
-          </td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Inspección por fugas</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        ${actividades
-          .map(
-            (act) => `
-          <tr>
-            <td>${act.descripcion}</td>
-            <td style="text-align: center;"><span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span></td>
-            <td>${act.observaciones || ''}</td>
-          </tr>
-        `,
-          )
-          .join('')}
-      </tbody>
-    </table>
-  </div>
-`;
+  return terminosMedicion.some(termino => desc.includes(termino)) ||
+    (desc.includes('medición') && desc.includes('parámetro'));
+};
 
-const generarSeccionElectricoTipoB = (actividades: any[]): string => `
+/**
+ * Detecta si una actividad es la de "Verificación de insumos" (virtual, no debe aparecer en checklist)
+ */
+const esActividadInsumos = (descripcion: string): boolean => {
+  const desc = descripcion.toLowerCase();
+  return desc.includes('verificación y registro fotográfico de insumos') ||
+    desc.includes('verificacion y registro fotografico de insumos') ||
+    (desc.includes('registro fotográfico') && desc.includes('insumos'));
+};
+
+/**
+ * Genera TODAS las actividades en una sola sección con checklist completo
+ * FILTRA las actividades que son parámetros de medición (aparecen en Módulo de Control)
+ * ✅ FIX: También filtra la actividad artificial de "Verificación de insumos"
+ */
+const generarTodasLasActividades = (actividades: any[]): string => {
+  if (!actividades || actividades.length === 0) {
+    return `
+    <div class="section">
+      <div class="section-subtitle">LISTA DE ACTIVIDADES DE MANTENIMIENTO</div>
+      <p style="padding: 10px; color: #666;">No se registraron actividades para este servicio.</p>
+    </div>
+    `;
+  }
+
+  // Filtrar actividades que NO son mediciones NI la actividad artificial de insumos
+  const actividadesChecklist = actividades.filter(
+    (act) => !esActividadMedicion(act.descripcion || '') && !esActividadInsumos(act.descripcion || '')
+  );
+
+  if (actividadesChecklist.length === 0) {
+    return `
+    <div class="section">
+      <div class="section-subtitle">LISTA DE ACTIVIDADES DE MANTENIMIENTO</div>
+      <p style="padding: 10px; color: #666;">No se registraron actividades de checklist para este servicio.</p>
+    </div>
+    `;
+  }
+
+  return `
   <div class="section">
-    <div class="section-subtitle">SISTEMA ELÉCTRICO DEL MOTOR</div>
+    <div class="section-subtitle">LISTA DE ACTIVIDADES DE MANTENIMIENTO</div>
+    <table class="checklist-table">
+      <thead>
+        <tr>
+          <th style="width: 60%;">Actividad</th>
+          <th style="width: 15%;">Estado</th>
+          <th style="width: 25%;">Observaciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${actividadesChecklist
+      .map(
+        (act) => {
+          const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
+          return `
+          <tr${esCambio ? ' style="background: #E8F5E9;"' : ''}>
+            <td>${act.descripcion || 'Actividad'}${esCambio ? ' <span class="cambio-badge">CAMBIO</span>' : ''}</td>
+            <td style="text-align: center;">
+              <span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span>
+            </td>
+            <td style="font-size: 9px;">${act.observaciones || ''}</td>
+          </tr>
+        `;
+        },
+      )
+      .join('')}
+      </tbody>
+    </table>
+  </div>
+`;
+};
+
+/**
+ * Genera sección de actividades por sistema (no usada actualmente)
+ */
+const generarSeccionActividades = (titulo: string, actividades: any[], tieneCambios: boolean = false): string => {
+  if (actividades.length === 0) return '';
+
+  return `
+  <div class="section">
+    <div class="section-subtitle">${titulo}${tieneCambios ? ' <span class="cambio-badge">INCLUYE CAMBIOS</span>' : ''}</div>
     <table class="checklist-table">
       <thead>
         <tr>
@@ -384,46 +323,27 @@ const generarSeccionElectricoTipoB = (actividades: any[]): string => `
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td>Revisar cargador de batería</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar electrolitos de batería</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar sistema de carga de baterías</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Limpieza y ajuste de bornes</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td>Revisar instrumentos y controles</td>
-          <td style="text-align: center;"><span class="resultado-badge resultado-B">B</span></td>
-          <td></td>
-        </tr>
         ${actividades
-          .map(
-            (act) => `
-          <tr>
-            <td>${act.descripcion}</td>
-            <td style="text-align: center;"><span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span></td>
+      .map(
+        (act) => {
+          const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
+          return `
+          <tr${esCambio ? ' style="background: #E8F5E9;"' : ''}>
+            <td>${act.descripcion}${esCambio ? ' <span class="cambio-badge">CAMBIO</span>' : ''}</td>
+            <td style="text-align: center;">
+              <span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span>
+            </td>
             <td>${act.observaciones || ''}</td>
           </tr>
-        `,
-          )
-          .join('')}
+        `;
+        },
+      )
+      .join('')}
       </tbody>
     </table>
   </div>
 `;
+};
 
 const generarDatosModulo = (datos: DatosOrdenPDF): string => {
   const modulo = datos.datosModulo || {};
@@ -477,7 +397,7 @@ const generarSimbologia = (): string => `
       <div class="simbologia-item"><span class="simbologia-code">R:</span> Regular</div>
       <div class="simbologia-item"><span class="simbologia-code">M:</span> Malo</div>
       <div class="simbologia-item"><span class="simbologia-code">I:</span> Inspeccionar</div>
-      <div class="simbologia-item"><span class="simbologia-code">C:</span> Cambiar</div>
+      <div class="simbologia-item"><span class="simbologia-code">C:</span> Cambiado</div>
       <div class="simbologia-item"><span class="simbologia-code">LI:</span> Limpiar</div>
       <div class="simbologia-item"><span class="simbologia-code">A:</span> Ajustar</div>
       <div class="simbologia-item"><span class="simbologia-code">L:</span> Lubricar</div>
@@ -493,32 +413,105 @@ const generarSimbologia = (): string => `
   </div>
 `;
 
-const generarEvidencias = (evidencias: string[] | { url: string; caption?: string }[]): string => {
-  if (!evidencias || evidencias.length === 0) return '';
+// Soporte para evidencias como strings o objetos
+type EvidenciaInput = string | { url: string; caption?: string };
 
-  // Normalizar formato - soportar array de strings o array de objetos
-  const evidenciasNormalizadas = evidencias.map((ev, idx) => {
+// Extraer tipo de evidencia del caption (ANTES, DURANTE, DESPUÉS, GENERAL)
+const extraerTipoEvidencia = (caption: string): string => {
+  const tipoMatch = caption.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i);
+  if (tipoMatch) {
+    const tipo = tipoMatch[1].toUpperCase();
+    if (tipo === 'DESPUÉS') return 'DESPUES';
+    if (tipo === 'MEDICIÓN') return 'MEDICION';
+    return tipo;
+  }
+  return 'GENERAL';
+};
+
+// Títulos amigables para cada sección
+const getTituloSeccion = (tipo: string): { titulo: string; icono: string } => {
+  switch (tipo) {
+    case 'ANTES': return { titulo: 'Estado Inicial (Antes del Servicio)', icono: '📸' };
+    case 'DURANTE': return { titulo: 'Durante el Servicio', icono: '🔧' };
+    case 'DESPUES': return { titulo: 'Estado Final (Después del Servicio)', icono: '✅' };
+    case 'MEDICION': return { titulo: 'Mediciones y Verificaciones', icono: '📏' };
+    case 'GENERAL': return { titulo: 'Evidencias Generales', icono: '📷' };
+    default: return { titulo: 'Otras Evidencias', icono: '📎' };
+  }
+};
+
+// Detectar evidencia de insumos
+const esEvidenciaInsumos = (caption: string): boolean => {
+  const captionLower = caption.toLowerCase();
+  return captionLower.includes('insumo') || captionLower.includes('filtro') || captionLower.includes('aceite');
+};
+
+const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
+  if (!evidencias || evidencias.length === 0) {
+    return `
+    <div class="section">
+      <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+      <div class="evidencias-empty">
+        <p>No se registraron evidencias fotográficas para este servicio.</p>
+      </div>
+    </div>
+  `;
+  }
+
+  // Normalizar evidencias a formato objeto
+  const normalizarEvidencia = (ev: EvidenciaInput, idx: number): { url: string; caption: string } => {
     if (typeof ev === 'string') {
       return { url: ev, caption: `Evidencia ${idx + 1}` };
     }
     return { url: ev.url, caption: ev.caption || `Evidencia ${idx + 1}` };
+  };
+
+  // Separar evidencias de INSUMOS (ya mostradas en sección propia)
+  const evidenciasNormalizadas = evidencias.map((ev, idx) => normalizarEvidencia(ev, idx));
+  const evidenciasRegulares = evidenciasNormalizadas.filter(ev => !esEvidenciaInsumos(ev.caption));
+
+  // Agrupar por tipo (ANTES, DURANTE, DESPUÉS)
+  const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+  const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
+
+  evidenciasRegulares.forEach((ev) => {
+    const tipo = extraerTipoEvidencia(ev.caption);
+    if (!grupos[tipo]) grupos[tipo] = [];
+    const captionLimpio = ev.caption.replace(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i, '');
+    grupos[tipo].push({ url: ev.url, caption: captionLimpio });
   });
 
-  return `
-  <div class="section">
-    <div class="section-title">📷 EVIDENCIAS FOTOGRÁFICAS</div>
-    <div class="evidencias-grid">
-      ${evidenciasNormalizadas
-        .map(
-          (ev, idx) => `
-        <div class="evidencia-item">
-          <img src="${ev.url}" alt="${ev.caption}" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'background:#f0f0f0;height:100%;display:flex;align-items:center;justify-content:center;color:#666;\\'>Imagen no disponible</div>';" />
-          <div class="evidencia-caption">${ev.caption}</div>
+  // Generar HTML agrupado por secciones
+  const seccionesHTML = ordenTipos
+    .filter(tipo => grupos[tipo] && grupos[tipo].length > 0)
+    .map(tipo => {
+      const { titulo, icono } = getTituloSeccion(tipo);
+      const evidenciasTipo = grupos[tipo];
+
+      // ✅ FIX: Clase especial para Fotos Generales
+      const claseGrupo = tipo === 'GENERAL' ? 'evidencias-grupo evidencias-grupo-general' : 'evidencias-grupo';
+      const tituloMostrar = tipo === 'GENERAL' ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
+
+      return `
+      <div class="${claseGrupo}">
+        <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
+        <div class="evidencias-grid-compacto">
+          ${evidenciasTipo.map((ev, idx) => `
+            <div class="evidencia-item-compacto">
+              <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+              <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
+            </div>
+          `).join('')}
         </div>
-      `,
-        )
-        .join('')}
-    </div>
+      </div>
+    `;
+    })
+    .join('');
+
+  return `
+  <div class="section evidencias-section">
+    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+    ${seccionesHTML}
   </div>
 `;
 };
@@ -532,14 +525,21 @@ const generarObservaciones = (observaciones: string): string => `
   </div>
 `;
 
-const generarFirmas = (): string => `
+// ✅ FIX: Unificar estilo de firmas con Tipo A Generador
+const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      <div class="firma-line"></div>
+      ${firmaTecnico
+    ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
+    : `<div class="firma-line"></div>`
+  }
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      <div class="firma-line"></div>
+      ${firmaCliente
+    ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
+    : `<div class="firma-line"></div>`
+  }
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
   </div>
@@ -555,6 +555,7 @@ const generarFooter = (): string => `
 
 const agruparActividadesPorSistema = (actividades: any[]): Record<string, any[]> => {
   const grupos: Record<string, any[]> = {
+    GENERAL: [],  // Para INSUMOS
     ENFRIAMIENTO: [],
     ASPIRACION: [],
     COMBUSTIBLE: [],
@@ -566,10 +567,42 @@ const agruparActividadesPorSistema = (actividades: any[]): Record<string, any[]>
     const sistema = act.sistema?.toUpperCase() || 'GENERAL';
     if (grupos[sistema]) {
       grupos[sistema].push(act);
+    } else {
+      // Si el sistema no está en la lista, agregarlo a GENERAL
+      grupos['GENERAL'].push(act);
     }
   });
 
   return grupos;
 };
+
+/**
+ * Sección especial para INSUMOS con foto destacada
+ */
+const generarSeccionInsumos = (evidencias: any[]): string => {
+  // Buscar evidencia de insumos por caption/descripción
+  const evidenciaInsumos = evidencias?.find((e: any) => {
+    const caption = (e.caption || e.descripcion || '').toLowerCase();
+    return caption.includes('insumo') || caption.includes('filtro') || caption.includes('aceite');
+  });
+
+  if (!evidenciaInsumos) return '';
+
+  return `
+  <div class="insumos-section">
+    <div class="insumos-title">📦 VERIFICACIÓN DE INSUMOS UTILIZADOS</div>
+    <div class="insumos-photo">
+      <img src="${evidenciaInsumos.url}" alt="Insumos" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+    </div>
+    <div style="text-align: center; margin-top: 10px;">
+      <span class="insumos-caption">
+        ${evidenciaInsumos.caption || 'Registro fotográfico de insumos utilizados en el servicio'}
+      </span>
+    </div>
+  </div>
+`;
+};
+
+// Función auxiliar eliminada - ahora usamos generarEvidencias directamente
 
 export default generarTipoBGeneradorHTML;

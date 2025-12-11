@@ -1,6 +1,7 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as express from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
@@ -20,6 +21,11 @@ async function bootstrap(): Promise<void> {
       logger: ['error', 'warn', 'log', 'debug', 'verbose'],
     });
     console.log('✅ [DEBUG 3/10] NestApplication creada exitosamente');
+
+    // ✅ FIX: Aumentar límite de body para payloads con imágenes Base64 (10MB)
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ limit: '10mb', extended: true }));
+    console.log('✅ [DEBUG 3.1] Body parser limit: 10MB');
 
     console.log('🔧 [DEBUG 4/10] Configurando GlobalPrefix...');
     app.setGlobalPrefix('api');
@@ -107,6 +113,25 @@ async function bootstrap(): Promise<void> {
         transform: true,
         transformOptions: {
           enableImplicitConversion: true,
+        },
+        // ✅ Mostrar errores detallados de validación (recursivo para nested objects)
+        exceptionFactory: (errors) => {
+          const extractErrors = (errs: any[], prefix = ''): string[] => {
+            const messages: string[] = [];
+            for (const err of errs) {
+              const prop = prefix ? `${prefix}.${err.property}` : err.property;
+              if (err.constraints) {
+                messages.push(`${prop}: ${Object.values(err.constraints).join(', ')}`);
+              }
+              if (err.children && err.children.length > 0) {
+                messages.push(...extractErrors(err.children, prop));
+              }
+            }
+            return messages;
+          };
+          const messages = extractErrors(errors);
+          console.log('❌ [ValidationPipe] Errores detallados:', messages);
+          return new BadRequestException(messages);
         },
       }),
     );
