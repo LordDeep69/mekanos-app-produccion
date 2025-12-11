@@ -18,8 +18,10 @@
 import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import {
+  DatosCorrectivoOrdenPDF,
   DatosCotizacionPDF,
   DatosOrdenPDF,
+  generarCorrectivoOrdenHTML,
   generarCotizacionHTML,
   generarTipoABombaHTML,
   generarTipoAGeneradorHTML,
@@ -73,17 +75,27 @@ export class PdfService implements OnModuleDestroy {
       // Obtener el HTML según el tipo de informe
       const html = this.obtenerHTML(options.tipoInforme, options.datos);
 
-      // Inicializar browser si no existe
-      if (!this.browser) {
-        await this.initBrowser();
-      }
+      // ✅ FIX: Verificar que browser esté activo y conectado
+      await this.ensureBrowserConnected();
 
       // Crear nueva página
       const page = await this.browser!.newPage();
 
       try {
+        // ✅ FIX MEJORADO: Configurar encoding UTF-8 explícitamente
+        await page.setExtraHTTPHeaders({
+          'Content-Type': 'text/html; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+        });
+
+        // Inyectar meta http-equiv para reforzar encoding UTF-8
+        const htmlConEncoding = html.replace(
+          '<meta charset="UTF-8">',
+          '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
+        );
+
         // Configurar contenido con timeout extendido para imágenes
-        await page.setContent(html, {
+        await page.setContent(htmlConEncoding, {
           waitUntil: 'networkidle0',
           timeout: 60000, // 60 segundos para cargar imágenes
         });
@@ -134,11 +146,75 @@ export class PdfService implements OnModuleDestroy {
         return generarTipoBGeneradorHTML(datos);
       case 'BOMBA_A':
         return generarTipoABombaHTML(datos);
+      case 'CORRECTIVO':
+        return generarCorrectivoOrdenHTML(this.adaptarDatosParaCorrectivo(datos));
       case 'COTIZACION':
         return generarCotizacionHTML(datos as unknown as DatosCotizacionPDF);
       default:
         return generarTipoAGeneradorHTML(datos);
     }
+  }
+
+  /**
+   * Adapta los datos genéricos de orden al formato específico de correctivo
+   */
+  private adaptarDatosParaCorrectivo(datos: DatosOrdenPDF): DatosCorrectivoOrdenPDF {
+    // Convertir actividades a trabajos ejecutados
+    const trabajosEjecutados = (datos.actividades || []).map((a, index) => ({
+      orden: index + 1,
+      descripcion: a.descripcion,
+      sistema: a.sistema || 'GENERAL',
+      tiempoHoras: 1,
+      resultado: a.resultado === 'B' ? 'COMPLETADO' as const :
+        a.resultado === 'R' ? 'PARCIAL' as const : 'COMPLETADO' as const,
+    }));
+
+    // Filtrar mediciones que tengan valor (para renderizado condicional)
+    const medicionesConValor = (datos.mediciones || []).filter(m =>
+      m.valor !== null && m.valor !== undefined && m.valor !== 0
+    ).map(m => ({
+      parametro: m.parametro,
+      valorDespues: String(m.valor),
+      unidad: m.unidad,
+      estado: (m.nivelAlerta === 'OK' ? 'OK' :
+        m.nivelAlerta === 'WARNING' ? 'ADVERTENCIA' : 'OK') as 'OK' | 'ADVERTENCIA' | 'CRITICO',
+    }));
+
+    return {
+      numeroOrden: datos.numeroOrden,
+      fecha: datos.fecha,
+      horaEntrada: datos.horaEntrada,
+      horaSalida: datos.horaSalida,
+      tipoServicio: 'CORRECTIVO',
+      cliente: datos.cliente,
+      direccion: datos.direccion,
+      tipoEquipo: datos.tipoEquipo || 'EQUIPO',
+      marcaEquipo: datos.marcaEquipo,
+      modeloEquipo: '',
+      serieEquipo: datos.serieEquipo,
+      tecnico: datos.tecnico,
+      problemaReportado: {
+        descripcion: datos.observaciones || 'Servicio de mantenimiento correctivo solicitado',
+        fechaReporte: datos.fecha,
+      },
+      diagnostico: {
+        descripcion: 'Diagnóstico realizado en sitio',
+        causaRaiz: 'Determinado durante la inspección técnica',
+        sistemasAfectados: [...new Set(trabajosEjecutados.map(t => t.sistema))],
+      },
+      trabajosEjecutados,
+      repuestosUtilizados: [],
+      mediciones: medicionesConValor.length > 0 ? medicionesConValor : undefined,
+      recomendaciones: ['Seguir plan de mantenimiento preventivo programado'],
+      observaciones: datos.observaciones,
+      evidencias: (datos.evidencias || []).map(e => ({
+        tipo: 'DURANTE' as const,
+        url: typeof e === 'string' ? e : e.url,
+        descripcion: typeof e === 'string' ? undefined : e.caption,
+      })),
+      firmaTecnico: datos.firmaTecnico,
+      firmaCliente: datos.firmaCliente,
+    };
   }
 
   /**
@@ -159,6 +235,37 @@ export class PdfService implements OnModuleDestroy {
     const tipoNombre = tipoNombreMap[tipo] || 'Informe';
 
     return `MEKANOS_${tipoNombre}_${numeroOrden}_${fecha}.pdf`;
+  }
+
+  /**
+   * ✅ FIX: Asegura que el browser esté conectado, reiniciando si es necesario
+   */
+  private async ensureBrowserConnected(): Promise<void> {
+    try {
+      // Verificar si browser existe y está conectado
+      if (this.browser && this.browser.connected) {
+        return; // Browser activo, nada que hacer
+      }
+
+      // Si existe pero no está conectado, cerrarlo
+      if (this.browser) {
+        this.logger.warn('⚠️ Browser desconectado, reiniciando...');
+        try {
+          await this.browser.close();
+        } catch (e) {
+          // Ignorar errores al cerrar browser muerto
+        }
+        this.browser = null;
+      }
+
+      // Inicializar nuevo browser
+      await this.initBrowser();
+    } catch (error) {
+      this.logger.error('❌ Error verificando conexión de browser', error);
+      // Forzar reinicio
+      this.browser = null;
+      await this.initBrowser();
+    }
   }
 
   /**
