@@ -444,6 +444,9 @@ class OfflineSyncService {
   }
 
   /// Reintenta sincronizar una orden específica
+  /// 
+  /// ✅ FIX 18-DIC-2025: Mantener estado EN_PROCESO durante toda la operación
+  /// para que la UI muestre el spinner y el técnico vea que está subiendo
   Future<bool> reintentarOrden(int idOrdenLocal) async {
     final online = await _connectivity.checkConnection();
     if (!online) return false;
@@ -454,20 +457,143 @@ class OfflineSyncService {
 
     if (orden == null) return false;
 
-    // Resetear intentos y estado
+    // ✅ Marcar como EN_PROCESO inmediatamente (NO PENDIENTE)
+    // Esto mantiene la orden visible en la UI con estado "Subiendo..."
     await (_db.update(
       _db.ordenesPendientesSync,
     )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).write(
       const OrdenesPendientesSyncCompanion(
-        estadoSync: Value('PENDIENTE'),
-        intentos: Value(0),
+        estadoSync: Value('EN_PROCESO'),
         ultimoError: Value(null),
       ),
     );
 
-    // Procesar cola (solo esta orden se procesará)
-    final result = await procesarCola();
-    return result.ordenesSync > 0;
+    // Procesar SOLO esta orden (no toda la cola)
+    return await _procesarOrdenIndividual(orden);
+  }
+
+  /// Procesa una orden individual sin pasar por procesarCola()
+  /// Mantiene el control del estado durante toda la operación
+  Future<bool> _procesarOrdenIndividual(OrdenesPendientesSyncData orden) async {
+    try {
+      debugPrint('🔄 [SYNC-INDIVIDUAL] Procesando orden ${orden.idOrdenBackend}');
+
+      // PASO 0: VERIFICAR SI LA ORDEN YA FUE COMPLETADA EN EL BACKEND
+      final verificacionInicial = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+      if (verificacionInicial['completada'] == true) {
+        debugPrint('✅ [SYNC-INDIVIDUAL] Orden ya completada en backend');
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+          'pdfUrl': verificacionInicial['pdfUrl'],
+        });
+        return true;
+      }
+
+      // Decodificar payload
+      final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
+
+      // CRÍTICO: Asegurar que la orden esté en EN_PROCESO en el backend
+      try {
+        await _apiClient.put('/ordenes/${orden.idOrdenBackend}/iniciar');
+      } on DioException catch (iniciarError) {
+        final statusCode = iniciarError.response?.statusCode;
+        if (statusCode == 400 || statusCode == 409) {
+          // Verificar si ya está completada
+          final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+          if (verificacion['completada'] == true) {
+            await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+            await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+              'pdfUrl': verificacion['pdfUrl'],
+            });
+            return true;
+          }
+        } else {
+          throw iniciarError;
+        }
+      }
+
+      // Enviar al backend
+      debugPrint('📤 [SYNC-INDIVIDUAL] Enviando a finalizar-completo...');
+      final response = await _apiClient.post(
+        '/ordenes/${orden.idOrdenBackend}/finalizar-completo',
+        data: payload,
+        options: Options(
+          sendTimeout: const Duration(minutes: 5),
+          receiveTimeout: const Duration(minutes: 5),
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint('✅ [SYNC-INDIVIDUAL] Éxito - eliminando de cola');
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        try {
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, response.data);
+        } catch (localError) {
+          debugPrint('⚠️ Error guardando estado local (no crítico): $localError');
+        }
+        return true;
+      } else if (response.statusCode == 400 || response.statusCode == 409) {
+        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        if (verificacion['completada'] == true) {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+            'pdfUrl': verificacion['pdfUrl'],
+          });
+          return true;
+        }
+        // Error real - marcar como error
+        await _db.marcarOrdenErrorSync(
+          orden.idOrdenLocal,
+          'Error ${response.statusCode}: ${response.data}',
+        );
+        return false;
+      } else {
+        await _db.marcarOrdenErrorSync(
+          orden.idOrdenLocal,
+          'Error ${response.statusCode}: ${response.data}',
+        );
+        return false;
+      }
+    } on DioException catch (e) {
+      debugPrint('❌ [SYNC-INDIVIDUAL] DioException: ${e.type} - ${e.message}');
+      
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 400 || statusCode == 409) {
+        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        if (verificacion['completada'] == true) {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+            'pdfUrl': verificacion['pdfUrl'],
+          });
+          return true;
+        }
+        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, 'Error $statusCode');
+        return false;
+      }
+
+      // Verificar si el backend procesó durante timeout
+      for (int intento = 1; intento <= 3; intento++) {
+        debugPrint('🔍 [SYNC-INDIVIDUAL] Verificación intento $intento/3...');
+        await Future.delayed(Duration(seconds: intento * 5));
+        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        if (verificacion['completada'] == true) {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+            'pdfUrl': verificacion['pdfUrl'],
+          });
+          return true;
+        }
+      }
+
+      // Marcar como error para reintento
+      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Error de conexión';
+      await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
+      return false;
+    } catch (e) {
+      debugPrint('❌ [SYNC-INDIVIDUAL] Error inesperado: $e');
+      await _db.marcarOrdenErrorSync(orden.idOrdenLocal, e.toString());
+      return false;
+    }
   }
 
   /// Cancela una orden de la cola de sincronización
