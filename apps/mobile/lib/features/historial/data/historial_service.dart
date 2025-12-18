@@ -1,6 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/config/environment.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 
@@ -228,35 +232,93 @@ class HistorialService {
             .get()
             .then((list) => list.length);
 
-    // ✅ FIX: Usar datos sincronizados si no hay datos locales
-    final totalActividadesFinal = actividades.isNotEmpty
-        ? actividades.length
-        : orden.totalActividades;
-    final totalMedicionesFinal = mediciones.isNotEmpty
-        ? mediciones.length
-        : orden.totalMediciones;
+    // ✅ FIX: Obtener catálogo de actividades para fallback
+    final actividadesCatalogo = await _db.getActividadesByTipoServicio(
+      orden.idTipoServicio,
+    );
+    final totalCatalogo = actividadesCatalogo.length;
+    final medicionesCatalogo = actividadesCatalogo
+        .where((a) => a.tipoActividad == 'MEDICION')
+        .length;
+
+    // ✅ FIX: Usar datos sincronizados si no hay datos locales (con fallback a catálogo)
+    int totalActividadesFinal;
+    if (actividades.isNotEmpty) {
+      totalActividadesFinal = actividades.length;
+    } else if (orden.totalActividades > 0) {
+      totalActividadesFinal = orden.totalActividades;
+    } else {
+      // Fallback: desglose sincronizado o catálogo
+      final desglose =
+          orden.actividadesBuenas +
+          orden.actividadesMalas +
+          orden.actividadesCorregidas +
+          orden.actividadesNA;
+      totalActividadesFinal = desglose > 0 ? desglose : totalCatalogo;
+    }
+
+    int totalMedicionesFinal;
+    if (mediciones.isNotEmpty) {
+      totalMedicionesFinal = mediciones.length;
+    } else if (orden.totalMediciones > 0) {
+      totalMedicionesFinal = orden.totalMediciones;
+    } else {
+      // Fallback: desglose sincronizado o catálogo
+      final desglose =
+          orden.medicionesNormales +
+          orden.medicionesAdvertencia +
+          orden.medicionesCriticas;
+      totalMedicionesFinal = desglose > 0 ? desglose : medicionesCatalogo;
+    }
+
     final evidenciasCount = evidenciasLocales > 0
         ? evidenciasLocales
         : orden.totalEvidencias;
     final firmasCount = firmasLocales > 0 ? firmasLocales : orden.totalFirmas;
 
-    // ✅ FIX: Usar desglose sincronizado si no hay datos locales
-    final buenosFinal = actividades.isNotEmpty
-        ? buenos
-        : orden.actividadesBuenas;
-    final malosFinal = actividades.isNotEmpty ? malos : orden.actividadesMalas;
-    final corregidosFinal = actividades.isNotEmpty
-        ? corregidos
-        : orden.actividadesCorregidas;
-    final noAplicaFinal = actividades.isNotEmpty
-        ? noAplica
-        : orden.actividadesNA;
+    // ✅ FIX: Usar desglose sincronizado si conteo local es 0
+    // El conteo local puede ser 0 aunque haya actividades (simbologia null)
+    final conteoLocalTotal = buenos + malos + corregidos + noAplica;
+    final conteoSincronizado =
+        orden.actividadesBuenas +
+        orden.actividadesMalas +
+        orden.actividadesCorregidas +
+        orden.actividadesNA;
+
+    int buenosFinal, malosFinal, corregidosFinal, noAplicaFinal;
+    if (conteoLocalTotal > 0) {
+      // Usar datos locales si tienen valores válidos
+      buenosFinal = buenos;
+      malosFinal = malos;
+      corregidosFinal = corregidos;
+      noAplicaFinal = noAplica;
+    } else if (conteoSincronizado > 0) {
+      // Usar desglose sincronizado si local es 0
+      buenosFinal = orden.actividadesBuenas;
+      malosFinal = orden.actividadesMalas;
+      corregidosFinal = orden.actividadesCorregidas;
+      noAplicaFinal = orden.actividadesNA;
+    } else {
+      // Fallback final: si está COMPLETADA, asumir todas buenas
+      buenosFinal = totalActividadesFinal;
+      malosFinal = 0;
+      corregidosFinal = 0;
+      noAplicaFinal = 0;
+    }
 
     // Calcular duración del servicio
     Duration? duracion;
     if (orden.fechaInicio != null && orden.fechaFin != null) {
       duracion = orden.fechaFin!.difference(orden.fechaInicio!);
     }
+
+    // ✅ NUEVO: Determinar si las estadísticas son reales (no fallback del catálogo)
+    // Son reales si: hay actividades locales ejecutadas O hay datos sincronizados del servidor
+    final tieneActividadesLocales = actividades.isNotEmpty;
+    final tieneDatosSincronizados =
+        orden.totalActividades > 0 || conteoSincronizado > 0;
+    final estadisticasSincronizadas =
+        tieneActividadesLocales || tieneDatosSincronizados;
 
     return OrdenHistorialDetalleDto(
       idLocal: orden.idLocal,
@@ -312,6 +374,8 @@ class HistorialService {
       // ✅ FIX: Horas como TEXTO PLANO - sin zona horaria
       horaEntradaTexto: orden.horaEntradaTexto,
       horaSalidaTexto: orden.horaSalidaTexto,
+      // ✅ NUEVO: Flag para saber si las estadísticas son reales o fallback
+      estadisticasSincronizadas: estadisticasSincronizadas,
     );
   }
 
@@ -439,6 +503,81 @@ class HistorialService {
 
     return tiposMap.values.toList()
       ..sort((a, b) => a.codigo.compareTo(b.codigo));
+  }
+
+  /// Consulta la URL del PDF desde el backend y la guarda localmente
+  ///
+  /// Útil cuando la orden fue sincronizada pero la URL del PDF no se guardó
+  /// correctamente en la base de datos local.
+  Future<String?> consultarYGuardarUrlPdf(int idOrdenLocal) async {
+    try {
+      // Obtener el idBackend de la orden
+      final orden = await (_db.select(
+        _db.ordenes,
+      )..where((o) => o.idLocal.equals(idOrdenLocal))).getSingleOrNull();
+
+      if (orden == null || orden.idBackend == null) {
+        return null;
+      }
+
+      // Importar Dio para hacer la consulta HTTP
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: Environment.apiBaseUrl,
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
+
+      // Obtener token de autenticación
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      if (token != null) {
+        dio.options.headers['Authorization'] = 'Bearer $token';
+      }
+
+      // Consultar la orden en el backend
+      final response = await dio.get('/ordenes/${orden.idBackend}');
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final data = response.data['data'];
+        String? urlPdf;
+
+        // Buscar URL del PDF en diferentes lugares posibles
+        if (data['url_pdf'] != null) {
+          urlPdf = data['url_pdf'];
+        } else if (data['urlPdf'] != null) {
+          urlPdf = data['urlPdf'];
+        } else if (data['documento'] != null &&
+            data['documento']['url'] != null) {
+          urlPdf = data['documento']['url'];
+        } else if (data['documentos'] != null && data['documentos'] is List) {
+          final docs = data['documentos'] as List;
+          final pdfDoc = docs.firstWhere(
+            (d) => d['tipo_documento'] == 'PDF' || d['tipoDocumento'] == 'PDF',
+            orElse: () => null,
+          );
+          if (pdfDoc != null) {
+            urlPdf = pdfDoc['url'] ?? pdfDoc['url_documento'];
+          }
+        }
+
+        if (urlPdf != null && urlPdf.isNotEmpty) {
+          // Guardar la URL en la base de datos local
+          await (_db.update(_db.ordenes)
+                ..where((o) => o.idLocal.equals(idOrdenLocal)))
+              .write(OrdenesCompanion(urlPdf: Value(urlPdf)));
+
+          return urlPdf;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error consultando URL PDF: $e');
+      return null;
+    }
   }
 
   /// Repara órdenes antiguas que tienen estado COMPLETADA pero sin fechaFin
@@ -594,6 +733,9 @@ class OrdenHistorialDetalleDto {
   final String? horaEntradaTexto;
   final String? horaSalidaTexto;
 
+  // ✅ NUEVO: Flag para saber si las estadísticas vienen del servidor o son fallback
+  final bool estadisticasSincronizadas;
+
   OrdenHistorialDetalleDto({
     required this.idLocal,
     this.idBackend,
@@ -631,6 +773,7 @@ class OrdenHistorialDetalleDto {
     this.urlPdf,
     this.horaEntradaTexto,
     this.horaSalidaTexto,
+    this.estadisticasSincronizadas = false,
   });
 
   /// Porcentaje de actividades buenas

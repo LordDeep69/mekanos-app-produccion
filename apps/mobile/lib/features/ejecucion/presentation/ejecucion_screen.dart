@@ -35,6 +35,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   Map<int, int> _conteoEvidenciasPorActividad = {}; // ✅ MINI-GALERÍA v2
   bool _isLoading = true;
   String? _numeroOrden;
+  bool _esCorrectivo = false;
+  String? _razonFallaActual;
   int _completadas = 0;
   int _total = 0;
   int _medicionesConValor = 0;
@@ -106,12 +108,24 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         'CLIENTE',
       );
 
-      // Obtener número de orden
+      // Obtener número de orden y tipo de servicio para detección de correctivos
       final db = ref.read(databaseProvider);
       final orden = await (db.select(
         db.ordenes,
       )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
       _numeroOrden = orden?.numeroOrden ?? 'Sin número';
+      _razonFallaActual = orden?.razonFalla;
+
+      if (orden != null) {
+        final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
+        final codigoTipo = tipoServicio?.codigo ?? '';
+        final numero = orden.numeroOrden.toUpperCase();
+        _esCorrectivo =
+            codigoTipo.toUpperCase().contains('CORR') ||
+            numero.contains('CORR');
+      } else {
+        _esCorrectivo = false;
+      }
     } catch (e) {
       print('❌ Error cargando datos: $e');
     }
@@ -222,6 +236,10 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final extraRazon = _extraRazonFallaCount();
+    final completadosDisplay = _completadas + _medicionesConValor + extraRazon;
+    final totalDisplay = _total + _totalMediciones + extraRazon;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_numeroOrden ?? 'Ejecución'),
@@ -253,7 +271,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '${_completadas + _medicionesConValor}/${_total + _totalMediciones}',
+                  '$completadosDisplay/$totalDisplay',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -1534,8 +1552,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   /// TAB 3: RESUMEN - Vista general con progreso COMPLETO (Checklist + Mediciones)
   Widget _buildResumenTab() {
     // CÁLCULO CORRECTO: (Actividades + Mediciones) / Total Items
-    final totalItems = _total + _totalMediciones;
-    final completados = _completadas + _medicionesConValor;
+    final extraRazon = _extraRazonFallaCount();
+    final totalItems = _total + _totalMediciones + extraRazon;
+    final completados = _completadas + _medicionesConValor + extraRazon;
     final porcentaje = totalItems > 0
         ? (completados / totalItems * 100).toInt()
         : 0;
@@ -1598,7 +1617,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                   const SizedBox(height: 8),
                   // Desglose
                   Text(
-                    '📋 Checklist: $_completadas/$_total  |  📏 Mediciones: $_medicionesConValor/$_totalMediciones',
+                    '📋 Checklist: $_completadas/$_total  |  📏 Mediciones: $_medicionesConValor/$_totalMediciones${_esCorrectivo ? "  |  ⚙️ Razón falla: ${_razonFallaActual?.trim().isNotEmpty == true ? "1/1" : "0/0"}" : ""}',
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                   ),
                 ],
@@ -1872,6 +1891,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     return count;
   }
 
+  int _extraRazonFallaCount() {
+    if (!_esCorrectivo) return 0;
+    return (_razonFallaActual?.trim().isNotEmpty ?? false) ? 1 : 0;
+  }
+
   // ============================================================================
   // ✅ RUTA 9: DIÁLOGO Y LÓGICA DE FINALIZACIÓN CON SYNC AL BACKEND
   // ============================================================================
@@ -1898,6 +1922,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       text: DateFormat('HH:mm').format(now),
     );
     final observacionesController = TextEditingController();
+    final razonFallaController = TextEditingController(
+      text: _razonFallaActual ?? '',
+    );
 
     // DEBUG: Log de valores iniciales
     print('🕐 Diálogo Finalización:');
@@ -1956,6 +1983,19 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                   border: OutlineInputBorder(),
                 ),
               ),
+              if (_esCorrectivo) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: razonFallaController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Razón de la falla (opcional)',
+                    hintText: 'Describe la causa raíz o hallazgo principal',
+                    prefixIcon: Icon(Icons.bug_report),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1976,6 +2016,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 'observaciones': observacionesController.text.isEmpty
                     ? 'Servicio completado satisfactoriamente.'
                     : observacionesController.text,
+                if (_esCorrectivo) 'razonFalla': razonFallaController.text,
               });
             },
             icon: const Icon(Icons.cloud_upload),
@@ -1991,6 +2032,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         horaEntrada: resultado['horaEntrada']!,
         horaSalida: resultado['horaSalida']!,
         observaciones: resultado['observaciones']!,
+        razonFalla: resultado['razonFalla'],
       );
     }
   }
@@ -2000,23 +2042,43 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     required String horaEntrada,
     required String horaSalida,
     required String observaciones,
+    String? razonFalla,
   }) async {
-    // Mostrar loading
+    // ✅ MEJORA: Mostrar loading con más información
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
+      builder: (ctx) => AlertDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Sincronizando con el servidor...'),
-            SizedBox(height: 8),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text(
+              'Finalizando servicio...',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  _buildLoadingStep(Icons.photo, 'Subiendo evidencias...'),
+                  _buildLoadingStep(Icons.gesture, 'Subiendo firmas...'),
+                  _buildLoadingStep(Icons.picture_as_pdf, 'Generando PDF...'),
+                  _buildLoadingStep(Icons.email, 'Enviando notificación...'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Text(
-              'Subiendo evidencias, firmas y datos.\nEsto puede tomar unos segundos.',
+              'Este proceso puede tardar hasta 30 segundos.\nNo cierres la aplicación.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
             ),
           ],
         ),
@@ -2045,11 +2107,21 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         horaEntrada: horaEntrada,
         horaSalida: horaSalida,
         usuarioId: ref.read(authStateProvider).user?.id ?? 1,
+        razonFalla: (razonFalla?.trim().isNotEmpty ?? false)
+            ? razonFalla!.trim()
+            : null,
       );
 
       Navigator.of(context).pop(); // Cerrar loading
 
       if (resultado.success) {
+        if (razonFalla != null) {
+          setState(() {
+            _razonFallaActual = (razonFalla.trim().isNotEmpty)
+                ? razonFalla.trim()
+                : null;
+          });
+        }
         if (resultado.guardadoOffline) {
           _mostrarExitoOffline(resultado);
         } else {
@@ -2134,10 +2206,13 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Icon(Icons.cloud_off, color: Colors.orange, size: 28),
+            Icon(Icons.cloud_sync, color: Colors.blue, size: 28),
             SizedBox(width: 8),
             Flexible(
-              child: Text('Servicio Guardado', style: TextStyle(fontSize: 18)),
+              child: Text(
+                'Servicio Completado',
+                style: TextStyle(fontSize: 18),
+              ),
             ),
           ],
         ),
@@ -2146,21 +2221,55 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ✅ MEJORA: Mensaje más claro sobre el estado real
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
+                  border: Border.all(color: Colors.green.shade200),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.orange.shade700),
+                    Icon(Icons.check_circle, color: Colors.green.shade700),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        'Tu trabajo está guardado de forma segura.',
-                        style: TextStyle(fontSize: 14),
+                        '¡Servicio finalizado correctamente!',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'El servidor está generando el PDF y enviando el email. Esto puede tardar hasta 30 segundos.',
+                        style: TextStyle(fontSize: 13),
                       ),
                     ),
                   ],
@@ -2168,23 +2277,28 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               ),
               const SizedBox(height: 16),
               const Text(
-                'Se sincronizará automáticamente cuando tengas conexión a Internet.',
-                style: TextStyle(fontSize: 14),
+                'Puedes continuar trabajando. La sincronización se completará en segundo plano.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
               const SizedBox(height: 16),
-              _buildResultadoItem(Icons.save, 'Estado', 'Guardado local ✅'),
-              _buildResultadoItem(Icons.sync, 'Sincronización', 'Pendiente 🔄'),
+              _buildResultadoItem(Icons.save, 'Datos locales', 'Guardados ✅'),
+              _buildResultadoItem(
+                Icons.cloud_upload,
+                'Subida al servidor',
+                'En proceso 🔄',
+              ),
+              _buildResultadoItem(Icons.picture_as_pdf, 'PDF', 'Generando...'),
             ],
           ),
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
             onPressed: () {
               Navigator.of(ctx).pop();
               Navigator.of(context).pop(); // Volver a lista de órdenes
             },
-            child: const Text('ENTENDIDO'),
+            child: const Text('CONTINUAR'),
           ),
         ],
       ),
@@ -2201,6 +2315,23 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
           Text(label),
           const Spacer(),
           Text(valor, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  /// ✅ NUEVO: Widget para mostrar paso de loading
+  Widget _buildLoadingStep(IconData icon, String texto) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.blue.shade700),
+          const SizedBox(width: 8),
+          Text(
+            texto,
+            style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+          ),
         ],
       ),
     );

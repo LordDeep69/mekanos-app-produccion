@@ -16,7 +16,7 @@ import 'core/config/supabase_config.dart';
 import 'features/auth/data/auth_models.dart';
 import 'features/auth/data/auth_provider.dart';
 import 'features/auth/presentation/login_screen.dart';
-import 'features/orders/presentation/home_screen.dart';
+import 'features/orders/presentation/home_production_screen.dart';
 
 void main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -91,8 +91,8 @@ class AuthWrapper extends ConsumerWidget {
         );
 
       case AuthStatus.authenticated:
-        // Usuario autenticado → Home
-        return const HomeScreen();
+        // Usuario autenticado → Home de Producción
+        return const HomeProductionScreen();
 
       case AuthStatus.unauthenticated:
       case AuthStatus.error:

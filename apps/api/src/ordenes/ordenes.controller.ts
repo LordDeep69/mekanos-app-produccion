@@ -1,11 +1,15 @@
 import { PrismaService } from '@mekanos/database';
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Put,
@@ -69,6 +73,177 @@ export class OrdenesController {
     private readonly prisma: PrismaService,
     private readonly finalizacionService: FinalizacionOrdenService,
   ) { }
+
+  @Get(':id/plan-actividades')
+  @UseGuards(JwtAuthGuard)
+  async getPlanActividades(@Param('id', ParseIntPipe) id: number) {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_orden_servicio: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+
+    const plan = await (this.prisma as any).ordenes_actividades_plan.findMany({
+      where: { id_orden_servicio: id },
+      orderBy: { orden_secuencia: 'asc' },
+    });
+
+    return {
+      success: true,
+      data: plan,
+    };
+  }
+
+  @Put(':id/plan-actividades')
+  @UseGuards(JwtAuthGuard)
+  async replacePlanActividades(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      actividades?: Array<{
+        idActividadCatalogo: number;
+        ordenSecuencia?: number;
+        esObligatoria?: boolean;
+      }>;
+    },
+    @UserId() userId: number,
+  ) {
+    const actividades = body?.actividades;
+
+    if (!Array.isArray(actividades)) {
+      throw new BadRequestException('Debe enviar actividades como array');
+    }
+
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_orden_servicio: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await (tx as any).ordenes_actividades_plan.deleteMany({
+        where: { id_orden_servicio: id },
+      });
+
+      if (actividades.length > 0) {
+        await (tx as any).ordenes_actividades_plan.createMany({
+          data: actividades.map((a, index) => {
+            if (!a || typeof a.idActividadCatalogo !== 'number') {
+              throw new BadRequestException(
+                'Cada actividad debe tener idActividadCatalogo numérico',
+              );
+            }
+            const ordenSecuencia =
+              typeof a.ordenSecuencia === 'number'
+                ? a.ordenSecuencia
+                : index + 1;
+
+            return {
+              id_orden_servicio: id,
+              id_actividad_catalogo: a.idActividadCatalogo,
+              orden_secuencia: ordenSecuencia,
+              origen: 'ADMIN',
+              es_obligatoria:
+                typeof a.esObligatoria === 'boolean' ? a.esObligatoria : true,
+              creado_por: userId || null,
+            };
+          }),
+          skipDuplicates: true,
+        });
+      }
+    });
+
+    return {
+      success: true,
+      message: 'Plan de actividades actualizado',
+    };
+  }
+
+  @Put(':id/plan-actividades/default')
+  @UseGuards(JwtAuthGuard)
+  async applyDefaultPlanActividades(
+    @Param('id', ParseIntPipe) id: number,
+    @UserId() userId: number,
+  ) {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_orden_servicio: true, id_tipo_servicio: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+
+    if (!orden.id_tipo_servicio) {
+      throw new BadRequestException('La orden no tiene tipo de servicio');
+    }
+
+    const actividadesCatalogo = await this.prisma.catalogo_actividades.findMany({
+      where: {
+        id_tipo_servicio: orden.id_tipo_servicio,
+        activo: true,
+      },
+      orderBy: { orden_ejecucion: 'asc' },
+    });
+
+    if (actividadesCatalogo.length === 0) {
+      throw new BadRequestException(
+        'No hay actividades en catálogo para el tipo de servicio de la orden',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await (tx as any).ordenes_actividades_plan.deleteMany({
+        where: { id_orden_servicio: id },
+      });
+
+      await (tx as any).ordenes_actividades_plan.createMany({
+        data: actividadesCatalogo.map((a, index) => ({
+          id_orden_servicio: id,
+          id_actividad_catalogo: a.id_actividad_catalogo,
+          orden_secuencia: a.orden_ejecucion ?? index + 1,
+          origen: 'ADMIN',
+          es_obligatoria: a.es_obligatoria ?? true,
+          creado_por: userId || null,
+        })),
+        skipDuplicates: true,
+      });
+    });
+
+    return {
+      success: true,
+      message: 'Plan de actividades default aplicado',
+      total: actividadesCatalogo.length,
+    };
+  }
+
+  @Delete(':id/plan-actividades')
+  @UseGuards(JwtAuthGuard)
+  async clearPlanActividades(@Param('id', ParseIntPipe) id: number) {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_orden_servicio: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+
+    await (this.prisma as any).ordenes_actividades_plan.deleteMany({
+      where: { id_orden_servicio: id },
+    });
+
+    return {
+      success: true,
+      message: 'Plan de actividades eliminado',
+    };
+  }
 
   /**
    * GET /api/ordenes/estados-debug

@@ -1,10 +1,11 @@
-import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import 'sync_retry_strategy.dart';
 
 /// Provider para el servicio de sincronización
 final syncServiceProvider = Provider<SyncService>((ref) {
@@ -25,6 +26,8 @@ class SyncResult {
   final int estadosGuardados;
   final int tiposServicioGuardados;
   final String? error;
+  // ✅ FIX: Timestamp del SERVIDOR para delta sync (evita problemas de hora local)
+  final DateTime? serverTimestamp;
 
   SyncResult({
     required this.success,
@@ -37,6 +40,7 @@ class SyncResult {
     this.estadosGuardados = 0,
     this.tiposServicioGuardados = 0,
     this.error,
+    this.serverTimestamp,
   });
 
   @override
@@ -52,6 +56,7 @@ SyncResult:
   parametros: $parametrosGuardados
   estados: $estadosGuardados
   tiposServicio: $tiposServicioGuardados
+  serverTimestamp: $serverTimestamp
   ${error != null ? 'error: $error' : ''}
 ''';
   }
@@ -65,16 +70,45 @@ class SyncService {
   SyncService(this._apiClient, this._db);
 
   /// Descargar datos del servidor para un técnico
-  Future<SyncResult> downloadData(int tecnicoId) async {
+  ///
+  /// [tecnicoId] - ID del técnico
+  /// [since] - Fecha para sync delta (solo cambios desde esta fecha)
+  /// [fullCatalogs] - Forzar descarga de catálogos completos
+  Future<SyncResult> downloadData(
+    int tecnicoId, {
+    DateTime? since,
+    bool fullCatalogs = false,
+  }) async {
     try {
+      // Construir query params para sync delta
+      final queryParams = <String, dynamic>{};
+      if (since != null) {
+        queryParams['since'] = since.toUtc().toIso8601String();
+        debugPrint(
+          '🔄 [SYNC DELTA] Sincronizando cambios desde ${since.toIso8601String()}',
+        );
+      }
+      if (fullCatalogs) {
+        queryParams['fullCatalogs'] = 'true';
+      }
+
       // 1. Llamar al endpoint de sincronización
-      // ✅ FIX: Timeout extendido para sync (puede haber muchas órdenes)
-      final response = await _apiClient.dio.get(
+      // ✅ ROBUSTO: Usando estrategia de reintentos inteligentes
+      // - Backoff exponencial con jitter
+      // - Timeout adaptativo que crece con cada intento
+      // - Clasificación inteligente de errores recuperables
+      debugPrint('🔄 [SYNC] Iniciando descarga con reintentos inteligentes...');
+
+      final response = await _apiClient.dio.getWithRetry<Map<String, dynamic>>(
         '/sync/download/$tecnicoId',
-        options: Options(
-          receiveTimeout: const Duration(minutes: 2),
-          sendTimeout: const Duration(seconds: 30),
-        ),
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+        retryConfig: RetryConfig.forLargeSync,
+        onRetry: (attempt, delay, error) {
+          debugPrint(
+            '🔄 [SYNC] Reintentando ($attempt/${RetryConfig.forLargeSync.maxAttempts}) '
+            'después de ${delay.inSeconds}s - Motivo: ${error.message}',
+          );
+        },
       );
 
       if (response.statusCode != 200) {
@@ -86,6 +120,20 @@ class SyncService {
       }
 
       final data = response.data as Map<String, dynamic>;
+
+      // ✅ FIX CRÍTICO: Extraer timestamp del SERVIDOR (no usar hora local)
+      // Esto evita problemas cuando dispositivos tienen hora desincronizada
+      DateTime? serverTimestamp;
+      if (data['serverTimestamp'] != null) {
+        try {
+          serverTimestamp = DateTime.parse(data['serverTimestamp'] as String);
+          debugPrint(
+            '🕐 [SYNC] Timestamp del servidor: ${serverTimestamp.toIso8601String()}',
+          );
+        } catch (e) {
+          debugPrint('⚠️ [SYNC] Error parseando serverTimestamp: $e');
+        }
+      }
 
       // 2. Procesar estados de orden
       int estadosGuardados = 0;
@@ -148,6 +196,8 @@ class SyncService {
         parametrosGuardados: parametrosGuardados,
         estadosGuardados: estadosGuardados,
         tiposServicioGuardados: tiposServicioGuardados,
+        // ✅ FIX: Pasar timestamp del servidor para delta sync confiable
+        serverTimestamp: serverTimestamp,
       );
     } catch (e) {
       await _db.updateSyncStatus('download', ultimoError: e.toString());
@@ -456,7 +506,34 @@ class SyncService {
 
           if (existingOrden != null) {
             final serverVersion = orden['version'] as int? ?? 0;
-            if (serverVersion > existingOrden.version) {
+            final codigoEstadoServer =
+                (orden['codigoEstado'] as String?)?.toUpperCase() ?? '';
+            final estadosFinalizados = [
+              'COMPLETADA',
+              'CERRADA',
+              'CANCELADA',
+              'FINALIZADA',
+            ];
+
+            // ✅ FIX CRÍTICO: SIEMPRE actualizar si:
+            // 1. La versión del servidor es mayor, O
+            // 2. El estado del servidor es FINALIZADO (COMPLETADA, etc.) y el local NO lo es
+            final estadoLocalFinalizado = estadosFinalizados.any((e) {
+              final estadoLocal = estadosMap.entries
+                  .firstWhere(
+                    (entry) => entry.value == existingOrden.idEstado,
+                    orElse: () => MapEntry('', -1),
+                  )
+                  .key;
+              return estadoLocal.toUpperCase() == e;
+            });
+
+            final debeActualizar =
+                serverVersion > existingOrden.version ||
+                (estadosFinalizados.contains(codigoEstadoServer) &&
+                    !estadoLocalFinalizado);
+
+            if (debeActualizar) {
               await _db.updateOrden(ordenCompanion, existingOrden.idLocal);
             }
           } else {

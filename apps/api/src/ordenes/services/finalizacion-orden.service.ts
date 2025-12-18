@@ -692,7 +692,8 @@ export class FinalizacionOrdenService {
         this.logger.log(`🔍 Determinando tipo informe: tipoEquipo="${tipoEquipoNombre}", servicioCodigo="${tipoServicioCodigo}", servicioNombre="${tipoServicioNombre}"`);
 
         // Si es CORRECTIVO → CORRECTIVO (independiente del equipo)
-        if (tipoServicioCodigo.includes('CORRECTIVO') || tipoServicioNombre.includes('CORRECTIVO')) {
+        // ✅ Compatible con CORRECTIVO (antiguo) y GEN_CORR/BOM_CORR (nuevos)
+        if (tipoServicioCodigo.includes('CORR') || tipoServicioNombre.includes('CORRECTIVO')) {
             this.logger.log(`📋 Tipo informe seleccionado: CORRECTIVO`);
             return 'CORRECTIVO';
         }
@@ -769,6 +770,17 @@ export class FinalizacionOrdenService {
                     : `Evidencia ${e.tipo}`,
             })),
             observaciones: dto.observaciones,
+            // ✅ NUEVO: Razón de falla para correctivos (opcional)
+            // Se pasa al template como parte del diagnóstico
+            diagnostico: dto.razonFalla ? {
+                descripcion: dto.razonFalla,
+                causaRaiz: dto.razonFalla,
+                sistemasAfectados: [],
+            } : undefined,
+            problemaReportado: dto.razonFalla ? {
+                descripcion: dto.razonFalla,
+                fechaReporte: new Date().toISOString(),
+            } : undefined,
             // Firmas como data URL para mostrar en el PDF
             firmaTecnico: dto.firmas.tecnico?.base64
                 ? `data:image/${dto.firmas.tecnico.formato || 'png'};base64,${dto.firmas.tecnico.base64}`
@@ -958,6 +970,13 @@ export class FinalizacionOrdenService {
         }
 
         // Actualizar orden
+        // 🔬 DIAGNÓSTICO: Log del valor exacto de fecha_modificacion
+        const fechaModificacionValue = new Date();
+        this.logger.log(`[🔬 DIAGNÓSTICO FINALIZACIÓN] Guardando fecha_modificacion:`);
+        this.logger.log(`   - new Date().toISOString(): ${fechaModificacionValue.toISOString()}`);
+        this.logger.log(`   - new Date().getTime(): ${fechaModificacionValue.getTime()}`);
+        this.logger.log(`   - Orden ID: ${idOrden}`);
+
         await this.prisma.ordenes_servicio.update({
             where: { id_orden_servicio: idOrden },
             data: {
@@ -967,9 +986,18 @@ export class FinalizacionOrdenService {
                 duracion_minutos: duracionMinutos,
                 observaciones_cierre: observaciones,
                 modificado_por: usuarioId,
-                fecha_modificacion: new Date(),
+                fecha_modificacion: fechaModificacionValue,
             },
         });
+
+        // Verificar que se guardó correctamente
+        const ordenActualizada = await this.prisma.ordenes_servicio.findUnique({
+            where: { id_orden_servicio: idOrden },
+            select: { fecha_modificacion: true, id_estado_actual: true },
+        });
+        this.logger.log(`[🔬 DIAGNÓSTICO FINALIZACIÓN] Valor guardado en BD:`);
+        this.logger.log(`   - fecha_modificacion leída: ${ordenActualizada?.fecha_modificacion?.toISOString()}`);
+        this.logger.log(`   - id_estado_actual: ${ordenActualizada?.id_estado_actual}`);
 
         // Registrar en historial
         await this.prisma.historial_estados_orden.create({

@@ -20,6 +20,10 @@ enum EstadoOrdenEnum {
   enProceso,
   cancelada,
   enEsperaRepuesto,
+  /// ✅ NUEVO: Orden completada localmente pero pendiente de subir al servidor
+  /// Este estado es SOLO LOCAL - no existe en backend/Supabase
+  /// Permite al técnico ver y subir manualmente la orden
+  porSubir,
 }
 
 /// Tipos de actividad
@@ -121,6 +125,37 @@ class ActividadesCatalogo extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ============================================================================
+// PLAN DE ACTIVIDADES POR ORDEN (para correctivos)
+// ============================================================================
+
+/// Plan de actividades asignado por Admin a una orden específica.
+/// Si existe plan, se usa en lugar del catálogo por tipo de servicio.
+/// Para correctivos donde las actividades son seleccionadas por el admin.
+class ActividadesPlan extends Table {
+  IntColumn get idLocal => integer().autoIncrement()();
+
+  // FK a la orden local
+  IntColumn get idOrden => integer().references(Ordenes, #idLocal)();
+
+  // FK a la actividad del catálogo
+  IntColumn get idActividadCatalogo =>
+      integer().references(ActividadesCatalogo, #id)();
+
+  // Orden de ejecución dentro del plan
+  IntColumn get ordenSecuencia => integer().withDefault(const Constant(1))();
+
+  // Origen: ADMIN o TECNICO
+  TextColumn get origen =>
+      text().withLength(max: 10).withDefault(const Constant('ADMIN'))();
+
+  // Si es obligatoria
+  BoolColumn get esObligatoria => boolean().withDefault(const Constant(true))();
+
+  // Sync control
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+}
+
 /// Clientes
 class Clientes extends Table {
   IntColumn get id => integer()();
@@ -156,6 +191,52 @@ class Equipos extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+// ============================================================================
+// TABLA INTERMEDIA ORDENES-EQUIPOS (Multi-Equipos)
+// ============================================================================
+
+/// Relación N:M entre órdenes y equipos.
+/// Una orden puede tener múltiples equipos (ej: estación de bombeo con 3 bombas).
+/// Cada equipo en la orden puede ser ejecutado de forma independiente.
+class OrdenesEquipos extends Table {
+  // ID del backend (PK desde el servidor)
+  IntColumn get idOrdenEquipo => integer()();
+
+  // FK a la orden local (referencia por idBackend de la orden)
+  IntColumn get idOrdenServicio => integer()();
+
+  // ID del equipo (sin FK porque el equipo puede no existir localmente)
+  // Los datos del equipo se desnormalizan en campos adicionales
+  IntColumn get idEquipo => integer()();
+
+  // Orden de ejecución dentro de la orden
+  IntColumn get ordenSecuencia => integer().withDefault(const Constant(1))();
+
+  // Nombre del sistema (ej: "Sistema Contraincendios", "Hidroflo 1")
+  TextColumn get nombreSistema => text().nullable()();
+
+  // Datos desnormalizados del equipo (para evitar JOINs)
+  TextColumn get codigoEquipo => text().nullable()();
+  TextColumn get nombreEquipo => text().nullable()();
+
+  // Estado de ejecución del equipo
+  TextColumn get estado =>
+      text().withLength(max: 20).withDefault(const Constant('PENDIENTE'))();
+
+  // Timestamps de ejecución
+  DateTimeColumn get fechaInicio => dateTime().nullable()();
+  DateTimeColumn get fechaFin => dateTime().nullable()();
+
+  // Observaciones específicas del equipo
+  TextColumn get observaciones => text().nullable()();
+
+  // Sync control
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {idOrdenEquipo};
 }
 
 // ============================================================================
@@ -217,6 +298,10 @@ class Ordenes extends Table {
   TextColumn get horaEntradaTexto => text().nullable()();
   TextColumn get horaSalidaTexto => text().nullable()();
 
+  // ✅ NUEVO: Campo opcional para correctivos - Razón de la falla
+  // Si está lleno, se incluye en el PDF. Si no, se omite.
+  TextColumn get razonFalla => text().nullable()();
+
   // Sync control - CRÍTICO para offline-first
   BoolColumn get isDirty => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
@@ -235,6 +320,10 @@ class ActividadesEjecutadas extends Table {
   IntColumn get idOrden => integer().references(Ordenes, #idLocal)();
   IntColumn get idActividadCatalogo =>
       integer().references(ActividadesCatalogo, #id)();
+
+  // ✅ NUEVO: FK opcional para multi-equipos (NULL si orden tiene 1 solo equipo)
+  IntColumn get idOrdenEquipo =>
+      integer().nullable().references(OrdenesEquipos, #idOrdenEquipo)();
 
   // Campos desnormalizados del catálogo (snapshot al momento de ejecutar)
   TextColumn get descripcion => text()(); // Copiado de ActividadesCatalogo
@@ -271,6 +360,10 @@ class Mediciones extends Table {
   IntColumn get idActividadEjecutada =>
       integer().nullable().references(ActividadesEjecutadas, #idLocal)();
   IntColumn get idParametro => integer().references(ParametrosCatalogo, #id)();
+
+  // ✅ NUEVO: FK opcional para multi-equipos (NULL si orden tiene 1 solo equipo)
+  IntColumn get idOrdenEquipo =>
+      integer().nullable().references(OrdenesEquipos, #idOrdenEquipo)();
 
   // ============================================================================
   // SNAPSHOT DEL PARÁMETRO (copiado al crear - NO DEPENDE DE JOIN)
@@ -315,6 +408,10 @@ class Evidencias extends Table {
   // ✅ NUEVO: FK opcional para vincular a actividad específica
   IntColumn get idActividadEjecutada =>
       integer().nullable().references(ActividadesEjecutadas, #idLocal)();
+
+  // ✅ NUEVO: FK opcional para multi-equipos (NULL si orden tiene 1 solo equipo)
+  IntColumn get idOrdenEquipo =>
+      integer().nullable().references(OrdenesEquipos, #idOrdenEquipo)();
 
   // Datos de la foto
   TextColumn get rutaLocal => text()(); // Path en el dispositivo
@@ -419,8 +516,11 @@ class OrdenesPendientesSync extends Table {
     ActividadesCatalogo,
     Clientes,
     Equipos,
+    // Multi-Equipos (relación N:M orden-equipos)
+    OrdenesEquipos,
     // Transaccionales
     Ordenes,
+    ActividadesPlan, // ✅ Plan de actividades por orden (correctivos)
     ActividadesEjecutadas,
     Mediciones,
     Evidencias,
@@ -434,7 +534,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 10; // v10: Tabla ordenes_pendientes_sync (modo offline)
+  int get schemaVersion => 13; // v13: Fix FK en ordenes_equipos (idEquipo sin referencia)
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -515,10 +615,57 @@ class AppDatabase extends _$AppDatabase {
         // v10: Tabla para cola de sincronización offline
         await m.createTable(ordenesPendientesSync);
       }
+      if (from < 11) {
+        // v11: Tabla para plan de actividades por orden (correctivos)
+        await m.createTable(actividadesPlan);
+      }
+      if (from < 12) {
+        // v12: Multi-equipos - Nueva tabla y FK columns
+        // 1. Crear tabla ordenes_equipos
+        await m.createTable(ordenesEquipos);
+
+        // 2. Agregar columna id_orden_equipo a actividades_ejecutadas
+        await customStatement(
+          'ALTER TABLE actividades_ejecutadas ADD COLUMN id_orden_equipo INTEGER REFERENCES ordenes_equipos(id_orden_equipo)',
+        );
+
+        // 3. Agregar columna id_orden_equipo a mediciones
+        await customStatement(
+          'ALTER TABLE mediciones ADD COLUMN id_orden_equipo INTEGER REFERENCES ordenes_equipos(id_orden_equipo)',
+        );
+
+        // 4. Agregar columna id_orden_equipo a evidencias
+        await customStatement(
+          'ALTER TABLE evidencias ADD COLUMN id_orden_equipo INTEGER REFERENCES ordenes_equipos(id_orden_equipo)',
+        );
+      }
+      if (from < 13) {
+        // v13: Fix FK en ordenes_equipos - Recrear tabla sin FK a Equipos
+        // (El FK a Equipos causaba fallas al sincronizar equipos que no existen localmente)
+        await m.deleteTable('ordenes_equipos');
+        await m.createTable(ordenesEquipos);
+      }
     },
     beforeOpen: (details) async {
       // Habilitar foreign keys
       await customStatement('PRAGMA foreign_keys = ON');
+      
+      // ✅ FIX: Limpiar dato corrupto si existe (datetime guardado como TEXT en lugar de INT)
+      // Esto pudo haber ocurrido en versiones anteriores con datetime('now')
+      await customStatement('''
+        DELETE FROM estados_orden WHERE id = -1 AND typeof(last_synced_at) = 'text'
+      ''');
+      
+      // ✅ SYNC MANUAL: Asegurar que existe estado POR_SUBIR (solo local)
+      // Este estado es usado para órdenes completadas offline pendientes de subir
+      // ID negativo (-1) para no colisionar con IDs del servidor
+      // ✅ FIX: Drift almacena DateTimeColumn como INTEGER (milisegundos desde epoch)
+      // No usar datetime('now') que retorna STRING
+      final nowMillis = DateTime.now().millisecondsSinceEpoch;
+      await customStatement('''
+        INSERT OR IGNORE INTO estados_orden (id, codigo, nombre, es_estado_final, last_synced_at)
+        VALUES (-1, 'POR_SUBIR', 'Por Subir', 0, $nowMillis)
+      ''');
     },
   );
 
@@ -573,6 +720,38 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  // ============================================================================
+  // MÉTODOS DE ACCESO - PLAN DE ACTIVIDADES (correctivos)
+  // ============================================================================
+
+  /// Insertar una actividad en el plan de una orden
+  Future<int> insertActividadPlan(ActividadesPlanCompanion item) async {
+    return await into(actividadesPlan).insert(item);
+  }
+
+  /// Obtener plan de actividades de una orden (ordenado por secuencia)
+  Future<List<ActividadesPlanData>> getPlanActividadesByOrden(int idOrden) {
+    return (select(actividadesPlan)
+          ..where((p) => p.idOrden.equals(idOrden))
+          ..orderBy([(p) => OrderingTerm.asc(p.ordenSecuencia)]))
+        .get();
+  }
+
+  /// Limpiar plan de actividades de una orden
+  Future<int> clearPlanActividades(int idOrden) async {
+    return await (delete(actividadesPlan)
+          ..where((p) => p.idOrden.equals(idOrden)))
+        .go();
+  }
+
+  /// Verificar si una orden tiene plan de actividades asignado
+  Future<bool> ordenTienePlanActividades(int idOrden) async {
+    final count = await (select(actividadesPlan)
+          ..where((p) => p.idOrden.equals(idOrden)))
+        .get();
+    return count.isNotEmpty;
+  }
+
   /// Insertar o actualizar cliente
   Future<void> upsertCliente(ClientesCompanion cliente) async {
     await into(clientes).insertOnConflictUpdate(cliente);
@@ -591,6 +770,63 @@ class AppDatabase extends _$AppDatabase {
   /// Obtener equipos por cliente
   Future<List<Equipo>> getEquiposByCliente(int idCliente) {
     return (select(equipos)..where((e) => e.idCliente.equals(idCliente))).get();
+  }
+
+  // ============================================================================
+  // MÉTODOS DE ACCESO - ORDENES EQUIPOS (Multi-Equipos)
+  // ============================================================================
+
+  /// Insertar o actualizar relación orden-equipo
+  Future<void> upsertOrdenEquipo(OrdenesEquiposCompanion ordenEquipo) async {
+    await into(ordenesEquipos).insertOnConflictUpdate(ordenEquipo);
+  }
+
+  /// Obtener todos los equipos de una orden (por idOrdenServicio = idBackend de la orden)
+  Future<List<OrdenesEquipo>> getEquiposByOrdenServicio(
+      int idOrdenServicio) async {
+    return (select(ordenesEquipos)
+          ..where((oe) => oe.idOrdenServicio.equals(idOrdenServicio))
+          ..orderBy([(oe) => OrderingTerm.asc(oe.ordenSecuencia)]))
+        .get();
+  }
+
+  /// Verificar si una orden tiene múltiples equipos
+  Future<bool> ordenTieneMultiEquipos(int idOrdenServicio) async {
+    final lista = await getEquiposByOrdenServicio(idOrdenServicio);
+    return lista.length > 1;
+  }
+
+  /// Obtener un equipo específico por su ID
+  Future<OrdenesEquipo?> getOrdenEquipoById(int idOrdenEquipo) async {
+    return (select(ordenesEquipos)
+          ..where((oe) => oe.idOrdenEquipo.equals(idOrdenEquipo)))
+        .getSingleOrNull();
+  }
+
+  /// Limpiar todos los equipos de una orden (para re-sincronizar)
+  Future<int> clearEquiposDeOrden(int idOrdenServicio) async {
+    return await (delete(ordenesEquipos)
+          ..where((oe) => oe.idOrdenServicio.equals(idOrdenServicio)))
+        .go();
+  }
+
+  /// ✅ NUEVO: Actualizar estado de un equipo específico
+  /// Usado cuando se completan todas las actividades/mediciones del equipo
+  Future<bool> updateEstadoEquipo(int idOrdenEquipo, String nuevoEstado, {
+    DateTime? fechaInicio,
+    DateTime? fechaFin,
+  }) async {
+    final companion = OrdenesEquiposCompanion(
+      estado: Value(nuevoEstado),
+      fechaInicio: fechaInicio != null ? Value(fechaInicio) : const Value.absent(),
+      fechaFin: fechaFin != null ? Value(fechaFin) : const Value.absent(),
+    );
+    
+    final result = await (update(ordenesEquipos)
+          ..where((oe) => oe.idOrdenEquipo.equals(idOrdenEquipo)))
+        .write(companion);
+    
+    return result > 0;
   }
 
   // ============================================================================
@@ -637,6 +873,64 @@ class AppDatabase extends _$AppDatabase {
   /// Stream de órdenes (reactivo)
   Stream<List<Ordene>> watchAllOrdenes() {
     return select(ordenes).watch();
+  }
+
+  /// Actualizar solo estado y PDF de una orden (SYNC LIGERO)
+  Future<void> updateOrdenEstadoYPdf(
+    int idLocal,
+    int idEstado,
+    String? urlPdf,
+  ) async {
+    await (update(ordenes)..where((o) => o.idLocal.equals(idLocal))).write(
+      OrdenesCompanion(
+        idEstado: Value(idEstado),
+        urlPdf: Value(urlPdf),
+        lastSyncedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Actualizar estadísticas completas de una orden (ON-DEMAND)
+  Future<void> updateOrdenEstadisticas(
+    int idLocal, {
+    required int totalActividades,
+    required int totalMediciones,
+    required int totalEvidencias,
+    required int totalFirmas,
+    required int actividadesBuenas,
+    required int actividadesMalas,
+    required int actividadesCorregidas,
+    required int actividadesNA,
+    required int medicionesNormales,
+    required int medicionesAdvertencia,
+    required int medicionesCriticas,
+    String? urlPdf,
+    String? trabajoRealizado,
+    String? observacionesTecnico,
+    String? horaEntrada,
+    String? horaSalida,
+  }) async {
+    await (update(ordenes)..where((o) => o.idLocal.equals(idLocal))).write(
+      OrdenesCompanion(
+        totalActividades: Value(totalActividades),
+        totalMediciones: Value(totalMediciones),
+        totalEvidencias: Value(totalEvidencias),
+        totalFirmas: Value(totalFirmas),
+        actividadesBuenas: Value(actividadesBuenas),
+        actividadesMalas: Value(actividadesMalas),
+        actividadesCorregidas: Value(actividadesCorregidas),
+        actividadesNA: Value(actividadesNA),
+        medicionesNormales: Value(medicionesNormales),
+        medicionesAdvertencia: Value(medicionesAdvertencia),
+        medicionesCriticas: Value(medicionesCriticas),
+        urlPdf: Value(urlPdf),
+        trabajoRealizado: Value(trabajoRealizado),
+        observacionesTecnico: Value(observacionesTecnico),
+        horaEntradaTexto: Value(horaEntrada),
+        horaSalidaTexto: Value(horaSalida),
+        lastSyncedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   // ============================================================================
@@ -945,6 +1239,19 @@ class AppDatabase extends _$AppDatabase {
         ))
         .watch()
         .map((list) => list.length);
+  }
+
+  /// Stream reactivo de lista de pendientes (para vista "Órdenes por Subir")
+  Stream<List<OrdenesPendientesSyncData>> watchOrdenesPendientesSync() {
+    return (select(ordenesPendientesSync)
+          ..where(
+            (o) =>
+                o.estadoSync.equals('PENDIENTE') |
+                (o.estadoSync.equals('ERROR') &
+                    o.intentos.isSmallerThanValue(5)),
+          )
+          ..orderBy([(o) => OrderingTerm.asc(o.fechaCreacion)]))
+        .watch();
   }
 
   // ============================================================================

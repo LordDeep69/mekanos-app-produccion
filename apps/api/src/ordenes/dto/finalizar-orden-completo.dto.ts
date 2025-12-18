@@ -317,6 +317,15 @@ export class FinalizarOrdenCompletoDto {
     @IsOptional()
     @IsString()
     emailAdicional?: string;
+
+    @ApiPropertyOptional({
+        description: 'Razón de la falla (solo para correctivos). Si se llena, aparece en el PDF.',
+        maxLength: 1000
+    })
+    @IsOptional()
+    @IsString()
+    @MaxLength(1000)
+    razonFalla?: string;
 }
 
 // ============================================================================

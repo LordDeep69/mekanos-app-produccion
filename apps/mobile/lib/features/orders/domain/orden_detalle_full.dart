@@ -49,6 +49,9 @@ class OrdenDetalleFull {
   /// Número de orden formateado
   String get numeroOrden => orden.numeroOrden;
 
+  /// ID del backend (para buscar equipos multi-equipo)
+  int? get idBackend => orden.idBackend;
+
   /// Nombre del cliente
   String get nombreCliente => cliente.nombre;
 
@@ -68,7 +71,6 @@ class OrdenDetalleFull {
   String get nombreEstado => estadoOrden.nombre;
 
   /// Cantidad de actividades a realizar
-  /// ✅ FIX: Usa valor sincronizado si local está vacío (órdenes históricas)
   int get cantidadActividades {
     if (actividadesCatalogo.isNotEmpty) {
       return actividadesCatalogo.length;
@@ -76,12 +78,47 @@ class OrdenDetalleFull {
     // Para órdenes históricas, usar valor sincronizado
     return orden.totalActividades;
   }
+  
+  /// Cantidad de mediciones (actividades tipo MEDICION)
+  int get cantidadMediciones {
+    return actividadesCatalogo.where((a) => a.tipoActividad == 'MEDICION').length;
+  }
 
   /// ✅ FIX: Estadísticas sincronizadas para órdenes históricas
-  int get totalActividadesSincronizadas => orden.totalActividades;
-  int get totalMedicionesSincronizadas => orden.totalMediciones;
+  /// Usa el desglose B+M+C+NA como fallback si totalActividades es 0
+  int get totalActividadesSincronizadas {
+    if (orden.totalActividades > 0) return orden.totalActividades;
+    // Fallback: sumar el desglose de actividades
+    final desglose =
+        orden.actividadesBuenas +
+        orden.actividadesMalas +
+        orden.actividadesCorregidas +
+        orden.actividadesNA;
+    return desglose > 0 ? desglose : actividadesCatalogo.length;
+  }
+
+  int get totalMedicionesSincronizadas {
+    if (orden.totalMediciones > 0) return orden.totalMediciones;
+    // Fallback 1: sumar el desglose de mediciones
+    final desglose =
+        orden.medicionesNormales +
+        orden.medicionesAdvertencia +
+        orden.medicionesCriticas;
+    if (desglose > 0) return desglose;
+    // Fallback 2: contar actividades tipo MEDICION del catálogo
+    return actividadesCatalogo
+        .where((a) => a.tipoActividad == 'MEDICION')
+        .length;
+  }
+
   int get totalEvidenciasSincronizadas => orden.totalEvidencias;
   int get totalFirmasSincronizadas => orden.totalFirmas;
+
+  /// ✅ FIX: Desglose de actividades sincronizadas
+  int get actividadesBuenasSincronizadas => orden.actividadesBuenas;
+  int get actividadesMalasSincronizadas => orden.actividadesMalas;
+  int get actividadesCorregidasSincronizadas => orden.actividadesCorregidas;
+  int get actividadesNASincronizadas => orden.actividadesNA;
 
   /// ✅ FIX: Hora de inicio y fin sincronizadas
   DateTime? get fechaInicioReal => orden.fechaInicio;
@@ -124,7 +161,28 @@ class OrdenDetalleFull {
   bool get estaEnProceso => estadoOrden.codigo == 'EN_PROCESO';
 
   /// ¿La orden está completada o cerrada?
-  bool get estaFinalizada => estadoOrden.esEstadoFinal;
+  /// ✅ FIX: Verificar por código de estado directamente, no solo por flag esEstadoFinal
+  /// ⚠️ IMPORTANTE: POR_SUBIR NO es estado final - permite entrar a vista de ejecución
+  bool get estaFinalizada {
+    // POR_SUBIR es estado LOCAL que permite al técnico subir manualmente
+    // NO debe considerarse como finalizada para permitir acceso a la vista
+    if (estadoOrden.codigo.toUpperCase() == 'POR_SUBIR') {
+      return false;
+    }
+    
+    final estadosFinalizados = [
+      'COMPLETADA',
+      'CERRADA',
+      'CANCELADA',
+      'FINALIZADA',
+    ];
+    return estadoOrden.esEstadoFinal ||
+        estadosFinalizados.contains(estadoOrden.codigo.toUpperCase());
+  }
+
+  /// ¿La orden está pendiente de subir al servidor?
+  /// Estado LOCAL: completada offline pero no sincronizada
+  bool get estaPorSubir => estadoOrden.codigo.toUpperCase() == 'POR_SUBIR';
 
   // ============================================================================
   // MÉTODOS DE UTILIDAD
@@ -144,10 +202,6 @@ class OrdenDetalleFull {
   List<ActividadesCatalogoData> actividadesDetipoActividad(String tipo) {
     return actividadesCatalogo.where((a) => a.tipoActividad == tipo).toList();
   }
-
-  /// Cantidad de actividades de medición
-  int get cantidadMediciones =>
-      actividadesCatalogo.where((a) => a.tipoActividad == 'MEDICION').length;
 
   @override
   String toString() {

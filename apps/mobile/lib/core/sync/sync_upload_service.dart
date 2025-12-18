@@ -11,6 +11,7 @@ import '../database/app_database.dart';
 import '../database/database_service.dart';
 import 'connectivity_service.dart';
 import 'offline_sync_service.dart';
+import 'sync_notification_service.dart';
 
 /// Provider para el servicio de sync upload
 final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
@@ -18,7 +19,8 @@ final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   final connectivity = ref.watch(connectivityServiceProvider);
   final offlineSync = ref.watch(offlineSyncServiceProvider);
-  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync);
+  final notificationService = ref.watch(syncNotificationServiceProvider);
+  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync, notificationService);
 });
 
 /// Resultado de la sincronización de subida
@@ -49,17 +51,20 @@ class SyncUploadResult {
 /// 4. Si hay conexión: Envía al endpoint POST /api/ordenes/{id}/finalizar-completo
 /// 5. Si NO hay conexión: Guarda en cola offline para sync posterior
 /// 6. Actualiza estado local tras éxito
+/// ✅ ENTERPRISE: Notifica UI de eventos de sincronización
 class SyncUploadService {
   final AppDatabase _db;
   final Dio _apiClient;
   final ConnectivityService _connectivity;
   final OfflineSyncService _offlineSync;
+  final SyncNotificationService _notificationService;
 
   SyncUploadService(
     this._db,
     this._apiClient,
     this._connectivity,
     this._offlineSync,
+    this._notificationService,
   );
 
   /// Finaliza y sincroniza una orden completa al backend
@@ -71,6 +76,7 @@ class SyncUploadService {
   /// [horaSalida] - Hora de salida del sitio (formato HH:mm)
   /// [usuarioId] - ID del usuario/técnico que finaliza
   /// [emailAdicional] - Email opcional para enviar copia
+  /// [razonFalla] - Opcional: Razón de la falla (solo para correctivos)
   Future<SyncUploadResult> finalizarOrden({
     required int idOrdenLocal,
     required int idOrdenBackend,
@@ -79,37 +85,131 @@ class SyncUploadService {
     required String horaSalida,
     required int usuarioId,
     String? emailAdicional,
+    String? razonFalla,
   }) async {
     try {
-      // 1. Recopilar actividades ejecutadas (excluir MEDICION - van en array separado)
+      // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
+      final equipos = await _db.getEquiposByOrdenServicio(idOrdenBackend);
+      final esMultiEquipo = equipos.length > 1;
+      
+      debugPrint('🔧 [SYNC] Orden $idOrdenBackend - Multi-equipo: $esMultiEquipo (${equipos.length} equipos)');
+      
+      // 1. Recopilar actividades ejecutadas (SOLO CHECKLIST, NO MEDICIONES)
+      // ✅ FIX 15-DIC-2025: EXCLUIR actividades con idParametroMedicion
+      // Estas son tipo MEDICION y aparecen en la sección MEDICIONES del PDF
+      // Si las incluimos aquí, aparecen DUPLICADAS (checklist vacío + mediciones)
       final actividades = await _db.getActividadesByOrden(idOrdenLocal);
-      final actividadesPayload = actividades
-          .where(
-            (a) => a.tipoActividad.toUpperCase() != 'MEDICION',
-          ) // ✅ FIX: Excluir mediciones
-          .map(
-            (a) => <String, dynamic>{
-              'sistema': a.sistema ?? 'Sin sistema',
-              'descripcion': a.descripcion,
-              'resultado': a.simbologia ?? 'N/A',
-              'observaciones': a.observacion,
-            },
-          )
-          .toList();
+      
+      // ✅ MULTI-EQUIPOS: Agrupar actividades por idOrdenEquipo
+      List<Map<String, dynamic>> actividadesPayload;
+      List<Map<String, dynamic>>? actividadesPorEquipoPayload;
+      
+      if (esMultiEquipo) {
+        // Agrupar actividades por equipo
+        final Map<int, List<Map<String, dynamic>>> actividadesAgrupadas = {};
+        
+        for (final a in actividades.where((a) => a.idParametroMedicion == null)) {
+          final idEquipo = a.idOrdenEquipo ?? 0;
+          actividadesAgrupadas.putIfAbsent(idEquipo, () => []);
+          actividadesAgrupadas[idEquipo]!.add({
+            'sistema': a.sistema ?? 'Sin sistema',
+            'descripcion': a.descripcion,
+            'resultado': a.simbologia ?? 'N/A',
+            'observaciones': a.observacion,
+          });
+        }
+        
+        // Construir estructura actividadesPorEquipo
+        actividadesPorEquipoPayload = [];
+        for (final equipo in equipos) {
+          final actividadesEquipo = actividadesAgrupadas[equipo.idOrdenEquipo] ?? [];
+          actividadesPorEquipoPayload.add({
+            'idOrdenEquipo': equipo.idOrdenEquipo,
+            'nombreEquipo': equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+            'codigoEquipo': equipo.codigoEquipo,
+            'actividades': actividadesEquipo,
+          });
+          debugPrint('   📋 Equipo ${equipo.nombreSistema}: ${actividadesEquipo.length} actividades');
+        }
+        
+        // También mantener actividades flat para backward compatibility
+        actividadesPayload = actividades
+            .where((a) => a.idParametroMedicion == null)
+            .map((a) => <String, dynamic>{
+                  'sistema': a.sistema ?? 'Sin sistema',
+                  'descripcion': a.descripcion,
+                  'resultado': a.simbologia ?? 'N/A',
+                  'observaciones': a.observacion,
+                  'idOrdenEquipo': a.idOrdenEquipo,
+                })
+            .toList();
+      } else {
+        // Orden simple: sin agrupación
+        actividadesPayload = actividades
+            .where((a) => a.idParametroMedicion == null)
+            .map((a) => <String, dynamic>{
+                  'sistema': a.sistema ?? 'Sin sistema',
+                  'descripcion': a.descripcion,
+                  'resultado': a.simbologia ?? 'N/A',
+                  'observaciones': a.observacion,
+                })
+            .toList();
+      }
 
       // 2. Recopilar mediciones
       final mediciones = await _db.getMedicionesByOrden(idOrdenLocal);
-      final medicionesPayload = mediciones
-          .where((m) => m.valor != null)
-          .map(
-            (m) => <String, dynamic>{
-              'parametro': m.nombreParametro,
-              'valor': m.valor!,
-              'unidad': m.unidadMedida,
-              'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
-            },
-          )
-          .toList();
+      
+      // ✅ MULTI-EQUIPOS: Agrupar mediciones por idOrdenEquipo
+      List<Map<String, dynamic>> medicionesPayload;
+      List<Map<String, dynamic>>? medicionesPorEquipoPayload;
+      
+      if (esMultiEquipo) {
+        final Map<int, List<Map<String, dynamic>>> medicionesAgrupadas = {};
+        
+        for (final m in mediciones.where((m) => m.valor != null)) {
+          final idEquipo = m.idOrdenEquipo ?? 0;
+          medicionesAgrupadas.putIfAbsent(idEquipo, () => []);
+          medicionesAgrupadas[idEquipo]!.add({
+            'parametro': m.nombreParametro,
+            'valor': m.valor!,
+            'unidad': m.unidadMedida,
+            'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
+          });
+        }
+        
+        medicionesPorEquipoPayload = [];
+        for (final equipo in equipos) {
+          final medicionesEquipo = medicionesAgrupadas[equipo.idOrdenEquipo] ?? [];
+          medicionesPorEquipoPayload.add({
+            'idOrdenEquipo': equipo.idOrdenEquipo,
+            'nombreEquipo': equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+            'mediciones': medicionesEquipo,
+          });
+          debugPrint('   📏 Equipo ${equipo.nombreSistema}: ${medicionesEquipo.length} mediciones');
+        }
+        
+        // También mantener mediciones flat
+        medicionesPayload = mediciones
+            .where((m) => m.valor != null)
+            .map((m) => <String, dynamic>{
+                  'parametro': m.nombreParametro,
+                  'valor': m.valor!,
+                  'unidad': m.unidadMedida,
+                  'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
+                  'idOrdenEquipo': m.idOrdenEquipo,
+                })
+            .toList();
+      } else {
+        medicionesPayload = mediciones
+            .where((m) => m.valor != null)
+            .map((m) => <String, dynamic>{
+                  'parametro': m.nombreParametro,
+                  'valor': m.valor!,
+                  'unidad': m.unidadMedida,
+                  'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
+                })
+            .toList();
+      }
 
       // 3. Recopilar evidencias y convertir a Base64
       final evidencias = await (_db.select(
@@ -131,6 +231,8 @@ class SyncUploadService {
             'tipo': tipoEvidencia,
             'base64': base64,
             'descripcion': ev.descripcion,
+            // ✅ FIX 16-DIC-2025: Incluir idOrdenEquipo para multi-equipos
+            if (ev.idOrdenEquipo != null) 'idOrdenEquipo': ev.idOrdenEquipo,
           });
         }
       }
@@ -188,6 +290,7 @@ class SyncUploadService {
       }
 
       // 6. Construir payload completo
+      // ✅ MULTI-EQUIPOS: Incluir estructura agrupada por equipo
       final payload = {
         'idOrden': idOrdenBackend,
         'evidencias': evidenciasPayload,
@@ -200,21 +303,38 @@ class SyncUploadService {
         'usuarioId': usuarioId,
         if (emailAdicional != null && emailAdicional.isNotEmpty)
           'emailAdicional': emailAdicional,
+        // ✅ NUEVO: Razón de falla para correctivos (opcional)
+        if (razonFalla != null && razonFalla.isNotEmpty)
+          'razonFalla': razonFalla,
+        // ✅ MULTI-EQUIPOS: Estructura agrupada por equipo
+        if (esMultiEquipo && actividadesPorEquipoPayload != null)
+          'actividadesPorEquipo': actividadesPorEquipoPayload,
+        if (esMultiEquipo && medicionesPorEquipoPayload != null)
+          'medicionesPorEquipo': medicionesPorEquipoPayload,
+        'esMultiEquipo': esMultiEquipo,
       };
+      
+      debugPrint('📦 [SYNC] Payload construido - esMultiEquipo: $esMultiEquipo');
+      if (esMultiEquipo) {
+        debugPrint('   📋 actividadesPorEquipo: ${actividadesPorEquipoPayload?.length ?? 0} equipos');
+        debugPrint('   📏 medicionesPorEquipo: ${medicionesPorEquipoPayload?.length ?? 0} equipos');
+      }
 
-      // 7. GUARDAR ESTADO LOCAL PRIMERO (integridad garantizada)
-      await _guardarEstadoLocalCompletada(
-        idOrdenLocal,
-        observaciones,
-        horaEntrada,
-        horaSalida,
-      );
-
-      // 8. VERIFICAR CONECTIVIDAD
+      // 7. VERIFICAR CONECTIVIDAD PRIMERO (para decidir qué estado usar)
       final isOnline = await _connectivity.checkConnection();
 
       if (!isOnline) {
-        // SIN CONEXIÓN - Guardar en cola offline
+        // ✅ SYNC MANUAL: Sin conexión → Guardar con estado POR_SUBIR
+        // Este estado permite al técnico ver la orden y subirla manualmente
+        await _guardarEstadoLocalPorSubir(
+          idOrdenLocal,
+          observaciones,
+          horaEntrada,
+          horaSalida,
+          razonFalla: razonFalla,
+        );
+        
+        // Guardar en cola offline
         final guardado = await _offlineSync.guardarEnCola(
           idOrdenLocal: idOrdenLocal,
           idOrdenBackend: idOrdenBackend,
@@ -222,10 +342,13 @@ class SyncUploadService {
         );
 
         if (guardado) {
+          // ✅ ENTERPRISE: Notificar que se guardó offline
+          _notificationService.notifyOrderQueuedOffline('#$idOrdenBackend');
+          
           return SyncUploadResult(
             success: true,
             mensaje:
-                'Orden guardada. Se sincronizará automáticamente cuando haya conexión.',
+                'Orden guardada localmente. Ve a "Órdenes por Subir" para sincronizarla.',
             guardadoOffline: true,
           );
         } else {
@@ -236,6 +359,15 @@ class SyncUploadService {
           );
         }
       }
+
+      // 8. CON CONEXIÓN - Guardar estado COMPLETADA y sync normal
+      await _guardarEstadoLocalCompletada(
+        idOrdenLocal,
+        observaciones,
+        horaEntrada,
+        horaSalida,
+        razonFalla: razonFalla,
+      );
 
       // 9. CON CONEXIÓN - Intentar sync normal
       try {
@@ -306,6 +438,7 @@ class SyncUploadService {
 
         // CRÍTICO: El backend puede estar procesando aún (toma ~25s)
         // Esperar y verificar múltiples veces antes de decidir si guardar en cola
+        Map<String, dynamic>? verificacionFinal;
         bool yaCompletada = false;
         for (int intento = 1; intento <= 3; intento++) {
           debugPrint(
@@ -315,9 +448,10 @@ class SyncUploadService {
           // Esperar antes de verificar (el backend puede estar procesando)
           await Future.delayed(Duration(seconds: intento * 5)); // 5s, 10s, 15s
 
-          yaCompletada = await _verificarOrdenYaCompletadaEnBackend(
+          verificacionFinal = await _verificarOrdenYaCompletadaEnBackend(
             idOrdenBackend,
           );
+          yaCompletada = verificacionFinal['completada'] == true;
           debugPrint('🔍 [SYNC] ¿Ya completada? $yaCompletada');
 
           if (yaCompletada) break;
@@ -327,7 +461,10 @@ class SyncUploadService {
           // El backend YA procesó la orden - NO guardar en cola
           debugPrint('✅ [SYNC] Backend ya procesó - NO guardar en cola');
           try {
-            await _marcarOrdenSincronizada(idOrdenLocal);
+            await _marcarOrdenSincronizada(
+              idOrdenLocal,
+              urlPdf: verificacionFinal?['pdfUrl'] as String?,
+            );
           } catch (_) {}
           return SyncUploadResult(
             success: true,
@@ -364,8 +501,9 @@ class SyncUploadService {
     int idOrdenLocal,
     String observaciones,
     String horaEntrada,
-    String horaSalida,
-  ) async {
+    String horaSalida, {
+    String? razonFalla,
+  }) async {
     // Obtener el ID del estado COMPLETADA
     final estadoCompletada = await (_db.select(
       _db.estadosOrden,
@@ -381,11 +519,51 @@ class SyncUploadService {
         observacionesTecnico: Value(observaciones),
         horaEntradaTexto: Value(horaEntrada),
         horaSalidaTexto: Value(horaSalida),
+        razonFalla: razonFalla != null && razonFalla.isNotEmpty
+            ? Value(razonFalla)
+            : const Value.absent(),
         fechaFin: Value(DateTime.now()),
         isDirty: const Value(true), // Marcado para sync
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  /// ✅ SYNC MANUAL: Guarda el estado local como POR_SUBIR (cuando no hay conexión)
+  /// Este estado permite al técnico ver la orden en la lista y subirla manualmente
+  /// cuando recupere conexión. El trabajo del técnico NO se pierde.
+  Future<void> _guardarEstadoLocalPorSubir(
+    int idOrdenLocal,
+    String observaciones,
+    String horaEntrada,
+    String horaSalida, {
+    String? razonFalla,
+  }) async {
+    // Obtener el ID del estado POR_SUBIR (creado en beforeOpen con ID -1)
+    final estadoPorSubir = await (_db.select(
+      _db.estadosOrden,
+    )..where((e) => e.codigo.equals('POR_SUBIR'))).getSingleOrNull();
+
+    await (_db.update(
+      _db.ordenes,
+    )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
+      OrdenesCompanion(
+        idEstado: estadoPorSubir != null
+            ? Value(estadoPorSubir.id)
+            : const Value.absent(),
+        observacionesTecnico: Value(observaciones),
+        horaEntradaTexto: Value(horaEntrada),
+        horaSalidaTexto: Value(horaSalida),
+        razonFalla: razonFalla != null && razonFalla.isNotEmpty
+            ? Value(razonFalla)
+            : const Value.absent(),
+        fechaFin: Value(DateTime.now()),
+        isDirty: const Value(true), // Marcado para sync
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    
+    debugPrint('📴 [SYNC] Orden $idOrdenLocal guardada con estado POR_SUBIR');
   }
 
   /// Convierte una imagen local a Base64
@@ -461,7 +639,9 @@ class SyncUploadService {
 
   /// CRÍTICO: Verifica si una orden ya fue completada en el backend
   /// Esto previene duplicación cuando el request llegó pero la respuesta se perdió
-  Future<bool> _verificarOrdenYaCompletadaEnBackend(int idOrdenBackend) async {
+  Future<Map<String, dynamic>> _verificarOrdenYaCompletadaEnBackend(
+    int idOrdenBackend,
+  ) async {
     try {
       final response = await _apiClient.get(
         '/ordenes/$idOrdenBackend',
@@ -472,35 +652,64 @@ class SyncUploadService {
       );
 
       if (response.statusCode == 200 && response.data is Map) {
-        // Buscar el estado en múltiples ubicaciones posibles
         final data = response.data as Map<String, dynamic>;
 
-        // Opción 1: estado.codigo
-        final estadoCodigo =
-            data['estado']?['codigo'] ?? data['estadoActual']?['codigo'];
-        if (estadoCodigo == 'COMPLETADA' || estadoCodigo == 'FINALIZADA') {
-          return true;
+        // El backend puede envolver los datos en diferentes estructuras
+        final datos = data['datos'] ?? data['orden'] ?? data['data'] ?? data;
+
+        // Buscar estado en múltiples ubicaciones posibles
+        final estadoObj =
+            datos['estado'] ?? datos['estadoActual'] ?? data['estado'];
+        final idEstadoActual =
+            datos['id_estado_actual'] ??
+            datos['idEstadoActual'] ??
+            data['id_estado_actual'];
+
+        String? estadoCodigo;
+        bool esEstadoFinal = false;
+        if (estadoObj is Map) {
+          estadoCodigo =
+              estadoObj['codigo_estado']?.toString() ??
+              estadoObj['codigo']?.toString();
+          esEstadoFinal =
+              estadoObj['es_estado_final'] == true ||
+              estadoObj['esEstadoFinal'] == true;
+        } else if (estadoObj is String) {
+          estadoCodigo = estadoObj;
         }
 
-        // Opción 2: id_estado_actual numérico (4 = COMPLETADA típicamente)
-        final idEstado = data['id_estado_actual'] ?? data['idEstadoActual'];
-        if (idEstado == 4) {
-          return true;
+        // Extraer URL del PDF si está disponible
+        String? pdfUrl;
+        if (datos is Map) {
+          final documentos =
+              datos['documentos_generados'] ?? datos['documentos'];
+          if (documentos is List && documentos.isNotEmpty) {
+            final ultimoDoc = documentos.last;
+            if (ultimoDoc is Map) {
+              pdfUrl =
+                  ultimoDoc['ruta_archivo']?.toString() ??
+                  ultimoDoc['url']?.toString();
+            }
+          }
+          pdfUrl ??=
+              datos['url_pdf']?.toString() ?? datos['pdfUrl']?.toString();
         }
 
-        // Opción 3: estado.es_estado_final
-        final esEstadoFinal =
-            data['estado']?['es_estado_final'] ??
-            data['estadoActual']?['esEstadoFinal'];
-        if (esEstadoFinal == true) {
-          return true;
+        if (estadoCodigo == 'COMPLETADA' ||
+            estadoCodigo == 'FINALIZADA' ||
+            estadoCodigo == 'FINALIZADO' ||
+            esEstadoFinal ||
+            idEstadoActual == 4 ||
+            idEstadoActual == '4') {
+          return {'completada': true, 'pdfUrl': pdfUrl};
         }
       }
-      return false;
+
+      return {'completada': false, 'pdfUrl': null};
     } catch (_) {
       // Si falla la verificación, asumir que NO está completada
       // Es mejor duplicar que perder una orden
-      return false;
+      return {'completada': false, 'pdfUrl': null};
     }
   }
 

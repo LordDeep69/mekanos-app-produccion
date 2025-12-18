@@ -383,19 +383,194 @@ export class SyncService {
 
   /**
    * DOWNLOAD: Obtener datos para trabajo offline del técnico
+   * 
+   * @param tecnicoId - ID del técnico
+   * @param since - Fecha para sync delta (solo cambios desde esta fecha)
+   * @param includeCatalogs - Incluir catálogos completos (true en sync completo)
    */
   async downloadForTecnico(
     tecnicoId: number,
+    since?: Date,
+    includeCatalogs: boolean = true,
   ): Promise<SyncDownloadResponseDto> {
-    this.logger.log(`[Sync] Download para técnico ${tecnicoId}`);
+    const syncType = since ? 'DELTA' : 'COMPLETO';
+    this.logger.log(`[Sync] Download ${syncType} para técnico ${tecnicoId}${since ? ` desde ${since.toISOString()}` : ''}`);
+
+    // ========================================================================
+    // 🔬 DIAGNÓSTICO PROFUNDO: Verificar problema de zona horaria
+    // ========================================================================
+    if (since) {
+      this.logger.log(`[🔬 DIAGNÓSTICO] since recibido:`);
+      this.logger.log(`   - since.toISOString(): ${since.toISOString()}`);
+      this.logger.log(`   - since.getTime(): ${since.getTime()}`);
+      this.logger.log(`   - Servidor new Date().toISOString(): ${new Date().toISOString()}`);
+      this.logger.log(`   - Servidor new Date().getTime(): ${new Date().getTime()}`);
+
+      // Verificar órdenes recientes del técnico para diagnóstico
+      const ordenesRecientes = await this.prisma.ordenes_servicio.findMany({
+        where: { id_tecnico_asignado: tecnicoId },
+        orderBy: { fecha_modificacion: 'desc' },
+        take: 3,
+        select: {
+          id_orden_servicio: true,
+          numero_orden: true,
+          fecha_modificacion: true,
+          id_estado_actual: true,
+        },
+      });
+
+      this.logger.log(`[🔬 DIAGNÓSTICO] Top 3 órdenes más recientes del técnico ${tecnicoId}:`);
+      for (const o of ordenesRecientes) {
+        const fm = o.fecha_modificacion;
+        this.logger.log(`   - Orden ${o.numero_orden} (ID: ${o.id_orden_servicio}, Estado: ${o.id_estado_actual})`);
+        this.logger.log(`     fecha_modificacion: ${fm ? fm.toISOString() : 'NULL'}`);
+        if (fm && since) {
+          const diff = fm.getTime() - since.getTime();
+          this.logger.log(`     ¿fm >= since? ${fm >= since} (diff: ${diff}ms = ${diff / 1000}s)`);
+        }
+      }
+    }
 
     // 1. Obtener órdenes asignadas al técnico
-    // ✅ FIX: Incluir órdenes completadas recientes (últimos 30 días) para historial
     const treintaDiasAtras = new Date();
     treintaDiasAtras.setDate(treintaDiasAtras.getDate() - 30);
 
-    const ordenes = await this.prisma.ordenes_servicio.findMany({
-      where: {
+    // ✅ FIX CRÍTICO: Simplificar filtro para delta sync
+    // El filtro OR con relaciones + fecha_modificacion causaba queries incorrectos en Prisma
+    // Para DELTA: Solo filtrar por fecha_modificacion (incluye TODAS las órdenes modificadas)
+    // Para FULL: Usar filtro OR para incluir activas + completadas recientes
+    let baseFilter: any;
+
+    if (since) {
+      // ========================================================================
+      // 🔧 FIX CRÍTICO: Usar timestamp string ISO para evitar problemas de TZ
+      // El problema era que Prisma/PostgreSQL podían interpretar mal los timestamps
+      // cuando se usa `timestamp without time zone` + objetos Date de JavaScript
+      // ========================================================================
+      const sinceIsoString = since.toISOString();
+      this.logger.log(`[Sync Delta] Filtrando órdenes modificadas desde ${sinceIsoString}`);
+
+      // Obtener IDs de órdenes modificadas usando query raw para garantizar comparación correcta
+      const ordenesModificadas = await this.prisma.$queryRaw<{ id_orden_servicio: number }[]>`
+        SELECT id_orden_servicio 
+        FROM ordenes_servicio 
+        WHERE id_tecnico_asignado = ${tecnicoId}
+          AND fecha_modificacion >= ${sinceIsoString}::timestamp
+      `;
+
+      this.logger.log(`[🔬 DIAGNÓSTICO] Query raw encontró ${ordenesModificadas.length} órdenes modificadas`);
+
+      if (ordenesModificadas.length === 0) {
+        // No hay órdenes modificadas.
+        // ✅ IMPORTANTE: Si includeCatalogs=true (fullCatalogs), debemos retornar catálogos completos
+        // aunque no haya órdenes modificadas, para permitir refrescar catálogos (p.ej. nuevas actividades).
+        this.logger.log(`[Sync Delta] No hay órdenes modificadas desde ${sinceIsoString}`);
+
+        if (includeCatalogs) {
+          this.logger.log('[Sync Delta] includeCatalogs=true → enviando catálogos completos sin órdenes');
+
+          const parametros = await this.prisma.parametros_medicion.findMany({
+            where: { activo: true },
+            orderBy: { categoria: 'asc' },
+          });
+
+          const actividades = await this.prisma.catalogo_actividades.findMany({
+            where: { activo: true },
+            include: { catalogo_sistemas: true },
+            orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
+          });
+
+          const estados = await this.prisma.estados_orden.findMany({
+            where: { activo: true },
+            orderBy: { orden_visualizacion: 'asc' },
+          });
+
+          const tiposServicio = await this.prisma.tipos_servicio.findMany({
+            where: { activo: true },
+            orderBy: { nombre_tipo: 'asc' },
+          });
+
+          return {
+            serverTimestamp: new Date().toISOString(),
+            tecnicoId,
+            syncType: 'DELTA',
+            sinceTimestamp: sinceIsoString,
+            ordenes: [],
+            parametrosMedicion: parametros.map((p) => ({
+              idParametroMedicion: p.id_parametro_medicion,
+              codigoParametro: p.codigo_parametro,
+              nombreParametro: p.nombre_parametro,
+              unidadMedida: p.unidad_medida,
+              tipoDato: p.tipo_dato || 'NUMERICO',
+              valorMinimoNormal: p.valor_minimo_normal
+                ? Number(p.valor_minimo_normal)
+                : undefined,
+              valorMaximoNormal: p.valor_maximo_normal
+                ? Number(p.valor_maximo_normal)
+                : undefined,
+              valorMinimoCritico: p.valor_minimo_critico
+                ? Number(p.valor_minimo_critico)
+                : undefined,
+              valorMaximoCritico: p.valor_maximo_critico
+                ? Number(p.valor_maximo_critico)
+                : undefined,
+              valorIdeal: p.valor_ideal ? Number(p.valor_ideal) : undefined,
+              esCriticoSeguridad: p.es_critico_seguridad || false,
+              esObligatorio: p.es_obligatorio || false,
+              decimalesPrecision: p.decimales_precision || 2,
+            })),
+            actividadesCatalogo: actividades.map((a) => ({
+              idActividadCatalogo: a.id_actividad_catalogo,
+              codigoActividad: a.codigo_actividad,
+              descripcionActividad: a.descripcion_actividad,
+              tipoActividad: a.tipo_actividad as string,
+              ordenEjecucion: a.orden_ejecucion,
+              esObligatoria: a.es_obligatoria || false,
+              tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
+              instrucciones: a.instrucciones ?? undefined,
+              precauciones: a.precauciones ?? undefined,
+              idParametroMedicion: a.id_parametro_medicion ?? undefined,
+              idTipoServicio: a.id_tipo_servicio,
+              sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+            })),
+            estadosOrden: estados.map((e) => ({
+              id: e.id_estado,
+              codigo: e.codigo_estado,
+              nombre: e.nombre_estado,
+              esEstadoFinal: e.es_estado_final || false,
+            })),
+            tiposServicio: tiposServicio.map((t) => ({
+              id: t.id_tipo_servicio,
+              codigo: t.codigo_tipo,
+              nombre: t.nombre_tipo,
+              descripcion: t.descripcion ?? undefined,
+            })),
+          };
+        }
+
+        return {
+          serverTimestamp: new Date().toISOString(),
+          tecnicoId,
+          syncType: 'DELTA',
+          sinceTimestamp: sinceIsoString,
+          ordenes: [],
+          parametrosMedicion: [],
+          actividadesCatalogo: [],
+          estadosOrden: [],
+          tiposServicio: [],
+        };
+      }
+
+      // Usar los IDs encontrados para el filtro
+      const ordenesIds = ordenesModificadas.map(o => o.id_orden_servicio);
+      this.logger.log(`[🔬 DIAGNÓSTICO] IDs de órdenes modificadas: ${ordenesIds.join(', ')}`);
+
+      baseFilter = {
+        id_orden_servicio: { in: ordenesIds },
+      };
+    } else {
+      // FULL SYNC: Filtro completo con OR para historial
+      baseFilter = {
         id_tecnico_asignado: tecnicoId,
         OR: [
           // Órdenes activas (no finales)
@@ -406,9 +581,16 @@ export class SyncService {
             fecha_fin_real: { gte: treintaDiasAtras },
           },
         ],
-      },
+      };
+    }
+
+    const ordenes = await this.prisma.ordenes_servicio.findMany({
+      where: baseFilter,
       include: {
         estado: true,
+        actividades_plan: {
+          orderBy: { orden_secuencia: 'asc' },
+        },
         cliente: {
           include: {
             persona: true,
@@ -623,6 +805,12 @@ export class SyncService {
       descripcionInicial: o.descripcion_inicial,
       trabajoRealizado: o.trabajo_realizado,
       observacionesTecnico: o.observaciones_tecnico,
+      actividadesPlan: (o as any).actividades_plan?.map((p: any) => ({
+        idActividadCatalogo: p.id_actividad_catalogo,
+        ordenSecuencia: p.orden_secuencia,
+        origen: p.origen,
+        esObligatoria: p.es_obligatoria ?? undefined,
+      })),
       // ✅ FIX: Incluir URL del PDF desde documentos_generados (consulta directa)
       urlPdf: documentosMap.get(o.id_orden_servicio) || undefined,
       // ✅ FIX: Incluir horarios reales del servicio
@@ -671,14 +859,24 @@ export class SyncService {
       fechaModificacion: o.fecha_modificacion?.toISOString(),
     }));
 
-    // 3. Obtener parámetros de medición activos
-    const parametros = await this.prisma.parametros_medicion.findMany({
-      where: { activo: true },
-      orderBy: { categoria: 'asc' },
-    });
+    // =========================================================================
+    // CATÁLOGOS: Solo incluir en sync completo o si se solicita explícitamente
+    // =========================================================================
+    let parametrosDownload: SyncParametroMedicionDto[] = [];
+    let actividadesDownload: SyncActividadCatalogoDto[] = [];
+    let estadosDownload: { id: number; codigo: string; nombre: string; esEstadoFinal: boolean }[] = [];
+    let tiposServicioDownload: { id: number; codigo: string; nombre: string; descripcion?: string }[] = [];
 
-    const parametrosDownload: SyncParametroMedicionDto[] = parametros.map(
-      (p) => ({
+    if (includeCatalogs) {
+      this.logger.log('[Sync] Incluyendo catálogos completos');
+
+      // 3. Obtener parámetros de medición activos
+      const parametros = await this.prisma.parametros_medicion.findMany({
+        where: { activo: true },
+        orderBy: { categoria: 'asc' },
+      });
+
+      parametrosDownload = parametros.map((p) => ({
         idParametroMedicion: p.id_parametro_medicion,
         codigoParametro: p.codigo_parametro,
         nombreParametro: p.nombre_parametro,
@@ -700,18 +898,16 @@ export class SyncService {
         esCriticoSeguridad: p.es_critico_seguridad || false,
         esObligatorio: p.es_obligatorio || false,
         decimalesPrecision: p.decimales_precision || 2,
-      }),
-    );
+      }));
 
-    // 4. Obtener catálogo de actividades activas con sistema incluido
-    const actividades = await this.prisma.catalogo_actividades.findMany({
-      where: { activo: true },
-      include: { catalogo_sistemas: true }, // ✅ CORREGIDO: nombre correcto de la relación
-      orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
-    });
+      // 4. Obtener catálogo de actividades activas con sistema incluido
+      const actividades = await this.prisma.catalogo_actividades.findMany({
+        where: { activo: true },
+        include: { catalogo_sistemas: true },
+        orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
+      });
 
-    const actividadesDownload: SyncActividadCatalogoDto[] = actividades.map(
-      (a) => ({
+      actividadesDownload = actividades.map((a) => ({
         idActividadCatalogo: a.id_actividad_catalogo,
         codigoActividad: a.codigo_actividad,
         descripcionActividad: a.descripcion_actividad,
@@ -722,45 +918,313 @@ export class SyncService {
         instrucciones: a.instrucciones ?? undefined,
         precauciones: a.precauciones ?? undefined,
         idParametroMedicion: a.id_parametro_medicion ?? undefined,
-        idTipoServicio: a.id_tipo_servicio,  // ✅ CRÍTICO para vincular con órdenes
-        sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL', // ✅ CORREGIDO + Fallback a GENERAL
-      }),
-    );
+        idTipoServicio: a.id_tipo_servicio,
+        sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+      }));
 
-    // 5. Obtener estados de orden
-    const estados = await this.prisma.estados_orden.findMany({
-      where: { activo: true },
-      orderBy: { orden_visualizacion: 'asc' },
-    });
+      // 5. Obtener estados de orden
+      const estados = await this.prisma.estados_orden.findMany({
+        where: { activo: true },
+        orderBy: { orden_visualizacion: 'asc' },
+      });
 
-    const estadosDownload = estados.map((e) => ({
-      id: e.id_estado,
-      codigo: e.codigo_estado,
-      nombre: e.nombre_estado,
-      esEstadoFinal: e.es_estado_final || false,
-    }));
+      estadosDownload = estados.map((e) => ({
+        id: e.id_estado,
+        codigo: e.codigo_estado,
+        nombre: e.nombre_estado,
+        esEstadoFinal: e.es_estado_final || false,
+      }));
 
-    // 6. Obtener tipos de servicio (CRÍTICO para FK en actividades_catalogo)
-    const tiposServicio = await this.prisma.tipos_servicio.findMany({
-      where: { activo: true },
-      orderBy: { nombre_tipo: 'asc' },
-    });
+      // 6. Obtener tipos de servicio
+      const tiposServicio = await this.prisma.tipos_servicio.findMany({
+        where: { activo: true },
+        orderBy: { nombre_tipo: 'asc' },
+      });
 
-    const tiposServicioDownload = tiposServicio.map((t) => ({
-      id: t.id_tipo_servicio,
-      codigo: t.codigo_tipo,
-      nombre: t.nombre_tipo,
-      descripcion: t.descripcion ?? undefined,
-    }));
+      tiposServicioDownload = tiposServicio.map((t) => ({
+        id: t.id_tipo_servicio,
+        codigo: t.codigo_tipo,
+        nombre: t.nombre_tipo,
+        descripcion: t.descripcion ?? undefined,
+      }));
+    } else {
+      this.logger.log('[Sync Delta] Omitiendo catálogos (ya sincronizados)');
+    }
+
+    // Log resumen de sync
+    this.logger.log(`[Sync] Resultado: ${ordenesDownload.length} órdenes, ${parametrosDownload.length} params, ${actividadesDownload.length} actividades`);
 
     return {
       serverTimestamp: new Date().toISOString(),
       tecnicoId,
+      // ✅ SYNC DELTA: Indicar tipo de sync y si es delta
+      syncType: since ? 'DELTA' : 'FULL',
+      sinceTimestamp: since?.toISOString(),
       ordenes: ordenesDownload,
       parametrosMedicion: parametrosDownload,
       actividadesCatalogo: actividadesDownload,
       estadosOrden: estadosDownload,
-      tiposServicio: tiposServicioDownload, // ✅ AGREGADO para FK en mobile
+      tiposServicio: tiposServicioDownload,
+    };
+  }
+
+  // ============================================================================
+  // SINCRONIZACIÓN INTELIGENTE - Métodos para comparación BD Local vs Supabase
+  // ============================================================================
+
+  /**
+   * Obtiene resúmenes compactos de órdenes para comparación inteligente.
+   * El móvil usa estos resúmenes para detectar diferencias con su BD local.
+   * 
+   * @param tecnicoId - ID del técnico
+   * @param limit - Número máximo de órdenes (default 500)
+   */
+  async getOrdenesResumen(tecnicoId: number, limit: number = 500): Promise<{
+    serverTimestamp: string;
+    tecnicoId: number;
+    totalOrdenes: number;
+    ordenes: Array<{
+      id: number;
+      numeroOrden: string;
+      estadoId: number;
+      estadoCodigo: string;
+      fechaModificacion: string;
+      urlPdf?: string;
+    }>;
+  }> {
+    this.logger.log(`[Sync Inteligente] Obteniendo resúmenes para técnico ${tecnicoId} (limit: ${limit})`);
+
+    // Obtener las últimas N órdenes del técnico, ordenadas por fecha_modificacion DESC
+    const ordenes = await this.prisma.ordenes_servicio.findMany({
+      where: { id_tecnico_asignado: tecnicoId },
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        id_estado_actual: true,
+        fecha_modificacion: true,
+        estado: {
+          select: {
+            codigo_estado: true,
+          },
+        },
+      },
+      orderBy: { fecha_modificacion: 'desc' },
+      take: limit,
+    });
+
+    // Obtener los IDs de órdenes para buscar PDFs
+    const ordenIds = ordenes.map(o => o.id_orden_servicio);
+
+    // Buscar PDFs directamente en documentos_generados por id_referencia
+    // (el documento se guarda con id_referencia = idOrden en finalizacion-orden.service.ts)
+    const documentos = await this.prisma.documentos_generados.findMany({
+      where: {
+        id_referencia: { in: ordenIds },
+        tipo_documento: 'INFORME_SERVICIO',
+      },
+      select: {
+        id_referencia: true,
+        ruta_archivo: true,
+      },
+      orderBy: { fecha_generacion: 'desc' },
+    });
+
+    // Crear mapa de ordenId -> urlPdf
+    const pdfMap = new Map<number, string>();
+    for (const doc of documentos) {
+      if (doc.id_referencia && !pdfMap.has(doc.id_referencia)) {
+        pdfMap.set(doc.id_referencia, doc.ruta_archivo);
+      }
+    }
+
+    const resumenOrdenes = ordenes.map((o) => ({
+      id: o.id_orden_servicio,
+      numeroOrden: o.numero_orden,
+      estadoId: o.id_estado_actual,
+      estadoCodigo: o.estado?.codigo_estado || 'DESCONOCIDO',
+      fechaModificacion: o.fecha_modificacion?.toISOString() || new Date().toISOString(),
+      urlPdf: pdfMap.get(o.id_orden_servicio) || undefined,
+    }));
+
+    this.logger.log(`[Sync Inteligente] Retornando ${resumenOrdenes.length} resúmenes`);
+
+    return {
+      serverTimestamp: new Date().toISOString(),
+      tecnicoId,
+      totalOrdenes: resumenOrdenes.length,
+      ordenes: resumenOrdenes,
+    };
+  }
+
+  /**
+   * Obtiene una orden completa por ID para sincronización individual.
+   * Usado cuando el móvil detecta que necesita actualizar una orden específica.
+   */
+  async getOrdenCompleta(ordenId: number): Promise<any> {
+    this.logger.log(`[Sync Inteligente] Descargando orden completa ID: ${ordenId}`);
+
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: ordenId },
+      include: {
+        estado: true,
+        cliente: {
+          include: {
+            persona: true,
+          },
+        },
+        sede: true,
+        equipo: true,
+        tipo_servicio: true,
+        // PDF se busca directamente en documentos_generados por id_referencia
+      },
+    });
+
+    if (!orden) {
+      this.logger.warn(`[Sync Inteligente] Orden ${ordenId} no encontrada`);
+      return null;
+    }
+
+    // =========================================================================
+    // ESTADÍSTICAS: Calcular contadores igual que en downloadForTecnico
+    // =========================================================================
+
+    // Contar actividades por estado
+    const actividadesStats = await this.prisma.actividades_ejecutadas.groupBy({
+      by: ['estado'],
+      where: { id_orden_servicio: ordenId },
+      _count: { id_actividad_ejecutada: true },
+    });
+
+    let actividadesBuenas = 0, actividadesMalas = 0, actividadesCorregidas = 0, actividadesNA = 0;
+    let totalActividades = 0;
+    for (const stat of actividadesStats) {
+      const count = stat._count.id_actividad_ejecutada;
+      totalActividades += count;
+      switch (stat.estado) {
+        case 'B': actividadesBuenas = count; break;
+        case 'M': actividadesMalas = count; break;
+        case 'C': actividadesCorregidas = count; break;
+        case 'NA': actividadesNA = count; break;
+      }
+    }
+
+    // Contar mediciones y clasificar por estado
+    const mediciones = await this.prisma.mediciones_servicio.findMany({
+      where: { id_orden_servicio: ordenId },
+      include: { parametros_medicion: true },
+    });
+
+    let medicionesNormales = 0, medicionesAdvertencia = 0, medicionesCriticas = 0;
+    for (const m of mediciones) {
+      const valor = m.valor_numerico?.toNumber() || 0;
+      const param = m.parametros_medicion;
+      let estado = 'NORMAL';
+      if (param) {
+        const minCrit = param.valor_minimo_critico?.toNumber();
+        const maxCrit = param.valor_maximo_critico?.toNumber();
+        const minNorm = param.valor_minimo_normal?.toNumber();
+        const maxNorm = param.valor_maximo_normal?.toNumber();
+        if ((minCrit !== undefined && valor < minCrit) || (maxCrit !== undefined && valor > maxCrit)) {
+          estado = 'CRITICO';
+        } else if ((minNorm !== undefined && valor < minNorm) || (maxNorm !== undefined && valor > maxNorm)) {
+          estado = 'ADVERTENCIA';
+        }
+      }
+      if (estado === 'NORMAL') medicionesNormales++;
+      else if (estado === 'ADVERTENCIA') medicionesAdvertencia++;
+      else medicionesCriticas++;
+    }
+
+    // Contar evidencias
+    const totalEvidencias = await this.prisma.evidencias_fotograficas.count({
+      where: { id_orden_servicio: ordenId },
+    });
+
+    // Contar firmas (igual que en downloadForTecnico)
+    // La orden tiene id_firma_cliente y nombre_quien_recibe
+    let totalFirmas = 0;
+    if (orden.id_firma_cliente) totalFirmas++;
+    if (orden.nombre_quien_recibe) totalFirmas++;
+
+    // URL del PDF - buscar directamente en documentos_generados por id_referencia
+    // (el documento se guarda con id_referencia = idOrden en finalizacion-orden.service.ts)
+    const documentoPdf = await this.prisma.documentos_generados.findFirst({
+      where: {
+        id_referencia: ordenId,
+        tipo_documento: 'INFORME_SERVICIO',
+      },
+      select: { ruta_archivo: true },
+      orderBy: { fecha_generacion: 'desc' },
+    });
+    const urlPdf = documentoPdf?.ruta_archivo;
+
+    this.logger.log(`[Sync Inteligente] Orden ${ordenId} - urlPdf: ${urlPdf || 'NULL'}`);
+
+    // Calcular horas de entrada/salida para Colombia (UTC-5)
+    let horaEntrada: string | undefined;
+    let horaSalida: string | undefined;
+
+    if (orden.fecha_inicio_real) {
+      const h = orden.fecha_inicio_real.getHours();
+      const m = orden.fecha_inicio_real.getMinutes();
+      let horaCol = h - 5;
+      if (horaCol < 0) horaCol += 24;
+      horaEntrada = `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    if (orden.fecha_fin_real) {
+      const h = orden.fecha_fin_real.getHours();
+      const m = orden.fecha_fin_real.getMinutes();
+      let horaCol = h - 5;
+      if (horaCol < 0) horaCol += 24;
+      horaSalida = `${String(horaCol).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    return {
+      idOrdenServicio: orden.id_orden_servicio,
+      numeroOrden: orden.numero_orden,
+      version: orden.fecha_modificacion?.getTime() || 1,
+      idEstadoActual: orden.id_estado_actual,
+      codigoEstado: orden.estado?.codigo_estado || 'DESCONOCIDO',
+      nombreEstado: orden.estado?.nombre_estado || 'Desconocido',
+      fechaProgramada: orden.fecha_programada?.toISOString(),
+      prioridad: orden.prioridad || 'NORMAL',
+      idCliente: orden.id_cliente,
+      nombreCliente: orden.cliente?.persona?.nombre_completo || orden.cliente?.persona?.razon_social || 'Cliente',
+      idSede: orden.id_sede ?? undefined,
+      nombreSede: orden.sede?.nombre_sede ?? undefined,
+      direccionSede: orden.sede?.direccion_sede ?? undefined,
+      idEquipo: orden.id_equipo,
+      codigoEquipo: orden.equipo?.codigo_equipo || '',
+      nombreEquipo: orden.equipo?.nombre_equipo || 'Equipo',
+      serieEquipo: orden.equipo?.numero_serie_equipo ?? undefined,
+      ubicacionEquipo: orden.equipo?.ubicacion_texto ?? undefined,
+      idTipoServicio: orden.id_tipo_servicio ?? undefined,
+      codigoTipoServicio: orden.tipo_servicio?.codigo_tipo ?? undefined,
+      nombreTipoServicio: orden.tipo_servicio?.nombre_tipo ?? undefined,
+      descripcionInicial: orden.descripcion_inicial ?? undefined,
+      trabajoRealizado: orden.trabajo_realizado ?? undefined,
+      observacionesTecnico: orden.observaciones_tecnico ?? undefined,
+      observacionesCierre: orden.observaciones_cierre ?? undefined,
+      horaEntrada: horaEntrada,
+      horaSalida: horaSalida,
+      fechaInicioReal: orden.fecha_inicio_real?.toISOString(),
+      fechaFinReal: orden.fecha_fin_real?.toISOString(),
+      urlPdf: urlPdf,
+      // ✅ ESTADÍSTICAS COMPLETAS
+      totalActividades: totalActividades + mediciones.length,
+      totalMediciones: mediciones.length,
+      totalEvidencias: totalEvidencias,
+      totalFirmas: totalFirmas,
+      actividadesBuenas: actividadesBuenas,
+      actividadesMalas: actividadesMalas,
+      actividadesCorregidas: actividadesCorregidas,
+      actividadesNA: actividadesNA,
+      medicionesNormales: medicionesNormales,
+      medicionesAdvertencia: medicionesAdvertencia,
+      medicionesCriticas: medicionesCriticas,
+      fechaCreacion: orden.fecha_creacion?.toISOString() || new Date().toISOString(),
+      fechaModificacion: orden.fecha_modificacion?.toISOString(),
     };
   }
 }

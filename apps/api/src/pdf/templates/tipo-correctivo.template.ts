@@ -1,22 +1,24 @@
 /**
  * Template MEKANOS - Informe de Mantenimiento Correctivo
  *
- * Documento técnico para reportar trabajos correctivos realizados.
- * Diferente al preventivo porque incluye:
- * - Descripción del problema original
- * - Diagnóstico realizado
- * - Trabajos ejecutados (no checklist predefinido)
- * - Repuestos utilizados
- * - Recomendaciones preventivas
+ * ESTRUCTURA ESTÁNDAR (igual que Tipo A/B):
+ * 1. CABECERA
+ * 2. DATOS DEL CLIENTE Y SERVICIO
+ * 3. REGISTRO DE DATOS DEL MÓDULO DE CONTROL [solo si aplica]
+ * 4. GENERAL (trabajos ejecutados)
+ * 5. SIMBOLOGÍA
+ * 6. MEDICIONES TÉCNICAS [solo si aplica]
+ * 7. REGISTRO FOTOGRÁFICO DEL SERVICIO
+ * 8. FOTOS GENERALES [si hay]
+ * 9. OBSERVACIONES
+ * 10. FIRMAS
+ * 11. FOOTER
  */
 
-import { baseStyles, MEKANOS_COLORS } from './mekanos-base.template';
-
-// Extender colores
-const COLORS = {
-    ...MEKANOS_COLORS,
-    textLight: '#666666',
-};
+import {
+    baseStyles,
+    MEKANOS_COLORS
+} from './mekanos-base.template';
 
 export interface DatosCorrectivoOrdenPDF {
     // Datos generales
@@ -43,34 +45,46 @@ export interface DatosCorrectivoOrdenPDF {
     tecnico: string;
     cargoTecnico?: string;
 
-    // Problema reportado (lo que dijo el cliente)
+    // Problema reportado (se incluirá en observaciones)
     problemaReportado: {
         descripcion: string;
         fechaReporte: string;
         reportadoPor?: string;
     };
 
-    // Diagnóstico realizado por el técnico
+    // Diagnóstico (se incluirá en observaciones)
     diagnostico: {
         descripcion: string;
         causaRaiz: string;
         sistemasAfectados: string[];
     };
 
-    // Trabajos ejecutados
+    // Trabajos ejecutados (se muestran en GENERAL)
     trabajosEjecutados: TrabajoEjecutadoPDF[];
 
-    // Repuestos utilizados
+    // Repuestos utilizados (no se usa - mantener compatibilidad)
     repuestosUtilizados: RepuestoUtilizadoPDF[];
 
     // Mediciones (si aplica)
     mediciones?: MedicionCorrectivoPDF[];
 
-    // Recomendaciones
+    // Recomendaciones (no se usa - mantener compatibilidad)
     recomendaciones: string[];
 
     // Observaciones
     observaciones?: string;
+
+    // Datos del módulo de control (opcional, solo si hay valores)
+    datosModulo?: {
+        rpm?: number;
+        presionAceite?: number;
+        temperaturaRefrigerante?: number;
+        cargaBateria?: number;
+        horasTrabajo?: number;
+        voltaje?: number;
+        frecuencia?: number;
+        corriente?: number;
+    };
 
     // Evidencias
     evidencias?: EvidenciaCorrectivoPDF[];
@@ -85,7 +99,8 @@ export interface TrabajoEjecutadoPDF {
     descripcion: string;
     sistema: string;
     tiempoHoras: number;
-    resultado: 'COMPLETADO' | 'PARCIAL' | 'PENDIENTE';
+    // ✅ FIX: Aceptar todos los códigos de simbología válidos
+    resultado: 'COMPLETADO' | 'PARCIAL' | 'PENDIENTE' | 'B' | 'R' | 'M' | 'C' | 'NA' | 'I' | 'LI' | 'A' | 'L' | 'LA' | 'S' | 'NT' | 'BA' | 'F' | 'RN' | 'NF' | string;
 }
 
 export interface RepuestoUtilizadoPDF {
@@ -112,377 +127,424 @@ export interface EvidenciaCorrectivoPDF {
 
 /**
  * Genera el HTML del informe de correctivo
+ * ESTRUCTURA IDÉNTICA A TIPO A/B
  */
 export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): string {
+    const tieneMediciones = Array.isArray(datos.mediciones) && datos.mediciones.length > 0;
+    const tieneDatosModulo = datos.datosModulo && Object.values(datos.datosModulo).some(v => v != null && v !== 0);
+
     return `
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Informe Correctivo ${datos.numeroOrden}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informe Mantenimiento Correctivo - ${datos.numeroOrden}</title>
     <style>
         ${baseStyles}
-        
-        .correctivo-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-            background: ${MEKANOS_COLORS.warning};
-            color: white;
-        }
-        
-        .problema-box {
-            background: #fff5f5;
-            border: 1px solid ${MEKANOS_COLORS.danger};
-            border-left: 4px solid ${MEKANOS_COLORS.danger};
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-        }
-        
-        .diagnostico-box {
-            background: #f0f7ff;
-            border: 1px solid ${MEKANOS_COLORS.secondary};
-            border-left: 4px solid ${MEKANOS_COLORS.secondary};
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-        }
-        
-        .resultado-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 8px;
-            font-weight: bold;
-        }
-        
-        .resultado-COMPLETADO { background: ${MEKANOS_COLORS.success}; color: white; }
-        .resultado-PARCIAL { background: ${MEKANOS_COLORS.warning}; color: white; }
-        .resultado-PENDIENTE { background: ${MEKANOS_COLORS.danger}; color: white; }
-        
-        .estado-badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 7px;
-            font-weight: bold;
-        }
-        
-        .estado-NUEVO { background: ${MEKANOS_COLORS.success}; color: white; }
-        .estado-REPARADO { background: ${MEKANOS_COLORS.secondary}; color: white; }
-        .estado-USADO { background: ${COLORS.textLight}; color: white; }
-        
-        .recomendacion-item {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 6px;
-            font-size: 9px;
-        }
-        
-        .recomendacion-icon {
-            color: ${MEKANOS_COLORS.secondary};
-            margin-right: 8px;
-            font-weight: bold;
-        }
     </style>
 </head>
 <body>
     <div class="page">
-        ${generarHeaderCorrectivo(datos)}
-        ${generarInfoGeneral(datos)}
-        ${generarProblemaReportado(datos)}
-        ${generarDiagnostico(datos)}
-        ${generarTrabajosEjecutados(datos)}
-        ${generarRepuestosUtilizados(datos)}
-        ${datos.mediciones && datos.mediciones.length > 0 ? generarMediciones(datos) : ''}
-        ${generarRecomendaciones(datos)}
-        ${datos.observaciones ? generarObservaciones(datos) : ''}
-        ${datos.evidencias && datos.evidencias.length > 0 ? generarEvidencias(datos) : ''}
-        ${generarFirmasCorrectivo(datos)}
-        ${generarFooterCorrectivo()}
+        <!-- 1. HEADER -->
+        ${generarHeader(datos)}
+        
+        <!-- 2. DATOS DEL CLIENTE Y SERVICIO -->
+        ${generarDatosCliente(datos)}
+        
+        <!-- 3. REGISTRO DE DATOS DEL MÓDULO DE CONTROL (solo si aplica) -->
+        ${tieneDatosModulo ? generarDatosModulo(datos) : ''}
+        
+        <!-- 4. GENERAL (Trabajos ejecutados) -->
+        ${generarSeccionGeneral(datos.trabajosEjecutados)}
+        
+        <!-- 5. SIMBOLOGÍA -->
+        ${generarSimbologia()}
+        
+        <!-- 6. MEDICIONES TÉCNICAS (solo si aplica) -->
+        ${tieneMediciones ? generarMediciones(datos.mediciones!) : ''}
+    </div>
+    
+    <div class="page page-break">
+        <!-- 7 y 8. REGISTRO FOTOGRÁFICO DEL SERVICIO + FOTOS GENERALES -->
+        ${generarEvidencias(datos.evidencias || [])}
+        
+        <!-- 9. OBSERVACIONES -->
+        ${generarObservaciones(datos)}
+        
+        <!-- 10. FIRMAS -->
+        ${generarFirmas(datos.firmaTecnico, datos.firmaCliente)}
+        
+        <!-- 11. FOOTER -->
+        ${generarFooter()}
     </div>
 </body>
 </html>
     `.trim();
 }
 
-function generarHeaderCorrectivo(datos: DatosCorrectivoOrdenPDF): string {
-    return `
+// ============================================================================
+// FUNCIONES DE GENERACIÓN - ESTRUCTURA IDÉNTICA A TIPO A/B
+// ============================================================================
+
+const generarHeader = (datos: DatosCorrectivoOrdenPDF): string => `
     <div class="header">
-        <div class="header-left">
-            <div class="logo">
-                <span style="font-size: 14px; font-weight: bold;">MEKANOS</span>
-            </div>
-            <div class="header-title">
-                <h1>MEKANOS S.A.S</h1>
-                <h2>INFORME DE MANTENIMIENTO CORRECTIVO</h2>
-            </div>
+        <div class="logo-container">
+            <svg class="logo" viewBox="0 0 100 40">
+                <rect width="100" height="40" fill="${MEKANOS_COLORS.primary}"/>
+                <text x="50" y="25" fill="white" font-size="14" font-weight="bold" text-anchor="middle">MEKANOS</text>
+            </svg>
         </div>
-        <div class="header-right">
+        <div class="header-title">
+            <h1>MANTENIMIENTO CORRECTIVO</h1>
+            <h2>${datos.tipoEquipo || 'EQUIPOS INDUSTRIALES'}</h2>
+        </div>
+        <div class="header-order">
             <div class="order-number">${datos.numeroOrden}</div>
-            <div style="font-size: 9px; color: ${COLORS.textLight}; margin-top: 5px;">${datos.fecha}</div>
-            <div style="margin-top: 5px;"><span class="correctivo-badge">CORRECTIVO</span></div>
         </div>
     </div>
-    `;
-}
+`;
 
-function generarInfoGeneral(datos: DatosCorrectivoOrdenPDF): string {
-    return `
+const generarDatosCliente = (datos: DatosCorrectivoOrdenPDF): string => `
     <div class="section">
-        <div class="info-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-            <div class="info-group">
-                <div class="info-label">👤 Cliente</div>
-                <div class="info-value">${datos.cliente}</div>
-                <div style="font-size: 8px; color: ${COLORS.textLight}; margin-top: 3px;">${datos.direccion}</div>
-                ${datos.contacto ? `<div style="font-size: 8px; color: ${COLORS.textLight};">Contacto: ${datos.contacto}</div>` : ''}
+        <div class="section-title">DATOS DEL CLIENTE Y SERVICIO</div>
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">Cliente</span>
+                <span class="info-value">${datos.cliente}</span>
             </div>
-            <div class="info-group">
-                <div class="info-label">⚙️ Equipo</div>
-                <div class="info-value">${datos.marcaEquipo} ${datos.modeloEquipo || ''}</div>
-                <div style="font-size: 8px; color: ${COLORS.textLight}; margin-top: 3px;">
-                    Serie: ${datos.serieEquipo}<br>
-                    ${datos.horasOperacion ? `Horas: ${datos.horasOperacion.toLocaleString()}` : ''}
-                </div>
+            <div class="info-item">
+                <span class="info-label">Marca del Equipo</span>
+                <span class="info-value">${datos.marcaEquipo}</span>
             </div>
-            <div class="info-group">
-                <div class="info-label">👷 Técnico / Horario</div>
-                <div class="info-value">${datos.tecnico}</div>
-                <div style="font-size: 8px; color: ${COLORS.textLight}; margin-top: 3px;">
-                    Entrada: ${datos.horaEntrada}<br>
-                    Salida: ${datos.horaSalida}
-                </div>
+            <div class="info-item">
+                <span class="info-label">N° de Serie</span>
+                <span class="info-value">${datos.serieEquipo}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Dirección</span>
+                <span class="info-value">${datos.direccion}</span>
             </div>
         </div>
-    </div>
-    `;
-}
-
-function generarProblemaReportado(datos: DatosCorrectivoOrdenPDF): string {
-    const p = datos.problemaReportado;
-    return `
-    <div class="section">
-        <div class="section-title">🔴 PROBLEMA REPORTADO</div>
-        <div class="problema-box">
-            <p style="font-size: 10px; margin-bottom: 8px;">${p.descripcion}</p>
-            <div style="display: flex; justify-content: space-between; font-size: 8px; color: ${COLORS.textLight};">
-                <span>Fecha reporte: ${p.fechaReporte}</span>
-                ${p.reportadoPor ? `<span>Reportado por: ${p.reportadoPor}</span>` : ''}
+        <div class="info-grid info-grid-4" style="margin-top: 8px;">
+            <div class="info-item">
+                <span class="info-label">Fecha</span>
+                <span class="info-value">${datos.fecha}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Técnico</span>
+                <span class="info-value">${datos.tecnico}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">H. Entrada</span>
+                <span class="info-value">${datos.horaEntrada}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">H. Salida</span>
+                <span class="info-value">${datos.horaSalida}</span>
             </div>
         </div>
     </div>
-    `;
-}
+`;
 
-function generarDiagnostico(datos: DatosCorrectivoOrdenPDF): string {
-    const d = datos.diagnostico;
+const generarDatosModulo = (datos: DatosCorrectivoOrdenPDF): string => {
+    const modulo = datos.datosModulo || {};
+
     return `
     <div class="section">
-        <div class="section-title">🔍 DIAGNÓSTICO TÉCNICO</div>
-        <div class="diagnostico-box">
-            <div style="margin-bottom: 10px;">
-                <strong style="font-size: 9px;">Descripción:</strong>
-                <p style="font-size: 10px; margin-top: 4px;">${d.descripcion}</p>
+        <div class="section-subtitle">REGISTRO DE DATOS DEL MÓDULO DE CONTROL</div>
+        <div class="mediciones-grid">
+            <div class="medicion-item">
+                <div class="medicion-label">Velocidad Motor</div>
+                <div class="medicion-value">${modulo.rpm || '-'} RPM</div>
             </div>
-            <div style="margin-bottom: 10px;">
-                <strong style="font-size: 9px;">Causa Raíz:</strong>
-                <p style="font-size: 10px; margin-top: 4px; font-weight: 500;">${d.causaRaiz}</p>
+            <div class="medicion-item">
+                <div class="medicion-label">Presión Aceite</div>
+                <div class="medicion-value">${modulo.presionAceite || '-'} PSI</div>
             </div>
-            <div>
-                <strong style="font-size: 9px;">Sistemas Afectados:</strong>
-                <div style="margin-top: 4px;">
-                    ${d.sistemasAfectados.map(s => `
-                    <span style="display: inline-block; background: ${MEKANOS_COLORS.background}; padding: 3px 8px; border-radius: 3px; font-size: 8px; margin-right: 5px; margin-bottom: 3px;">${s}</span>
-                    `).join('')}
-                </div>
+            <div class="medicion-item">
+                <div class="medicion-label">Temp. Refrigerante</div>
+                <div class="medicion-value">${modulo.temperaturaRefrigerante || '-'} °C</div>
+            </div>
+            <div class="medicion-item">
+                <div class="medicion-label">Carga Batería</div>
+                <div class="medicion-value">${modulo.cargaBateria || '-'} V</div>
+            </div>
+            <div class="medicion-item">
+                <div class="medicion-label">Horas Trabajo</div>
+                <div class="medicion-value">${modulo.horasTrabajo || '-'} Hrs</div>
+            </div>
+            <div class="medicion-item">
+                <div class="medicion-label">Voltaje Generador</div>
+                <div class="medicion-value">${modulo.voltaje || '-'} V</div>
+            </div>
+            <div class="medicion-item">
+                <div class="medicion-label">Frecuencia</div>
+                <div class="medicion-value">${modulo.frecuencia || '-'} Hz</div>
+            </div>
+            <div class="medicion-item">
+                <div class="medicion-label">Corriente</div>
+                <div class="medicion-value">${modulo.corriente || '-'} A</div>
             </div>
         </div>
     </div>
-    `;
-}
+`;
+};
 
-function generarTrabajosEjecutados(datos: DatosCorrectivoOrdenPDF): string {
-    return `
+const generarSeccionGeneral = (trabajos: TrabajoEjecutadoPDF[]): string => `
     <div class="section">
-        <div class="section-title">🔧 TRABAJOS EJECUTADOS</div>
+        <div class="section-subtitle">GENERAL</div>
         <table class="checklist-table">
             <thead>
                 <tr>
-                    <th style="width: 5%;">#</th>
-                    <th style="width: 45%;">Descripción del Trabajo</th>
-                    <th style="width: 20%;">Sistema</th>
-                    <th style="width: 10%;" class="text-center">Tiempo</th>
-                    <th style="width: 20%;" class="text-center">Resultado</th>
+                    <th style="width: 70%;">Actividad / Trabajo Ejecutado</th>
+                    <th style="width: 15%;">Estado</th>
+                    <th style="width: 15%;">Obs.</th>
                 </tr>
             </thead>
             <tbody>
-                ${datos.trabajosEjecutados.map(t => `
+                ${trabajos.map((t) => `
                 <tr>
-                    <td class="text-center">${t.orden}</td>
                     <td>${t.descripcion}</td>
-                    <td>${t.sistema}</td>
-                    <td class="text-center">${t.tiempoHoras}h</td>
-                    <td class="text-center">
-                        <span class="resultado-badge resultado-${t.resultado}">${t.resultado}</span>
+                    <td style="text-align: center;">
+                        <span class="resultado-badge resultado-${mapResultado(t.resultado)}">${mapResultado(t.resultado)}</span>
                     </td>
+                    <td>${t.sistema || ''}</td>
                 </tr>
                 `).join('')}
             </tbody>
         </table>
     </div>
-    `;
-}
+`;
 
-function generarRepuestosUtilizados(datos: DatosCorrectivoOrdenPDF): string {
-    if (!datos.repuestosUtilizados || datos.repuestosUtilizados.length === 0) {
+// ✅ FIX: Mapea resultados preservando códigos reales (B, R, M, C, NA, etc.)
+const mapResultado = (resultado: string): string => {
+    if (!resultado) return 'NA';
+
+    // Si ya es un código válido, devolverlo directamente
+    const codigosValidos = ['B', 'R', 'M', 'C', 'NA', 'I', 'LI', 'A', 'L', 'LA', 'S', 'NT', 'BA', 'F', 'RN', 'NF'];
+    if (codigosValidos.includes(resultado.toUpperCase())) {
+        return resultado.toUpperCase();
+    }
+
+    // Mapear nombres largos a códigos
+    switch (resultado.toUpperCase()) {
+        case 'COMPLETADO': return 'B';
+        case 'BUENO': return 'B';
+        case 'PARCIAL': return 'R';
+        case 'REGULAR': return 'R';
+        case 'PENDIENTE': return 'M';
+        case 'MALO': return 'M';
+        case 'CAMBIADO': return 'C';
+        case 'NO_APLICA': return 'NA';
+        case 'N/A': return 'NA';
+        default: return resultado; // Devolver tal cual, no asumir 'B'
+    }
+};
+
+const generarSimbologia = (): string => `
+    <div class="section">
+        <div class="section-title">SIMBOLOGÍA</div>
+        <div class="simbologia-grid">
+            <div class="simbologia-item"><span class="simbologia-code">B:</span> Bueno</div>
+            <div class="simbologia-item"><span class="simbologia-code">R:</span> Regular</div>
+            <div class="simbologia-item"><span class="simbologia-code">M:</span> Malo</div>
+            <div class="simbologia-item"><span class="simbologia-code">I:</span> Inspeccionar</div>
+            <div class="simbologia-item"><span class="simbologia-code">C:</span> Cambiado</div>
+            <div class="simbologia-item"><span class="simbologia-code">LI:</span> Limpiar</div>
+            <div class="simbologia-item"><span class="simbologia-code">A:</span> Ajustar</div>
+            <div class="simbologia-item"><span class="simbologia-code">L:</span> Lubricar</div>
+            <div class="simbologia-item"><span class="simbologia-code">NA:</span> No Aplica</div>
+            <div class="simbologia-item"><span class="simbologia-code">LA:</span> Lavar</div>
+            <div class="simbologia-item"><span class="simbologia-code">S:</span> Sucio</div>
+            <div class="simbologia-item"><span class="simbologia-code">NT:</span> No Tiene</div>
+            <div class="simbologia-item"><span class="simbologia-code">BA:</span> Bajo</div>
+            <div class="simbologia-item"><span class="simbologia-code">F:</span> Lleno</div>
+            <div class="simbologia-item"><span class="simbologia-code">RN:</span> Rellenar Nivel</div>
+            <div class="simbologia-item"><span class="simbologia-code">NF:</span> No Funciona</div>
+        </div>
+    </div>
+`;
+
+const generarMediciones = (mediciones: MedicionCorrectivoPDF[]): string => `
+    <div class="section">
+        <div class="section-title">MEDICIONES TÉCNICAS</div>
+        <table class="checklist-table">
+            <thead>
+                <tr>
+                    <th>Parámetro</th>
+                    <th>Valor</th>
+                    <th>Unidad</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${mediciones.map((med) => `
+                <tr>
+                    <td>${med.parametro}</td>
+                    <td style="text-align: center; font-weight: bold;">${med.valorDespues}</td>
+                    <td style="text-align: center;">${med.unidad}</td>
+                    <td style="text-align: center;" class="alerta-${med.estado}">${med.estado}</td>
+                </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    </div>
+`;
+
+// Soporte para evidencias - Estructura idéntica a Tipo A
+type EvidenciaInput = EvidenciaCorrectivoPDF | string | { url: string; caption?: string };
+
+const extraerTipoEvidencia = (caption: string): string => {
+    const tipoMatch = caption.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i);
+    if (tipoMatch) {
+        const tipo = tipoMatch[1].toUpperCase();
+        if (tipo === 'DESPUÉS') return 'DESPUES';
+        if (tipo === 'MEDICIÓN') return 'MEDICION';
+        return tipo;
+    }
+    return 'GENERAL';
+};
+
+const getTituloSeccion = (tipo: string): { titulo: string; icono: string } => {
+    switch (tipo) {
+        case 'ANTES': return { titulo: 'Estado Inicial (Antes del Servicio)', icono: '📸' };
+        case 'DURANTE': return { titulo: 'Durante el Servicio', icono: '🔧' };
+        case 'DESPUES': return { titulo: 'Estado Final (Después del Servicio)', icono: '✅' };
+        case 'MEDICION': return { titulo: 'Mediciones y Verificaciones', icono: '📏' };
+        case 'GENERAL': return { titulo: 'Evidencias Generales', icono: '📷' };
+        default: return { titulo: 'Otras Evidencias', icono: '📎' };
+    }
+};
+
+const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
+    if (!evidencias || evidencias.length === 0) {
         return `
         <div class="section">
-            <div class="section-title">🔩 REPUESTOS UTILIZADOS</div>
-            <div style="background: ${MEKANOS_COLORS.background}; padding: 15px; text-align: center; border-radius: 4px; font-size: 9px; color: ${COLORS.textLight};">
-                No se utilizaron repuestos en este servicio
+            <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+            <div class="evidencias-empty">
+                <p>No se registraron evidencias fotográficas para este servicio.</p>
             </div>
         </div>
         `;
     }
 
-    return `
-    <div class="section">
-        <div class="section-title">🔩 REPUESTOS UTILIZADOS</div>
-        <table class="checklist-table">
-            <thead>
-                <tr>
-                    <th style="width: 15%;">Código</th>
-                    <th style="width: 45%;">Descripción</th>
-                    <th style="width: 10%;" class="text-center">Cant.</th>
-                    <th style="width: 10%;">Unidad</th>
-                    <th style="width: 20%;" class="text-center">Estado</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${datos.repuestosUtilizados.map(r => `
-                <tr>
-                    <td><strong>${r.codigo}</strong></td>
-                    <td>${r.descripcion}</td>
-                    <td class="text-center">${r.cantidad}</td>
-                    <td>${r.unidad}</td>
-                    <td class="text-center">
-                        <span class="estado-badge estado-${r.estado}">${r.estado}</span>
-                    </td>
-                </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    </div>
-    `;
-}
+    // Normalizar evidencias a formato objeto
+    const normalizarEvidencia = (ev: EvidenciaInput, idx: number): { url: string; caption: string } => {
+        if (typeof ev === 'string') {
+            return { url: ev, caption: `Evidencia ${idx + 1}` };
+        }
+        if ('tipo' in ev) {
+            return { url: ev.url, caption: `${ev.tipo}: ${ev.descripcion || `Foto ${idx + 1}`}` };
+        }
+        return { url: ev.url, caption: ev.caption || `Evidencia ${idx + 1}` };
+    };
 
-function generarMediciones(datos: DatosCorrectivoOrdenPDF): string {
-    return `
-    <div class="section">
-        <div class="section-title">📊 MEDICIONES</div>
-        <table class="checklist-table">
-            <thead>
-                <tr>
-                    <th style="width: 30%;">Parámetro</th>
-                    <th style="width: 20%;" class="text-center">Antes</th>
-                    <th style="width: 20%;" class="text-center">Después</th>
-                    <th style="width: 15%;">Unidad</th>
-                    <th style="width: 15%;" class="text-center">Estado</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${datos.mediciones!.map(m => `
-                <tr>
-                    <td>${m.parametro}</td>
-                    <td class="text-center">${m.valorAntes || '-'}</td>
-                    <td class="text-center" style="font-weight: bold;">${m.valorDespues}</td>
-                    <td>${m.unidad}</td>
-                    <td class="text-center alerta-${m.estado}">${m.estado}</td>
-                </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    </div>
-    `;
-}
+    const evidenciasNormalizadas = evidencias.map((ev, idx) => normalizarEvidencia(ev, idx));
 
-function generarRecomendaciones(datos: DatosCorrectivoOrdenPDF): string {
-    return `
-    <div class="section">
-        <div class="section-title">💡 RECOMENDACIONES</div>
-        <div style="background: ${MEKANOS_COLORS.background}; padding: 12px; border-radius: 4px;">
-            ${datos.recomendaciones.map(r => `
-            <div class="recomendacion-item">
-                <span class="recomendacion-icon">→</span>
-                <span>${r}</span>
-            </div>
-            `).join('')}
-        </div>
-    </div>
-    `;
-}
+    // Agrupar evidencias por tipo
+    const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+    const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
 
-function generarObservaciones(datos: DatosCorrectivoOrdenPDF): string {
-    return `
-    <div class="section">
-        <div class="section-title">📝 OBSERVACIONES</div>
-        <div class="observaciones-box" style="background: ${MEKANOS_COLORS.background}; padding: 12px; border-radius: 4px; font-size: 9px;">
-            ${datos.observaciones}
-        </div>
-    </div>
-    `;
-}
+    evidenciasNormalizadas.forEach((ev) => {
+        const tipo = extraerTipoEvidencia(ev.caption);
+        if (!grupos[tipo]) grupos[tipo] = [];
+        const captionLimpio = ev.caption.replace(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i, '');
+        grupos[tipo].push({ url: ev.url, caption: captionLimpio });
+    });
 
-function generarEvidencias(datos: DatosCorrectivoOrdenPDF): string {
-    return `
-    <div class="section">
-        <div class="section-title">📷 EVIDENCIAS FOTOGRÁFICAS</div>
-        <div class="evidencias-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-            ${datos.evidencias!.map(e => `
-            <div class="evidencia-item">
-                <img src="${e.url}" style="width: 100%; height: 120px; object-fit: cover;" />
-                <div class="evidencia-caption" style="background: ${MEKANOS_COLORS.primary}; color: white; padding: 4px; text-align: center; font-size: 8px;">
-                    ${e.tipo}${e.descripcion ? ': ' + e.descripcion : ''}
+    // Generar HTML agrupado
+    const seccionesHTML = ordenTipos
+        .filter(tipo => grupos[tipo] && grupos[tipo].length > 0)
+        .map(tipo => {
+            const { titulo, icono } = getTituloSeccion(tipo);
+            const evidenciasTipo = grupos[tipo];
+            const claseGrupo = tipo === 'GENERAL' ? 'evidencias-grupo evidencias-grupo-general' : 'evidencias-grupo';
+            const tituloMostrar = tipo === 'GENERAL' ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
+
+            return `
+            <div class="${claseGrupo}">
+                <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
+                <div class="evidencias-grid-compacto">
+                    ${evidenciasTipo.map((ev, idx) => `
+                    <div class="evidencia-item-compacto">
+                        <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                        <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
+                    </div>
+                    `).join('')}
                 </div>
             </div>
-            `).join('')}
+            `;
+        })
+        .join('');
+
+    return `
+    <div class="section evidencias-section">
+        <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+        ${seccionesHTML}
+    </div>
+    `;
+};
+
+const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
+    // Combinar problema reportado, diagnóstico y observaciones en una sola sección
+    const partes: string[] = [];
+
+    if (datos.problemaReportado?.descripcion) {
+        partes.push(`<strong>Problema Reportado:</strong> ${datos.problemaReportado.descripcion}`);
+    }
+
+    if (datos.diagnostico?.descripcion) {
+        partes.push(`<strong>Diagnóstico:</strong> ${datos.diagnostico.descripcion}`);
+    }
+
+    if (datos.diagnostico?.causaRaiz) {
+        partes.push(`<strong>Causa Raíz:</strong> ${datos.diagnostico.causaRaiz}`);
+    }
+
+    if (datos.observaciones) {
+        partes.push(`<strong>Observaciones:</strong> ${datos.observaciones}`);
+    }
+
+    const contenido = partes.length > 0
+        ? partes.join('<br><br>')
+        : 'Sin observaciones adicionales.';
+
+    return `
+    <div class="section">
+        <div class="section-title">OBSERVACIONES</div>
+        <div class="observaciones-box">
+            ${contenido}
         </div>
     </div>
     `;
-}
+};
 
-function generarFirmasCorrectivo(datos: DatosCorrectivoOrdenPDF): string {
-    return `
-    <div class="firmas-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px;">
-        <div class="firma-box" style="text-align: center;">
-            ${datos.firmaTecnico ? `<img src="${datos.firmaTecnico}" style="max-height: 50px; margin-bottom: 5px;" />` : '<div style="height: 50px;"></div>'}
-            <div style="border-top: 1px solid ${MEKANOS_COLORS.text}; padding-top: 6px;">
-                <div style="font-weight: bold; font-size: 10px;">${datos.tecnico}</div>
-                <div style="font-size: 8px; color: ${COLORS.textLight};">Técnico Ejecutor</div>
-            </div>
+const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
+    <div class="firmas-container">
+        <div class="firma-box">
+            ${firmaTecnico
+        ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
+        : `<div class="firma-line"></div>`
+    }
+            <div class="firma-label">Firma Técnico Asignado</div>
         </div>
-        <div class="firma-box" style="text-align: center;">
-            ${datos.firmaCliente ? `<img src="${datos.firmaCliente}" style="max-height: 50px; margin-bottom: 5px;" />` : '<div style="height: 50px;"></div>'}
-            <div style="border-top: 1px solid ${MEKANOS_COLORS.text}; padding-top: 6px;">
-                <div style="font-weight: bold; font-size: 10px;">Cliente</div>
-                <div style="font-size: 8px; color: ${COLORS.textLight};">Recibido a satisfacción</div>
-            </div>
+        <div class="firma-box">
+            ${firmaCliente
+        ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
+        : `<div class="firma-line"></div>`
+    }
+            <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
         </div>
     </div>
-    `;
-}
+`;
 
-function generarFooterCorrectivo(): string {
-    return `
+const generarFooter = (): string => `
     <div class="footer">
-        <strong>MEKANOS S.A.S</strong> - NIT: 900.123.456-7<br>
-        BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - Cartagena, Colombia<br>
-        TEL: 6359384 | CEL: 315-7083350 | EMAIL: mekanossas2@gmail.com
+        <strong>MEKANOS S.A.S</strong><br/>
+        BARRIO LIBANO CRA 49C #31-35 DIAG. AL SENA - TEL: 6359384<br/>
+        CEL: 315-7083350 E-MAIL: mekanossas2@gmail.com
     </div>
-    `;
-}
+`;
 
 export default generarCorrectivoOrdenHTML;
