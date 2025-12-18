@@ -1,5 +1,54 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+// ============================================================================
+// DTOs para SINCRONIZACIÓN INTELIGENTE (Comparación BD Local vs Supabase)
+// ============================================================================
+
+/**
+ * Resumen compacto de una orden para comparación (~100 bytes)
+ * Se usa para detectar diferencias sin transferir datos completos
+ */
+export class OrdenResumenDto {
+  @ApiProperty({ description: 'ID de la orden en servidor' })
+  id: number;
+
+  @ApiProperty({ description: 'Número de orden (ej: BOMA-182224-023)' })
+  numeroOrden: string;
+
+  @ApiProperty({ description: 'ID del estado actual (1=PENDIENTE, 2=EN_PROGRESO, 4=COMPLETADA)' })
+  estadoId: number;
+
+  @ApiProperty({ description: 'Código del estado (ej: COMPLETADA)' })
+  estadoCodigo: string;
+
+  @ApiProperty({ description: 'Fecha de última modificación ISO 8601' })
+  fechaModificacion: string;
+
+  @ApiPropertyOptional({ description: 'URL del PDF si existe' })
+  urlPdf?: string;
+}
+
+/**
+ * Respuesta del endpoint de comparación inteligente
+ */
+export class SyncCompareResponseDto {
+  @ApiProperty({ description: 'Timestamp del servidor al momento de la consulta' })
+  serverTimestamp: string;
+
+  @ApiProperty({ description: 'ID del técnico consultado' })
+  tecnicoId: number;
+
+  @ApiProperty({ description: 'Total de órdenes en el resumen' })
+  totalOrdenes: number;
+
+  @ApiProperty({ type: [OrdenResumenDto], description: 'Resúmenes de órdenes para comparación' })
+  ordenes: OrdenResumenDto[];
+}
+
+// ============================================================================
+// DTOs originales
+// ============================================================================
+
 /**
  * Resultado de sincronización de una orden individual
  */
@@ -50,6 +99,19 @@ export class SyncBatchResponseDto {
 
   @ApiProperty({ type: [SyncOrdenResultDto], description: 'Resultado por orden' })
   results: SyncOrdenResultDto[];
+}
+export class SyncActividadPlanDto {
+  @ApiProperty()
+  idActividadCatalogo: number;
+
+  @ApiProperty()
+  ordenSecuencia: number;
+
+  @ApiProperty()
+  origen: string;
+
+  @ApiPropertyOptional()
+  esObligatoria?: boolean;
 }
 
 /**
@@ -129,6 +191,9 @@ export class SyncOrdenDownloadDto {
 
   @ApiPropertyOptional()
   observacionesTecnico?: string;
+
+  @ApiPropertyOptional({ type: [SyncActividadPlanDto] })
+  actividadesPlan?: SyncActividadPlanDto[];
 
   // ✅ FIX: Agregar URL del PDF para sincronización
   @ApiPropertyOptional({ description: 'URL del PDF generado (órdenes completadas)' })
@@ -299,6 +364,10 @@ export class SyncTipoServicioDto {
 
 /**
  * Respuesta de download de datos para técnico
+ * 
+ * Soporta dos modos:
+ * - FULL: Sync completo con todos los datos y catálogos
+ * - DELTA: Solo órdenes modificadas desde `sinceTimestamp`
  */
 export class SyncDownloadResponseDto {
   @ApiProperty({ description: 'Timestamp del servidor para referencia' })
@@ -307,18 +376,31 @@ export class SyncDownloadResponseDto {
   @ApiProperty({ description: 'ID del técnico' })
   tecnicoId: number;
 
-  @ApiProperty({ type: [SyncOrdenDownloadDto], description: 'Órdenes asignadas' })
+  @ApiProperty({
+    description: 'Tipo de sincronización realizada',
+    enum: ['FULL', 'DELTA'],
+    example: 'FULL',
+  })
+  syncType: 'FULL' | 'DELTA';
+
+  @ApiPropertyOptional({
+    description: 'Timestamp desde el cual se sincronizaron cambios (solo en DELTA)',
+    example: '2025-12-12T10:00:00.000Z',
+  })
+  sinceTimestamp?: string;
+
+  @ApiProperty({ type: [SyncOrdenDownloadDto], description: 'Órdenes asignadas (todas en FULL, solo modificadas en DELTA)' })
   ordenes: SyncOrdenDownloadDto[];
 
-  @ApiProperty({ type: [SyncParametroMedicionDto], description: 'Parámetros de medición activos' })
+  @ApiProperty({ type: [SyncParametroMedicionDto], description: 'Parámetros de medición (vacío en DELTA si no hubo cambios)' })
   parametrosMedicion: SyncParametroMedicionDto[];
 
-  @ApiProperty({ type: [SyncActividadCatalogoDto], description: 'Catálogo de actividades' })
+  @ApiProperty({ type: [SyncActividadCatalogoDto], description: 'Catálogo de actividades (vacío en DELTA si no hubo cambios)' })
   actividadesCatalogo: SyncActividadCatalogoDto[];
 
-  @ApiProperty({ description: 'Estados de orden disponibles' })
+  @ApiProperty({ description: 'Estados de orden disponibles (vacío en DELTA si no hubo cambios)' })
   estadosOrden: { id: number; codigo: string; nombre: string; esEstadoFinal: boolean }[];
 
-  @ApiProperty({ type: [SyncTipoServicioDto], description: 'Tipos de servicio disponibles' })
+  @ApiProperty({ type: [SyncTipoServicioDto], description: 'Tipos de servicio disponibles (vacío en DELTA si no hubo cambios)' })
   tiposServicio: SyncTipoServicioDto[];
 }

@@ -1,10 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/app_database.dart';
+import '../../../core/database/database_service.dart';
 import '../../ejecucion/data/ejecucion_service.dart';
 import '../../ejecucion/presentation/ejecucion_screen.dart';
+import '../../ejecucion/presentation/resumen_finalizacion_screen.dart';
 import '../data/orden_repository.dart';
 import '../domain/orden_detalle_full.dart';
+import 'widgets/equipos_orden_widget.dart' show EquiposOrdenWidget, equiposOrdenProvider;
 
 /// Pantalla de Detalle de Orden - RUTA 5
 /// Muestra información de la orden y actividades agrupadas por sistema
@@ -51,6 +56,11 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
           widget.idOrdenLocal,
         );
 
+        // ✅ MULTI-EQUIPOS: Invalidar provider de equipos para refrescar estados
+        if (detalle.idBackend != null) {
+          ref.invalidate(equiposOrdenProvider(detalle.idBackend!));
+        }
+
         setState(() {
           _detalle = detalle;
           _resumen = resumen;
@@ -89,7 +99,10 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         foregroundColor: Colors.white,
       ),
       body: _buildBody(),
-      bottomNavigationBar: _detalle != null ? _buildBottomBar() : null,
+      // ✅ FIX: Ocultar botón para órdenes finalizadas (COMPLETADA, CERRADA, CANCELADA)
+      bottomNavigationBar: _detalle != null && !_detalle!.estaFinalizada
+          ? _buildBottomBar()
+          : null,
     );
   }
 
@@ -132,6 +145,25 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
       slivers: [
         // Header con información de la orden
         SliverToBoxAdapter(child: _buildOrderHeader()),
+
+        // ✅ NUEVO: Widget de equipos (solo se muestra si hay múltiples equipos)
+        if (_detalle?.idBackend != null)
+          SliverToBoxAdapter(
+            child: EquiposOrdenWidget(
+              idOrdenServicio: _detalle!.idBackend!,
+              onEquipoSelected: (equipo) {
+                // TODO: Navegar a ejecución con equipo específico
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Equipo seleccionado: ${equipo.nombreSistema ?? equipo.nombreEquipo}',
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+          ),
 
         // Estadísticas
         SliverToBoxAdapter(child: _buildStatsCard()),
@@ -282,23 +314,38 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
 
     final grupos = _agruparPorSistema();
 
-    // ✅ FIX: Detectar si es orden histórica sin datos locales
-    final esOrdenHistorica =
-        _detalle!.estaFinalizada &&
-        (_resumen?.totalItems ?? 0) == 0 &&
-        _detalle!.totalActividadesSincronizadas > 0;
+    // ✅ FIX SIMPLIFICADO: Si está COMPLETADA, SIEMPRE usar estadísticas sincronizadas
+    // No importa si hay datos locales o no - las estadísticas del servidor son la fuente de verdad
+    final esOrdenHistorica = _detalle!.estaFinalizada;
 
-    // Usar datos locales o sincronizados según corresponda
-    final actividades = esOrdenHistorica
-        ? _detalle!.totalActividadesSincronizadas
-        : _detalle!.cantidadActividades;
+    // ✅ MULTI-EQUIPOS FIX: Determinar si la orden ha iniciado ejecución
+    // Una orden ha iniciado si tiene actividades ejecutadas (totalItems > 0)
+    final haIniciadoEjecucion = (_resumen?.totalItems ?? 0) > 0;
 
-    final completadas = esOrdenHistorica
-        ? _detalle!
-              .totalActividadesSincronizadas // Si está completada, todas están hechas
-        : (_resumen?.totalCompletados ?? 0);
+    // ✅ FIX MEJORADO: Usar totalItems correcto según el estado
+    // - Orden histórica: usar datos sincronizados del servidor
+    // - Orden en proceso: usar ResumenEjecucion que suma actividades de TODOS los equipos
+    // - Orden no iniciada: usar actividades del catálogo (referencia)
+    int totalItems;
+    int completados;
+    int pendientes;
 
-    final pendientes = esOrdenHistorica ? 0 : (actividades - completadas);
+    if (esOrdenHistorica) {
+      // Orden finalizada: usar datos del servidor
+      totalItems = _detalle!.totalActividadesSincronizadas;
+      completados = totalItems;
+      pendientes = 0;
+    } else if (haIniciadoEjecucion) {
+      // Orden en proceso: usar ResumenEjecucion que ya suma todos los equipos
+      totalItems = _resumen!.totalItems;
+      completados = _resumen!.totalCompletados;
+      pendientes = (totalItems - completados).clamp(0, totalItems);
+    } else {
+      // Orden no iniciada: usar catálogo como referencia
+      totalItems = _detalle!.cantidadActividades;
+      completados = 0;
+      pendientes = totalItems;
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -337,7 +384,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
             children: [
               _buildStatItem(
                 Icons.checklist,
-                '$actividades',
+                '$totalItems',
                 'Actividades',
                 Colors.blue,
               ),
@@ -353,7 +400,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
                 esOrdenHistorica ? Icons.photo_camera : Icons.check_circle,
                 esOrdenHistorica
                     ? '${_detalle!.totalEvidenciasSincronizadas}'
-                    : '$completadas',
+                    : '$completados',
                 esOrdenHistorica ? 'Fotos' : 'Completadas',
                 Colors.green,
               ),
@@ -551,6 +598,11 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   }
 
   Widget _buildBottomBar() {
+    // ✅ FIX: No mostrar para órdenes finalizadas
+    if (_detalle?.estaFinalizada ?? false) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -635,8 +687,38 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   }
 
   /// Inicia la ejecución y navega a la pantalla de ejecución
+  /// ✅ FIX 15-DIC-2025: Detecta multi-equipos y muestra selector
   Future<void> _iniciarYNavegar() async {
     final service = ref.read(ejecucionServiceProvider);
+    final db = ref.read(databaseProvider);
+    
+    // Verificar si es orden multi-equipo
+    final idBackend = _detalle?.idBackend;
+    debugPrint('🔍 [MULTI-EQ] idBackend: $idBackend, numeroOrden: ${_detalle?.numeroOrden}');
+    
+    if (idBackend != null) {
+      final equipos = await db.getEquiposByOrdenServicio(idBackend);
+      debugPrint('🔍 [MULTI-EQ] Equipos encontrados: ${equipos.length}');
+      for (final eq in equipos) {
+        debugPrint('   ↳ Equipo ${eq.ordenSecuencia}: ${eq.nombreSistema ?? eq.nombreEquipo} (idOrdenEquipo: ${eq.idOrdenEquipo})');
+      }
+      
+      if (equipos.length > 1) {
+        // ✅ MULTI-EQUIPO: Mostrar selector de equipos
+        final equipoSeleccionado = await _mostrarSelectorEquipos(equipos);
+        
+        if (equipoSeleccionado == null) {
+          // Usuario canceló
+          return;
+        }
+        
+        // Navegar con equipo específico
+        await _navegarAEjecucion(service, equipoSeleccionado);
+        return;
+      }
+    }
+    
+    // ORDEN SIMPLE: Iniciar y navegar directamente
     final resultado = await service.iniciarEjecucion(widget.idOrdenLocal);
 
     if (!resultado.exito) {
@@ -665,6 +747,271 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
     }
   }
 
+  /// Muestra diálogo para seleccionar equipo en orden multi-equipo
+  /// ✅ MULTI-EQUIPOS: Incluye opción "Resumen/Finalizar" para completar la orden
+  Future<OrdenesEquipo?> _mostrarSelectorEquipos(List<OrdenesEquipo> equipos) async {
+    // Resultado especial: null con retorno de función = cancelado
+    // Para "Resumen/Finalizar" devolvemos un equipo especial con idOrdenEquipo = -1
+    final resultado = await showModalBottomSheet<dynamic>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.85,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Título
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.devices_other, color: Colors.blue.shade700, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Orden Multi-Equipo',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // Instrucciones
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'Esta orden tiene ${equipos.length} equipos. Selecciona qué deseas hacer:',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ),
+            
+            // ✅ CARD RESUMEN/FINALIZAR
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Card(
+                elevation: 4,
+                color: Colors.green.shade50,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.green.shade300, width: 2),
+                ),
+                child: InkWell(
+                  onTap: () => Navigator.pop(context, 'RESUMEN'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.summarize,
+                            color: Colors.green.shade700,
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '📋 RESUMEN Y FINALIZAR',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.green.shade800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Ver progreso de todos los equipos, capturar firmas y finalizar el servicio',
+                                style: TextStyle(
+                                  color: Colors.green.shade700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.arrow_forward_ios, color: Colors.green.shade700),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            
+            // Separador
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'O ejecutar un equipo',
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                ],
+              ),
+            ),
+            
+            // Lista de equipos
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: equipos.length,
+                itemBuilder: (context, index) {
+                  final equipo = equipos[index];
+                  final estadoColor = _getEstadoEquipoColor(equipo.estado);
+                  
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue.shade100,
+                        child: Text(
+                          '${equipo.ordenSecuencia}',
+                          style: TextStyle(
+                            color: Colors.blue.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        equipo.codigoEquipo ?? '',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      ),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: estadoColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          equipo.estado,
+                          style: TextStyle(
+                            color: estadoColor,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      onTap: () => Navigator.pop(context, equipo),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    // Si seleccionó "RESUMEN", navegar a ResumenFinalizacionScreen
+    if (resultado == 'RESUMEN') {
+      if (mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ResumenFinalizacionScreen(
+              idOrdenLocal: widget.idOrdenLocal,
+              idBackend: _detalle?.idBackend,
+              numeroOrden: _detalle?.numeroOrden,
+            ),
+          ),
+        );
+        _loadDetalleOrden(); // Recargar al volver
+      }
+      return null; // No navegar a ejecución
+    }
+    
+    // Retornar el equipo seleccionado (o null si canceló)
+    return resultado as OrdenesEquipo?;
+  }
+
+  /// Navega a la ejecución con un equipo específico
+  /// ✅ MULTI-EQUIPOS: Pasa idOrdenEquipo para clonar actividades por equipo
+  Future<void> _navegarAEjecucion(EjecucionService service, OrdenesEquipo equipo) async {
+    // ✅ MULTI-EQUIPOS: Pasar idOrdenEquipo al iniciar ejecución
+    final resultado = await service.iniciarEjecucion(
+      widget.idOrdenLocal,
+      idOrdenEquipo: equipo.idOrdenEquipo,
+    );
+
+    if (!resultado.exito) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ ${resultado.error}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EjecucionScreen(
+            idOrdenLocal: widget.idOrdenLocal,
+            idOrdenEquipo: equipo.idOrdenEquipo,  // ✅ Pasar ID del equipo
+          ),
+        ),
+      );
+      _loadDetalleOrden();
+    }
+  }
+
+  /// Color según estado del equipo
+  Color _getEstadoEquipoColor(String estado) {
+    switch (estado.toUpperCase()) {
+      case 'COMPLETADO':
+      case 'FINALIZADO':
+        return Colors.green;
+      case 'EN_PROCESO':
+      case 'EN PROCESO':
+        return Colors.orange;
+      case 'PENDIENTE':
+      default:
+        return Colors.grey;
+    }
+  }
+
   Color _getEstadoColor(String estado) {
     switch (estado.toUpperCase()) {
       case 'ASIGNADA':
@@ -675,6 +1022,9 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         return Colors.green;
       case 'CANCELADA':
         return Colors.red;
+      case 'POR_SUBIR':
+        // ✅ SYNC MANUAL: Estado especial para órdenes offline pendientes de subir
+        return Colors.deepOrange;
       default:
         return Colors.grey;
     }

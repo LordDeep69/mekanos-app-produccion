@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -9,11 +11,13 @@ import '../../../core/sync/offline_sync_service.dart';
 
 /// Pantalla de órdenes pendientes de sincronización
 ///
-/// Muestra lista de órdenes guardadas offline que aún no se han sincronizado.
-/// Permite:
-/// - Ver estado de cada orden (pendiente, error, en proceso)
-/// - Reintentar sincronización manual
-/// - Ver detalles de errores
+/// ✅ SYNC MANUAL: Esta es la pantalla central para subir órdenes offline
+/// El técnico tiene control total sobre cuándo subir cada orden
+/// Muestra:
+/// - Lista de órdenes guardadas offline pendientes de subir
+/// - Estado de cada orden (pendiente, error, en proceso)
+/// - Botón SUBIR individual por cada orden
+/// - Información básica extraída del payload
 class PendingSyncScreen extends ConsumerStatefulWidget {
   const PendingSyncScreen({super.key});
 
@@ -22,7 +26,8 @@ class PendingSyncScreen extends ConsumerStatefulWidget {
 }
 
 class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
-  bool _isSyncing = false;
+  bool _isSyncingAll = false;
+  final Set<int> _syncingOrders = {}; // Órdenes individuales siendo sincronizadas
 
   @override
   Widget build(BuildContext context) {
@@ -31,25 +36,33 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sincronización Pendiente'),
+        title: const Text('Órdenes por Subir'),
+        backgroundColor: Colors.orange.shade700,
+        foregroundColor: Colors.white,
         actions: [
           // Indicador de conectividad
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isOnline ? Colors.green.shade100 : Colors.red.shade100,
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   isOnline ? Icons.wifi : Icons.wifi_off,
-                  color: isOnline ? Colors.green : Colors.red,
-                  size: 20,
+                  color: isOnline ? Colors.green.shade700 : Colors.red.shade700,
+                  size: 16,
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  isOnline ? 'Online' : 'Offline',
+                  isOnline ? 'Conectado' : 'Sin conexión',
                   style: TextStyle(
-                    color: isOnline ? Colors.green : Colors.red,
-                    fontSize: 12,
+                    color: isOnline ? Colors.green.shade700 : Colors.red.shade700,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -68,10 +81,10 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         },
       ),
       floatingActionButton: pendientesAsync.maybeWhen(
-        data: (pendientes) => pendientes.isNotEmpty && isOnline
+        data: (pendientes) => pendientes.isNotEmpty && isOnline && pendientes.length > 1
             ? FloatingActionButton.extended(
-                onPressed: _isSyncing ? null : _syncAll,
-                icon: _isSyncing
+                onPressed: _isSyncingAll ? null : _syncAll,
+                icon: _isSyncingAll
                     ? const SizedBox(
                         width: 20,
                         height: 20,
@@ -80,11 +93,11 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.sync),
+                    : const Icon(Icons.cloud_upload),
                 label: Text(
-                  _isSyncing ? 'Sincronizando...' : 'Sincronizar Todo',
+                  _isSyncingAll ? 'Subiendo...' : 'Subir Todas (${pendientes.length})',
                 ),
-                backgroundColor: _isSyncing ? Colors.grey : Colors.blue,
+                backgroundColor: _isSyncingAll ? Colors.grey : Colors.orange.shade700,
               )
             : null,
         orElse: () => null,
@@ -97,16 +110,29 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.cloud_done, size: 80, color: Colors.green.shade300),
-          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.cloud_done, size: 80, color: Colors.green.shade400),
+          ),
+          const SizedBox(height: 24),
           const Text(
             '¡Todo sincronizado!',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            'No hay órdenes pendientes de sincronización',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            'No tienes órdenes pendientes por subir',
+            style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 24),
+          TextButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Volver'),
           ),
         ],
       ),
@@ -117,50 +143,105 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
     List<OrdenesPendientesSyncData> pendientes,
     bool isOnline,
   ) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: pendientes.length,
-      itemBuilder: (context, index) {
-        final orden = pendientes[index];
-        return _buildOrdenCard(orden, isOnline);
-      },
+    return Column(
+      children: [
+        // Banner informativo
+        if (!isOnline)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            color: Colors.orange.shade100,
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.orange.shade800),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Conecta a Internet para subir tus órdenes',
+                    style: TextStyle(color: Colors.orange.shade800, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        // Lista
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: pendientes.length,
+            itemBuilder: (context, index) {
+              final orden = pendientes[index];
+              return _buildOrdenCard(orden, isOnline);
+            },
+          ),
+        ),
+      ],
     );
+  }
+
+  /// Extrae información del payload JSON para mostrar en la UI
+  Map<String, dynamic> _extraerInfoDePayload(String payloadJson) {
+    try {
+      final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
+      return {
+        'observaciones': payload['observaciones'] ?? '',
+        'horaEntrada': payload['horaEntrada'] ?? '',
+        'horaSalida': payload['horaSalida'] ?? '',
+        'esMultiEquipo': payload['esMultiEquipo'] ?? false,
+        'totalActividades': (payload['actividades'] as List?)?.length ?? 0,
+        'totalMediciones': (payload['mediciones'] as List?)?.length ?? 0,
+        'totalEvidencias': (payload['evidencias'] as List?)?.length ?? 0,
+      };
+    } catch (e) {
+      return {};
+    }
   }
 
   Widget _buildOrdenCard(OrdenesPendientesSyncData orden, bool isOnline) {
     final isError = orden.estadoSync == 'ERROR';
     final isEnProceso = orden.estadoSync == 'EN_PROCESO';
+    final isSyncingThis = _syncingOrders.contains(orden.idOrdenLocal);
+    final info = _extraerInfoDePayload(orden.payloadJson);
 
     Color statusColor;
     IconData statusIcon;
     String statusText;
 
-    if (isEnProceso) {
+    if (isSyncingThis || isEnProceso) {
       statusColor = Colors.blue;
-      statusIcon = Icons.sync;
-      statusText = 'Sincronizando...';
+      statusIcon = Icons.cloud_sync;
+      statusText = 'Subiendo...';
     } else if (isError) {
       statusColor = Colors.red;
       statusIcon = Icons.error_outline;
       statusText = 'Error (intento ${orden.intentos}/5)';
     } else {
       statusColor = Colors.orange;
-      statusIcon = Icons.schedule;
-      statusText = 'Pendiente';
+      statusIcon = Icons.cloud_upload_outlined;
+      statusText = 'Lista para subir';
     }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: statusColor.withValues(alpha: 0.3), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header con estado
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
               children: [
-                Icon(statusIcon, color: statusColor, size: 24),
-                const SizedBox(width: 8),
+                Icon(statusIcon, color: statusColor, size: 28),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,86 +250,166 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                         'Orden #${orden.idOrdenBackend}',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 18,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         statusText,
-                        style: TextStyle(color: statusColor, fontSize: 12),
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                // Botón de reintentar
-                if (isOnline && !isEnProceso)
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: () => _reintentarOrden(orden.idOrdenLocal),
-                    tooltip: 'Reintentar',
-                  ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Info de fechas
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  'Creado: ${_formatDate(orden.fechaCreacion)}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-
-            if (orden.fechaUltimoIntento != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.update, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Último intento: ${_formatDate(orden.fechaUltimoIntento!)}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ],
-
-            // Error message
-            if (isError && orden.ultimoError != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.warning, size: 16, color: Colors.red.shade700),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        orden.ultimoError!.length > 100
-                            ? '${orden.ultimoError!.substring(0, 100)}...'
-                            : orden.ultimoError!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.red.shade700,
-                        ),
+                // Badge multi-equipo
+                if (info['esMultiEquipo'] == true)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Multi-Equipo',
+                      style: TextStyle(
+                        color: Colors.purple.shade700,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // Contenido
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Resumen de datos capturados
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    if (info['totalActividades'] != null && info['totalActividades'] > 0)
+                      _buildInfoChip(Icons.checklist, '${info['totalActividades']} act.'),
+                    if (info['totalMediciones'] != null && info['totalMediciones'] > 0)
+                      _buildInfoChip(Icons.speed, '${info['totalMediciones']} med.'),
+                    if (info['totalEvidencias'] != null && info['totalEvidencias'] > 0)
+                      _buildInfoChip(Icons.photo_camera, '${info['totalEvidencias']} fotos'),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+
+                // Info de fechas
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Guardado: ${_formatDate(orden.fechaCreacion)}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   ],
                 ),
+
+                // Error message
+                if (isError && orden.ultimoError != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber, size: 18, color: Colors.red.shade700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            orden.ultimoError!.length > 80
+                                ? '${orden.ultimoError!.substring(0, 80)}...'
+                                : orden.ultimoError!,
+                            style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // Botón SUBIR prominente
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: ElevatedButton.icon(
+              onPressed: (isOnline && !isSyncingThis && !isEnProceso)
+                  ? () => _subirOrdenIndividual(orden.idOrdenLocal)
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                disabledBackgroundColor: Colors.grey.shade300,
               ),
-            ],
-          ],
-        ),
+              icon: isSyncingThis
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.cloud_upload, size: 20),
+              label: Text(
+                isSyncingThis
+                    ? 'Subiendo...'
+                    : (isOnline ? 'SUBIR AHORA' : 'Sin conexión'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.grey.shade700),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ],
       ),
     );
   }
@@ -257,8 +418,48 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
     return DateFormat('dd/MM/yyyy HH:mm').format(date);
   }
 
+  /// Sube una orden individual
+  Future<void> _subirOrdenIndividual(int idOrdenLocal) async {
+    setState(() => _syncingOrders.add(idOrdenLocal));
+
+    try {
+      final offlineSync = ref.read(offlineSyncServiceProvider);
+      final success = await offlineSync.reintentarOrden(idOrdenLocal);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  success ? Icons.check_circle : Icons.error_outline,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  success
+                      ? '✅ Orden subida correctamente'
+                      : '❌ Error al subir. Intenta de nuevo.',
+                ),
+              ],
+            ),
+            backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        // Refrescar lista
+        ref.invalidate(pendingSyncListProvider);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncingOrders.remove(idOrdenLocal));
+      }
+    }
+  }
+
+  /// Sube todas las órdenes pendientes
   Future<void> _syncAll() async {
-    setState(() => _isSyncing = true);
+    setState(() => _isSyncingAll = true);
 
     try {
       final syncNotifier = ref.read(syncNotifierProvider.notifier);
@@ -267,8 +468,18 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.mensaje),
+            content: Row(
+              children: [
+                Icon(
+                  result.success ? Icons.check_circle : Icons.warning_amber,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(result.mensaje)),
+              ],
+            ),
             backgroundColor: result.success ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 4),
           ),
         );
         // Refrescar lista
@@ -276,28 +487,8 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isSyncing = false);
+        setState(() => _isSyncingAll = false);
       }
-    }
-  }
-
-  Future<void> _reintentarOrden(int idOrdenLocal) async {
-    final offlineSync = ref.read(offlineSyncServiceProvider);
-    final success = await offlineSync.reintentarOrden(idOrdenLocal);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'Orden sincronizada correctamente'
-                : 'No se pudo sincronizar. Se reintentará automáticamente.',
-          ),
-          backgroundColor: success ? Colors.green : Colors.orange,
-        ),
-      );
-      // Refrescar lista
-      ref.invalidate(pendingSyncListProvider);
     }
   }
 }

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sync/background_sync_worker.dart';
 import '../../../core/sync/offline_sync_service.dart';
+import '../../../core/sync/sync_lifecycle_manager.dart';
 import '../../../core/sync/sync_service.dart';
 import '../../auth/data/auth_provider.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
@@ -47,13 +48,27 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  SyncLifecycleManager? _syncLifecycleManager;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadLocalStats();
       _setupSyncListener();
+      _initializeSmartSync();
     });
+  }
+
+  /// Inicializar sistema de sincronización inteligente
+  void _initializeSmartSync() {
+    final authState = ref.read(authStateProvider);
+    final user = authState.user;
+    if (user == null) return;
+
+    final tecnicoId = user.syncId;
+    _syncLifecycleManager = ref.read(syncLifecycleManagerProvider(tecnicoId));
+    _syncLifecycleManager?.initialize();
   }
 
   /// Configura listener para mostrar SnackBar cuando se completa sync

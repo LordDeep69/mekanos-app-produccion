@@ -29,7 +29,7 @@ Un técnico ejecuta un mantenimiento preventivo Tipo A a un generador eléctrico
 | 1.11 | App Móvil | Subir evidencias | POST /evidencias-fotograficas | URLs Cloudinary |
 | 1.12 | App Móvil | Completar orden | PATCH /ordenes/:id/estado | EN_PROCESO → COMPLETADA |
 | 1.13 | Backend Auto | Generar PDF | Interno | PDF ~1MB generado |
-| 1.14 | Backend Auto | Subir PDF Cloudflare | Interno | URL R2 obtenida |
+| 1.14 | Backend Auto | Subir PDF Cloudflare | Interno | URL R2 obtenida | REGISTRAR EN BD
 | 1.15 | Backend Auto | Guardar en documentos | Interno | Registro en BD |
 | 1.16 | Backend Auto | Enviar email | Interno | Email enviado con PDF |
 

@@ -49,7 +49,18 @@ class OrdenesListScreen extends ConsumerStatefulWidget {
   /// Valores: null, 'pendientes', 'urgentes'
   final String? filtroInicial;
 
-  const OrdenesListScreen({super.key, this.filtroInicial});
+  /// ✅ NUEVO: Filtro inicial por estado (desde HomeProductionScreen)
+  final String? initialFilterEstado;
+
+  /// ✅ NUEVO: Filtro para mostrar solo ordenes de hoy
+  final bool initialFilterHoy;
+
+  const OrdenesListScreen({
+    super.key,
+    this.filtroInicial,
+    this.initialFilterEstado,
+    this.initialFilterHoy = false,
+  });
 
   @override
   ConsumerState<OrdenesListScreen> createState() => _OrdenesListScreenState();
@@ -97,6 +108,29 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
           break;
       }
     }
+
+    // ✅ NUEVO: Aplicar filtro inicial por estado desde Home
+    if (widget.initialFilterEstado != null) {
+      _mostrarFiltros = true;
+      switch (widget.initialFilterEstado) {
+        case 'PENDIENTE':
+        case 'ASIGNADA':
+          _filtroEstado = FiltroEstado.programada;
+          break;
+        case 'EN_PROCESO':
+          _filtroEstado = FiltroEstado.enProceso;
+          break;
+        case 'COMPLETADA':
+          _filtroEstado = FiltroEstado.completada;
+          break;
+      }
+    }
+
+    // ✅ NUEVO: Aplicar filtro de hoy
+    if (widget.initialFilterHoy) {
+      _mostrarFiltros = true;
+      _filtroFecha = FiltroFecha.hoy;
+    }
   }
 
   /// ✅ FIX RENDIMIENTO: Cargar detalles una sola vez y cachearlos
@@ -140,11 +174,25 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
 
   /// ✅ FIX: Refrescar lista de órdenes al volver de detalle/ejecución
   void _refrescarOrdenes() {
+    // Guardar posición ANTES de cualquier cambio
+    final savedOffset = _scrollController.hasClients
+        ? _scrollController.offset
+        : null;
+
+    debugPrint('📜 [SCROLL] Guardando posición: $savedOffset');
+
     if (mounted) {
       setState(() {
         // Limpiar cache para forzar recarga de detalles
         _detallesCache.clear();
         _cargandoDetalles = false;
+      });
+    }
+
+    // ✅ UX: Restaurar scroll después del rebuild con más intentos
+    if (savedOffset != null && savedOffset > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _restaurarScroll(savedOffset, intentos: 5);
       });
     }
   }
@@ -306,7 +354,8 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
           case FiltroTipoServicio.bomPrevA:
             if (!codigoTipo.contains('BOM_PREV')) return false;
           case FiltroTipoServicio.correctivo:
-            if (!codigoTipo.contains('CORRECT')) return false;
+            // ✅ Compatible con CORRECTIVO (antiguo) y GEN_CORR/BOM_CORR (nuevos)
+            if (!codigoTipo.contains('CORR')) return false;
         }
       }
 
@@ -395,15 +444,21 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
   }
 
   /// v3.3: Restaurar scroll con reintentos
-  void _restaurarScroll(double offset, {int intentos = 3}) {
-    if (intentos <= 0) return;
+  void _restaurarScroll(double offset, {int intentos = 5}) {
+    if (intentos <= 0 || offset <= 0) return;
 
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (!mounted) return;
+      
       if (_scrollController.hasClients) {
-        _scrollController.jumpTo(offset);
-        debugPrint('📜 Scroll restaurado: $offset');
+        // Verificar que el offset sea válido para el contenido actual
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        final targetOffset = offset.clamp(0.0, maxScroll);
+        _scrollController.jumpTo(targetOffset);
+        debugPrint('📜 [SCROLL] Restaurado a: $targetOffset (solicitado: $offset, max: $maxScroll)');
       } else {
         // Reintentar si el controller no está listo
+        debugPrint('📜 [SCROLL] Controller no listo, reintentando... ($intentos restantes)');
         _restaurarScroll(offset, intentos: intentos - 1);
       }
     });
@@ -563,6 +618,8 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
                                 });
                               },
                               child: ListView.builder(
+                                // ✅ FIX: PageStorageKey preserva el scroll automáticamente
+                                key: const PageStorageKey<String>('ordenes_list'),
                                 // v3.3: ScrollController para preservar posición manual
                                 controller: _scrollController,
                                 padding: const EdgeInsets.only(bottom: 16),
@@ -1183,6 +1240,9 @@ class _OrdenCardOptimizado extends StatelessWidget {
       case 'EN_PROCESO':
         color = Colors.amber;
         icon = Icons.play_circle_outline;
+      case 'POR_SUBIR':
+        color = Colors.deepPurple;
+        icon = Icons.cloud_upload_outlined;
       case 'COMPLETADA':
         color = Colors.green;
         icon = Icons.check_circle_outline;
@@ -1379,6 +1439,10 @@ class _OrdenCard extends StatelessWidget {
       case 'EN_PROCESO':
         color = Colors.amber;
         icon = Icons.play_circle_outline;
+        break;
+      case 'POR_SUBIR':
+        color = Colors.deepPurple;
+        icon = Icons.cloud_upload_outlined;
         break;
       case 'COMPLETADA':
         color = Colors.green;

@@ -20,6 +20,7 @@ class HistorialScreen extends ConsumerStatefulWidget {
 
 class _HistorialScreenState extends ConsumerState<HistorialScreen> {
   final TextEditingController _busquedaController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   List<OrdenHistorialDto> _ordenes = [];
   EstadisticasHistorialDto? _estadisticas;
   bool _isLoading = true;
@@ -43,6 +44,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
   @override
   void dispose() {
     _busquedaController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -554,6 +556,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
     return RefreshIndicator(
       onRefresh: _cargarDatos,
       child: ListView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.all(12),
         itemCount: _ordenes.length,
         itemBuilder: (context, index) {
@@ -561,13 +564,25 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
           return _HistorialCard(
             orden: orden,
             onTap: () {
+              final savedOffset = _scrollController.hasClients
+                  ? _scrollController.offset
+                  : null;
+
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
                       HistorialDetalleScreen(idOrdenLocal: orden.idLocal),
                 ),
-              );
+              ).then((_) {
+                if (savedOffset != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_scrollController.hasClients) {
+                      _scrollController.jumpTo(savedOffset);
+                    }
+                  });
+                }
+              });
             },
           );
         },

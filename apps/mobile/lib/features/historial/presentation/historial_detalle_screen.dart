@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/sync/smart_sync_service.dart';
 import '../data/historial_service.dart';
 import '../data/pdf_service.dart';
 import 'pdf_viewer_screen.dart';
@@ -28,6 +29,8 @@ class _HistorialDetalleScreenState
   OrdenHistorialDetalleDto? _detalle;
   bool _isLoading = true;
   String? _error;
+  bool _isFetchingPdf = false;
+  bool _isLoadingStats = false; // ✅ NUEVO: Estado para carga on-demand
 
   @override
   void initState() {
@@ -53,6 +56,11 @@ class _HistorialDetalleScreenState
             _error = 'No se encontró la orden';
           }
         });
+
+        // ✅ NUEVO: Cargar estadísticas on-demand si la orden viene de otro dispositivo
+        if (detalle != null && _necesitaCargarEstadisticas(detalle)) {
+          _cargarEstadisticasOnDemand(detalle.idBackend!);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -60,6 +68,57 @@ class _HistorialDetalleScreenState
           _error = 'Error al cargar detalle: $e';
           _isLoading = false;
         });
+      }
+    }
+  }
+
+  /// ✅ NUEVO: Detecta si la orden necesita cargar estadísticas del backend
+  bool _necesitaCargarEstadisticas(OrdenHistorialDetalleDto detalle) {
+    // Si no tiene idBackend, no podemos cargar del servidor
+    if (detalle.idBackend == null) return false;
+
+    // ✅ FIX: Usar el flag estadisticasSincronizadas para detectar si son datos reales
+    // Si las estadísticas son de fallback (catálogo), necesitamos cargar del servidor
+    if (!detalle.estadisticasSincronizadas) {
+      debugPrint(
+        '🔄 [ON-DEMAND] Orden ${detalle.numeroOrden} necesita cargar estadísticas (fallback del catálogo)',
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  /// ✅ NUEVO: Carga estadísticas desde el backend (on-demand)
+  Future<void> _cargarEstadisticasOnDemand(int idBackend) async {
+    if (_isLoadingStats) return;
+
+    setState(() => _isLoadingStats = true);
+
+    try {
+      final smartSync = ref.read(smartSyncServiceProvider);
+      final cargado = await smartSync.cargarEstadisticasOrden(idBackend);
+
+      if (cargado && mounted) {
+        // Recargar el detalle para mostrar las estadísticas actualizadas
+        final service = ref.read(historialServiceProvider);
+        final detalleActualizado = await service.getDetalleOrden(
+          widget.idOrdenLocal,
+        );
+
+        if (mounted) {
+          setState(() {
+            _detalle = detalleActualizado;
+            _isLoadingStats = false;
+          });
+        }
+      } else if (mounted) {
+        setState(() => _isLoadingStats = false);
+      }
+    } catch (e) {
+      debugPrint('Error cargando estadísticas on-demand: $e');
+      if (mounted) {
+        setState(() => _isLoadingStats = false);
       }
     }
   }
@@ -78,6 +137,57 @@ class _HistorialDetalleScreenState
         ),
       ),
     );
+  }
+
+  /// Intenta consultar la URL del PDF desde el backend
+  Future<void> _consultarUrlPdf() async {
+    if (_detalle == null || _isFetchingPdf) return;
+
+    setState(() => _isFetchingPdf = true);
+
+    try {
+      final service = ref.read(historialServiceProvider);
+      final urlPdf = await service.consultarYGuardarUrlPdf(_detalle!.idLocal);
+
+      if (urlPdf != null && urlPdf.isNotEmpty) {
+        // Recargar el detalle para obtener la URL actualizada
+        await _cargarDetalle();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ PDF encontrado y disponible'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          // Abrir el PDF automáticamente
+          _abrirPdf();
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('PDF aún no disponible. Intente más tarde.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al consultar PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingPdf = false);
+      }
+    }
   }
 
   /// Descarga y comparte el PDF
@@ -149,29 +259,42 @@ class _HistorialDetalleScreenState
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // Botón Ver PDF - Siempre visible
-          IconButton(
-            icon: Icon(
-              Icons.picture_as_pdf,
-              color: _detalle?.urlPdf != null && _detalle!.urlPdf!.isNotEmpty
-                  ? Colors.white
-                  : Colors.white54,
-            ),
-            onPressed: () {
-              if (_detalle?.urlPdf != null && _detalle!.urlPdf!.isNotEmpty) {
-                _abrirPdf();
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('PDF no disponible para esta orden'),
-                    backgroundColor: Colors.orange,
+          // Botón Ver PDF - Consulta automática si no está disponible
+          _isFetchingPdf
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
                   ),
-                );
-              }
-            },
-            tooltip: 'Ver PDF',
-          ),
-          // Botón Compartir PDF - Siempre visible
+                )
+              : IconButton(
+                  icon: Icon(
+                    Icons.picture_as_pdf,
+                    color:
+                        _detalle?.urlPdf != null && _detalle!.urlPdf!.isNotEmpty
+                        ? Colors.white
+                        : Colors.white70,
+                  ),
+                  onPressed: () {
+                    if (_detalle?.urlPdf != null &&
+                        _detalle!.urlPdf!.isNotEmpty) {
+                      _abrirPdf();
+                    } else {
+                      // Si no hay URL, intentar consultar al backend
+                      _consultarUrlPdf();
+                    }
+                  },
+                  tooltip:
+                      _detalle?.urlPdf != null && _detalle!.urlPdf!.isNotEmpty
+                      ? 'Ver PDF'
+                      : 'Buscar PDF',
+                ),
+          // Botón Compartir PDF - Consulta automática si no está disponible
           IconButton(
             icon: Icon(
               Icons.share,
@@ -183,12 +306,8 @@ class _HistorialDetalleScreenState
               if (_detalle?.urlPdf != null && _detalle!.urlPdf!.isNotEmpty) {
                 _compartirPdf();
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('PDF no disponible para compartir'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
+                // Si no hay URL, intentar consultar primero
+                _consultarUrlPdf();
               }
             },
             tooltip: 'Compartir',
@@ -254,6 +373,42 @@ class _HistorialDetalleScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ NUEVO: Banner de carga on-demand
+            if (_isLoadingStats)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Cargando estadísticas y PDF desde el servidor...',
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Cabecera con estado
             _buildCabecera(detalle),
             const SizedBox(height: 16),

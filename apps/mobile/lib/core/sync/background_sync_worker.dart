@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connectivity_service.dart';
 import 'offline_sync_service.dart';
+import 'sync_notification_service.dart';
 
 /// Callback para notificar resultados de sincronización
 typedef SyncResultCallback = void Function(OfflineSyncResult result);
@@ -166,11 +167,40 @@ class BackgroundSyncWorker {
 final backgroundSyncWorkerProvider = Provider<BackgroundSyncWorker>((ref) {
   final syncService = ref.watch(offlineSyncServiceProvider);
   final connectivity = ref.watch(connectivityServiceProvider);
+  final notificationService = ref.watch(syncNotificationServiceProvider);
 
   final worker = BackgroundSyncWorker(syncService, connectivity);
 
-  // Auto-iniciar cuando se crea
-  worker.start();
+  // ✅ ENTERPRISE: Escuchar resultados para emitir notificaciones UI
+  worker.addListener((result) {
+    if (result.ordenesSync > 0) {
+      // Notificar cada orden sincronizada
+      for (var i = 0; i < result.ordenesSync; i++) {
+        notificationService.notifyOrderSynced('#${i + 1}');
+      }
+    }
+    if (result.ordenesFallidas > 0) {
+      notificationService.notifyOrderFailed(
+        '${result.ordenesFallidas} orden(es)',
+        error: result.errores.isNotEmpty ? result.errores.first : null,
+      );
+    }
+  });
+  
+  // ✅ ENTERPRISE: Escuchar cambios de conectividad para notificar
+  connectivity.statusStream.listen((status) {
+    if (status == ConnectivityStatus.online) {
+      notificationService.notifyConnectionRestored();
+    } else if (status == ConnectivityStatus.offline) {
+      notificationService.notifyConnectionLost();
+    }
+  });
+
+  // ❌ SYNC MANUAL: NO auto-iniciar - el técnico decide cuándo subir
+  // El worker existe pero NO sincroniza automáticamente
+  // El técnico debe ir a "Órdenes por Subir" y presionar SUBIR manualmente
+  // Esto garantiza que el técnico vea el feedback de cada orden subida
+  // worker.start(); // <-- COMENTADO: Sync automático deshabilitado
 
   // Cleanup al disponer
   ref.onDispose(() => worker.dispose());

@@ -807,6 +807,7 @@ model ordenes_servicio {
   modificado_por                                                                           Int?
   fecha_modificacion                                                                       DateTime?                 @db.Timestamp(6)
   actividades_ejecutadas                                                                   actividades_ejecutadas[]
+  actividades_plan                                                                         ordenes_actividades_plan[]
   componentes_usados                                                                       componentes_usados[]
   cotizaciones                                                                             cotizaciones[]
   cronogramas_servicio                                                                     cronogramas_servicio[]
@@ -837,6 +838,26 @@ model ordenes_servicio {
   @@index([id_tecnico_asignado, id_estado_actual], map: "idx_os_tecnico_estado")
   @@index([id_estado_actual, fecha_programada], map: "idx_os_estados_activos")
   @@map("ordenes_servicio")
+}
+
+model ordenes_actividades_plan {
+  id_orden_actividad_plan Int                      @id @default(autoincrement())
+  id_orden_servicio       Int
+  id_actividad_catalogo   Int
+  orden_secuencia         Int                      @default(1)
+  origen                  origen_actividad_plan_enum @default(ADMIN)
+  es_obligatoria          Boolean?                 @default(true)
+  creado_por              Int?
+  fecha_creacion          DateTime?                @default(now()) @db.Timestamp(6)
+  modificado_por          Int?
+  fecha_modificacion      DateTime?                @db.Timestamp(6)
+
+  orden                ordenes_servicio     @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade, onUpdate: NoAction)
+  actividad_catalogo   catalogo_actividades @relation(fields: [id_actividad_catalogo], references: [id_actividad_catalogo], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id_orden_servicio, id_actividad_catalogo], map: "uk_plan_orden_actividad")
+  @@index([id_orden_servicio, orden_secuencia], map: "idx_plan_orden_secuencia")
+  @@map("ordenes_actividades_plan")
 }
 
 model detalle_servicios_orden {
@@ -893,6 +914,7 @@ model catalogo_actividades {
   modificado_por                                         Int?
   fecha_modificacion                                     DateTime?                @db.Timestamp(6)
   actividades_ejecutadas                                 actividades_ejecutadas[]
+  actividades_plan                                       ordenes_actividades_plan[]
   usuarios_catalogo_actividades_creado_porTousuarios     usuarios?                @relation("catalogo_actividades_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
   parametros_medicion                                    parametros_medicion?     @relation(fields: [id_parametro_medicion], references: [id_parametro_medicion], onDelete: NoAction, onUpdate: NoAction)
   catalogo_sistemas                                      catalogo_sistemas?       @relation(fields: [id_sistema], references: [id_sistema], onDelete: NoAction, onUpdate: NoAction)
@@ -2322,6 +2344,11 @@ enum origen_solicitud_enum {
   INTERNO
   EMERGENCIA
   GARANTIA
+}
+
+enum origen_actividad_plan_enum {
+  ADMIN
+  TECNICO
 }
 
 enum estado_detalle_servicio_enum {

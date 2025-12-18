@@ -1,23 +1,25 @@
 import {
-    Body,
-    Controller,
-    Get,
-    HttpCode,
-    HttpStatus,
-    Param,
-    ParseIntPipe,
-    Post,
-    UseGuards,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
-    ApiBearerAuth,
-    ApiOperation,
-    ApiParam,
-    ApiResponse,
-    ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { SyncBatchResponseDto, SyncDownloadResponseDto } from './dto/sync-response.dto';
+import { SyncBatchResponseDto, SyncCompareResponseDto, SyncDownloadResponseDto } from './dto/sync-response.dto';
 import { SyncBatchUploadDto } from './dto/sync-upload-orden.dto';
 import { SyncService } from './sync.service';
 
@@ -39,7 +41,7 @@ import { SyncService } from './sync.service';
 @Controller('sync')
 @UseGuards(JwtAuthGuard)
 export class SyncController {
-  constructor(private readonly syncService: SyncService) {}
+  constructor(private readonly syncService: SyncService) { }
 
   /**
    * POST /api/sync/ordenes - Batch upload desde móvil
@@ -71,24 +73,43 @@ export class SyncController {
 
   /**
    * GET /api/sync/download/:tecnicoId - Descargar datos para offline
+   * 
+   * Soporta SYNC DELTA: si se proporciona `since`, solo retorna cambios
+   * desde esa fecha (ISO 8601). Sin `since`, retorna datos completos.
    */
   @Get('download/:tecnicoId')
   @ApiOperation({
-    summary: 'Descargar datos para trabajo offline',
+    summary: 'Descargar datos para trabajo offline (soporta delta sync)',
     description: `
-      Retorna todos los datos necesarios para que el técnico trabaje sin conexión:
-      - Órdenes asignadas (no finalizadas)
-      - Parámetros de medición con rangos
-      - Catálogo de actividades
-      - Estados de orden disponibles
+      Retorna datos necesarios para que el técnico trabaje sin conexión.
       
-      El técnico debe llamar este endpoint antes de perder conexión.
+      **Sync Completo (sin parámetro 'since'):**
+      - Todas las órdenes asignadas activas y completadas recientes
+      - Catálogos completos (parámetros, actividades, estados, tipos)
+      
+      **Sync Delta (con parámetro 'since'):**
+      - Solo órdenes modificadas desde la fecha indicada
+      - Catálogos solo si fueron modificados (o siempre en primera sync)
+      
+      Usar sync delta para sincronizaciones periódicas (más eficiente).
     `,
   })
   @ApiParam({
     name: 'tecnicoId',
     description: 'ID del técnico (empleado)',
     type: Number,
+  })
+  @ApiQuery({
+    name: 'since',
+    required: false,
+    description: 'Timestamp ISO 8601 para sync delta. Si se omite, retorna todos los datos.',
+    example: '2025-12-12T10:00:00.000Z',
+  })
+  @ApiQuery({
+    name: 'fullCatalogs',
+    required: false,
+    description: 'Forzar descarga de catálogos completos incluso en sync delta',
+    type: Boolean,
   })
   @ApiResponse({
     status: 200,
@@ -101,7 +122,88 @@ export class SyncController {
   })
   async downloadForTecnico(
     @Param('tecnicoId', ParseIntPipe) tecnicoId: number,
+    @Query('since') since?: string,
+    @Query('fullCatalogs') fullCatalogs?: string,
   ): Promise<SyncDownloadResponseDto> {
-    return await this.syncService.downloadForTecnico(tecnicoId);
+    const sinceDate = since ? new Date(since) : undefined;
+    const includeCatalogs = fullCatalogs === 'true' || !sinceDate;
+
+    return await this.syncService.downloadForTecnico(
+      tecnicoId,
+      sinceDate,
+      includeCatalogs,
+    );
+  }
+
+  // ============================================================================
+  // SINCRONIZACIÓN INTELIGENTE - Comparación BD Local vs Supabase
+  // ============================================================================
+
+  /**
+   * GET /api/sync/compare/:tecnicoId - Obtener resúmenes para comparación inteligente
+   * 
+   * Retorna un resumen ligero de las últimas N órdenes del técnico.
+   * El móvil usa esto para comparar con su BD local y detectar diferencias.
+   */
+  @Get('compare/:tecnicoId')
+  @ApiOperation({
+    summary: 'Obtener resúmenes de órdenes para sincronización inteligente',
+    description: `
+      Retorna resúmenes compactos (~100 bytes/orden) de las últimas N órdenes.
+      El móvil compara estos resúmenes con su BD local para detectar:
+      - Órdenes nuevas en servidor (completadas en otro dispositivo)
+      - Órdenes con estado diferente
+      - Órdenes que necesitan sincronización
+      
+      Este enfoque NO depende de timestamps y es más robusto.
+    `,
+  })
+  @ApiParam({
+    name: 'tecnicoId',
+    description: 'ID del técnico (empleado)',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Número máximo de órdenes a comparar (default: 500)',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Resúmenes de órdenes para comparación',
+    type: SyncCompareResponseDto,
+  })
+  async compareForTecnico(
+    @Param('tecnicoId', ParseIntPipe) tecnicoId: number,
+    @Query('limit') limit?: string,
+  ): Promise<SyncCompareResponseDto> {
+    const limitNum = limit ? parseInt(limit, 10) : 500;
+    return await this.syncService.getOrdenesResumen(tecnicoId, limitNum);
+  }
+
+  /**
+   * GET /api/sync/orden/:ordenId - Descargar una orden específica completa
+   * 
+   * Usado por el móvil cuando detecta que necesita actualizar una orden específica.
+   */
+  @Get('orden/:ordenId')
+  @ApiOperation({
+    summary: 'Descargar una orden específica completa',
+    description: 'Retorna todos los datos de una orden específica para sincronización.',
+  })
+  @ApiParam({
+    name: 'ordenId',
+    description: 'ID de la orden a descargar',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Datos completos de la orden',
+  })
+  async downloadOrden(
+    @Param('ordenId', ParseIntPipe) ordenId: number,
+  ): Promise<any> {
+    return await this.syncService.getOrdenCompleta(ordenId);
   }
 }

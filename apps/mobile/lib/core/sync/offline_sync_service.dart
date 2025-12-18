@@ -132,13 +132,15 @@ class OfflineSyncService {
       try {
         // PASO 0: VERIFICAR SI LA ORDEN YA FUE COMPLETADA EN EL BACKEND
         // Esto previene duplicación cuando el request anterior llegó pero la respuesta se perdió
-        final yaCompletada = await _verificarOrdenYaCompletada(
+        final verificacionInicial = await _verificarOrdenYaCompletada(
           orden.idOrdenBackend,
         );
-        if (yaCompletada) {
+        if (verificacionInicial['completada'] == true) {
           // La orden ya fue procesada - eliminar de cola sin reenviar
           await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
-          await _marcarOrdenSincronizada(orden.idOrdenLocal, null);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+            'pdfUrl': verificacionInicial['pdfUrl'],
+          });
           sincronizadas++;
           continue; // Saltar al siguiente
         }
@@ -156,12 +158,14 @@ class OfflineSyncService {
           if (iniciarResponse.statusCode != 200 &&
               iniciarResponse.statusCode != 201) {
             // Verificar estado actual
-            final yaCompletada = await _verificarOrdenYaCompletada(
+            final verificacionEstado = await _verificarOrdenYaCompletada(
               orden.idOrdenBackend,
             );
-            if (yaCompletada) {
+            if (verificacionEstado['completada'] == true) {
               await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
-              await _marcarOrdenSincronizada(orden.idOrdenLocal, null);
+              await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+                'pdfUrl': verificacionEstado['pdfUrl'],
+              });
               sincronizadas++;
               continue;
             }
@@ -171,12 +175,14 @@ class OfflineSyncService {
           final statusCode = iniciarError.response?.statusCode;
           if (statusCode == 400 || statusCode == 409) {
             // Verificar si ya está completada
-            final yaCompletada = await _verificarOrdenYaCompletada(
+            final verificacionIniciar = await _verificarOrdenYaCompletada(
               orden.idOrdenBackend,
             );
-            if (yaCompletada) {
+            if (verificacionIniciar['completada'] == true) {
               await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
-              await _marcarOrdenSincronizada(orden.idOrdenLocal, null);
+              await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+                'pdfUrl': verificacionIniciar['pdfUrl'],
+              });
               sincronizadas++;
               continue;
             }
@@ -554,10 +560,11 @@ final pendingSyncCountProvider = StreamProvider<int>((ref) {
   return db.watchCountOrdenesPendientesSync();
 });
 
-/// Provider de la lista de órdenes pendientes
-final pendingSyncListProvider = FutureProvider<List<OrdenesPendientesSyncData>>(
+/// Provider de la lista de órdenes pendientes (reactivo para actualización en tiempo real)
+/// ✅ SYNC MANUAL: Usa StreamProvider para actualizarse automáticamente cuando cambia la BD
+final pendingSyncListProvider = StreamProvider<List<OrdenesPendientesSyncData>>(
   (ref) {
     final db = ref.watch(databaseProvider);
-    return db.getOrdenesPendientesSync();
+    return db.watchOrdenesPendientesSync();
   },
 );

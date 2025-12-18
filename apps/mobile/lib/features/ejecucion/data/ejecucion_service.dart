@@ -36,6 +36,28 @@ class EjecucionService {
         );
       }
 
+      // ✅ FIX CRÍTICO: Verificar si la orden ya está finalizada
+      // Obtener el estado actual de la orden
+      final estadoOrden = await _db.getEstadoOrdenById(orden.idEstado);
+      if (estadoOrden != null) {
+        // Verificar por código de estado o por flag esEstadoFinal
+        final estadosFinalizados = ['COMPLETADA', 'CERRADA', 'CANCELADA'];
+        if (estadoOrden.esEstadoFinal ||
+            estadosFinalizados.contains(estadoOrden.codigo.toUpperCase())) {
+          // Orden ya finalizada - NO modificar nada
+          return InicioEjecucionResult(
+            exito: true,
+            mensaje:
+                'Orden ya finalizada (${estadoOrden.codigo}). Solo visualización.',
+            actividadesInstanciadas: orden.totalActividades,
+            medicionesCreadas: orden.totalMediciones,
+            estadoAnterior: estadoOrden.codigo,
+            estadoNuevo: estadoOrden.codigo,
+            yaExistia: true,
+          );
+        }
+      }
+
       // 2. Verificar idempotencia: ¿Ya existen actividades ejecutadas?
       final actividadesExistentes = await _db.getActividadesByOrden(
         idOrdenLocal,
@@ -226,6 +248,20 @@ class EjecucionService {
         primeraActividad: primeraActividadNombre,
         verificacionLectura: verificacion.isNotEmpty,
       );
+    });
+  }
+
+  Future<void> eliminarActividadLocal(int idActividadLocal) async {
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.evidencias,
+      )..where((e) => e.idActividadEjecutada.equals(idActividadLocal))).go();
+      await (_db.delete(
+        _db.mediciones,
+      )..where((m) => m.idActividadEjecutada.equals(idActividadLocal))).go();
+      await (_db.delete(
+        _db.actividadesEjecutadas,
+      )..where((a) => a.idLocal.equals(idActividadLocal))).go();
     });
   }
 

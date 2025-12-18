@@ -159,14 +159,16 @@ export class PdfService implements OnModuleDestroy {
    * Adapta los datos genéricos de orden al formato específico de correctivo
    */
   private adaptarDatosParaCorrectivo(datos: DatosOrdenPDF): DatosCorrectivoOrdenPDF {
-    // Convertir actividades a trabajos ejecutados
+    // ✅ FIX: Convertir actividades a trabajos ejecutados preservando resultado real
     const trabajosEjecutados = (datos.actividades || []).map((a, index) => ({
       orden: index + 1,
       descripcion: a.descripcion,
-      sistema: a.sistema || 'GENERAL',
+      // ✅ FIX: Usar observaciones para la columna 'Obs.' (antes usaba sistema)
+      sistema: a.observaciones || '',
       tiempoHoras: 1,
-      resultado: a.resultado === 'B' ? 'COMPLETADO' as const :
-        a.resultado === 'R' ? 'PARCIAL' as const : 'COMPLETADO' as const,
+      // ✅ FIX: Pasar resultado directamente (B, R, M, C, NA, etc.)
+      // El template mapResultado() ya maneja todos los códigos
+      resultado: a.resultado || 'NA',
     }));
 
     // Filtrar mediciones que tengan valor (para renderizado condicional)

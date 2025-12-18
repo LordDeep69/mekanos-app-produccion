@@ -3057,6 +3057,12 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
   late final GeneratedColumn<String> horaSalidaTexto = GeneratedColumn<String>(
       'hora_salida_texto', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _razonFallaMeta =
+      const VerificationMeta('razonFalla');
+  @override
+  late final GeneratedColumn<String> razonFalla = GeneratedColumn<String>(
+      'razon_falla', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _isDirtyMeta =
       const VerificationMeta('isDirty');
   @override
@@ -3120,6 +3126,7 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
         medicionesCriticas,
         horaEntradaTexto,
         horaSalidaTexto,
+        razonFalla,
         isDirty,
         lastSyncedAt,
         createdAt,
@@ -3301,6 +3308,12 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
           horaSalidaTexto.isAcceptableOrUnknown(
               data['hora_salida_texto']!, _horaSalidaTextoMeta));
     }
+    if (data.containsKey('razon_falla')) {
+      context.handle(
+          _razonFallaMeta,
+          razonFalla.isAcceptableOrUnknown(
+              data['razon_falla']!, _razonFallaMeta));
+    }
     if (data.containsKey('is_dirty')) {
       context.handle(_isDirtyMeta,
           isDirty.isAcceptableOrUnknown(data['is_dirty']!, _isDirtyMeta));
@@ -3386,6 +3399,8 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
           DriftSqlType.string, data['${effectivePrefix}hora_entrada_texto']),
       horaSalidaTexto: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}hora_salida_texto']),
+      razonFalla: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}razon_falla']),
       isDirty: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_dirty'])!,
       lastSyncedAt: attachedDatabase.typeMapping.read(
@@ -3433,6 +3448,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
   final int medicionesCriticas;
   final String? horaEntradaTexto;
   final String? horaSalidaTexto;
+  final String? razonFalla;
   final bool isDirty;
   final DateTime? lastSyncedAt;
   final DateTime createdAt;
@@ -3467,6 +3483,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       required this.medicionesCriticas,
       this.horaEntradaTexto,
       this.horaSalidaTexto,
+      this.razonFalla,
       required this.isDirty,
       this.lastSyncedAt,
       required this.createdAt,
@@ -3522,6 +3539,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     }
     if (!nullToAbsent || horaSalidaTexto != null) {
       map['hora_salida_texto'] = Variable<String>(horaSalidaTexto);
+    }
+    if (!nullToAbsent || razonFalla != null) {
+      map['razon_falla'] = Variable<String>(razonFalla);
     }
     map['is_dirty'] = Variable<bool>(isDirty);
     if (!nullToAbsent || lastSyncedAt != null) {
@@ -3582,6 +3602,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       horaSalidaTexto: horaSalidaTexto == null && nullToAbsent
           ? const Value.absent()
           : Value(horaSalidaTexto),
+      razonFalla: razonFalla == null && nullToAbsent
+          ? const Value.absent()
+          : Value(razonFalla),
       isDirty: Value(isDirty),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3628,6 +3651,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       medicionesCriticas: serializer.fromJson<int>(json['medicionesCriticas']),
       horaEntradaTexto: serializer.fromJson<String?>(json['horaEntradaTexto']),
       horaSalidaTexto: serializer.fromJson<String?>(json['horaSalidaTexto']),
+      razonFalla: serializer.fromJson<String?>(json['razonFalla']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -3667,6 +3691,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       'medicionesCriticas': serializer.toJson<int>(medicionesCriticas),
       'horaEntradaTexto': serializer.toJson<String?>(horaEntradaTexto),
       'horaSalidaTexto': serializer.toJson<String?>(horaSalidaTexto),
+      'razonFalla': serializer.toJson<String?>(razonFalla),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -3704,6 +3729,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           int? medicionesCriticas,
           Value<String?> horaEntradaTexto = const Value.absent(),
           Value<String?> horaSalidaTexto = const Value.absent(),
+          Value<String?> razonFalla = const Value.absent(),
           bool? isDirty,
           Value<DateTime?> lastSyncedAt = const Value.absent(),
           DateTime? createdAt,
@@ -3752,6 +3778,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
         horaSalidaTexto: horaSalidaTexto.present
             ? horaSalidaTexto.value
             : this.horaSalidaTexto,
+        razonFalla: razonFalla.present ? razonFalla.value : this.razonFalla,
         isDirty: isDirty ?? this.isDirty,
         lastSyncedAt:
             lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
@@ -3790,6 +3817,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           ..write('medicionesCriticas: $medicionesCriticas, ')
           ..write('horaEntradaTexto: $horaEntradaTexto, ')
           ..write('horaSalidaTexto: $horaSalidaTexto, ')
+          ..write('razonFalla: $razonFalla, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -3829,6 +3857,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
         medicionesCriticas,
         horaEntradaTexto,
         horaSalidaTexto,
+        razonFalla,
         isDirty,
         lastSyncedAt,
         createdAt,
@@ -3867,6 +3896,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           other.medicionesCriticas == this.medicionesCriticas &&
           other.horaEntradaTexto == this.horaEntradaTexto &&
           other.horaSalidaTexto == this.horaSalidaTexto &&
+          other.razonFalla == this.razonFalla &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt &&
           other.createdAt == this.createdAt &&
@@ -3903,6 +3933,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
   final Value<int> medicionesCriticas;
   final Value<String?> horaEntradaTexto;
   final Value<String?> horaSalidaTexto;
+  final Value<String?> razonFalla;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
   final Value<DateTime> createdAt;
@@ -3937,6 +3968,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     this.medicionesCriticas = const Value.absent(),
     this.horaEntradaTexto = const Value.absent(),
     this.horaSalidaTexto = const Value.absent(),
+    this.razonFalla = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3972,6 +4004,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     this.medicionesCriticas = const Value.absent(),
     this.horaEntradaTexto = const Value.absent(),
     this.horaSalidaTexto = const Value.absent(),
+    this.razonFalla = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -4011,6 +4044,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     Expression<int>? medicionesCriticas,
     Expression<String>? horaEntradaTexto,
     Expression<String>? horaSalidaTexto,
+    Expression<String>? razonFalla,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
     Expression<DateTime>? createdAt,
@@ -4049,6 +4083,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
       if (medicionesCriticas != null) 'mediciones_criticas': medicionesCriticas,
       if (horaEntradaTexto != null) 'hora_entrada_texto': horaEntradaTexto,
       if (horaSalidaTexto != null) 'hora_salida_texto': horaSalidaTexto,
+      if (razonFalla != null) 'razon_falla': razonFalla,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -4086,6 +4121,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
       Value<int>? medicionesCriticas,
       Value<String?>? horaEntradaTexto,
       Value<String?>? horaSalidaTexto,
+      Value<String?>? razonFalla,
       Value<bool>? isDirty,
       Value<DateTime?>? lastSyncedAt,
       Value<DateTime>? createdAt,
@@ -4122,6 +4158,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
       medicionesCriticas: medicionesCriticas ?? this.medicionesCriticas,
       horaEntradaTexto: horaEntradaTexto ?? this.horaEntradaTexto,
       horaSalidaTexto: horaSalidaTexto ?? this.horaSalidaTexto,
+      razonFalla: razonFalla ?? this.razonFalla,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -4222,6 +4259,9 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     if (horaSalidaTexto.present) {
       map['hora_salida_texto'] = Variable<String>(horaSalidaTexto.value);
     }
+    if (razonFalla.present) {
+      map['razon_falla'] = Variable<String>(razonFalla.value);
+    }
     if (isDirty.present) {
       map['is_dirty'] = Variable<bool>(isDirty.value);
     }
@@ -4269,6 +4309,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
           ..write('medicionesCriticas: $medicionesCriticas, ')
           ..write('horaEntradaTexto: $horaEntradaTexto, ')
           ..write('horaSalidaTexto: $horaSalidaTexto, ')
+          ..write('razonFalla: $razonFalla, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')

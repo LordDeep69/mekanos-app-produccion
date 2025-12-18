@@ -54,12 +54,28 @@ class AuthService {
         await _storage.saveAccessToken(accessToken);
         await _storage.saveRefreshToken(refreshToken);
 
-        // Decodificar info del usuario del JWT (payload)
-        final userInfo = _decodeJwtPayload(accessToken);
+        // ✅ FIX: Usar datos del response body (contiene idEmpleado)
+        // El JWT no contiene idEmpleado, solo el response body lo tiene
+        UserInfo userInfo;
+        if (data['user'] != null) {
+          // Usar datos completos del backend
+          userInfo = UserInfo.fromJson(data['user'] as Map<String, dynamic>);
+          debugPrint('👷 idEmpleado del backend: ${userInfo.idEmpleado}');
+        } else {
+          // Fallback: decodificar del JWT (sin idEmpleado)
+          userInfo = _decodeJwtPayload(accessToken);
+        }
+
         await _storage.saveUserId(userInfo.id);
         await _storage.saveUserEmail(userInfo.email);
+        // ✅ NUEVO: Guardar idEmpleado para recuperarlo después
+        if (userInfo.idEmpleado != null) {
+          await _storage.saveIdEmpleado(userInfo.idEmpleado!);
+        }
 
-        debugPrint('✅ Login exitoso para usuario ID: ${userInfo.id}');
+        debugPrint(
+          '✅ Login exitoso - ID: ${userInfo.id}, idEmpleado: ${userInfo.idEmpleado}, syncId: ${userInfo.syncId}',
+        );
 
         return AuthResponse(
           accessToken: accessToken,
@@ -145,6 +161,21 @@ class AuthService {
 
       // Intentar decodificar el token para ver si sigue siendo válido
       final userInfo = _decodeJwtPayload(token);
+
+      // ✅ FIX: Recuperar idEmpleado del storage (no está en JWT)
+      final idEmpleado = await _storage.getIdEmpleado();
+      if (idEmpleado != null) {
+        debugPrint('👷 idEmpleado recuperado del storage: $idEmpleado');
+        return UserInfo(
+          id: userInfo.id,
+          email: userInfo.email,
+          nombre: userInfo.nombre,
+          rol: userInfo.rol,
+          personaId: userInfo.personaId,
+          idEmpleado: idEmpleado,
+        );
+      }
+
       return userInfo;
     } catch (e) {
       debugPrint('⚠️ Token inválido o expirado');
