@@ -12,6 +12,7 @@ import '../database/database_service.dart';
 import 'connectivity_service.dart';
 import 'offline_sync_service.dart';
 import 'sync_notification_service.dart';
+import 'sync_progress.dart';
 
 /// Provider para el servicio de sync upload
 final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
@@ -20,7 +21,8 @@ final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
   final connectivity = ref.watch(connectivityServiceProvider);
   final offlineSync = ref.watch(offlineSyncServiceProvider);
   final notificationService = ref.watch(syncNotificationServiceProvider);
-  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync, notificationService);
+  final progressNotifier = ref.watch(syncProgressProvider.notifier);
+  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync, notificationService, progressNotifier);
 });
 
 /// Resultado de la sincronización de subida
@@ -52,12 +54,14 @@ class SyncUploadResult {
 /// 5. Si NO hay conexión: Guarda en cola offline para sync posterior
 /// 6. Actualiza estado local tras éxito
 /// ✅ ENTERPRISE: Notifica UI de eventos de sincronización
+/// ✅ 19-DIC-2025: Emite progreso en tiempo real para feedback visual
 class SyncUploadService {
   final AppDatabase _db;
   final Dio _apiClient;
   final ConnectivityService _connectivity;
   final OfflineSyncService _offlineSync;
   final SyncNotificationService _notificationService;
+  final SyncProgressNotifier _progressNotifier;
 
   SyncUploadService(
     this._db,
@@ -65,6 +69,7 @@ class SyncUploadService {
     this._connectivity,
     this._offlineSync,
     this._notificationService,
+    this._progressNotifier,
   );
 
   /// Finaliza y sincroniza una orden completa al backend
@@ -88,6 +93,10 @@ class SyncUploadService {
     String? razonFalla,
   }) async {
     try {
+      // ✅ 19-DIC-2025: Iniciar progreso
+      _progressNotifier.iniciar(idOrdenBackend);
+      _progressNotifier.avanzar(SyncStep.preparando);
+      
       // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
       final equipos = await _db.getEquiposByOrdenServicio(idOrdenBackend);
       final esMultiEquipo = equipos.length > 1;
@@ -211,6 +220,10 @@ class SyncUploadService {
             .toList();
       }
 
+      // ✅ 19-DIC-2025: Progreso - Evidencias
+      _progressNotifier.completarPaso(SyncStep.preparando);
+      _progressNotifier.avanzar(SyncStep.evidencias);
+
       // 3. Recopilar evidencias y convertir a Base64
       final evidencias = await (_db.select(
         _db.evidencias,
@@ -236,6 +249,10 @@ class SyncUploadService {
           });
         }
       }
+
+      // ✅ 19-DIC-2025: Progreso - Firmas
+      _progressNotifier.completarPaso(SyncStep.evidencias);
+      _progressNotifier.avanzar(SyncStep.firmas);
 
       // 4. Recopilar firmas y convertir a Base64
       final firmas = await _db.getFirmasByOrden(idOrdenLocal);
@@ -274,6 +291,7 @@ class SyncUploadService {
 
       // 5. Validar requisitos mínimos
       if (firmasPayload == null) {
+        _progressNotifier.error('Falta la firma del técnico');
         return SyncUploadResult(
           success: false,
           mensaje: 'Falta la firma del técnico',
@@ -282,12 +300,16 @@ class SyncUploadService {
       }
 
       if (evidenciasPayload.isEmpty) {
+        _progressNotifier.error('Debe incluir al menos una evidencia fotográfica');
         return SyncUploadResult(
           success: false,
           mensaje: 'Debe incluir al menos una evidencia fotográfica',
           error: 'MISSING_EVIDENCIAS',
         );
       }
+
+      // ✅ 19-DIC-2025: Progreso - Firmas completado
+      _progressNotifier.completarPaso(SyncStep.firmas);
 
       // 6. Construir payload completo
       // ✅ MULTI-EQUIPOS: Incluir estructura agrupada por equipo
@@ -344,6 +366,7 @@ class SyncUploadService {
         if (guardado) {
           // ✅ ENTERPRISE: Notificar que se guardó offline
           _notificationService.notifyOrderQueuedOffline('#$idOrdenBackend');
+          _progressNotifier.reset(); // No es error, pero no se subió
           
           return SyncUploadResult(
             success: true,
@@ -352,6 +375,7 @@ class SyncUploadService {
             guardadoOffline: true,
           );
         } else {
+          _progressNotifier.error('Error guardando orden para sync posterior');
           return SyncUploadResult(
             success: false,
             mensaje: 'Error guardando orden para sync posterior',
@@ -368,6 +392,9 @@ class SyncUploadService {
         horaSalida,
         razonFalla: razonFalla,
       );
+
+      // ✅ 19-DIC-2025: Progreso - Enviando al servidor
+      _progressNotifier.avanzar(SyncStep.enviando);
 
       // 9. CON CONEXIÓN - Intentar sync normal
       try {
@@ -389,6 +416,14 @@ class SyncUploadService {
         );
 
         if (response.statusCode == 200) {
+          // ✅ 19-DIC-2025: Progreso - PDF y Email (el backend los hace)
+          _progressNotifier.completarPaso(SyncStep.enviando);
+          _progressNotifier.avanzar(SyncStep.pdf);
+          _progressNotifier.completarPaso(SyncStep.pdf);
+          _progressNotifier.avanzar(SyncStep.email);
+          _progressNotifier.completarPaso(SyncStep.email);
+          _progressNotifier.completar();
+          
           // Extraer URL del PDF de la respuesta
           String? pdfUrl;
           if (response.data is Map) {
@@ -419,6 +454,7 @@ class SyncUploadService {
           );
         } else {
           // Error del servidor - guardar en cola para retry
+          _progressNotifier.error('Error del servidor: ${response.statusCode}');
           await _offlineSync.guardarEnCola(
             idOrdenLocal: idOrdenLocal,
             idOrdenBackend: idOrdenBackend,

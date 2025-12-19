@@ -166,7 +166,8 @@ export class TareasProgramadasService {
           },
         },
         include: {
-          cliente: { include: { persona: true } },
+          // ✅ FIX 15-DIC-2025: Corregido nombre relación según schema.prisma
+          clientes: { include: { persona: true } },
           empleados: { include: { persona: true } }, // asesor responsable via empleados
         },
       });
@@ -179,8 +180,8 @@ export class TareasProgramadasService {
             (new Date(contrato.fecha_fin!).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
           );
 
-          const nombreCliente = contrato.cliente.persona.razon_social ||
-            contrato.cliente.persona.nombre_completo || 'Cliente';
+          const nombreCliente = contrato.clientes.persona.razon_social ||
+            contrato.clientes.persona.nombre_completo || 'Cliente';
 
           // Solo notificar una vez por contrato (verificar si ya existe notificación reciente)
           const notificacionExistente = await this.prisma.notificaciones.findFirst({

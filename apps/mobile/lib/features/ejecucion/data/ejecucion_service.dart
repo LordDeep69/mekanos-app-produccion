@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
@@ -12,6 +13,7 @@ final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
 
 /// Servicio de Ejecución - RUTA 6
 /// Maneja la lógica transaccional de iniciar y ejecutar órdenes de servicio
+/// ✅ MULTI-EQUIPOS: Soporta órdenes con múltiples equipos (15-DIC-2025)
 class EjecucionService {
   final AppDatabase _db;
 
@@ -19,13 +21,19 @@ class EjecucionService {
 
   /// Inicia la ejecución de una orden
   ///
+  /// ✅ MULTI-EQUIPOS: Si [idOrdenEquipo] no es null, clona actividades
+  /// solo para ese equipo específico. Si es null, usa flujo simple.
+  ///
   /// REQUISITOS TRANSACCIONALES:
-  /// 1. Idempotencia: Si ya existen actividades, NO hace nada
+  /// 1. Idempotencia: Si ya existen actividades (para ese equipo), NO hace nada
   /// 2. Clonado: Copia actividades del catálogo a la tabla transaccional
   /// 3. Estado: Actualiza la orden a EN_PROCESO
   ///
   /// Retorna un [InicioEjecucionResult] con los detalles de la operación
-  Future<InicioEjecucionResult> iniciarEjecucion(int idOrdenLocal) async {
+  Future<InicioEjecucionResult> iniciarEjecucion(
+    int idOrdenLocal, {
+    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS: ID del equipo específico (opcional)
+  }) async {
     return await _db.transaction(() async {
       // 1. Obtener la orden
       final orden = await _db.getOrdenById(idOrdenLocal);
@@ -59,9 +67,20 @@ class EjecucionService {
       }
 
       // 2. Verificar idempotencia: ¿Ya existen actividades ejecutadas?
-      final actividadesExistentes = await _db.getActividadesByOrden(
-        idOrdenLocal,
-      );
+      // ✅ MULTI-EQUIPOS: Si hay idOrdenEquipo, verificar solo para ese equipo
+      List<ActividadesEjecutada> actividadesExistentes;
+      if (idOrdenEquipo != null) {
+        // Multi-equipo: Filtrar por equipo específico
+        actividadesExistentes = await (_db.select(_db.actividadesEjecutadas)
+              ..where((a) => a.idOrden.equals(idOrdenLocal))
+              ..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo)))
+            .get();
+        debugPrint(
+            '🔧 [MULTI-EQ] Verificando actividades para equipo $idOrdenEquipo: ${actividadesExistentes.length}');
+      } else {
+        // Orden simple: Todas las actividades
+        actividadesExistentes = await _db.getActividadesByOrden(idOrdenLocal);
+      }
       if (actividadesExistentes.isNotEmpty) {
         // Ya fue iniciada previamente - PERO verificar si faltan mediciones
         final medicionesExistentes = await (_db.select(
@@ -129,36 +148,81 @@ class EjecucionService {
       // 3. Obtener el estado actual
       final estadoAnterior = _getEstadoCodigo(orden.idEstado);
 
-      // 4. Consultar actividades del catálogo para el tipo de servicio
-      final actividadesCatalogo =
-          await (_db.select(_db.actividadesCatalogo)
-                ..where((a) => a.idTipoServicio.equals(orden.idTipoServicio))
-                ..orderBy([(a) => OrderingTerm.asc(a.ordenEjecucion)]))
-              .get();
+      // ======================================================================
+      // 4. OBTENER ACTIVIDADES A EJECUTAR
+      // ======================================================================
+      // PRIORIDAD:
+      // 1. Si existe plan de actividades asignado por admin → usar plan
+      // 2. Si no → usar catálogo por tipo de servicio (comportamiento original)
+      // ======================================================================
 
-      if (actividadesCatalogo.isEmpty) {
-        return InicioEjecucionResult(
-          exito: false,
-          error:
-              'No hay actividades en catálogo para tipo de servicio: ${orden.idTipoServicio}',
-        );
+      List<ActividadesCatalogoData> actividadesAEjecutar = [];
+
+      // 4.1 Verificar si existe plan de actividades para esta orden
+      final planActividades = await _db.getPlanActividadesByOrden(idOrdenLocal);
+
+      if (planActividades.isNotEmpty) {
+        // ✅ USAR PLAN DE ACTIVIDADES ASIGNADO POR ADMIN
+        // Obtener las actividades del catálogo según el plan
+        for (final planItem in planActividades) {
+          final actCatalogo =
+              await (_db.select(_db.actividadesCatalogo)
+                    ..where(
+                      (a) => a.id.equals(planItem.idActividadCatalogo),
+                    ))
+                  .getSingleOrNull();
+
+          if (actCatalogo != null) {
+            actividadesAEjecutar.add(actCatalogo);
+          }
+        }
+
+        if (actividadesAEjecutar.isEmpty) {
+          return InicioEjecucionResult(
+            exito: false,
+            error:
+                'Plan de actividades asignado pero actividades no encontradas en catálogo',
+          );
+        }
+      } else {
+        // ✅ FALLBACK: Usar catálogo por tipo de servicio (comportamiento original)
+        actividadesAEjecutar =
+            await (_db.select(_db.actividadesCatalogo)
+                  ..where((a) => a.idTipoServicio.equals(orden.idTipoServicio))
+                  ..orderBy([(a) => OrderingTerm.asc(a.ordenEjecucion)]))
+                .get();
+
+        if (actividadesAEjecutar.isEmpty) {
+          return InicioEjecucionResult(
+            exito: false,
+            error:
+                'No hay actividades en catálogo para tipo de servicio: ${orden.idTipoServicio}',
+          );
+        }
       }
 
-      // 5. Clonar actividades del catálogo a la tabla transaccional
+      // 5. Clonar actividades a la tabla transaccional
       // Y crear mediciones con SNAPSHOT completo para actividades de medición
+      // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo si se proporciona
       int instanciadas = 0;
       int medicionesCreadas = 0;
       String? primeraActividadNombre;
 
-      for (final actCatalogo in actividadesCatalogo) {
+      debugPrint(
+          '🔧 [EJECUCIÓN] Clonando ${actividadesAEjecutar.length} actividades${idOrdenEquipo != null ? ' para equipo $idOrdenEquipo' : ''}');
+
+      for (final actCatalogo in actividadesAEjecutar) {
         // Determinar el sistema (usar GENERAL si es null)
         final sistemaNombre = actCatalogo.sistema ?? 'GENERAL';
 
         // Insertar actividad ejecutada y obtener su ID
+        // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo
         final idActividadEjecutada = await _db.insertActividadEjecutada(
           ActividadesEjecutadasCompanion.insert(
             idOrden: idOrdenLocal,
             idActividadCatalogo: actCatalogo.id,
+            // ✅ MULTI-EQUIPOS: FK al equipo específico (null si orden simple)
+            idOrdenEquipo: Value(idOrdenEquipo),
             // Campos desnormalizados (snapshot)
             descripcion: actCatalogo.descripcion,
             sistema: Value(sistemaNombre),
@@ -176,6 +240,7 @@ class EjecucionService {
 
         // ==================================================================
         // CREAR MEDICIÓN CON SNAPSHOT SI LA ACTIVIDAD REQUIERE MEDICIÓN
+        // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo
         // ==================================================================
         if (actCatalogo.idParametroMedicion != null) {
           // Buscar el parámetro en el catálogo para copiar sus datos
@@ -187,11 +252,14 @@ class EjecucionService {
 
           if (parametro != null) {
             // Crear fila de medición VACÍA con SNAPSHOT de rangos y unidad
+            // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo
             await _db.insertMedicion(
               MedicionesCompanion.insert(
                 idOrden: idOrdenLocal,
                 idActividadEjecutada: Value(idActividadEjecutada),
                 idParametro: parametro.id,
+                // ✅ MULTI-EQUIPOS: FK al equipo específico
+                idOrdenEquipo: Value(idOrdenEquipo),
                 // SNAPSHOT: Copiar datos del parámetro para offline
                 nombreParametro: parametro.nombre,
                 unidadMedida: parametro.unidad ?? '',
@@ -348,11 +416,21 @@ class EjecucionService {
   }
 
   /// Obtiene todas las mediciones de una orden (con snapshot completo)
-  Future<List<Medicione>> getMedicionesByOrdenLocal(int idOrdenLocal) async {
-    return await (_db.select(_db.mediciones)
-          ..where((m) => m.idOrden.equals(idOrdenLocal))
-          ..orderBy([(m) => OrderingTerm.asc(m.idLocal)]))
-        .get();
+  /// ✅ MULTI-EQUIPOS: Si [idOrdenEquipo] no es null, filtra por ese equipo
+  Future<List<Medicione>> getMedicionesByOrdenLocal(
+    int idOrdenLocal, {
+    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS
+  }) async {
+    var query = _db.select(_db.mediciones)
+      ..where((m) => m.idOrden.equals(idOrdenLocal))
+      ..orderBy([(m) => OrderingTerm.asc(m.idLocal)]);
+
+    // ✅ MULTI-EQUIPOS: Filtrar por equipo si se proporciona
+    if (idOrdenEquipo != null) {
+      query = query..where((m) => m.idOrdenEquipo.equals(idOrdenEquipo));
+    }
+
+    return await query.get();
   }
 
   /// Calcula el estado del valor según los rangos
@@ -385,17 +463,26 @@ class EjecucionService {
   }
 
   /// Obtiene las actividades ejecutadas agrupadas por sistema
-  /// IMPORTANTE: Excluye actividades tipo MEDICION (se muestran solo en tab Mediciones)
+  /// ✅ FIX 15-DIC-2025: EXCLUYE actividades tipo MEDICION (van en tab Mediciones)
+  /// ✅ MULTI-EQUIPOS: Si [idOrdenEquipo] no es null, filtra por ese equipo
+  /// Las actividades con idParametroMedicion se manejan en tabla mediciones
   Future<Map<String, List<ActividadesEjecutada>>> getActividadesAgrupadas(
-    int idOrdenLocal,
-  ) async {
-    final actividades =
-        await (_db.select(_db.actividadesEjecutadas)
-              ..where((a) => a.idOrden.equals(idOrdenLocal))
-              // EXCLUIR tipo MEDICION - se muestran en tab separado
-              ..where((a) => a.tipoActividad.equals('MEDICION').not())
-              ..orderBy([(a) => OrderingTerm.asc(a.ordenEjecucion)]))
-            .get();
+    int idOrdenLocal, {
+    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS: Filtrar por equipo específico
+  }) async {
+    var query = _db.select(_db.actividadesEjecutadas)
+      ..where((a) => a.idOrden.equals(idOrdenLocal))
+      // ✅ FIX: Excluir actividades que tienen parámetro de medición
+      // Estas aparecen en el tab Mediciones, no en Checklist
+      ..where((a) => a.idParametroMedicion.isNull())
+      ..orderBy([(a) => OrderingTerm.asc(a.ordenEjecucion)]);
+
+    // ✅ MULTI-EQUIPOS: Filtrar por equipo si se proporciona
+    if (idOrdenEquipo != null) {
+      query = query..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo));
+    }
+
+    final actividades = await query.get();
 
     final Map<String, List<ActividadesEjecutada>> grupos = {};
     for (final act in actividades) {
@@ -407,25 +494,54 @@ class EjecucionService {
   }
 
   /// Obtiene las actividades que requieren medición
+  /// ✅ MULTI-EQUIPOS: Si [idOrdenEquipo] no es null, filtra por ese equipo
   Future<List<ActividadesEjecutada>> getActividadesConMedicion(
-    int idOrdenLocal,
-  ) async {
-    return await (_db.select(_db.actividadesEjecutadas)
-          ..where((a) => a.idOrden.equals(idOrdenLocal))
-          ..where((a) => a.idParametroMedicion.isNotNull())
-          ..orderBy([(a) => OrderingTerm.asc(a.ordenEjecucion)]))
-        .get();
+    int idOrdenLocal, {
+    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS
+  }) async {
+    var query = _db.select(_db.actividadesEjecutadas)
+      ..where((a) => a.idOrden.equals(idOrdenLocal))
+      ..where((a) => a.idParametroMedicion.isNotNull())
+      ..orderBy([(a) => OrderingTerm.asc(a.ordenEjecucion)]);
+
+    // ✅ MULTI-EQUIPOS: Filtrar por equipo si se proporciona
+    if (idOrdenEquipo != null) {
+      query = query..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo));
+    }
+
+    return await query.get();
   }
 
   /// Obtiene el resumen de progreso de la ejecución
+  /// ✅ MULTI-EQUIPOS: Si [idOrdenEquipo] no es null, filtra por ese equipo
   /// IMPORTANTE: Excluye actividades tipo MEDICION para evitar doble conteo
-  Future<ResumenEjecucion> getResumenEjecucion(int idOrdenLocal) async {
+  Future<ResumenEjecucion> getResumenEjecucion(
+    int idOrdenLocal, {
+    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS
+  }) async {
     // ✅ FIX: Filtrar actividades tipo MEDICION (se cuentan en tabla mediciones)
-    final todasActividades = await _db.getActividadesByOrden(idOrdenLocal);
+    List<ActividadesEjecutada> todasActividades;
+    List<Medicione> mediciones;
+
+    if (idOrdenEquipo != null) {
+      // ✅ MULTI-EQUIPOS: Filtrar por equipo
+      todasActividades = await (_db.select(_db.actividadesEjecutadas)
+            ..where((a) => a.idOrden.equals(idOrdenLocal))
+            ..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo)))
+          .get();
+      mediciones = await (_db.select(_db.mediciones)
+            ..where((m) => m.idOrden.equals(idOrdenLocal))
+            ..where((m) => m.idOrdenEquipo.equals(idOrdenEquipo)))
+          .get();
+    } else {
+      // Orden simple: Todas las actividades
+      todasActividades = await _db.getActividadesByOrden(idOrdenLocal);
+      mediciones = await _db.getMedicionesByOrden(idOrdenLocal);
+    }
+
     final actividades = todasActividades
         .where((a) => a.tipoActividad != 'MEDICION')
         .toList();
-    final mediciones = await _db.getMedicionesByOrden(idOrdenLocal);
 
     int completadas = 0;
     int pendientes = 0;
@@ -522,6 +638,63 @@ class EjecucionService {
         return 'CANCELADA';
       default:
         return 'DESCONOCIDO';
+    }
+  }
+
+  /// ✅ NUEVO: Verifica si todas las actividades+mediciones del equipo están completas
+  /// y actualiza el estado del equipo automáticamente
+  /// 
+  /// Retorna el nuevo estado del equipo o null si no hubo cambio
+  Future<String?> verificarYActualizarEstadoEquipo(
+    int idOrdenLocal,
+    int idOrdenEquipo,
+  ) async {
+    try {
+      // Obtener resumen del equipo
+      final resumen = await getResumenEjecucion(
+        idOrdenLocal,
+        idOrdenEquipo: idOrdenEquipo,
+      );
+
+      // Verificar si todo está completo
+      final actividadesCompletas = resumen.completadas >= resumen.totalActividades;
+      final medicionesCompletas = resumen.medicionesConValor >= resumen.totalMediciones;
+      final todoCompleto = actividadesCompletas && medicionesCompletas 
+          && (resumen.totalActividades > 0 || resumen.totalMediciones > 0);
+
+      // Obtener estado actual del equipo
+      final equipo = await _db.getOrdenEquipoById(idOrdenEquipo);
+      if (equipo == null) return null;
+
+      final estadoActual = equipo.estado.toUpperCase();
+      String nuevoEstado;
+
+      if (todoCompleto) {
+        nuevoEstado = 'COMPLETADO';
+      } else if (resumen.completadas > 0 || resumen.medicionesConValor > 0) {
+        nuevoEstado = 'EN_PROCESO';
+      } else {
+        nuevoEstado = 'PENDIENTE';
+      }
+
+      // Solo actualizar si cambió el estado
+      if (nuevoEstado != estadoActual) {
+        await _db.updateEstadoEquipo(
+          idOrdenEquipo,
+          nuevoEstado,
+          fechaInicio: nuevoEstado == 'EN_PROCESO' && equipo.fechaInicio == null
+              ? DateTime.now()
+              : null,
+          fechaFin: nuevoEstado == 'COMPLETADO' ? DateTime.now() : null,
+        );
+        debugPrint('✅ [MULTI-EQUIPO] Estado actualizado: $estadoActual -> $nuevoEstado');
+        return nuevoEstado;
+      }
+
+      return null; // No hubo cambio
+    } catch (e) {
+      debugPrint('❌ Error verificando estado equipo: $e');
+      return null;
     }
   }
 }

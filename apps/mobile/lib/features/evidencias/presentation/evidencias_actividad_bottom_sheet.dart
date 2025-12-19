@@ -17,12 +17,14 @@ class EvidenciasActividadBottomSheet extends ConsumerStatefulWidget {
   final int idOrden;
   final int idActividad;
   final String nombreActividad;
+  final int? idOrdenEquipo; // ✅ MULTI-EQUIPOS (16-DIC-2025)
 
   const EvidenciasActividadBottomSheet({
     super.key,
     required this.idOrden,
     required this.idActividad,
     required this.nombreActividad,
+    this.idOrdenEquipo, // ✅ MULTI-EQUIPOS: Opcional para backward compatibility
   });
 
   @override
@@ -88,6 +90,7 @@ class _EvidenciasActividadBottomSheetState
       tipo: tipo,
       descripcion: widget.nombreActividad,
       idActividadEjecutada: widget.idActividad,
+      idOrdenEquipo: widget.idOrdenEquipo, // ✅ MULTI-EQUIPOS (16-DIC-2025)
     );
 
     if (resultado.exito) {

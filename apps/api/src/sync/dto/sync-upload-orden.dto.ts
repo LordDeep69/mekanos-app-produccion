@@ -24,6 +24,11 @@ export class SyncMedicionDto {
   @IsInt()
   serverId?: number;
 
+  @ApiPropertyOptional({ description: 'ID del orden-equipo (para multi-equipos, opcional)' })
+  @IsOptional()
+  @IsInt()
+  idOrdenEquipo?: number;
+
   @ApiProperty({ description: 'ID del parámetro de medición' })
   @IsInt()
   idParametroMedicion: number;
@@ -75,6 +80,11 @@ export class SyncActividadDto {
   @IsOptional()
   @IsInt()
   serverId?: number;
+
+  @ApiPropertyOptional({ description: 'ID del orden-equipo (para multi-equipos, opcional)' })
+  @IsOptional()
+  @IsInt()
+  idOrdenEquipo?: number;
 
   @ApiProperty({ description: 'ID de la actividad del catálogo' })
   @IsInt()

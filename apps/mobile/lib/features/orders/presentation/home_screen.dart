@@ -434,11 +434,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         text: '...',
         color: Colors.grey,
         isLoading: true,
+        pendingCount: 0,
       ),
       error: (_, __) => _buildSyncChip(
         icon: Icons.help_outline,
         text: '?',
         color: Colors.grey,
+        pendingCount: 0,
       ),
       data: (info) {
         final isSyncing = info.state == SyncIndicatorState.syncing;
@@ -447,6 +449,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           text: info.statusText,
           color: info.color,
           isLoading: isSyncing,
+          pendingCount: info.pendingCount,
         );
       },
     );
@@ -457,6 +460,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required String text,
     required Color color,
     bool isLoading = false,
+    int pendingCount = 0,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -477,22 +481,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               color: Colors.white.withValues(alpha: 0.9),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: color, width: 1.5),
+              // Sombra sutil para resaltar el chip
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.3),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isLoading)
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: color,
-                    ),
-                  )
-                else
-                  Icon(icon, size: 14, color: color),
-                const SizedBox(width: 5),
+                // Icono con badge numérico si hay pendientes
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (isLoading)
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: color,
+                        ),
+                      )
+                    else
+                      Icon(icon, size: 16, color: color),
+                    // Badge numérico flotante
+                    if (pendingCount > 0 && !isLoading)
+                      Positioned(
+                        top: -6,
+                        right: -8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white, width: 1),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 14,
+                            minHeight: 14,
+                          ),
+                          child: Text(
+                            pendingCount > 9 ? '9+' : pendingCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 6),
                 Text(
                   text,
                   style: TextStyle(

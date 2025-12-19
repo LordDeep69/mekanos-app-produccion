@@ -87,6 +87,11 @@ export class EvidenciaDto {
     @IsOptional()
     @IsString()
     formato?: 'png' | 'jpg' | 'jpeg';
+
+    @ApiPropertyOptional({ description: 'ID del orden-equipo (para multi-equipos)' })
+    @IsOptional()
+    @IsNumber()
+    idOrdenEquipo?: number;
 }
 
 /**

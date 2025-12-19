@@ -1,24 +1,24 @@
 import { PrismaService } from '@mekanos/database';
 import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException
+    BadRequestException,
+    Injectable,
+    Logger,
+    NotFoundException
 } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { validarTransicion } from '../ordenes/domain/workflow-estados';
 import {
-  SyncActividadCatalogoDto,
-  SyncBatchResponseDto,
-  SyncDownloadResponseDto,
-  SyncOrdenDownloadDto,
-  SyncOrdenResultDto,
-  SyncParametroMedicionDto,
+    SyncActividadCatalogoDto,
+    SyncBatchResponseDto,
+    SyncDownloadResponseDto,
+    SyncOrdenDownloadDto,
+    SyncOrdenResultDto,
+    SyncParametroMedicionDto,
 } from './dto/sync-response.dto';
 import {
-  SyncBatchUploadDto,
-  SyncMedicionDto,
-  SyncOrdenDto,
+    SyncBatchUploadDto,
+    SyncMedicionDto,
+    SyncOrdenDto,
 } from './dto/sync-upload-orden.dto';
 
 /**
@@ -110,7 +110,7 @@ export class SyncService {
       const ordenServidor = await tx.ordenes_servicio.findUnique({
         where: { id_orden_servicio: dto.idOrdenServicio },
         include: {
-          estado: true,
+          estados_orden: true,
         },
       });
 
@@ -143,16 +143,16 @@ export class SyncService {
 
       // 4. Procesar cambio de estado si existe
       if (dto.cambioEstado) {
-        const estadoActual = ordenServidor.estado?.codigo_estado;
+        const estadoActual = ordenServidor.estados_orden?.codigo_estado;
 
         // Validar transición FSM
         try {
           validarTransicion(estadoActual, dto.cambioEstado.nuevoEstado);
-        } catch (error) {
+        } catch (error: unknown) {
           return {
             idOrdenServicio: dto.idOrdenServicio,
             success: false,
-            error: `Transición inválida: ${error.message}`,
+            error: `Transición inválida: ${(error as Error).message}`,
           };
         }
 
@@ -244,13 +244,10 @@ export class SyncService {
             await tx.actividades_ejecutadas.update({
               where: { id_actividad_ejecutada: actividadDto.serverId },
               data: {
-                estado_actividad: actividadDto.estadoActividad as any,
+                estado: actividadDto.estadoActividad as any,
                 observaciones: actividadDto.observaciones,
-                hora_inicio: actividadDto.horaInicio
+                fecha_ejecucion: actividadDto.horaInicio
                   ? new Date(actividadDto.horaInicio)
-                  : undefined,
-                hora_fin: actividadDto.horaFin
-                  ? new Date(actividadDto.horaFin)
                   : undefined,
               },
             });
@@ -264,15 +261,12 @@ export class SyncService {
               data: {
                 id_orden_servicio: dto.idOrdenServicio,
                 id_actividad_catalogo: actividadDto.idActividadCatalogo,
-                estado_actividad: actividadDto.estadoActividad as any,
+                estado: actividadDto.estadoActividad as any,
                 observaciones: actividadDto.observaciones,
-                hora_inicio: actividadDto.horaInicio
+                fecha_ejecucion: actividadDto.horaInicio
                   ? new Date(actividadDto.horaInicio)
                   : null,
-                hora_fin: actividadDto.horaFin
-                  ? new Date(actividadDto.horaFin)
-                  : null,
-                ejecutado_por: tecnicoId,
+                ejecutada_por: tecnicoId,
               },
             });
             actividadesMapping.push({
@@ -574,10 +568,10 @@ export class SyncService {
         id_tecnico_asignado: tecnicoId,
         OR: [
           // Órdenes activas (no finales)
-          { estado: { es_estado_final: false } },
+          { estados_orden: { es_estado_final: false } },
           // Órdenes completadas en los últimos 30 días (para historial)
           {
-            estado: { es_estado_final: true },
+            estados_orden: { es_estado_final: true },
             fecha_fin_real: { gte: treintaDiasAtras },
           },
         ],
@@ -587,23 +581,27 @@ export class SyncService {
     const ordenes = await this.prisma.ordenes_servicio.findMany({
       where: baseFilter,
       include: {
-        estado: true,
-        actividades_plan: {
+        estados_orden: true,
+        ordenes_actividades_plan: {
           orderBy: { orden_secuencia: 'asc' },
         },
-        cliente: {
+        clientes: {
           include: {
             persona: true,
           },
         },
-        sede: true,
-        equipo: true,
-        tipo_servicio: true,
+        sedes_cliente: true,
+        equipos: true,
+        tipos_servicio: true,
+        // ✅ Multi-Equipos: Incluir equipos asociados
+        ordenes_equipos: {
+          include: {
+            equipos: true,
+          },
+          orderBy: { orden_secuencia: 'asc' },
+        },
         // ✅ FIX: Incluir informes para obtener URL del PDF
         informes: {
-          include: {
-            documento_pdf: true,
-          },
           orderBy: { fecha_generacion: 'desc' },
           take: 1,
         },
@@ -783,29 +781,29 @@ export class SyncService {
       numeroOrden: o.numero_orden,
       version: o.fecha_modificacion?.getTime() || 0,
       idEstadoActual: o.id_estado_actual,
-      codigoEstado: o.estado?.codigo_estado || '',
-      nombreEstado: o.estado?.nombre_estado || '',
+      codigoEstado: o.estados_orden?.codigo_estado || '',
+      nombreEstado: o.estados_orden?.nombre_estado || '',
       fechaProgramada: o.fecha_programada?.toISOString(),
       prioridad: o.prioridad as string,
       idCliente: o.id_cliente,
       nombreCliente:
-        o.cliente?.persona?.nombre_completo ||
-        o.cliente?.persona?.razon_social ||
+        o.clientes?.persona?.nombre_completo ||
+        o.clientes?.persona?.razon_social ||
         'Sin nombre',
-      idSede: o.id_sede,
-      nombreSede: o.sede?.nombre_sede,
-      direccionSede: o.sede?.direccion_sede,
+      idSede: o.id_sede ?? undefined,
+      nombreSede: o.sedes_cliente?.nombre_sede,
+      direccionSede: o.sedes_cliente?.direccion_sede,
       idEquipo: o.id_equipo,
-      codigoEquipo: o.equipo?.codigo_equipo || '',
-      nombreEquipo: o.equipo?.nombre_equipo || '',
-      ubicacionEquipo: o.equipo?.ubicacion_texto,
-      idTipoServicio: o.id_tipo_servicio,
-      codigoTipoServicio: o.tipo_servicio?.codigo_tipo || '',
-      nombreTipoServicio: o.tipo_servicio?.nombre_tipo || '',
+      codigoEquipo: o.equipos?.codigo_equipo || '',
+      nombreEquipo: o.equipos?.nombre_equipo || '',
+      ubicacionEquipo: o.equipos?.ubicacion_texto,
+      idTipoServicio: o.id_tipo_servicio ?? undefined,
+      codigoTipoServicio: o.tipos_servicio?.codigo_tipo || '',
+      nombreTipoServicio: o.tipos_servicio?.nombre_tipo || '',
       descripcionInicial: o.descripcion_inicial,
       trabajoRealizado: o.trabajo_realizado,
       observacionesTecnico: o.observaciones_tecnico,
-      actividadesPlan: (o as any).actividades_plan?.map((p: any) => ({
+      actividadesPlan: o.ordenes_actividades_plan?.map((p: any) => ({
         idActividadCatalogo: p.id_actividad_catalogo,
         ordenSecuencia: p.orden_secuencia,
         origen: p.origen,
@@ -855,6 +853,28 @@ export class SyncService {
       medicionesNormales: medicionesNormalesMap.get(o.id_orden_servicio) || 0,
       medicionesAdvertencia: medicionesAdvertenciaMap.get(o.id_orden_servicio) || 0,
       medicionesCriticas: medicionesCriticasMap.get(o.id_orden_servicio) || 0,
+      // ✅ Multi-Equipos: Mapear equipos asociados (vacío = orden tradicional 1 equipo)
+      ordenesEquipos: (() => {
+        const mapped = o.ordenes_equipos?.map((oe) => ({
+          idOrdenEquipo: oe.id_orden_equipo,
+          idOrdenServicio: oe.id_orden_servicio,
+          idEquipo: oe.id_equipo,
+          ordenSecuencia: oe.orden_secuencia,
+          nombreSistema: oe.nombre_sistema || undefined,
+          estado: oe.estado || 'PENDIENTE',
+          fechaInicio: oe.fecha_inicio?.toISOString(),
+          fechaFin: oe.fecha_fin?.toISOString(),
+          observaciones: oe.observaciones || undefined,
+          codigoEquipo: oe.equipos?.codigo_equipo || '',
+          nombreEquipo: oe.equipos?.nombre_equipo || '',
+          ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
+        })) || [];
+        // Log para diagnóstico de multi-equipos
+        if (mapped.length > 1) {
+          this.logger.log(`[🔧 MULTI-EQUIPO] Orden ${o.numero_orden} (ID ${o.id_orden_servicio}) tiene ${mapped.length} equipos`);
+        }
+        return mapped;
+      })(),
       fechaCreacion: o.fecha_creacion?.toISOString() || new Date().toISOString(),
       fechaModificacion: o.fecha_modificacion?.toISOString(),
     }));
@@ -1002,7 +1022,7 @@ export class SyncService {
         numero_orden: true,
         id_estado_actual: true,
         fecha_modificacion: true,
-        estado: {
+        estados_orden: {
           select: {
             codigo_estado: true,
           },
@@ -1041,7 +1061,7 @@ export class SyncService {
       id: o.id_orden_servicio,
       numeroOrden: o.numero_orden,
       estadoId: o.id_estado_actual,
-      estadoCodigo: o.estado?.codigo_estado || 'DESCONOCIDO',
+      estadoCodigo: o.estados_orden?.codigo_estado || 'DESCONOCIDO',
       fechaModificacion: o.fecha_modificacion?.toISOString() || new Date().toISOString(),
       urlPdf: pdfMap.get(o.id_orden_servicio) || undefined,
     }));
@@ -1066,15 +1086,15 @@ export class SyncService {
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: ordenId },
       include: {
-        estado: true,
-        cliente: {
+        estados_orden: true,
+        clientes: {
           include: {
             persona: true,
           },
         },
-        sede: true,
-        equipo: true,
-        tipo_servicio: true,
+        sedes_cliente: true,
+        equipos: true,
+        tipos_servicio: true,
         // PDF se busca directamente en documentos_generados por id_referencia
       },
     });
@@ -1185,23 +1205,23 @@ export class SyncService {
       numeroOrden: orden.numero_orden,
       version: orden.fecha_modificacion?.getTime() || 1,
       idEstadoActual: orden.id_estado_actual,
-      codigoEstado: orden.estado?.codigo_estado || 'DESCONOCIDO',
-      nombreEstado: orden.estado?.nombre_estado || 'Desconocido',
+      codigoEstado: orden.estados_orden?.codigo_estado || 'DESCONOCIDO',
+      nombreEstado: orden.estados_orden?.nombre_estado || 'Desconocido',
       fechaProgramada: orden.fecha_programada?.toISOString(),
       prioridad: orden.prioridad || 'NORMAL',
       idCliente: orden.id_cliente,
-      nombreCliente: orden.cliente?.persona?.nombre_completo || orden.cliente?.persona?.razon_social || 'Cliente',
+      nombreCliente: orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
       idSede: orden.id_sede ?? undefined,
-      nombreSede: orden.sede?.nombre_sede ?? undefined,
-      direccionSede: orden.sede?.direccion_sede ?? undefined,
+      nombreSede: orden.sedes_cliente?.nombre_sede ?? undefined,
+      direccionSede: orden.sedes_cliente?.direccion_sede ?? undefined,
       idEquipo: orden.id_equipo,
-      codigoEquipo: orden.equipo?.codigo_equipo || '',
-      nombreEquipo: orden.equipo?.nombre_equipo || 'Equipo',
-      serieEquipo: orden.equipo?.numero_serie_equipo ?? undefined,
-      ubicacionEquipo: orden.equipo?.ubicacion_texto ?? undefined,
+      codigoEquipo: orden.equipos?.codigo_equipo || '',
+      nombreEquipo: orden.equipos?.nombre_equipo || 'Equipo',
+      serieEquipo: orden.equipos?.numero_serie_equipo ?? undefined,
+      ubicacionEquipo: orden.equipos?.ubicacion_texto ?? undefined,
       idTipoServicio: orden.id_tipo_servicio ?? undefined,
-      codigoTipoServicio: orden.tipo_servicio?.codigo_tipo ?? undefined,
-      nombreTipoServicio: orden.tipo_servicio?.nombre_tipo ?? undefined,
+      codigoTipoServicio: orden.tipos_servicio?.codigo_tipo ?? undefined,
+      nombreTipoServicio: orden.tipos_servicio?.nombre_tipo ?? undefined,
       descripcionInicial: orden.descripcion_inicial ?? undefined,
       trabajoRealizado: orden.trabajo_realizado ?? undefined,
       observacionesTecnico: orden.observaciones_tecnico ?? undefined,

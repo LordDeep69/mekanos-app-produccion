@@ -8,6 +8,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/sync/background_sync_worker.dart';
 import '../../../core/sync/connectivity_service.dart';
 import '../../../core/sync/offline_sync_service.dart';
+import '../../../core/sync/sync_progress.dart';
 
 /// Pantalla de órdenes pendientes de sincronización
 ///
@@ -418,37 +419,43 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
     return DateFormat('dd/MM/yyyy HH:mm').format(date);
   }
 
-  /// Sube una orden individual
+  /// Sube una orden individual CON FEEDBACK DE PROGRESO
   Future<void> _subirOrdenIndividual(int idOrdenLocal) async {
     setState(() => _syncingOrders.add(idOrdenLocal));
+
+    // ✅ NUEVO: Mostrar diálogo de progreso
+    // ignore: unawaited_futures
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const _SyncProgressDialog(),
+    );
 
     try {
       final offlineSync = ref.read(offlineSyncServiceProvider);
       final success = await offlineSync.reintentarOrden(idOrdenLocal);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(
-                  success ? Icons.check_circle : Icons.error_outline,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  success
-                      ? '✅ Orden subida correctamente'
-                      : '❌ Error al subir. Intenta de nuevo.',
-                ),
-              ],
-            ),
-            backgroundColor: success ? Colors.green : Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        // El diálogo se cierra solo cuando el progreso llega a completado/error
         // Refrescar lista
         ref.invalidate(pendingSyncListProvider);
+        
+        // Mostrar snackbar adicional si hay error
+        if (!success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('❌ Error al subir. Revisa los detalles.'),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) {
@@ -490,5 +497,216 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         setState(() => _isSyncingAll = false);
       }
     }
+  }
+}
+
+/// ✅ WIDGET DE DIÁLOGO DE PROGRESO DE SINCRONIZACIÓN
+/// Muestra el progreso en tiempo real de la subida al servidor
+class _SyncProgressDialog extends ConsumerWidget {
+  const _SyncProgressDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progress = ref.watch(syncProgressProvider);
+
+    return PopScope(
+      // No permitir cerrar con back mientras está en progreso
+      canPop: progress.pasoActual == SyncStep.completado ||
+          progress.pasoActual == SyncStep.error,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            if (progress.pasoActual == SyncStep.completado)
+              const Icon(Icons.check_circle, color: Colors.green, size: 28)
+            else if (progress.pasoActual == SyncStep.error)
+              const Icon(Icons.error, color: Colors.red, size: 28)
+            else
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                progress.pasoActual == SyncStep.completado
+                    ? '¡Sincronización Exitosa!'
+                    : progress.pasoActual == SyncStep.error
+                        ? 'Error en Sincronización'
+                        : 'Sincronizando...',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Lista de pasos con estados
+              _buildStepItem(
+                step: SyncStep.preparando,
+                progress: progress,
+                icon: Icons.settings,
+              ),
+              _buildStepItem(
+                step: SyncStep.evidencias,
+                progress: progress,
+                icon: Icons.photo_camera,
+              ),
+              _buildStepItem(
+                step: SyncStep.firmas,
+                progress: progress,
+                icon: Icons.draw,
+              ),
+              _buildStepItem(
+                step: SyncStep.enviando,
+                progress: progress,
+                icon: Icons.cloud_upload,
+              ),
+              _buildStepItem(
+                step: SyncStep.pdf,
+                progress: progress,
+                icon: Icons.picture_as_pdf,
+              ),
+              _buildStepItem(
+                step: SyncStep.email,
+                progress: progress,
+                icon: Icons.email,
+              ),
+
+              // Mensaje de error si hay
+              if (progress.pasoActual == SyncStep.error &&
+                  progress.mensajeError != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          progress.mensajeError!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Mensaje de éxito
+              if (progress.pasoActual == SyncStep.completado) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.celebration,
+                          color: Colors.green.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          '¡Orden sincronizada correctamente! PDF generado y email enviado.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          // Solo mostrar botón cuando esté completado o error
+          if (progress.pasoActual == SyncStep.completado ||
+              progress.pasoActual == SyncStep.error)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: progress.pasoActual == SyncStep.completado
+                    ? Colors.green
+                    : Colors.blue,
+              ),
+              onPressed: () {
+                Navigator.of(context).pop(); // Cerrar diálogo
+              },
+              child: Text(progress.pasoActual == SyncStep.completado
+                  ? 'CONTINUAR'
+                  : 'CERRAR'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepItem({
+    required SyncStep step,
+    required SyncProgress progress,
+    required IconData icon,
+  }) {
+    final isCompleted = progress.pasosCompletados.contains(step);
+    final isActive = progress.pasoActual == step;
+    final isError = progress.pasoActual == SyncStep.error && isActive;
+    final isPending = !isCompleted && !isActive;
+
+    Color color;
+    Widget leading;
+
+    if (isCompleted) {
+      color = Colors.green;
+      leading = const Icon(Icons.check_circle, color: Colors.green, size: 22);
+    } else if (isError) {
+      color = Colors.red;
+      leading = const Icon(Icons.error, color: Colors.red, size: 22);
+    } else if (isActive) {
+      color = Colors.blue;
+      leading = const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else {
+      color = Colors.grey.shade400;
+      leading = Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 22);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 12),
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isCompleted ? step.nombreCompletado : step.nombre,
+              style: TextStyle(
+                fontSize: 14,
+                color: color,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                decoration: isCompleted ? TextDecoration.none : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

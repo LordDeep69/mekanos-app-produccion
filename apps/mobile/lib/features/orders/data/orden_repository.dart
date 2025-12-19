@@ -90,6 +90,10 @@ class OrdenRepository {
   ///
   /// CRÍTICO: Las actividades son las del CATÁLOGO (lo que se debe hacer),
   /// no las ejecutadas (lo que ya se hizo). Las ejecutadas se cargarán aparte.
+  ///
+  /// PRIORIDAD:
+  /// 1. Si existe plan de actividades asignado por admin → usar plan
+  /// 2. Si no → usar catálogo por tipo de servicio (comportamiento original)
   Future<OrdenDetalleFull?> getDetalleCompleto(int idOrdenLocal) async {
     final orden = await _db.getOrdenById(idOrdenLocal);
     if (orden == null) return null;
@@ -106,9 +110,28 @@ class OrdenRepository {
     final estado = await _db.getEstadoOrdenById(orden.idEstado);
     if (estado == null) return null;
 
-    final actividades = await _db.getActividadesByTipoServicio(
-      orden.idTipoServicio,
-    );
+    // ✅ PRIORIDAD: Verificar si existe plan de actividades para esta orden
+    List<ActividadesCatalogoData> actividades = [];
+
+    final planActividades = await _db.getPlanActividadesByOrden(idOrdenLocal);
+    if (planActividades.isNotEmpty) {
+      // ✅ USAR PLAN DE ACTIVIDADES ASIGNADO POR ADMIN
+      for (final planItem in planActividades) {
+        final actCatalogo = await (_db.select(_db.actividadesCatalogo)
+              ..where((a) => a.id.equals(planItem.idActividadCatalogo)))
+            .getSingleOrNull();
+        if (actCatalogo != null) {
+          actividades.add(actCatalogo);
+        }
+      }
+    }
+
+    // Si no hay plan o el plan está vacío, usar catálogo por tipo de servicio
+    if (actividades.isEmpty) {
+      actividades = await _db.getActividadesByTipoServicio(
+        orden.idTipoServicio,
+      );
+    }
 
     return OrdenDetalleFull(
       orden: orden,

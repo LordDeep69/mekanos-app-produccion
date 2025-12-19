@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' show DateFormat;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart'
     show SyncUploadResult, syncUploadServiceProvider;
 import '../../auth/data/auth_provider.dart';
@@ -2242,51 +2243,18 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Ejecuta la sincronización con el backend
+  /// ✅ 19-DIC-2025: Con feedback de progreso en tiempo real
   Future<void> _ejecutarFinalizacion({
     required String horaEntrada,
     required String horaSalida,
     required String observaciones,
     String? razonFalla,
   }) async {
-    // ✅ MEJORA: Mostrar loading con más información
+    // ✅ 19-DIC-2025: Mostrar diálogo con progreso reactivo
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text(
-              'Finalizando servicio...',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  _buildLoadingStep(Icons.photo, 'Subiendo evidencias...'),
-                  _buildLoadingStep(Icons.gesture, 'Subiendo firmas...'),
-                  _buildLoadingStep(Icons.picture_as_pdf, 'Generando PDF...'),
-                  _buildLoadingStep(Icons.email, 'Enviando notificación...'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Este proceso puede tardar hasta 30 segundos.\nNo cierres la aplicación.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
+      builder: (ctx) => const _SyncProgressDialog(),
     );
 
     try {
@@ -2976,6 +2944,220 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// ✅ WIDGET DE DIÁLOGO DE PROGRESO DE SINCRONIZACIÓN
+/// Muestra el progreso en tiempo real de la subida al servidor
+class _SyncProgressDialog extends ConsumerWidget {
+  const _SyncProgressDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progress = ref.watch(syncProgressProvider);
+
+    return PopScope(
+      // No permitir cerrar con back mientras está en progreso
+      canPop: progress.pasoActual == SyncStep.completado ||
+          progress.pasoActual == SyncStep.error,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            if (progress.pasoActual == SyncStep.completado)
+              const Icon(Icons.check_circle, color: Colors.green, size: 28)
+            else if (progress.pasoActual == SyncStep.error)
+              const Icon(Icons.error, color: Colors.red, size: 28)
+            else
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                progress.pasoActual == SyncStep.completado
+                    ? '¡Sincronización Exitosa!'
+                    : progress.pasoActual == SyncStep.error
+                        ? 'Error en Sincronización'
+                        : 'Sincronizando...',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Lista de pasos con estados
+              _buildStepItem(
+                step: SyncStep.preparando,
+                progress: progress,
+                icon: Icons.settings,
+              ),
+              _buildStepItem(
+                step: SyncStep.evidencias,
+                progress: progress,
+                icon: Icons.photo_camera,
+              ),
+              _buildStepItem(
+                step: SyncStep.firmas,
+                progress: progress,
+                icon: Icons.draw,
+              ),
+              _buildStepItem(
+                step: SyncStep.enviando,
+                progress: progress,
+                icon: Icons.cloud_upload,
+              ),
+              _buildStepItem(
+                step: SyncStep.pdf,
+                progress: progress,
+                icon: Icons.picture_as_pdf,
+              ),
+              _buildStepItem(
+                step: SyncStep.email,
+                progress: progress,
+                icon: Icons.email,
+              ),
+
+              // Mensaje de error si hay
+              if (progress.pasoActual == SyncStep.error &&
+                  progress.mensajeError != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          progress.mensajeError!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Mensaje de éxito
+              if (progress.pasoActual == SyncStep.completado) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.celebration,
+                          color: Colors.green.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          '¡Orden sincronizada correctamente! PDF generado y email enviado.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          // Solo mostrar botón cuando esté completado o error
+          if (progress.pasoActual == SyncStep.completado ||
+              progress.pasoActual == SyncStep.error)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: progress.pasoActual == SyncStep.completado
+                    ? Colors.green
+                    : Colors.blue,
+              ),
+              onPressed: () {
+                Navigator.of(context).pop(); // Cerrar diálogo
+                if (progress.pasoActual == SyncStep.completado) {
+                  Navigator.of(context).pop(); // Volver a lista de órdenes
+                }
+              },
+              child: Text(progress.pasoActual == SyncStep.completado
+                  ? 'CONTINUAR'
+                  : 'CERRAR'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepItem({
+    required SyncStep step,
+    required SyncProgress progress,
+    required IconData icon,
+  }) {
+    final isCompleted = progress.pasosCompletados.contains(step);
+    final isActive = progress.pasoActual == step;
+    final isError = progress.pasoActual == SyncStep.error && isActive;
+    final isPending = !isCompleted && !isActive;
+
+    Color color;
+    Widget leading;
+
+    if (isCompleted) {
+      color = Colors.green;
+      leading = const Icon(Icons.check_circle, color: Colors.green, size: 22);
+    } else if (isError) {
+      color = Colors.red;
+      leading = const Icon(Icons.error, color: Colors.red, size: 22);
+    } else if (isActive) {
+      color = Colors.blue;
+      leading = const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else {
+      color = Colors.grey.shade400;
+      leading = Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 22);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 12),
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isCompleted ? step.nombreCompletado : step.nombre,
+              style: TextStyle(
+                fontSize: 14,
+                color: color,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                decoration: isCompleted ? TextDecoration.none : null,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

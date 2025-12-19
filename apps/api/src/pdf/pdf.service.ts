@@ -18,14 +18,14 @@
 import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import {
-  DatosCorrectivoOrdenPDF,
-  DatosCotizacionPDF,
-  DatosOrdenPDF,
-  generarCorrectivoOrdenHTML,
-  generarCotizacionHTML,
-  generarTipoABombaHTML,
-  generarTipoAGeneradorHTML,
-  generarTipoBGeneradorHTML,
+    DatosCorrectivoOrdenPDF,
+    DatosCotizacionPDF,
+    DatosOrdenPDF,
+    generarCorrectivoOrdenHTML,
+    generarCotizacionHTML,
+    generarTipoABombaHTML,
+    generarTipoAGeneradorHTML,
+    generarTipoBGeneradorHTML,
 } from './templates';
 
 export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
@@ -195,25 +195,41 @@ export class PdfService implements OnModuleDestroy {
       modeloEquipo: '',
       serieEquipo: datos.serieEquipo,
       tecnico: datos.tecnico,
-      problemaReportado: {
-        descripcion: datos.observaciones || 'Servicio de mantenimiento correctivo solicitado',
-        fechaReporte: datos.fecha,
-      },
-      diagnostico: {
-        descripcion: 'Diagnóstico realizado en sitio',
-        causaRaiz: 'Determinado durante la inspección técnica',
-        sistemasAfectados: [...new Set(trabajosEjecutados.map(t => t.sistema))],
-      },
+      // ✅ FIX 14-DIC-2025: Separar correctamente cada campo sin usar observaciones como fallback universal
+      // IMPORTANTE: problemaReportado y diagnostico deben mostrarse SOLO si tienen valor real
+      problemaReportado: datos.problemaReportado?.descripcion ? {
+        descripcion: datos.problemaReportado.descripcion,
+        fechaReporte: datos.problemaReportado.fechaReporte || datos.fecha,
+      } : undefined,
+      diagnostico: datos.diagnostico ? {
+        descripcion: datos.diagnostico.descripcion || 'Diagnóstico realizado en sitio',
+        causaRaiz: datos.diagnostico.causaRaiz || 'Pendiente de análisis',
+        sistemasAfectados: datos.diagnostico.sistemasAfectados || [...new Set(trabajosEjecutados.map(t => t.sistema))],
+      } : undefined,
       trabajosEjecutados,
       repuestosUtilizados: [],
       mediciones: medicionesConValor.length > 0 ? medicionesConValor : undefined,
       recomendaciones: ['Seguir plan de mantenimiento preventivo programado'],
       observaciones: datos.observaciones,
-      evidencias: (datos.evidencias || []).map(e => ({
-        tipo: 'DURANTE' as const,
-        url: typeof e === 'string' ? e : e.url,
-        descripcion: typeof e === 'string' ? undefined : e.caption,
-      })),
+      // ✅ FIX 17-DIC-2025: MULTI-EQUIPOS - Pasar datos agrupados por equipo
+      esMultiEquipo: datos.esMultiEquipo,
+      actividadesPorEquipo: datos.actividadesPorEquipo,
+      medicionesPorEquipo: datos.medicionesPorEquipo,
+      evidenciasPorEquipo: datos.evidenciasPorEquipo,
+      // ✅ FIX: Preservar caption con formato ANTES:/DURANTE:/DESPUÉS: para que el template agrupe correctamente
+      evidencias: (datos.evidencias || []).map(e => {
+        const caption = typeof e === 'string' ? undefined : e.caption;
+        // Extraer tipo del caption si existe (formato "ANTES: descripción" o "DURANTE: descripción")
+        const tipoMatch = caption?.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS):/i);
+        const tipo = tipoMatch 
+          ? (tipoMatch[1].toUpperCase() === 'DESPUÉS' ? 'DESPUES' : tipoMatch[1].toUpperCase()) as 'ANTES' | 'DURANTE' | 'DESPUES'
+          : 'DURANTE';
+        return {
+          tipo,
+          url: typeof e === 'string' ? e : e.url,
+          descripcion: caption,
+        };
+      }),
       firmaTecnico: datos.firmaTecnico,
       firmaCliente: datos.firmaCliente,
     };

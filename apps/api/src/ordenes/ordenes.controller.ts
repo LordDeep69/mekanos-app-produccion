@@ -1,20 +1,20 @@
 import { PrismaService } from '@mekanos/database';
 import {
-  BadRequestException,
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  NotFoundException,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Put,
-  Query,
-  UseGuards,
+    BadRequestException,
+    Body,
+    Controller,
+    Delete,
+    Get,
+    HttpCode,
+    HttpStatus,
+    NotFoundException,
+    Param,
+    ParseIntPipe,
+    Patch,
+    Post,
+    Put,
+    Query,
+    UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -86,7 +86,7 @@ export class OrdenesController {
       throw new NotFoundException('Orden no encontrada');
     }
 
-    const plan = await (this.prisma as any).ordenes_actividades_plan.findMany({
+    const plan = await this.prisma.ordenes_actividades_plan.findMany({
       where: { id_orden_servicio: id },
       orderBy: { orden_secuencia: 'asc' },
     });
@@ -127,12 +127,12 @@ export class OrdenesController {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await (tx as any).ordenes_actividades_plan.deleteMany({
+      await tx.ordenes_actividades_plan.deleteMany({
         where: { id_orden_servicio: id },
       });
 
       if (actividades.length > 0) {
-        await (tx as any).ordenes_actividades_plan.createMany({
+        await tx.ordenes_actividades_plan.createMany({
           data: actividades.map((a, index) => {
             if (!a || typeof a.idActividadCatalogo !== 'number') {
               throw new BadRequestException(
@@ -199,11 +199,11 @@ export class OrdenesController {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await (tx as any).ordenes_actividades_plan.deleteMany({
+      await tx.ordenes_actividades_plan.deleteMany({
         where: { id_orden_servicio: id },
       });
 
-      await (tx as any).ordenes_actividades_plan.createMany({
+      await tx.ordenes_actividades_plan.createMany({
         data: actividadesCatalogo.map((a, index) => ({
           id_orden_servicio: id,
           id_actividad_catalogo: a.id_actividad_catalogo,
@@ -235,7 +235,7 @@ export class OrdenesController {
       throw new NotFoundException('Orden no encontrada');
     }
 
-    await (this.prisma as any).ordenes_actividades_plan.deleteMany({
+    await this.prisma.ordenes_actividades_plan.deleteMany({
       where: { id_orden_servicio: id },
     });
 
@@ -438,16 +438,18 @@ export class OrdenesController {
     console.log('[OrdenesController] Command executed, returning simplified response');
 
     // SIMPLIFY RESPONSE TO AVOID CIRCULAR REFS OR HUGE PAYLOAD
+    // ✅ FIX 15-DIC-2025: Corregidos nombres de propiedades según schema Prisma
+    const tecnico = result.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
     return {
       success: true,
       message: 'Técnico asignado exitosamente',
       data: {
         id_orden_servicio: result.id_orden_servicio,
         numero_orden: result.numero_orden,
-        estado: result.estado,
-        tecnico: result.tecnico ? {
-          id_empleado: result.tecnico.id_empleado,
-          persona: result.tecnico.persona
+        estado: result.estados_orden,
+        tecnico: tecnico ? {
+          id_empleado: tecnico.id_empleado,
+          persona: tecnico.persona
         } : null
       },
     };
@@ -629,9 +631,13 @@ export class OrdenesController {
     console.log('🔬 ═══════════════════════════════════════════════════════════════');
     console.log('');
     console.log('📋 EVIDENCIAS recibidas:', dto.evidencias?.length || 0);
-    dto.evidencias?.slice(0, 3).forEach((ev, i) => {
-      console.log(`   [${i}] tipo="${ev.tipo}", base64=${ev.base64?.length || 0} chars`);
+    // ✅ FIX 17-DIC-2025: Log forense de idOrdenEquipo para diagnóstico multi-equipo
+    dto.evidencias?.slice(0, 5).forEach((ev, i) => {
+      console.log(`   [${i}] tipo="${ev.tipo}", idOrdenEquipo=${ev.idOrdenEquipo ?? 'NULL'}, desc="${ev.descripcion?.substring(0, 30) ?? 'N/A'}...", base64=${ev.base64?.length || 0} chars`);
     });
+    if (dto.evidencias?.length > 5) {
+      console.log(`   ... y ${dto.evidencias.length - 5} evidencias más`);
+    }
     console.log('');
     console.log('✍️ FIRMAS:');
     console.log(`   tecnico: tipo="${dto.firmas?.tecnico?.tipo}", idPersona=${dto.firmas?.tecnico?.idPersona}`);
@@ -658,6 +664,8 @@ export class OrdenesController {
         base64: e.base64,
         descripcion: e.descripcion,
         formato: e.formato,
+        // ✅ FIX 17-DIC-2025: Incluir idOrdenEquipo para multi-equipos
+        idOrdenEquipo: e.idOrdenEquipo,
       })),
       firmas: {
         tecnico: {

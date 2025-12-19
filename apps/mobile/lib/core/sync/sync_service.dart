@@ -536,8 +536,34 @@ class SyncService {
             if (debeActualizar) {
               await _db.updateOrden(ordenCompanion, existingOrden.idLocal);
             }
+
+            // ✅ NUEVO: Guardar plan de actividades si existe
+            final planData = orden['actividadesPlan'] as List?;
+            debugPrint('🎯 [SYNC] Orden ${orden['numeroOrden']} - Plan data: ${planData?.length ?? 0} items');
+            await _guardarPlanActividades(
+              existingOrden.idLocal,
+              planData,
+            );
+
+            // ✅ NUEVO: Guardar equipos de la orden (multi-equipos)
+            final equiposData = orden['ordenesEquipos'] as List?;
+            debugPrint('🔧 [SYNC] Orden ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposData?.length ?? 0}');
+            await _guardarOrdenesEquipos(idOrden as int, equiposData);
           } else {
-            await _db.insertOrdenFromSync(ordenCompanion);
+            final idLocalNueva = await _db.insertOrdenFromSync(ordenCompanion);
+
+            // ✅ NUEVO: Guardar plan de actividades si existe
+            final planDataNueva = orden['actividadesPlan'] as List?;
+            debugPrint('🎯 [SYNC] Orden NUEVA ${orden['numeroOrden']} - Plan data: ${planDataNueva?.length ?? 0} items');
+            await _guardarPlanActividades(
+              idLocalNueva,
+              planDataNueva,
+            );
+
+            // ✅ NUEVO: Guardar equipos de la orden (multi-equipos)
+            final equiposDataNueva = orden['ordenesEquipos'] as List?;
+            debugPrint('🔧 [SYNC] Orden NUEVA ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposDataNueva?.length ?? 0}');
+            await _guardarOrdenesEquipos(idOrden as int, equiposDataNueva);
           }
           ordenesCount++;
         } catch (e) {
@@ -551,6 +577,86 @@ class SyncService {
       'clientes': clientesIds.length,
       'equipos': equiposIds.length,
     };
+  }
+
+  /// ✅ NUEVO: Guardar plan de actividades de una orden
+  /// Si la orden tiene un plan asignado por admin, se guarda localmente
+  /// para usar en vez del catálogo por tipo de servicio
+  Future<void> _guardarPlanActividades(int idOrdenLocal, List? planData) async {
+    // Si no hay plan, limpiar cualquier plan anterior y salir
+    if (planData == null || planData.isEmpty) {
+      await _db.clearPlanActividades(idOrdenLocal);
+      return;
+    }
+
+    // Limpiar plan anterior
+    await _db.clearPlanActividades(idOrdenLocal);
+
+    // Insertar nuevo plan
+    for (final item in planData) {
+      final idActividadCatalogo = item['idActividadCatalogo'] as int?;
+      if (idActividadCatalogo == null) continue;
+
+      await _db.insertActividadPlan(
+        ActividadesPlanCompanion(
+          idOrden: Value(idOrdenLocal),
+          idActividadCatalogo: Value(idActividadCatalogo),
+          ordenSecuencia: Value(item['ordenSecuencia'] as int? ?? 1),
+          origen: Value(item['origen'] as String? ?? 'ADMIN'),
+          esObligatoria: Value(item['esObligatoria'] as bool? ?? true),
+          lastSyncedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+
+    debugPrint(
+      '🎯 [SYNC] Guardado plan de actividades: ${planData.length} items para orden $idOrdenLocal',
+    );
+  }
+
+  /// ✅ NUEVO: Guardar equipos de una orden (multi-equipos)
+  /// Si la orden tiene múltiples equipos, se guardan localmente
+  /// para mostrar en UI y asociar actividades/mediciones/evidencias
+  Future<void> _guardarOrdenesEquipos(
+      int idOrdenServicio, List? equiposData) async {
+    // Debug: Ver qué llega del backend
+    debugPrint('🔍 [SYNC-DEBUG] _guardarOrdenesEquipos($idOrdenServicio) - equiposData: ${equiposData?.length ?? "null"}');
+    
+    // Si no hay equipos, limpiar cualquier dato anterior y salir
+    if (equiposData == null || equiposData.isEmpty) {
+      await _db.clearEquiposDeOrden(idOrdenServicio);
+      return;
+    }
+
+    // Limpiar equipos anteriores de esta orden
+    await _db.clearEquiposDeOrden(idOrdenServicio);
+
+    // Insertar nuevos equipos
+    for (final item in equiposData) {
+      final idOrdenEquipo = item['idOrdenEquipo'] as int?;
+      final idEquipo = item['idEquipo'] as int?;
+      if (idOrdenEquipo == null || idEquipo == null) continue;
+
+      await _db.upsertOrdenEquipo(
+        OrdenesEquiposCompanion(
+          idOrdenEquipo: Value(idOrdenEquipo),
+          idOrdenServicio: Value(idOrdenServicio),
+          idEquipo: Value(idEquipo),
+          ordenSecuencia: Value(item['ordenSecuencia'] as int? ?? 1),
+          nombreSistema: Value(item['nombreSistema'] as String?),
+          codigoEquipo: Value(item['codigoEquipo'] as String?),
+          nombreEquipo: Value(item['nombreEquipo'] as String?),
+          estado: Value(item['estado'] as String? ?? 'PENDIENTE'),
+          fechaInicio: Value(_parseDateTime(item['fechaInicio'])),
+          fechaFin: Value(_parseDateTime(item['fechaFin'])),
+          lastSyncedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+
+    debugPrint(
+      '🔧 [SYNC] Guardados ${equiposData.length} equipos para orden $idOrdenServicio (multi-equipos)',
+    );
   }
 
   /// Parsear fecha desde string
