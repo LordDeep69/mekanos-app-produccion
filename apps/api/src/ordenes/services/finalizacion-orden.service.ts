@@ -195,6 +195,61 @@ export interface FinalizarOrdenDto {
 }
 
 /**
+ * ============================================================================
+ * EVENTOS DE PROGRESO PARA STREAMING EN TIEMPO REAL
+ * ============================================================================
+ * 
+ * Estos eventos se emiten al cliente durante el proceso de finalización
+ * para mostrar el progreso en tiempo real en la app móvil.
+ */
+
+/**
+ * Pasos del proceso de finalización
+ */
+export type FinalizacionStep = 
+    | 'validando'           // Paso 0: Validando datos
+    | 'obteniendo_orden'    // Paso 1: Obteniendo datos de la orden
+    | 'evidencias'          // Paso 2: Subiendo evidencias a Cloudinary
+    | 'firmas'              // Paso 3: Registrando firmas digitales
+    | 'actividades'         // Paso 3.5: Registrando actividades
+    | 'mediciones'          // Paso 3.6: Registrando mediciones
+    | 'generando_pdf'       // Paso 4: Generando PDF
+    | 'subiendo_pdf'        // Paso 5: Subiendo PDF a R2
+    | 'registrando_doc'     // Paso 6: Registrando documento en BD
+    | 'enviando_email'      // Paso 7: Enviando email
+    | 'actualizando_estado' // Paso 8: Actualizando estado
+    | 'completado'          // Finalizado exitosamente
+    | 'error';              // Error en el proceso
+
+/**
+ * Estado del paso
+ */
+export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'error';
+
+/**
+ * Evento de progreso emitido durante la finalización
+ */
+export interface ProgressEvent {
+    /** Paso actual del proceso */
+    step: FinalizacionStep;
+    /** Estado del paso */
+    status: StepStatus;
+    /** Mensaje descriptivo */
+    message: string;
+    /** Porcentaje de progreso total (0-100) */
+    progress: number;
+    /** Datos adicionales opcionales */
+    data?: Record<string, unknown>;
+    /** Timestamp del evento */
+    timestamp: number;
+}
+
+/**
+ * Tipo para el callback de progreso
+ */
+export type ProgressCallback = (event: ProgressEvent) => void;
+
+/**
  * Resultado de la finalización
  */
 export interface FinalizacionResult {
@@ -250,10 +305,36 @@ export class FinalizacionOrdenService {
      * MÉTODO PRINCIPAL: Finaliza una orden de servicio
      * 
      * Ejecuta todo el flujo de finalización de forma transaccional
+     * 
+     * @param dto Datos para finalizar la orden
+     * @param onProgress Callback opcional para emitir eventos de progreso en tiempo real
      */
-    async finalizarOrden(dto: FinalizarOrdenDto): Promise<FinalizacionResult> {
+    async finalizarOrden(
+        dto: FinalizarOrdenDto,
+        onProgress?: ProgressCallback,
+    ): Promise<FinalizacionResult> {
         const startTime = Date.now();
         this.logger.log(`🚀 Iniciando finalización de orden ${dto.idOrden}`);
+
+        // Helper para emitir progreso
+        const emitProgress = (
+            step: FinalizacionStep,
+            status: StepStatus,
+            message: string,
+            progress: number,
+            data?: Record<string, unknown>,
+        ) => {
+            if (onProgress) {
+                onProgress({
+                    step,
+                    status,
+                    message,
+                    progress,
+                    data,
+                    timestamp: Date.now(),
+                });
+            }
+        };
 
         // Variables para tracking de recursos creados (para rollback)
         const recursosCreados = {
@@ -266,18 +347,23 @@ export class FinalizacionOrdenService {
             // ========================================================================
             // PASO 0: Validaciones iniciales
             // ========================================================================
+            emitProgress('validando', 'in_progress', 'Validando datos de entrada...', 5);
             this.logger.log('📋 Paso 0: Validando datos de entrada...');
             await this.validarEntrada(dto);
+            emitProgress('validando', 'completed', 'Datos validados correctamente', 10);
 
             // ========================================================================
             // PASO 1: Obtener datos completos de la orden
             // ========================================================================
+            emitProgress('obteniendo_orden', 'in_progress', 'Obteniendo datos de la orden...', 12);
             this.logger.log('📋 Paso 1: Obteniendo datos de la orden...');
             const orden = await this.obtenerOrdenCompleta(dto.idOrden);
+            emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
 
             // ========================================================================
             // PASO 2: Subir evidencias a Cloudinary y registrar en BD
             // ========================================================================
+            emitProgress('evidencias', 'in_progress', `Subiendo ${dto.evidencias.length} evidencias...`, 18);
             this.logger.log('📷 Paso 2: Procesando evidencias fotográficas...');
             const evidenciasResultado = await this.procesarEvidencias(
                 dto.evidencias,
@@ -286,10 +372,12 @@ export class FinalizacionOrdenService {
                 dto.usuarioId,
             );
             recursosCreados.evidencias = evidenciasResultado.map(e => e.id);
+            emitProgress('evidencias', 'completed', `${evidenciasResultado.length} evidencias subidas`, 35);
 
             // ========================================================================
             // PASO 3: Registrar firmas digitales
             // ========================================================================
+            emitProgress('firmas', 'in_progress', 'Registrando firmas digitales...', 38);
             this.logger.log('✍️ Paso 3: Registrando firmas digitales...');
             const firmasResultado = await this.procesarFirmas(
                 dto.firmas,
@@ -297,6 +385,7 @@ export class FinalizacionOrdenService {
             );
             recursosCreados.firmas = firmasResultado.map(f => f.id);
             this.logger.log(`   ✓ ${firmasResultado.length} firmas registradas`);
+            emitProgress('firmas', 'completed', `${firmasResultado.length} firmas registradas`, 45);
 
             // ✅ FIX: Vincular firma del cliente a la orden para conteo en sync
             const firmaCliente = firmasResultado.find(f => f.tipo === 'CLIENTE');
@@ -315,6 +404,7 @@ export class FinalizacionOrdenService {
             // ========================================================================
             // PASO 3.5: Persistir actividades ejecutadas en BD (para estadísticas)
             // ========================================================================
+            emitProgress('actividades', 'in_progress', 'Registrando actividades ejecutadas...', 48);
             this.logger.log('📋 Paso 3.5: Registrando actividades ejecutadas...');
             const actividadesGuardadas = await this.persistirActividades(
                 orden.id_orden_servicio,
@@ -322,11 +412,13 @@ export class FinalizacionOrdenService {
                 dto.usuarioId,
             );
             this.logger.log(`   ✓ ${actividadesGuardadas} actividades registradas`);
+            emitProgress('actividades', 'completed', `${actividadesGuardadas} actividades registradas`, 52);
 
             // ========================================================================
             // PASO 3.6: Persistir mediciones en BD (para estadísticas)
             // ========================================================================
             if (dto.mediciones && dto.mediciones.length > 0) {
+                emitProgress('mediciones', 'in_progress', `Registrando ${dto.mediciones.length} mediciones...`, 54);
                 this.logger.log('📏 Paso 3.6: Registrando mediciones...');
                 const medicionesGuardadas = await this.persistirMediciones(
                     orden.id_orden_servicio,
@@ -334,11 +426,13 @@ export class FinalizacionOrdenService {
                     dto.usuarioId,
                 );
                 this.logger.log(`   ✓ ${medicionesGuardadas} mediciones registradas`);
+                emitProgress('mediciones', 'completed', `${medicionesGuardadas} mediciones registradas`, 58);
             }
 
             // ========================================================================
             // PASO 4: Generar PDF con template real
             // ========================================================================
+            emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 60);
             this.logger.log('📄 Paso 4: Generando PDF con template profesional...');
             const tipoInforme = this.determinarTipoInforme(orden);
             const pdfResult = await this.generarPDFOrden(
@@ -348,19 +442,23 @@ export class FinalizacionOrdenService {
                 firmasResultado,
                 tipoInforme,
             );
+            emitProgress('generando_pdf', 'completed', `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`, 72);
 
             // ========================================================================
             // PASO 5: Subir PDF a Cloudflare R2
             // ========================================================================
+            emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF a la nube...', 74);
             this.logger.log('☁️ Paso 5: Subiendo PDF a almacenamiento...');
             const r2Result = await this.subirPDFaR2(
                 pdfResult.buffer,
                 orden.numero_orden,
             );
+            emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 78);
 
             // ========================================================================
             // PASO 6: Registrar documento en BD
             // ========================================================================
+            emitProgress('registrando_doc', 'in_progress', 'Registrando documento en base de datos...', 80);
             this.logger.log('💾 Paso 6: Registrando documento en base de datos...');
             const documentoResult = await this.registrarDocumento(
                 orden.id_orden_servicio,
@@ -370,20 +468,24 @@ export class FinalizacionOrdenService {
                 dto.usuarioId,
             );
             recursosCreados.documento = documentoResult.id;
+            emitProgress('registrando_doc', 'completed', 'Documento registrado', 85);
 
             // ========================================================================
             // PASO 7: Enviar email con PDF adjunto
             // ========================================================================
+            emitProgress('enviando_email', 'in_progress', 'Enviando informe por email...', 87);
             this.logger.log('📧 Paso 7: Enviando email con informe...');
             const emailResult = await this.enviarEmailInforme(
                 orden,
                 pdfResult,
                 dto.emailAdicional,
             );
+            emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 92);
 
             // ========================================================================
             // PASO 8: Actualizar estado de la orden
             // ========================================================================
+            emitProgress('actualizando_estado', 'in_progress', 'Actualizando estado de la orden...', 94);
             this.logger.log('✅ Paso 8: Actualizando estado de la orden...');
             await this.actualizarEstadoOrden(
                 orden.id_orden_servicio,
@@ -392,12 +494,20 @@ export class FinalizacionOrdenService {
                 dto.horaEntrada,
                 dto.horaSalida,
             );
+            emitProgress('actualizando_estado', 'completed', 'Estado actualizado a COMPLETADA', 98);
 
             // ========================================================================
             // RESULTADO EXITOSO
             // ========================================================================
             const tiempoTotal = Date.now() - startTime;
             this.logger.log(`🎉 Orden ${orden.numero_orden} finalizada exitosamente en ${tiempoTotal}ms`);
+            
+            // Emitir evento final de completado
+            emitProgress('completado', 'completed', `Orden ${orden.numero_orden} finalizada exitosamente`, 100, {
+                tiempoTotal,
+                ordenId: orden.id_orden_servicio,
+                numeroOrden: orden.numero_orden,
+            });
 
             return {
                 success: true,
@@ -427,6 +537,12 @@ export class FinalizacionOrdenService {
             // ========================================================================
             const err = error as Error;
             this.logger.error(`❌ Error finalizando orden: ${err.message}`, err.stack);
+
+            // Emitir evento de error
+            emitProgress('error', 'error', `Error: ${err.message}`, 0, {
+                errorMessage: err.message,
+                errorStack: err.stack,
+            });
 
             // Intentar rollback de recursos creados
             await this.rollback(recursosCreados);

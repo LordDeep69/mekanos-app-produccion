@@ -2993,11 +2993,70 @@ class _SyncProgressDialog extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Lista de pasos con estados
+              // ✅ 19-DIC-2025: Mostrar mensaje actual del servidor si está disponible
+              if (progress.mensajeActual != null && 
+                  progress.pasoActual != SyncStep.completado &&
+                  progress.pasoActual != SyncStep.error) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          progress.mensajeActual!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              
+              // ✅ 19-DIC-2025: Barra de progreso visual
+              if (progress.porcentaje > 0 && 
+                  progress.pasoActual != SyncStep.completado &&
+                  progress.pasoActual != SyncStep.error) ...[
+                LinearProgressIndicator(
+                  value: progress.porcentaje / 100,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${progress.porcentaje}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Lista de pasos con estados - Usando pasos visibles simplificados
               _buildStepItem(
                 step: SyncStep.preparando,
                 progress: progress,
                 icon: Icons.settings,
+              ),
+              _buildStepItem(
+                step: SyncStep.validando,
+                progress: progress,
+                icon: Icons.verified_user,
               ),
               _buildStepItem(
                 step: SyncStep.evidencias,
@@ -3010,17 +3069,12 @@ class _SyncProgressDialog extends ConsumerWidget {
                 icon: Icons.draw,
               ),
               _buildStepItem(
-                step: SyncStep.enviando,
-                progress: progress,
-                icon: Icons.cloud_upload,
-              ),
-              _buildStepItem(
-                step: SyncStep.pdf,
+                step: SyncStep.generando_pdf,
                 progress: progress,
                 icon: Icons.picture_as_pdf,
               ),
               _buildStepItem(
-                step: SyncStep.email,
+                step: SyncStep.enviando_email,
                 progress: progress,
                 icon: Icons.email,
               ),
