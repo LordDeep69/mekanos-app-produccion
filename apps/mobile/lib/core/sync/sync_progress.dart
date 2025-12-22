@@ -199,16 +199,15 @@ class SyncProgressNotifier extends StateNotifier<SyncProgress> {
   }
   
   /// Avanza al siguiente paso (para uso local, sin SSE)
+  /// ✅ FIX 20-DIC-2025: NO auto-completar el paso anterior
+  /// Solo SSE o llamadas explícitas a completarPaso marcan completado
   void avanzar(SyncStep nuevoPaso, {String? mensaje, int? progreso}) {
     debugPrint('✅ [PROGRESS] Avanzando a: $nuevoPaso');
-    final pasosCompletos = {...state.pasosCompletados};
-    if (state.pasoActual != SyncStep.preparando && 
-        state.pasoActual != SyncStep.error) {
-      pasosCompletos.add(state.pasoActual);
-    }
+    // Ya NO auto-completamos el paso anterior
+    // El SSE del backend es quien marca como completado
     state = SyncProgress(
       pasoActual: nuevoPaso,
-      pasosCompletados: pasosCompletos,
+      pasosCompletados: state.pasosCompletados, // Sin cambios
       mensajeActual: mensaje,
       ordenId: state.ordenId,
       porcentaje: progreso ?? state.porcentaje,

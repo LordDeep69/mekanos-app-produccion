@@ -220,9 +220,9 @@ class SyncUploadService {
             .toList();
       }
 
-      // ✅ 19-DIC-2025: Progreso - Evidencias
-      _progressNotifier.completarPaso(SyncStep.preparando);
-      _progressNotifier.avanzar(SyncStep.evidencias);
+      // ✅ 20-DIC-2025: NO marcar pasos locales como completados
+      // El SSE del servidor marcará los pasos como completados cuando realmente se procesen
+      _progressNotifier.avanzar(SyncStep.preparando, mensaje: 'Cargando evidencias...');
 
       // 3. Recopilar evidencias y convertir a Base64
       final evidencias = await (_db.select(
@@ -250,9 +250,8 @@ class SyncUploadService {
         }
       }
 
-      // ✅ 19-DIC-2025: Progreso - Firmas
-      _progressNotifier.completarPaso(SyncStep.evidencias);
-      _progressNotifier.avanzar(SyncStep.firmas);
+      // ✅ 20-DIC-2025: Solo actualizar mensaje de progreso
+      _progressNotifier.avanzar(SyncStep.preparando, mensaje: 'Cargando firmas...');
 
       // 4. Recopilar firmas y convertir a Base64
       final firmas = await _db.getFirmasByOrden(idOrdenLocal);
@@ -308,8 +307,7 @@ class SyncUploadService {
         );
       }
 
-      // ✅ 19-DIC-2025: Progreso - Firmas completado
-      _progressNotifier.completarPaso(SyncStep.firmas);
+      // ✅ 20-DIC-2025: Ya no marcamos completado aquí, el SSE lo hará
 
       // 6. Construir payload completo
       // ✅ MULTI-EQUIPOS: Incluir estructura agrupada por equipo
@@ -803,24 +801,36 @@ class SyncUploadService {
           receiveTimeout: const Duration(minutes: 5),
           headers: {
             'Accept': 'text/event-stream',
+            'Cache-Control': 'no-cache',
           },
         ),
       );
       
-      if (response.statusCode != 200) {
+      debugPrint('📡 [SSE] Response status: ${response.statusCode}');
+      debugPrint('📡 [SSE] Response headers: ${response.headers}');
+      
+      // ✅ FIX 20-DIC-2025: Aceptar 200 y 201 (NestJS @Post retorna 201 por defecto)
+      final statusOk = response.statusCode == 200 || response.statusCode == 201;
+      if (!statusOk) {
+        debugPrint('❌ [SSE] Status no válido: ${response.statusCode}');
         return _SSEResult(
           success: false,
           error: 'Error del servidor: ${response.statusCode}',
         );
       }
       
+      debugPrint('📡 [SSE] Conexión SSE establecida (status: ${response.statusCode})');
+      
       final stream = response.data?.stream;
       if (stream == null) {
+        debugPrint('❌ [SSE] Stream es null');
         return _SSEResult(
           success: false,
           error: 'No se recibió stream del servidor',
         );
       }
+      
+      debugPrint('📡 [SSE] Stream obtenido, comenzando a leer eventos...');
       
       // Variables para acumular el resultado final
       Map<String, dynamic>? resultadoFinal;

@@ -735,6 +735,7 @@ export class OrdenesController {
    * }
    */
   @Post(':id/finalizar-completo-stream')
+  @HttpCode(200) // ✅ SSE requiere 200, no 201 (default de @Post)
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Finalizar orden con streaming de progreso',
@@ -751,6 +752,10 @@ export class OrdenesController {
     @UserId() userId: number,
     @Res() res: Response,
   ) {
+    // ✅ FIX 20-DIC-2025: Establecer status 200 explícitamente para SSE
+    // Cuando usamos @Res(), @HttpCode() no aplica automáticamente
+    res.status(200);
+    
     // Configurar headers para SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
