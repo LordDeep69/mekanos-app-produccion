@@ -18,15 +18,18 @@ export class PrismaOrdenServicioRepository {
   /**
    * Includes OPTIMIZADOS para respuestas rápidas
    * SIMPLIFICADO para evitar queries recursivas masivas
+   * 
+   * ✅ FIX 15-DIC-2025: Corregidos nombres de relaciones Prisma
+   * Los nombres deben coincidir EXACTAMENTE con los generados en schema.prisma
    */
   private readonly INCLUDE_RELATIONS = {
-    cliente: { include: { persona: true } },
-    sede: true,
-    equipo: { include: { tipo_equipo: true } }, // Eliminada recursión de cliente
-    tipo_servicio: true,
-    tecnico: { include: { persona: true } },
-    estado: true,
-    usuario_creador: { include: { persona: true } },
+    clientes: { include: { persona: true } },
+    sedes_cliente: true,
+    equipos: { include: { tipos_equipo: true } },
+    tipos_servicio: true,
+    empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } },
+    estados_orden: true,
+    usuarios_ordenes_servicio_creado_porTousuarios: { include: { persona: true } },
     // Eliminados: supervisor, usuario_modificador, usuario_aprobador, firmas_digitales
   };
 
@@ -103,6 +106,8 @@ export class PrismaOrdenServicioRepository {
    * Buscar orden por ID
    * @param id_orden_servicio ID de la orden
    * @returns Orden con relaciones completas o null
+   * 
+   * ✅ FIX 15-DIC-2025: Corregidos nombres de relaciones según schema.prisma
    */
   async findById(id_orden_servicio: number): Promise<any | null> {
     return this.prisma.ordenes_servicio.findUnique({
@@ -112,24 +117,24 @@ export class PrismaOrdenServicioRepository {
         // Para detalle: incluir relaciones one-to-many
         actividades_ejecutadas: {
           include: {
-            catalogo_actividades: true, // ✅ Nombre correcto según schema
-            empleados: { include: { persona: true } }, // ✅ Relación 'ejecutada_por'
+            catalogo_actividades: true,
+            empleados: { include: { persona: true } },
           },
           orderBy: { fecha_ejecucion: 'desc' },
         },
         mediciones_servicio: {
           include: {
-            parametros_medicion: true, // ✅ Nombre correcto según schema
+            parametros_medicion: true,
           },
           orderBy: { fecha_medicion: 'desc' },
         },
         evidencias_fotograficas: {
           orderBy: { fecha_captura: 'desc' },
         },
-        detalles_servicios: {
+        detalle_servicios_orden: {
           include: {
-            servicio: true, // catalogo_servicios
-            tecnico: { include: { persona: true } }, // ✅ Relación 'id_tecnico_ejecutor' → 'tecnico'
+            catalogo_servicios: true,
+            empleados: { include: { persona: true } },
           },
         },
       },
@@ -273,8 +278,8 @@ export class PrismaOrdenServicioRepository {
         fecha_modificacion: new Date(),
       },
       include: {
-        estado: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
-        tecnico: { include: { persona: true } }, // ✅ REQUERIDO: Controller necesita tecnico.persona.nombre_completo
+        estados_orden: true, // ✅ FIX 15-DIC-2025: Corregido nombre relación
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } }, // ✅ FIX
       },
     });
   }
@@ -298,8 +303,8 @@ export class PrismaOrdenServicioRepository {
         fecha_modificacion: new Date(),
       },
       include: {
-        estado: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
-        tecnico: { include: { persona: true } }, // ✅ REQUERIDO: Controller necesita tecnico para contexto
+        estados_orden: true, // ✅ FIX 15-DIC-2025: Corregido nombre relación
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } }, // ✅ FIX
       },
     });
   }

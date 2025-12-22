@@ -115,6 +115,49 @@ export class SyncActividadPlanDto {
 }
 
 /**
+ * Equipo asignado a una orden multi-equipo
+ * Para órdenes de Preventivo Tipo A con múltiples bombas/generadores
+ */
+export class SyncOrdenEquipoDto {
+  @ApiProperty({ description: 'ID del registro orden_equipo (PK de tabla intermedia)' })
+  idOrdenEquipo: number;
+
+  @ApiProperty({ description: 'ID de la orden de servicio' })
+  idOrdenServicio: number;
+
+  @ApiProperty({ description: 'ID del equipo' })
+  idEquipo: number;
+
+  @ApiProperty({ description: 'Orden de secuencia (1, 2, 3...)' })
+  ordenSecuencia: number;
+
+  @ApiPropertyOptional({ description: 'Nombre del sistema (ej: "Bomba Principal Sistema 1")' })
+  nombreSistema?: string;
+
+  @ApiProperty({ description: 'Estado del equipo en la orden (PENDIENTE, EN_PROGRESO, COMPLETADO)' })
+  estado: string;
+
+  @ApiPropertyOptional({ description: 'Fecha/hora inicio trabajo en este equipo' })
+  fechaInicio?: string;
+
+  @ApiPropertyOptional({ description: 'Fecha/hora fin trabajo en este equipo' })
+  fechaFin?: string;
+
+  @ApiPropertyOptional({ description: 'Observaciones específicas del equipo' })
+  observaciones?: string;
+
+  // Datos del equipo (para mostrar en UI)
+  @ApiProperty({ description: 'Código del equipo' })
+  codigoEquipo: string;
+
+  @ApiProperty({ description: 'Nombre del equipo' })
+  nombreEquipo: string;
+
+  @ApiPropertyOptional({ description: 'Ubicación del equipo' })
+  ubicacionEquipo?: string;
+}
+
+/**
  * Orden resumida para download (datos esenciales para móvil)
  */
 export class SyncOrdenDownloadDto {
@@ -251,6 +294,13 @@ export class SyncOrdenDownloadDto {
 
   @ApiPropertyOptional({ description: 'Mediciones críticas (fuera de rango)' })
   medicionesCriticas?: number;
+
+  // ✅ Multi-Equipos: Lista de equipos asociados a esta orden (para Preventivo Tipo A)
+  @ApiPropertyOptional({ 
+    type: [SyncOrdenEquipoDto], 
+    description: 'Equipos asociados a esta orden (vacío = orden tradicional 1 equipo)' 
+  })
+  ordenesEquipos?: SyncOrdenEquipoDto[];
 
   // Fechas
   @ApiProperty()

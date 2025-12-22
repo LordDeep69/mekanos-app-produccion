@@ -1231,10 +1231,12 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Stream reactivo de conteo de pendientes (para badge en UI)
+  /// ✅ FIX 18-DIC-2025: Incluir EN_PROCESO para badge consistente
   Stream<int> watchCountOrdenesPendientesSync() {
     return (select(ordenesPendientesSync)..where(
           (o) =>
               o.estadoSync.equals('PENDIENTE') |
+              o.estadoSync.equals('EN_PROCESO') |
               (o.estadoSync.equals('ERROR') & o.intentos.isSmallerThanValue(5)),
         ))
         .watch()
@@ -1242,11 +1244,13 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Stream reactivo de lista de pendientes (para vista "Órdenes por Subir")
+  /// ✅ FIX 18-DIC-2025: Incluir EN_PROCESO para mostrar feedback "Subiendo..."
   Stream<List<OrdenesPendientesSyncData>> watchOrdenesPendientesSync() {
     return (select(ordenesPendientesSync)
           ..where(
             (o) =>
                 o.estadoSync.equals('PENDIENTE') |
+                o.estadoSync.equals('EN_PROCESO') |
                 (o.estadoSync.equals('ERROR') &
                     o.intentos.isSmallerThanValue(5)),
           )

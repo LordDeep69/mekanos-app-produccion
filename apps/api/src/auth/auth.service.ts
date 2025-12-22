@@ -162,9 +162,9 @@ export class AuthService {
     };
 
     const [access_token, refresh_token] = await Promise.all([
-      // Access token (1 hora) - aumentado para operaciones largas
+      // Access token (3 horas) - ✅ ENTERPRISE: Tiempo extendido para operaciones de campo
       this.jwtService.signAsync(payload, {
-        expiresIn: '1h',
+        expiresIn: '3h',
       }),
       // Refresh token (7 días) - override secret
       this.jwtService.signAsync(payload, {

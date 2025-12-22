@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' show DateFormat;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart'
     show SyncUploadResult, syncUploadServiceProvider;
 import '../../auth/data/auth_provider.dart';
@@ -17,10 +18,17 @@ import '../data/ejecucion_service.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
 /// TabBar: Checklist | Mediciones | Resumen
+/// 
+/// ✅ MULTI-EQUIPOS: Puede recibir idOrdenEquipo para filtrar por equipo específico
 class EjecucionScreen extends ConsumerStatefulWidget {
   final int idOrdenLocal;
+  final int? idOrdenEquipo; // ✅ MULTI-EQUIPOS: ID del equipo específico (opcional)
 
-  const EjecucionScreen({super.key, required this.idOrdenLocal});
+  const EjecucionScreen({
+    super.key, 
+    required this.idOrdenLocal,
+    this.idOrdenEquipo, // null = orden simple, valor = multi-equipo
+  });
 
   @override
   ConsumerState<EjecucionScreen> createState() => _EjecucionScreenState();
@@ -45,11 +53,22 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   // ✅ RUTA 8: Estado de firmas
   bool _tieneFirmaTecnico = false;
   bool _tieneFirmaCliente = false;
+  
+  // ✅ MULTI-EQUIPOS: Nombre del equipo actual
+  String? _nombreEquipoActual;
+  
+  // ✅ FIX 17-DIC-2025: Flag para saber si es orden de un solo equipo (necesita tab Resumen)
+  bool get _esOrdenSimple => widget.idOrdenEquipo == null;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    // ✅ FIX 17-DIC-2025: Orden simple = 3 tabs (Checklist + Mediciones + Resumen)
+    // Multi-equipo = 2 tabs (Resumen está en NavigacionEquiposScreen)
+    _tabController = TabController(
+      length: _esOrdenSimple ? 3 : 2, 
+      vsync: this,
+    );
     _cargarDatos();
   }
 
@@ -63,16 +82,29 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     setState(() => _isLoading = true);
 
     final service = ref.read(ejecucionServiceProvider);
+    final db = ref.read(databaseProvider);
 
     try {
+      // ✅ MULTI-EQUIPOS: Si hay idOrdenEquipo, cargar nombre del equipo
+      if (widget.idOrdenEquipo != null) {
+        final equipoInfo = await db.getOrdenEquipoById(widget.idOrdenEquipo!);
+        _nombreEquipoActual = equipoInfo?.nombreSistema ?? 
+                             equipoInfo?.nombreEquipo ?? 
+                             'Equipo ${equipoInfo?.ordenSecuencia ?? '?'}';
+      }
+
       // Cargar actividades agrupadas
+      // ✅ MULTI-EQUIPOS: Pasar idOrdenEquipo para filtrar
       _actividadesPorSistema = await service.getActividadesAgrupadas(
         widget.idOrdenLocal,
+        idOrdenEquipo: widget.idOrdenEquipo,
       );
 
       // Cargar MEDICIONES desde tabla local (con snapshot completo)
+      // ✅ MULTI-EQUIPOS: Pasar idOrdenEquipo para filtrar
       _mediciones = await service.getMedicionesByOrdenLocal(
         widget.idOrdenLocal,
+        idOrdenEquipo: widget.idOrdenEquipo,
       );
 
       // Calcular estadísticas de actividades
@@ -109,7 +141,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       );
 
       // Obtener número de orden y tipo de servicio para detección de correctivos
-      final db = ref.read(databaseProvider);
+      // (reutilizamos 'db' ya declarado arriba)
       final orden = await (db.select(
         db.ordenes,
       )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
@@ -168,6 +200,14 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         for (final act in actividades) {
           if (act.simbologia != null) completadas++;
         }
+      }
+
+      // ✅ MULTI-EQUIPOS: Verificar y actualizar estado del equipo
+      if (widget.idOrdenEquipo != null) {
+        await service.verificarYActualizarEstadoEquipo(
+          widget.idOrdenLocal,
+          widget.idOrdenEquipo!,
+        );
       }
 
       // Actualizar UI sin reconstruir lista
@@ -236,13 +276,24 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
   @override
   Widget build(BuildContext context) {
-    final extraRazon = _extraRazonFallaCount();
-    final completadosDisplay = _completadas + _medicionesConValor + extraRazon;
-    final totalDisplay = _total + _totalMediciones + extraRazon;
+    // ✅ FIX: Contador simplificado - razón de falla ya no es actividad (se captura en JSON)
+    final completadosDisplay = _completadas + _medicionesConValor;
+    final totalDisplay = _total + _totalMediciones;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_numeroOrden ?? 'Ejecución'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_numeroOrden ?? 'Ejecución', style: const TextStyle(fontSize: 16)),
+            // ✅ MULTI-EQUIPOS: Mostrar nombre del equipo
+            if (_nombreEquipoActual != null)
+              Text(
+                _nombreEquipoActual!,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+              ),
+          ],
+        ),
         backgroundColor: Colors.green.shade700,
         foregroundColor: Colors.white,
         bottom: TabBar(
@@ -250,10 +301,12 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(icon: Icon(Icons.checklist), text: 'Checklist'),
-            Tab(icon: Icon(Icons.speed), text: 'Mediciones'),
-            Tab(icon: Icon(Icons.summarize), text: 'Resumen'),
+          // ✅ FIX 17-DIC-2025: Orden simple = 3 tabs, multi-equipo = 2 tabs
+          tabs: [
+            const Tab(icon: Icon(Icons.checklist), text: 'Checklist'),
+            const Tab(icon: Icon(Icons.speed), text: 'Mediciones'),
+            if (_esOrdenSimple)
+              const Tab(icon: Icon(Icons.summarize), text: 'Resumen'),
           ],
         ),
         actions: [
@@ -286,34 +339,26 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
               controller: _tabController,
+              // ✅ FIX 17-DIC-2025: Orden simple = 3 tabs, multi-equipo = 2 tabs
               children: [
                 _buildChecklistTab(),
                 _buildMedicionesTab(),
-                _buildResumenTab(),
+                if (_esOrdenSimple) _buildResumenTab(),
               ],
             ),
     );
   }
 
   /// TAB 1: CHECKLIST - Lista agrupada por sistema
-  /// EXCLUYE actividades tipo MEDICION (se muestran en tab Mediciones)
+  /// ✅ FIX 14-DIC-2025: Ahora incluye TODAS las actividades (incluyendo tipo MEDICION)
   Widget _buildChecklistTab() {
     if (_actividadesPorSistema.isEmpty) {
       return const Center(child: Text('No hay actividades para esta orden'));
     }
 
-    // Filtrar actividades: excluir tipo MEDICION de la vista Checklist
-    final checklistPorSistema = <String, List<ActividadesEjecutada>>{};
-    for (final entry in _actividadesPorSistema.entries) {
-      final actividadesChecklist = entry.value
-          .where((a) => a.tipoActividad.toUpperCase() != 'MEDICION')
-          .toList();
-      if (actividadesChecklist.isNotEmpty) {
-        checklistPorSistema[entry.key] = actividadesChecklist;
-      }
-    }
-
-    if (checklistPorSistema.isEmpty) {
+    // ✅ FIX: Ya no excluimos ningún tipo - todas las actividades van al checklist
+    // Las mediciones con parámetros también aparecen en tab Mediciones (para ingresar valores)
+    if (_actividadesPorSistema.isEmpty) {
       return const Center(
         child: Text('No hay actividades de checklist para esta orden'),
       );
@@ -323,10 +368,10 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       onRefresh: _cargarDatos,
       child: ListView.builder(
         padding: const EdgeInsets.only(bottom: 100),
-        itemCount: checklistPorSistema.length,
+        itemCount: _actividadesPorSistema.length,
         itemBuilder: (context, index) {
-          final sistema = checklistPorSistema.keys.elementAt(index);
-          final actividades = checklistPorSistema[sistema]!;
+          final sistema = _actividadesPorSistema.keys.elementAt(index);
+          final actividades = _actividadesPorSistema[sistema]!;
 
           return _buildSistemaSection(sistema, actividades);
         },
@@ -760,6 +805,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         idOrden: widget.idOrdenLocal,
         idActividad: idActividad,
         nombreActividad: nombreActividad,
+        idOrdenEquipo: widget.idOrdenEquipo, // ✅ MULTI-EQUIPOS (16-DIC-2025)
       ),
     );
     // Recargar conteo después de cerrar
@@ -833,6 +879,15 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       if (med.valor != null) {
         conValor++;
       }
+    }
+
+    // ✅ MULTI-EQUIPOS: Verificar y actualizar estado del equipo
+    if (widget.idOrdenEquipo != null) {
+      final service = ref.read(ejecucionServiceProvider);
+      service.verificarYActualizarEstadoEquipo(
+        widget.idOrdenLocal,
+        widget.idOrdenEquipo!,
+      );
     }
 
     if (mounted) {
@@ -1289,6 +1344,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Widget selector de estado de batería
+  /// ✅ FIX 18-DIC-2025: Añadido botón para valor personalizado (ej: 88%, 34%)
   Widget _buildBateriaSelector(ActividadesEjecutada actividad) {
     final observacion = actividad.observacion ?? '';
     final valorActual = observacion.startsWith('BATERIA: ')
@@ -1303,61 +1359,212 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       ('BAJA', 'Baja', Colors.red, Icons.battery_alert),
     ];
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: opciones.map((opcion) {
-        final codigo = opcion.$1;
-        final label = opcion.$2;
-        final color = opcion.$3;
-        final icon = opcion.$4;
-        final isSelected = valorActual == codigo;
+    // Verificar si el valor actual es personalizado (no está en opciones predefinidas)
+    final esValorPersonalizado = valorActual.isNotEmpty &&
+        !opciones.any((o) => o.$1 == valorActual);
 
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Material(
-              color: isSelected ? color : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => _marcarActividadEspecial(
-                  actividad.idLocal,
-                  'BATERIA: $codigo',
-                  // M si 25% o BAJA, C si 50%, B si 75% o 100%
-                  (codigo == 'BAJA' || codigo == '25%')
-                      ? 'M'
-                      : (codigo == '50%')
-                      ? 'C'
-                      : 'B',
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        icon,
-                        size: 18,
-                        color: isSelected ? Colors.white : color,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Fila de opciones predefinidas
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: opciones.map((opcion) {
+            final codigo = opcion.$1;
+            final label = opcion.$2;
+            final color = opcion.$3;
+            final icon = opcion.$4;
+            final isSelected = valorActual == codigo;
+
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Material(
+                  color: isSelected ? color : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => _marcarActividadEspecial(
+                      actividad.idLocal,
+                      'BATERIA: $codigo',
+                      // M si 25% o BAJA, C si 50%, B si 75% o 100%
+                      (codigo == 'BAJA' || codigo == '25%')
+                          ? 'M'
+                          : (codigo == '50%')
+                          ? 'C'
+                          : 'B',
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            icon,
+                            size: 18,
+                            color: isSelected ? Colors.white : color,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                              color: isSelected ? Colors.white : color,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10,
-                          color: isSelected ? Colors.white : color,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
+            );
+          }).toList(),
+        ),
+        
+        // Botón de valor personalizado
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () => _mostrarDialogoPorcentajeBateria(actividad),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: esValorPersonalizado ? Colors.blue.shade50 : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: esValorPersonalizado ? Colors.blue : Colors.grey.shade300,
+                width: esValorPersonalizado ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.edit_note,
+                  size: 18,
+                  color: esValorPersonalizado ? Colors.blue.shade700 : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  esValorPersonalizado
+                      ? 'Valor: $valorActual'
+                      : 'Otro valor...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: esValorPersonalizado ? FontWeight.bold : FontWeight.normal,
+                    color: esValorPersonalizado ? Colors.blue.shade700 : Colors.grey.shade600,
+                  ),
+                ),
+                if (esValorPersonalizado) ...[
+                  const SizedBox(width: 4),
+                  Icon(Icons.check_circle, size: 16, color: Colors.blue.shade700),
+                ],
+              ],
             ),
           ),
-        );
-      }).toList(),
+        ),
+      ],
     );
+  }
+
+  /// Diálogo para ingresar porcentaje de batería personalizado
+  Future<void> _mostrarDialogoPorcentajeBateria(ActividadesEjecutada actividad) async {
+    final controller = TextEditingController();
+    final observacion = actividad.observacion ?? '';
+    
+    // Si ya tiene un valor, pre-llenar (quitando el %)
+    if (observacion.startsWith('BATERIA: ')) {
+      final valorSinPrefix = observacion.substring(9);
+      // Si termina en %, quitar el %
+      if (valorSinPrefix.endsWith('%')) {
+        controller.text = valorSinPrefix.substring(0, valorSinPrefix.length - 1);
+      } else if (valorSinPrefix != 'BAJA') {
+        controller.text = valorSinPrefix;
+      }
+    }
+
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.battery_charging_full, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Carga de Batería'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ingresa el porcentaje exacto de carga:',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Porcentaje',
+                hintText: 'Ej: 88',
+                suffixText: '%',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.battery_std),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Valores sugeridos: 100%, 75%, 50%, 25%',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            icon: const Icon(Icons.save, size: 18),
+            label: const Text('Guardar'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado != null && resultado.isNotEmpty) {
+      // Validar que sea un número
+      final numero = int.tryParse(resultado);
+      if (numero != null) {
+        // Determinar simbología según porcentaje
+        // M si <=25%, C si 26-50%, B si >50%
+        final simbologia = numero <= 25 ? 'M' : (numero <= 50 ? 'C' : 'B');
+        await _marcarActividadEspecial(
+          actividad.idLocal,
+          'BATERIA: $resultado%',
+          simbologia,
+        );
+      } else {
+        // Si no es número válido, mostrar error
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Por favor ingresa un número válido'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    }
   }
 
   /// Widget input para temperatura
@@ -1543,6 +1750,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         idOrden: widget.idOrdenLocal,
         idActividad: idActividad,
         nombreActividad: 'Medición: ${medicion.nombreParametro}',
+        idOrdenEquipo: widget.idOrdenEquipo, // ✅ MULTI-EQUIPOS (16-DIC-2025)
       ),
     );
     // Recargar conteo después de cerrar
@@ -1551,10 +1759,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
   /// TAB 3: RESUMEN - Vista general con progreso COMPLETO (Checklist + Mediciones)
   Widget _buildResumenTab() {
-    // CÁLCULO CORRECTO: (Actividades + Mediciones) / Total Items
-    final extraRazon = _extraRazonFallaCount();
-    final totalItems = _total + _totalMediciones + extraRazon;
-    final completados = _completadas + _medicionesConValor + extraRazon;
+    // ✅ FIX: Contador simplificado - razón de falla ya no es actividad
+    final totalItems = _total + _totalMediciones;
+    final completados = _completadas + _medicionesConValor;
     final porcentaje = totalItems > 0
         ? (completados / totalItems * 100).toInt()
         : 0;
@@ -1615,9 +1822,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 8),
-                  // Desglose
+                  // ✅ FIX: Desglose simplificado - razón de falla se captura aparte en diálogo finalización
                   Text(
-                    '📋 Checklist: $_completadas/$_total  |  📏 Mediciones: $_medicionesConValor/$_totalMediciones${_esCorrectivo ? "  |  ⚙️ Razón falla: ${_razonFallaActual?.trim().isNotEmpty == true ? "1/1" : "0/0"}" : ""}',
+                    '📋 Checklist: $_completadas/$_total  |  📏 Mediciones: $_medicionesConValor/$_totalMediciones',
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                   ),
                 ],
@@ -1891,10 +2098,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     return count;
   }
 
-  int _extraRazonFallaCount() {
-    if (!_esCorrectivo) return 0;
-    return (_razonFallaActual?.trim().isNotEmpty ?? false) ? 1 : 0;
-  }
+  // ✅ _extraRazonFallaCount() ELIMINADO - razón de falla ahora se captura en diálogo de finalización
+  // y se almacena en el campo JSON de la orden, no como actividad
 
   // ============================================================================
   // ✅ RUTA 9: DIÁLOGO Y LÓGICA DE FINALIZACIÓN CON SYNC AL BACKEND
@@ -2038,51 +2243,18 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Ejecuta la sincronización con el backend
+  /// ✅ 19-DIC-2025: Con feedback de progreso en tiempo real
   Future<void> _ejecutarFinalizacion({
     required String horaEntrada,
     required String horaSalida,
     required String observaciones,
     String? razonFalla,
   }) async {
-    // ✅ MEJORA: Mostrar loading con más información
+    // ✅ 19-DIC-2025: Mostrar diálogo con progreso reactivo
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text(
-              'Finalizando servicio...',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  _buildLoadingStep(Icons.photo, 'Subiendo evidencias...'),
-                  _buildLoadingStep(Icons.gesture, 'Subiendo firmas...'),
-                  _buildLoadingStep(Icons.picture_as_pdf, 'Generando PDF...'),
-                  _buildLoadingStep(Icons.email, 'Enviando notificación...'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Este proceso puede tardar hasta 30 segundos.\nNo cierres la aplicación.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
+      builder: (ctx) => const _SyncProgressDialog(),
     );
 
     try {
@@ -2772,6 +2944,274 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// ✅ WIDGET DE DIÁLOGO DE PROGRESO DE SINCRONIZACIÓN
+/// Muestra el progreso en tiempo real de la subida al servidor
+class _SyncProgressDialog extends ConsumerWidget {
+  const _SyncProgressDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progress = ref.watch(syncProgressProvider);
+
+    return PopScope(
+      // No permitir cerrar con back mientras está en progreso
+      canPop: progress.pasoActual == SyncStep.completado ||
+          progress.pasoActual == SyncStep.error,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            if (progress.pasoActual == SyncStep.completado)
+              const Icon(Icons.check_circle, color: Colors.green, size: 28)
+            else if (progress.pasoActual == SyncStep.error)
+              const Icon(Icons.error, color: Colors.red, size: 28)
+            else
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                progress.pasoActual == SyncStep.completado
+                    ? '¡Sincronización Exitosa!'
+                    : progress.pasoActual == SyncStep.error
+                        ? 'Error en Sincronización'
+                        : 'Sincronizando...',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ✅ 19-DIC-2025: Mostrar mensaje actual del servidor si está disponible
+              if (progress.mensajeActual != null && 
+                  progress.pasoActual != SyncStep.completado &&
+                  progress.pasoActual != SyncStep.error) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          progress.mensajeActual!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              
+              // ✅ 19-DIC-2025: Barra de progreso visual
+              if (progress.porcentaje > 0 && 
+                  progress.pasoActual != SyncStep.completado &&
+                  progress.pasoActual != SyncStep.error) ...[
+                LinearProgressIndicator(
+                  value: progress.porcentaje / 100,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${progress.porcentaje}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Lista de pasos con estados - Usando pasos visibles simplificados
+              _buildStepItem(
+                step: SyncStep.preparando,
+                progress: progress,
+                icon: Icons.settings,
+              ),
+              _buildStepItem(
+                step: SyncStep.validando,
+                progress: progress,
+                icon: Icons.verified_user,
+              ),
+              _buildStepItem(
+                step: SyncStep.evidencias,
+                progress: progress,
+                icon: Icons.photo_camera,
+              ),
+              _buildStepItem(
+                step: SyncStep.firmas,
+                progress: progress,
+                icon: Icons.draw,
+              ),
+              _buildStepItem(
+                step: SyncStep.generando_pdf,
+                progress: progress,
+                icon: Icons.picture_as_pdf,
+              ),
+              _buildStepItem(
+                step: SyncStep.enviando_email,
+                progress: progress,
+                icon: Icons.email,
+              ),
+
+              // Mensaje de error si hay
+              if (progress.pasoActual == SyncStep.error &&
+                  progress.mensajeError != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          progress.mensajeError!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Mensaje de éxito
+              if (progress.pasoActual == SyncStep.completado) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.celebration,
+                          color: Colors.green.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          '¡Orden sincronizada correctamente! PDF generado y email enviado.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          // Solo mostrar botón cuando esté completado o error
+          if (progress.pasoActual == SyncStep.completado ||
+              progress.pasoActual == SyncStep.error)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: progress.pasoActual == SyncStep.completado
+                    ? Colors.green
+                    : Colors.blue,
+              ),
+              onPressed: () {
+                Navigator.of(context).pop(); // Cerrar diálogo
+                if (progress.pasoActual == SyncStep.completado) {
+                  Navigator.of(context).pop(); // Volver a lista de órdenes
+                }
+              },
+              child: Text(progress.pasoActual == SyncStep.completado
+                  ? 'CONTINUAR'
+                  : 'CERRAR'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepItem({
+    required SyncStep step,
+    required SyncProgress progress,
+    required IconData icon,
+  }) {
+    final isCompleted = progress.pasosCompletados.contains(step);
+    final isActive = progress.pasoActual == step;
+    final isError = progress.pasoActual == SyncStep.error && isActive;
+    final isPending = !isCompleted && !isActive;
+
+    Color color;
+    Widget leading;
+
+    if (isCompleted) {
+      color = Colors.green;
+      leading = const Icon(Icons.check_circle, color: Colors.green, size: 22);
+    } else if (isError) {
+      color = Colors.red;
+      leading = const Icon(Icons.error, color: Colors.red, size: 22);
+    } else if (isActive) {
+      color = Colors.blue;
+      leading = const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else {
+      color = Colors.grey.shade400;
+      leading = Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 22);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 12),
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isCompleted ? step.nombreCompletado : step.nombre,
+              style: TextStyle(
+                fontSize: 14,
+                color: color,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                decoration: isCompleted ? TextDecoration.none : null,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

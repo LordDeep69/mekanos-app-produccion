@@ -102,6 +102,7 @@ class EvidenciaService {
   /// [tipo]: Tipo de evidencia (ANTES, DURANTE, DESPUES, MEDICION, ACTIVIDAD)
   /// [descripcion]: Descripción opcional del técnico
   /// [idActividadEjecutada]: Si se proporciona, vincula la foto a esa actividad específica
+  /// [idOrdenEquipo]: ✅ MULTI-EQUIPOS: ID del orden-equipo para vincular evidencia
   ///
   /// Retorna [CapturaEvidenciaResult] con información forense
   Future<CapturaEvidenciaResult> capturarFotoCamara({
@@ -109,6 +110,7 @@ class EvidenciaService {
     required TipoEvidencia tipo,
     String? descripcion,
     int? idActividadEjecutada, // ✅ NUEVO: Para modelo híbrido
+    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS (16-DIC-2025)
   }) async {
     try {
       // 1. Capturar imagen con compresión nativa (OFFLINE - no requiere internet)
@@ -149,6 +151,7 @@ class EvidenciaService {
         EvidenciasCompanion.insert(
           idOrden: idOrden,
           idActividadEjecutada: Value(idActividadEjecutada), // ✅ MODELO HÍBRIDO
+          idOrdenEquipo: Value(idOrdenEquipo), // ✅ MULTI-EQUIPOS (16-DIC-2025)
           rutaLocal: rutaDestino,
           tipoEvidencia: tipo.name,
           descripcion: Value(descripcion),
@@ -170,10 +173,12 @@ class EvidenciaService {
   }
 
   /// Selecciona una imagen de la galería con compresión automática
+  /// ✅ MULTI-EQUIPOS (16-DIC-2025): Agregado idOrdenEquipo opcional
   Future<CapturaEvidenciaResult> seleccionarDeGaleria({
     required int idOrden,
     required TipoEvidencia tipo,
     String? descripcion,
+    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS: Para asociar evidencia a equipo específico
   }) async {
     try {
       // 1. Seleccionar imagen con compresión
@@ -202,7 +207,7 @@ class EvidenciaService {
       // 3. Obtener tamaño
       final tamanoBytes = await archivoPermanente.length();
 
-      // 4. Registrar en BD
+      // 4. Registrar en BD (con idOrdenEquipo para multi-equipos)
       final idEvidencia = await _db.insertEvidencia(
         EvidenciasCompanion.insert(
           idOrden: idOrden,
@@ -212,6 +217,7 @@ class EvidenciaService {
           fechaCaptura: Value(DateTime.now()),
           isDirty: const Value(true),
           subida: const Value(false),
+          idOrdenEquipo: Value(idOrdenEquipo), // ✅ MULTI-EQUIPOS
         ),
       );
 

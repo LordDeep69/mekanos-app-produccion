@@ -1,23 +1,25 @@
 import { PrismaService } from '@mekanos/database';
 import {
-  BadRequestException,
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  NotFoundException,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Put,
-  Query,
-  UseGuards,
+    BadRequestException,
+    Body,
+    Controller,
+    Delete,
+    Get,
+    HttpCode,
+    HttpStatus,
+    NotFoundException,
+    Param,
+    ParseIntPipe,
+    Patch,
+    Post,
+    Put,
+    Query,
+    Res,
+    UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 // Commands
@@ -42,7 +44,7 @@ import { FinalizarOrdenCompletoDto } from './dto/finalizar-orden-completo.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
 
 // Services
-import { FinalizacionOrdenService } from './services/finalizacion-orden.service';
+import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
@@ -86,7 +88,7 @@ export class OrdenesController {
       throw new NotFoundException('Orden no encontrada');
     }
 
-    const plan = await (this.prisma as any).ordenes_actividades_plan.findMany({
+    const plan = await this.prisma.ordenes_actividades_plan.findMany({
       where: { id_orden_servicio: id },
       orderBy: { orden_secuencia: 'asc' },
     });
@@ -127,12 +129,12 @@ export class OrdenesController {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await (tx as any).ordenes_actividades_plan.deleteMany({
+      await tx.ordenes_actividades_plan.deleteMany({
         where: { id_orden_servicio: id },
       });
 
       if (actividades.length > 0) {
-        await (tx as any).ordenes_actividades_plan.createMany({
+        await tx.ordenes_actividades_plan.createMany({
           data: actividades.map((a, index) => {
             if (!a || typeof a.idActividadCatalogo !== 'number') {
               throw new BadRequestException(
@@ -199,11 +201,11 @@ export class OrdenesController {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await (tx as any).ordenes_actividades_plan.deleteMany({
+      await tx.ordenes_actividades_plan.deleteMany({
         where: { id_orden_servicio: id },
       });
 
-      await (tx as any).ordenes_actividades_plan.createMany({
+      await tx.ordenes_actividades_plan.createMany({
         data: actividadesCatalogo.map((a, index) => ({
           id_orden_servicio: id,
           id_actividad_catalogo: a.id_actividad_catalogo,
@@ -235,7 +237,7 @@ export class OrdenesController {
       throw new NotFoundException('Orden no encontrada');
     }
 
-    await (this.prisma as any).ordenes_actividades_plan.deleteMany({
+    await this.prisma.ordenes_actividades_plan.deleteMany({
       where: { id_orden_servicio: id },
     });
 
@@ -438,16 +440,18 @@ export class OrdenesController {
     console.log('[OrdenesController] Command executed, returning simplified response');
 
     // SIMPLIFY RESPONSE TO AVOID CIRCULAR REFS OR HUGE PAYLOAD
+    // ✅ FIX 15-DIC-2025: Corregidos nombres de propiedades según schema Prisma
+    const tecnico = result.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
     return {
       success: true,
       message: 'Técnico asignado exitosamente',
       data: {
         id_orden_servicio: result.id_orden_servicio,
         numero_orden: result.numero_orden,
-        estado: result.estado,
-        tecnico: result.tecnico ? {
-          id_empleado: result.tecnico.id_empleado,
-          persona: result.tecnico.persona
+        estado: result.estados_orden,
+        tecnico: tecnico ? {
+          id_empleado: tecnico.id_empleado,
+          persona: tecnico.persona
         } : null
       },
     };
@@ -629,9 +633,13 @@ export class OrdenesController {
     console.log('🔬 ═══════════════════════════════════════════════════════════════');
     console.log('');
     console.log('📋 EVIDENCIAS recibidas:', dto.evidencias?.length || 0);
-    dto.evidencias?.slice(0, 3).forEach((ev, i) => {
-      console.log(`   [${i}] tipo="${ev.tipo}", base64=${ev.base64?.length || 0} chars`);
+    // ✅ FIX 17-DIC-2025: Log forense de idOrdenEquipo para diagnóstico multi-equipo
+    dto.evidencias?.slice(0, 5).forEach((ev, i) => {
+      console.log(`   [${i}] tipo="${ev.tipo}", idOrdenEquipo=${ev.idOrdenEquipo ?? 'NULL'}, desc="${ev.descripcion?.substring(0, 30) ?? 'N/A'}...", base64=${ev.base64?.length || 0} chars`);
     });
+    if (dto.evidencias?.length > 5) {
+      console.log(`   ... y ${dto.evidencias.length - 5} evidencias más`);
+    }
     console.log('');
     console.log('✍️ FIRMAS:');
     console.log(`   tecnico: tipo="${dto.firmas?.tecnico?.tipo}", idPersona=${dto.firmas?.tecnico?.idPersona}`);
@@ -658,6 +666,8 @@ export class OrdenesController {
         base64: e.base64,
         descripcion: e.descripcion,
         formato: e.formato,
+        // ✅ FIX 17-DIC-2025: Incluir idOrdenEquipo para multi-equipos
+        idOrdenEquipo: e.idOrdenEquipo,
       })),
       firmas: {
         tecnico: {
@@ -702,6 +712,140 @@ export class OrdenesController {
       data: result.datos,
       tiempoTotal: `${result.tiempoTotal}ms`,
     };
+  }
+
+  /**
+   * ==========================================================================
+   * POST /api/ordenes/:id/finalizar-completo-stream
+   * ==========================================================================
+   * 
+   * ENDPOINT CON STREAMING DE PROGRESO EN TIEMPO REAL
+   * 
+   * Este endpoint ejecuta el mismo flujo de finalización pero emite eventos
+   * Server-Sent Events (SSE) para que el cliente pueda mostrar el progreso
+   * en tiempo real.
+   * 
+   * Cada evento tiene el formato:
+   * {
+   *   step: 'validando' | 'evidencias' | 'firmas' | 'generando_pdf' | ...
+   *   status: 'pending' | 'in_progress' | 'completed' | 'error'
+   *   message: 'Mensaje descriptivo'
+   *   progress: 0-100
+   *   timestamp: 1234567890
+   * }
+   */
+  @Post(':id/finalizar-completo-stream')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Finalizar orden con streaming de progreso',
+    description: 'Ejecuta el flujo completo de finalización emitiendo eventos SSE de progreso en tiempo real.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', example: 1 })
+  @ApiResponse({
+    status: 200,
+    description: 'Stream de eventos SSE con el progreso de la finalización.',
+  })
+  async finalizarCompletoStream(
+    @Param('id') id: string,
+    @Body() dto: FinalizarOrdenCompletoDto,
+    @UserId() userId: number,
+    @Res() res: Response,
+  ) {
+    // Configurar headers para SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Para nginx
+    res.flushHeaders();
+
+    // Helper para enviar eventos SSE
+    const sendEvent = (event: ProgressEvent) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    try {
+      // Construir DTO interno con ID de orden
+      const finalizarDto = {
+        idOrden: parseInt(id, 10),
+        evidencias: dto.evidencias.map(e => ({
+          tipo: e.tipo as 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION',
+          base64: e.base64,
+          descripcion: e.descripcion,
+          formato: e.formato,
+          idOrdenEquipo: e.idOrdenEquipo,
+        })),
+        firmas: {
+          tecnico: {
+            tipo: 'TECNICO' as const,
+            base64: dto.firmas.tecnico.base64,
+            idPersona: dto.firmas.tecnico.idPersona,
+            formato: dto.firmas.tecnico.formato,
+          },
+          cliente: dto.firmas.cliente ? {
+            tipo: 'CLIENTE' as const,
+            base64: dto.firmas.cliente.base64,
+            idPersona: dto.firmas.cliente.idPersona,
+            formato: dto.firmas.cliente.formato,
+          } : undefined,
+        },
+        actividades: dto.actividades.map(a => ({
+          sistema: a.sistema,
+          descripcion: a.descripcion,
+          resultado: a.resultado as 'B' | 'M' | 'C' | 'N/A',
+          observaciones: a.observaciones,
+        })),
+        mediciones: dto.mediciones?.map(m => ({
+          parametro: m.parametro,
+          valor: m.valor,
+          unidad: m.unidad,
+          nivelAlerta: m.nivelAlerta as 'OK' | 'WARNING' | 'CRITICAL' | undefined,
+        })),
+        observaciones: dto.observaciones,
+        datosModulo: dto.datosModulo,
+        horaEntrada: dto.horaEntrada,
+        horaSalida: dto.horaSalida,
+        emailAdicional: dto.emailAdicional,
+        usuarioId: userId || 1,
+      };
+
+      // Ejecutar flujo completo con callback de progreso
+      const result = await this.finalizacionService.finalizarOrden(
+        finalizarDto,
+        (event) => sendEvent(event), // Callback para emitir eventos SSE
+      );
+
+      // Enviar resultado final
+      res.write(`data: ${JSON.stringify({
+        step: 'result',
+        status: 'completed',
+        message: result.mensaje,
+        progress: 100,
+        timestamp: Date.now(),
+        data: {
+          success: result.success,
+          datos: result.datos,
+          tiempoTotal: result.tiempoTotal,
+        },
+      })}\n\n`);
+
+      // Cerrar stream
+      res.end();
+
+    } catch (error) {
+      const err = error as Error;
+      
+      // Enviar evento de error
+      res.write(`data: ${JSON.stringify({
+        step: 'error',
+        status: 'error',
+        message: err.message,
+        progress: 0,
+        timestamp: Date.now(),
+      })}\n\n`);
+
+      // Cerrar stream
+      res.end();
+    }
   }
 
 }

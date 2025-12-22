@@ -9,6 +9,7 @@ import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
 import 'connectivity_service.dart';
+import 'sync_progress.dart';
 
 /// Resultado del intento de sincronización offline
 class OfflineSyncResult {
@@ -38,11 +39,17 @@ class OfflineSyncService {
   final AppDatabase _db;
   final Dio _apiClient;
   final ConnectivityService _connectivity;
+  final SyncProgressNotifier _progressNotifier;
 
   // Máximo de reintentos antes de abandonar
   static const int maxIntentos = 5;
 
-  OfflineSyncService(this._db, this._apiClient, this._connectivity);
+  OfflineSyncService(
+    this._db,
+    this._apiClient,
+    this._connectivity,
+    this._progressNotifier,
+  );
 
   /// Guarda una orden en la cola de sincronización pendiente
   ///
@@ -444,6 +451,9 @@ class OfflineSyncService {
   }
 
   /// Reintenta sincronizar una orden específica
+  /// 
+  /// ✅ FIX 18-DIC-2025: Mantener estado EN_PROCESO durante toda la operación
+  /// para que la UI muestre el spinner y el técnico vea que está subiendo
   Future<bool> reintentarOrden(int idOrdenLocal) async {
     final online = await _connectivity.checkConnection();
     if (!online) return false;
@@ -454,20 +464,180 @@ class OfflineSyncService {
 
     if (orden == null) return false;
 
-    // Resetear intentos y estado
+    // ✅ Marcar como EN_PROCESO inmediatamente (NO PENDIENTE)
+    // Esto mantiene la orden visible en la UI con estado "Subiendo..."
     await (_db.update(
       _db.ordenesPendientesSync,
     )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).write(
       const OrdenesPendientesSyncCompanion(
-        estadoSync: Value('PENDIENTE'),
-        intentos: Value(0),
+        estadoSync: Value('EN_PROCESO'),
         ultimoError: Value(null),
       ),
     );
 
-    // Procesar cola (solo esta orden se procesará)
-    final result = await procesarCola();
-    return result.ordenesSync > 0;
+    // Procesar SOLO esta orden (no toda la cola)
+    return await _procesarOrdenIndividual(orden);
+  }
+
+  /// Procesa una orden individual sin pasar por procesarCola()
+  /// Mantiene el control del estado durante toda la operación
+  /// ✅ ACTUALIZADO: Emite progreso para feedback visual en UI
+  Future<bool> _procesarOrdenIndividual(OrdenesPendientesSyncData orden) async {
+    try {
+      debugPrint('🔄 [SYNC-INDIVIDUAL] Procesando orden ${orden.idOrdenBackend}');
+      
+      // ✅ PROGRESO: Iniciando
+      _progressNotifier.iniciar(orden.idOrdenBackend);
+      _progressNotifier.avanzar(SyncStep.preparando);
+
+      // PASO 0: VERIFICAR SI LA ORDEN YA FUE COMPLETADA EN EL BACKEND
+      final verificacionInicial = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+      if (verificacionInicial['completada'] == true) {
+        debugPrint('✅ [SYNC-INDIVIDUAL] Orden ya completada en backend');
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+          'pdfUrl': verificacionInicial['pdfUrl'],
+        });
+        _progressNotifier.completar();
+        return true;
+      }
+
+      // Decodificar payload
+      final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
+      _progressNotifier.completarPaso(SyncStep.preparando);
+
+      // ✅ PROGRESO: Evidencias
+      _progressNotifier.avanzar(SyncStep.evidencias);
+      // (las evidencias ya están en el payload)
+      _progressNotifier.completarPaso(SyncStep.evidencias);
+
+      // ✅ PROGRESO: Firmas
+      _progressNotifier.avanzar(SyncStep.firmas);
+      // (las firmas ya están en el payload)
+      _progressNotifier.completarPaso(SyncStep.firmas);
+
+      // ✅ PROGRESO: Enviando al servidor
+      _progressNotifier.avanzar(SyncStep.enviando);
+
+      // CRÍTICO: Asegurar que la orden esté en EN_PROCESO en el backend
+      try {
+        await _apiClient.put('/ordenes/${orden.idOrdenBackend}/iniciar');
+      } on DioException catch (iniciarError) {
+        final statusCode = iniciarError.response?.statusCode;
+        if (statusCode == 400 || statusCode == 409) {
+          // Verificar si ya está completada
+          final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+          if (verificacion['completada'] == true) {
+            await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+            await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+              'pdfUrl': verificacion['pdfUrl'],
+            });
+            _progressNotifier.completar();
+            return true;
+          }
+        } else {
+          throw iniciarError;
+        }
+      }
+
+      // Enviar al backend
+      debugPrint('📤 [SYNC-INDIVIDUAL] Enviando a finalizar-completo...');
+      final response = await _apiClient.post(
+        '/ordenes/${orden.idOrdenBackend}/finalizar-completo',
+        data: payload,
+        options: Options(
+          sendTimeout: const Duration(minutes: 5),
+          receiveTimeout: const Duration(minutes: 5),
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint('✅ [SYNC-INDIVIDUAL] Éxito - eliminando de cola');
+        _progressNotifier.completarPaso(SyncStep.enviando);
+        
+        // ✅ PROGRESO: PDF y Email (backend los procesa)
+        _progressNotifier.avanzar(SyncStep.pdf);
+        _progressNotifier.completarPaso(SyncStep.pdf);
+        _progressNotifier.avanzar(SyncStep.email);
+        _progressNotifier.completarPaso(SyncStep.email);
+        
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        try {
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, response.data);
+        } catch (localError) {
+          debugPrint('⚠️ Error guardando estado local (no crítico): $localError');
+        }
+        
+        _progressNotifier.completar();
+        return true;
+      } else if (response.statusCode == 400 || response.statusCode == 409) {
+        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        if (verificacion['completada'] == true) {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+            'pdfUrl': verificacion['pdfUrl'],
+          });
+          _progressNotifier.completar();
+          return true;
+        }
+        // Error real - marcar como error
+        final errorMsg = 'Error ${response.statusCode}: ${response.data}';
+        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
+        _progressNotifier.error(errorMsg);
+        return false;
+      } else {
+        final errorMsg = 'Error ${response.statusCode}: ${response.data}';
+        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
+        _progressNotifier.error(errorMsg);
+        return false;
+      }
+    } on DioException catch (e) {
+      debugPrint('❌ [SYNC-INDIVIDUAL] DioException: ${e.type} - ${e.message}');
+      
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 400 || statusCode == 409) {
+        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        if (verificacion['completada'] == true) {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+            'pdfUrl': verificacion['pdfUrl'],
+          });
+          _progressNotifier.completar();
+          return true;
+        }
+        final errorMsg = 'Error $statusCode';
+        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
+        _progressNotifier.error(errorMsg);
+        return false;
+      }
+
+      // Verificar si el backend procesó durante timeout
+      for (int intento = 1; intento <= 3; intento++) {
+        debugPrint('🔍 [SYNC-INDIVIDUAL] Verificación intento $intento/3...');
+        await Future.delayed(Duration(seconds: intento * 5));
+        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        if (verificacion['completada'] == true) {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+            'pdfUrl': verificacion['pdfUrl'],
+          });
+          _progressNotifier.completar();
+          return true;
+        }
+      }
+
+      // Marcar como error para reintento
+      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Error de conexión';
+      await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
+      _progressNotifier.error(errorMsg);
+      return false;
+    } catch (e) {
+      debugPrint('❌ [SYNC-INDIVIDUAL] Error inesperado: $e');
+      final errorMsg = e.toString();
+      await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
+      _progressNotifier.error(errorMsg);
+      return false;
+    }
   }
 
   /// Cancela una orden de la cola de sincronización
@@ -551,7 +721,8 @@ final offlineSyncServiceProvider = Provider<OfflineSyncService>((ref) {
   final db = ref.watch(databaseProvider);
   final apiClient = ref.watch(apiClientProvider);
   final connectivity = ref.watch(connectivityServiceProvider);
-  return OfflineSyncService(db, apiClient.dio, connectivity);
+  final progressNotifier = ref.watch(syncProgressProvider.notifier);
+  return OfflineSyncService(db, apiClient.dio, connectivity, progressNotifier);
 });
 
 /// Provider del conteo de órdenes pendientes (reactivo para badge)

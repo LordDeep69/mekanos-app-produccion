@@ -9,11 +9,25 @@
  * - Tablero de control
  * - Presostatos
  * - Tanques y membranas
+ *
+ * ✅ MULTI-EQUIPOS (15-DIC-2025): Soporta órdenes con múltiples equipos
  */
 
-import { baseStyles, DatosOrdenPDF, MEKANOS_COLORS } from './mekanos-base.template';
+import {
+  baseStyles,
+  DatosOrdenPDF,
+  EvidenciasPorEquipoPDF,
+  generarChecklistMultiEquipo,
+  generarMedicionesMultiEquipo,
+  generarLeyendaEquipos,
+  MEKANOS_COLORS,
+} from './mekanos-base.template';
 
 export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
+  // ✅ MULTI-EQUIPOS: Determinar si usar tablas multi-equipo
+  const esMultiEquipo =
+    datos.esMultiEquipo || (datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1);
+
   return `
 <!DOCTYPE html>
 <html lang="es">
@@ -71,11 +85,30 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
     <!-- HEADER -->
     ${generarHeader(datos)}
     
+    <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
+    ${generarLeyendaEquipos(
+      datos.actividadesPorEquipo?.map((a) => a.equipo),
+      esMultiEquipo,
+    )}
+    
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
     ${generarDatosCliente(datos)}
     
     <!-- CHECKLIST DE BOMBAS -->
-    ${generarChecklistBombas(datos)}
+    <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
+    ${
+      esMultiEquipo && datos.actividadesPorEquipo
+        ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
+        : generarChecklistBombas(datos)
+    }
+    
+    <!-- MEDICIONES -->
+    <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
+    ${
+      esMultiEquipo && datos.medicionesPorEquipo
+        ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+        : '' // Las mediciones se incluyen en generarChecklistBombas para órdenes simples
+    }
     
     <!-- SIMBOLOGÍA -->
     ${generarSimbologia()}
@@ -83,7 +116,11 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
   
   <div class="page page-break">
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
-    ${generarEvidencias(datos.evidencias)}
+    ${
+      datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+        ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
+        : generarEvidencias(datos.evidencias)
+    }
     
     <!-- OBSERVACIONES -->
     ${generarObservaciones(datos.observaciones)}
@@ -163,7 +200,10 @@ const generarDatosCliente = (datos: DatosOrdenPDF): string => `
  * Función auxiliar para obtener valor de medición por nombre EXACTO de parámetro
  * ✅ CORREGIDO: Usa coincidencia exacta para evitar cruces de datos
  */
-const obtenerMedicionExacta = (mediciones: any[], nombreExacto: string): { valor: string; unidad: string } => {
+const obtenerMedicionExacta = (
+  mediciones: any[],
+  nombreExacto: string,
+): { valor: string; unidad: string } => {
   if (!mediciones || mediciones.length === 0) return { valor: '-', unidad: '' };
 
   // Buscar coincidencia exacta (case-insensitive)
@@ -183,19 +223,21 @@ const obtenerMedicionExacta = (mediciones: any[], nombreExacto: string): { valor
  */
 const esActividadMedicion = (descripcion: string): boolean => {
   const desc = descripcion.toLowerCase();
-  return desc.includes('medición') ||
+  return (
+    desc.includes('medición') ||
     desc.includes('presión') ||
     desc.includes('voltaje') ||
     desc.includes('amperaje') ||
     desc.includes('temperatura') ||
     desc.includes('rpm') ||
-    (desc.includes('medir') && !desc.includes('revisar'));
+    (desc.includes('medir') && !desc.includes('revisar'))
+  );
 };
 
 const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
   // Filtrar actividades que NO son mediciones (las mediciones van en sección aparte)
   const actividadesChecklist = (datos.actividades || []).filter(
-    (act: any) => !esActividadMedicion(act.descripcion || '')
+    (act: any) => !esActividadMedicion(act.descripcion || ''),
   );
 
   // Obtener mediciones con NOMBRES EXACTOS del catálogo
@@ -222,7 +264,9 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
       </thead>
       <tbody>
         <!-- Actividades dinámicas del checklist -->
-        ${actividadesChecklist.map((act: any) => `
+        ${actividadesChecklist
+          .map(
+            (act: any) => `
           <tr>
             <td>${act.descripcion || 'Actividad'}</td>
             <td style="text-align: center;">
@@ -230,7 +274,9 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
             </td>
             <td style="font-size: 9px;">${act.observaciones || ''}</td>
           </tr>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -287,22 +333,32 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
           <td style="text-align: center;"><span class="presion-value">${presionTanques.valor}</span></td>
           <td style="text-align: center;">PSI</td>
         </tr>
-        ${(datos.mediciones || []).filter((m: any) => {
-    // Excluir mediciones que ya se mostraron arriba (coincidencia exacta)
-    const nombresMostrados = [
-      'medición de presiones', 'medición de voltaje', 'medición de amperaje',
-      'temperatura', 'presostato presión encendido', 'presostato presión apagado',
-      'presión tanques', 'análisis de vibración'
-    ];
-    const param = (m.parametro || '').toLowerCase().trim();
-    return !nombresMostrados.includes(param);
-  }).map((m: any) => `
+        ${(datos.mediciones || [])
+          .filter((m: any) => {
+            // Excluir mediciones que ya se mostraron arriba (coincidencia exacta)
+            const nombresMostrados = [
+              'medición de presiones',
+              'medición de voltaje',
+              'medición de amperaje',
+              'temperatura',
+              'presostato presión encendido',
+              'presostato presión apagado',
+              'presión tanques',
+              'análisis de vibración',
+            ];
+            const param = (m.parametro || '').toLowerCase().trim();
+            return !nombresMostrados.includes(param);
+          })
+          .map(
+            (m: any) => `
           <tr style="background: ${MEKANOS_COLORS.background};">
             <td><strong>${m.parametro}</strong></td>
             <td style="text-align: center;"><span class="presion-value">${m.valor ?? '-'}</span></td>
             <td style="text-align: center;">${m.unidad || ''}</td>
           </tr>
-        `).join('')}
+        `,
+          )
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -335,13 +391,17 @@ const generarSimbologia = (): string => `
 
 /**
  * Detecta si una evidencia es de INSUMOS por su caption/descripción
+ * ✅ FIX 17-DIC-2025: Detección precisa basada en descripción exacta de la actividad
  */
 const esEvidenciaInsumos = (caption: string): boolean => {
   const captionLower = caption.toLowerCase();
-  return captionLower.includes('insumo') ||
-    captionLower.includes('filtro') ||
-    captionLower.includes('aceite') ||
-    captionLower.includes('verificación y registro fotográfico de insumos');
+  // Detección PRECISA: La descripción exacta de la actividad de insumos
+  return (
+    captionLower.includes('verificación y registro fotográfico de insumos') ||
+    captionLower.includes('verificacion y registro fotografico de insumos') ||
+    // Fallback más específico
+    (captionLower.includes('insumo') && captionLower.includes('registro'))
+  );
 };
 
 /**
@@ -363,12 +423,18 @@ const extraerTipoEvidencia = (caption: string): string => {
  */
 const getTituloSeccionBomba = (tipo: string): { titulo: string; icono: string } => {
   switch (tipo) {
-    case 'ANTES': return { titulo: 'Estado Inicial (Antes del Servicio)', icono: '📸' };
-    case 'DURANTE': return { titulo: 'Durante el Servicio', icono: '🔧' };
-    case 'DESPUES': return { titulo: 'Estado Final (Después del Servicio)', icono: '✅' };
-    case 'MEDICION': return { titulo: 'Mediciones y Verificaciones', icono: '📏' };
-    case 'GENERAL': return { titulo: 'Evidencias Generales', icono: '📷' };
-    default: return { titulo: 'Otras Evidencias', icono: '📎' };
+    case 'ANTES':
+      return { titulo: 'Estado Inicial (Antes del Servicio)', icono: '📸' };
+    case 'DURANTE':
+      return { titulo: 'Durante el Servicio', icono: '🔧' };
+    case 'DESPUES':
+      return { titulo: 'Estado Final (Después del Servicio)', icono: '✅' };
+    case 'MEDICION':
+      return { titulo: 'Mediciones y Verificaciones', icono: '📏' };
+    case 'GENERAL':
+      return { titulo: 'Evidencias Generales', icono: '📷' };
+    default:
+      return { titulo: 'Otras Evidencias', icono: '📎' };
   }
 };
 
@@ -393,7 +459,9 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
   });
 
   // Separar evidencias de INSUMOS (para bombas no debería haber, pero por consistencia)
-  const evidenciasRegulares = evidenciasNormalizadas.filter((ev: any) => !esEvidenciaInsumos(ev.caption));
+  const evidenciasRegulares = evidenciasNormalizadas.filter(
+    (ev: any) => !esEvidenciaInsumos(ev.caption),
+  );
 
   // Agrupar por tipo (ANTES, DURANTE, DESPUÉS)
   const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
@@ -402,14 +470,17 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
   evidenciasRegulares.forEach((ev: any) => {
     const tipo = extraerTipoEvidencia(ev.caption);
     if (!grupos[tipo]) grupos[tipo] = [];
-    const captionLimpio = ev.caption.replace(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i, '');
+    const captionLimpio = ev.caption.replace(
+      /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
+      '',
+    );
     grupos[tipo].push({ url: ev.url, caption: captionLimpio });
   });
 
   // Generar HTML agrupado por secciones
   const seccionesHTML = ordenTipos
-    .filter(tipo => grupos[tipo] && grupos[tipo].length > 0)
-    .map(tipo => {
+    .filter((tipo) => grupos[tipo] && grupos[tipo].length > 0)
+    .map((tipo) => {
       const { titulo, icono } = getTituloSeccionBomba(tipo);
       const evidenciasTipo = grupos[tipo];
 
@@ -420,7 +491,9 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
         ? 'linear-gradient(135deg, #0d9488 0%, #115e59 100%)'
         : `linear-gradient(135deg, ${MEKANOS_COLORS.primary} 0%, ${MEKANOS_COLORS.secondary} 100%)`;
       const bordeGrupo = esGeneral ? 'border: 2px solid #0d9488;' : '';
-      const fondoGrupo = esGeneral ? 'background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);' : '';
+      const fondoGrupo = esGeneral
+        ? 'background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);'
+        : '';
 
       return `
       <div class="evidencias-grupo" style="margin-bottom: 20px; ${bordeGrupo} ${fondoGrupo} border-radius: 8px; overflow: hidden;">
@@ -428,12 +501,16 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
           ${tituloMostrar} (${evidenciasTipo.length})
         </div>
         <div class="evidencias-grid" style="padding: 10px;">
-          ${evidenciasTipo.map((ev: any, idx: number) => `
+          ${evidenciasTipo
+            .map(
+              (ev: any, idx: number) => `
             <div class="evidencia-item">
               <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption" style="${esGeneral ? 'background: #0d9488;' : ''}">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
       </div>
     `;
@@ -461,17 +538,19 @@ const generarObservaciones = (observaciones: string): string => `
 const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      ${firmaTecnico
-    ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+      ${
+        firmaTecnico
+          ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
+          : `<div class="firma-line"></div>`
+      }
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      ${firmaCliente
-    ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+      ${
+        firmaCliente
+          ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
+          : `<div class="firma-line"></div>`
+      }
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
   </div>
@@ -484,5 +563,104 @@ const generarFooter = (): string => `
     CEL: 315-7083350 E-MAIL: mekanossas2@gmail.com
   </div>
 `;
+
+/**
+ * ✅ MULTI-EQUIPOS: Genera evidencias agrupadas por equipo
+ * Cada equipo tiene su propia sección con fotos ANTES/DURANTE/DESPUÉS
+ */
+const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPDF[]): string => {
+  if (!evidenciasPorEquipo || evidenciasPorEquipo.length === 0) {
+    return `
+    <div class="section">
+      <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+      <div style="padding: 20px; text-align: center; color: #666;">
+        No se registraron evidencias fotográficas para este servicio.
+      </div>
+    </div>
+    `;
+  }
+
+  const equiposHTML = evidenciasPorEquipo
+    .map((grupo, equipoIdx) => {
+      const { equipo, evidencias } = grupo;
+      const nombreEquipo =
+        equipo.nombreSistema || equipo.nombreEquipo || `Equipo ${equipo.ordenSecuencia}`;
+
+      // Agrupar evidencias por tipo (ANTES, DURANTE, DESPUÉS)
+      const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
+      const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+
+      evidencias.forEach((ev: any) => {
+        const tipo = extraerTipoEvidencia(ev.caption || '');
+        if (!grupos[tipo]) grupos[tipo] = [];
+        const captionLimpio = (ev.caption || '').replace(
+          /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
+          '',
+        );
+        grupos[tipo].push({
+          url: ev.url,
+          caption: captionLimpio || `Foto ${grupos[tipo].length + 1}`,
+        });
+      });
+
+      // Generar secciones de fotos por tipo
+      const tiposHTML = ordenTipos
+        .filter((tipo) => grupos[tipo] && grupos[tipo].length > 0)
+        .map((tipo) => {
+          const { titulo, icono } = getTituloSeccionBomba(tipo);
+          const evidenciasTipo = grupos[tipo];
+
+          return `
+        <div style="margin-bottom: 12px;">
+          <div style="background: linear-gradient(135deg, ${MEKANOS_COLORS.secondary} 0%, ${MEKANOS_COLORS.primary} 100%); color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
+            ${icono} ${titulo} (${evidenciasTipo.length})
+          </div>
+          <div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
+            ${evidenciasTipo
+              .map(
+                (ev: any, idx: number) => `
+              <div class="evidencia-item">
+                <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
+              </div>
+            `,
+              )
+              .join('')}
+          </div>
+        </div>
+      `;
+        })
+        .join('');
+
+      // Colores alternados para cada equipo
+      const coloresEquipo = [
+        { bg: '#e0f2fe', border: '#0284c7', header: '#0369a1' },
+        { bg: '#dcfce7', border: '#16a34a', header: '#15803d' },
+        { bg: '#fef3c7', border: '#d97706', header: '#b45309' },
+        { bg: '#fce7f3', border: '#db2777', header: '#be185d' },
+      ];
+      const color = coloresEquipo[equipoIdx % coloresEquipo.length];
+
+      return `
+    <div style="margin-bottom: 20px; border: 2px solid ${color.border}; border-radius: 8px; overflow: hidden;">
+      <div style="background: ${color.header}; color: white; padding: 10px 15px; font-weight: bold; font-size: 13px;">
+        🔧 EQUIPO ${equipo.ordenSecuencia}: ${nombreEquipo.toUpperCase()}
+        ${equipo.codigoEquipo ? `<span style="font-weight: normal; font-size: 11px; opacity: 0.9;"> (${equipo.codigoEquipo})</span>` : ''}
+      </div>
+      <div style="padding: 10px; background: ${color.bg};">
+        ${tiposHTML || '<div style="text-align: center; color: #666; padding: 10px;">Sin evidencias para este equipo</div>'}
+      </div>
+    </div>
+  `;
+    })
+    .join('');
+
+  return `
+  <div class="section">
+    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO - MULTI-EQUIPOS (${evidenciasPorEquipo.length} equipos)</div>
+    ${equiposHTML}
+  </div>
+`;
+};
 
 export default generarTipoABombaHTML;

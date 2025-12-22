@@ -12,6 +12,7 @@ import '../database/database_service.dart';
 import 'connectivity_service.dart';
 import 'offline_sync_service.dart';
 import 'sync_notification_service.dart';
+import 'sync_progress.dart';
 
 /// Provider para el servicio de sync upload
 final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
@@ -20,7 +21,8 @@ final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
   final connectivity = ref.watch(connectivityServiceProvider);
   final offlineSync = ref.watch(offlineSyncServiceProvider);
   final notificationService = ref.watch(syncNotificationServiceProvider);
-  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync, notificationService);
+  final progressNotifier = ref.watch(syncProgressProvider.notifier);
+  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync, notificationService, progressNotifier);
 });
 
 /// Resultado de la sincronización de subida
@@ -52,12 +54,14 @@ class SyncUploadResult {
 /// 5. Si NO hay conexión: Guarda en cola offline para sync posterior
 /// 6. Actualiza estado local tras éxito
 /// ✅ ENTERPRISE: Notifica UI de eventos de sincronización
+/// ✅ 19-DIC-2025: Emite progreso en tiempo real para feedback visual
 class SyncUploadService {
   final AppDatabase _db;
   final Dio _apiClient;
   final ConnectivityService _connectivity;
   final OfflineSyncService _offlineSync;
   final SyncNotificationService _notificationService;
+  final SyncProgressNotifier _progressNotifier;
 
   SyncUploadService(
     this._db,
@@ -65,6 +69,7 @@ class SyncUploadService {
     this._connectivity,
     this._offlineSync,
     this._notificationService,
+    this._progressNotifier,
   );
 
   /// Finaliza y sincroniza una orden completa al backend
@@ -88,6 +93,10 @@ class SyncUploadService {
     String? razonFalla,
   }) async {
     try {
+      // ✅ 19-DIC-2025: Iniciar progreso
+      _progressNotifier.iniciar(idOrdenBackend);
+      _progressNotifier.avanzar(SyncStep.preparando);
+      
       // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
       final equipos = await _db.getEquiposByOrdenServicio(idOrdenBackend);
       final esMultiEquipo = equipos.length > 1;
@@ -211,6 +220,10 @@ class SyncUploadService {
             .toList();
       }
 
+      // ✅ 19-DIC-2025: Progreso - Evidencias
+      _progressNotifier.completarPaso(SyncStep.preparando);
+      _progressNotifier.avanzar(SyncStep.evidencias);
+
       // 3. Recopilar evidencias y convertir a Base64
       final evidencias = await (_db.select(
         _db.evidencias,
@@ -236,6 +249,10 @@ class SyncUploadService {
           });
         }
       }
+
+      // ✅ 19-DIC-2025: Progreso - Firmas
+      _progressNotifier.completarPaso(SyncStep.evidencias);
+      _progressNotifier.avanzar(SyncStep.firmas);
 
       // 4. Recopilar firmas y convertir a Base64
       final firmas = await _db.getFirmasByOrden(idOrdenLocal);
@@ -274,6 +291,7 @@ class SyncUploadService {
 
       // 5. Validar requisitos mínimos
       if (firmasPayload == null) {
+        _progressNotifier.error('Falta la firma del técnico');
         return SyncUploadResult(
           success: false,
           mensaje: 'Falta la firma del técnico',
@@ -282,12 +300,16 @@ class SyncUploadService {
       }
 
       if (evidenciasPayload.isEmpty) {
+        _progressNotifier.error('Debe incluir al menos una evidencia fotográfica');
         return SyncUploadResult(
           success: false,
           mensaje: 'Debe incluir al menos una evidencia fotográfica',
           error: 'MISSING_EVIDENCIAS',
         );
       }
+
+      // ✅ 19-DIC-2025: Progreso - Firmas completado
+      _progressNotifier.completarPaso(SyncStep.firmas);
 
       // 6. Construir payload completo
       // ✅ MULTI-EQUIPOS: Incluir estructura agrupada por equipo
@@ -344,6 +366,7 @@ class SyncUploadService {
         if (guardado) {
           // ✅ ENTERPRISE: Notificar que se guardó offline
           _notificationService.notifyOrderQueuedOffline('#$idOrdenBackend');
+          _progressNotifier.reset(); // No es error, pero no se subió
           
           return SyncUploadResult(
             success: true,
@@ -352,6 +375,7 @@ class SyncUploadService {
             guardadoOffline: true,
           );
         } else {
+          _progressNotifier.error('Error guardando orden para sync posterior');
           return SyncUploadResult(
             success: false,
             mensaje: 'Error guardando orden para sync posterior',
@@ -369,7 +393,10 @@ class SyncUploadService {
         razonFalla: razonFalla,
       );
 
-      // 9. CON CONEXIÓN - Intentar sync normal
+      // ✅ 19-DIC-2025: Progreso - Enviando al servidor
+      _progressNotifier.avanzar(SyncStep.validando, mensaje: 'Conectando con servidor...');
+
+      // 9. CON CONEXIÓN - Intentar sync con streaming de progreso
       try {
         // Asegurar que la orden esté en EN_PROCESO en el backend
         try {
@@ -378,35 +405,26 @@ class SyncUploadService {
           // Ignorar - puede ya estar en proceso
         }
 
-        // Enviar al backend
-        final response = await _apiClient.post(
-          '/ordenes/$idOrdenBackend/finalizar-completo',
-          data: payload,
-          options: Options(
-            sendTimeout: const Duration(minutes: 5),
-            receiveTimeout: const Duration(minutes: 5),
-          ),
+        // ✅ 19-DIC-2025: Usar endpoint con SSE para progreso en tiempo real
+        final response = await _enviarConProgresoSSE(
+          idOrdenBackend: idOrdenBackend,
+          payload: payload,
         );
 
-        if (response.statusCode == 200) {
+        if (response.success) {
+          _progressNotifier.completar();
+          
           // Extraer URL del PDF de la respuesta
           String? pdfUrl;
-          if (response.data is Map) {
-            pdfUrl = response.data['datos']?['documento']?['url'];
-            pdfUrl ??= response.data['pdfUrl'];
-            pdfUrl ??= response.data['pdf_url'];
-            pdfUrl ??= response.data['data']?['pdfUrl'];
-            pdfUrl ??= response.data['data']?['documento']?['url'];
+          if (response.datos != null) {
+            pdfUrl = response.datos!['documento']?['url'];
+            pdfUrl ??= response.datos!['pdfUrl'];
           }
 
           // CRÍTICO: El backend YA procesó la orden exitosamente
-          // Si falla el guardado local, AÚN debemos retornar éxito
-          // para evitar que el usuario reintente y cause duplicación
           try {
             await _marcarOrdenSincronizada(idOrdenLocal, urlPdf: pdfUrl);
           } catch (localError) {
-            // Error guardando localmente - pero el backend YA procesó
-            // No es crítico, la orden está sincronizada en el servidor
             debugPrint(
               '⚠️ Error guardando estado local (no crítico): $localError',
             );
@@ -415,10 +433,11 @@ class SyncUploadService {
           return SyncUploadResult(
             success: true,
             mensaje: 'Orden finalizada y sincronizada correctamente',
-            datos: response.data,
+            datos: response.datos,
           );
         } else {
           // Error del servidor - guardar en cola para retry
+          _progressNotifier.error(response.error ?? 'Error del servidor');
           await _offlineSync.guardarEnCola(
             idOrdenLocal: idOrdenLocal,
             idOrdenBackend: idOrdenBackend,
@@ -426,8 +445,8 @@ class SyncUploadService {
           );
           return SyncUploadResult(
             success: false,
-            mensaje: 'Error del servidor. Se reintentará automáticamente.',
-            error: response.data?.toString(),
+            mensaje: response.error ?? 'Error del servidor. Se reintentará automáticamente.',
+            error: response.error,
             guardadoOffline: true,
           );
         }
@@ -759,4 +778,165 @@ class SyncUploadService {
       },
     };
   }
+
+  /// ✅ 19-DIC-2025: Envía la orden usando SSE para progreso en tiempo real
+  /// 
+  /// Este método usa el endpoint /finalizar-completo-stream que retorna
+  /// Server-Sent Events (SSE) con el progreso de cada paso del backend.
+  /// 
+  /// Los eventos se procesan en tiempo real y se emiten al SyncProgressNotifier
+  /// para que la UI se actualice.
+  Future<_SSEResult> _enviarConProgresoSSE({
+    required int idOrdenBackend,
+    required Map<String, dynamic> payload,
+  }) async {
+    debugPrint('📡 [SSE] Iniciando envío con streaming para orden $idOrdenBackend');
+    
+    try {
+      // Usar responseType: stream para leer SSE
+      final response = await _apiClient.post<ResponseBody>(
+        '/ordenes/$idOrdenBackend/finalizar-completo-stream',
+        data: payload,
+        options: Options(
+          responseType: ResponseType.stream,
+          sendTimeout: const Duration(minutes: 5),
+          receiveTimeout: const Duration(minutes: 5),
+          headers: {
+            'Accept': 'text/event-stream',
+          },
+        ),
+      );
+      
+      if (response.statusCode != 200) {
+        return _SSEResult(
+          success: false,
+          error: 'Error del servidor: ${response.statusCode}',
+        );
+      }
+      
+      final stream = response.data?.stream;
+      if (stream == null) {
+        return _SSEResult(
+          success: false,
+          error: 'No se recibió stream del servidor',
+        );
+      }
+      
+      // Variables para acumular el resultado final
+      Map<String, dynamic>? resultadoFinal;
+      String? ultimoError;
+      
+      // Leer el stream línea por línea
+      await for (final chunk in stream) {
+        final lines = utf8.decode(chunk).split('\n');
+        
+        for (final line in lines) {
+          if (line.startsWith('data: ')) {
+            final jsonStr = line.substring(6).trim();
+            if (jsonStr.isEmpty) continue;
+            
+            try {
+              final evento = json.decode(jsonStr) as Map<String, dynamic>;
+              debugPrint('📡 [SSE] Evento recibido: ${evento['step']} - ${evento['status']}');
+              
+              // Procesar el evento en el notifier
+              _progressNotifier.procesarEventoBackend(evento);
+              
+              // Si es el resultado final, guardarlo
+              if (evento['step'] == 'result' && evento['data'] != null) {
+                resultadoFinal = evento['data'] as Map<String, dynamic>;
+              }
+              
+              // Si es error, guardarlo
+              if (evento['status'] == 'error') {
+                ultimoError = evento['message'] as String?;
+              }
+            } catch (e) {
+              debugPrint('⚠️ [SSE] Error parseando evento: $e');
+            }
+          }
+        }
+      }
+      
+      // Verificar resultado
+      if (ultimoError != null) {
+        return _SSEResult(
+          success: false,
+          error: ultimoError,
+        );
+      }
+      
+      if (resultadoFinal != null) {
+        return _SSEResult(
+          success: resultadoFinal['success'] as bool? ?? true,
+          datos: resultadoFinal['datos'] as Map<String, dynamic>?,
+        );
+      }
+      
+      // Si no hubo resultado explícito pero no hubo error, asumir éxito
+      return _SSEResult(success: true);
+      
+    } on DioException catch (e) {
+      debugPrint('❌ [SSE] DioException: ${e.message}');
+      
+      // Si falla el SSE, hacer fallback al endpoint tradicional
+      debugPrint('📡 [SSE] Fallback a endpoint tradicional...');
+      return _fallbackEnvioTradicional(idOrdenBackend, payload);
+    } catch (e) {
+      debugPrint('❌ [SSE] Error inesperado: $e');
+      return _SSEResult(
+        success: false,
+        error: e.toString(),
+      );
+    }
+  }
+  
+  /// Fallback al endpoint tradicional si SSE falla
+  Future<_SSEResult> _fallbackEnvioTradicional(
+    int idOrdenBackend,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final response = await _apiClient.post(
+        '/ordenes/$idOrdenBackend/finalizar-completo',
+        data: payload,
+        options: Options(
+          sendTimeout: const Duration(minutes: 5),
+          receiveTimeout: const Duration(minutes: 5),
+        ),
+      );
+      
+      if (response.statusCode == 200) {
+        Map<String, dynamic>? datos;
+        if (response.data is Map) {
+          datos = response.data as Map<String, dynamic>;
+        }
+        return _SSEResult(
+          success: true,
+          datos: datos?['datos'] as Map<String, dynamic>?,
+        );
+      }
+      
+      return _SSEResult(
+        success: false,
+        error: 'Error del servidor: ${response.statusCode}',
+      );
+    } on DioException catch (e) {
+      // Re-lanzar para que el caller maneje el error
+      rethrow;
+    }
+  }
+}
+
+/// Resultado interno del envío con SSE
+class _SSEResult {
+  final bool success;
+  final Map<String, dynamic>? datos;
+  final String? error;
+  
+  _SSEResult({
+    required this.success,
+    this.datos,
+    this.error,
+  });
 }

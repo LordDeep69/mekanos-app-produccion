@@ -9,15 +9,25 @@
  * SISTEMA ELÉCTRICO DEL MOTOR
  * REGISTRO DE DATOS DEL MÓDULO DE CONTROL
  * GENERAL
+ *
+ * ✅ MULTI-EQUIPOS (15-DIC-2025): Soporta órdenes con múltiples equipos
  */
 
 import {
   baseStyles,
   DatosOrdenPDF,
-  MEKANOS_COLORS
+  EvidenciasPorEquipoPDF,
+  generarChecklistMultiEquipo,
+  generarMedicionesMultiEquipo,
+  generarLeyendaEquipos,
+  MEKANOS_COLORS,
 } from './mekanos-base.template';
 
 export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
+  // ✅ MULTI-EQUIPOS: Determinar si usar tablas multi-equipo
+  const esMultiEquipo =
+    datos.esMultiEquipo || (datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1);
+
   const actividadesPorSistema = agruparActividadesPorSistema(datos.actividades);
 
   return `
@@ -36,33 +46,58 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
     <!-- HEADER -->
     ${generarHeader(datos)}
     
+    <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
+    ${generarLeyendaEquipos(
+      datos.actividadesPorEquipo?.map((a) => a.equipo),
+      esMultiEquipo,
+    )}
+    
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
     ${generarDatosCliente(datos)}
     
     <!-- LISTA DE ACTIVIDADES DE INSPECCIÓN -->
-    ${generarSeccionActividades('SISTEMA DE ENFRIAMIENTO', actividadesPorSistema['ENFRIAMIENTO'] || [])}
-    ${generarSeccionActividades('SISTEMA DE ASPIRACIÓN', actividadesPorSistema['ASPIRACION'] || [])}
-    ${generarSeccionActividades('SISTEMA DE COMBUSTIBLE', actividadesPorSistema['COMBUSTIBLE'] || [])}
-    ${generarSeccionActividades('SISTEMA DE LUBRICACIÓN', actividadesPorSistema['LUBRICACION'] || [])}
-    ${generarSeccionActividades('SISTEMA DE ESCAPE', actividadesPorSistema['ESCAPE'] || [])}
-    ${generarSeccionActividades('SISTEMA ELÉCTRICO DEL MOTOR', actividadesPorSistema['ELECTRICO'] || [])}
+    <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
+    ${
+      esMultiEquipo && datos.actividadesPorEquipo
+        ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
+        : `
+          ${generarSeccionActividades('SISTEMA DE ENFRIAMIENTO', actividadesPorSistema['ENFRIAMIENTO'] || [])}
+          ${generarSeccionActividades('SISTEMA DE ASPIRACIÓN', actividadesPorSistema['ASPIRACION'] || [])}
+          ${generarSeccionActividades('SISTEMA DE COMBUSTIBLE', actividadesPorSistema['COMBUSTIBLE'] || [])}
+          ${generarSeccionActividades('SISTEMA DE LUBRICACIÓN', actividadesPorSistema['LUBRICACION'] || [])}
+          ${generarSeccionActividades('SISTEMA DE ESCAPE', actividadesPorSistema['ESCAPE'] || [])}
+          ${generarSeccionActividades('SISTEMA ELÉCTRICO DEL MOTOR', actividadesPorSistema['ELECTRICO'] || [])}
+        `
+    }
     
     <!-- REGISTRO DE DATOS DEL MÓDULO DE CONTROL -->
     ${generarDatosModulo(datos)}
     
-    <!-- GENERAL -->
-    ${generarSeccionGeneral(actividadesPorSistema['GENERAL'] || [])}
+    <!-- GENERAL: Solo para órdenes de un solo equipo (ya está incluido en checklist multi-equipo) -->
+    ${!esMultiEquipo ? generarSeccionGeneral(actividadesPorSistema['GENERAL'] || []) : ''}
     
     <!-- SIMBOLOGÍA -->
     ${generarSimbologia()}
     
     <!-- MEDICIONES (si hay) -->
-    ${datos.mediciones.length > 0 ? generarMediciones(datos.mediciones) : ''}
+    <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
+    ${
+      esMultiEquipo && datos.medicionesPorEquipo
+        ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+        : datos.mediciones.length > 0
+          ? generarMediciones(datos.mediciones)
+          : ''
+    }
   </div>
   
   <div class="page page-break">
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
-    ${generarEvidencias(datos.evidencias)}
+    <!-- ✅ MULTI-EQUIPOS (16-DIC-2025): Usar evidencias agrupadas por equipo si es multi-equipo -->
+    ${
+      esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+        ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
+        : generarEvidencias(datos.evidencias)
+    }
     
     <!-- OBSERVACIONES -->
     ${generarObservaciones(datos.observaciones)}
@@ -154,8 +189,8 @@ const generarSeccionActividades = (titulo: string, actividades: any[]): string =
       </thead>
       <tbody>
         ${actividades
-      .map(
-        (act) => `
+          .map(
+            (act) => `
           <tr>
             <td>${act.descripcion}</td>
             <td style="text-align: center;">
@@ -164,8 +199,8 @@ const generarSeccionActividades = (titulo: string, actividades: any[]): string =
             <td>${act.observaciones || ''}</td>
           </tr>
         `,
-      )
-      .join('')}
+          )
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -229,8 +264,8 @@ const generarSeccionGeneral = (actividades: any[]): string => `
       </thead>
       <tbody>
         ${actividades
-    .map(
-      (act) => `
+          .map(
+            (act) => `
           <tr>
             <td>${act.descripcion}</td>
             <td style="text-align: center;">
@@ -239,8 +274,8 @@ const generarSeccionGeneral = (actividades: any[]): string => `
             <td>${act.observaciones || ''}</td>
           </tr>
         `,
-    )
-    .join('')}
+          )
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -284,8 +319,8 @@ const generarMediciones = (mediciones: any[]): string => `
       </thead>
       <tbody>
         ${mediciones
-    .map(
-      (med) => `
+          .map(
+            (med) => `
           <tr>
             <td>${med.parametro}</td>
             <td style="text-align: center; font-weight: bold;">${med.valor}</td>
@@ -293,8 +328,8 @@ const generarMediciones = (mediciones: any[]): string => `
             <td style="text-align: center;" class="alerta-${med.nivelAlerta}">${med.nivelAlerta}</td>
           </tr>
         `,
-    )
-    .join('')}
+          )
+          .join('')}
       </tbody>
     </table>
   </div>
@@ -319,12 +354,18 @@ const extraerTipoEvidencia = (caption: string): string => {
 // Títulos amigables para cada sección
 const getTituloSeccion = (tipo: string): { titulo: string; icono: string } => {
   switch (tipo) {
-    case 'ANTES': return { titulo: 'Estado Inicial (Antes del Servicio)', icono: '📸' };
-    case 'DURANTE': return { titulo: 'Durante el Servicio', icono: '🔧' };
-    case 'DESPUES': return { titulo: 'Estado Final (Después del Servicio)', icono: '✅' };
-    case 'MEDICION': return { titulo: 'Mediciones y Verificaciones', icono: '📏' };
-    case 'GENERAL': return { titulo: 'Evidencias Generales', icono: '📷' };
-    default: return { titulo: 'Otras Evidencias', icono: '📎' };
+    case 'ANTES':
+      return { titulo: 'Estado Inicial (Antes del Servicio)', icono: '📸' };
+    case 'DURANTE':
+      return { titulo: 'Durante el Servicio', icono: '🔧' };
+    case 'DESPUES':
+      return { titulo: 'Estado Final (Después del Servicio)', icono: '✅' };
+    case 'MEDICION':
+      return { titulo: 'Mediciones y Verificaciones', icono: '📏' };
+    case 'GENERAL':
+      return { titulo: 'Evidencias Generales', icono: '📷' };
+    default:
+      return { titulo: 'Otras Evidencias', icono: '📎' };
   }
 };
 
@@ -345,7 +386,10 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
   }
 
   // Normalizar evidencias a formato objeto
-  const normalizarEvidencia = (ev: EvidenciaInput, idx: number): { url: string; caption: string } => {
+  const normalizarEvidencia = (
+    ev: EvidenciaInput,
+    idx: number,
+  ): { url: string; caption: string } => {
     if (typeof ev === 'string') {
       return { url: ev, caption: `Evidencia ${idx + 1}` };
     }
@@ -356,9 +400,10 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
   const evidenciasNormalizadas = evidencias.map((ev, idx) => normalizarEvidencia(ev, idx));
 
   // Filtrar cualquier evidencia de insumos - NO deben aparecer en Tipo A
-  const evidenciasRegulares = evidenciasNormalizadas.filter(ev => {
+  const evidenciasRegulares = evidenciasNormalizadas.filter((ev) => {
     const captionLower = (ev.caption || '').toLowerCase();
-    const esInsumo = captionLower.includes('insumo') ||
+    const esInsumo =
+      captionLower.includes('insumo') ||
       captionLower.includes('verificación y registro fotográfico de insumos');
     return !esInsumo;
   });
@@ -371,31 +416,40 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
     const tipo = extraerTipoEvidencia(ev.caption);
     if (!grupos[tipo]) grupos[tipo] = [];
     // Limpiar el tipo del caption para mostrar solo la descripción
-    const captionLimpio = ev.caption.replace(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i, '');
+    const captionLimpio = ev.caption.replace(
+      /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
+      '',
+    );
     grupos[tipo].push({ url: ev.url, caption: captionLimpio });
   });
 
   // Generar HTML agrupado
   const seccionesHTML = ordenTipos
-    .filter(tipo => grupos[tipo] && grupos[tipo].length > 0)
-    .map(tipo => {
+    .filter((tipo) => grupos[tipo] && grupos[tipo].length > 0)
+    .map((tipo) => {
       const { titulo, icono } = getTituloSeccion(tipo);
       const evidenciasTipo = grupos[tipo];
 
       // ✅ FIX: Clase especial para Fotos Generales
-      const claseGrupo = tipo === 'GENERAL' ? 'evidencias-grupo evidencias-grupo-general' : 'evidencias-grupo';
-      const tituloMostrar = tipo === 'GENERAL' ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
+      const claseGrupo =
+        tipo === 'GENERAL' ? 'evidencias-grupo evidencias-grupo-general' : 'evidencias-grupo';
+      const tituloMostrar =
+        tipo === 'GENERAL' ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
 
       return `
       <div class="${claseGrupo}">
         <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
         <div class="evidencias-grid-compacto">
-          ${evidenciasTipo.map((ev, idx) => `
+          ${evidenciasTipo
+            .map(
+              (ev, idx) => `
             <div class="evidencia-item-compacto">
               <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
       </div>
     `;
@@ -422,17 +476,19 @@ const generarObservaciones = (observaciones: string): string => `
 const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      ${firmaTecnico
-    ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+      ${
+        firmaTecnico
+          ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
+          : `<div class="firma-line"></div>`
+      }
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      ${firmaCliente
-    ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
-    : `<div class="firma-line"></div>`
-  }
+      ${
+        firmaCliente
+          ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
+          : `<div class="firma-line"></div>`
+      }
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
   </div>
@@ -467,6 +523,135 @@ const agruparActividadesPorSistema = (actividades: any[]): Record<string, any[]>
   });
 
   return grupos;
+};
+
+/**
+ * ✅ MULTI-EQUIPOS (16-DIC-2025): Genera sección de evidencias agrupadas por equipo
+ * Cada equipo tiene su propia sección con fotos ANTES/DURANTE/DESPUÉS
+ */
+const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPDF[]): string => {
+  if (!evidenciasPorEquipo || evidenciasPorEquipo.length === 0) {
+    return `
+    <div class="section">
+      <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+      <div style="padding: 20px; text-align: center; color: #666;">
+        No se registraron evidencias fotográficas para este servicio.
+      </div>
+    </div>
+    `;
+  }
+
+  const equiposHTML = evidenciasPorEquipo
+    .map((grupo, equipoIdx) => {
+      const { equipo, evidencias } = grupo;
+      const nombreEquipo =
+        equipo.nombreSistema || equipo.nombreEquipo || `Equipo ${equipo.ordenSecuencia}`;
+
+      // Agrupar evidencias por tipo (ANTES, DURANTE, DESPUÉS)
+      const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
+      const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+
+      evidencias.forEach((ev: any) => {
+        const tipo = ev.momento || extraerTipoEvidenciaGenerador(ev.caption || '');
+        if (!grupos[tipo]) grupos[tipo] = [];
+        const captionLimpio = (ev.caption || '').replace(
+          /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
+          '',
+        );
+        grupos[tipo].push({
+          url: ev.url,
+          caption: captionLimpio || `Foto ${grupos[tipo].length + 1}`,
+        });
+      });
+
+      // Generar secciones de fotos por tipo
+      const tiposHTML = ordenTipos
+        .filter((tipo) => grupos[tipo] && grupos[tipo].length > 0)
+        .map((tipo) => {
+          const { titulo, icono } = getTituloSeccionGenerador(tipo);
+          const evidenciasTipo = grupos[tipo];
+
+          return `
+        <div style="margin-bottom: 12px;">
+          <div style="background: linear-gradient(135deg, ${MEKANOS_COLORS.secondary} 0%, ${MEKANOS_COLORS.primary} 100%); color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
+            ${icono} ${titulo} (${evidenciasTipo.length})
+          </div>
+          <div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
+            ${evidenciasTipo
+              .map(
+                (ev: any, idx: number) => `
+              <div class="evidencia-item">
+                <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
+              </div>
+            `,
+              )
+              .join('')}
+          </div>
+        </div>
+      `;
+        })
+        .join('');
+
+      // Colores alternados para cada equipo
+      const coloresEquipo = [
+        { bg: '#e0f2fe', border: '#0284c7', header: '#0369a1' },
+        { bg: '#dcfce7', border: '#16a34a', header: '#15803d' },
+        { bg: '#fef3c7', border: '#d97706', header: '#b45309' },
+        { bg: '#fce7f3', border: '#db2777', header: '#be185d' },
+      ];
+      const color = coloresEquipo[equipoIdx % coloresEquipo.length];
+
+      return `
+    <div style="margin-bottom: 20px; border: 2px solid ${color.border}; border-radius: 8px; overflow: hidden;">
+      <div style="background: ${color.header}; color: white; padding: 10px 15px; font-weight: bold; font-size: 13px;">
+        ⚡ GENERADOR ${equipo.ordenSecuencia}: ${nombreEquipo.toUpperCase()}
+        ${equipo.codigoEquipo ? `<span style="font-weight: normal; font-size: 11px; opacity: 0.9;"> (${equipo.codigoEquipo})</span>` : ''}
+      </div>
+      <div style="padding: 10px; background: ${color.bg};">
+        ${tiposHTML || '<div style="text-align: center; color: #666; padding: 10px;">Sin evidencias para este equipo</div>'}
+      </div>
+    </div>
+  `;
+    })
+    .join('');
+
+  return `
+  <div class="section">
+    <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO - MULTI-EQUIPOS (${evidenciasPorEquipo.length} equipos)</div>
+    ${equiposHTML}
+  </div>
+`;
+};
+
+/**
+ * Extrae el tipo de evidencia del caption
+ */
+const extraerTipoEvidenciaGenerador = (caption: string): string => {
+  const upper = caption.toUpperCase();
+  if (upper.includes('ANTES')) return 'ANTES';
+  if (upper.includes('DURANTE')) return 'DURANTE';
+  if (upper.includes('DESPUES') || upper.includes('DESPUÉS')) return 'DESPUES';
+  if (upper.includes('MEDICION') || upper.includes('MEDICIÓN')) return 'MEDICION';
+  return 'GENERAL';
+};
+
+/**
+ * Obtiene título e icono para sección de evidencias
+ */
+const getTituloSeccionGenerador = (tipo: string): { titulo: string; icono: string } => {
+  switch (tipo) {
+    case 'ANTES':
+      return { titulo: 'ESTADO INICIAL', icono: '📋' };
+    case 'DURANTE':
+      return { titulo: 'PROCESO DE MANTENIMIENTO', icono: '🔧' };
+    case 'DESPUES':
+      return { titulo: 'ESTADO FINAL', icono: '✅' };
+    case 'MEDICION':
+      return { titulo: 'MEDICIONES', icono: '📏' };
+    default:
+      return { titulo: 'GENERAL', icono: '📷' };
+  }
 };
 
 export default generarTipoAGeneradorHTML;
