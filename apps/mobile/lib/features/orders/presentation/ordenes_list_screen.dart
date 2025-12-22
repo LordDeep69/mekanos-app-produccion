@@ -27,6 +27,7 @@ enum FiltroEstado {
   completada,
   cancelada,
   cerrada,
+  porSubir, // ✅ 20-DIC-2025: Filtrar órdenes pendientes de subir
 }
 
 /// Enum para filtros de prioridad - COHERENTE CON BACKEND
@@ -240,6 +241,10 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
             break;
           case FiltroEstado.cerrada:
             if (estadoOrden != 'CERRADA') return false;
+            break;
+          case FiltroEstado.porSubir:
+            // ✅ 20-DIC-2025: Filtrar órdenes pendientes de subir
+            if (estadoOrden != 'POR_SUBIR') return false;
             break;
           default:
             break;
@@ -749,6 +754,13 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
                   _filtroEstado == FiltroEstado.cerrada,
                   () => setState(() => _filtroEstado = FiltroEstado.cerrada),
                   Colors.grey.shade700,
+                ),
+                // ✅ 20-DIC-2025: Filtro para órdenes pendientes de subir
+                _buildFilterChip(
+                  'Por Subir',
+                  _filtroEstado == FiltroEstado.porSubir,
+                  () => setState(() => _filtroEstado = FiltroEstado.porSubir),
+                  Colors.orange,
                 ),
               ],
             ),

@@ -858,12 +858,24 @@ class _ResumenFinalizacionScreenState
 
   void _mostrarExitoOnline(SyncUploadResult resultado) {
     final datosRes = resultado.datos;
-    final dataInterna = datosRes?['data'] as Map<String, dynamic>?;
+    
+    // ✅ 20-DIC-2025: Soportar ambas estructuras de respuesta
+    // Puede venir como datosRes['datos'] (SSE) o datosRes directamente (endpoint tradicional)
+    Map<String, dynamic>? datosInternos;
+    if (datosRes != null) {
+      // Primero intentar 'datos' (estructura SSE y respuesta del servicio)
+      if (datosRes['datos'] is Map<String, dynamic>) {
+        datosInternos = datosRes['datos'] as Map<String, dynamic>;
+      } else {
+        // Fallback: los datos podrían estar directamente en datosRes
+        datosInternos = datosRes;
+      }
+    }
 
-    final evidenciasCount = (dataInterna?['evidencias'] as List?)?.length ?? 0;
-    final firmasCount = (dataInterna?['firmas'] as List?)?.length ?? 0;
-    final pdfGenerado = dataInterna?['documento'] != null;
-    final emailEnviado = dataInterna?['email']?['enviado'] == true;
+    final evidenciasCount = (datosInternos?['evidencias'] as List?)?.length ?? 0;
+    final firmasCount = (datosInternos?['firmas'] as List?)?.length ?? 0;
+    final pdfGenerado = datosInternos?['documento'] != null;
+    final emailEnviado = datosInternos?['email']?['enviado'] == true;
 
     showDialog(
       context: context,

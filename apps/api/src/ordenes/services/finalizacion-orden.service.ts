@@ -1443,38 +1443,57 @@ export class FinalizacionOrdenService {
             throw new InternalServerErrorException('Estado COMPLETADA no encontrado');
         }
 
-        //  FIX: Calcular fechas reales usando horas de entrada/salida
-        // IMPORTANTE: Guardar las horas TAL CUAL vienen del móvil (hora local Colombia)
-        // No hacer conversión a UTC porque Drift en el móvil pierde la info de zona horaria
-        const hoy = new Date();
+        // 🔧 FIX 20-DIC-2025: Obtener la orden para usar fecha_inicio_real existente
+        // Esto evita violar el constraint chk_os_fecha_fin_posterior cuando la orden
+        // fue iniciada en un día diferente al que se finaliza
+        const ordenExistente = await this.prisma.ordenes_servicio.findUnique({
+            where: { id_orden_servicio: idOrden },
+            select: { fecha_inicio_real: true },
+        });
+
+        // Usar fecha_inicio_real existente como base, o fecha actual si no existe
+        const fechaBase = ordenExistente?.fecha_inicio_real 
+            ? new Date(ordenExistente.fecha_inicio_real) 
+            : new Date();
+        
+        this.logger.log(`   📅 Fecha base para cálculo: ${fechaBase.toISOString()} (existente: ${!!ordenExistente?.fecha_inicio_real})`);
+
         let fechaInicioReal: Date | undefined;
-        let fechaFinReal: Date = hoy;
+        let fechaFinReal: Date = new Date();
 
         if (horaEntrada) {
             const [horasE, minutosE] = horaEntrada.split(':').map(Number);
-            // Crear fecha SIN conversión UTC - guardar la hora local tal cual
-            fechaInicioReal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), horasE, minutosE, 0, 0);
+            // Usar la fecha base (existente o actual) para construir fecha_inicio_real
+            fechaInicioReal = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), fechaBase.getDate(), horasE, minutosE, 0, 0);
+        } else if (ordenExistente?.fecha_inicio_real) {
+            // Si no viene horaEntrada, mantener la existente
+            fechaInicioReal = new Date(ordenExistente.fecha_inicio_real);
         }
 
         if (horaSalida) {
             const [horasS, minutosS] = horaSalida.split(':').map(Number);
-            fechaFinReal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), horasS, minutosS, 0, 0);
+            // Para fecha_fin_real, usamos la fecha base pero debemos verificar cruce de medianoche
+            fechaFinReal = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), fechaBase.getDate(), horasS, minutosS, 0, 0);
+            
+            // 🔧 FIX: Si hora de salida es menor que hora de entrada, es cruce de medianoche
+            // Debemos agregar un día a la fecha de fin
+            if (fechaInicioReal && fechaFinReal < fechaInicioReal) {
+                fechaFinReal = new Date(fechaFinReal.getTime() + 24 * 60 * 60 * 1000);
+                this.logger.log(`   ⏰ Cruce de medianoche detectado, fecha_fin_real ajustada al día siguiente`);
+            }
         }
+
+        // Log para debugging
+        this.logger.log(`   📅 Fechas calculadas:`);
+        this.logger.log(`      - fecha_inicio_real: ${fechaInicioReal?.toISOString() ?? 'null'}`);
+        this.logger.log(`      - fecha_fin_real: ${fechaFinReal.toISOString()}`);
 
         // Calcular duración en minutos
         let duracionMinutos: number | undefined;
         if (fechaInicioReal) {
             const diffMs = fechaFinReal.getTime() - fechaInicioReal.getTime();
-            // Si la diferencia es negativa (hora entrada > hora salida), 
-            // puede ser cruce de medianoche - agregar 24 horas
-            if (diffMs < 0) {
-                // Ajustar: si es cruce de medianoche, sumar 24h
-                const diffAjustado = diffMs + (24 * 60 * 60 * 1000);
-                duracionMinutos = Math.round(diffAjustado / 60000);
-                this.logger.log(`   ⏰ Duración ajustada por cruce de medianoche: ${duracionMinutos} min`);
-            } else {
-                duracionMinutos = Math.round(diffMs / 60000);
-            }
+            duracionMinutos = Math.round(diffMs / 60000);
+            
             // Validación final: duración debe ser positiva y razonable (max 24h)
             if (duracionMinutos < 0 || duracionMinutos > 1440) {
                 this.logger.warn(`   ⚠️ Duración inválida (${duracionMinutos} min), usando null`);
