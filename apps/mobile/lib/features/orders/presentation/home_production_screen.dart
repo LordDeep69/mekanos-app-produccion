@@ -33,10 +33,12 @@ final quickStatsProvider = FutureProvider.autoDispose<QuickStats>((ref) async {
     estadoMap[e.id] = e.codigo;
   }
 
-  // v3.2 FIX: Pendientes = todos los estados activos del técnico
+  // v3.3 FIX: Pendientes = todos los estados activos del técnico (NO iniciadas)
+  // Incluye APROBADA que existe en Supabase como estado pre-ejecución
   final pendientes = ordenes.where((o) {
     final codigo = estadoMap[o.idEstado] ?? '';
     return codigo == 'ASIGNADA' ||
+        codigo == 'APROBADA' ||
         codigo == 'PROGRAMADA' ||
         codigo == 'EN_ESPERA_REPUESTO';
   }).length;

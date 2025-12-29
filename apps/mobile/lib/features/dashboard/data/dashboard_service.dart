@@ -44,11 +44,11 @@ class DashboardService {
 
     // Obtener IDs de estados
     final estadoCompletada = await _getEstadoId(['COMPLETADA', 'FINALIZADO']);
-    // v3.2 FIX: "Pendientes" = todos los estados activos del técnico (no solo EN_PROCESO)
-    // Incluye: ASIGNADA (orden asignada pero no iniciada), EN_PROCESO (en ejecución),
-    // PROGRAMADA (programada para el técnico), EN_ESPERA_REPUESTO (pausada por repuesto)
+    // v3.3 FIX: "Pendientes" = todos los estados activos del técnico
+    // Incluye: ASIGNADA, APROBADA (pre-ejecución), EN_PROCESO, PROGRAMADA, EN_ESPERA_REPUESTO
     final estadosActivos = await _getEstadoIds([
       'ASIGNADA',
+      'APROBADA',
       'EN_PROCESO',
       'PROGRAMADA',
       'EN_ESPERA_REPUESTO',

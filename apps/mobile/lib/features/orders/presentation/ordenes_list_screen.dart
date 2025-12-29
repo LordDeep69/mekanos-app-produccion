@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../historial/presentation/historial_screen.dart';
 import '../data/orden_repository.dart';
+import 'home_production_screen.dart';
 import 'orden_detalle_screen.dart';
 
 /// Enum para filtros de fecha rápidos
@@ -173,13 +174,15 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
     super.dispose();
   }
 
-  /// ✅ FIX: Refrescar lista de órdenes al volver de detalle/ejecución
-  /// PRUDENCIA: No limpiamos el caché completo para evitar saltos de scroll
+  /// ✅ v3.3 FIX: Refrescar lista de órdenes al volver de detalle/ejecución
+  /// Limpia caché para reflejar cambios de estado (ej: EN_PROCESO)
   void _refrescarOrdenes() {
     if (mounted) {
+      // ✅ Invalidar quickStatsProvider para actualizar Home/Dashboard
+      ref.invalidate(quickStatsProvider);
       setState(() {
-        // Solo marcamos para cargar detalles de órdenes que no estén en caché
-        // pero NO limpiamos lo que ya tenemos para preservar el scroll
+        // ✅ v3.3: Limpiar caché para forzar recarga con estados actualizados
+        _detallesCache.clear();
         _cargandoDetalles = false;
       });
     }
@@ -1232,67 +1235,100 @@ class _OrdenCardOptimizado extends StatelessWidget {
     );
   }
 
+  /// v3.3 UI/UX: Chip de estado mejorado con todos los estados de Supabase
   Widget _buildEstadoChip(String codigoEstado) {
     Color color;
     IconData icon;
-    switch (codigoEstado) {
+    switch (codigoEstado.toUpperCase()) {
+      case 'ASIGNADA':
+        color = Colors.blue.shade600;
+        icon = Icons.assignment_ind;
+      case 'APROBADA':
+        color = Colors.teal;
+        icon = Icons.verified_outlined;
       case 'PENDIENTE':
         color = Colors.orange;
         icon = Icons.pending_outlined;
       case 'PROGRAMADA':
-        color = Colors.blue;
+        color = Colors.indigo;
         icon = Icons.schedule;
       case 'EN_PROCESO':
-        color = Colors.amber;
-        icon = Icons.play_circle_outline;
+        color = Colors.amber.shade700;
+        icon = Icons.engineering;
+      case 'EN_ESPERA_REPUESTO':
+        color = Colors.deepOrange;
+        icon = Icons.inventory_2_outlined;
       case 'POR_SUBIR':
         color = Colors.deepPurple;
         icon = Icons.cloud_upload_outlined;
       case 'COMPLETADA':
-        color = Colors.green;
-        icon = Icons.check_circle_outline;
+        color = Colors.green.shade600;
+        icon = Icons.check_circle;
       case 'CERRADA':
-        color = Colors.grey;
+        color = Colors.blueGrey;
         icon = Icons.lock_outline;
+      case 'CANCELADA':
+        color = Colors.red.shade400;
+        icon = Icons.cancel_outlined;
       default:
         color = Colors.grey;
         icon = Icons.help_outline;
     }
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
       ),
-      child: Icon(icon, color: color, size: 28),
+      child: Icon(icon, color: color, size: 26),
     );
   }
 
+  /// v3.3 UI/UX: Chip de prioridad mejorado con mejor contraste
   Widget _buildPrioridadChip(String prioridad) {
     Color color;
-    switch (prioridad) {
-      case 'ALTA':
-        color = Colors.red;
+    IconData? icon;
+    switch (prioridad.toUpperCase()) {
       case 'URGENTE':
-        color = Colors.purple;
+        color = Colors.red.shade700;
+        icon = Icons.priority_high;
+      case 'ALTA':
+        color = Colors.orange.shade700;
+        icon = Icons.arrow_upward;
+      case 'NORMAL':
+        color = Colors.blue.shade600;
+        icon = null;
       case 'BAJA':
-        color = Colors.green;
+        color = Colors.green.shade600;
+        icon = Icons.arrow_downward;
       default:
         color = Colors.grey;
+        icon = null;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(4),
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
       ),
-      child: Text(
-        prioridad,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: color,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            prioridad,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }

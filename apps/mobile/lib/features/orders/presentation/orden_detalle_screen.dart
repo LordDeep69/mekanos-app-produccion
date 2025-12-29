@@ -8,7 +8,8 @@ import '../../ejecucion/presentation/ejecucion_screen.dart';
 import '../../ejecucion/presentation/resumen_finalizacion_screen.dart';
 import '../data/orden_repository.dart';
 import '../domain/orden_detalle_full.dart';
-import 'widgets/equipos_orden_widget.dart' show EquiposOrdenWidget, equiposOrdenProvider;
+import 'home_production_screen.dart';
+import 'widgets/equipos_orden_widget.dart';
 
 /// Pantalla de Detalle de Orden - RUTA 5
 /// Muestra información de la orden y actividades agrupadas por sistema
@@ -690,33 +691,37 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   Future<void> _iniciarYNavegar() async {
     final service = ref.read(ejecucionServiceProvider);
     final db = ref.read(databaseProvider);
-    
+
     // Verificar si es orden multi-equipo
     final idBackend = _detalle?.idBackend;
-    debugPrint('🔍 [MULTI-EQ] idBackend: $idBackend, numeroOrden: ${_detalle?.numeroOrden}');
-    
+    debugPrint(
+      '🔍 [MULTI-EQ] idBackend: $idBackend, numeroOrden: ${_detalle?.numeroOrden}',
+    );
+
     if (idBackend != null) {
       final equipos = await db.getEquiposByOrdenServicio(idBackend);
       debugPrint('🔍 [MULTI-EQ] Equipos encontrados: ${equipos.length}');
       for (final eq in equipos) {
-        debugPrint('   ↳ Equipo ${eq.ordenSecuencia}: ${eq.nombreSistema ?? eq.nombreEquipo} (idOrdenEquipo: ${eq.idOrdenEquipo})');
+        debugPrint(
+          '   ↳ Equipo ${eq.ordenSecuencia}: ${eq.nombreSistema ?? eq.nombreEquipo} (idOrdenEquipo: ${eq.idOrdenEquipo})',
+        );
       }
-      
+
       if (equipos.length > 1) {
         // ✅ MULTI-EQUIPO: Mostrar selector de equipos
         final equipoSeleccionado = await _mostrarSelectorEquipos(equipos);
-        
+
         if (equipoSeleccionado == null) {
           // Usuario canceló
           return;
         }
-        
+
         // Navegar con equipo específico
         await _navegarAEjecucion(service, equipoSeleccionado);
         return;
       }
     }
-    
+
     // ORDEN SIMPLE: Iniciar y navegar directamente
     final resultado = await service.iniciarEjecucion(widget.idOrdenLocal);
 
@@ -734,6 +739,9 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
 
     // Navegar a la pantalla de ejecución y recargar al volver
     if (mounted) {
+      // ✅ v3.3 FIX: Invalidar quickStatsProvider para actualizar Home/Dashboard
+      ref.invalidate(quickStatsProvider);
+
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -742,13 +750,16 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         ),
       );
       // ✅ Recargar estadísticas al volver
+      ref.invalidate(quickStatsProvider);
       _loadDetalleOrden();
     }
   }
 
   /// Muestra diálogo para seleccionar equipo en orden multi-equipo
   /// ✅ MULTI-EQUIPOS: Incluye opción "Resumen/Finalizar" para completar la orden
-  Future<OrdenesEquipo?> _mostrarSelectorEquipos(List<OrdenesEquipo> equipos) async {
+  Future<OrdenesEquipo?> _mostrarSelectorEquipos(
+    List<OrdenesEquipo> equipos,
+  ) async {
     // Resultado especial: null con retorno de función = cancelado
     // Para "Resumen/Finalizar" devolvemos un equipo especial con idOrdenEquipo = -1
     final resultado = await showModalBottomSheet<dynamic>(
@@ -779,7 +790,11 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.devices_other, color: Colors.blue.shade700, size: 28),
+                  Icon(
+                    Icons.devices_other,
+                    color: Colors.blue.shade700,
+                    size: 28,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -803,7 +818,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
                 style: TextStyle(color: Colors.grey.shade600),
               ),
             ),
-            
+
             // ✅ CARD RESUMEN/FINALIZAR
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -857,14 +872,17 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
                             ],
                           ),
                         ),
-                        Icon(Icons.arrow_forward_ios, color: Colors.green.shade700),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.green.shade700,
+                        ),
                       ],
                     ),
                   ),
                 ),
               ),
             ),
-            
+
             // Separador
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -875,14 +893,17 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
                       'O ejecutar un equipo',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                   Expanded(child: Divider(color: Colors.grey.shade300)),
                 ],
               ),
             ),
-            
+
             // Lista de equipos
             Expanded(
               child: ListView.builder(
@@ -891,9 +912,12 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
                 itemBuilder: (context, index) {
                   final equipo = equipos[index];
                   final estadoColor = _getEstadoEquipoColor(equipo.estado);
-                  
+
                   return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     child: ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.blue.shade100,
@@ -906,15 +930,23 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
                         ),
                       ),
                       title: Text(
-                        equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+                        equipo.nombreSistema ??
+                            equipo.nombreEquipo ??
+                            'Equipo ${equipo.ordenSecuencia}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
                         equipo.codigoEquipo ?? '',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
                       ),
                       trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: estadoColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -938,7 +970,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         ),
       ),
     );
-    
+
     // Si seleccionó "RESUMEN", navegar a ResumenFinalizacionScreen
     if (resultado == 'RESUMEN') {
       if (mounted) {
@@ -956,14 +988,17 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
       }
       return null; // No navegar a ejecución
     }
-    
+
     // Retornar el equipo seleccionado (o null si canceló)
     return resultado as OrdenesEquipo?;
   }
 
   /// Navega a la ejecución con un equipo específico
   /// ✅ MULTI-EQUIPOS: Pasa idOrdenEquipo para clonar actividades por equipo
-  Future<void> _navegarAEjecucion(EjecucionService service, OrdenesEquipo equipo) async {
+  Future<void> _navegarAEjecucion(
+    EjecucionService service,
+    OrdenesEquipo equipo,
+  ) async {
     // ✅ MULTI-EQUIPOS: Pasar idOrdenEquipo al iniciar ejecución
     final resultado = await service.iniciarEjecucion(
       widget.idOrdenLocal,
@@ -988,7 +1023,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         MaterialPageRoute(
           builder: (context) => EjecucionScreen(
             idOrdenLocal: widget.idOrdenLocal,
-            idOrdenEquipo: equipo.idOrdenEquipo,  // ✅ Pasar ID del equipo
+            idOrdenEquipo: equipo.idOrdenEquipo, // ✅ Pasar ID del equipo
           ),
         ),
       );
