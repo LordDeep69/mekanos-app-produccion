@@ -2,13 +2,15 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 
 /// Provider para el servicio de ejecución
 final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
   final db = ref.watch(databaseProvider);
-  return EjecucionService(db);
+  final apiClient = ref.watch(apiClientProvider);
+  return EjecucionService(db, apiClient);
 });
 
 /// Servicio de Ejecución - RUTA 6
@@ -16,8 +18,9 @@ final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
 /// ✅ MULTI-EQUIPOS: Soporta órdenes con múltiples equipos (15-DIC-2025)
 class EjecucionService {
   final AppDatabase _db;
+  final ApiClient _apiClient;
 
-  EjecucionService(this._db);
+  EjecucionService(this._db, this._apiClient);
 
   /// Inicia la ejecución de una orden
   ///
@@ -301,6 +304,12 @@ class EjecucionService {
             updatedAt: Value(DateTime.now()),
           ),
         );
+
+        // ✅ v3.3 INTELLIGENT SYNC: Notificar al backend de inmediato si hay red
+        // No bloqueamos el flujo principal si falla (el isDirty garantiza el sync posterior)
+        if (orden.idBackend != null) {
+          _notificarInicioBackend(orden.idBackend!);
+        }
       }
 
       // 7. Verificación de lectura
@@ -318,6 +327,23 @@ class EjecucionService {
         verificacionLectura: verificacion.isNotEmpty,
       );
     });
+  }
+
+  /// ✅ v3.3: Notifica al backend que se inició la ejecución (mejor esfuerzo)
+  Future<void> _notificarInicioBackend(int idOrdenBackend) async {
+    try {
+      debugPrint(
+        '📡 [SYNC] Notificando inicio de orden $idOrdenBackend al backend...',
+      );
+      await _apiClient.dio.put('/ordenes/$idOrdenBackend/iniciar');
+      debugPrint('✅ [SYNC] Backend notificado correctamente');
+    } catch (e) {
+      // Error silencioso: el flag isDirty de la orden garantiza que el SyncWorker
+      // lo intente de nuevo más tarde de forma más robusta.
+      debugPrint(
+        '⚠️ [SYNC] No se pudo notificar inicio al backend (se hará en sync posterior): $e',
+      );
+    }
   }
 
   /// Elimina una actividad del plan local y sus dependencias

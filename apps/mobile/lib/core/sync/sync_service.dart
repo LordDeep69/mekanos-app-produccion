@@ -534,35 +534,58 @@ class SyncService {
                     !estadoLocalFinalizado);
 
             if (debeActualizar) {
-              await _db.updateOrden(ordenCompanion, existingOrden.idLocal);
+              // ✅ v3.3 FIX: Protección de estado local "isDirty"
+              // Si la orden está dirty localmente (ej: EN_PROCESO),
+              // NO sobrescribir el estado y mantener el flag dirty
+              // A menos que el servidor traiga un estado FINALIZADO.
+              if (existingOrden.isDirty &&
+                  !estadosFinalizados.contains(codigoEstadoServer)) {
+                debugPrint(
+                  '🛡️ [SYNC] Protegiendo orden dirty ${existingOrden.numeroOrden} - Preservando estado local',
+                );
+
+                final ordenProtegida = ordenCompanion.copyWith(
+                  idEstado: Value(existingOrden.idEstado),
+                  isDirty: const Value(true),
+                  // Preservar también fechas de inicio/fin locales
+                  fechaInicio: existingOrden.fechaInicio != null
+                      ? Value(existingOrden.fechaInicio)
+                      : ordenCompanion.fechaInicio,
+                );
+                await _db.updateOrden(ordenProtegida, existingOrden.idLocal);
+              } else {
+                await _db.updateOrden(ordenCompanion, existingOrden.idLocal);
+              }
             }
 
             // ✅ NUEVO: Guardar plan de actividades si existe
             final planData = orden['actividadesPlan'] as List?;
-            debugPrint('🎯 [SYNC] Orden ${orden['numeroOrden']} - Plan data: ${planData?.length ?? 0} items');
-            await _guardarPlanActividades(
-              existingOrden.idLocal,
-              planData,
+            debugPrint(
+              '🎯 [SYNC] Orden ${orden['numeroOrden']} - Plan data: ${planData?.length ?? 0} items',
             );
+            await _guardarPlanActividades(existingOrden.idLocal, planData);
 
             // ✅ NUEVO: Guardar equipos de la orden (multi-equipos)
             final equiposData = orden['ordenesEquipos'] as List?;
-            debugPrint('🔧 [SYNC] Orden ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposData?.length ?? 0}');
+            debugPrint(
+              '🔧 [SYNC] Orden ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposData?.length ?? 0}',
+            );
             await _guardarOrdenesEquipos(idOrden, equiposData);
           } else {
             final idLocalNueva = await _db.insertOrdenFromSync(ordenCompanion);
 
             // ✅ NUEVO: Guardar plan de actividades si existe
             final planDataNueva = orden['actividadesPlan'] as List?;
-            debugPrint('🎯 [SYNC] Orden NUEVA ${orden['numeroOrden']} - Plan data: ${planDataNueva?.length ?? 0} items');
-            await _guardarPlanActividades(
-              idLocalNueva,
-              planDataNueva,
+            debugPrint(
+              '🎯 [SYNC] Orden NUEVA ${orden['numeroOrden']} - Plan data: ${planDataNueva?.length ?? 0} items',
             );
+            await _guardarPlanActividades(idLocalNueva, planDataNueva);
 
             // ✅ NUEVO: Guardar equipos de la orden (multi-equipos)
             final equiposDataNueva = orden['ordenesEquipos'] as List?;
-            debugPrint('🔧 [SYNC] Orden NUEVA ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposDataNueva?.length ?? 0}');
+            debugPrint(
+              '🔧 [SYNC] Orden NUEVA ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposDataNueva?.length ?? 0}',
+            );
             await _guardarOrdenesEquipos(idOrden, equiposDataNueva);
           }
           ordenesCount++;
@@ -618,10 +641,14 @@ class SyncService {
   /// Si la orden tiene múltiples equipos, se guardan localmente
   /// para mostrar en UI y asociar actividades/mediciones/evidencias
   Future<void> _guardarOrdenesEquipos(
-      int idOrdenServicio, List? equiposData) async {
+    int idOrdenServicio,
+    List? equiposData,
+  ) async {
     // Debug: Ver qué llega del backend
-    debugPrint('🔍 [SYNC-DEBUG] _guardarOrdenesEquipos($idOrdenServicio) - equiposData: ${equiposData?.length ?? "null"}');
-    
+    debugPrint(
+      '🔍 [SYNC-DEBUG] _guardarOrdenesEquipos($idOrdenServicio) - equiposData: ${equiposData?.length ?? "null"}',
+    );
+
     // Si no hay equipos, limpiar cualquier dato anterior y salir
     if (equiposData == null || equiposData.isEmpty) {
       await _db.clearEquiposDeOrden(idOrdenServicio);
