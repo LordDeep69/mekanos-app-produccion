@@ -174,26 +174,13 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
   }
 
   /// ✅ FIX: Refrescar lista de órdenes al volver de detalle/ejecución
+  /// PRUDENCIA: No limpiamos el caché completo para evitar saltos de scroll
   void _refrescarOrdenes() {
-    // Guardar posición ANTES de cualquier cambio
-    final savedOffset = _scrollController.hasClients
-        ? _scrollController.offset
-        : null;
-
-    debugPrint('📜 [SCROLL] Guardando posición: $savedOffset');
-
     if (mounted) {
       setState(() {
-        // Limpiar cache para forzar recarga de detalles
-        _detallesCache.clear();
+        // Solo marcamos para cargar detalles de órdenes que no estén en caché
+        // pero NO limpiamos lo que ya tenemos para preservar el scroll
         _cargandoDetalles = false;
-      });
-    }
-
-    // ✅ UX: Restaurar scroll después del rebuild con más intentos
-    if (savedOffset != null && savedOffset > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _restaurarScroll(savedOffset, intentos: 5);
       });
     }
   }
@@ -454,16 +441,20 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
 
     Future.delayed(const Duration(milliseconds: 50), () {
       if (!mounted) return;
-      
+
       if (_scrollController.hasClients) {
         // Verificar que el offset sea válido para el contenido actual
         final maxScroll = _scrollController.position.maxScrollExtent;
         final targetOffset = offset.clamp(0.0, maxScroll);
         _scrollController.jumpTo(targetOffset);
-        debugPrint('📜 [SCROLL] Restaurado a: $targetOffset (solicitado: $offset, max: $maxScroll)');
+        debugPrint(
+          '📜 [SCROLL] Restaurado a: $targetOffset (solicitado: $offset, max: $maxScroll)',
+        );
       } else {
         // Reintentar si el controller no está listo
-        debugPrint('📜 [SCROLL] Controller no listo, reintentando... ($intentos restantes)');
+        debugPrint(
+          '📜 [SCROLL] Controller no listo, reintentando... ($intentos restantes)',
+        );
         _restaurarScroll(offset, intentos: intentos - 1);
       }
     });
@@ -624,7 +615,9 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
                               },
                               child: ListView.builder(
                                 // ✅ FIX: PageStorageKey preserva el scroll automáticamente
-                                key: const PageStorageKey<String>('ordenes_list'),
+                                key: const PageStorageKey<String>(
+                                  'ordenes_list',
+                                ),
                                 // v3.3: ScrollController para preservar posición manual
                                 controller: _scrollController,
                                 padding: const EdgeInsets.only(bottom: 16),

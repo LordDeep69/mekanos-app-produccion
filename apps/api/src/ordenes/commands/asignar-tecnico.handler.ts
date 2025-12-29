@@ -7,14 +7,15 @@ import { AsignarTecnicoCommand } from './asignar-tecnico.command';
 export class AsignarTecnicoHandler implements ICommandHandler<AsignarTecnicoCommand> {
   constructor(
     private readonly repository: PrismaOrdenServicioRepository
-  ) {}
+  ) { }
 
   async execute(command: AsignarTecnicoCommand): Promise<any> {
     const { ordenId, tecnicoId } = command;
 
     // 1. Verificar existencia
     console.log(`[AsignarTecnicoHandler] Verificando orden ${ordenId}`);
-    const ordenExistente = await this.repository.findById(parseInt(ordenId, 10));
+    const id = typeof ordenId === 'string' ? parseInt(ordenId, 10) : ordenId;
+    const ordenExistente = await this.repository.findById(id);
     if (!ordenExistente) {
       throw new NotFoundException(`Orden con ID ${ordenId} no encontrada`);
     }
@@ -29,10 +30,10 @@ export class AsignarTecnicoHandler implements ICommandHandler<AsignarTecnicoComm
     // 3. Asignar técnico
     console.log(`[AsignarTecnicoHandler] Asignando tecnico ${tecnicoId} a orden ${ordenId}`);
     const result = await this.repository.asignarTecnico(
-      parseInt(ordenId, 10),
+      typeof ordenId === 'string' ? parseInt(ordenId, 10) : ordenId,
       tecnicoId,
       estadoAsignada.id_estado,
-      1 // TODO: obtener userId desde JWT
+      command.userId || 1
     );
     console.log(`[AsignarTecnicoHandler] Asignacion completada`);
     return result;

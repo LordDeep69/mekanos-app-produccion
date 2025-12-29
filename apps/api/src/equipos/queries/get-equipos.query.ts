@@ -1,4 +1,5 @@
-import { IsOptional, IsInt, IsString, IsBoolean, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 /**
  * DTO para filtrar equipos en listados
@@ -6,10 +7,12 @@ import { IsOptional, IsInt, IsString, IsBoolean, Min } from 'class-validator';
  */
 export class GetEquiposQueryDto {
   @IsOptional()
+  @Type(() => Number)
   @IsInt({ message: 'id_cliente debe ser un número entero' })
   id_cliente?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt({ message: 'id_sede debe ser un número entero' })
   id_sede?: number;
 
@@ -18,6 +21,7 @@ export class GetEquiposQueryDto {
   estado_equipo?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt({ message: 'id_tipo_equipo debe ser un número entero' })
   id_tipo_equipo?: number;
 
@@ -26,11 +30,13 @@ export class GetEquiposQueryDto {
   activo?: boolean;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt({ message: 'page debe ser un número entero' })
   @Min(1, { message: 'page debe ser mayor o igual a 1' })
   page?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt({ message: 'limit debe ser un número entero' })
   @Min(1, { message: 'limit debe ser mayor o igual a 1' })
   limit?: number;

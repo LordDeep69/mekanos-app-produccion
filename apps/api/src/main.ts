@@ -27,6 +27,25 @@ async function bootstrap(): Promise<void> {
     app.use(express.urlencoded({ limit: '10mb', extended: true }));
     console.log('✅ [DEBUG 3.1] Body parser limit: 10MB');
 
+    // ✅ AUDITORÍA DE TRÁFICO: Middleware de Logging Global (Después de body-parser)
+    app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const { method, url, body } = req;
+      const timestamp = new Date().toISOString();
+      
+      console.log(`[${timestamp}] [REQUEST] ${method} ${url}`);
+      if (method !== 'GET' && body && Object.keys(body).length > 0) {
+        console.log(`[BODY]`, JSON.stringify(body, null, 2));
+      }
+
+      // Capturar el final de la respuesta para loguear el status
+      res.on('finish', () => {
+        const duration = Date.now() - new Date(timestamp).getTime();
+        console.log(`[${new Date().toISOString()}] [RESPONSE] ${method} ${url} - Status: ${res.statusCode} (${duration}ms)`);
+      });
+
+      next();
+    });
+
     console.log('🔧 [DEBUG 4/10] Configurando GlobalPrefix...');
     app.setGlobalPrefix('api');
     console.log('✅ [DEBUG 5/10] GlobalPrefix configurado');

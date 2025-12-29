@@ -141,22 +141,76 @@ async function limpieza() {
 async function insertarTiposServicio() {
   separator('PASO 3: TIPOS DE SERVICIO');
 
+  // Obtener IDs de tipos de equipo para vinculación
+  const tipoGen = await prisma.tipos_equipo.findUnique({ where: { codigo_tipo: 'GEN' } });
+  const tipoBomba = await prisma.tipos_equipo.findUnique({ where: { codigo_tipo: 'BOM' } });
+  const tipoMotor = await prisma.tipos_equipo.findUnique({ where: { codigo_tipo: 'MOT' } });
+
   const tipos = [
-    { codigo_tipo: 'GEN_PREV_A', nombre_tipo: 'Preventivo Tipo A - Generador', categoria: 'PREVENTIVO', tiene_checklist: true, requiere_mediciones: true, duracion_estimada_horas: 2.5 },
-    { codigo_tipo: 'GEN_PREV_B', nombre_tipo: 'Preventivo Tipo B - Generador', categoria: 'PREVENTIVO', tiene_checklist: true, requiere_mediciones: true, duracion_estimada_horas: 4.0 },
-    { codigo_tipo: 'BOM_PREV_A', nombre_tipo: 'Preventivo Tipo A - Bomba', categoria: 'PREVENTIVO', tiene_checklist: true, requiere_mediciones: true, duracion_estimada_horas: 2.0 },
-    { codigo_tipo: 'CORRECTIVO', nombre_tipo: 'Mantenimiento Correctivo', categoria: 'CORRECTIVO', tiene_checklist: false, requiere_mediciones: true, duracion_estimada_horas: 3.0 },
-    { codigo_tipo: 'EMERGENCIA', nombre_tipo: 'Servicio de Emergencia', categoria: 'EMERGENCIA', tiene_checklist: false, requiere_mediciones: true, duracion_estimada_horas: 2.0 },
-    { codigo_tipo: 'INSPECCION', nombre_tipo: 'Visita de Inspección', categoria: 'DIAGNOSTICO', tiene_checklist: false, requiere_mediciones: false, duracion_estimada_horas: 1.5 },
+    {
+      codigo_tipo: 'GEN_PREV_A',
+      nombre_tipo: 'Preventivo Tipo A - Generador',
+      categoria: 'PREVENTIVO',
+      id_tipo_equipo: tipoGen?.id_tipo_equipo,
+      tiene_checklist: true,
+      requiere_mediciones: true,
+      duracion_estimada_horas: 2.5
+    },
+    {
+      codigo_tipo: 'GEN_PREV_B',
+      nombre_tipo: 'Preventivo Tipo B - Generador',
+      categoria: 'PREVENTIVO',
+      id_tipo_equipo: tipoGen?.id_tipo_equipo,
+      tiene_checklist: true,
+      requiere_mediciones: true,
+      duracion_estimada_horas: 4.0
+    },
+    {
+      codigo_tipo: 'BOM_PREV_A',
+      nombre_tipo: 'Preventivo Tipo A - Bomba',
+      categoria: 'PREVENTIVO',
+      id_tipo_equipo: tipoBomba?.id_tipo_equipo,
+      tiene_checklist: true,
+      requiere_mediciones: true,
+      duracion_estimada_horas: 2.0
+    },
+    {
+      codigo_tipo: 'CORRECTIVO',
+      nombre_tipo: 'Mantenimiento Correctivo',
+      categoria: 'CORRECTIVO',
+      tiene_checklist: false,
+      requiere_mediciones: true,
+      duracion_estimada_horas: 3.0
+    },
+    {
+      codigo_tipo: 'EMERGENCIA',
+      nombre_tipo: 'Servicio de Emergencia',
+      categoria: 'EMERGENCIA',
+      tiene_checklist: false,
+      requiere_mediciones: true,
+      duracion_estimada_horas: 2.0
+    },
+    {
+      codigo_tipo: 'INSPECCION',
+      nombre_tipo: 'Visita de Inspección',
+      categoria: 'DIAGNOSTICO',
+      tiene_checklist: false,
+      requiere_mediciones: false,
+      duracion_estimada_horas: 1.5
+    },
   ];
 
   for (const tipo of tipos) {
     await prisma.tipos_servicio.upsert({
       where: { codigo_tipo: tipo.codigo_tipo },
-      update: { nombre_tipo: tipo.nombre_tipo, activo: true },
+      update: {
+        nombre_tipo: tipo.nombre_tipo,
+        id_tipo_equipo: tipo.id_tipo_equipo,
+        activo: true
+      },
       create: { ...tipo, activo: true } as any,
     });
-    log(`Tipo servicio: ${tipo.codigo_tipo}`, 'success');
+    log(`Tipo servicio: ${tipo.codigo_tipo} -> Equipo: ${tipo.id_tipo_equipo || 'TODOS'}`, 'success');
   }
 
   const count = await prisma.tipos_servicio.count({ where: { activo: true } });

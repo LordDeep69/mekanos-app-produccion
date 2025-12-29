@@ -4,6 +4,7 @@
  * ALINEADO CON schema.prisma prioridad_enum
  */
 export enum PrioridadOrdenEnum {
+  BAJA = 'BAJA',
   NORMAL = 'NORMAL',
   ALTA = 'ALTA',
   URGENTE = 'URGENTE',
@@ -17,6 +18,7 @@ export enum PrioridadOrdenEnum {
  */
 export class PrioridadOrden {
   private static readonly SLA_DIAS: Record<PrioridadOrdenEnum, number> = {
+    [PrioridadOrdenEnum.BAJA]: 30,
     [PrioridadOrdenEnum.NORMAL]: 15,
     [PrioridadOrdenEnum.ALTA]: 5,
     [PrioridadOrdenEnum.URGENTE]: 2,
@@ -25,6 +27,13 @@ export class PrioridadOrden {
 
   private constructor(private readonly value: PrioridadOrdenEnum) {
     Object.freeze(this);
+  }
+
+  /**
+   * Crea prioridad BAJA
+   */
+  static baja(): PrioridadOrden {
+    return new PrioridadOrden(PrioridadOrdenEnum.BAJA);
   }
 
   /**
@@ -108,6 +117,7 @@ export class PrioridadOrden {
    */
   compareTo(other: PrioridadOrden): number {
     const orden = [
+      PrioridadOrdenEnum.BAJA,
       PrioridadOrdenEnum.NORMAL,
       PrioridadOrdenEnum.ALTA,
       PrioridadOrdenEnum.URGENTE,
@@ -119,6 +129,10 @@ export class PrioridadOrden {
   }
 
   // Helper methods
+
+  esBaja(): boolean {
+    return this.value === PrioridadOrdenEnum.BAJA;
+  }
 
   esNormal(): boolean {
     return this.value === PrioridadOrdenEnum.NORMAL;

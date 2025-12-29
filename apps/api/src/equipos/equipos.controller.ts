@@ -1,25 +1,27 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateEquipoCommand } from './commands/create-equipo.command';
 import { DeleteEquipoCommand } from './commands/delete-equipo.command';
 import { UpdateEquipoCommand } from './commands/update-equipo.command';
 import { UserId } from './decorators/user-id.decorator';
+import { CreateEquipoCompletoDto } from './dto/create-equipo-completo.dto';
 import { CreateEquipoDto } from './dto/create-equipo.dto';
 import { UpdateEquipoDto } from './dto/update-equipo.dto';
+import { EquiposGestionService } from './equipos-gestion.service';
 import { GetEquipoQuery } from './queries/get-equipo.query';
 import { GetEquiposQuery, GetEquiposQueryDto } from './queries/get-equipos.query';
 
@@ -35,8 +37,9 @@ import { GetEquiposQuery, GetEquiposQueryDto } from './queries/get-equipos.query
 export class EquiposController {
   constructor(
     private readonly commandBus: CommandBus,
-    private readonly queryBus: QueryBus
-  ) {}
+    private readonly queryBus: QueryBus,
+    private readonly equiposGestionService: EquiposGestionService
+  ) { }
 
   /**
    * POST /api/equipos
@@ -49,7 +52,7 @@ export class EquiposController {
   ) {
     const command = new CreateEquipoCommand(dto, userId);
     const equipo = await this.commandBus.execute(command);
-    
+
     return {
       success: true,
       message: 'Equipo creado exitosamente',
@@ -59,7 +62,7 @@ export class EquiposController {
 
   /**
    * GET /api/equipos
-   * Listar equipos con filtros y paginación
+   * Listar equipos con filtrado jerárquico enterprise (Cliente -> Sede)
    */
   @Get()
   async findAll(@Query() queryDto: GetEquiposQueryDto) {
@@ -72,11 +75,14 @@ export class EquiposController {
       queryDto.page,
       queryDto.limit
     );
-    
+
     const result = await this.queryBus.execute(query);
-    
+
     return {
       success: true,
+      message: queryDto.id_sede
+        ? `Equipos filtrados por sede ${queryDto.id_sede}`
+        : (queryDto.id_cliente ? `Equipos filtrados por cliente ${queryDto.id_cliente}` : 'Listado de equipos obtenido'),
       data: result.items,
       pagination: {
         total: result.total,
@@ -84,6 +90,53 @@ export class EquiposController {
         limit: result.limit,
         totalPages: result.totalPages
       }
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ENDPOINTS DE GESTIÓN POLIMÓRFICA (Deben ir antes de los endpoints con :id)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/equipos/gestion-completa
+   * Crear equipo con datos polimórficos (padre + hijo en transacción)
+   */
+  @Post('gestion-completa')
+  @ApiOperation({ summary: 'Crear equipo completo con datos específicos según tipo' })
+  async crearEquipoCompleto(
+    @Body() dto: CreateEquipoCompletoDto,
+    @UserId() userId: number
+  ) {
+    return this.equiposGestionService.crearEquipoCompleto(dto, userId);
+  }
+
+  /**
+   * GET /api/equipos/listado-completo
+   * Listar equipos con datos polimórficos incluidos
+   */
+  @Get('listado-completo')
+  @ApiOperation({ summary: 'Listar equipos con datos específicos según tipo' })
+  async listarEquiposCompletos(@Query() queryDto: GetEquiposQueryDto) {
+    return this.equiposGestionService.listarEquiposCompletos({
+      id_cliente: queryDto.id_cliente,
+      id_sede: queryDto.id_sede,
+      estado_equipo: queryDto.estado_equipo,
+      page: queryDto.page,
+      limit: queryDto.limit,
+    });
+  }
+
+  /**
+   * GET /api/equipos/completo/:id
+   * Obtener equipo con todos sus datos polimórficos
+   */
+  @Get('completo/:id')
+  @ApiOperation({ summary: 'Obtener equipo con datos específicos según tipo' })
+  async obtenerEquipoCompleto(@Param('id', ParseIntPipe) id: number) {
+    const equipo = await this.equiposGestionService.obtenerEquipoCompleto(id);
+    return {
+      success: true,
+      data: equipo,
     };
   }
 
@@ -95,7 +148,7 @@ export class EquiposController {
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const query = new GetEquipoQuery(id);
     const equipo = await this.queryBus.execute(query);
-    
+
     return {
       success: true,
       data: equipo
@@ -114,7 +167,7 @@ export class EquiposController {
   ) {
     const command = new UpdateEquipoCommand(id, dto, userId);
     const equipo = await this.commandBus.execute(command);
-    
+
     return {
       success: true,
       message: 'Equipo actualizado exitosamente',
@@ -133,7 +186,7 @@ export class EquiposController {
   ) {
     const command = new DeleteEquipoCommand(id, userId);
     await this.commandBus.execute(command);
-    
+
     return {
       success: true,
       message: 'Equipo eliminado exitosamente'

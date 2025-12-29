@@ -1,14 +1,33 @@
+import { Type } from 'class-transformer';
 import {
     IsBoolean,
     IsDateString,
+    IsEmail,
     IsEnum,
     IsInt,
+    IsNotEmpty,
     IsNumber,
     IsOptional,
     IsString,
     Max,
-    Min
+    Min,
+    ValidateNested
 } from 'class-validator';
+
+// Enums para tipo de identificación y tipo de persona
+export enum TipoIdentificacionEnum {
+  CC = 'CC',
+  CE = 'CE',
+  NIT = 'NIT',
+  PASAPORTE = 'PASAPORTE',
+  TI = 'TI',
+  RC = 'RC',
+}
+
+export enum TipoPersonaEnum {
+  NATURAL = 'NATURAL',
+  JURIDICA = 'JURIDICA',
+}
 
 export enum TipoClienteEnum {
   RESIDENCIAL = 'RESIDENCIAL',
@@ -33,9 +52,88 @@ export enum PeriodicidadMantenimientoEnum {
   SIN_DEFINIR = 'SIN_DEFINIR',
 }
 
+/**
+ * DTO anidado para crear persona junto con el cliente
+ */
+export class CreatePersonaNestedDto {
+  @IsEnum(TipoIdentificacionEnum)
+  @IsNotEmpty()
+  tipo_identificacion: TipoIdentificacionEnum;
+
+  @IsString()
+  @IsNotEmpty()
+  numero_identificacion: string;
+
+  @IsEnum(TipoPersonaEnum)
+  @IsOptional()
+  tipo_persona?: TipoPersonaEnum = TipoPersonaEnum.JURIDICA;
+
+  @IsOptional()
+  @IsString()
+  primer_nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  segundo_nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  primer_apellido?: string;
+
+  @IsOptional()
+  @IsString()
+  segundo_apellido?: string;
+
+  @IsOptional()
+  @IsString()
+  razon_social?: string;
+
+  @IsOptional()
+  @IsString()
+  nombre_comercial?: string;
+
+  @IsOptional()
+  @IsString()
+  representante_legal?: string;
+
+  @IsOptional()
+  @IsString()
+  cedula_representante?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email_principal?: string;
+
+  @IsOptional()
+  @IsString()
+  telefono_principal?: string;
+
+  @IsOptional()
+  @IsString()
+  celular?: string;
+
+  @IsOptional()
+  @IsString()
+  direccion_principal?: string;
+
+  @IsOptional()
+  @IsString()
+  ciudad?: string;
+
+  @IsOptional()
+  @IsString()
+  departamento?: string;
+}
+
 export class CreateClientesDto {
+  @IsOptional()
   @IsInt()
-  id_persona: number;
+  id_persona?: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreatePersonaNestedDto)
+  persona?: CreatePersonaNestedDto;
 
   @IsOptional()
   @IsEnum(TipoClienteEnum)

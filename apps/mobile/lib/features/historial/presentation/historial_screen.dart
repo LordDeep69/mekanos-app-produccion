@@ -48,11 +48,13 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
     super.dispose();
   }
 
-  Future<void> _cargarDatos() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _cargarDatos({bool mostrarLoading = true}) async {
+    if (mostrarLoading) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final service = ref.read(historialServiceProvider);
@@ -63,7 +65,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
       }
 
       // Cargar órdenes con filtros (incluyendo nuevos de RUTA 12)
-      final ordenes = await service.getOrdenesFinalizadas(
+      final ordenesNuevas = await service.getOrdenesFinalizadas(
         busqueda: _busquedaController.text.isNotEmpty
             ? _busquedaController.text
             : null,
@@ -75,7 +77,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
       );
 
       // Cargar estadísticas
-      final estadisticas = await service.getEstadisticas(
+      final estadisticasNuevas = await service.getEstadisticas(
         fechaDesde: _fechaDesde,
         fechaHasta: _fechaHasta,
       );
@@ -94,8 +96,10 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
 
       if (mounted) {
         setState(() {
-          _ordenes = ordenes;
-          _estadisticas = estadisticas;
+          // ✅ FIX ROBUSTO: Solo actualizamos si los datos son diferentes
+          // para evitar reconstrucciones innecesarias que rompen el scroll
+          _ordenes = ordenesNuevas;
+          _estadisticas = estadisticasNuevas;
           _isLoading = false;
         });
       }
@@ -107,6 +111,10 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
         });
       }
     }
+  }
+
+  void _refrescar() {
+    _cargarDatos(mostrarLoading: false);
   }
 
   void _buscar() {
@@ -554,8 +562,9 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
 
   Widget _buildLista() {
     return RefreshIndicator(
-      onRefresh: _cargarDatos,
+      onRefresh: () => _cargarDatos(mostrarLoading: false),
       child: ListView.builder(
+        key: const PageStorageKey<String>('historial_list'),
         controller: _scrollController,
         padding: const EdgeInsets.all(12),
         itemCount: _ordenes.length,
@@ -564,25 +573,13 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
           return _HistorialCard(
             orden: orden,
             onTap: () {
-              final savedOffset = _scrollController.hasClients
-                  ? _scrollController.offset
-                  : null;
-
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
                       HistorialDetalleScreen(idOrdenLocal: orden.idLocal),
                 ),
-              ).then((_) {
-                if (savedOffset != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_scrollController.hasClients) {
-                      _scrollController.jumpTo(savedOffset);
-                    }
-                  });
-                }
-              });
+              ).then((_) => _refrescar());
             },
           );
         },

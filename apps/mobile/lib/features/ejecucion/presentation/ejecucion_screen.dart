@@ -18,14 +18,15 @@ import '../data/ejecucion_service.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
 /// TabBar: Checklist | Mediciones | Resumen
-/// 
+///
 /// ✅ MULTI-EQUIPOS: Puede recibir idOrdenEquipo para filtrar por equipo específico
 class EjecucionScreen extends ConsumerStatefulWidget {
   final int idOrdenLocal;
-  final int? idOrdenEquipo; // ✅ MULTI-EQUIPOS: ID del equipo específico (opcional)
+  final int?
+  idOrdenEquipo; // ✅ MULTI-EQUIPOS: ID del equipo específico (opcional)
 
   const EjecucionScreen({
-    super.key, 
+    super.key,
     required this.idOrdenLocal,
     this.idOrdenEquipo, // null = orden simple, valor = multi-equipo
   });
@@ -53,10 +54,10 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   // ✅ RUTA 8: Estado de firmas
   bool _tieneFirmaTecnico = false;
   bool _tieneFirmaCliente = false;
-  
+
   // ✅ MULTI-EQUIPOS: Nombre del equipo actual
   String? _nombreEquipoActual;
-  
+
   // ✅ FIX 17-DIC-2025: Flag para saber si es orden de un solo equipo (necesita tab Resumen)
   bool get _esOrdenSimple => widget.idOrdenEquipo == null;
 
@@ -65,10 +66,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     super.initState();
     // ✅ FIX 17-DIC-2025: Orden simple = 3 tabs (Checklist + Mediciones + Resumen)
     // Multi-equipo = 2 tabs (Resumen está en NavigacionEquiposScreen)
-    _tabController = TabController(
-      length: _esOrdenSimple ? 3 : 2, 
-      vsync: this,
-    );
+    _tabController = TabController(length: _esOrdenSimple ? 3 : 2, vsync: this);
     _cargarDatos();
   }
 
@@ -88,9 +86,10 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       // ✅ MULTI-EQUIPOS: Si hay idOrdenEquipo, cargar nombre del equipo
       if (widget.idOrdenEquipo != null) {
         final equipoInfo = await db.getOrdenEquipoById(widget.idOrdenEquipo!);
-        _nombreEquipoActual = equipoInfo?.nombreSistema ?? 
-                             equipoInfo?.nombreEquipo ?? 
-                             'Equipo ${equipoInfo?.ordenSecuencia ?? '?'}';
+        _nombreEquipoActual =
+            equipoInfo?.nombreSistema ??
+            equipoInfo?.nombreEquipo ??
+            'Equipo ${equipoInfo?.ordenSecuencia ?? '?'}';
       }
 
       // Cargar actividades agrupadas
@@ -285,12 +284,18 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_numeroOrden ?? 'Ejecución', style: const TextStyle(fontSize: 16)),
+            Text(
+              _numeroOrden ?? 'Ejecución',
+              style: const TextStyle(fontSize: 16),
+            ),
             // ✅ MULTI-EQUIPOS: Mostrar nombre del equipo
             if (_nombreEquipoActual != null)
               Text(
                 _nombreEquipoActual!,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
               ),
           ],
         ),
@@ -353,30 +358,189 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   /// ✅ FIX 14-DIC-2025: Ahora incluye TODAS las actividades (incluyendo tipo MEDICION)
   Widget _buildChecklistTab() {
     if (_actividadesPorSistema.isEmpty) {
-      return const Center(child: Text('No hay actividades para esta orden'));
-    }
-
-    // ✅ FIX: Ya no excluimos ningún tipo - todas las actividades van al checklist
-    // Las mediciones con parámetros también aparecen en tab Mediciones (para ingresar valores)
-    if (_actividadesPorSistema.isEmpty) {
-      return const Center(
-        child: Text('No hay actividades de checklist para esta orden'),
-      );
+      return _buildEmptyChecklist();
     }
 
     return RefreshIndicator(
       onRefresh: _cargarDatos,
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: 100),
-        itemCount: _actividadesPorSistema.length,
-        itemBuilder: (context, index) {
-          final sistema = _actividadesPorSistema.keys.elementAt(index);
-          final actividades = _actividadesPorSistema[sistema]!;
+      child: Stack(
+        children: [
+          ListView.builder(
+            padding: const EdgeInsets.only(bottom: 100),
+            itemCount: _actividadesPorSistema.length,
+            itemBuilder: (context, index) {
+              final sistema = _actividadesPorSistema.keys.elementAt(index);
+              final actividades = _actividadesPorSistema[sistema]!;
 
-          return _buildSistemaSection(sistema, actividades);
-        },
+              return _buildSistemaSection(sistema, actividades);
+            },
+          ),
+          if (_esCorrectivo)
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: FloatingActionButton.extended(
+                onPressed: _mostrarDialogoAddActividad,
+                label: const Text('Add Actividad'),
+                icon: const Icon(Icons.add),
+                backgroundColor: Colors.green.shade700,
+              ),
+            ),
+        ],
       ),
     );
+  }
+
+  Widget _buildEmptyChecklist() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.checklist, size: 64, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            'No hay actividades para esta orden',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+          ),
+          if (_esCorrectivo) ...[
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: _mostrarDialogoAddActividad,
+              icon: const Icon(Icons.add),
+              label: const Text('Add primera actividad'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Muestra dialogo para añadir actividad del catalogo
+  Future<void> _mostrarDialogoAddActividad() async {
+    final db = ref.read(databaseProvider);
+    // Obtener actividades del catalogo que NO estan ya en la orden
+    final actividadesCat = await db.getAllActividadesCatalogo();
+
+    // Obtener IDs de actividades ya presentes para filtrar
+    final idsExistentes = <int>{};
+    for (final lista in _actividadesPorSistema.values) {
+      for (final act in lista) {
+        idsExistentes.add(act.idActividadCatalogo);
+      }
+    }
+
+    final actividadesDisponibles = actividadesCat
+        .where((a) => !idsExistentes.contains(a.id))
+        .toList();
+
+    if (!mounted) return;
+
+    final idSeleccionado = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Actividad'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: actividadesDisponibles.isEmpty
+              ? const Text('No hay mas actividades disponibles.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: actividadesDisponibles.length,
+                  itemBuilder: (context, index) {
+                    final act = actividadesDisponibles[index];
+                    return ListTile(
+                      title: Text(act.descripcion),
+                      subtitle: Text(act.sistema ?? 'General'),
+                      leading: const Icon(Icons.add_circle_outline),
+                      onTap: () => Navigator.pop(ctx, act.id),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+
+    if (idSeleccionado != null) {
+      await _addActividadPlan(idSeleccionado);
+    }
+  }
+
+  Future<void> _addActividadPlan(int idActividadCatalogo) async {
+    setState(() => _isLoading = true);
+    try {
+      final service = ref.read(ejecucionServiceProvider);
+      await service.addActividadDinamica(
+        idOrdenLocal: widget.idOrdenLocal,
+        idActividadCatalogo: idActividadCatalogo,
+        idOrdenEquipo: widget.idOrdenEquipo,
+      );
+
+      await _cargarDatos();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Actividad añadida exitosamente')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _confirmarEliminarActividad(
+    ActividadesEjecutada actividad,
+  ) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar Actividad'),
+        content: Text(
+          '¿Está seguro de eliminar "${actividad.descripcion}" del plan?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      setState(() => _isLoading = true);
+      try {
+        final service = ref.read(ejecucionServiceProvider);
+        await service.eliminarActividadLocal(actividad.idLocal);
+        await _cargarDatos();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
   }
 
   Widget _buildSistemaSection(
@@ -462,30 +626,35 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Icono de estado
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: estaCompletada
-                        ? _getColorForSimbologia(simbologia)
-                        : Colors.grey.shade200,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: estaCompletada
-                        ? Text(
-                            simbologia,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                GestureDetector(
+                  onLongPress: _esCorrectivo
+                      ? () => _confirmarEliminarActividad(actividad)
+                      : null,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: estaCompletada
+                          ? _getColorForSimbologia(simbologia)
+                          : Colors.grey.shade200,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: estaCompletada
+                          ? Text(
+                              simbologia,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            )
+                          : Icon(
+                              Icons.pending,
+                              size: 18,
+                              color: Colors.grey.shade400,
                             ),
-                          )
-                        : Icon(
-                            Icons.pending,
-                            size: 18,
-                            color: Colors.grey.shade400,
-                          ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1360,8 +1529,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     ];
 
     // Verificar si el valor actual es personalizado (no está en opciones predefinidas)
-    final esValorPersonalizado = valorActual.isNotEmpty &&
-        !opciones.any((o) => o.$1 == valorActual);
+    final esValorPersonalizado =
+        valorActual.isNotEmpty && !opciones.any((o) => o.$1 == valorActual);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1422,7 +1591,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             );
           }).toList(),
         ),
-        
+
         // Botón de valor personalizado
         const SizedBox(height: 8),
         InkWell(
@@ -1431,10 +1600,14 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: esValorPersonalizado ? Colors.blue.shade50 : Colors.grey.shade50,
+              color: esValorPersonalizado
+                  ? Colors.blue.shade50
+                  : Colors.grey.shade50,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: esValorPersonalizado ? Colors.blue : Colors.grey.shade300,
+                color: esValorPersonalizado
+                    ? Colors.blue
+                    : Colors.grey.shade300,
                 width: esValorPersonalizado ? 2 : 1,
               ),
             ),
@@ -1444,7 +1617,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 Icon(
                   Icons.edit_note,
                   size: 18,
-                  color: esValorPersonalizado ? Colors.blue.shade700 : Colors.grey.shade600,
+                  color: esValorPersonalizado
+                      ? Colors.blue.shade700
+                      : Colors.grey.shade600,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -1453,13 +1628,21 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                       : 'Otro valor...',
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: esValorPersonalizado ? FontWeight.bold : FontWeight.normal,
-                    color: esValorPersonalizado ? Colors.blue.shade700 : Colors.grey.shade600,
+                    fontWeight: esValorPersonalizado
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: esValorPersonalizado
+                        ? Colors.blue.shade700
+                        : Colors.grey.shade600,
                   ),
                 ),
                 if (esValorPersonalizado) ...[
                   const SizedBox(width: 4),
-                  Icon(Icons.check_circle, size: 16, color: Colors.blue.shade700),
+                  Icon(
+                    Icons.check_circle,
+                    size: 16,
+                    color: Colors.blue.shade700,
+                  ),
                 ],
               ],
             ),
@@ -1470,16 +1653,21 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Diálogo para ingresar porcentaje de batería personalizado
-  Future<void> _mostrarDialogoPorcentajeBateria(ActividadesEjecutada actividad) async {
+  Future<void> _mostrarDialogoPorcentajeBateria(
+    ActividadesEjecutada actividad,
+  ) async {
     final controller = TextEditingController();
     final observacion = actividad.observacion ?? '';
-    
+
     // Si ya tiene un valor, pre-llenar (quitando el %)
     if (observacion.startsWith('BATERIA: ')) {
       final valorSinPrefix = observacion.substring(9);
       // Si termina en %, quitar el %
       if (valorSinPrefix.endsWith('%')) {
-        controller.text = valorSinPrefix.substring(0, valorSinPrefix.length - 1);
+        controller.text = valorSinPrefix.substring(
+          0,
+          valorSinPrefix.length - 1,
+        );
       } else if (valorSinPrefix != 'BAJA') {
         controller.text = valorSinPrefix;
       }
@@ -2311,7 +2499,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   /// Muestra diálogo de éxito cuando se sincronizó online
   void _mostrarExitoOnline(SyncUploadResult resultado) {
     final datosRes = resultado.datos;
-    
+
     // ✅ 20-DIC-2025: Soportar ambas estructuras de respuesta
     // Puede venir como datosRes['datos'] (SSE) o datosRes directamente (endpoint tradicional)
     Map<String, dynamic>? datosInternos;
@@ -2325,7 +2513,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       }
     }
 
-    final evidenciasCount = (datosInternos?['evidencias'] as List?)?.length ?? 0;
+    final evidenciasCount =
+        (datosInternos?['evidencias'] as List?)?.length ?? 0;
     final firmasCount = (datosInternos?['firmas'] as List?)?.length ?? 0;
     final pdfGenerado = datosInternos?['documento'] != null;
     final emailEnviado = datosInternos?['email']?['enviado'] == true;
@@ -2972,7 +3161,8 @@ class _SyncProgressDialog extends ConsumerWidget {
 
     return PopScope(
       // No permitir cerrar con back mientras está en progreso
-      canPop: progress.pasoActual == SyncStep.completado ||
+      canPop:
+          progress.pasoActual == SyncStep.completado ||
           progress.pasoActual == SyncStep.error,
       child: AlertDialog(
         title: Row(
@@ -2993,8 +3183,8 @@ class _SyncProgressDialog extends ConsumerWidget {
                 progress.pasoActual == SyncStep.completado
                     ? '¡Sincronización Exitosa!'
                     : progress.pasoActual == SyncStep.error
-                        ? 'Error en Sincronización'
-                        : 'Sincronizando...',
+                    ? 'Error en Sincronización'
+                    : 'Sincronizando...',
                 style: const TextStyle(fontSize: 18),
               ),
             ),
@@ -3006,7 +3196,7 @@ class _SyncProgressDialog extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // ✅ 19-DIC-2025: Mostrar mensaje actual del servidor si está disponible
-              if (progress.mensajeActual != null && 
+              if (progress.mensajeActual != null &&
                   progress.pasoActual != SyncStep.completado &&
                   progress.pasoActual != SyncStep.error) ...[
                 Container(
@@ -3038,27 +3228,26 @@ class _SyncProgressDialog extends ConsumerWidget {
                   ),
                 ),
               ],
-              
+
               // ✅ 19-DIC-2025: Barra de progreso visual
-              if (progress.porcentaje > 0 && 
+              if (progress.porcentaje > 0 &&
                   progress.pasoActual != SyncStep.completado &&
                   progress.pasoActual != SyncStep.error) ...[
                 LinearProgressIndicator(
                   value: progress.porcentaje / 100,
                   backgroundColor: Colors.grey.shade200,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Colors.blue.shade600,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '${progress.porcentaje}%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 16),
               ],
-              
+
               // Lista de pasos con estados - Usando pasos visibles simplificados
               _buildStepItem(
                 step: SyncStep.preparando,
@@ -3132,8 +3321,11 @@ class _SyncProgressDialog extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.celebration,
-                          color: Colors.green.shade700, size: 20),
+                      Icon(
+                        Icons.celebration,
+                        color: Colors.green.shade700,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
@@ -3164,9 +3356,11 @@ class _SyncProgressDialog extends ConsumerWidget {
                   Navigator.of(context).pop(); // Volver a lista de órdenes
                 }
               },
-              child: Text(progress.pasoActual == SyncStep.completado
-                  ? 'CONTINUAR'
-                  : 'CERRAR'),
+              child: Text(
+                progress.pasoActual == SyncStep.completado
+                    ? 'CONTINUAR'
+                    : 'CERRAR',
+              ),
             ),
         ],
       ),
@@ -3201,7 +3395,11 @@ class _SyncProgressDialog extends ConsumerWidget {
       );
     } else {
       color = Colors.grey.shade400;
-      leading = Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 22);
+      leading = Icon(
+        Icons.circle_outlined,
+        color: Colors.grey.shade400,
+        size: 22,
+      );
     }
 
     return Padding(

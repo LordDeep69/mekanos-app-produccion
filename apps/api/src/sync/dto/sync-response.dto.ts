@@ -18,11 +18,41 @@ export class OrdenResumenDto {
   @ApiProperty({ description: 'ID del estado actual (1=PENDIENTE, 2=EN_PROGRESO, 4=COMPLETADA)' })
   estadoId: number;
 
+  @ApiPropertyOptional({ description: 'ID del estado (alias snake_case)' })
+  id_estado?: number;
+
   @ApiProperty({ description: 'Código del estado (ej: COMPLETADA)' })
   estadoCodigo: string;
 
+  @ApiProperty({ description: 'ID del cliente' })
+  idCliente: number;
+
+  @ApiPropertyOptional({ description: 'ID del cliente (alias snake_case)' })
+  id_cliente?: number;
+
+  @ApiProperty({ description: 'ID del equipo principal' })
+  idEquipo: number;
+
+  @ApiPropertyOptional({ description: 'ID del equipo (alias snake_case)' })
+  id_equipo?: number;
+
+  @ApiProperty({ description: 'ID del tipo de servicio' })
+  idTipoServicio: number;
+
+  @ApiPropertyOptional({ description: 'ID del tipo de servicio (alias snake_case)' })
+  id_tipo_servicio?: number;
+
+  @ApiProperty({ description: 'Prioridad de la orden' })
+  prioridad: string;
+
+  @ApiPropertyOptional({ description: 'Fecha programada ISO 8601' })
+  fechaProgramada?: string;
+
   @ApiProperty({ description: 'Fecha de última modificación ISO 8601' })
   fechaModificacion: string;
+
+  @ApiPropertyOptional({ description: 'Versión de la orden (timestamp)' })
+  version?: number;
 
   @ApiPropertyOptional({ description: 'URL del PDF si existe' })
   urlPdf?: string;
@@ -296,9 +326,9 @@ export class SyncOrdenDownloadDto {
   medicionesCriticas?: number;
 
   // ✅ Multi-Equipos: Lista de equipos asociados a esta orden (para Preventivo Tipo A)
-  @ApiPropertyOptional({ 
-    type: [SyncOrdenEquipoDto], 
-    description: 'Equipos asociados a esta orden (vacío = orden tradicional 1 equipo)' 
+  @ApiPropertyOptional({
+    type: [SyncOrdenEquipoDto],
+    description: 'Equipos asociados a esta orden (vacío = orden tradicional 1 equipo)'
   })
   ordenesEquipos?: SyncOrdenEquipoDto[];
 

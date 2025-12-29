@@ -1,14 +1,14 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,7 +22,7 @@ import { UpdateClientesDto } from './dto/update-clientes.dto';
 @Controller('clientes')
 @UseGuards(JwtAuthGuard)
 export class ClientesController {
-  constructor(private readonly clientesService: ClientesService) {}
+  constructor(private readonly clientesService: ClientesService) { }
 
   @Post()
   create(
@@ -33,21 +33,37 @@ export class ClientesController {
   }
 
   @Get()
-  findAll(
+  async findAll(
     @Query('tipo_cliente') tipo_cliente?: string,
     @Query('cliente_activo') cliente_activo?: string,
+    @Query('search') search?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
-    return this.clientesService.findAll({
+    const skipNum = skip ? parseInt(skip) : 0;
+    const takeNum = take ? parseInt(take) : 50;
+
+    const { items, total } = await this.clientesService.findAll({
       tipo_cliente,
       cliente_activo:
         cliente_activo !== undefined
           ? cliente_activo === 'true'
           : undefined,
-      skip: skip ? parseInt(skip) : undefined,
-      take: take ? parseInt(take) : undefined,
+      search,
+      skip: skipNum,
+      take: takeNum,
     });
+
+    return {
+      success: true,
+      data: items,
+      pagination: {
+        total,
+        skip: skipNum,
+        take: takeNum,
+        totalPages: Math.ceil(total / takeNum),
+      },
+    };
   }
 
   @Get(':id')

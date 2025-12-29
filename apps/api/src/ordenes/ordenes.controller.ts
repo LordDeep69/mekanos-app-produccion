@@ -1,21 +1,21 @@
 import { PrismaService } from '@mekanos/database';
 import {
-    BadRequestException,
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpCode,
-    HttpStatus,
-    NotFoundException,
-    Param,
-    ParseIntPipe,
-    Patch,
-    Post,
-    Put,
-    Query,
-    Res,
-    UseGuards,
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Res,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -41,6 +41,7 @@ import { AsignarTecnicoDto } from './dto/asignar-tecnico.dto';
 import { CambiarEstadoOrdenDto } from './dto/cambiar-estado-orden.dto';
 import { CreateOrdenDto } from './dto/create-orden.dto';
 import { FinalizarOrdenCompletoDto } from './dto/finalizar-orden-completo.dto';
+import { AddActividadPlanDto, UpdateActividadPlanDto } from './dto/plan-actividades.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
 
 // Services
@@ -247,6 +248,240 @@ export class OrdenesController {
     };
   }
 
+  @Post(':id/plan-actividades/actividad')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Añadir actividad individual al plan' })
+  async addActividadIndividual(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AddActividadPlanDto,
+    @UserId() userId: number,
+  ) {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_orden_servicio: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+
+    // Validar que la actividad existe en el catálogo
+    const actividadCat = await this.prisma.catalogo_actividades.findUnique({
+      where: { id_actividad_catalogo: dto.idActividadCatalogo },
+    });
+
+    if (!actividadCat) {
+      throw new BadRequestException('La actividad no existe en el catálogo');
+    }
+
+    // Evitar duplicados (UK en BD)
+    const existe = await this.prisma.ordenes_actividades_plan.findUnique({
+      where: {
+        id_orden_servicio_id_actividad_catalogo: {
+          id_orden_servicio: id,
+          id_actividad_catalogo: dto.idActividadCatalogo,
+        },
+      },
+    });
+
+    if (existe) {
+      throw new BadRequestException('Esta actividad ya está en el plan de la orden');
+    }
+
+    // Calcular secuencia si no se provee
+    let secuencia = dto.ordenSecuencia;
+    if (secuencia === undefined) {
+      const lastAct = await this.prisma.ordenes_actividades_plan.findFirst({
+        where: { id_orden_servicio: id },
+        orderBy: { orden_secuencia: 'desc' },
+      });
+      secuencia = (lastAct?.orden_secuencia ?? 0) + 1;
+    }
+
+    const nuevaAct = await this.prisma.ordenes_actividades_plan.create({
+      data: {
+        id_orden_servicio: id,
+        id_actividad_catalogo: dto.idActividadCatalogo,
+        orden_secuencia: secuencia,
+        es_obligatoria: dto.esObligatoria ?? true,
+        origen: (dto.origen as any) || 'ADMIN',
+        creado_por: userId,
+      },
+      include: {
+        catalogo_actividades: true,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Actividad añadida al plan',
+      data: nuevaAct,
+    };
+  }
+
+  @Patch(':id/plan-actividades/actividad/:actividadPlanId')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Actualizar actividad individual del plan' })
+  async updateActividadIndividual(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('actividadPlanId', ParseIntPipe) actividadPlanId: number,
+    @Body() dto: UpdateActividadPlanDto,
+    @UserId() userId: number,
+  ) {
+    const actividad = await this.prisma.ordenes_actividades_plan.findFirst({
+      where: {
+        id_orden_actividad_plan: actividadPlanId,
+        id_orden_servicio: id,
+      },
+    });
+
+    if (!actividad) {
+      throw new NotFoundException('Actividad no encontrada en el plan de esta orden');
+    }
+
+    const actualizada = await this.prisma.ordenes_actividades_plan.update({
+      where: { id_orden_actividad_plan: actividadPlanId },
+      data: {
+        orden_secuencia: dto.ordenSecuencia,
+        es_obligatoria: dto.esObligatoria,
+        modificado_por: userId,
+        fecha_modificacion: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Actividad del plan actualizada',
+      data: actualizada,
+    };
+  }
+
+  @Delete(':id/plan-actividades/actividad/:actividadPlanId')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Eliminar actividad individual del plan' })
+  async removeActividadIndividual(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('actividadPlanId', ParseIntPipe) actividadPlanId: number,
+  ) {
+    const actividad = await this.prisma.ordenes_actividades_plan.findFirst({
+      where: {
+        id_orden_actividad_plan: actividadPlanId,
+        id_orden_servicio: id,
+      },
+    });
+
+    if (!actividad) {
+      throw new NotFoundException('Actividad no encontrada en el plan de esta orden');
+    }
+
+    await this.prisma.ordenes_actividades_plan.delete({
+      where: { id_orden_actividad_plan: actividadPlanId },
+    });
+
+    return {
+      success: true,
+      message: 'Actividad eliminada del plan',
+    };
+  }
+
+  @Get(':id/actividades')
+  @UseGuards(JwtAuthGuard)
+  async getActividadesEjecutadas(@Param('id', ParseIntPipe) id: number) {
+    const actividades = await this.prisma.actividades_ejecutadas.findMany({
+      where: { id_orden_servicio: id },
+      include: {
+        catalogo_actividades: true,
+        empleados: { include: { persona: true } },
+      },
+      orderBy: { fecha_ejecucion: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: actividades,
+    };
+  }
+
+  @Get(':id/mediciones')
+  @UseGuards(JwtAuthGuard)
+  async getMediciones(@Param('id', ParseIntPipe) id: number) {
+    const mediciones = await this.prisma.mediciones_servicio.findMany({
+      where: { id_orden_servicio: id },
+      include: {
+        parametros_medicion: true,
+      },
+      orderBy: { fecha_medicion: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: mediciones,
+    };
+  }
+
+  @Get(':id/evidencias')
+  @UseGuards(JwtAuthGuard)
+  async getEvidencias(@Param('id', ParseIntPipe) id: number) {
+    const evidencias = await this.prisma.evidencias_fotograficas.findMany({
+      where: { id_orden_servicio: id },
+      orderBy: { fecha_captura: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: evidencias,
+    };
+  }
+
+  @Get(':id/firmas')
+  @UseGuards(JwtAuthGuard)
+  async getFirmas(@Param('id', ParseIntPipe) id: number) {
+    // 1. Obtener la orden para ver la firma del cliente vinculada
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_firma_cliente: true, id_tecnico_asignado: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+
+    const idsFirmas = [];
+    if (orden.id_firma_cliente) idsFirmas.push(orden.id_firma_cliente);
+
+    // 2. Buscar firmas vinculadas (incluyendo la del técnico si existe)
+    // El técnico firma cada vez que finaliza, buscamos la última firma de ese técnico
+    const todasLasFirmas = await this.prisma.firmas_digitales.findMany({
+      where: {
+        OR: [
+          { id_firma_digital: { in: idsFirmas } },
+          {
+            AND: [
+              { id_persona: { not: 0 } }, // Persona real
+              { tipo_firma: 'TECNICO' },
+              {
+                persona: {
+                  empleados: {
+                    id_empleado: orden.id_tecnico_asignado || -1
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      include: {
+        persona: true
+      },
+      orderBy: { fecha_registro: 'desc' }
+    });
+
+    return {
+      success: true,
+      data: todasLasFirmas,
+    };
+  }
+
   /**
    * GET /api/ordenes/estados-debug
    * DEBUG: Listar estados
@@ -267,14 +502,18 @@ export class OrdenesController {
     @Body() dto: CreateOrdenDto,
     @UserId() userId: number
   ) {
+    const tecnicoId = dto.id_tecnico_asignado || dto.tecnicoId;
+    const equiposIds = dto.equipos_ids || [dto.id_equipo];
+
     const command = new CreateOrdenCommand(
-      dto.equipoId,
-      dto.clienteId,
-      dto.tipoServicioId,
-      dto.sedeClienteId,
-      dto.descripcion,
+      dto.id_cliente,
+      equiposIds,
+      dto.id_tipo_servicio,
+      dto.id_sede_cliente,
+      dto.descripcion_inicial,
       dto.prioridad,
-      dto.fechaProgramada ? new Date(dto.fechaProgramada) : undefined,
+      dto.fecha_programada ? new Date(dto.fecha_programada) : undefined,
+      tecnicoId,
       userId
     );
 
@@ -282,8 +521,10 @@ export class OrdenesController {
 
     return {
       success: true,
-      message: 'Orden de servicio creada exitosamente',
-      data: result, // Ya es objeto plain desde Prisma repository
+      message: tecnicoId
+        ? 'Orden de servicio creada y técnico asignado exitosamente'
+        : 'Orden de servicio creada exitosamente',
+      data: result,
     };
   }
 
@@ -755,7 +996,7 @@ export class OrdenesController {
     // ✅ FIX 20-DIC-2025: Establecer status 200 explícitamente para SSE
     // Cuando usamos @Res(), @HttpCode() no aplica automáticamente
     res.status(200);
-    
+
     // Configurar headers para SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -838,7 +1079,7 @@ export class OrdenesController {
 
     } catch (error) {
       const err = error as Error;
-      
+
       // Enviar evento de error
       res.write(`data: ${JSON.stringify({
         step: 'error',

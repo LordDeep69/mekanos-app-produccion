@@ -1,0 +1,266 @@
+﻿/**
+ * TIPOS DE EQUIPOS - MEKANOS S.A.S
+ * 
+ * Tipos TypeScript para el módulo de gestión de equipos.
+ * Versión: 4.0 - 100% Fidelidad SQL Schema & Backend DTO
+ */
+
+// 
+// ENUMS
+// 
+
+export type TipoEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR';
+
+export type EstadoEquipo =
+  | 'OPERATIVO'
+  | 'STANDBY'
+  | 'INACTIVO'
+  | 'EN_REPARACION'
+  | 'FUERA_SERVICIO'
+  | 'BAJA';
+
+export type Criticidad = 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA';
+
+export type TipoMotor = 'COMBUSTION' | 'ELECTRICO';
+
+export type TipoCombustible =
+  | 'DIESEL'
+  | 'GASOLINA'
+  | 'GAS_NATURAL'
+  | 'GLP'
+  | 'DUAL'
+  | 'BIODIESEL';
+
+export type TipoArranque =
+  | 'ELECTRICO'
+  | 'MANUAL'
+  | 'NEUMATICO'
+  | 'HIDRAULICO';
+
+export type NumeroFases = 'MONOFASICO' | 'TRIFASICO';
+
+export type ClaseAislamiento = 'A' | 'B' | 'F' | 'H';
+
+export type CriterioIntervalo = 'DIAS' | 'HORAS' | 'LO_QUE_OCURRA_PRIMERO';
+
+export type TipoContrato =
+  | 'SIN_CONTRATO'
+  | 'PREVENTIVO'
+  | 'INTEGRAL'
+  | 'POR_LLAMADA';
+
+export type EstadoPintura = 'EXCELENTE' | 'BUENO' | 'REGULAR' | 'MALO' | 'NO_APLICA';
+
+export type TipoBomba =
+  | 'CENTRIFUGA'
+  | 'TURBINA_VERTICAL_POZO'
+  | 'SUMERGIBLE'
+  | 'PERIFERICA'
+  | 'TURBINA'
+  | 'DESPLAZAMIENTO_POSITIVO';
+
+export type AplicacionBomba =
+  | 'AGUA_POTABLE'
+  | 'AGUAS_RESIDUALES'
+  | 'AGUAS_LLUVIAS'
+  | 'CONTRAINCENDIOS'
+  | 'INDUSTRIAL'
+  | 'PISCINA'
+  | 'RIEGO';
+
+// 
+// INTERFACES PRINCIPALES
+// 
+
+export interface EquipoListItem {
+  id_equipo: number;
+  codigo_equipo: string;
+  nombre_equipo: string | null;
+  tipo: TipoEquipo;
+  estado_equipo: EstadoEquipo;
+  criticidad: Criticidad;
+  ubicacion_texto: string;
+  cliente: {
+    id_cliente: number;
+    nombre: string;
+  };
+  sede: {
+    id_sede: number;
+    nombre: string;
+  } | null;
+  fecha_creacion: string;
+  datos_especificos: Record<string, unknown> | null;
+}
+
+export interface EquipoDetalle extends EquipoListItem {
+  numero_serie_equipo: string | null;
+  tipo_equipo: {
+    id_tipo_equipo: number;
+    nombre_tipo: string;
+    codigo_tipo: string;
+  };
+  lecturas_horometro: Array<{
+    id_lectura: number;
+    valor_lectura: number;
+    fecha_lectura: string;
+  }>;
+  historial_estados: Array<{
+    id_historial: number;
+    estado_anterior: string;
+    estado_nuevo: string;
+    fecha_cambio: string;
+  }>;
+}
+
+// 
+// DTOs PARA CREACIÓN (Fieles al Backend)
+// 
+
+export interface DatosEquipoBase {
+  codigo_equipo: string;
+  id_cliente: number;
+  id_tipo_equipo: number;
+  id_sede?: number;
+  nombre_equipo?: string;
+  numero_serie_equipo?: string;
+  ubicacion_texto: string;
+  ubicacion_detallada?: Record<string, unknown>;
+  estado_equipo: EstadoEquipo;
+  criticidad: Criticidad;
+  criticidad_justificacion?: string;
+  fecha_instalacion?: string;
+  fecha_inicio_servicio_mekanos?: string;
+  en_garantia?: boolean;
+  fecha_inicio_garantia?: string;
+  fecha_fin_garantia?: string;
+  proveedor_garantia?: string;
+  horas_actuales?: number;
+  fecha_ultima_lectura_horas?: string;
+  estado_pintura?: EstadoPintura;
+  requiere_pintura?: boolean;
+  tipo_contrato?: TipoContrato;
+  intervalo_tipo_a_dias_override?: number;
+  intervalo_tipo_a_horas_override?: number;
+  intervalo_tipo_b_dias_override?: number;
+  intervalo_tipo_b_horas_override?: number;
+  criterio_intervalo_override?: CriterioIntervalo;
+  observaciones_generales?: string;
+  configuracion_especial?: string;
+  activo?: boolean;
+  fecha_baja?: string;
+  motivo_baja?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DatosMotor {
+  tipo_motor: TipoMotor;
+  marca_motor: string;
+  modelo_motor?: string;
+  numero_serie_motor?: string;
+  potencia_hp?: number;
+  potencia_kw?: number;
+  velocidad_nominal_rpm?: number;
+  tipo_combustible?: TipoCombustible;
+  numero_cilindros?: number;
+  voltaje_arranque_vdc?: number;
+  capacidad_aceite_litros?: number;
+  capacidad_refrigerante_litros?: number;
+  voltaje_operacion_vac?: string;
+  frecuencia_hz?: number;
+  aspiracion?: string;
+  sistema_enfriamiento?: string;
+  capacidad_baterias_ah?: number;
+  cantidad_baterias?: number;
+  tipo_aceite_recomendado?: string;
+  tipo_refrigerante_recomendado?: string;
+  presion_aceite_minima_psi?: number;
+  temperatura_operacion_maxima_c?: number;
+}
+
+export interface DatosGenerador {
+  marca_generador: string;
+  modelo_generador?: string;
+  numero_serie_generador?: string;
+  potencia_kva?: number;
+  potencia_kw_generador?: number;
+  voltaje_salida: string;
+  amperaje_maximo?: number;
+  numero_fases?: number;
+  frecuencia_hz_generador?: number;
+  factor_potencia?: number;
+  tipo_conexion?: string;
+  marca_avr?: string;
+  modelo_avr?: string;
+  marca_controlador?: string;
+  modelo_controlador?: string;
+  capacidad_tanque_principal_litros?: number;
+  tiene_cabina_insonorizada?: boolean;
+  tiene_transferencia_automatica?: boolean;
+  tipo_transferencia?: string;
+  ubicacion_transferencia?: string;
+  calibre_cable_potencia?: string;
+  longitud_cable_potencia_m?: number;
+}
+
+export interface DatosBomba {
+  marca_bomba: string;
+  modelo_bomba?: string;
+  numero_serie_bomba?: string;
+  tipo_bomba: string;
+  caudal_maximo_m3h?: number;
+  altura_manometrica_maxima_m?: number;
+  presion_maxima_psi?: number;
+  diametro_succion_pulgadas?: number;
+  diametro_descarga_pulgadas?: number;
+  presion_encendido_psi?: number;
+  presion_apagado_psi?: number;
+  material_cuerpo_bomba?: string;
+  material_impulsor?: string;
+  tipo_sello_mecanico?: string;
+  succion_positiva?: boolean;
+  tiene_tablero_control?: boolean;
+  marca_tablero_control?: string;
+  modelo_tablero_control?: string;
+  radiador_alto_cm?: number;
+  radiador_ancho_cm?: number;
+  radiador_panal_cm?: number;
+}
+
+export interface CreateEquipoPayload {
+  tipo: TipoEquipo;
+  datosEquipo: DatosEquipoBase;
+  datosMotor?: DatosMotor;
+  datosGenerador?: DatosGenerador;
+  datosBomba?: DatosBomba;
+}
+
+// 
+// RESPUESTAS
+// 
+
+export interface CreateEquipoResponse {
+  success: boolean;
+  message: string;
+  error?: string;
+  data: {
+    id_equipo: number;
+    codigo_equipo: string;
+    tipo: string;
+    nombre_equipo: string | null;
+    cliente: { id_cliente: number; nombre: string };
+    sede: { id_sede: number; nombre: string } | null;
+    estado_equipo: string;
+    fecha_creacion: string;
+    datos_especificos: Record<string, unknown>;
+  };
+}
+
+export interface EquiposListadoResponse {
+  data: EquipoListItem[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}

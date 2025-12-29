@@ -1,6 +1,6 @@
 import { OrdenServicioEntity } from '../entities/orden-servicio.entity';
-import { OrdenServicioId } from '../value-objects/orden-servicio-id.vo';
 import { EstadoOrden } from '../value-objects/estado-orden.vo';
+import { OrdenServicioId } from '../value-objects/orden-servicio-id.vo';
 
 /**
  * Filtros para búsqueda de órdenes
@@ -78,6 +78,14 @@ export interface IOrdenServicioRepository {
    * @returns Total de órdenes
    */
   count(filters?: FindOrdenesFilters): Promise<number>;
+
+  /**
+   * Guarda una orden con soporte para múltiples equipos (Enterprise)
+   * @param orden - Datos de la orden a persistir
+   * @param equiposIds - Lista de IDs de equipos a vincular
+   * @returns Orden persistida
+   */
+  saveWithEquipos(orden: any, equiposIds: number[]): Promise<any>;
 
   /**
    * Guarda una orden (crear o actualizar)

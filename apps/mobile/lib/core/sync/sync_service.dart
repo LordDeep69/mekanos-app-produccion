@@ -548,7 +548,7 @@ class SyncService {
             // ✅ NUEVO: Guardar equipos de la orden (multi-equipos)
             final equiposData = orden['ordenesEquipos'] as List?;
             debugPrint('🔧 [SYNC] Orden ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposData?.length ?? 0}');
-            await _guardarOrdenesEquipos(idOrden as int, equiposData);
+            await _guardarOrdenesEquipos(idOrden, equiposData);
           } else {
             final idLocalNueva = await _db.insertOrdenFromSync(ordenCompanion);
 
@@ -563,7 +563,7 @@ class SyncService {
             // ✅ NUEVO: Guardar equipos de la orden (multi-equipos)
             final equiposDataNueva = orden['ordenesEquipos'] as List?;
             debugPrint('🔧 [SYNC] Orden NUEVA ${orden['numeroOrden']} (ID $idOrden) - ordenesEquipos recibido del backend: ${equiposDataNueva?.length ?? 0}');
-            await _guardarOrdenesEquipos(idOrden as int, equiposDataNueva);
+            await _guardarOrdenesEquipos(idOrden, equiposDataNueva);
           }
           ordenesCount++;
         } catch (e) {
