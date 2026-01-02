@@ -20,7 +20,8 @@ class SecureStorageService {
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';
   static const String _userEmailKey = 'user_email';
-  static const String _idEmpleadoKey = 'id_empleado'; // ✅ NUEVO
+  static const String _userNameKey = 'user_name'; // ✅ NUEVO: Nombre del usuario
+  static const String _idEmpleadoKey = 'id_empleado';
 
   SecureStorageService()
     : _storage = const FlutterSecureStorage(
@@ -68,6 +69,17 @@ class SecureStorageService {
 
   Future<String?> getUserEmail() async {
     return await _storage.read(key: _userEmailKey);
+  }
+
+  // ============ USER NAME ============
+
+  /// ✅ NUEVO: Guardar nombre del usuario (de tabla persona)
+  Future<void> saveUserName(String name) async {
+    await _storage.write(key: _userNameKey, value: name);
+  }
+
+  Future<String?> getUserName() async {
+    return await _storage.read(key: _userNameKey);
   }
 
   // ============ ID EMPLEADO (para sync) ============

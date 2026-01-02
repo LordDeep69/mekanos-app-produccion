@@ -33,6 +33,10 @@ class OrdenResumen {
   final String fechaModificacion;
   final String? urlPdf;
 
+  final int? idCliente;
+  final int? idEquipo;
+  final int? idTipoServicio;
+
   OrdenResumen({
     required this.id,
     required this.numeroOrden,
@@ -40,6 +44,9 @@ class OrdenResumen {
     required this.estadoCodigo,
     required this.fechaModificacion,
     this.urlPdf,
+    this.idCliente,
+    this.idEquipo,
+    this.idTipoServicio,
   });
 
   factory OrdenResumen.fromJson(Map<String, dynamic> json) {
@@ -50,6 +57,9 @@ class OrdenResumen {
       estadoCodigo: json['estadoCodigo'] as String,
       fechaModificacion: json['fechaModificacion'] as String,
       urlPdf: json['urlPdf'] as String?,
+      idCliente: json['id_cliente'] as int?,
+      idEquipo: json['id_equipo'] as int?,
+      idTipoServicio: json['id_tipo_servicio'] as int?,
     );
   }
 }
@@ -237,11 +247,27 @@ class SmartSyncService {
                 '   ✅ ${ordenResumen.numeroOrden} estado actualizado (LIGERO) - PDF: ${ordenResumen.urlPdf != null ? "SÍ" : "NO"}',
               );
             } else if (ordenLocal == null && idEstadoLocal != null) {
-              // ORDEN NUEVA: Crear registro básico desde resumen
-              await _crearOrdenDesdeResumen(ordenResumen, idEstadoLocal);
-              ordenesDescargadas.add(ordenResumen.numeroOrden);
-              descargadas++;
-              debugPrint('   ✅ ${ordenResumen.numeroOrden} creada (BÁSICA)');
+              // ORDEN NUEVA: Descargar orden completa para asegurar dependencias (FKs)
+              debugPrint(
+                '   📥 ${ordenResumen.numeroOrden}: Descargando orden completa para evitar fallas de FK',
+              );
+              final fullData = await _descargarOrdenCompleta(ordenResumen.id);
+              if (fullData != null) {
+                await _guardarOrdenEnLocal(fullData, estadosMap, mapaLocal);
+                ordenesDescargadas.add(ordenResumen.numeroOrden);
+                descargadas++;
+                debugPrint(
+                  '   ✅ ${ordenResumen.numeroOrden} creada (COMPLETA)',
+                );
+              } else {
+                // Fallback a creación básica si falla la descarga completa
+                await _crearOrdenDesdeResumen(ordenResumen, idEstadoLocal);
+                ordenesDescargadas.add(ordenResumen.numeroOrden);
+                descargadas++;
+                debugPrint(
+                  '   ⚠️ ${ordenResumen.numeroOrden} creada (BÁSICA - Falló descarga completa)',
+                );
+              }
             } else {
               errores++;
               mensajesError.add(
@@ -425,15 +451,15 @@ class SmartSyncService {
     int idEstadoLocal,
   ) async {
     // Crear orden con datos mínimos desde resumen
-    // Cliente, equipo y tipoServicio usan placeholders (1) - se actualizarán on-demand
+    // Cliente, equipo y tipoServicio usan los IDs reales del servidor para evitar error de FK
     final ordenCompanion = OrdenesCompanion(
       idBackend: Value(resumen.id),
       numeroOrden: Value(resumen.numeroOrden),
       version: Value(0),
       idEstado: Value(idEstadoLocal),
-      idCliente: const Value(1), // Placeholder
-      idEquipo: const Value(1), // Placeholder
-      idTipoServicio: const Value(1), // Placeholder
+      idCliente: Value(resumen.idCliente ?? 1),
+      idEquipo: Value(resumen.idEquipo ?? 1),
+      idTipoServicio: Value(resumen.idTipoServicio ?? 1),
       prioridad: const Value('MEDIA'),
       urlPdf: Value(resumen.urlPdf),
       lastSyncedAt: Value(DateTime.now()),

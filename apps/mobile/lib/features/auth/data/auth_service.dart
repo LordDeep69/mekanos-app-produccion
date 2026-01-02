@@ -68,7 +68,11 @@ class AuthService {
 
         await _storage.saveUserId(userInfo.id);
         await _storage.saveUserEmail(userInfo.email);
-        // ✅ NUEVO: Guardar idEmpleado para recuperarlo después
+        // ✅ NUEVO: Guardar nombre del usuario (de tabla persona)
+        if (userInfo.nombre != null) {
+          await _storage.saveUserName(userInfo.nombre!);
+        }
+        // ✅ Guardar idEmpleado para recuperarlo después
         if (userInfo.idEmpleado != null) {
           await _storage.saveIdEmpleado(userInfo.idEmpleado!);
         }
@@ -162,14 +166,18 @@ class AuthService {
       // Intentar decodificar el token para ver si sigue siendo válido
       final userInfo = _decodeJwtPayload(token);
 
-      // ✅ FIX: Recuperar idEmpleado del storage (no está en JWT)
+      // ✅ FIX: Recuperar idEmpleado y nombre del storage (no están en JWT)
       final idEmpleado = await _storage.getIdEmpleado();
-      if (idEmpleado != null) {
-        debugPrint('👷 idEmpleado recuperado del storage: $idEmpleado');
+      final userName = await _storage.getUserName();
+
+      if (idEmpleado != null || userName != null) {
+        debugPrint(
+          '👷 Datos recuperados del storage - idEmpleado: $idEmpleado, nombre: $userName',
+        );
         return UserInfo(
           id: userInfo.id,
           email: userInfo.email,
-          nombre: userInfo.nombre,
+          nombre: userName ?? userInfo.nombre,
           rol: userInfo.rol,
           personaId: userInfo.personaId,
           idEmpleado: idEmpleado,

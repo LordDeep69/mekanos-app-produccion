@@ -5,7 +5,8 @@
  */
 export class AsignarTecnicoCommand {
   constructor(
-    public readonly ordenId: string,
-    public readonly tecnicoId: number
-  ) {}
+    public readonly ordenId: string | number,
+    public readonly tecnicoId: number,
+    public readonly userId?: number
+  ) { }
 }

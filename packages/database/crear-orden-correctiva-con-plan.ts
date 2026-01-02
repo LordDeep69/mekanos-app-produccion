@@ -65,7 +65,7 @@ async function main() {
   `;
   if (actividades.length < 3) { console.log('❌ No hay suficientes actividades'); return; }
   console.log(`✅ Actividades para el plan: ${actividades.length}`);
-  actividades.forEach((a, i) => console.log(`   ${i+1}. [${a.codigo_actividad}] ${a.descripcion_actividad?.substring(0, 50)}...`));
+  actividades.forEach((a, i) => console.log(`   ${i + 1}. [${a.codigo_actividad}] ${a.descripcion_actividad?.substring(0, 50)}...`));
 
   // 7. Número de orden único
   const numeroOrden = `OS-CORR-PLAN-${Date.now().toString().slice(-6)}`;

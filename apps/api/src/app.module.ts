@@ -85,6 +85,8 @@ import { PdfModule } from './pdf/pdf.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 // ✅ FASE 7 BONUS: DASHBOARD - Métricas unificadas para admin (Sesión Nov 28)
 import { DashboardModule } from './dashboard/dashboard.module';
+// ✅ FASE 6 INVENTARIO: Motor Transaccional Enterprise (Sesión Dic 27)
+import { InventarioModule } from './inventario/inventario.module';
 
 @Module({
   imports: [
@@ -176,8 +178,10 @@ import { DashboardModule } from './dashboard/dashboard.module';
     NotificacionesModule, // ✅ GET/PATCH /notificaciones + CRON jobs (recordatorios, vencimientos)
     // ✅ FASE 7 BONUS: DASHBOARD (Sesión Nov 28)
     DashboardModule, // ✅ GET /dashboard - Métricas unificadas para admin
+    // ✅ FASE 6 INVENTARIO: Motor Transaccional Enterprise (Sesión Dic 27)
+    InventarioModule, // ✅ POST /inventario/entrada, /salida, /ajuste + GET /kardex, /dashboard
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

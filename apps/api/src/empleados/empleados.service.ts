@@ -5,7 +5,7 @@ import { UpdateEmpleadosDto } from './dto/update-empleados.dto';
 
 @Injectable()
 export class EmpleadosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(createDto: CreateEmpleadosDto, userId: number) {
     // Validar que id_persona existe
@@ -64,32 +64,60 @@ export class EmpleadosService {
     es_tecnico?: boolean;
     es_asesor?: boolean;
     empleado_activo?: boolean;
+    search?: string;
     skip?: number;
     take?: number;
   }) {
-    const { es_tecnico, es_asesor, empleado_activo, skip = 0, take = 50 } =
+    const { es_tecnico, es_asesor, empleado_activo, search, skip = 0, take = 50 } =
       params || {};
 
-    return this.prisma.empleados.findMany({
-      where: {
-        ...(es_tecnico !== undefined && { es_tecnico }),
-        ...(es_asesor !== undefined && { es_asesor }),
-        ...(empleado_activo !== undefined && { empleado_activo }),
-      },
-      include: {
-        persona: true,
-      },
-      skip,
-      take,
-      orderBy: { fecha_creacion: 'desc' },
-    });
+    const where: any = {
+      ...(es_tecnico !== undefined && { es_tecnico }),
+      ...(es_asesor !== undefined && { es_asesor }),
+      ...(empleado_activo !== undefined && { empleado_activo }),
+      ...(search && {
+        OR: [
+          { persona: { primer_nombre: { contains: search, mode: 'insensitive' } } },
+          { persona: { primer_apellido: { contains: search, mode: 'insensitive' } } },
+          { persona: { numero_identificacion: { contains: search, mode: 'insensitive' } } },
+          { codigo_empleado: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.empleados.findMany({
+        where,
+        include: {
+          persona: true,
+        },
+        skip,
+        take,
+        orderBy: { fecha_creacion: 'desc' },
+      }),
+      this.prisma.empleados.count({ where }),
+    ]);
+
+    return { items, total };
   }
 
   async findOne(id: number) {
     const empleado = await this.prisma.empleados.findUnique({
       where: { id_empleado: id },
       include: {
-        persona: true,
+        persona: {
+          include: {
+            usuarios: {
+              include: {
+                usuarios_roles_usuarios_roles_id_usuarioTousuarios: {
+                  include: {
+                    roles: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         empleados: {
           // Jefe inmediato
           include: {
@@ -104,7 +132,17 @@ export class EmpleadosService {
       throw new Error(`Empleado con ID ${id} no encontrado`);
     }
 
-    return empleado;
+    // Extraer usuario de persona para acceso más fácil en frontend
+    const usuario = empleado.persona?.usuarios;
+    const resultado = {
+      ...empleado,
+      usuario: usuario ? {
+        ...usuario,
+        usuarios_roles: usuario.usuarios_roles_usuarios_roles_id_usuarioTousuarios,
+      } : null,
+    };
+
+    return resultado;
   }
 
   async update(id: number, updateDto: UpdateEmpleadosDto, userId: number) {

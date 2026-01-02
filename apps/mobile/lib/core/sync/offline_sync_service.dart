@@ -529,7 +529,7 @@ class OfflineSyncService {
             return true;
           }
         } else {
-          throw iniciarError;
+          rethrow;
         }
       }
 
@@ -781,7 +781,7 @@ class OfflineSyncService {
         success: false,
         error: 'Error del servidor: ${response.statusCode}',
       );
-    } on DioException catch (e) {
+    } on DioException {
       rethrow;
     }
   }

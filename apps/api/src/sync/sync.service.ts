@@ -1,24 +1,23 @@
 import { PrismaService } from '@mekanos/database';
 import {
-    BadRequestException,
-    Injectable,
-    Logger,
-    NotFoundException
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException
 } from '@nestjs/common';
-import { CommandBus } from '@nestjs/cqrs';
 import { validarTransicion } from '../ordenes/domain/workflow-estados';
 import {
-    SyncActividadCatalogoDto,
-    SyncBatchResponseDto,
-    SyncDownloadResponseDto,
-    SyncOrdenDownloadDto,
-    SyncOrdenResultDto,
-    SyncParametroMedicionDto,
+  SyncActividadCatalogoDto,
+  SyncBatchResponseDto,
+  SyncDownloadResponseDto,
+  SyncOrdenDownloadDto,
+  SyncOrdenResultDto,
+  SyncParametroMedicionDto,
 } from './dto/sync-response.dto';
 import {
-    SyncBatchUploadDto,
-    SyncMedicionDto,
-    SyncOrdenDto,
+  SyncBatchUploadDto,
+  SyncMedicionDto,
+  SyncOrdenDto,
 } from './dto/sync-upload-orden.dto';
 
 /**
@@ -40,7 +39,6 @@ export class SyncService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly commandBus: CommandBus,
   ) { }
 
   /**
@@ -70,7 +68,7 @@ export class SyncService {
             totalConflicts++;
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         this.logger.error(
           `[Sync] Error procesando orden ${ordenDto.idOrdenServicio}: ${error.message}`,
         );
@@ -578,6 +576,16 @@ export class SyncService {
       };
     }
 
+    // ========================================================================
+    // ENTERPRISE OPTIMIZATION: Limite de 50 ordenes para rendimiento mobile
+    // ========================================================================
+    // Estrategia:
+    // 1. Ordenar por: estado activo primero, luego prioridad, luego fecha
+    // 2. Limitar a 50 ordenes (suficiente para trabajo diario del tecnico)
+    // 3. Incluir ordenes activas + historial reciente dentro del limite
+    // ========================================================================
+    const LIMITE_ORDENES_MOBILE = 50;
+
     const ordenes = await this.prisma.ordenes_servicio.findMany({
       where: baseFilter,
       include: {
@@ -593,19 +601,19 @@ export class SyncService {
         sedes_cliente: true,
         equipos: true,
         tipos_servicio: true,
-        // ✅ Multi-Equipos: Incluir equipos asociados
+        // Multi-Equipos: Incluir equipos asociados
         ordenes_equipos: {
           include: {
             equipos: true,
           },
           orderBy: { orden_secuencia: 'asc' },
         },
-        // ✅ FIX: Incluir informes para obtener URL del PDF
+        // Incluir informes para obtener URL del PDF
         informes: {
           orderBy: { fecha_generacion: 'desc' },
           take: 1,
         },
-        // ✅ FIX: Incluir conteos para estadísticas
+        // Incluir conteos para estadisticas
         _count: {
           select: {
             actividades_ejecutadas: true,
@@ -615,10 +623,18 @@ export class SyncService {
         },
       },
       orderBy: [
+        // Ordenes activas primero (estados finales al final)
+        { estados_orden: { es_estado_final: 'asc' } },
+        // Luego por prioridad (URGENTE primero)
         { prioridad: 'desc' },
+        // Finalmente por fecha programada
         { fecha_programada: 'asc' },
       ],
+      // LIMITE ENTERPRISE: Maximo 50 ordenes para optimizar sync mobile
+      take: LIMITE_ORDENES_MOBILE,
     });
+
+    this.logger.log(`[Sync] Ordenes obtenidas: ${ordenes.length} (limite: ${LIMITE_ORDENES_MOBILE})`);
 
     // 2. Obtener documentos PDF para las órdenes completadas
     const ordenesIds = ordenes.map((o) => o.id_orden_servicio);
@@ -797,12 +813,12 @@ export class SyncService {
       codigoEquipo: o.equipos?.codigo_equipo || '',
       nombreEquipo: o.equipos?.nombre_equipo || '',
       ubicacionEquipo: o.equipos?.ubicacion_texto,
-      idTipoServicio: o.id_tipo_servicio ?? undefined,
+      idTipoServicio: o.id_tipo_servicio!,
       codigoTipoServicio: o.tipos_servicio?.codigo_tipo || '',
       nombreTipoServicio: o.tipos_servicio?.nombre_tipo || '',
-      descripcionInicial: o.descripcion_inicial,
-      trabajoRealizado: o.trabajo_realizado,
-      observacionesTecnico: o.observaciones_tecnico,
+      descripcionInicial: o.descripcion_inicial ?? undefined,
+      trabajoRealizado: o.trabajo_realizado ?? undefined,
+      observacionesTecnico: o.observaciones_tecnico ?? undefined,
       actividadesPlan: o.ordenes_actividades_plan?.map((p: any) => ({
         idActividadCatalogo: p.id_actividad_catalogo,
         ordenSecuencia: p.orden_secuencia,
@@ -1021,6 +1037,11 @@ export class SyncService {
         id_orden_servicio: true,
         numero_orden: true,
         id_estado_actual: true,
+        id_cliente: true,
+        id_equipo: true,
+        id_tipo_servicio: true,
+        prioridad: true,
+        fecha_programada: true,
         fecha_modificacion: true,
         estados_orden: {
           select: {
@@ -1057,14 +1078,31 @@ export class SyncService {
       }
     }
 
-    const resumenOrdenes = ordenes.map((o) => ({
-      id: o.id_orden_servicio,
-      numeroOrden: o.numero_orden,
-      estadoId: o.id_estado_actual,
-      estadoCodigo: o.estados_orden?.codigo_estado || 'DESCONOCIDO',
-      fechaModificacion: o.fecha_modificacion?.toISOString() || new Date().toISOString(),
-      urlPdf: pdfMap.get(o.id_orden_servicio) || undefined,
-    }));
+    const resumenOrdenes = ordenes.map((o) => {
+      // ✅ FIX: Mapear NORMAL -> MEDIA para compatibilidad con App Móvil
+      let prioridadMobile: string = o.prioridad as string;
+      if (prioridadMobile === 'NORMAL') prioridadMobile = 'MEDIA';
+
+      return {
+        id: o.id_orden_servicio,
+        numeroOrden: o.numero_orden,
+        estadoId: o.id_estado_actual,
+        id_estado: o.id_estado_actual, // Alias snake_case
+        estadoCodigo: o.estados_orden?.codigo_estado || 'DESCONOCIDO',
+        idCliente: o.id_cliente || 1,
+        id_cliente: o.id_cliente || 1, // Alias snake_case
+        idEquipo: o.id_equipo || 1,
+        id_equipo: o.id_equipo || 1, // Alias snake_case
+        idTipoService: o.id_tipo_servicio || 1, // Fallback (legacy support)
+        idTipoServicio: o.id_tipo_servicio || 1,
+        id_tipo_servicio: o.id_tipo_servicio || 1, // Alias snake_case
+        prioridad: prioridadMobile,
+        fechaProgramada: o.fecha_programada?.toISOString(), // ✅ Nueva: Info de fecha para Smart Sync
+        fechaModificacion: o.fecha_modificacion?.toISOString() || new Date().toISOString(),
+        version: o.fecha_modificacion?.getTime() || 0,
+        urlPdf: pdfMap.get(o.id_orden_servicio) || undefined,
+      };
+    });
 
     this.logger.log(`[Sync Inteligente] Retornando ${resumenOrdenes.length} resúmenes`);
 

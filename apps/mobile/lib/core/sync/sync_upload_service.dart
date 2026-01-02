@@ -931,7 +931,7 @@ class SyncUploadService {
         success: false,
         error: 'Error del servidor: ${response.statusCode}',
       );
-    } on DioException catch (e) {
+    } on DioException {
       // Re-lanzar para que el caller maneje el error
       rethrow;
     }

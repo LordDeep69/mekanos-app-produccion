@@ -69,7 +69,7 @@ export class OrdenServicioEntity {
     private readonly _createdAt: Date,
     private _updatedAt: Date | null,
     private readonly _userId: number | null
-  ) {}
+  ) { }
 
   /**
    * Factory method para crear una nueva Orden de Servicio
@@ -146,7 +146,14 @@ export class OrdenServicioEntity {
     // Validar fecha programada si se proporciona
     if (props.fechaProgramada) {
       const fecha = new Date(props.fechaProgramada);
-      if (fecha < new Date()) {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+
+      // Permitir fechas desde ayer para evitar problemas de desfase horario (UTC vs Local)
+      // durante la validación de "hoy"
+      const limitePasado = new Date(hoy.getTime() - 24 * 60 * 60 * 1000);
+
+      if (fecha < limitePasado) {
         throw new Error('Fecha programada no puede ser en el pasado');
       }
     }

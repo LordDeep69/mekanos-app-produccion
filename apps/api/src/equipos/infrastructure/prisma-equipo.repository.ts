@@ -8,7 +8,7 @@ import { PrismaService } from '../../database/prisma.service';
  */
 @Injectable()
 export class PrismaEquipoRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Guardar equipo (crear o actualizar)
@@ -45,14 +45,14 @@ export class PrismaEquipoRepository {
           fecha_modificacion: new Date(),
         },
         include: {
-          cliente: {
+          clientes: {
             include: {
               persona: true,
             },
           },
-          sede: true,
-          tipo_equipo: true,
-          usuario_creador: {
+          sedes_cliente: true,
+          tipos_equipo: true,
+          usuarios_equipos_creado_porTousuarios: {
             include: {
               persona: true,
             },
@@ -75,14 +75,14 @@ export class PrismaEquipoRepository {
           creado_por: data.creado_por,
         },
         include: {
-          cliente: {
+          clientes: {
             include: {
               persona: true,
             },
           },
-          sede: true,
-          tipo_equipo: true,
-          usuario_creador: {
+          sedes_cliente: true,
+          tipos_equipo: true,
+          usuarios_equipos_creado_porTousuarios: {
             include: {
               persona: true,
             },
@@ -99,19 +99,19 @@ export class PrismaEquipoRepository {
     return this.prisma.equipos.findUnique({
       where: { id_equipo },
       include: {
-        cliente: {
+        clientes: {
           include: {
             persona: true,
           },
         },
-        sede: true,
-        tipo_equipo: true,
-        usuario_creador: {
+        sedes_cliente: true,
+        tipos_equipo: true,
+        usuarios_equipos_creado_porTousuarios: {
           include: {
             persona: true,
           },
         },
-        usuario_modificador: {
+        usuarios_equipos_modificado_porTousuarios: {
           include: {
             persona: true,
           },
@@ -144,13 +144,21 @@ export class PrismaEquipoRepository {
       this.prisma.equipos.findMany({
         where,
         include: {
-          cliente: {
+          clientes: {
             include: {
               persona: true,
             },
           },
-          sede: true,
-          tipo_equipo: true,
+          sedes_cliente: {
+            select: { id_sede: true, nombre_sede: true },
+          },
+          tipos_equipo: {
+            select: {
+              id_tipo_equipo: true,
+              nombre_tipo: true,
+              codigo_tipo: true
+            },
+          },
         },
         skip: filters?.skip || 0,
         take: filters?.take || 50,

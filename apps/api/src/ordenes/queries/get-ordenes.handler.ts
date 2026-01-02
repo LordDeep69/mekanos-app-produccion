@@ -1,5 +1,5 @@
-import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { GetOrdenesQuery } from './get-ordenes.query';
 
 interface PaginatedResponse {
@@ -15,10 +15,20 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
   constructor(
     @Inject('IOrdenServicioRepository')
     private readonly ordenRepository: any // Usa PrismaOrdenServicioRepository directamente (not interfaz)
-  ) {}
+  ) { }
 
   async execute(query: GetOrdenesQuery): Promise<PaginatedResponse> {
-    const { page, limit, clienteId, equipoId, tecnicoId, prioridad } = query;
+    const { page, limit, clienteId, equipoId, tecnicoId, estado, prioridad } = query;
+
+    // Resolver estado string → id_estado_actual (ZERO TRUST: lookup en BD)
+    let idEstadoActual: number | undefined;
+    if (estado) {
+      const estadoRecord = await this.ordenRepository.findEstadoByCodigo(estado);
+      if (estadoRecord) {
+        idEstadoActual = estadoRecord.id_estado;
+      }
+      // Si no encuentra el estado, idEstadoActual queda undefined (sin filtro)
+    }
 
     const filters: any = {
       skip: (page - 1) * limit,
@@ -26,16 +36,27 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
       id_cliente: clienteId,
       id_equipo: equipoId,
       id_tecnico_asignado: tecnicoId,
-      // estado y prioridad NO son filtros directos en repository (requieren lookup de IDs)
-      // TODO: Agregar resolución de estado string → id_estado_actual
+      id_estado_actual: idEstadoActual,
       prioridad,
     };
 
     // findAll() devuelve { items, total } directamente
     const result = await this.ordenRepository.findAll(filters);
 
+    // ✅ FIX: Transformar ordenes_equipos para que use 'equipo' (singular) en lugar de 'equipos' (plural)
+    const ordenesTransformadas = result.items.map((orden: any) => {
+      if (orden.ordenes_equipos && Array.isArray(orden.ordenes_equipos)) {
+        orden.ordenes_equipos = orden.ordenes_equipos.map((oe: any) => ({
+          ...oe,
+          equipo: oe.equipos,
+          equipos: undefined,
+        }));
+      }
+      return orden;
+    });
+
     return {
-      ordenes: result.items, // Ya son objetos Prisma serializables
+      ordenes: ordenesTransformadas,
       total: result.total,
       page,
       limit,

@@ -1,14 +1,14 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -44,7 +44,7 @@ export class TiposServicioController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
-  ) {}
+  ) { }
 
   // ============================================================================
   // CREATE
@@ -90,6 +90,10 @@ export class TiposServicioController {
   // READ ALL
   // ============================================================================
 
+  /**
+   * GET /api/tipos-servicio
+   * Listar tipos de servicio con filtrado enterprise por Tipo de Equipo
+   */
   @Get()
   @ApiOperation({ summary: 'Listar tipos de servicio con filtros' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
@@ -125,7 +129,9 @@ export class TiposServicioController {
 
     return {
       success: true,
-      message: 'Tipos de servicio obtenidos exitosamente',
+      message: tipoEquipoId
+        ? `Servicios filtrados para el tipo de equipo ${tipoEquipoId}`
+        : 'Tipos de servicio obtenidos exitosamente',
       data: result.data,
       meta: result.meta,
     };

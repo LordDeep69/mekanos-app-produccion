@@ -1,14 +1,14 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -20,7 +20,7 @@ import { SedesClienteService } from './sedes-cliente.service';
 @Controller('sedes-cliente')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SedesClienteController {
-  constructor(private readonly sedesClienteService: SedesClienteService) {}
+  constructor(private readonly sedesClienteService: SedesClienteService) { }
 
   @Post()
   create(
@@ -30,19 +30,38 @@ export class SedesClienteController {
     return this.sedesClienteService.create(createDto, userId);
   }
 
+  /**
+   * GET /api/sedes-cliente
+   * Listar sedes con filtrado jerárquico enterprise
+   */
   @Get()
-  findAll(
+  async findAll(
     @Query('id_cliente') id_cliente?: string,
     @Query('activo') activo?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
-    return this.sedesClienteService.findAll({
+    const skipNum = skip ? parseInt(skip) : 0;
+    const takeNum = take ? parseInt(take) : 50;
+
+    const { items, total } = await this.sedesClienteService.findAll({
       id_cliente: id_cliente ? parseInt(id_cliente) : undefined,
       activo: activo !== undefined ? activo === 'true' : undefined,
-      skip: skip ? parseInt(skip) : undefined,
-      take: take ? parseInt(take) : undefined,
+      skip: skipNum,
+      take: takeNum,
     });
+
+    return {
+      success: true,
+      message: id_cliente ? `Sedes filtradas para el cliente ${id_cliente}` : 'Listado de sedes obtenido',
+      data: items,
+      pagination: {
+        total,
+        skip: skipNum,
+        take: takeNum,
+        totalPages: Math.ceil(total / takeNum),
+      },
+    };
   }
 
   @Get(':id')

@@ -44,18 +44,25 @@ class DashboardService {
 
     // Obtener IDs de estados
     final estadoCompletada = await _getEstadoId(['COMPLETADA', 'FINALIZADO']);
-    // v3.1: "Pendientes" = solo EN_PROCESO (órdenes activas del técnico)
-    final estadosEnProceso = await _getEstadoIds(['EN_PROCESO']);
+    // v3.3 FIX: "Pendientes" = todos los estados activos del técnico
+    // Incluye: ASIGNADA, APROBADA (pre-ejecución), EN_PROCESO, PROGRAMADA, EN_ESPERA_REPUESTO
+    final estadosActivos = await _getEstadoIds([
+      'ASIGNADA',
+      'APROBADA',
+      'EN_PROCESO',
+      'PROGRAMADA',
+      'EN_ESPERA_REPUESTO',
+    ]);
 
     // Ejecutar queries en paralelo para mejor rendimiento
     final results = await Future.wait([
       _contarOrdenesCompletadas(inicioHoy, estadoCompletada), // 0: hoy
       _contarOrdenesCompletadas(inicioSemana, estadoCompletada), // 1: semana
       _contarOrdenesCompletadas(inicioMes, estadoCompletada), // 2: mes
-      _contarOrdenesPendientes(estadosEnProceso), // 3: pendientes (EN_PROCESO)
-      _contarOrdenesUrgentes(
-        estadosEnProceso,
-      ), // 4: urgentes (EN_PROCESO + URGENTE)
+      _contarOrdenesPendientes(
+        estadosActivos,
+      ), // 3: pendientes (todos los estados activos)
+      _contarOrdenesUrgentes(estadosActivos), // 4: urgentes (activos + URGENTE)
       _calcularTiempoPromedio(estadoCompletada), // 5: tiempo promedio
       _calcularPorcentajeChecklistOK(), // 6: % checklist OK
       _contarTotalOrdenes(estadoCompletada), // 7: total completadas

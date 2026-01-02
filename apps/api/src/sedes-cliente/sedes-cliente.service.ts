@@ -5,7 +5,7 @@ import { UpdateSedesClienteDto } from './dto/update-sedes-cliente.dto';
 
 @Injectable()
 export class SedesClienteService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(createDto: CreateSedesClienteDto, userId: number) {
     // Validar que cliente existe
@@ -24,7 +24,7 @@ export class SedesClienteService {
         fecha_creacion: new Date(),
       },
       include: {
-        cliente: {
+        clientes: {
           include: {
             persona: true,
           },
@@ -41,29 +41,36 @@ export class SedesClienteService {
   }) {
     const { id_cliente, activo, skip = 0, take = 50 } = params || {};
 
-    return this.prisma.sedes_cliente.findMany({
-      where: {
-        ...(id_cliente && { id_cliente }),
-        ...(activo !== undefined && { activo }),
-      },
-      include: {
-        cliente: {
-          include: {
-            persona: true,
+    const where = {
+      ...(id_cliente && { id_cliente }),
+      ...(activo !== undefined && { activo }),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.sedes_cliente.findMany({
+        where,
+        include: {
+          clientes: {
+            include: {
+              persona: true,
+            },
           },
         },
-      },
-      skip,
-      take,
-      orderBy: { fecha_creacion: 'desc' },
-    });
+        skip,
+        take,
+        orderBy: { nombre_sede: 'asc' },
+      }),
+      this.prisma.sedes_cliente.count({ where }),
+    ]);
+
+    return { items, total };
   }
 
   async findOne(id: number) {
     const sede = await this.prisma.sedes_cliente.findUnique({
       where: { id_sede: id },
       include: {
-        cliente: {
+        clientes: {
           include: {
             persona: true,
           },
@@ -94,7 +101,7 @@ export class SedesClienteService {
         fecha_modificacion: new Date(),
       },
       include: {
-        cliente: {
+        clientes: {
           include: {
             persona: true,
           },

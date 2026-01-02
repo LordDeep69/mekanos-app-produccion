@@ -13,7 +13,7 @@ import { Injectable } from '@nestjs/common';
  */
 @Injectable()
 export class PrismaOrdenServicioRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   /**
    * Includes OPTIMIZADOS para respuestas rápidas
@@ -30,6 +30,19 @@ export class PrismaOrdenServicioRepository {
     empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } },
     estados_orden: true,
     usuarios_ordenes_servicio_creado_porTousuarios: { include: { persona: true } },
+    ordenes_equipos: {
+      include: {
+        equipos: {
+          include: {
+            tipos_equipo: true
+          }
+        }
+      }
+    },
+    informes: {
+      orderBy: { fecha_generacion: 'desc' as const },
+      take: 1,
+    },
     // Eliminados: supervisor, usuario_modificador, usuario_aprobador, firmas_digitales
   };
 
@@ -38,36 +51,116 @@ export class PrismaOrdenServicioRepository {
   // ============================================================================
 
   /**
+   * Guarda una orden con soporte para múltiples equipos (Enterprise)
+   * Realiza la creación de la orden y la vinculación de equipos en una transacción atómica.
+   */
+  async saveWithEquipos(orden: any, equiposIds: number[]): Promise<any> {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Crear la cabecera de la orden
+      const savedOrden = await tx.ordenes_servicio.create({
+        data: {
+          numero_orden: orden.numero_orden,
+          id_cliente: orden.id_cliente,
+          id_sede: orden.id_sede || null,
+          id_equipo: orden.id_equipo, // Equipo principal
+          id_tipo_servicio: orden.id_tipo_servicio || null,
+          id_cronograma: orden.id_cronograma || null,
+          fecha_programada: orden.fecha_programada || null,
+          hora_programada: orden.hora_programada || null,
+          prioridad: orden.prioridad || 'NORMAL',
+          origen_solicitud: orden.origen_solicitud || 'PROGRAMADO',
+          id_tecnico_asignado: orden.id_tecnico_asignado || null,
+          fecha_asignacion: orden.fecha_asignacion || null,
+          id_estado_actual: orden.id_estado_actual,
+          descripcion_inicial: orden.descripcion_inicial || null,
+          requiere_firma_cliente: orden.requiere_firma_cliente !== undefined ? orden.requiere_firma_cliente : true,
+          creado_por: orden.creado_por,
+        },
+      });
+
+      // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
+      if (equiposIds && equiposIds.length > 0) {
+        const vinculaciones = equiposIds.map((id_equipo) => ({
+          id_orden_servicio: savedOrden.id_orden_servicio,
+          id_equipo,
+          creado_por: orden.creado_por,
+        }));
+
+        await tx.ordenes_equipos.createMany({
+          data: vinculaciones,
+        });
+      }
+
+      return savedOrden;
+    });
+  }
+
+  /**
    * Crear o actualizar orden de servicio
-   * @param data Datos de la orden (con/sin id_orden_servicio para update/create) o entity OrdenServicioEntity
-   * @returns Orden creada/actualizada con relaciones completas
+   * ✅ ENTERPRISE: Validación de integridad atómica pre-guardado
    */
   async save(data: any): Promise<any> {
     // Convertir entity a plain object si es necesario
     const plainData = data.toObject ? data.toObject() : data;
 
-    // Mapear campos de entity a schema database (si viene de entity)
+    // Mapear campos de entity a schema database
     const dbData = plainData.numeroOrden
       ? {
-          numero_orden: plainData.numeroOrden?.value || plainData.numeroOrden,
-          id_cliente: plainData.clienteId,
-          id_equipo: plainData.equipoId,
-          id_tipo_servicio: plainData.tipoServicioId,
-          id_sede: plainData.sedeClienteId || null,
-          descripcion_inicial: plainData.descripcion || null,
-          fecha_programada: plainData.fechaProgramada || null,
-          prioridad: plainData.prioridad?.value || plainData.prioridad || 'NORMAL',
-          origen_solicitud: 'PROGRAMADO',
-          id_estado_actual: 1,
-          requiere_firma_cliente: true,
-          creado_por: plainData.creado_por || data.creado_por,
-        }
+        numero_orden: plainData.numeroOrden?.value || plainData.numeroOrden,
+        id_cliente: plainData.clienteId,
+        id_equipo: plainData.equipoId,
+        id_tipo_servicio: plainData.tipoServicioId,
+        id_sede: plainData.sedeClienteId || null,
+        descripcion_inicial: plainData.descripcion || null,
+        fecha_programada: plainData.fechaProgramada || null,
+        prioridad: plainData.prioridad?.value || plainData.prioridad || 'NORMAL',
+        origen_solicitud: 'PROGRAMADO',
+        id_estado_actual: 1,
+        requiere_firma_cliente: true,
+        creado_por: plainData.creado_por || data.creado_por,
+      }
       : plainData;
+
+    // --- VALIDACIÓN DE INTEGRIDAD ATÓMICA (ENTERPRISE) ---
+    if (!dbData.id_orden_servicio) {
+      const [clienteValido, equipoValido, tipoServicioValido] = await Promise.all([
+        this.prisma.clientes.findUnique({ where: { id_cliente: dbData.id_cliente } }),
+        this.prisma.equipos.findUnique({ where: { id_equipo: dbData.id_equipo } }),
+        this.prisma.tipos_servicio.findUnique({ where: { id_tipo_servicio: dbData.id_tipo_servicio } })
+      ]);
+
+      if (!clienteValido) throw new Error(`Integridad fallida: El cliente ${dbData.id_cliente} no existe.`);
+      if (!equipoValido) throw new Error(`Integridad fallida: El equipo ${dbData.id_equipo} no existe.`);
+      if (!tipoServicioValido) throw new Error(`Integridad fallida: El tipo de servicio ${dbData.id_tipo_servicio} no existe.`);
+
+      // Validar que el equipo pertenezca al cliente
+      if (equipoValido.id_cliente !== dbData.id_cliente) {
+        throw new Error(`Integridad fallida: El equipo ${dbData.id_equipo} no pertenece al cliente ${dbData.id_cliente}.`);
+      }
+
+      // Validar que la sede pertenezca al cliente (si se especificó sede)
+      if (dbData.id_sede) {
+        const sedeValida = await this.prisma.sedes_cliente.findUnique({ where: { id_sede: dbData.id_sede } });
+        if (!sedeValida || sedeValida.id_cliente !== dbData.id_cliente) {
+          throw new Error(`Integridad fallida: La sede ${dbData.id_sede} no pertenece al cliente ${dbData.id_cliente}.`);
+        }
+        // Validar que el equipo esté en esa sede
+        if (equipoValido.id_sede !== dbData.id_sede) {
+          throw new Error(`Integridad fallida: El equipo ${dbData.id_equipo} no pertenece a la sede ${dbData.id_sede}.`);
+        }
+      }
+
+      // Validar que el servicio sea compatible con el tipo de equipo
+      if (tipoServicioValido.id_tipo_equipo && tipoServicioValido.id_tipo_equipo !== equipoValido.id_tipo_equipo) {
+        throw new Error(`Integridad fallida: El servicio ${tipoServicioValido.nombre_tipo} no es aplicable al equipo tipo ${equipoValido.id_tipo_equipo}.`);
+      }
+    }
+    // ----------------------------------------------------
 
     if (dbData.id_orden_servicio) {
       // UPDATE: Orden existente
       const { id_orden_servicio, ...updateData } = dbData;
-      
+
       return this.prisma.ordenes_servicio.update({
         where: { id_orden_servicio },
         data: {
@@ -320,7 +413,7 @@ export class PrismaOrdenServicioRepository {
     modificado_por: number,
   ): Promise<any> {
     const orden = await this.findById(id_orden_servicio);
-    
+
     // Calcular duración en minutos si existe fecha_inicio_real
     let duracion_minutos = null;
     if (orden?.fecha_inicio_real) {
@@ -364,8 +457,8 @@ export class PrismaOrdenServicioRepository {
         fecha_modificacion: new Date(),
       },
       include: {
-        estado: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
-        usuario_aprobador: { include: { persona: true } }, // ✅ REQUERIDO: Para script test
+        estados_orden: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
+        usuarios_ordenes_servicio_aprobada_porTousuarios: { include: { persona: true } }, // ✅ REQUERIDO: Para script test
       },
     });
   }
@@ -390,8 +483,8 @@ export class PrismaOrdenServicioRepository {
         fecha_modificacion: new Date(),
       },
       include: {
-        estado: true, // ✅ REQUERIDO: Controller necesita estado.codigo_estado
-        tecnico: { include: { persona: true } }, // ✅ OPCIONAL: Contexto adicional
+        estados_orden: true, // ✅ REQUERIDO: Controller necesita estado.codigo_estado
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } }, // ✅ OPCIONAL: Contexto adicional
       },
     });
   }
@@ -522,7 +615,7 @@ export class PrismaOrdenServicioRepository {
    */
   async getUltimoCorrelativoMes(anio: number, mes: number): Promise<number> {
     const prefix = `OS-${anio}${mes.toString().padStart(2, '0')}`;
-    
+
     const ultimaOrden = await this.prisma.ordenes_servicio.findFirst({
       where: {
         numero_orden: {
@@ -536,11 +629,11 @@ export class PrismaOrdenServicioRepository {
         numero_orden: true,
       },
     });
-    
+
     if (!ultimaOrden) {
       return 0;
     }
-    
+
     // Extraer correlativo: OS-YYYYMM-NNNN → NNNN
     const parts = ultimaOrden.numero_orden.split('-');
     return parseInt(parts[2], 10);

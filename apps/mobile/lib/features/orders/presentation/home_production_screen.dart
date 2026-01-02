@@ -33,11 +33,17 @@ final quickStatsProvider = FutureProvider.autoDispose<QuickStats>((ref) async {
     estadoMap[e.id] = e.codigo;
   }
 
+  // v3.3 FIX: Pendientes = todos los estados activos del técnico (NO iniciadas)
+  // Incluye APROBADA que existe en Supabase como estado pre-ejecución
   final pendientes = ordenes.where((o) {
     final codigo = estadoMap[o.idEstado] ?? '';
-    return codigo == 'PENDIENTE' || codigo == 'ASIGNADA';
+    return codigo == 'ASIGNADA' ||
+        codigo == 'APROBADA' ||
+        codigo == 'PROGRAMADA' ||
+        codigo == 'EN_ESPERA_REPUESTO';
   }).length;
 
+  // En Proceso = órdenes que el técnico ya inició
   final enProceso = ordenes.where((o) {
     final codigo = estadoMap[o.idEstado] ?? '';
     return codigo == 'EN_PROCESO';
@@ -285,7 +291,7 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
                     ),
                   ),
                   Text(
-                    user?.email?.split('@').first ?? 'Técnico',
+                    user?.nombre ?? user?.email?.split('@').first ?? 'Técnico',
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -339,91 +345,91 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
               ),
               const SizedBox(height: 12),
 
-            // Barra de progreso si está sincronizando
-            if (syncState.isSyncing) ...[
-              LinearProgressIndicator(
-                value: syncState.progress > 0 ? syncState.progress : null,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                syncState.currentStep ?? 'Sincronizando...',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.primary,
+              // Barra de progreso si está sincronizando
+              if (syncState.isSyncing) ...[
+                LinearProgressIndicator(
+                  value: syncState.progress > 0 ? syncState.progress : null,
                 ),
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 16,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                const SizedBox(height: 8),
+                Text(
+                  syncState.currentStep ?? 'Sincronizando...',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
                   ),
-                  const SizedBox(width: 4),
-                  // ✅ FIX: Flexible para evitar overflow
-                  Flexible(
-                    child: Text(
-                      'Última sync: ${syncState.lastSyncText}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
-                        ),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: () {
-                      ref.read(syncStateProvider.notifier).syncNow(tecnicoId);
-                    },
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Sync'),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            // Error si hay
-            if (syncState.status == SyncStatus.error &&
-                syncState.errorMessage != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
+              ] else ...[
+                Row(
                   children: [
                     Icon(
-                      Icons.error_outline,
+                      Icons.access_time,
                       size: 16,
-                      color: theme.colorScheme.error,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    const SizedBox(width: 4),
+                    // ✅ FIX: Flexible para evitar overflow
+                    Flexible(
+                      child: Text(
+                        'Última sync: ${syncState.lastSyncText}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        syncState.errorMessage!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                    TextButton.icon(
+                      onPressed: () {
+                        ref.read(syncStateProvider.notifier).syncNow(tecnicoId);
+                      },
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Sync'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
                     ),
                   ],
                 ),
-              ),
+              ],
+
+              // Error si hay
+              if (syncState.status == SyncStatus.error &&
+                  syncState.errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 16,
+                        color: theme.colorScheme.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          syncState.errorMessage!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-    ),  // Cierra InkWell
-  );  // Cierra Card
+      ), // Cierra InkWell
+    ); // Cierra Card
   }
 
   Widget _buildQuickStatsGrid(

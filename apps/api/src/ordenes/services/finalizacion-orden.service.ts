@@ -166,6 +166,9 @@ export interface FinalizarOrdenDto {
     /** ✅ MULTI-EQUIPOS: Flag indicador */
     esMultiEquipo?: boolean;
 
+    /** Razón de la falla (solo para correctivos) */
+    razonFalla?: string;
+
     /** Observaciones generales del servicio */
     observaciones: string;
 
@@ -206,7 +209,7 @@ export interface FinalizarOrdenDto {
 /**
  * Pasos del proceso de finalización
  */
-export type FinalizacionStep = 
+export type FinalizacionStep =
     | 'validando'           // Paso 0: Validando datos
     | 'obteniendo_orden'    // Paso 1: Obteniendo datos de la orden
     | 'evidencias'          // Paso 2: Subiendo evidencias a Cloudinary
@@ -382,6 +385,7 @@ export class FinalizacionOrdenService {
             const firmasResultado = await this.procesarFirmas(
                 dto.firmas,
                 dto.usuarioId,
+                orden,
             );
             recursosCreados.firmas = firmasResultado.map(f => f.id);
             this.logger.log(`   ✓ ${firmasResultado.length} firmas registradas`);
@@ -434,6 +438,10 @@ export class FinalizacionOrdenService {
             // ========================================================================
             emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 60);
             this.logger.log('📄 Paso 4: Generando PDF con template profesional...');
+
+            // Mapear mediciones del array a datosModulo para el PDF (necesario también para horómetro abajo)
+            const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
+
             const tipoInforme = this.determinarTipoInforme(orden);
             const pdfResult = await this.generarPDFOrden(
                 orden,
@@ -441,6 +449,7 @@ export class FinalizacionOrdenService {
                 evidenciasResultado,
                 firmasResultado,
                 tipoInforme,
+                datosModuloMapeado,
             );
             emitProgress('generando_pdf', 'completed', `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`, 72);
 
@@ -483,6 +492,21 @@ export class FinalizacionOrdenService {
             emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 92);
 
             // ========================================================================
+            // PASO 7.5: Registrar lectura de horómetro (si existe)
+            // ========================================================================
+            if (dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo) {
+                const horas = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
+                emitProgress('actualizando_estado', 'in_progress', `Registrando lectura de horómetro: ${horas}h...`, 93);
+                this.logger.log(`⏳ Paso 7.5: Registrando lectura de horómetro (${horas}h)...`);
+                await this.persistirHorometro(
+                    orden.id_orden_servicio,
+                    orden.id_equipo,
+                    horas!,
+                    dto.usuarioId,
+                );
+            }
+
+            // ========================================================================
             // PASO 8: Actualizar estado de la orden
             // ========================================================================
             emitProgress('actualizando_estado', 'in_progress', 'Actualizando estado de la orden...', 94);
@@ -501,7 +525,7 @@ export class FinalizacionOrdenService {
             // ========================================================================
             const tiempoTotal = Date.now() - startTime;
             this.logger.log(`🎉 Orden ${orden.numero_orden} finalizada exitosamente en ${tiempoTotal}ms`);
-            
+
             // Emitir evento final de completado
             emitProgress('completado', 'completed', `Orden ${orden.numero_orden} finalizada exitosamente`, 100, {
                 tiempoTotal,
@@ -737,16 +761,17 @@ export class FinalizacionOrdenService {
     private async procesarFirmas(
         firmas: { tecnico: FirmaInput; cliente?: FirmaInput },
         usuarioId: number,
+        orden: any,
     ): Promise<Array<{ id: number; tipo: string }>> {
         const resultados: Array<{ id: number; tipo: string }> = [];
 
         // Procesar firma del técnico
-        const firmaTecnico = await this.registrarFirma(firmas.tecnico, usuarioId);
+        const firmaTecnico = await this.registrarFirma(firmas.tecnico, usuarioId, orden);
         resultados.push({ id: firmaTecnico.id_firma_digital, tipo: 'TECNICO' });
 
         // Procesar firma del cliente si existe
         if (firmas.cliente?.base64) {
-            const firmaCliente = await this.registrarFirma(firmas.cliente, usuarioId);
+            const firmaCliente = await this.registrarFirma(firmas.cliente, usuarioId, orden);
             resultados.push({ id: firmaCliente.id_firma_digital, tipo: 'CLIENTE' });
         }
 
@@ -756,15 +781,68 @@ export class FinalizacionOrdenService {
     /**
      * Registra una firma digital en BD
      * Busca primero para manejar el constraint único (id_persona, tipo_firma)
-     * Si idPersona es 0, usa el usuarioId como fallback
+     * ✅ FIX 28-DIC-2025: Mapeo robusto de id_usuario -> id_persona para evitar FK error
      */
-    private async registrarFirma(firma: FirmaInput, usuarioId: number) {
+    private async registrarFirma(firma: FirmaInput, usuarioId: number, orden: any) {
         const hash = createHash('sha256').update(firma.base64).digest('hex');
 
-        // Si idPersona es 0, usar el usuarioId como fallback (técnico que registra)
-        const idPersonaReal = firma.idPersona > 0 ? firma.idPersona : usuarioId;
+        this.logger.log(`🔍 Registrando firma [${firma.tipo}]: idPersona recibida=${firma.idPersona}, usuarioId=${usuarioId}`);
 
-        // Buscar firma existente
+        let idPersonaReal: number | null = null;
+
+        if (firma.tipo === 'TECNICO') {
+            // 1. Intentar obtener desde el técnico asignado a la orden (vía empleados)
+            idPersonaReal = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_persona;
+
+            // 2. Si no, intentar resolver el idPersona que mandó el móvil (que suele ser el id_usuario)
+            if (!idPersonaReal && firma.idPersona > 0) {
+                const u = await this.prisma.usuarios.findUnique({
+                    where: { id_usuario: firma.idPersona },
+                    select: { id_persona: true }
+                });
+                if (u?.id_persona) {
+                    idPersonaReal = u.id_persona;
+                    this.logger.log(`   💡 id_persona resuelto desde idPersona del móvil (id_usuario=${firma.idPersona}) -> ${idPersonaReal}`);
+                }
+            }
+
+            // 3. Fallback: usar el usuarioId del contexto de finalización (quien registra)
+            if (!idPersonaReal) {
+                const u = await this.prisma.usuarios.findUnique({
+                    where: { id_usuario: usuarioId },
+                    select: { id_persona: true }
+                });
+                if (u?.id_persona) {
+                    idPersonaReal = u.id_persona;
+                    this.logger.log(`   💡 id_persona resuelto desde usuarioId del contexto (${usuarioId}) -> ${idPersonaReal}`);
+                }
+            }
+        } else {
+            // Para CLIENTE
+            // 1. Usar ID que viene del móvil si es > 0
+            if (firma.idPersona && firma.idPersona > 0) {
+                idPersonaReal = firma.idPersona;
+            }
+
+            // 2. Fallback: usar la persona del cliente vinculado a la orden
+            if (!idPersonaReal) {
+                idPersonaReal = orden.clientes?.id_persona;
+                if (idPersonaReal) {
+                    this.logger.log(`   💡 id_persona resuelto desde cliente de la orden -> ${idPersonaReal}`);
+                }
+            }
+        }
+
+        // Si después de todo no hay id_persona, no podemos continuar con esta firma
+        if (!idPersonaReal) {
+            this.logger.error(`❌ ERROR: No se pudo determinar un id_persona válido para la firma ${firma.tipo}`);
+            throw new BadRequestException(
+                `No se pudo determinar la identidad de la persona para la firma del ${firma.tipo.toLowerCase()}. ` +
+                `Asegúrese de que el ${firma.tipo === 'TECNICO' ? 'técnico' : 'cliente'} tenga un registro de persona asociado.`
+            );
+        }
+
+        // Buscar firma existente para esta persona y tipo
         const firmaExistente = await this.prisma.firmas_digitales.findFirst({
             where: {
                 id_persona: idPersonaReal,
@@ -773,6 +851,7 @@ export class FinalizacionOrdenService {
         });
 
         if (firmaExistente) {
+            this.logger.log(`   🔄 Actualizando firma existente ID: ${firmaExistente.id_firma_digital} para persona ${idPersonaReal}`);
             // Actualizar firma existente
             return this.prisma.firmas_digitales.update({
                 where: { id_firma_digital: firmaExistente.id_firma_digital },
@@ -788,6 +867,7 @@ export class FinalizacionOrdenService {
             });
         }
 
+        this.logger.log(`   🆕 Creando nueva firma para persona ${idPersonaReal}`);
         // Crear nueva firma
         return this.prisma.firmas_digitales.create({
             data: {
@@ -857,7 +937,7 @@ export class FinalizacionOrdenService {
         // Extraer relaciones con nombres correctos de Prisma
         const equipo = orden.equipos;
         const tipoServicio = orden.tipos_servicio;
-        
+
         // Determinar por tipo de equipo (usar tipos_equipo?.nombre_tipo)
         const tipoEquipoNombre = (equipo?.tipos_equipo?.nombre_tipo || '').toLowerCase();
         const tipoServicioCodigo = (tipoServicio?.codigo || '').toUpperCase();
@@ -900,11 +980,9 @@ export class FinalizacionOrdenService {
         evidencias: Array<{ id: number; tipo: string; url: string }>,
         _firmas: Array<{ id: number; tipo: string }>, // Las firmas se incluyen vía dto.firmas
         tipoInforme: TipoInforme,
+        datosModuloMapeado: any,
     ) {
         // Construir datos para el template
-
-        // Mapear mediciones del array a datosModulo para el PDF
-        const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
 
         // ✅ FIX 15-DIC-2025: Corregidos nombres de propiedades según schema Prisma
         // Las relaciones tienen nombres largos generados por Prisma
@@ -912,7 +990,7 @@ export class FinalizacionOrdenService {
         const cliente = orden.clientes;
         const equipo = orden.equipos;
         const tipoServicio = orden.tipos_servicio;
-        
+
         // Nombre del técnico (persona natural o nombre completo como fallback)
         const tecnicoPersona = tecnicoEmpleado?.persona;
         const nombreTecnico = tecnicoPersona?.primer_nombre && tecnicoPersona?.primer_apellido
@@ -937,7 +1015,7 @@ export class FinalizacionOrdenService {
                 resultado: string;
                 observaciones?: string;
             }>;
-        }> | undefined;
+        }> = [];
 
         let medicionesPorEquipo: Array<{
             equipo: {
@@ -954,11 +1032,11 @@ export class FinalizacionOrdenService {
                 unidad: string;
                 nivelAlerta: string;
             }>;
-        }> | undefined;
+        }> = [];
 
         if (dto.esMultiEquipo && dto.actividadesPorEquipo) {
             this.logger.log(`📋 Construyendo datos multi-equipo para PDF (${dto.actividadesPorEquipo.length} equipos)`);
-            
+
             actividadesPorEquipo = dto.actividadesPorEquipo.map((eq, index) => ({
                 equipo: {
                     idOrdenEquipo: eq.idOrdenEquipo,
@@ -985,10 +1063,9 @@ export class FinalizacionOrdenService {
             // Detectamos multi-equipo desde la BD y distribuimos las actividades
             const numEquipos = orden.ordenes_equipos.length;
             const actividadesPlanas = dto.actividades;
-            const actividadesPorEquipoCount = Math.floor(actividadesPlanas.length / numEquipos);
-            
+
             this.logger.log(`⚠️ FALLBACK MULTI-EQUIPO: Distribuyendo ${actividadesPlanas.length} actividades entre ${numEquipos} equipos`);
-            
+
             // Agrupar actividades por descripción (cada descripción aparece N veces, una por equipo)
             const actividadesUnicas = new Map<string, typeof actividadesPlanas>();
             for (const act of actividadesPlanas) {
@@ -998,7 +1075,7 @@ export class FinalizacionOrdenService {
                 }
                 actividadesUnicas.get(key)!.push(act);
             }
-            
+
             actividadesPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => ({
                 equipo: {
                     idOrdenEquipo: oe.id_orden_equipo,
@@ -1018,7 +1095,7 @@ export class FinalizacionOrdenService {
                     };
                 }),
             }));
-            
+
             this.logger.log(`✅ FALLBACK completado: ${actividadesUnicas.size} actividades únicas x ${numEquipos} equipos`);
             for (const eq of actividadesPorEquipo) {
                 this.logger.log(`   📋 ${eq.equipo.nombreSistema}: ${eq.actividades.length} actividades`);
@@ -1049,9 +1126,9 @@ export class FinalizacionOrdenService {
             // ✅ FIX 16-DIC-2025: FALLBACK para mediciones cuando Flutter no envía estructura multi-equipo
             const numEquipos = orden.ordenes_equipos.length;
             const medicionesPlanas = dto.mediciones;
-            
+
             this.logger.log(`⚠️ FALLBACK MEDICIONES: Distribuyendo ${medicionesPlanas.length} mediciones entre ${numEquipos} equipos`);
-            
+
             // Agrupar mediciones por parámetro
             const medicionesUnicas = new Map<string, typeof medicionesPlanas>();
             for (const med of medicionesPlanas) {
@@ -1061,7 +1138,7 @@ export class FinalizacionOrdenService {
                 }
                 medicionesUnicas.get(key)!.push(med);
             }
-            
+
             medicionesPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => ({
                 equipo: {
                     idOrdenEquipo: oe.id_orden_equipo,
@@ -1080,13 +1157,13 @@ export class FinalizacionOrdenService {
                     };
                 }),
             }));
-            
+
             this.logger.log(`✅ FALLBACK MEDICIONES completado: ${medicionesUnicas.size} parámetros únicos x ${numEquipos} equipos`);
         }
 
         // ✅ FIX 16-DIC-2025: Detectar multi-equipo desde FALLBACK o DTO
         const esMultiEquipo = dto.esMultiEquipo || (orden.ordenes_equipos && orden.ordenes_equipos.length > 1);
-        
+
         // ✅ FIX 16-DIC-2025: Construir evidenciasPorEquipo si es multi-equipo
         let evidenciasPorEquipo: Array<{
             equipo: {
@@ -1102,35 +1179,35 @@ export class FinalizacionOrdenService {
                 caption?: string;
                 momento?: string;
             }>;
-        }> | undefined;
+        }> = [];
 
         if (esMultiEquipo && orden.ordenes_equipos && orden.ordenes_equipos.length > 1) {
             const numEquipos = orden.ordenes_equipos.length;
-            
+
             // ✅ FIX 16-DIC-2025: Verificar si las evidencias ya tienen idOrdenEquipo del móvil
             const evidenciasConEquipo = dto.evidencias.filter(e => e.idOrdenEquipo != null && e.idOrdenEquipo > 0);
             const usarIdOrdenEquipoDelMovil = evidenciasConEquipo.length > 0;
-            
+
             if (usarIdOrdenEquipoDelMovil) {
                 // ✅ MODO CORRECTO: Usar idOrdenEquipo que viene del móvil
                 this.logger.log(`📷 MODO PRECISO: Agrupando ${evidencias.length} evidencias por idOrdenEquipo del móvil`);
-                
+
                 // Crear mapa de idOrdenEquipo -> evidencias (combinando dto y resultados subidos)
                 const evidenciasPorIdEquipo = new Map<number, Array<{ url: string; caption?: string; momento?: string }>>();
-                
+
                 for (let i = 0; i < evidencias.length; i++) {
                     const evSubida = evidencias[i]; // Contiene url y tipo
                     const evOriginal = dto.evidencias[i]; // Contiene idOrdenEquipo y descripcion
-                    
+
                     if (!evOriginal) continue;
-                    
+
                     const idEquipo = evOriginal.idOrdenEquipo || 0;
                     const momento = evSubida.tipo || 'DURANTE';
                     // ✅ Preservar descripción de actividad
-                    const caption = evOriginal.descripcion 
+                    const caption = evOriginal.descripcion
                         ? `${momento}: ${evOriginal.descripcion}`
                         : momento;
-                    
+
                     if (!evidenciasPorIdEquipo.has(idEquipo)) {
                         evidenciasPorIdEquipo.set(idEquipo, []);
                     }
@@ -1140,12 +1217,12 @@ export class FinalizacionOrdenService {
                         momento: momento,
                     });
                 }
-                
+
                 // Construir estructura por equipo
                 evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => {
                     const idOrdenEquipo = oe.id_orden_equipo;
                     const evidenciasDelEquipo = evidenciasPorIdEquipo.get(idOrdenEquipo) || [];
-                    
+
                     // Ordenar evidencias: ANTES primero, luego DURANTE, luego DESPUES
                     const ordenMomento = { 'ANTES': 1, 'DURANTE': 2, 'DESPUES': 3 };
                     evidenciasDelEquipo.sort((a, b) => {
@@ -1153,7 +1230,7 @@ export class FinalizacionOrdenService {
                         const ordenB = ordenMomento[b.momento as keyof typeof ordenMomento] || 2;
                         return ordenA - ordenB;
                     });
-                    
+
                     return {
                         equipo: {
                             idOrdenEquipo: idOrdenEquipo,
@@ -1166,7 +1243,7 @@ export class FinalizacionOrdenService {
                         evidencias: evidenciasDelEquipo,
                     };
                 });
-                
+
                 this.logger.log(`✅ EVIDENCIAS agrupadas por idOrdenEquipo`);
                 for (const eq of evidenciasPorEquipo) {
                     const porMomento = { ANTES: 0, DURANTE: 0, DESPUES: 0 };
@@ -1180,14 +1257,14 @@ export class FinalizacionOrdenService {
             } else {
                 // ⚠️ FALLBACK: Distribuir por índice (legacy, cuando móvil no envía idOrdenEquipo)
                 this.logger.log(`⚠️ FALLBACK EVIDENCIAS: Distribuyendo evidencias entre ${numEquipos} equipos (sin idOrdenEquipo)`);
-                
+
                 // Agrupar evidencias por momento
                 const evidenciasPorMomento: { [key: string]: Array<{ url: string; descripcion?: string }> } = {
                     'ANTES': [],
                     'DURANTE': [],
                     'DESPUES': [],
                 };
-                
+
                 for (let i = 0; i < evidencias.length; i++) {
                     const evSubida = evidencias[i];
                     const evOriginal = dto.evidencias[i];
@@ -1200,12 +1277,12 @@ export class FinalizacionOrdenService {
                         descripcion: evOriginal?.descripcion,
                     });
                 }
-                
+
                 this.logger.log(`   📷 ANTES: ${evidenciasPorMomento['ANTES'].length}, DURANTE: ${evidenciasPorMomento['DURANTE'].length}, DESPUES: ${evidenciasPorMomento['DESPUES'].length}`);
-                
+
                 evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => {
                     const evidenciasEquipo: Array<{ url: string; caption?: string; momento?: string }> = [];
-                    
+
                     for (const momento of ['ANTES', 'DURANTE', 'DESPUES']) {
                         const evidenciasMomento = evidenciasPorMomento[momento] || [];
                         const evidenciasParaEquipo = evidenciasMomento.filter((_, i) => i % numEquipos === equipoIndex);
@@ -1215,7 +1292,7 @@ export class FinalizacionOrdenService {
                             momento: momento,
                         })));
                     }
-                    
+
                     return {
                         equipo: {
                             idOrdenEquipo: oe.id_orden_equipo,
@@ -1228,7 +1305,7 @@ export class FinalizacionOrdenService {
                         evidencias: evidenciasEquipo,
                     };
                 });
-                
+
                 this.logger.log(`✅ FALLBACK EVIDENCIAS completado`);
                 for (const eq of evidenciasPorEquipo) {
                     this.logger.log(`   📷 ${eq.equipo.nombreSistema}: ${eq.evidencias.length} evidencias`);
@@ -1452,10 +1529,10 @@ export class FinalizacionOrdenService {
         });
 
         // Usar fecha_inicio_real existente como base, o fecha actual si no existe
-        const fechaBase = ordenExistente?.fecha_inicio_real 
-            ? new Date(ordenExistente.fecha_inicio_real) 
+        const fechaBase = ordenExistente?.fecha_inicio_real
+            ? new Date(ordenExistente.fecha_inicio_real)
             : new Date();
-        
+
         this.logger.log(`   📅 Fecha base para cálculo: ${fechaBase.toISOString()} (existente: ${!!ordenExistente?.fecha_inicio_real})`);
 
         let fechaInicioReal: Date | undefined;
@@ -1474,7 +1551,7 @@ export class FinalizacionOrdenService {
             const [horasS, minutosS] = horaSalida.split(':').map(Number);
             // Para fecha_fin_real, usamos la fecha base pero debemos verificar cruce de medianoche
             fechaFinReal = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), fechaBase.getDate(), horasS, minutosS, 0, 0);
-            
+
             // 🔧 FIX: Si hora de salida es menor que hora de entrada, es cruce de medianoche
             // Debemos agregar un día a la fecha de fin
             if (fechaInicioReal && fechaFinReal < fechaInicioReal) {
@@ -1493,7 +1570,7 @@ export class FinalizacionOrdenService {
         if (fechaInicioReal) {
             const diffMs = fechaFinReal.getTime() - fechaInicioReal.getTime();
             duracionMinutos = Math.round(diffMs / 60000);
-            
+
             // Validación final: duración debe ser positiva y razonable (max 24h)
             if (duracionMinutos < 0 || duracionMinutos > 1440) {
                 this.logger.warn(`   ⚠️ Duración inválida (${duracionMinutos} min), usando null`);
@@ -1710,7 +1787,51 @@ export class FinalizacionOrdenService {
     }
 
     /**
-     * Mapea resultado a estado de actividad (enum del schema)
+     * Registra la lectura del horómetro en la tabla lecturas_horometro
+     * ROBUSTEZ: Valida que la lectura no sea inferior a la anterior
+     */
+    private async persistirHorometro(
+        idOrden: number,
+        idEquipo: number,
+        horas: number,
+        usuarioId: number,
+    ): Promise<void> {
+        try {
+            // 1. Obtener la última lectura para este equipo
+            const ultimaLectura = await this.prisma.lecturas_horometro.findFirst({
+                where: { id_equipo: idEquipo },
+                orderBy: { fecha_lectura: 'desc' },
+            });
+
+            // 2. Validación Zero Trust: Evitar horómetro en reversa
+            if (ultimaLectura && Number(ultimaLectura.horas_lectura) > horas) {
+                this.logger.warn(`⚠️ Intento de registrar horómetro menor al actual (${horas} < ${ultimaLectura.horas_lectura}). Se ignorará para mantener integridad.`);
+                return;
+            }
+
+            // 3. Registrar nueva lectura
+            await this.prisma.lecturas_horometro.create({
+                data: {
+                    id_equipo: idEquipo,
+                    id_orden_servicio: idOrden,
+                    horas_lectura: horas,
+                    fecha_lectura: new Date(),
+                    tipo_lectura: 'MANTENIMIENTO',
+                    registrado_por: usuarioId,
+                    observaciones: `Registrado automáticamente al finalizar orden ${idOrden}`,
+                },
+            });
+
+            this.logger.log(`   ✅ Horómetro registrado: ${horas}h (Equipo ID: ${idEquipo})`);
+        } catch (error: unknown) {
+            const err = error as Error;
+            this.logger.error(`❌ Error persistiendo horómetro: ${err.message}`);
+            // No fallar la finalización si falla el horómetro (non-critical path)
+        }
+    }
+
+    /**
+     * Mapea resultado a estado de actividad
      * B=Bueno, M=Malo, C=Corregido, NA=NoAplica, R=Regular, etc.
      */
     private mapResultadoAEstado(resultado: string): 'B' | 'M' | 'C' | 'NA' | 'R' {

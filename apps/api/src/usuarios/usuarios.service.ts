@@ -1,8 +1,8 @@
 import {
-    ConflictException,
-    Injectable,
-    InternalServerErrorException,
-    NotFoundException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
@@ -11,7 +11,7 @@ import { UpdateUsuariosDto } from './dto/update-usuarios.dto';
 
 @Injectable()
 export class UsuariosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(createDto: CreateUsuariosDto) {
     try {
@@ -66,7 +66,7 @@ export class UsuariosService {
   async findAll(page: number = 1, limit: number = 10) {
     try {
       const skip = (page - 1) * limit;
-      
+
       const [data, total] = await Promise.all([
         this.prisma.usuarios.findMany({
           skip,
@@ -144,6 +144,31 @@ export class UsuariosService {
       }
       throw new InternalServerErrorException(
         `Error al eliminar usuarios: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  async resetPassword(id: number, newPassword: string) {
+    try {
+      await this.findOne(id); // Verifica existencia
+
+      const salt = await bcrypt.genSalt();
+      const password_hash = await bcrypt.hash(newPassword, salt);
+
+      return await this.prisma.usuarios.update({
+        where: { id_usuario: id },
+        data: {
+          password_hash,
+          fecha_ultimo_cambio_password: new Date(),
+          debe_cambiar_password: false,
+        },
+      });
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error al restablecer contraseña: ${(error as Error).message}`,
       );
     }
   }

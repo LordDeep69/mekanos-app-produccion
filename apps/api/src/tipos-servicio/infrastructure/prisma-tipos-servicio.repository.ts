@@ -19,7 +19,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
  */
 @Injectable()
 export class PrismaTiposServicioRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   /**
    * Includes QUIRÚRGICOS (selectivos) para performance
@@ -194,8 +194,13 @@ export class PrismaTiposServicioRepository {
         // Filtro por categoría
         categoria: filters?.categoria as any,
 
-        // Filtro por tipo equipo
-        id_tipo_equipo: filters?.tipoEquipoId,
+        // Filtro por tipo equipo: Incluir específicos + globales (null)
+        ...(filters?.tipoEquipoId && {
+          OR: [
+            { id_tipo_equipo: filters.tipoEquipoId },
+            { id_tipo_equipo: null },
+          ],
+        }),
 
         // Búsqueda global (nombre, codigo, descripcion)
         ...(filters?.search && {
@@ -423,7 +428,13 @@ export class PrismaTiposServicioRepository {
       where: {
         activo: filters?.activo !== undefined ? filters.activo : true,
         categoria: filters?.categoria as any,
-        id_tipo_equipo: filters?.tipoEquipoId,
+        // Filtro por tipo equipo: Incluir específicos + globales (null)
+        ...(filters?.tipoEquipoId && {
+          OR: [
+            { id_tipo_equipo: filters.tipoEquipoId },
+            { id_tipo_equipo: null },
+          ],
+        }),
         ...(filters?.search && {
           OR: [
             { nombre_tipo: { contains: filters.search, mode: 'insensitive' } },

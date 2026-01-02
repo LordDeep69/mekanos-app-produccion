@@ -39,7 +39,7 @@ class _ResumenFinalizacionScreenState
     extends ConsumerState<ResumenFinalizacionScreen> {
   bool _isLoading = true;
   List<OrdenesEquipo> _equipos = [];
-  Map<int, _EstadoEquipo> _estadosPorEquipo = {};
+  final Map<int, _EstadoEquipo> _estadosPorEquipo = {};
   bool _esMultiEquipo = false;
   bool _tieneFirmaTecnico = false;
   bool _tieneFirmaCliente = false;

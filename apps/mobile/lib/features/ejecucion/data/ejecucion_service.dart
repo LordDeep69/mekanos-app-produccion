@@ -2,13 +2,15 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 
 /// Provider para el servicio de ejecución
 final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
   final db = ref.watch(databaseProvider);
-  return EjecucionService(db);
+  final apiClient = ref.watch(apiClientProvider);
+  return EjecucionService(db, apiClient);
 });
 
 /// Servicio de Ejecución - RUTA 6
@@ -16,8 +18,9 @@ final ejecucionServiceProvider = Provider<EjecucionService>((ref) {
 /// ✅ MULTI-EQUIPOS: Soporta órdenes con múltiples equipos (15-DIC-2025)
 class EjecucionService {
   final AppDatabase _db;
+  final ApiClient _apiClient;
 
-  EjecucionService(this._db);
+  EjecucionService(this._db, this._apiClient);
 
   /// Inicia la ejecución de una orden
   ///
@@ -71,12 +74,14 @@ class EjecucionService {
       List<ActividadesEjecutada> actividadesExistentes;
       if (idOrdenEquipo != null) {
         // Multi-equipo: Filtrar por equipo específico
-        actividadesExistentes = await (_db.select(_db.actividadesEjecutadas)
-              ..where((a) => a.idOrden.equals(idOrdenLocal))
-              ..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo)))
-            .get();
+        actividadesExistentes =
+            await (_db.select(_db.actividadesEjecutadas)
+                  ..where((a) => a.idOrden.equals(idOrdenLocal))
+                  ..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo)))
+                .get();
         debugPrint(
-            '🔧 [MULTI-EQ] Verificando actividades para equipo $idOrdenEquipo: ${actividadesExistentes.length}');
+          '🔧 [MULTI-EQ] Verificando actividades para equipo $idOrdenEquipo: ${actividadesExistentes.length}',
+        );
       } else {
         // Orden simple: Todas las actividades
         actividadesExistentes = await _db.getActividadesByOrden(idOrdenLocal);
@@ -167,9 +172,7 @@ class EjecucionService {
         for (final planItem in planActividades) {
           final actCatalogo =
               await (_db.select(_db.actividadesCatalogo)
-                    ..where(
-                      (a) => a.id.equals(planItem.idActividadCatalogo),
-                    ))
+                    ..where((a) => a.id.equals(planItem.idActividadCatalogo)))
                   .getSingleOrNull();
 
           if (actCatalogo != null) {
@@ -209,7 +212,8 @@ class EjecucionService {
       String? primeraActividadNombre;
 
       debugPrint(
-          '🔧 [EJECUCIÓN] Clonando ${actividadesAEjecutar.length} actividades${idOrdenEquipo != null ? ' para equipo $idOrdenEquipo' : ''}');
+        '🔧 [EJECUCIÓN] Clonando ${actividadesAEjecutar.length} actividades${idOrdenEquipo != null ? ' para equipo $idOrdenEquipo' : ''}',
+      );
 
       for (final actCatalogo in actividadesAEjecutar) {
         // Determinar el sistema (usar GENERAL si es null)
@@ -300,6 +304,12 @@ class EjecucionService {
             updatedAt: Value(DateTime.now()),
           ),
         );
+
+        // ✅ v3.3 INTELLIGENT SYNC: Notificar al backend de inmediato si hay red
+        // No bloqueamos el flujo principal si falla (el isDirty garantiza el sync posterior)
+        if (orden.idBackend != null) {
+          _notificarInicioBackend(orden.idBackend!);
+        }
       }
 
       // 7. Verificación de lectura
@@ -319,6 +329,24 @@ class EjecucionService {
     });
   }
 
+  /// ✅ v3.3: Notifica al backend que se inició la ejecución (mejor esfuerzo)
+  Future<void> _notificarInicioBackend(int idOrdenBackend) async {
+    try {
+      debugPrint(
+        '📡 [SYNC] Notificando inicio de orden $idOrdenBackend al backend...',
+      );
+      await _apiClient.dio.put('/ordenes/$idOrdenBackend/iniciar');
+      debugPrint('✅ [SYNC] Backend notificado correctamente');
+    } catch (e) {
+      // Error silencioso: el flag isDirty de la orden garantiza que el SyncWorker
+      // lo intente de nuevo más tarde de forma más robusta.
+      debugPrint(
+        '⚠️ [SYNC] No se pudo notificar inicio al backend (se hará en sync posterior): $e',
+      );
+    }
+  }
+
+  /// Elimina una actividad del plan local y sus dependencias
   Future<void> eliminarActividadLocal(int idActividadLocal) async {
     await _db.transaction(() async {
       await (_db.delete(
@@ -330,6 +358,77 @@ class EjecucionService {
       await (_db.delete(
         _db.actividadesEjecutadas,
       )..where((a) => a.idLocal.equals(idActividadLocal))).go();
+    });
+  }
+
+  /// Adds a dynamic activity to the execution plan
+  Future<int> addActividadDinamica({
+    required int idOrdenLocal,
+    required int idActividadCatalogo,
+    int? idOrdenEquipo,
+    String? sistema,
+  }) async {
+    return await _db.transaction(() async {
+      final actCatalogo = await (_db.select(
+        _db.actividadesCatalogo,
+      )..where((a) => a.id.equals(idActividadCatalogo))).getSingleOrNull();
+
+      if (actCatalogo == null) throw Exception('Activity not found in catalog');
+
+      // Get last sequence
+      final queryUltima = _db.select(_db.actividadesEjecutadas)
+        ..where((a) => a.idOrden.equals(idOrdenLocal));
+      if (idOrdenEquipo != null) {
+        queryUltima.where((a) => a.idOrdenEquipo.equals(idOrdenEquipo));
+      }
+      queryUltima.orderBy([(a) => OrderingTerm.desc(a.ordenEjecucion)]);
+
+      final ultimaAct = await queryUltima.getSingleOrNull();
+      final nuevaSecuencia = (ultimaAct?.ordenEjecucion ?? 0) + 1;
+
+      final idActividadEjecutada = await _db.insertActividadEjecutada(
+        ActividadesEjecutadasCompanion.insert(
+          idOrden: idOrdenLocal,
+          idActividadCatalogo: idActividadCatalogo,
+          idOrdenEquipo: Value(idOrdenEquipo),
+          descripcion: actCatalogo.descripcion,
+          sistema: Value(sistema ?? actCatalogo.sistema ?? 'GENERAL'),
+          tipoActividad: actCatalogo.tipoActividad,
+          idParametroMedicion: Value(actCatalogo.idParametroMedicion),
+          ordenEjecucion: Value(nuevaSecuencia),
+          simbologia: const Value(null),
+          completada: const Value(false),
+          isDirty: const Value(true),
+        ),
+      );
+
+      // If it requires measurement, create it
+      if (actCatalogo.idParametroMedicion != null) {
+        final parametro =
+            await (_db.select(_db.parametrosCatalogo)
+                  ..where((p) => p.id.equals(actCatalogo.idParametroMedicion!)))
+                .getSingleOrNull();
+
+        if (parametro != null) {
+          await _db.insertMedicion(
+            MedicionesCompanion.insert(
+              idOrden: idOrdenLocal,
+              idActividadEjecutada: Value(idActividadEjecutada),
+              idParametro: parametro.id,
+              idOrdenEquipo: Value(idOrdenEquipo),
+              nombreParametro: parametro.nombre,
+              unidadMedida: parametro.unidad ?? '',
+              rangoMinimoNormal: Value(parametro.valorMinimoNormal),
+              rangoMaximoNormal: Value(parametro.valorMaximoNormal),
+              rangoMinimoCritico: Value(parametro.valorMinimoCritico),
+              rangoMaximoCritico: Value(parametro.valorMaximoCritico),
+              isDirty: const Value(true),
+            ),
+          );
+        }
+      }
+
+      return idActividadEjecutada;
     });
   }
 
@@ -525,14 +624,16 @@ class EjecucionService {
 
     if (idOrdenEquipo != null) {
       // ✅ MULTI-EQUIPOS: Filtrar por equipo
-      todasActividades = await (_db.select(_db.actividadesEjecutadas)
-            ..where((a) => a.idOrden.equals(idOrdenLocal))
-            ..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo)))
-          .get();
-      mediciones = await (_db.select(_db.mediciones)
-            ..where((m) => m.idOrden.equals(idOrdenLocal))
-            ..where((m) => m.idOrdenEquipo.equals(idOrdenEquipo)))
-          .get();
+      todasActividades =
+          await (_db.select(_db.actividadesEjecutadas)
+                ..where((a) => a.idOrden.equals(idOrdenLocal))
+                ..where((a) => a.idOrdenEquipo.equals(idOrdenEquipo)))
+              .get();
+      mediciones =
+          await (_db.select(_db.mediciones)
+                ..where((m) => m.idOrden.equals(idOrdenLocal))
+                ..where((m) => m.idOrdenEquipo.equals(idOrdenEquipo)))
+              .get();
     } else {
       // Orden simple: Todas las actividades
       todasActividades = await _db.getActividadesByOrden(idOrdenLocal);
@@ -643,7 +744,7 @@ class EjecucionService {
 
   /// ✅ NUEVO: Verifica si todas las actividades+mediciones del equipo están completas
   /// y actualiza el estado del equipo automáticamente
-  /// 
+  ///
   /// Retorna el nuevo estado del equipo o null si no hubo cambio
   Future<String?> verificarYActualizarEstadoEquipo(
     int idOrdenLocal,
@@ -657,10 +758,14 @@ class EjecucionService {
       );
 
       // Verificar si todo está completo
-      final actividadesCompletas = resumen.completadas >= resumen.totalActividades;
-      final medicionesCompletas = resumen.medicionesConValor >= resumen.totalMediciones;
-      final todoCompleto = actividadesCompletas && medicionesCompletas 
-          && (resumen.totalActividades > 0 || resumen.totalMediciones > 0);
+      final actividadesCompletas =
+          resumen.completadas >= resumen.totalActividades;
+      final medicionesCompletas =
+          resumen.medicionesConValor >= resumen.totalMediciones;
+      final todoCompleto =
+          actividadesCompletas &&
+          medicionesCompletas &&
+          (resumen.totalActividades > 0 || resumen.totalMediciones > 0);
 
       // Obtener estado actual del equipo
       final equipo = await _db.getOrdenEquipoById(idOrdenEquipo);
@@ -687,7 +792,9 @@ class EjecucionService {
               : null,
           fechaFin: nuevoEstado == 'COMPLETADO' ? DateTime.now() : null,
         );
-        debugPrint('✅ [MULTI-EQUIPO] Estado actualizado: $estadoActual -> $nuevoEstado');
+        debugPrint(
+          '✅ [MULTI-EQUIPO] Estado actualizado: $estadoActual -> $nuevoEstado',
+        );
         return nuevoEstado;
       }
 

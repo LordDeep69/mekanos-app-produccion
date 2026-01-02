@@ -20,6 +20,7 @@ enum EstadoOrdenEnum {
   enProceso,
   cancelada,
   enEsperaRepuesto,
+
   /// ✅ NUEVO: Orden completada localmente pero pendiente de subir al servidor
   /// Este estado es SOLO LOCAL - no existe en backend/Supabase
   /// Permite al técnico ver y subir manualmente la orden
@@ -649,19 +650,43 @@ class AppDatabase extends _$AppDatabase {
     beforeOpen: (details) async {
       // Habilitar foreign keys
       await customStatement('PRAGMA foreign_keys = ON');
-      
+
       // ✅ FIX: Limpiar dato corrupto si existe (datetime guardado como TEXT en lugar de INT)
       // Esto pudo haber ocurrido en versiones anteriores con datetime('now')
       await customStatement('''
         DELETE FROM estados_orden WHERE id = -1 AND typeof(last_synced_at) = 'text'
       ''');
-      
-      // ✅ SYNC MANUAL: Asegurar que existe estado POR_SUBIR (solo local)
-      // Este estado es usado para órdenes completadas offline pendientes de subir
-      // ID negativo (-1) para no colisionar con IDs del servidor
-      // ✅ FIX: Drift almacena DateTimeColumn como INTEGER (milisegundos desde epoch)
-      // No usar datetime('now') que retorna STRING
+
+      // ✅ SYNC ROBUSTNESS: Asegurar placeholders (ID 1) para catálogos iniciales
+      // Esto evita errores de FOREIGN KEY constraint failed durante el Smart Sync inicial
+      // cuando el servidor envía IDs que el móvil aún no ha descargado en sus catálogos.
       final nowMillis = DateTime.now().millisecondsSinceEpoch;
+
+      // 1. Estado inicial (ASIGNADA suele ser ID 1)
+      await customStatement('''
+        INSERT OR IGNORE INTO estados_orden (id, codigo, nombre, es_estado_final, last_synced_at)
+        VALUES (1, 'ASIGNADA', 'Asignada', 0, $nowMillis)
+      ''');
+
+      // 2. Cliente placeholder
+      await customStatement('''
+        INSERT OR IGNORE INTO clientes (id, nombre, activo, last_synced_at)
+        VALUES (1, 'Cliente del Sistema', 1, $nowMillis)
+      ''');
+
+      // 3. Equipo placeholder
+      await customStatement('''
+        INSERT OR IGNORE INTO equipos (id, codigo, nombre, id_cliente, activo, last_synced_at)
+        VALUES (1, 'EQ-001', 'Equipo del Sistema', 1, 1, $nowMillis)
+      ''');
+
+      // 4. Tipo de Servicio placeholder
+      await customStatement('''
+        INSERT OR IGNORE INTO tipos_servicio (id, codigo, nombre, activo, last_synced_at)
+        VALUES (1, 'SISTEMA', 'Servicio del Sistema', 1, $nowMillis)
+      ''');
+
+      // ✅ SYNC MANUAL: Asegurar que existe estado POR_SUBIR (solo local)
       await customStatement('''
         INSERT OR IGNORE INTO estados_orden (id, codigo, nombre, es_estado_final, last_synced_at)
         VALUES (-1, 'POR_SUBIR', 'Por Subir', 0, $nowMillis)
@@ -710,6 +735,11 @@ class AppDatabase extends _$AppDatabase {
     await into(actividadesCatalogo).insertOnConflictUpdate(act);
   }
 
+  /// Obtener todas las actividades del catálogo
+  Future<List<ActividadesCatalogoData>> getAllActividadesCatalogo() {
+    return select(actividadesCatalogo).get();
+  }
+
   /// Obtener actividades por tipo de servicio
   Future<List<ActividadesCatalogoData>> getActividadesByTipoServicio(
     int idTipoServicio,
@@ -739,16 +769,16 @@ class AppDatabase extends _$AppDatabase {
 
   /// Limpiar plan de actividades de una orden
   Future<int> clearPlanActividades(int idOrden) async {
-    return await (delete(actividadesPlan)
-          ..where((p) => p.idOrden.equals(idOrden)))
-        .go();
+    return await (delete(
+      actividadesPlan,
+    )..where((p) => p.idOrden.equals(idOrden))).go();
   }
 
   /// Verificar si una orden tiene plan de actividades asignado
   Future<bool> ordenTienePlanActividades(int idOrden) async {
-    final count = await (select(actividadesPlan)
-          ..where((p) => p.idOrden.equals(idOrden)))
-        .get();
+    final count = await (select(
+      actividadesPlan,
+    )..where((p) => p.idOrden.equals(idOrden))).get();
     return count.isNotEmpty;
   }
 
@@ -783,7 +813,8 @@ class AppDatabase extends _$AppDatabase {
 
   /// Obtener todos los equipos de una orden (por idOrdenServicio = idBackend de la orden)
   Future<List<OrdenesEquipo>> getEquiposByOrdenServicio(
-      int idOrdenServicio) async {
+    int idOrdenServicio,
+  ) async {
     return (select(ordenesEquipos)
           ..where((oe) => oe.idOrdenServicio.equals(idOrdenServicio))
           ..orderBy([(oe) => OrderingTerm.asc(oe.ordenSecuencia)]))
@@ -798,34 +829,38 @@ class AppDatabase extends _$AppDatabase {
 
   /// Obtener un equipo específico por su ID
   Future<OrdenesEquipo?> getOrdenEquipoById(int idOrdenEquipo) async {
-    return (select(ordenesEquipos)
-          ..where((oe) => oe.idOrdenEquipo.equals(idOrdenEquipo)))
-        .getSingleOrNull();
+    return (select(
+      ordenesEquipos,
+    )..where((oe) => oe.idOrdenEquipo.equals(idOrdenEquipo))).getSingleOrNull();
   }
 
   /// Limpiar todos los equipos de una orden (para re-sincronizar)
   Future<int> clearEquiposDeOrden(int idOrdenServicio) async {
-    return await (delete(ordenesEquipos)
-          ..where((oe) => oe.idOrdenServicio.equals(idOrdenServicio)))
-        .go();
+    return await (delete(
+      ordenesEquipos,
+    )..where((oe) => oe.idOrdenServicio.equals(idOrdenServicio))).go();
   }
 
   /// ✅ NUEVO: Actualizar estado de un equipo específico
   /// Usado cuando se completan todas las actividades/mediciones del equipo
-  Future<bool> updateEstadoEquipo(int idOrdenEquipo, String nuevoEstado, {
+  Future<bool> updateEstadoEquipo(
+    int idOrdenEquipo,
+    String nuevoEstado, {
     DateTime? fechaInicio,
     DateTime? fechaFin,
   }) async {
     final companion = OrdenesEquiposCompanion(
       estado: Value(nuevoEstado),
-      fechaInicio: fechaInicio != null ? Value(fechaInicio) : const Value.absent(),
+      fechaInicio: fechaInicio != null
+          ? Value(fechaInicio)
+          : const Value.absent(),
       fechaFin: fechaFin != null ? Value(fechaFin) : const Value.absent(),
     );
-    
-    final result = await (update(ordenesEquipos)
-          ..where((oe) => oe.idOrdenEquipo.equals(idOrdenEquipo)))
-        .write(companion);
-    
+
+    final result = await (update(
+      ordenesEquipos,
+    )..where((oe) => oe.idOrdenEquipo.equals(idOrdenEquipo))).write(companion);
+
     return result > 0;
   }
 
