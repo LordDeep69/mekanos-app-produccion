@@ -36,6 +36,7 @@ import {
   CreateEquipoPayload,
   TipoEquipo
 } from '../types';
+import { ConfigParametrosEditor } from './ConfigParametrosEditor';
 
 // 
 // SCHEMAS DE VALIDACIÓN (Zod) - Robustos & Enterprise
