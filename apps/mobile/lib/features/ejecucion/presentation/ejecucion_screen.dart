@@ -46,6 +46,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   String? _numeroOrden;
   bool _esCorrectivo = false;
   String? _razonFallaActual;
+  late TextEditingController _observacionesController;
+  final _observacionesFocusNode = FocusNode();
   int _completadas = 0;
   int _total = 0;
   int _medicionesConValor = 0;
@@ -64,6 +66,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   @override
   void initState() {
     super.initState();
+    _observacionesController = TextEditingController();
     // ✅ FIX 17-DIC-2025: Orden simple = 3 tabs (Checklist + Mediciones + Resumen)
     // Multi-equipo = 2 tabs (Resumen está en NavigacionEquiposScreen)
     _tabController = TabController(length: _esOrdenSimple ? 3 : 2, vsync: this);
@@ -73,6 +76,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _observacionesController.dispose();
+    _observacionesFocusNode.dispose();
     super.dispose();
   }
 
@@ -146,6 +151,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
       _numeroOrden = orden?.numeroOrden ?? 'Sin número';
       _razonFallaActual = orden?.razonFalla;
+      _observacionesController.text = orden?.observacionesTecnico ?? '';
 
       if (orden != null) {
         final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
@@ -2012,6 +2018,22 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     await _actualizarConteoEvidencias();
   }
 
+  /// Guarda las observaciones generales en la BD
+  Future<void> _guardarObservacionesGenerales() async {
+    final db = ref.read(databaseProvider);
+    final texto = _observacionesController.text.trim();
+
+    await (db.update(
+      db.ordenes,
+    )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).write(
+      OrdenesCompanion(
+        observacionesTecnico: Value(texto.isEmpty ? null : texto),
+        updatedAt: Value(DateTime.now()),
+        isDirty: const Value(true),
+      ),
+    );
+  }
+
   /// TAB 3: RESUMEN - Vista general con progreso COMPLETO (Checklist + Mediciones)
   Widget _buildResumenTab() {
     // ✅ FIX: Contador simplificado - razón de falla ya no es actividad
@@ -2128,6 +2150,76 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                     'Pendientes',
                     _total - _completadas,
                     Colors.blue,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ✅ NUEVO: Observaciones Generales (Movido aquí para que el cliente lo vea antes de firmar)
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.notes, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text(
+                        'Observaciones Generales',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _observacionesController,
+                    focusNode: _observacionesFocusNode,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      hintText:
+                          'Ingrese las observaciones generales del servicio...',
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade200),
+                      ),
+                    ),
+                    onChanged: (_) {
+                      // Opcional: Auto-guardar con debounce
+                    },
+                    onEditingComplete: () {
+                      _guardarObservacionesGenerales();
+                      _observacionesFocusNode.unfocus();
+                    },
+                    onTapOutside: (_) {
+                      _guardarObservacionesGenerales();
+                      _observacionesFocusNode.unfocus();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Este campo será visible en el reporte PDF final.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ],
               ),
@@ -2381,7 +2473,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     final horaSalidaController = TextEditingController(
       text: DateFormat('HH:mm').format(now),
     );
-    final observacionesController = TextEditingController();
     final razonFallaController = TextEditingController(
       text: _razonFallaActual ?? '',
     );
@@ -2432,17 +2523,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 ),
                 keyboardType: TextInputType.datetime,
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: observacionesController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Observaciones Generales',
-                  hintText: 'Observaciones del servicio...',
-                  prefixIcon: Icon(Icons.notes),
-                  border: OutlineInputBorder(),
-                ),
-              ),
               if (_esCorrectivo) ...[
                 const SizedBox(height: 12),
                 TextField(
@@ -2473,9 +2553,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               Navigator.of(ctx).pop({
                 'horaEntrada': horaEntradaController.text,
                 'horaSalida': horaSalidaController.text,
-                'observaciones': observacionesController.text.isEmpty
+                'observaciones': _observacionesController.text.isEmpty
                     ? 'Servicio completado satisfactoriamente.'
-                    : observacionesController.text,
+                    : _observacionesController.text,
                 if (_esCorrectivo) 'razonFalla': razonFallaController.text,
               });
             },
