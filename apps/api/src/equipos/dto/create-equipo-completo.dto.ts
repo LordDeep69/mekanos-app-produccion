@@ -759,6 +759,15 @@ export class CreateEquipoCompletoDto {
   @ValidateNested()
   @Type(() => DatosBombaDto)
   datosBomba?: DatosBombaDto;
+
+  /**
+   * ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
+   * Configuración personalizada de unidades y rangos para el equipo.
+   * Si no se proporciona, se usará el catálogo global.
+   */
+  @IsOptional()
+  @IsJSON()
+  config_parametros?: any;
 }
 
 // 

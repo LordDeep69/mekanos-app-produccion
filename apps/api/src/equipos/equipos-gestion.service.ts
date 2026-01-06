@@ -134,6 +134,8 @@ export class EquiposGestionService {
             en_garantia: dto.datosEquipo.en_garantia ?? false,
             fecha_inicio_garantia: dto.datosEquipo.fecha_inicio_garantia ? new Date(dto.datosEquipo.fecha_inicio_garantia) : null,
             fecha_fin_garantia: dto.datosEquipo.fecha_fin_garantia ? new Date(dto.datosEquipo.fecha_fin_garantia) : null,
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Config personalizada
+            config_parametros: dto.config_parametros || {},
             activo: true,
             creado_por: userId,
           },
