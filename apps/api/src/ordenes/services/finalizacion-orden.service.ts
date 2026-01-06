@@ -33,6 +33,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { ConfigParametrosService } from '../../config-parametros/config-parametros.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService, OrdenEmailData } from '../../email/email.service';
 import { PdfService, TipoInforme } from '../../pdf/pdf.service';
