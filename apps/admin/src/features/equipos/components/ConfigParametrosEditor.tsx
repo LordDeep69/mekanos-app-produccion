@@ -115,6 +115,7 @@ const PARAMETROS_GENERADOR = [
     { key: 'presion_aceite', label: 'Presión de Aceite', magnitud: 'presion' },
     { key: 'velocidad_motor', label: 'Velocidad de Motor', magnitud: 'velocidad' },
     { key: 'corriente_generador', label: 'Corriente del Generador', magnitud: 'corriente' },
+    { key: 'carga_bateria', label: 'Carga de Batería', magnitud: 'voltaje' },
 ];
 
 // Parámetros específicos para bombas
@@ -151,6 +152,10 @@ const RANGOS_DEFAULT_GENERADOR: Record<string, Record<string, RangoParametro>> =
     },
     corriente_generador: {
         'A': { min_normal: 0, max_normal: 100, min_critico: 0, max_critico: 120 },
+    },
+    carga_bateria: {
+        'V': { min_normal: 12.5, max_normal: 14.5, min_critico: 11.5, max_critico: 15.0 },
+        'VDC': { min_normal: 12.5, max_normal: 14.5, min_critico: 11.5, max_critico: 15.0 },
     },
 };
 

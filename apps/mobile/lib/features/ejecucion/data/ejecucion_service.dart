@@ -112,8 +112,12 @@ class EjecucionService {
                     .getSingleOrNull();
 
             if (parametro != null) {
-              // ✅ FLEXIBILIZACIÓN PARÁMETROS: Resolver rangos (equipo > catálogo)
+              // ✅ FLEXIBILIZACIÓN PARÁMETROS: Resolver rangos y unidades (equipo > catálogo)
               final rangosCustom = _resolverRangosPersonalizados(
+                configParametrosJson: configEquipoJson,
+                codigoParametro: parametro.codigo,
+              );
+              final unidadCustom = _resolverUnidadPersonalizada(
                 configParametrosJson: configEquipoJson,
                 codigoParametro: parametro.codigo,
               );
@@ -124,7 +128,7 @@ class EjecucionService {
                   idActividadEjecutada: Value(act.idLocal),
                   idParametro: parametro.id,
                   nombreParametro: parametro.nombre,
-                  unidadMedida: parametro.unidad ?? '',
+                  unidadMedida: unidadCustom ?? parametro.unidad ?? '',
                   rangoMinimoNormal: Value(
                     rangosCustom?.minNormal ?? parametro.valorMinimoNormal,
                   ),
@@ -290,8 +294,12 @@ class EjecucionService {
                   .getSingleOrNull();
 
           if (parametro != null) {
-            // ✅ FLEXIBILIZACIÓN PARÁMETROS: Resolver rangos (equipo > catálogo)
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS: Resolver rangos y unidades (equipo > catálogo)
             final rangosCustom = _resolverRangosPersonalizados(
+              configParametrosJson: configEquipoJson,
+              codigoParametro: parametro.codigo,
+            );
+            final unidadCustom = _resolverUnidadPersonalizada(
               configParametrosJson: configEquipoJson,
               codigoParametro: parametro.codigo,
             );
@@ -305,9 +313,9 @@ class EjecucionService {
                 idParametro: parametro.id,
                 // ✅ MULTI-EQUIPOS: FK al equipo específico
                 idOrdenEquipo: Value(idOrdenEquipo),
-                // SNAPSHOT: Usar rangos personalizados si existen, sino catálogo
+                // SNAPSHOT: Usar rangos/unidades personalizados si existen, sino catálogo
                 nombreParametro: parametro.nombre,
-                unidadMedida: parametro.unidad ?? '',
+                unidadMedida: unidadCustom ?? parametro.unidad ?? '',
                 rangoMinimoNormal: Value(
                   rangosCustom?.minNormal ?? parametro.valorMinimoNormal,
                 ),
@@ -459,9 +467,13 @@ class EjecucionService {
                 .getSingleOrNull();
 
         if (parametro != null) {
-          // ✅ FLEXIBILIZACIÓN PARÁMETROS: Obtener config y resolver rangos
+          // ✅ FLEXIBILIZACIÓN PARÁMETROS: Obtener config y resolver rangos/unidades
           final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
           final rangosCustom = _resolverRangosPersonalizados(
+            configParametrosJson: configEquipoJson,
+            codigoParametro: parametro.codigo,
+          );
+          final unidadCustom = _resolverUnidadPersonalizada(
             configParametrosJson: configEquipoJson,
             codigoParametro: parametro.codigo,
           );
@@ -473,7 +485,7 @@ class EjecucionService {
               idParametro: parametro.id,
               idOrdenEquipo: Value(idOrdenEquipo),
               nombreParametro: parametro.nombre,
-              unidadMedida: parametro.unidad ?? '',
+              unidadMedida: unidadCustom ?? parametro.unidad ?? '',
               rangoMinimoNormal: Value(
                 rangosCustom?.minNormal ?? parametro.valorMinimoNormal,
               ),
@@ -618,20 +630,29 @@ class EjecucionService {
 
       // Mapeo de códigos de parámetro del catálogo a claves del config
       // El frontend usa claves como "frecuencia_generador", "voltaje_generador", etc.
+      // IMPORTANTE: Los códigos deben coincidir EXACTAMENTE con los del seed
       final mapaClaves = {
-        'GEN_FRECUENCIA': 'frecuencia_generador',
-        'GEN_VOLTAJE': 'voltaje_generador',
-        'GEN_TEMP_REFRIGERANTE': 'temperatura_refrigerante',
-        'GEN_PRESION_ACEITE': 'presion_aceite',
+        // Generadores - códigos del catálogo (fase-menos-1-ejecutar.ts)
         'GEN_RPM': 'velocidad_motor',
+        'GEN_PRESION_ACEITE': 'presion_aceite',
+        'GEN_TEMP_REFRIGERANTE': 'temperatura_refrigerante',
+        'GEN_VOLTAJE_BATERIA': 'carga_bateria', // Carga de Batería
+        'GEN_HOROMETRO': 'horas_trabajo', // Sin rangos normalmente
+        'GEN_VOLTAJE_SALIDA': 'voltaje_generador', // Voltaje del Generador
+        'GEN_FRECUENCIA': 'frecuencia_generador',
+        'GEN_AMPERAJE': 'corriente_generador',
+        // Alias por si hay variaciones de nombre
+        'GEN_VOLTAJE': 'voltaje_generador',
         'GEN_CORRIENTE': 'corriente_generador',
         // Bombas
+        'BOM_VIBRACION': 'vibracion',
         'BOM_PRESION_DESCARGA': 'presion_descarga',
         'BOM_PRESION_SUCCION': 'presion_succion',
         'BOM_VOLTAJE': 'voltaje_motor',
         'BOM_AMPERAJE': 'corriente_motor',
-        'BOM_VIBRACION': 'vibracion',
         'BOM_TEMPERATURA': 'temperatura_motor',
+        'BOM_CAUDAL': 'caudal',
+        'BOM_RPM': 'velocidad_bomba',
       };
 
       final claveConfig = mapaClaves[codigoParametro.toUpperCase()];
@@ -652,6 +673,56 @@ class EjecucionService {
       );
     } catch (e) {
       debugPrint('⚠️ [CONFIG] Error parseando configParametros: $e');
+      return null;
+    }
+  }
+
+  /// Resuelve la unidad personalizada del equipo para un parámetro
+  /// Retorna la unidad personalizada o null para usar la del catálogo
+  String? _resolverUnidadPersonalizada({
+    required String? configParametrosJson,
+    required String codigoParametro,
+  }) {
+    if (configParametrosJson == null || configParametrosJson.isEmpty) {
+      return null;
+    }
+
+    try {
+      final config = jsonDecode(configParametrosJson) as Map<String, dynamic>;
+      final unidades = config['unidades'] as Map<String, dynamic>?;
+      if (unidades == null) return null;
+
+      // Mapeo de códigos de parámetro a tipo de magnitud
+      final mapaParamAMagnitud = {
+        // Generadores
+        'GEN_TEMP_REFRIGERANTE': 'temperatura',
+        'GEN_PRESION_ACEITE': 'presion',
+        'GEN_VOLTAJE_SALIDA': 'voltaje',
+        'GEN_VOLTAJE_BATERIA': 'voltaje',
+        'GEN_VOLTAJE': 'voltaje',
+        'GEN_FRECUENCIA': 'frecuencia',
+        'GEN_AMPERAJE': 'corriente',
+        'GEN_CORRIENTE': 'corriente',
+        // Bombas
+        'BOM_PRESION_DESCARGA': 'presion',
+        'BOM_PRESION_SUCCION': 'presion',
+        'BOM_VOLTAJE': 'voltaje',
+        'BOM_AMPERAJE': 'corriente',
+        'BOM_TEMPERATURA': 'temperatura',
+      };
+
+      final magnitud = mapaParamAMagnitud[codigoParametro.toUpperCase()];
+      if (magnitud == null) return null;
+
+      final unidadCustom = unidades[magnitud] as String?;
+      if (unidadCustom != null) {
+        debugPrint(
+          '✅ [CONFIG] Usando unidad personalizada para $codigoParametro: $unidadCustom',
+        );
+      }
+      return unidadCustom;
+    } catch (e) {
+      debugPrint('⚠️ [CONFIG] Error parseando unidades: $e');
       return null;
     }
   }
