@@ -151,7 +151,12 @@ export class EmailService implements OnModuleInit {
 
       const result = await this.transporter.sendMail(mailOptions);
       this.logger.log(`✅ Email enviado - ID: ${result.messageId}`);
-      
+      this.logger.log(`   📨 Destinatario: ${options.to}`);
+      this.logger.log(`   📋 Asunto: ${options.subject}`);
+      this.logger.log(`   📎 Adjuntos: ${options.attachments?.length || 0}`);
+      this.logger.log(`   📬 Response: ${result.response || 'N/A'}`);
+      this.logger.log(`   ⚠️ NOTA: Verificar carpeta SPAM si no llega el email`);
+
       return { success: true, messageId: result.messageId };
 
     } catch (error) {
@@ -172,9 +177,9 @@ export class EmailService implements OnModuleInit {
     pdfUrl: string,
     pdfBuffer?: Buffer
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    
+
     const htmlContent = this.buildOrdenCompletadaTemplate(ordenNumero, pdfUrl);
-    
+
     const attachments: EmailAttachment[] = [];
     if (pdfBuffer) {
       attachments.push({
@@ -202,9 +207,9 @@ export class EmailService implements OnModuleInit {
     clienteEmail: string,
     pdfBuffer: Buffer
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    
+
     const htmlContent = this.buildInformeTecnicoTemplate(data);
-    
+
     return this.sendEmail({
       to: clienteEmail,
       subject: `📋 Informe Técnico ${data.ordenNumero} - ${data.tipoMantenimiento} | MEKANOS S.A.S`,
@@ -224,7 +229,7 @@ export class EmailService implements OnModuleInit {
    */
   async sendTestEmail(to: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const htmlContent = this.buildTestEmailTemplate();
-    
+
     return this.sendEmail({
       to,
       subject: '🧪 Email de Prueba - MEKANOS S.A.S',
@@ -528,11 +533,11 @@ export class EmailService implements OnModuleInit {
 
               <div style="background: ${MEKANOS_COLORS.white}; border: 2px dashed ${MEKANOS_COLORS.blueLight}; padding: 20px; margin: 25px 0; border-radius: 8px;">
                 <p style="color: ${MEKANOS_COLORS.blueDark}; margin: 0; font-size: 14px;">
-                  <strong>📅 Fecha:</strong> ${new Date().toLocaleString('es-CO', { 
-                    dateStyle: 'full', 
-                    timeStyle: 'short',
-                    timeZone: 'America/Bogota'
-                  })}
+                  <strong>📅 Fecha:</strong> ${new Date().toLocaleString('es-CO', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: 'America/Bogota'
+    })}
                 </p>
               </div>
 

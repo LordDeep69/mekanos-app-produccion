@@ -551,41 +551,57 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     final completadasSistema = actividades
         .where((a) => a.simbologia != null)
         .length;
+    final esTodoCompletado = completadasSistema == actividades.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header del sistema (sticky)
+        // Header del sistema (Enterprise Style)
         Container(
-          color: Colors.green.shade50,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.blueGrey.shade50,
+            border: Border(
+              bottom: BorderSide(color: Colors.blueGrey.shade100, width: 1),
+              top: BorderSide(color: Colors.blueGrey.shade100, width: 0.5),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
-              Icon(Icons.folder, color: Colors.green.shade700, size: 20),
-              const SizedBox(width: 8),
+              Icon(
+                _getSistemaIcon(sistema),
+                color: Colors.blueGrey.shade700,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  sistema,
+                  sistema.toUpperCase(),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.green.shade700,
-                    fontSize: 14,
+                    color: Colors.blueGrey.shade800,
+                    fontSize: 12,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: completadasSistema == actividades.length
-                      ? Colors.green
-                      : Colors.grey,
+                  color: esTodoCompletado
+                      ? Colors.green.shade600
+                      : Colors.blueGrey.shade200,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '$completadasSistema/${actividades.length}',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -595,6 +611,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         ),
         // Actividades del sistema
         ...actividades.map((act) => _buildActividadItem(act)),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -602,215 +619,295 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   Widget _buildActividadItem(ActividadesEjecutada actividad) {
     final simbologia = actividad.simbologia;
     final estaCompletada = simbologia != null;
+    final Color colorSimbologia = estaCompletada
+        ? _getColorForSimbologia(simbologia)
+        : Colors.blueGrey.shade300;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: estaCompletada
-            ? _getColorForSimbologia(simbologia).withValues(alpha: 0.1)
-            : Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
         border: Border.all(
           color: estaCompletada
-              ? _getColorForSimbologia(simbologia).withValues(alpha: 0.5)
-              : Colors.grey.shade300,
+              ? colorSimbologia.withValues(alpha: 0.3)
+              : Colors.grey.shade200,
+          width: 1,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Descripción de la actividad
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Icono de estado
-                GestureDetector(
-                  onLongPress: _esCorrectivo
-                      ? () => _confirmarEliminarActividad(actividad)
-                      : null,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: estaCompletada
-                          ? _getColorForSimbologia(simbologia)
-                          : Colors.grey.shade200,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: estaCompletada
-                          ? Text(
-                              simbologia,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            )
-                          : Icon(
-                              Icons.pending,
-                              size: 18,
-                              color: Colors.grey.shade400,
-                            ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Indicador lateral de estado de actividad
+              Container(
+                width: 4,
+                color: estaCompletada ? colorSimbologia : Colors.transparent,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        actividad.descripcion,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          color: estaCompletada
-                              ? Colors.grey.shade700
-                              : Colors.black,
-                        ),
+                      // Cabecera de actividad
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onLongPress: _esCorrectivo
+                                ? () => _confirmarEliminarActividad(actividad)
+                                : null,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: estaCompletada
+                                    ? colorSimbologia
+                                    : Colors.blueGrey.shade50,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: estaCompletada
+                                      ? colorSimbologia
+                                      : Colors.blueGrey.shade100,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Center(
+                                child: estaCompletada
+                                    ? Text(
+                                        simbologia,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.radio_button_off_rounded,
+                                        size: 20,
+                                        color: Colors.blueGrey.shade300,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  actividad.descripcion,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: estaCompletada
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: estaCompletada
+                                        ? Colors.blueGrey.shade900
+                                        : Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blueGrey.shade50,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        actividad.tipoActividad,
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: Colors.blueGrey.shade600,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    if (actividad.idParametroMedicion !=
+                                        null) ...[
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        Icons.analytics_outlined,
+                                        size: 14,
+                                        color: Colors.blue.shade600,
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        'REQUIERE MEDIDA',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: Colors.blue.shade700,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      if (actividad.tipoActividad != 'INSPECCION')
+                      const SizedBox(height: 16),
+                      // Acciones (Inputs + Observación + Cámara)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildActividadInputWidget(actividad),
+                          ),
+                          const SizedBox(width: 12),
+                          _buildActionCircleButton(
+                            icon: Icons.notes_rounded,
+                            onTap: () => _mostrarDialogoObservacion(actividad),
+                            isActive:
+                                actividad.observacion != null &&
+                                actividad.observacion!.isNotEmpty,
+                            color: Colors.amber.shade700,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildBotonCamaraEnterprise(actividad),
+                        ],
+                      ),
+                      // Vista previa de observación si existe
+                      if (actividad.observacion != null &&
+                          actividad.observacion!.isNotEmpty &&
+                          !_esActividadEspecial(actividad.descripcion))
                         Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            actividad.tipoActividad,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade500,
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade50.withValues(
+                                alpha: 0.5,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.amber.shade100),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 14,
+                                  color: Colors.amber.shade800,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    actividad.observacion!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.amber.shade900,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      if (actividad.idParametroMedicion != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.speed,
-                                size: 14,
-                                color: Colors.blue.shade400,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Requiere medición',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.blue.shade400,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Fila con input de actividad + botones
-            // RUTA 11 v2: Widget dinámico según tipo de actividad
-            Row(
-              children: [
-                Expanded(child: _buildActividadInputWidget(actividad)),
-                const SizedBox(width: 8),
-                // ✅ BOTÓN OBSERVACIÓN
-                _buildBotonObservacion(actividad),
-                const SizedBox(width: 4),
-                // ✅ BOTÓN CÁMARA - MODELO HÍBRIDO
-                _buildBotonCamara(actividad),
-              ],
-            ),
-            // ✅ Mostrar observación si existe (para actividades normales)
-            if (actividad.observacion != null &&
-                actividad.observacion!.isNotEmpty &&
-                !_esActividadEspecial(actividad.descripcion))
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.notes, size: 14, color: Colors.amber.shade700),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          actividad.observacion!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.amber.shade900,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Botón de cámara para abrir mini-galería de evidencias por actividad
-  Widget _buildBotonCamara(ActividadesEjecutada actividad) {
+  Widget _buildActionCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isActive,
+    required Color color,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: isActive ? color.withValues(alpha: 0.1) : Colors.grey.shade50,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isActive ? color : Colors.grey.shade300,
+            width: 1,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: isActive ? color : Colors.grey.shade400,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBotonCamaraEnterprise(ActividadesEjecutada actividad) {
     final conteoFotos = _conteoEvidenciasPorActividad[actividad.idLocal] ?? 0;
     final tieneEvidencia = conteoFotos > 0;
+    final Color color = Colors.blue.shade700;
 
     return InkWell(
       onTap: () => _abrirMiniGaleria(actividad.idLocal, actividad.descripcion),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        width: 52,
-        height: 48,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: tieneEvidencia ? Colors.blue.shade50 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(8),
+          color: tieneEvidencia
+              ? color.withValues(alpha: 0.1)
+              : Colors.grey.shade50,
+          shape: BoxShape.circle,
           border: Border.all(
-            color: tieneEvidencia ? Colors.blue : Colors.grey.shade300,
-            width: tieneEvidencia ? 2 : 1,
+            color: tieneEvidencia ? color : Colors.grey.shade300,
+            width: 1,
           ),
         ),
         child: Stack(
+          alignment: Alignment.center,
           children: [
-            Center(
-              child: Icon(
-                tieneEvidencia
-                    ? Icons.photo_library
-                    : Icons.camera_alt_outlined,
-                color: tieneEvidencia ? Colors.blue : Colors.grey.shade400,
-                size: 24,
-              ),
+            Icon(
+              tieneEvidencia
+                  ? Icons.photo_library_rounded
+                  : Icons.camera_alt_rounded,
+              size: 20,
+              color: tieneEvidencia ? color : Colors.grey.shade400,
             ),
-            // Badge con número de fotos
             if (tieneEvidencia)
               Positioned(
-                top: 2,
-                right: 2,
+                top: 0,
+                right: 0,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(10),
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
                   ),
                   child: Text(
                     '$conteoFotos',
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: 8,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -822,38 +919,27 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     );
   }
 
-  /// ✅ Botón para agregar/editar observación por actividad
-  Widget _buildBotonObservacion(ActividadesEjecutada actividad) {
-    final tieneObservacion =
-        actividad.observacion != null &&
-        actividad.observacion!.isNotEmpty &&
-        !_esActividadEspecial(actividad.descripcion);
-
-    return InkWell(
-      onTap: () => _mostrarDialogoObservacion(actividad),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 44,
-        height: 48,
-        decoration: BoxDecoration(
-          color: tieneObservacion ? Colors.amber.shade50 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: tieneObservacion ? Colors.amber : Colors.grey.shade300,
-            width: tieneObservacion ? 2 : 1,
-          ),
-        ),
-        child: Center(
-          child: Icon(
-            tieneObservacion ? Icons.speaker_notes : Icons.notes_outlined,
-            color: tieneObservacion
-                ? Colors.amber.shade700
-                : Colors.grey.shade400,
-            size: 20,
-          ),
-        ),
-      ),
-    );
+  IconData _getSistemaIcon(String sistema) {
+    final sistemaLower = sistema.toLowerCase();
+    if (sistemaLower.contains('enfriamiento')) return Icons.ac_unit_rounded;
+    if (sistemaLower.contains('combustible')) {
+      return Icons.local_gas_station_rounded;
+    }
+    if (sistemaLower.contains('lubricacion') ||
+        sistemaLower.contains('lubricación')) {
+      return Icons.oil_barrel_rounded;
+    }
+    if (sistemaLower.contains('electrico') ||
+        sistemaLower.contains('eléctrico')) {
+      return Icons.electrical_services_rounded;
+    }
+    if (sistemaLower.contains('control')) return Icons.settings_remote_rounded;
+    if (sistemaLower.contains('escape')) return Icons.air_rounded;
+    if (sistemaLower.contains('aspiracion') ||
+        sistemaLower.contains('aspiración')) {
+      return Icons.filter_alt_rounded;
+    }
+    return Icons.build_circle_rounded;
   }
 
   /// Determina si una actividad es "especial" (usa la observación para datos)
@@ -1008,25 +1094,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       setState(() {
         _tieneFirmaTecnico = tieneTecnico;
         _tieneFirmaCliente = tieneCliente;
-      });
-    }
-  }
-
-  /// ✅ FIX SCROLL MEDICIONES: Actualiza estado local sin reconstruir ListView
-  /// Similar a _marcarActividad pero para mediciones
-  void _actualizarContadorMediciones() {
-    // Recalcular mediciones con valor basándose en la lista actual en BD
-    // No recargamos toda la lista, solo actualizamos el contador
-    int conValor = 0;
-    for (final med in _mediciones) {
-      if (med.valor != null) {
-        conValor++;
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _medicionesConValor = conValor;
       });
     }
   }
@@ -2485,7 +2552,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         if (resultado.guardadoOffline) {
           _mostrarExitoOffline(resultado);
         } else {
-          _mostrarExitoOnline(resultado);
+          await _mostrarExitoOnline(resultado);
         }
       } else {
         _mostrarError(resultado.mensaje);
@@ -2497,27 +2564,87 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Muestra diálogo de éxito cuando se sincronizó online
-  void _mostrarExitoOnline(SyncUploadResult resultado) {
+  /// ✅ 03-ENE-2026: FIX CRÍTICO - Obtener conteos de BD local como fallback
+  Future<void> _mostrarExitoOnline(SyncUploadResult resultado) async {
     final datosRes = resultado.datos;
 
-    // ✅ 20-DIC-2025: Soportar ambas estructuras de respuesta
-    // Puede venir como datosRes['datos'] (SSE) o datosRes directamente (endpoint tradicional)
-    Map<String, dynamic>? datosInternos;
+    debugPrint('🔍 [RESULTADO] datosRes: $datosRes');
+    debugPrint('🔍 [RESULTADO] datosRes.runtimeType: ${datosRes.runtimeType}');
+
+    int evidenciasCount = 0;
+    int firmasCount = 0;
+    bool pdfGenerado = false;
+    bool emailEnviado = false;
+
+    // Intentar extraer de la respuesta del servidor
     if (datosRes != null) {
-      // Primero intentar 'datos' (estructura SSE y respuesta del servicio)
-      if (datosRes['datos'] is Map<String, dynamic>) {
-        datosInternos = datosRes['datos'] as Map<String, dynamic>;
-      } else {
-        // Fallback: los datos podrían estar directamente en datosRes
-        datosInternos = datosRes;
+      List? evidenciasList;
+      List? firmasList;
+      Map<String, dynamic>? documentoMap;
+      Map<String, dynamic>? emailMap;
+
+      // Buscar en estructura directa primero
+      if (datosRes['evidencias'] is List) {
+        evidenciasList = datosRes['evidencias'] as List;
+      }
+      if (datosRes['firmas'] is List) {
+        firmasList = datosRes['firmas'] as List;
+      }
+      if (datosRes['documento'] is Map) {
+        documentoMap = datosRes['documento'] as Map<String, dynamic>;
+      }
+      if (datosRes['email'] is Map) {
+        emailMap = datosRes['email'] as Map<String, dynamic>;
+      }
+
+      // Si no encontró, buscar en estructura anidada 'datos'
+      if (evidenciasList == null && datosRes['datos'] is Map<String, dynamic>) {
+        final datosAnidados = datosRes['datos'] as Map<String, dynamic>;
+        evidenciasList ??= datosAnidados['evidencias'] as List?;
+        firmasList ??= datosAnidados['firmas'] as List?;
+        documentoMap ??= datosAnidados['documento'] as Map<String, dynamic>?;
+        emailMap ??= datosAnidados['email'] as Map<String, dynamic>?;
+      }
+
+      evidenciasCount = evidenciasList?.length ?? 0;
+      firmasCount = firmasList?.length ?? 0;
+      pdfGenerado = documentoMap != null;
+      emailEnviado = emailMap?['enviado'] == true;
+    }
+
+    // ✅ FALLBACK CRÍTICO: Si no hay datos del servidor, obtener de BD local
+    if (evidenciasCount == 0 && firmasCount == 0) {
+      debugPrint(
+        '⚠️ [RESULTADO] Datos del servidor vacíos, obteniendo de BD local...',
+      );
+      try {
+        final db = ref.read(databaseProvider);
+        final evidenciasLocal = await (db.select(
+          db.evidencias,
+        )..where((e) => e.idOrden.equals(widget.idOrdenLocal))).get();
+        final firmasLocal = await db.getFirmasByOrden(widget.idOrdenLocal);
+        final ordenLocal =
+            await (db.select(db.ordenes)
+                  ..where((o) => o.idLocal.equals(widget.idOrdenLocal)))
+                .getSingleOrNull();
+
+        evidenciasCount = evidenciasLocal.length;
+        firmasCount = firmasLocal.length;
+        pdfGenerado =
+            ordenLocal?.urlPdf != null && ordenLocal!.urlPdf!.isNotEmpty;
+        emailEnviado = true; // Si llegó aquí, el backend procesó exitosamente
+
+        debugPrint(
+          '✅ [RESULTADO FALLBACK] evidencias=$evidenciasCount, firmas=$firmasCount',
+        );
+      } catch (e) {
+        debugPrint('❌ [RESULTADO FALLBACK] Error: $e');
       }
     }
 
-    final evidenciasCount =
-        (datosInternos?['evidencias'] as List?)?.length ?? 0;
-    final firmasCount = (datosInternos?['firmas'] as List?)?.length ?? 0;
-    final pdfGenerado = datosInternos?['documento'] != null;
-    final emailEnviado = datosInternos?['email']?['enviado'] == true;
+    debugPrint(
+      '🔍 [RESULTADO FINAL] evidencias=$evidenciasCount, firmas=$firmasCount, pdf=$pdfGenerado, email=$emailEnviado',
+    );
 
     showDialog(
       context: context,

@@ -87,15 +87,10 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
     };
 
     // --- TRANSACCIÓN ENTERPRISE: Orden + Múltiples Equipos ---
-    const savedOrden = await (this.ordenRepository as any).saveWithEquipos(ordenData, equiposIds);
+    // ✅ OPTIMIZADO 05-ENE-2026: Retornar orden con relaciones LITE directamente
+    // Evita el findById pesado que causaba +10 segundos de latencia
+    const savedOrden = await (this.ordenRepository as any).saveWithEquiposOptimizado(ordenData, equiposIds);
 
-    // Devolver orden con relaciones completas
-    const result = await this.ordenRepository.findById(savedOrden.id_orden_servicio);
-
-    if (!result) {
-      throw new Error('Error crítico: No se pudo recuperar la orden recién creada.');
-    }
-
-    return result;
+    return savedOrden;
   }
 }

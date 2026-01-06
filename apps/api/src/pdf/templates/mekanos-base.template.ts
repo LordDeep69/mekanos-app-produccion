@@ -70,6 +70,12 @@ export interface DatosOrdenPDF {
   firmaTecnico?: string;
   firmaCliente?: string;
 
+  // ✅ FIX 05-ENE-2026: Datos del firmante para mostrar nombre/cargo bajo la firma
+  nombreTecnico?: string;
+  cargoTecnico?: string;
+  nombreCliente?: string;
+  cargoCliente?: string;
+
   // ✅ Campos adicionales para correctivos (opcional)
   diagnostico?: {
     descripcion: string;
@@ -138,22 +144,22 @@ export interface ActividadPDF {
   sistema: string;
   descripcion: string;
   resultado:
-    | 'B'
-    | 'R'
-    | 'M'
-    | 'I'
-    | 'C'
-    | 'LI'
-    | 'A'
-    | 'L'
-    | 'NA'
-    | 'LA'
-    | 'S'
-    | 'NT'
-    | 'BA'
-    | 'F'
-    | 'RN'
-    | 'NF';
+  | 'B'
+  | 'R'
+  | 'M'
+  | 'I'
+  | 'C'
+  | 'LI'
+  | 'A'
+  | 'L'
+  | 'NA'
+  | 'LA'
+  | 'S'
+  | 'NT'
+  | 'BA'
+  | 'F'
+  | 'RN'
+  | 'NF';
   observaciones?: string;
 }
 
@@ -603,12 +609,27 @@ export const baseStyles = `
     object-fit: contain;
   }
   
+  .firma-nombre {
+    font-size: 12px;
+    font-weight: bold;
+    color: ${MEKANOS_COLORS.text};
+    margin-top: 8px;
+  }
+  
+  .firma-cargo {
+    font-size: 10px;
+    color: ${MEKANOS_COLORS.secondary};
+    margin-top: 2px;
+  }
+  
   .firma-label {
-    font-size: 11px;
+    font-size: 9px;
     color: ${MEKANOS_COLORS.primary};
     text-transform: uppercase;
     font-weight: bold;
-    margin-top: 5px;
+    margin-top: 8px;
+    padding-top: 5px;
+    border-top: 1px solid ${MEKANOS_COLORS.border};
   }
   
   .footer {

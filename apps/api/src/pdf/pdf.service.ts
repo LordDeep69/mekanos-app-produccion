@@ -18,14 +18,14 @@
 import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import {
-    DatosCorrectivoOrdenPDF,
-    DatosCotizacionPDF,
-    DatosOrdenPDF,
-    generarCorrectivoOrdenHTML,
-    generarCotizacionHTML,
-    generarTipoABombaHTML,
-    generarTipoAGeneradorHTML,
-    generarTipoBGeneradorHTML,
+  DatosCorrectivoOrdenPDF,
+  DatosCotizacionPDF,
+  DatosOrdenPDF,
+  generarCorrectivoOrdenHTML,
+  generarCotizacionHTML,
+  generarTipoABombaHTML,
+  generarTipoAGeneradorHTML,
+  generarTipoBGeneradorHTML,
 } from './templates';
 
 export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
@@ -94,10 +94,12 @@ export class PdfService implements OnModuleDestroy {
           '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
         );
 
-        // Configurar contenido con timeout extendido para imágenes
+        // 🔧 FIX 02-ENE-2026: Revertir a 'networkidle0' - Las imágenes son URLs de Cloudinary
+        // que necesitan cargarse via HTTP. 'domcontentloaded' NO espera las imágenes,
+        // causando que aparezcan en blanco en el PDF generado.
         await page.setContent(htmlConEncoding, {
           waitUntil: 'networkidle0',
-          timeout: 60000, // 60 segundos para cargar imágenes
+          timeout: 60000, // 60 segundos para permitir carga de imágenes de Cloudinary
         });
 
         // Generar PDF
@@ -221,7 +223,7 @@ export class PdfService implements OnModuleDestroy {
         const caption = typeof e === 'string' ? undefined : e.caption;
         // Extraer tipo del caption si existe (formato "ANTES: descripción" o "DURANTE: descripción")
         const tipoMatch = caption?.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS):/i);
-        const tipo = tipoMatch 
+        const tipo = tipoMatch
           ? (tipoMatch[1].toUpperCase() === 'DESPUÉS' ? 'DESPUES' : tipoMatch[1].toUpperCase()) as 'ANTES' | 'DURANTE' | 'DESPUES'
           : 'DURANTE';
         return {

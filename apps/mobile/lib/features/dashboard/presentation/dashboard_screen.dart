@@ -345,12 +345,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildSeccionTitulo(String titulo) {
-    return Text(
-      titulo,
-      style: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-        color: Colors.grey.shade800,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: Colors.indigo.shade700,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            titulo.toUpperCase(),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueGrey.shade800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -394,7 +411,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  /// v2: Card de métrica con indicador de tendencia
   Widget _buildMetricCardConTendencia({
     required String titulo,
     required String valor,
@@ -403,59 +419,71 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required IconData icono,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
+    return Card(
+      elevation: 1.5,
+      shadowColor: color.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.02),
+          border: Border(top: BorderSide(color: color, width: 3)),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icono, color: color, size: 18),
             ),
-            child: Icon(icono, color: color, size: 18),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            valor,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          Text(
-            titulo,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
-          ),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: mejora ? Colors.green.shade50 : Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              tendencia,
+            const SizedBox(height: 6),
+            Text(
+              valor,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: mejora ? Colors.green.shade700 : Colors.orange.shade700,
+                color: color,
+                letterSpacing: -0.5,
               ),
             ),
-          ),
-        ],
+            Text(
+              titulo.toUpperCase(),
+              style: TextStyle(
+                color: Colors.blueGrey.shade700,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: mejora ? Colors.green.shade50 : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: mejora
+                      ? Colors.green.shade100
+                      : Colors.orange.shade100,
+                ),
+              ),
+              child: Text(
+                tendencia,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: mejora
+                      ? Colors.green.shade700
+                      : Colors.orange.shade700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -466,43 +494,48 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required IconData icono,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
+    return Card(
+      elevation: 1.5,
+      shadowColor: color.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.02),
+          border: Border(top: BorderSide(color: color, width: 3)),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icono, color: color, size: 20),
             ),
-            child: Icon(icono, color: color, size: 20),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            valor,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
+            const SizedBox(height: 8),
+            Text(
+              valor,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+                letterSpacing: -0.5,
+              ),
             ),
-          ),
-          Text(
-            titulo,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          ),
-        ],
+            Text(
+              titulo.toUpperCase(),
+              style: TextStyle(
+                color: Colors.blueGrey.shade700,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -614,7 +647,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icono, color: color, size: 28),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icono, color: color, size: 24),
+        ),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,21 +665,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: color,
+                letterSpacing: -0.5,
               ),
             ),
             Row(
               children: [
                 Text(
-                  titulo,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  titulo.toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.blueGrey.shade700,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-                // v3: Indicador de tap disponible
                 if (tapeable) ...[
                   const SizedBox(width: 4),
                   Icon(
-                    Icons.chevron_right,
+                    Icons.chevron_right_rounded,
                     size: 14,
-                    color: color.withOpacity(0.6),
+                    color: color.withValues(alpha: 0.6),
                   ),
                 ],
               ],
@@ -683,50 +728,51 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required IconData icono,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icono, color: color, size: 20),
-              const SizedBox(width: 6),
-              Text(
-                titulo,
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 13,
+    return Card(
+      elevation: 1.5,
+      shadowColor: color.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.02),
+          border: Border(left: BorderSide(color: color, width: 4)),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icono, color: color, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  titulo.toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.blueGrey.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            valor,
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: color,
+              ],
             ),
-          ),
-          Text(
-            subtitulo,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              valor,
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: color,
+                letterSpacing: -0.5,
+              ),
+            ),
+            Text(
+              subtitulo,
+              style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 11),
+            ),
+          ],
+        ),
       ),
     );
   }

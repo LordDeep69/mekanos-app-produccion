@@ -396,7 +396,11 @@ class SyncService {
           ClientesCompanion(
             id: Value(entry.key),
             nombre: Value(
-              entry.value['nombreCliente'] as String? ?? 'Sin nombre',
+              entry.value['nombreComercial'] as String? ??
+                  entry.value['nombreCompleto'] as String? ??
+                  entry.value['razonSocial'] as String? ??
+                  entry.value['nombreCliente'] as String? ??
+                  'Sin nombre',
             ),
             lastSyncedAt: Value(DateTime.now()),
           ),

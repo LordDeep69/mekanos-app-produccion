@@ -18,8 +18,8 @@ import {
   DatosOrdenPDF,
   EvidenciasPorEquipoPDF,
   generarChecklistMultiEquipo,
-  generarMedicionesMultiEquipo,
   generarLeyendaEquipos,
+  generarMedicionesMultiEquipo,
   MEKANOS_COLORS,
 } from './mekanos-base.template';
 
@@ -48,19 +48,18 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
     ${generarLeyendaEquipos(
-      datos.actividadesPorEquipo?.map((a) => a.equipo),
-      esMultiEquipo,
-    )}
+    datos.actividadesPorEquipo?.map((a) => a.equipo),
+    esMultiEquipo,
+  )}
     
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
     ${generarDatosCliente(datos)}
     
     <!-- LISTA DE ACTIVIDADES DE INSPECCIÓN -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${
-      esMultiEquipo && datos.actividadesPorEquipo
-        ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
-        : `
+    ${esMultiEquipo && datos.actividadesPorEquipo
+      ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
+      : `
           ${generarSeccionActividades('SISTEMA DE ENFRIAMIENTO', actividadesPorSistema['ENFRIAMIENTO'] || [])}
           ${generarSeccionActividades('SISTEMA DE ASPIRACIÓN', actividadesPorSistema['ASPIRACION'] || [])}
           ${generarSeccionActividades('SISTEMA DE COMBUSTIBLE', actividadesPorSistema['COMBUSTIBLE'] || [])}
@@ -81,29 +80,27 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- MEDICIONES (si hay) -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${
-      esMultiEquipo && datos.medicionesPorEquipo
-        ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-        : datos.mediciones.length > 0
-          ? generarMediciones(datos.mediciones)
-          : ''
+    ${esMultiEquipo && datos.medicionesPorEquipo
+      ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+      : datos.mediciones.length > 0
+        ? generarMediciones(datos.mediciones)
+        : ''
     }
   </div>
   
   <div class="page page-break">
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
     <!-- ✅ MULTI-EQUIPOS (16-DIC-2025): Usar evidencias agrupadas por equipo si es multi-equipo -->
-    ${
-      esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-        ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
-        : generarEvidencias(datos.evidencias)
+    ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+      ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
+      : generarEvidencias(datos.evidencias)
     }
     
     <!-- OBSERVACIONES -->
     ${generarObservaciones(datos.observaciones)}
     
     <!-- FIRMAS -->
-    ${generarFirmas(datos.firmaTecnico, datos.firmaCliente)}
+    ${generarFirmas(datos)}
     
     <!-- FOOTER -->
     ${generarFooter()}
@@ -189,8 +186,8 @@ const generarSeccionActividades = (titulo: string, actividades: any[]): string =
       </thead>
       <tbody>
         ${actividades
-          .map(
-            (act) => `
+      .map(
+        (act) => `
           <tr>
             <td>${act.descripcion}</td>
             <td style="text-align: center;">
@@ -199,8 +196,8 @@ const generarSeccionActividades = (titulo: string, actividades: any[]): string =
             <td>${act.observaciones || ''}</td>
           </tr>
         `,
-          )
-          .join('')}
+      )
+      .join('')}
       </tbody>
     </table>
   </div>
@@ -264,8 +261,8 @@ const generarSeccionGeneral = (actividades: any[]): string => `
       </thead>
       <tbody>
         ${actividades
-          .map(
-            (act) => `
+    .map(
+      (act) => `
           <tr>
             <td>${act.descripcion}</td>
             <td style="text-align: center;">
@@ -274,8 +271,8 @@ const generarSeccionGeneral = (actividades: any[]): string => `
             <td>${act.observaciones || ''}</td>
           </tr>
         `,
-          )
-          .join('')}
+    )
+    .join('')}
       </tbody>
     </table>
   </div>
@@ -319,8 +316,8 @@ const generarMediciones = (mediciones: any[]): string => `
       </thead>
       <tbody>
         ${mediciones
-          .map(
-            (med) => `
+    .map(
+      (med) => `
           <tr>
             <td>${med.parametro}</td>
             <td style="text-align: center; font-weight: bold;">${med.valor}</td>
@@ -328,8 +325,8 @@ const generarMediciones = (mediciones: any[]): string => `
             <td style="text-align: center;" class="alerta-${med.nivelAlerta}">${med.nivelAlerta}</td>
           </tr>
         `,
-          )
-          .join('')}
+    )
+    .join('')}
       </tbody>
     </table>
   </div>
@@ -441,15 +438,15 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
         <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
         <div class="evidencias-grid-compacto">
           ${evidenciasTipo
-            .map(
-              (ev, idx) => `
+          .map(
+            (ev, idx) => `
             <div class="evidencia-item-compacto">
               <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
           `,
-            )
-            .join('')}
+          )
+          .join('')}
         </div>
       </div>
     `;
@@ -473,22 +470,25 @@ const generarObservaciones = (observaciones: string): string => `
   </div>
 `;
 
-const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
+// ✅ FIX 05-ENE-2026: Mostrar nombre y cargo del técnico/cliente bajo la firma
+const generarFirmas = (datos: DatosOrdenPDF): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      ${
-        firmaTecnico
-          ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
-          : `<div class="firma-line"></div>`
-      }
+      ${datos.firmaTecnico
+    ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+      <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || ''}</div>
+      <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable'}</div>
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      ${
-        firmaCliente
-          ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
-          : `<div class="firma-line"></div>`
-      }
+      ${datos.firmaCliente
+    ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+      <div class="firma-nombre">${datos.nombreCliente || ''}</div>
+      <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
   </div>

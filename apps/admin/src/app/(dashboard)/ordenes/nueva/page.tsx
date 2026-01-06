@@ -12,8 +12,8 @@
 
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     getCategoriaServicioColor,
     getCategoriaServicioLabel,
@@ -32,14 +32,8 @@ import {
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { cn } from '@/lib/utils';
 import {
-    AlertCircle,
-    ArrowLeft,
-    ArrowRight,
     Building2,
-    Calendar,
     Check,
-    CheckCircle2,
-    ChevronRight,
     ClipboardList,
     Loader2,
     MapPin,
@@ -49,7 +43,6 @@ import {
     Wrench,
     X
 } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -97,7 +90,7 @@ function StepIndicator({ paso, pasoActual, label, icon: Icon }: { paso: Paso; pa
                     paso <= pasoActual ? "bg-blue-600" : "bg-slate-200"
                 )} />
             )}
-            
+
             <div className={cn(
                 'flex items-center justify-center w-10 h-10 rounded-xl border-2 z-10 transition-all duration-500 shadow-sm',
                 completado && 'bg-green-500 border-green-500 text-white scale-90 rotate-[360deg]',
@@ -110,7 +103,7 @@ function StepIndicator({ paso, pasoActual, label, icon: Icon }: { paso: Paso; pa
                     <Icon className={cn("h-5 w-5", activo ? "animate-pulse" : "")} />
                 )}
             </div>
-            
+
             <div className="mt-3 text-center">
                 <span className={cn(
                     'text-[10px] font-bold uppercase tracking-widest transition-colors duration-300',
@@ -364,8 +357,23 @@ function PasoAlcance({
                     </div>
                 </div>
                 <div>
-                    <label className="text-sm font-bold text-slate-700 uppercase mb-3 block">Fecha Programada</label>
-                    <input type="date" value={data.fechaProgramada || ''} onChange={(e) => onChange({ fechaProgramada: e.target.value })} className="w-full p-2 border-2 rounded-xl text-sm outline-none focus:border-blue-500" />
+                    <label className="text-sm font-bold text-slate-700 uppercase mb-3 block">
+                        Fecha Programada <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="date"
+                        value={data.fechaProgramada || ''}
+                        onChange={(e) => onChange({ fechaProgramada: e.target.value })}
+                        min={new Date().toISOString().split('T')[0]}
+                        className={cn(
+                            "w-full p-2 border-2 rounded-xl text-sm outline-none focus:border-blue-500",
+                            !data.fechaProgramada && "border-red-200 bg-red-50"
+                        )}
+                        required
+                    />
+                    {!data.fechaProgramada && (
+                        <p className="text-xs text-red-500 mt-1">La fecha es obligatoria</p>
+                    )}
                 </div>
             </div>
         </div>
@@ -453,7 +461,8 @@ export default function NuevaOrdenPage() {
 
     const canContinue = () => {
         if (paso === 1) return !!data.clienteId && data.equiposSeleccionados.length > 0;
-        if (paso === 2) return !!data.tipoServicioId;
+        // ✅ FIX: Fecha programada es REQUERIDA
+        if (paso === 2) return !!data.tipoServicioId && !!data.fechaProgramada;
         return true;
     };
 
@@ -462,11 +471,14 @@ export default function NuevaOrdenPage() {
         try {
             const result = await crearOrden.mutateAsync({
                 clienteId: data.clienteId!,
+                equipoId: data.equiposSeleccionados[0]?.id_equipo, // Equipo principal (requerido)
                 equiposIds: data.equiposSeleccionados.map(e => e.id_equipo),
                 tipoServicioId: data.tipoServicioId!,
                 sedeClienteId: data.sedeId,
                 prioridad: data.prioridad,
-                fechaProgramada: data.fechaProgramada ? new Date(data.fechaProgramada) : undefined,
+                // ✅ FIX TIMEZONE: Enviar fecha como string YYYY-MM-DD sin conversión a Date
+                // El backend manejará la conversión correctamente
+                fechaProgramada: data.fechaProgramada || undefined,
                 descripcion: data.descripcion,
                 tecnicoId: data.tecnicoId,
             });

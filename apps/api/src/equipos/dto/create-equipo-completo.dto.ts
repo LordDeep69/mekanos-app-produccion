@@ -10,23 +10,24 @@
 
 import { Type } from 'class-transformer';
 import {
-    IsBoolean,
-    IsEnum,
-    IsInt,
-    IsNotEmpty,
-    IsNumber,
-    IsOptional,
-    IsPositive,
-    IsString,
-    Matches,
-    Max,
-    MaxLength,
-    Min,
-    MinLength,
-    ValidateIf,
-    ValidateNested,
-    IsDateString,
-    IsJSON
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsJSON,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested
 } from 'class-validator';
 
 // 
@@ -216,20 +217,34 @@ export class DatosMotorDto {
   @IsInt()
   velocidad_nominal_rpm?: number;
 
-  // Campos Combustión
-  @IsOptional()
+  // ═══════════════════════════════════════════════════════
+  // CAMPOS COMBUSTIÓN (Validados condicionalmente)
+  // ═══════════════════════════════════════════════════════
+  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.COMBUSTION)
+  @IsNotEmpty({ message: 'El tipo de combustible es obligatorio para motores a combustión' })
   @IsEnum(TipoCombustibleEnum)
   tipo_combustible?: TipoCombustibleEnum;
 
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(24)
+  @Min(1, { message: 'Mínimo 1 cilindro' })
+  @Max(24, { message: 'Máximo 24 cilindros' })
   numero_cilindros?: number;
 
   @IsOptional()
   @IsInt()
-  cilindrada_cc?: number;
+  @IsIn([12, 24, 48], { message: 'El voltaje de arranque debe ser 12, 24 o 48 VDC' })
+  voltaje_arranque_vdc?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.COMBUSTION)
+  @IsNotEmpty({ message: 'La capacidad de aceite es obligatoria para motores a combustión' })
+  capacidad_aceite_litros?: number;
+
+  @IsOptional()
+  @IsNumber()
+  capacidad_refrigerante_litros?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -238,10 +253,6 @@ export class DatosMotorDto {
   @IsOptional()
   @IsEnum(TipoArranqueEnum)
   tipo_arranque?: TipoArranqueEnum;
-
-  @IsOptional()
-  @IsInt()
-  voltaje_arranque_vdc?: number;
 
   @IsOptional()
   @IsNumber()
@@ -295,31 +306,29 @@ export class DatosMotorDto {
   amperaje_cargador?: number;
 
   @IsOptional()
-  @IsNumber()
-  capacidad_aceite_litros?: number;
-
-  @IsOptional()
   @IsString()
   @MaxLength(50)
   tipo_aceite?: string;
-
-  @IsOptional()
-  @IsNumber()
-  capacidad_refrigerante_litros?: number;
 
   @IsOptional()
   @IsString()
   @MaxLength(100)
   tipo_refrigerante?: string;
 
-  // Campos Eléctricos
+  // ═══════════════════════════════════════════════════════
+  // CAMPOS ELÉCTRICOS (Validados condicionalmente)
+  // ═══════════════════════════════════════════════════════
   @IsOptional()
   @IsString()
   @MaxLength(30)
+  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.ELECTRICO)
+  @IsNotEmpty({ message: 'El voltaje de operación es obligatorio para motores eléctricos' })
   voltaje_operacion_vac?: string;
 
   @IsOptional()
   @IsEnum(NumeroFasesEnum)
+  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.ELECTRICO)
+  @IsNotEmpty({ message: 'El número de fases es obligatorio para motores eléctricos' })
   numero_fases?: NumeroFasesEnum;
 
   @IsOptional()
@@ -410,10 +419,12 @@ export class DatosGeneradorDto {
 
   @IsOptional()
   @IsInt()
+  @IsIn([1, 3], { message: 'El número de fases debe ser 1 (Monofásico) o 3 (Trifásico)' })
   numero_fases?: number;
 
   @IsOptional()
   @IsInt()
+  @IsIn([50, 60], { message: 'La frecuencia debe ser 50 o 60 Hz' })
   frecuencia_hz?: number;
 
   @IsOptional()
@@ -472,6 +483,8 @@ export class DatosGeneradorDto {
 
   @IsOptional()
   @IsNumber()
+  @ValidateIf(o => o.tiene_tanque_auxiliar === true)
+  @IsNotEmpty({ message: 'La capacidad del tanque auxiliar es obligatoria si se indica que tiene uno' })
   capacidad_tanque_auxiliar_litros?: number;
 
   @IsOptional()
@@ -555,10 +568,14 @@ export class DatosBombaDto {
 
   @IsOptional()
   @IsInt()
+  @Min(1, { message: 'Mínimo 1 bomba' })
   numero_total_bombas_sistema?: number;
 
   @IsOptional()
   @IsInt()
+  @Min(1)
+  @ValidateIf(o => o.numero_total_bombas_sistema !== undefined)
+  @IsNotEmpty({ message: 'La posición es obligatoria si hay un sistema múltiple' })
   numero_bomba_en_sistema?: number;
 
   @IsOptional()
@@ -595,6 +612,8 @@ export class DatosBombaDto {
 
   @IsOptional()
   @IsNumber()
+  @ValidateIf(o => o.tiene_presostato === true)
+  @IsNotEmpty({ message: 'La presión de apagado es obligatoria si usa presostato' })
   presion_apagado_psi?: number;
 
   @IsOptional()

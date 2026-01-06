@@ -102,7 +102,7 @@ export interface OrdenesResponse {
     };
 }
 
-// Parámetros de consulta
+// Parámetros de consulta - ENTERPRISE
 export interface OrdenesQueryParams {
     page?: number;
     limit?: number;
@@ -111,6 +111,12 @@ export interface OrdenesQueryParams {
     idTecnico?: number;
     estado?: string;
     prioridad?: string;
+    // ENTERPRISE: Nuevos parámetros de ordenamiento y filtrado
+    sortBy?: 'fecha_creacion' | 'fecha_programada' | 'fecha_modificacion' | 'numero_orden' | 'prioridad';
+    sortOrder?: 'asc' | 'desc';
+    tipoServicioId?: number;
+    fechaDesde?: string;  // ISO date string
+    fechaHasta?: string;  // ISO date string
 }
 
 // DTO para crear orden - MULTI-EQUIPOS

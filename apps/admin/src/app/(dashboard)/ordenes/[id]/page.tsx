@@ -36,6 +36,7 @@ import {
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { cn } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
+import { useQuery } from '@tanstack/react-query';
 import {
     AlertCircle,
     ArrowLeft,
@@ -59,6 +60,7 @@ import {
     Wrench,
     XCircle
 } from 'lucide-react';
+import { getSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -201,9 +203,13 @@ function ActionButton({
 function formatDisplayDate(dateStr?: string) {
     if (!dateStr) return 'Sin programar';
     try {
-        // Si ya incluye la hora o zona horaria, no añadir T12:00:00
-        const finalDateStr = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
-        return new Date(finalDateStr).toLocaleDateString('es-CO', {
+        // ✅ FIX TIMEZONE: Extraer solo la parte de fecha (YYYY-MM-DD) y crear fecha local
+        // Evita problemas de timezone cuando el string viene como ISO con UTC
+        const datePart = dateStr.split('T')[0]; // "2026-01-05T00:00:00.000Z" → "2026-01-05"
+        const [year, month, day] = datePart.split('-').map(Number);
+        // Crear fecha local (sin conversión UTC)
+        const localDate = new Date(year, month - 1, day);
+        return localDate.toLocaleDateString('es-CO', {
             weekday: 'long',
             day: '2-digit',
             month: 'long',
@@ -221,8 +227,49 @@ function TabGeneral({ orden }: { orden: Orden }) {
         ? new Date(orden.fecha_creacion).toLocaleString('es-CO')
         : '-';
 
+    const fechaFinalizacion = orden.fecha_fin_real
+        ? new Date(orden.fecha_fin_real).toLocaleString('es-CO')
+        : null;
+
+    const horaInicio = orden.fecha_inicio_real
+        ? new Date(orden.fecha_inicio_real).toLocaleString('es-CO')
+        : null;
+
+    // ✅ FIX: Solo mostrar banner si tiene fecha_fin_real (servicio realmente finalizado)
+    // No mostrar para órdenes recién creadas o estados administrativos
+    const servicioFinalizado = !!orden.fecha_fin_real;
+
     return (
         <div className="space-y-6">
+            {/* Banner de Orden Completada - Solo si tiene fecha_fin_real */}
+            {servicioFinalizado && (
+                <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-lg">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                            <CheckCircle2 className="h-8 w-8" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-xl font-bold">Servicio Finalizado</h3>
+                            <div className="text-green-100 text-sm space-y-0.5">
+                                {horaInicio && <p>🕐 Inicio: {horaInicio}</p>}
+                                <p>✅ Fin: {fechaFinalizacion}</p>
+                            </div>
+                        </div>
+                        {orden.informes?.[0]?.url_pdf && (
+                            <a
+                                href={orden.informes[0].url_pdf}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-4 py-2 bg-white text-green-700 rounded-xl font-bold text-sm hover:bg-green-50 transition-all shadow-lg"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Ver Informe PDF
+                            </a>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Grid de información */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <InfoCard
@@ -731,19 +778,38 @@ function TabDocumentos({ orden }: { orden: Orden }) {
     const { data: evidenciasData, isLoading: isLoadingEv } = useEvidenciasOrden(orden.id_orden_servicio);
     const { data: firmasData, isLoading: isLoadingFi } = useFirmasOrden(orden.id_orden_servicio);
 
+    // ✅ FIX 05-ENE-2026: Obtener URL del PDF desde documentos_generados
+    const { data: pdfData } = useQuery({
+        queryKey: ['orden-pdf-url', orden.id_orden_servicio],
+        queryFn: async () => {
+            const session = await getSession();
+            const token = (session as any)?.accessToken;
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ordenes/${orden.id_orden_servicio}/pdf-url`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            return res.json();
+        },
+        enabled: orden.estados_orden?.codigo_estado === 'COMPLETADA' || orden.estados_orden?.codigo_estado === 'APROBADA',
+    });
+    const urlPdf = pdfData?.data?.url || null;
+
     const evidencias = evidenciasData?.data || [];
     const firmas = firmasData?.data || [];
 
     const firmaTecnico = firmas.find((f: any) => f.tipo_firma === 'TECNICO');
     const firmaCliente = firmas.find((f: any) => f.tipo_firma === 'CLIENTE');
 
-    // Agrupar evidencias por equipo (para multi-equipos)
-    const evidenciasPorEquipo = evidencias.reduce((acc: any, ev: any) => {
-        const key = ev.id_orden_equipo || 'GENERAL';
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(ev);
+    // ✅ MEJORADO: Agrupar evidencias por tipo (ANTES/DURANTE/DESPUÉS) y luego por descripción
+    const tiposEvidencia = ['ANTES', 'DURANTE', 'DESPUES'] as const;
+    const evidenciasPorTipo = tiposEvidencia.reduce((acc: any, tipo) => {
+        acc[tipo] = evidencias.filter((ev: any) => ev.tipo_evidencia === tipo);
         return acc;
-    }, {});
+    }, {} as Record<string, any[]>);
+
+    // Agrupar evidencias sin tipo conocido
+    const otrasEvidencias = evidencias.filter((ev: any) =>
+        !tiposEvidencia.includes(ev.tipo_evidencia)
+    );
 
     return (
         <div className="space-y-6">
@@ -762,7 +828,9 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                         ) : firmaTecnico ? (
                             <div className="bg-white p-2 rounded-lg border border-gray-200 w-full">
                                 <img
-                                    src={firmaTecnico.url_firma}
+                                    src={firmaTecnico.firma_base64?.startsWith('data:')
+                                        ? firmaTecnico.firma_base64
+                                        : `data:image/png;base64,${firmaTecnico.firma_base64}`}
                                     alt="Firma Técnico"
                                     className="h-32 object-contain mx-auto"
                                 />
@@ -787,7 +855,9 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                         ) : firmaCliente ? (
                             <div className="bg-white p-2 rounded-lg border border-gray-200 w-full">
                                 <img
-                                    src={firmaCliente.url_firma}
+                                    src={firmaCliente.firma_base64?.startsWith('data:')
+                                        ? firmaCliente.firma_base64
+                                        : `data:image/png;base64,${firmaCliente.firma_base64}`}
                                     alt="Firma Cliente"
                                     className="h-32 object-contain mx-auto"
                                 />
@@ -830,38 +900,48 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                             <p className="text-sm">Las fotos se capturan desde la app móvil durante el servicio</p>
                         </div>
                     ) : (
-                        <div className="space-y-8">
-                            {Object.entries(evidenciasPorEquipo).map(([idEquipo, fotos]: [string, any]) => {
-                                const equipo = orden.ordenes_equipos?.find(oe => oe.id_orden_equipo === Number(idEquipo))?.equipo;
+                        <div className="space-y-6">
+                            {/* Secciones por tipo de evidencia */}
+                            {(['ANTES', 'DURANTE', 'DESPUES'] as const).map((tipo) => {
+                                const fotos = evidenciasPorTipo[tipo] || [];
+                                if (fotos.length === 0) return null;
+
+                                const colores = {
+                                    ANTES: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-500', text: 'text-amber-700' },
+                                    DURANTE: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-500', text: 'text-blue-700' },
+                                    DESPUES: { bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-500', text: 'text-green-700' },
+                                };
+                                const color = colores[tipo];
+                                const labels = { ANTES: 'Antes del Servicio', DURANTE: 'Durante el Servicio', DESPUES: 'Después del Servicio' };
+
                                 return (
-                                    <div key={idEquipo} className="space-y-4">
-                                        {idEquipo !== 'GENERAL' && (
-                                            <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                                                <Wrench className="h-4 w-4 text-blue-500" />
-                                                <h5 className="text-sm font-black text-gray-700 uppercase">
-                                                    Equipo: {equipo?.codigo_equipo} - {equipo?.nombre_equipo}
-                                                </h5>
-                                            </div>
-                                        )}
-                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    <div key={tipo} className={`${color.bg} ${color.border} border rounded-xl p-4`}>
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <span className={`${color.badge} text-white text-xs font-bold px-2 py-1 rounded-full`}>
+                                                {labels[tipo]}
+                                            </span>
+                                            <span className={`text-xs ${color.text} font-medium`}>
+                                                {fotos.length} foto{fotos.length !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                                             {fotos.map((foto: any) => (
                                                 <div
                                                     key={foto.id_evidencia}
-                                                    className="group relative bg-gray-100 rounded-xl overflow-hidden border border-gray-200 hover:ring-2 hover:ring-blue-500 transition-all cursor-zoom-in"
+                                                    className="group relative bg-white rounded-lg overflow-hidden border border-gray-200 hover:ring-2 hover:ring-blue-500 transition-all cursor-zoom-in shadow-sm"
                                                 >
                                                     <img
-                                                        src={foto.url_archivo}
+                                                        src={foto.ruta_archivo}
                                                         alt={foto.descripcion || 'Evidencia'}
-                                                        className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
+                                                        className="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300"
+                                                        onError={(e) => {
+                                                            (e.target as HTMLImageElement).src = '/placeholder-image.png';
+                                                        }}
                                                     />
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
-                                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{foto.tipo_evidencia}</span>
-                                                        <p className="text-xs text-white font-medium line-clamp-2">{foto.descripcion || 'Sin descripción'}</p>
-                                                    </div>
-                                                    <div className="absolute top-2 right-2">
-                                                        <span className="bg-black/50 backdrop-blur-md text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                                                            {foto.tipo_evidencia}
-                                                        </span>
+                                                    <div className="p-2 bg-white">
+                                                        <p className="text-xs text-gray-700 font-medium line-clamp-2">
+                                                            {foto.descripcion || 'Sin descripción'}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             ))}
@@ -869,6 +949,42 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                                     </div>
                                 );
                             })}
+
+                            {/* Otras evidencias sin categoría */}
+                            {otrasEvidencias.length > 0 && (
+                                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <span className="bg-gray-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                                            Otras Evidencias
+                                        </span>
+                                        <span className="text-xs text-gray-600 font-medium">
+                                            {otrasEvidencias.length} foto{otrasEvidencias.length !== 1 ? 's' : ''}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                        {otrasEvidencias.map((foto: any) => (
+                                            <div
+                                                key={foto.id_evidencia}
+                                                className="group relative bg-white rounded-lg overflow-hidden border border-gray-200 hover:ring-2 hover:ring-blue-500 transition-all cursor-zoom-in shadow-sm"
+                                            >
+                                                <img
+                                                    src={foto.ruta_archivo}
+                                                    alt={foto.descripcion || 'Evidencia'}
+                                                    className="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).src = '/placeholder-image.png';
+                                                    }}
+                                                />
+                                                <div className="p-2 bg-white">
+                                                    <p className="text-xs text-gray-700 font-medium line-clamp-2">
+                                                        {foto.descripcion || foto.tipo_evidencia || 'Sin descripción'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -890,16 +1006,16 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                     </div>
                     {orden.estados_orden?.codigo_estado === 'COMPLETADA' || orden.estados_orden?.codigo_estado === 'APROBADA' ? (
                         <a
-                            href={orden.informes?.[0]?.url_pdf || '#'}
+                            href={urlPdf || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                             className={cn(
                                 "px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center gap-2",
-                                !orden.informes?.[0]?.url_pdf && "opacity-50 cursor-not-allowed pointer-events-none"
+                                !urlPdf && "opacity-50 cursor-not-allowed pointer-events-none"
                             )}
                         >
                             <FileText className="h-4 w-4" />
-                            {orden.informes?.[0]?.url_pdf ? 'Descargar PDF' : 'PDF no disponible'}
+                            {urlPdf ? 'Descargar PDF' : 'PDF no disponible'}
                         </a>
                     ) : (
                         <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">No generado aún</span>

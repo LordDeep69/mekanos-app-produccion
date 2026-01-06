@@ -196,110 +196,126 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   Widget _buildOrderHeader() {
     if (_detalle == null) return const SizedBox.shrink();
 
-    return Container(
+    final Color estadoColor = _getEstadoColor(_detalle!.codigoEstado);
+
+    return Card(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue.shade600, Colors.blue.shade800],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+      elevation: 2,
+      shadowColor: estadoColor.withValues(alpha: 0.3),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [estadoColor, estadoColor.withValues(alpha: 0.8)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Número de orden y estado
-          Row(
-            children: [
-              // Número de orden con Flexible para manejar textos largos
-              Expanded(
-                child: Text(
-                  _detalle!.numeroOrden,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _detalle!.numeroOrden,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          _detalle!.codigoEstado.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Badge de estado
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: _getEstadoColor(_detalle!.codigoEstado),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  _detalle!.codigoEstado,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                  const SizedBox(height: 20),
+                  _buildHeaderInfoRow(
+                    Icons.business_rounded,
+                    'CLIENTE',
+                    _detalle!.nombreCliente,
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  _buildHeaderInfoRow(
+                    Icons.settings_suggest_rounded,
+                    'EQUIPO',
+                    _detalle!.equipoDisplay,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildHeaderInfoRow(
+                    Icons.engineering_rounded,
+                    'SERVICIO',
+                    _detalle!.nombreTipoServicio,
+                  ),
+                ],
               ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-          const Divider(color: Colors.white24),
-          const SizedBox(height: 8),
-
-          // Cliente
-          _buildInfoRow(Icons.business, 'Cliente', _detalle!.nombreCliente),
-          const SizedBox(height: 8),
-
-          // Equipo
-          _buildInfoRow(
-            Icons.precision_manufacturing,
-            'Equipo',
-            _detalle!.equipoDisplay,
-          ),
-          const SizedBox(height: 8),
-
-          // Tipo de Servicio
-          _buildInfoRow(Icons.build, 'Servicio', _detalle!.nombreTipoServicio),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildHeaderInfoRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, color: Colors.white70, size: 20),
-        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: Colors.white, size: 18),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
               ),
               Text(
                 value,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -347,76 +363,100 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
       pendientes = totalItems;
     }
 
-    return Container(
+    return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: esOrdenHistorica ? Colors.green.shade50 : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: esOrdenHistorica
-            ? Border.all(color: Colors.green.shade200, width: 1)
-            : null,
-      ),
-      child: Column(
-        children: [
-          // ✅ FIX: Indicador de orden histórica
-          if (esOrdenHistorica)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.history, size: 16, color: Colors.green.shade700),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Orden Completada - Datos del Historial',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.green.shade700,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+      elevation: 1.5,
+      shadowColor: esOrdenHistorica
+          ? Colors.green.withValues(alpha: 0.2)
+          : Colors.grey.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          color: esOrdenHistorica
+              ? Colors.green.shade50.withValues(alpha: 0.3)
+              : Colors.grey.shade50,
+          border: Border(
+            left: BorderSide(
+              color: esOrdenHistorica ? Colors.green : Colors.blueGrey.shade300,
+              width: 4,
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatItem(
-                Icons.checklist,
-                '$totalItems',
-                'Actividades',
-                Colors.blue,
-              ),
-              _buildStatItem(
-                esOrdenHistorica ? Icons.speed : Icons.category,
-                esOrdenHistorica
-                    ? '${_detalle!.totalMedicionesSincronizadas}'
-                    : '${grupos.length}',
-                esOrdenHistorica ? 'Mediciones' : 'Sistemas',
-                Colors.orange,
-              ),
-              _buildStatItem(
-                esOrdenHistorica ? Icons.photo_camera : Icons.check_circle,
-                esOrdenHistorica
-                    ? '${_detalle!.totalEvidenciasSincronizadas}'
-                    : '$completados',
-                esOrdenHistorica ? 'Fotos' : 'Completadas',
-                Colors.green,
-              ),
-              _buildStatItem(
-                esOrdenHistorica ? Icons.draw : Icons.pending_actions,
-                esOrdenHistorica
-                    ? '${_detalle!.totalFirmasSincronizadas}'
-                    : '$pendientes',
-                esOrdenHistorica ? 'Firmas' : 'Pendientes',
-                esOrdenHistorica
-                    ? Colors.purple
-                    : (pendientes == 0 ? Colors.green : Colors.orange),
-              ),
-            ],
           ),
-        ],
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            if (esOrdenHistorica)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.verified_rounded,
+                      size: 16,
+                      color: Colors.green.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'RESUMEN DE FINALIZACIÓN',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem(
+                  Icons.checklist_rtl_rounded,
+                  '$totalItems',
+                  'TAREAS',
+                  Colors.blue.shade700,
+                ),
+                _buildStatItem(
+                  esOrdenHistorica
+                      ? Icons.analytics_rounded
+                      : Icons.account_tree_rounded,
+                  esOrdenHistorica
+                      ? '${_detalle!.totalMedicionesSincronizadas}'
+                      : '${grupos.length}',
+                  esOrdenHistorica ? 'MEDIDAS' : 'SISTEMAS',
+                  Colors.orange.shade800,
+                ),
+                _buildStatItem(
+                  esOrdenHistorica
+                      ? Icons.camera_alt_rounded
+                      : Icons.task_alt_rounded,
+                  esOrdenHistorica
+                      ? '${_detalle!.totalEvidenciasSincronizadas}'
+                      : '$completados',
+                  esOrdenHistorica ? 'FOTOS' : 'HECHAS',
+                  Colors.green.shade700,
+                ),
+                _buildStatItem(
+                  esOrdenHistorica
+                      ? Icons.history_edu_rounded
+                      : Icons.pending_actions_rounded,
+                  esOrdenHistorica
+                      ? '${_detalle!.totalFirmasSincronizadas}'
+                      : '$pendientes',
+                  esOrdenHistorica ? 'FIRMAS' : 'RESTAN',
+                  esOrdenHistorica
+                      ? Colors.purple.shade700
+                      : (pendientes == 0
+                            ? Colors.green.shade700
+                            : Colors.orange.shade800),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -429,19 +469,32 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   ) {
     return Column(
       children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        const SizedBox(height: 8),
         Text(
           value,
           style: TextStyle(
-            fontSize: 24,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
             color: color,
+            letterSpacing: -0.5,
           ),
         ),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            color: Colors.blueGrey.shade700,
+            letterSpacing: 0.5,
+          ),
         ),
       ],
     );
@@ -540,58 +593,91 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   }
 
   Widget _buildActividadTile(dynamic actividad, bool isLast) {
+    final Color tipoColor = _getTipoActividadColor(actividad.tipoActividad);
+
     return Container(
       margin: EdgeInsets.fromLTRB(16, 0, 16, isLast ? 16 : 0),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
-          left: BorderSide(
-            color: _getTipoActividadColor(actividad.tipoActividad),
-            width: 4,
-          ),
+          left: BorderSide(color: tipoColor, width: 4),
           bottom: isLast
               ? BorderSide.none
-              : BorderSide(color: Colors.grey.shade200),
+              : BorderSide(color: Colors.grey.shade100),
         ),
       ),
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: Icon(
-          Icons.check_box_outline_blank,
-          color: Colors.grey.shade400,
-          size: 28,
+          actividad.tipoActividad == 'MEDICION'
+              ? Icons.analytics_outlined
+              : Icons.check_box_outline_blank_rounded,
+          color: Colors.blueGrey.shade200,
+          size: 24,
         ),
         title: Text(
           actividad.descripcion,
-          style: const TextStyle(fontSize: 14),
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.blueGrey.shade900,
+            fontWeight: FontWeight.w500,
+          ),
         ),
-        subtitle: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: _getTipoActividadColor(
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: tipoColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: tipoColor.withValues(alpha: 0.2)),
+                ),
+                child: Text(
                   actividad.tipoActividad,
-                ).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                actividad.tipoActividad,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: _getTipoActividadColor(actividad.tipoActividad),
-                  fontWeight: FontWeight.bold,
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: tipoColor,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-            ),
-            if (actividad.esObligatoria) ...[
-              const SizedBox(width: 8),
-              const Icon(Icons.star, size: 12, color: Colors.amber),
+              if (actividad.esObligatoria) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.star_rounded,
+                        size: 10,
+                        color: Colors.amber.shade800,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'OBLIGATORIA',
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-        trailing: actividad.tipoActividad == 'MEDICION'
-            ? Icon(Icons.speed, color: Colors.purple.shade400)
-            : null,
         dense: true,
       ),
     );

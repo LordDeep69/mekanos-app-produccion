@@ -419,6 +419,27 @@ export class OrdenesController {
     };
   }
 
+  /**
+   * GET /api/ordenes/:id/servicios
+   * Obtener detalles de servicios comerciales de una orden
+   */
+  @Get(':id/servicios')
+  @UseGuards(JwtAuthGuard)
+  async getServicios(@Param('id', ParseIntPipe) id: number) {
+    const servicios = await this.prisma.detalle_servicios_orden.findMany({
+      where: { id_orden_servicio: id },
+      include: {
+        catalogo_servicios: true,
+      },
+      orderBy: { fecha_registro: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: servicios,
+    };
+  }
+
   @Get(':id/evidencias')
   @UseGuards(JwtAuthGuard)
   async getEvidencias(@Param('id', ParseIntPipe) id: number) {
@@ -436,49 +457,119 @@ export class OrdenesController {
   @Get(':id/firmas')
   @UseGuards(JwtAuthGuard)
   async getFirmas(@Param('id', ParseIntPipe) id: number) {
-    // 1. Obtener la orden para ver la firma del cliente vinculada
-    const orden = await this.prisma.ordenes_servicio.findUnique({
-      where: { id_orden_servicio: id },
-      select: { id_firma_cliente: true, id_tecnico_asignado: true },
-    });
+    // ✅ FIX 05-ENE-2026: Obtener firmas ESPECÍFICAS de esta orden
+    // Antes: Buscaba "la última firma del técnico" mezclando firmas entre órdenes
+    // Ahora: Usa id_firma_tecnico e id_firma_cliente vinculados a cada orden
 
-    if (!orden) {
+    // Usar $queryRaw para acceder a id_firma_tecnico (campo nuevo no en Prisma Client aún)
+    const ordenData = await this.prisma.$queryRaw<any[]>`
+      SELECT id_firma_cliente, id_firma_tecnico, nombre_quien_recibe, cargo_quien_recibe 
+      FROM ordenes_servicio WHERE id_orden_servicio = ${id}
+    `;
+
+    if (!ordenData || ordenData.length === 0) {
       throw new NotFoundException('Orden no encontrada');
     }
+    const orden = ordenData[0];
 
-    const idsFirmas = [];
+    // Recolectar IDs de firmas vinculadas a ESTA orden específica
+    const idsFirmas: number[] = [];
+    if (orden.id_firma_tecnico) idsFirmas.push(orden.id_firma_tecnico);
     if (orden.id_firma_cliente) idsFirmas.push(orden.id_firma_cliente);
 
-    // 2. Buscar firmas vinculadas (incluyendo la del técnico si existe)
-    // El técnico firma cada vez que finaliza, buscamos la última firma de ese técnico
-    const todasLasFirmas = await this.prisma.firmas_digitales.findMany({
-      where: {
-        OR: [
-          { id_firma_digital: { in: idsFirmas } },
-          {
-            AND: [
-              { id_persona: { not: 0 } }, // Persona real
-              { tipo_firma: 'TECNICO' },
-              {
-                persona: {
-                  empleados: {
-                    id_empleado: orden.id_tecnico_asignado || -1
-                  }
-                }
-              }
-            ]
+    let firmasOrden: any[] = [];
+
+    if (idsFirmas.length > 0) {
+      // ✅ Órdenes NUEVAS: Usar FKs vinculadas
+      firmasOrden = await this.prisma.firmas_digitales.findMany({
+        where: { id_firma_digital: { in: idsFirmas } },
+        include: { persona: true },
+      });
+    } else {
+      // ✅ FALLBACK para órdenes ANTIGUAS (sin FK vinculada)
+      // Buscar firmas por id_persona del técnico asignado + última firma del cliente
+      const ordenCompleta = await this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: id },
+        select: {
+          id_tecnico_asignado: true,
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+            select: { id_persona: true }
           }
-        ]
-      },
-      include: {
-        persona: true
-      },
-      orderBy: { fecha_registro: 'desc' }
-    });
+        },
+      });
+
+      const idPersonaTecnico = ordenCompleta?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_persona;
+
+      if (idPersonaTecnico) {
+        // Buscar última firma del técnico
+        const firmaTecnico = await this.prisma.firmas_digitales.findFirst({
+          where: { id_persona: idPersonaTecnico, tipo_firma: 'TECNICO' },
+          orderBy: { fecha_registro: 'desc' },
+          include: { persona: true },
+        });
+        if (firmaTecnico) firmasOrden.push(firmaTecnico);
+      }
+
+      // Buscar firma del cliente (si hay id_firma_cliente aunque sea null el técnico)
+      if (orden.id_firma_cliente) {
+        const firmaCliente = await this.prisma.firmas_digitales.findUnique({
+          where: { id_firma_digital: orden.id_firma_cliente },
+          include: { persona: true },
+        });
+        if (firmaCliente) firmasOrden.push(firmaCliente);
+      }
+    }
+
+    // Mapear para incluir nombre_firmante desde persona
+    const firmasConNombre = firmasOrden.map(f => ({
+      ...f,
+      nombre_firmante: f.persona
+        ? `${(f.persona as any).primer_nombre || (f.persona as any).nombres || ''} ${(f.persona as any).primer_apellido || (f.persona as any).apellidos || ''}`.trim()
+        : (f.tipo_firma === 'CLIENTE' ? orden.nombre_quien_recibe : 'Sin nombre'),
+      cargo_firmante: f.tipo_firma === 'TECNICO'
+        ? 'Técnico Responsable'
+        : (orden.cargo_quien_recibe || 'Cliente / Autorizador'),
+    }));
 
     return {
       success: true,
-      data: todasLasFirmas,
+      data: firmasConNombre,
+    };
+  }
+
+  /**
+   * GET /api/ordenes/:id/pdf-url
+   * Obtiene la URL del PDF del informe de servicio (sin generar)
+   */
+  @Get(':id/pdf-url')
+  @UseGuards(JwtAuthGuard)
+  async getPdfUrl(@Param('id', ParseIntPipe) id: number) {
+    console.log(`[PDF-URL] Buscando URL del PDF para orden id=${id}`);
+
+    // Buscar documento PDF directamente por id_referencia (= id_orden_servicio)
+    const documento = await this.prisma.documentos_generados.findFirst({
+      where: {
+        id_referencia: id,
+        tipo_documento: 'INFORME_SERVICIO',
+      },
+      orderBy: { fecha_generacion: 'desc' },
+      select: {
+        id_documento: true,
+        ruta_archivo: true,
+        fecha_generacion: true,
+        numero_documento: true,
+      },
+    });
+
+    console.log(`[PDF] Resultado para orden ${id}:`, documento ? documento.ruta_archivo : 'NO ENCONTRADO');
+
+    return {
+      success: true,
+      data: documento ? {
+        url: documento.ruta_archivo,
+        fecha: documento.fecha_generacion,
+        numero: documento.numero_documento,
+      } : null,
     };
   }
 
@@ -512,7 +603,9 @@ export class OrdenesController {
       dto.id_sede_cliente,
       dto.descripcion_inicial,
       dto.prioridad,
-      dto.fecha_programada ? new Date(dto.fecha_programada) : undefined,
+      // ✅ FIX TIMEZONE: Agregar T12:00:00 para evitar offset de día
+      // "2026-01-05" → "2026-01-05T12:00:00" (mediodía evita problemas de timezone)
+      dto.fecha_programada ? new Date(`${dto.fecha_programada}T12:00:00`) : undefined,
       tecnicoId,
       userId
     );
@@ -530,7 +623,9 @@ export class OrdenesController {
 
   /**
    * GET /api/ordenes
-   * Lista órdenes con paginación y filtros
+   * Lista órdenes con paginación, filtros y ordenamiento
+   * 
+   * ENTERPRISE: Soporta sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta
    */
   @Get()
   async findAll(
@@ -541,6 +636,11 @@ export class OrdenesController {
     @Query('idTecnico') idTecnico?: string,
     @Query('estado') estado?: string,
     @Query('prioridad') prioridad?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+    @Query('tipoServicioId') tipoServicioId?: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
   ) {
     const query = new GetOrdenesQuery(
       page ? parseInt(page, 10) : 1,
@@ -550,6 +650,11 @@ export class OrdenesController {
       idTecnico ? parseInt(idTecnico, 10) : undefined,
       estado,
       prioridad,
+      sortBy || 'fecha_creacion',
+      sortOrder || 'desc',
+      tipoServicioId ? parseInt(tipoServicioId, 10) : undefined,
+      fechaDesde,
+      fechaHasta,
     );
 
     const result = await this.queryBus.execute(query);

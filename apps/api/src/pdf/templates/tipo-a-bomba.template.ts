@@ -18,8 +18,8 @@ import {
   DatosOrdenPDF,
   EvidenciasPorEquipoPDF,
   generarChecklistMultiEquipo,
-  generarMedicionesMultiEquipo,
   generarLeyendaEquipos,
+  generarMedicionesMultiEquipo,
   MEKANOS_COLORS,
 } from './mekanos-base.template';
 
@@ -87,27 +87,25 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
     ${generarLeyendaEquipos(
-      datos.actividadesPorEquipo?.map((a) => a.equipo),
-      esMultiEquipo,
-    )}
+    datos.actividadesPorEquipo?.map((a) => a.equipo),
+    esMultiEquipo,
+  )}
     
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
     ${generarDatosCliente(datos)}
     
     <!-- CHECKLIST DE BOMBAS -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${
-      esMultiEquipo && datos.actividadesPorEquipo
-        ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
-        : generarChecklistBombas(datos)
+    ${esMultiEquipo && datos.actividadesPorEquipo
+      ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
+      : generarChecklistBombas(datos)
     }
     
     <!-- MEDICIONES -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${
-      esMultiEquipo && datos.medicionesPorEquipo
-        ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-        : '' // Las mediciones se incluyen en generarChecklistBombas para órdenes simples
+    ${esMultiEquipo && datos.medicionesPorEquipo
+      ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+      : '' // Las mediciones se incluyen en generarChecklistBombas para órdenes simples
     }
     
     <!-- SIMBOLOGÍA -->
@@ -116,17 +114,16 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
   
   <div class="page page-break">
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
-    ${
-      datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-        ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
-        : generarEvidencias(datos.evidencias)
+    ${datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+      ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
+      : generarEvidencias(datos.evidencias)
     }
     
     <!-- OBSERVACIONES -->
     ${generarObservaciones(datos.observaciones)}
     
     <!-- FIRMAS -->
-    ${generarFirmas(datos.firmaTecnico, datos.firmaCliente)}
+    ${generarFirmas(datos)}
     
     <!-- FOOTER -->
     ${generarFooter()}
@@ -265,8 +262,8 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
       <tbody>
         <!-- Actividades dinámicas del checklist -->
         ${actividadesChecklist
-          .map(
-            (act: any) => `
+      .map(
+        (act: any) => `
           <tr>
             <td>${act.descripcion || 'Actividad'}</td>
             <td style="text-align: center;">
@@ -275,8 +272,8 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
             <td style="font-size: 9px;">${act.observaciones || ''}</td>
           </tr>
         `,
-          )
-          .join('')}
+      )
+      .join('')}
       </tbody>
     </table>
   </div>
@@ -334,31 +331,31 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
           <td style="text-align: center;">PSI</td>
         </tr>
         ${(datos.mediciones || [])
-          .filter((m: any) => {
-            // Excluir mediciones que ya se mostraron arriba (coincidencia exacta)
-            const nombresMostrados = [
-              'medición de presiones',
-              'medición de voltaje',
-              'medición de amperaje',
-              'temperatura',
-              'presostato presión encendido',
-              'presostato presión apagado',
-              'presión tanques',
-              'análisis de vibración',
-            ];
-            const param = (m.parametro || '').toLowerCase().trim();
-            return !nombresMostrados.includes(param);
-          })
-          .map(
-            (m: any) => `
+      .filter((m: any) => {
+        // Excluir mediciones que ya se mostraron arriba (coincidencia exacta)
+        const nombresMostrados = [
+          'medición de presiones',
+          'medición de voltaje',
+          'medición de amperaje',
+          'temperatura',
+          'presostato presión encendido',
+          'presostato presión apagado',
+          'presión tanques',
+          'análisis de vibración',
+        ];
+        const param = (m.parametro || '').toLowerCase().trim();
+        return !nombresMostrados.includes(param);
+      })
+      .map(
+        (m: any) => `
           <tr style="background: ${MEKANOS_COLORS.background};">
             <td><strong>${m.parametro}</strong></td>
             <td style="text-align: center;"><span class="presion-value">${m.valor ?? '-'}</span></td>
             <td style="text-align: center;">${m.unidad || ''}</td>
           </tr>
         `,
-          )
-          .join('')}
+      )
+      .join('')}
       </tbody>
     </table>
   </div>
@@ -502,15 +499,15 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
         </div>
         <div class="evidencias-grid" style="padding: 10px;">
           ${evidenciasTipo
-            .map(
-              (ev: any, idx: number) => `
+          .map(
+            (ev: any, idx: number) => `
             <div class="evidencia-item">
               <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption" style="${esGeneral ? 'background: #0d9488;' : ''}">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
           `,
-            )
-            .join('')}
+          )
+          .join('')}
         </div>
       </div>
     `;
@@ -534,23 +531,25 @@ const generarObservaciones = (observaciones: string): string => `
   </div>
 `;
 
-// ✅ FIX: Unificar estilo de firmas con Tipo A Generador
-const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
+// ✅ FIX 05-ENE-2026: Mostrar nombre y cargo del técnico/cliente bajo la firma
+const generarFirmas = (datos: DatosOrdenPDF): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      ${
-        firmaTecnico
-          ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
-          : `<div class="firma-line"></div>`
-      }
+      ${datos.firmaTecnico
+    ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+      <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || ''}</div>
+      <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable'}</div>
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      ${
-        firmaCliente
-          ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
-          : `<div class="firma-line"></div>`
-      }
+      ${datos.firmaCliente
+    ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+      <div class="firma-nombre">${datos.nombreCliente || ''}</div>
+      <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
   </div>

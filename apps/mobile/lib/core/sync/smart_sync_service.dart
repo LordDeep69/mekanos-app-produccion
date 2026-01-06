@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import '../lifecycle/data_lifecycle_manager.dart';
 
 // ============================================================================
 // MODELOS
@@ -32,6 +33,7 @@ class OrdenResumen {
   final String estadoCodigo;
   final String fechaModificacion;
   final String? urlPdf;
+  final String? nombreCliente;
 
   final int? idCliente;
   final int? idEquipo;
@@ -44,6 +46,7 @@ class OrdenResumen {
     required this.estadoCodigo,
     required this.fechaModificacion,
     this.urlPdf,
+    this.nombreCliente,
     this.idCliente,
     this.idEquipo,
     this.idTipoServicio,
@@ -57,6 +60,7 @@ class OrdenResumen {
       estadoCodigo: json['estadoCodigo'] as String,
       fechaModificacion: json['fechaModificacion'] as String,
       urlPdf: json['urlPdf'] as String?,
+      nombreCliente: json['nombreCliente'] as String?,
       idCliente: json['id_cliente'] as int?,
       idEquipo: json['id_equipo'] as int?,
       idTipoServicio: json['id_tipo_servicio'] as int?,
@@ -100,8 +104,9 @@ class SmartSyncResult {
 class SmartSyncService {
   final ApiClient _apiClient;
   final AppDatabase _db;
+  final DataLifecycleManager _lifecycleManager;
 
-  SmartSyncService(this._apiClient, this._db);
+  SmartSyncService(this._apiClient, this._db, this._lifecycleManager);
 
   /// Ejecuta la sincronización inteligente completa
   Future<SmartSyncResult> sincronizarInteligente(
@@ -207,7 +212,17 @@ class SmartSyncService {
             );
             aDescargar.add(ordenServidor);
           } else {
-            // Sin cambios → SKIP
+            // Sin cambios en la orden, pero igual actualizamos el nombre del cliente por si cambió la prioridad/dato
+            if (ordenServidor.idCliente != null &&
+                ordenServidor.nombreCliente != null) {
+              await _db.upsertCliente(
+                ClientesCompanion(
+                  id: Value(ordenServidor.idCliente!),
+                  nombre: Value(ordenServidor.nombreCliente!),
+                  lastSyncedAt: Value(DateTime.now()),
+                ),
+              );
+            }
             omitidas++;
           }
         }
@@ -241,6 +256,19 @@ class SmartSyncService {
                 idEstadoLocal,
                 ordenResumen.urlPdf,
               );
+
+              // ✅ 03-ENE-2026: Asegurar que el nombre del cliente se actualice con la prioridad correcta
+              if (ordenResumen.idCliente != null &&
+                  ordenResumen.nombreCliente != null) {
+                await _db.upsertCliente(
+                  ClientesCompanion(
+                    id: Value(ordenResumen.idCliente!),
+                    nombre: Value(ordenResumen.nombreCliente!),
+                    lastSyncedAt: Value(DateTime.now()),
+                  ),
+                );
+              }
+
               ordenesDescargadas.add(ordenResumen.numeroOrden);
               descargadas++;
               debugPrint(
@@ -285,6 +313,24 @@ class SmartSyncService {
       debugPrint(
         '🧠 [SMART SYNC] ✅ Completado: $descargadas descargadas, $omitidas omitidas, $errores errores',
       );
+
+      // ✅ LIFECYCLE: Ejecutar limpieza post-sync para liberar espacio
+      if (descargadas > 0 || errores == 0) {
+        try {
+          debugPrint('🧹 [SMART SYNC] Ejecutando limpieza post-sync...');
+          final purgeResult = await _lifecycleManager
+              .ejecutarLimpiezaInteligente();
+          if (purgeResult.tuvoCambios) {
+            debugPrint(
+              '🧹 [SMART SYNC] Limpieza: ${purgeResult.totalPurgado} items liberados',
+            );
+          }
+        } catch (e) {
+          debugPrint(
+            '⚠️ [SMART SYNC] Error en limpieza post-sync (no crítico): $e',
+          );
+        }
+      }
 
       return SmartSyncResult(
         success: errores == 0,
@@ -561,5 +607,6 @@ class SmartSyncService {
 final smartSyncServiceProvider = Provider<SmartSyncService>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   final db = ref.watch(databaseProvider);
-  return SmartSyncService(apiClient, db);
+  final lifecycleManager = ref.watch(dataLifecycleManagerProvider);
+  return SmartSyncService(apiClient, db, lifecycleManager);
 });

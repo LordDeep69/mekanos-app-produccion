@@ -56,6 +56,9 @@ dependencies:
   # Supabase (Realtime para notificaciones)
   supabase_flutter: ^2.3.0
   
+  # Preferencias locales (configuración)
+  shared_preferences: ^2.2.2
+  
   # UI
   cupertino_icons: ^1.0.8
 

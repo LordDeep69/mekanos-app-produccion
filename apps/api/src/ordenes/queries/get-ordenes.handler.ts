@@ -18,7 +18,10 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
   ) { }
 
   async execute(query: GetOrdenesQuery): Promise<PaginatedResponse> {
-    const { page, limit, clienteId, equipoId, tecnicoId, estado, prioridad } = query;
+    const {
+      page, limit, clienteId, equipoId, tecnicoId, estado, prioridad,
+      sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta
+    } = query;
 
     // Resolver estado string → id_estado_actual (ZERO TRUST: lookup en BD)
     let idEstadoActual: number | undefined;
@@ -38,6 +41,12 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
       id_tecnico_asignado: tecnicoId,
       id_estado_actual: idEstadoActual,
       prioridad,
+      // ENTERPRISE: Nuevos filtros y ordenamiento
+      sortBy: sortBy || 'fecha_creacion',
+      sortOrder: sortOrder || 'desc',
+      id_tipo_servicio: tipoServicioId,
+      fechaDesde,
+      fechaHasta,
     };
 
     // findAll() devuelve { items, total } directamente

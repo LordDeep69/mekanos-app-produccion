@@ -171,7 +171,11 @@ const empleadoSchemaV2 = z.object({
     // PASO 3: ACCESO AL SISTEMA (tabla usuarios)
     // ─────────────────────────────────────────────────────────────────────────
     crear_acceso_sistema: z.boolean(),
-    username: z.string().max(50).optional(),
+    username: z.string()
+        .max(50)
+        .regex(/^[a-z0-9._-]+$/, 'Solo letras minúsculas, números, puntos, guiones y sin espacios')
+        .optional()
+        .or(z.literal('')),
     password: z.string().max(255).optional(),
     debe_cambiar_password: z.boolean(),
     roles_seleccionados: z.array(z.number()),
@@ -233,7 +237,11 @@ export function EmpleadoFormV2({ onSuccess, onCancel }: EmpleadoFormV2Props) {
 
     const sugerirUsername = () => {
         if (primerNombre && primerApellido && !usernameActual) {
-            const sugerido = `${primerNombre.charAt(0).toLowerCase()}${primerApellido.toLowerCase()}`.replace(/\s/g, '');
+            const sugerido = `${primerNombre.charAt(0).toLowerCase()}${primerApellido.toLowerCase()}`
+                .trim()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/\s+/g, '.');
             setValue('username', sugerido);
         }
     };

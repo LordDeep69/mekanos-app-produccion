@@ -22,7 +22,14 @@ final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
   final offlineSync = ref.watch(offlineSyncServiceProvider);
   final notificationService = ref.watch(syncNotificationServiceProvider);
   final progressNotifier = ref.watch(syncProgressProvider.notifier);
-  return SyncUploadService(db, apiClient.dio, connectivity, offlineSync, notificationService, progressNotifier);
+  return SyncUploadService(
+    db,
+    apiClient.dio,
+    connectivity,
+    offlineSync,
+    notificationService,
+    progressNotifier,
+  );
 });
 
 /// Resultado de la sincronización de subida
@@ -96,28 +103,32 @@ class SyncUploadService {
       // ✅ 19-DIC-2025: Iniciar progreso
       _progressNotifier.iniciar(idOrdenBackend);
       _progressNotifier.avanzar(SyncStep.preparando);
-      
+
       // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
       final equipos = await _db.getEquiposByOrdenServicio(idOrdenBackend);
       final esMultiEquipo = equipos.length > 1;
-      
-      debugPrint('🔧 [SYNC] Orden $idOrdenBackend - Multi-equipo: $esMultiEquipo (${equipos.length} equipos)');
-      
+
+      debugPrint(
+        '🔧 [SYNC] Orden $idOrdenBackend - Multi-equipo: $esMultiEquipo (${equipos.length} equipos)',
+      );
+
       // 1. Recopilar actividades ejecutadas (SOLO CHECKLIST, NO MEDICIONES)
       // ✅ FIX 15-DIC-2025: EXCLUIR actividades con idParametroMedicion
       // Estas son tipo MEDICION y aparecen en la sección MEDICIONES del PDF
       // Si las incluimos aquí, aparecen DUPLICADAS (checklist vacío + mediciones)
       final actividades = await _db.getActividadesByOrden(idOrdenLocal);
-      
+
       // ✅ MULTI-EQUIPOS: Agrupar actividades por idOrdenEquipo
       List<Map<String, dynamic>> actividadesPayload;
       List<Map<String, dynamic>>? actividadesPorEquipoPayload;
-      
+
       if (esMultiEquipo) {
         // Agrupar actividades por equipo
         final Map<int, List<Map<String, dynamic>>> actividadesAgrupadas = {};
-        
-        for (final a in actividades.where((a) => a.idParametroMedicion == null)) {
+
+        for (final a in actividades.where(
+          (a) => a.idParametroMedicion == null,
+        )) {
           final idEquipo = a.idOrdenEquipo ?? 0;
           actividadesAgrupadas.putIfAbsent(idEquipo, () => []);
           actividadesAgrupadas[idEquipo]!.add({
@@ -127,54 +138,64 @@ class SyncUploadService {
             'observaciones': a.observacion,
           });
         }
-        
+
         // Construir estructura actividadesPorEquipo
         actividadesPorEquipoPayload = [];
         for (final equipo in equipos) {
-          final actividadesEquipo = actividadesAgrupadas[equipo.idOrdenEquipo] ?? [];
+          final actividadesEquipo =
+              actividadesAgrupadas[equipo.idOrdenEquipo] ?? [];
           actividadesPorEquipoPayload.add({
             'idOrdenEquipo': equipo.idOrdenEquipo,
-            'nombreEquipo': equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+            'nombreEquipo':
+                equipo.nombreSistema ??
+                equipo.nombreEquipo ??
+                'Equipo ${equipo.ordenSecuencia}',
             'codigoEquipo': equipo.codigoEquipo,
             'actividades': actividadesEquipo,
           });
-          debugPrint('   📋 Equipo ${equipo.nombreSistema}: ${actividadesEquipo.length} actividades');
+          debugPrint(
+            '   📋 Equipo ${equipo.nombreSistema}: ${actividadesEquipo.length} actividades',
+          );
         }
-        
+
         // También mantener actividades flat para backward compatibility
         actividadesPayload = actividades
             .where((a) => a.idParametroMedicion == null)
-            .map((a) => <String, dynamic>{
-                  'sistema': a.sistema ?? 'Sin sistema',
-                  'descripcion': a.descripcion,
-                  'resultado': a.simbologia ?? 'N/A',
-                  'observaciones': a.observacion,
-                  'idOrdenEquipo': a.idOrdenEquipo,
-                })
+            .map(
+              (a) => <String, dynamic>{
+                'sistema': a.sistema ?? 'Sin sistema',
+                'descripcion': a.descripcion,
+                'resultado': a.simbologia ?? 'N/A',
+                'observaciones': a.observacion,
+                'idOrdenEquipo': a.idOrdenEquipo,
+              },
+            )
             .toList();
       } else {
         // Orden simple: sin agrupación
         actividadesPayload = actividades
             .where((a) => a.idParametroMedicion == null)
-            .map((a) => <String, dynamic>{
-                  'sistema': a.sistema ?? 'Sin sistema',
-                  'descripcion': a.descripcion,
-                  'resultado': a.simbologia ?? 'N/A',
-                  'observaciones': a.observacion,
-                })
+            .map(
+              (a) => <String, dynamic>{
+                'sistema': a.sistema ?? 'Sin sistema',
+                'descripcion': a.descripcion,
+                'resultado': a.simbologia ?? 'N/A',
+                'observaciones': a.observacion,
+              },
+            )
             .toList();
       }
 
       // 2. Recopilar mediciones
       final mediciones = await _db.getMedicionesByOrden(idOrdenLocal);
-      
+
       // ✅ MULTI-EQUIPOS: Agrupar mediciones por idOrdenEquipo
       List<Map<String, dynamic>> medicionesPayload;
       List<Map<String, dynamic>>? medicionesPorEquipoPayload;
-      
+
       if (esMultiEquipo) {
         final Map<int, List<Map<String, dynamic>>> medicionesAgrupadas = {};
-        
+
         for (final m in mediciones.where((m) => m.valor != null)) {
           final idEquipo = m.idOrdenEquipo ?? 0;
           medicionesAgrupadas.putIfAbsent(idEquipo, () => []);
@@ -185,44 +206,57 @@ class SyncUploadService {
             'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
           });
         }
-        
+
         medicionesPorEquipoPayload = [];
         for (final equipo in equipos) {
-          final medicionesEquipo = medicionesAgrupadas[equipo.idOrdenEquipo] ?? [];
+          final medicionesEquipo =
+              medicionesAgrupadas[equipo.idOrdenEquipo] ?? [];
           medicionesPorEquipoPayload.add({
             'idOrdenEquipo': equipo.idOrdenEquipo,
-            'nombreEquipo': equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+            'nombreEquipo':
+                equipo.nombreSistema ??
+                equipo.nombreEquipo ??
+                'Equipo ${equipo.ordenSecuencia}',
             'mediciones': medicionesEquipo,
           });
-          debugPrint('   📏 Equipo ${equipo.nombreSistema}: ${medicionesEquipo.length} mediciones');
+          debugPrint(
+            '   📏 Equipo ${equipo.nombreSistema}: ${medicionesEquipo.length} mediciones',
+          );
         }
-        
+
         // También mantener mediciones flat
         medicionesPayload = mediciones
             .where((m) => m.valor != null)
-            .map((m) => <String, dynamic>{
-                  'parametro': m.nombreParametro,
-                  'valor': m.valor!,
-                  'unidad': m.unidadMedida,
-                  'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
-                  'idOrdenEquipo': m.idOrdenEquipo,
-                })
+            .map(
+              (m) => <String, dynamic>{
+                'parametro': m.nombreParametro,
+                'valor': m.valor!,
+                'unidad': m.unidadMedida,
+                'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
+                'idOrdenEquipo': m.idOrdenEquipo,
+              },
+            )
             .toList();
       } else {
         medicionesPayload = mediciones
             .where((m) => m.valor != null)
-            .map((m) => <String, dynamic>{
-                  'parametro': m.nombreParametro,
-                  'valor': m.valor!,
-                  'unidad': m.unidadMedida,
-                  'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
-                })
+            .map(
+              (m) => <String, dynamic>{
+                'parametro': m.nombreParametro,
+                'valor': m.valor!,
+                'unidad': m.unidadMedida,
+                'nivelAlerta': _mapEstadoToNivelAlerta(m.estadoValor),
+              },
+            )
             .toList();
       }
 
       // ✅ 20-DIC-2025: NO marcar pasos locales como completados
       // El SSE del servidor marcará los pasos como completados cuando realmente se procesen
-      _progressNotifier.avanzar(SyncStep.preparando, mensaje: 'Cargando evidencias...');
+      _progressNotifier.avanzar(
+        SyncStep.preparando,
+        mensaje: 'Cargando evidencias...',
+      );
 
       // 3. Recopilar evidencias y convertir a Base64
       final evidencias = await (_db.select(
@@ -251,7 +285,10 @@ class SyncUploadService {
       }
 
       // ✅ 20-DIC-2025: Solo actualizar mensaje de progreso
-      _progressNotifier.avanzar(SyncStep.preparando, mensaje: 'Cargando firmas...');
+      _progressNotifier.avanzar(
+        SyncStep.preparando,
+        mensaje: 'Cargando firmas...',
+      );
 
       // 4. Recopilar firmas y convertir a Base64
       final firmas = await _db.getFirmasByOrden(idOrdenLocal);
@@ -299,7 +336,9 @@ class SyncUploadService {
       }
 
       if (evidenciasPayload.isEmpty) {
-        _progressNotifier.error('Debe incluir al menos una evidencia fotográfica');
+        _progressNotifier.error(
+          'Debe incluir al menos una evidencia fotográfica',
+        );
         return SyncUploadResult(
           success: false,
           mensaje: 'Debe incluir al menos una evidencia fotográfica',
@@ -333,11 +372,17 @@ class SyncUploadService {
           'medicionesPorEquipo': medicionesPorEquipoPayload,
         'esMultiEquipo': esMultiEquipo,
       };
-      
-      debugPrint('📦 [SYNC] Payload construido - esMultiEquipo: $esMultiEquipo');
+
+      debugPrint(
+        '📦 [SYNC] Payload construido - esMultiEquipo: $esMultiEquipo',
+      );
       if (esMultiEquipo) {
-        debugPrint('   📋 actividadesPorEquipo: ${actividadesPorEquipoPayload?.length ?? 0} equipos');
-        debugPrint('   📏 medicionesPorEquipo: ${medicionesPorEquipoPayload?.length ?? 0} equipos');
+        debugPrint(
+          '   📋 actividadesPorEquipo: ${actividadesPorEquipoPayload?.length ?? 0} equipos',
+        );
+        debugPrint(
+          '   📏 medicionesPorEquipo: ${medicionesPorEquipoPayload?.length ?? 0} equipos',
+        );
       }
 
       // 7. VERIFICAR CONECTIVIDAD PRIMERO (para decidir qué estado usar)
@@ -353,7 +398,7 @@ class SyncUploadService {
           horaSalida,
           razonFalla: razonFalla,
         );
-        
+
         // Guardar en cola offline
         final guardado = await _offlineSync.guardarEnCola(
           idOrdenLocal: idOrdenLocal,
@@ -365,7 +410,7 @@ class SyncUploadService {
           // ✅ ENTERPRISE: Notificar que se guardó offline
           _notificationService.notifyOrderQueuedOffline('#$idOrdenBackend');
           _progressNotifier.reset(); // No es error, pero no se subió
-          
+
           return SyncUploadResult(
             success: true,
             mensaje:
@@ -392,7 +437,10 @@ class SyncUploadService {
       );
 
       // ✅ 19-DIC-2025: Progreso - Enviando al servidor
-      _progressNotifier.avanzar(SyncStep.validando, mensaje: 'Conectando con servidor...');
+      _progressNotifier.avanzar(
+        SyncStep.validando,
+        mensaje: 'Conectando con servidor...',
+      );
 
       // 9. CON CONEXIÓN - Intentar sync con streaming de progreso
       try {
@@ -411,17 +459,38 @@ class SyncUploadService {
 
         if (response.success) {
           _progressNotifier.completar();
-          
+
+          // ✅ 03-ENE-2026: DEBUG - Ver exactamente qué datos llegan
+          debugPrint('📊 [SYNC RESULT] response.datos = ${response.datos}');
+          debugPrint(
+            '📊 [SYNC RESULT] response.datos.keys = ${response.datos?.keys}',
+          );
+
           // Extraer URL del PDF de la respuesta
           String? pdfUrl;
           if (response.datos != null) {
+            debugPrint(
+              '📊 [SYNC RESULT] documento = ${response.datos!['documento']}',
+            );
+            debugPrint(
+              '📊 [SYNC RESULT] evidencias = ${response.datos!['evidencias']}',
+            );
+            debugPrint(
+              '📊 [SYNC RESULT] firmas = ${response.datos!['firmas']}',
+            );
+            debugPrint('📊 [SYNC RESULT] email = ${response.datos!['email']}');
+
             pdfUrl = response.datos!['documento']?['url'];
             pdfUrl ??= response.datos!['pdfUrl'];
+            debugPrint('📊 [SYNC RESULT] pdfUrl extraído = $pdfUrl');
           }
 
           // CRÍTICO: El backend YA procesó la orden exitosamente
           try {
             await _marcarOrdenSincronizada(idOrdenLocal, urlPdf: pdfUrl);
+            debugPrint(
+              '✅ [SYNC] Orden marcada como sincronizada con urlPdf=$pdfUrl',
+            );
           } catch (localError) {
             debugPrint(
               '⚠️ Error guardando estado local (no crítico): $localError',
@@ -443,7 +512,9 @@ class SyncUploadService {
           );
           return SyncUploadResult(
             success: false,
-            mensaje: response.error ?? 'Error del servidor. Se reintentará automáticamente.',
+            mensaje:
+                response.error ??
+                'Error del servidor. Se reintentará automáticamente.',
             error: response.error,
             guardadoOffline: true,
           );
@@ -579,7 +650,7 @@ class SyncUploadService {
         updatedAt: Value(DateTime.now()),
       ),
     );
-    
+
     debugPrint('📴 [SYNC] Orden $idOrdenLocal guardada con estado POR_SUBIR');
   }
 
@@ -778,18 +849,20 @@ class SyncUploadService {
   }
 
   /// ✅ 19-DIC-2025: Envía la orden usando SSE para progreso en tiempo real
-  /// 
+  ///
   /// Este método usa el endpoint /finalizar-completo-stream que retorna
   /// Server-Sent Events (SSE) con el progreso de cada paso del backend.
-  /// 
+  ///
   /// Los eventos se procesan en tiempo real y se emiten al SyncProgressNotifier
   /// para que la UI se actualice.
   Future<_SSEResult> _enviarConProgresoSSE({
     required int idOrdenBackend,
     required Map<String, dynamic> payload,
   }) async {
-    debugPrint('📡 [SSE] Iniciando envío con streaming para orden $idOrdenBackend');
-    
+    debugPrint(
+      '📡 [SSE] Iniciando envío con streaming para orden $idOrdenBackend',
+    );
+
     try {
       // Usar responseType: stream para leer SSE
       final response = await _apiClient.post<ResponseBody>(
@@ -799,16 +872,13 @@ class SyncUploadService {
           responseType: ResponseType.stream,
           sendTimeout: const Duration(minutes: 5),
           receiveTimeout: const Duration(minutes: 5),
-          headers: {
-            'Accept': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-          },
+          headers: {'Accept': 'text/event-stream', 'Cache-Control': 'no-cache'},
         ),
       );
-      
+
       debugPrint('📡 [SSE] Response status: ${response.statusCode}');
       debugPrint('📡 [SSE] Response headers: ${response.headers}');
-      
+
       // ✅ FIX 20-DIC-2025: Aceptar 200 y 201 (NestJS @Post retorna 201 por defecto)
       final statusOk = response.statusCode == 200 || response.statusCode == 201;
       if (!statusOk) {
@@ -818,9 +888,11 @@ class SyncUploadService {
           error: 'Error del servidor: ${response.statusCode}',
         );
       }
-      
-      debugPrint('📡 [SSE] Conexión SSE establecida (status: ${response.statusCode})');
-      
+
+      debugPrint(
+        '📡 [SSE] Conexión SSE establecida (status: ${response.statusCode})',
+      );
+
       final stream = response.data?.stream;
       if (stream == null) {
         debugPrint('❌ [SSE] Stream es null');
@@ -829,34 +901,49 @@ class SyncUploadService {
           error: 'No se recibió stream del servidor',
         );
       }
-      
+
       debugPrint('📡 [SSE] Stream obtenido, comenzando a leer eventos...');
-      
+
       // Variables para acumular el resultado final
       Map<String, dynamic>? resultadoFinal;
       String? ultimoError;
-      
+
       // Leer el stream línea por línea
       await for (final chunk in stream) {
         final lines = utf8.decode(chunk).split('\n');
-        
+
         for (final line in lines) {
           if (line.startsWith('data: ')) {
             final jsonStr = line.substring(6).trim();
             if (jsonStr.isEmpty) continue;
-            
+
             try {
               final evento = json.decode(jsonStr) as Map<String, dynamic>;
-              debugPrint('📡 [SSE] Evento recibido: ${evento['step']} - ${evento['status']}');
-              
+              debugPrint(
+                '📡 [SSE] Evento recibido: ${evento['step']} - ${evento['status']}',
+              );
+
               // Procesar el evento en el notifier
               _progressNotifier.procesarEventoBackend(evento);
-              
+
               // Si es el resultado final, guardarlo
               if (evento['step'] == 'result' && evento['data'] != null) {
                 resultadoFinal = evento['data'] as Map<String, dynamic>;
+                debugPrint(
+                  '📡 [SSE] ✅ Resultado final recibido: ${resultadoFinal.keys}',
+                );
+                if (resultadoFinal['datos'] != null) {
+                  final datos = resultadoFinal['datos'] as Map<String, dynamic>;
+                  debugPrint('📡 [SSE] Datos internos: ${datos.keys}');
+                  debugPrint(
+                    '📡 [SSE] Evidencias: ${datos['evidencias']?.length ?? 0}',
+                  );
+                  debugPrint(
+                    '📡 [SSE] Firmas: ${datos['firmas']?.length ?? 0}',
+                  );
+                }
               }
-              
+
               // Si es error, guardarlo
               if (evento['status'] == 'error') {
                 ultimoError = evento['message'] as String?;
@@ -867,40 +954,33 @@ class SyncUploadService {
           }
         }
       }
-      
+
       // Verificar resultado
       if (ultimoError != null) {
-        return _SSEResult(
-          success: false,
-          error: ultimoError,
-        );
+        return _SSEResult(success: false, error: ultimoError);
       }
-      
+
       if (resultadoFinal != null) {
         return _SSEResult(
           success: resultadoFinal['success'] as bool? ?? true,
           datos: resultadoFinal['datos'] as Map<String, dynamic>?,
         );
       }
-      
+
       // Si no hubo resultado explícito pero no hubo error, asumir éxito
       return _SSEResult(success: true);
-      
     } on DioException catch (e) {
       debugPrint('❌ [SSE] DioException: ${e.message}');
-      
+
       // Si falla el SSE, hacer fallback al endpoint tradicional
       debugPrint('📡 [SSE] Fallback a endpoint tradicional...');
       return _fallbackEnvioTradicional(idOrdenBackend, payload);
     } catch (e) {
       debugPrint('❌ [SSE] Error inesperado: $e');
-      return _SSEResult(
-        success: false,
-        error: e.toString(),
-      );
+      return _SSEResult(success: false, error: e.toString());
     }
   }
-  
+
   /// Fallback al endpoint tradicional si SSE falla
   Future<_SSEResult> _fallbackEnvioTradicional(
     int idOrdenBackend,
@@ -915,7 +995,7 @@ class SyncUploadService {
           receiveTimeout: const Duration(minutes: 5),
         ),
       );
-      
+
       if (response.statusCode == 200) {
         Map<String, dynamic>? datos;
         if (response.data is Map) {
@@ -926,7 +1006,7 @@ class SyncUploadService {
           datos: datos?['datos'] as Map<String, dynamic>?,
         );
       }
-      
+
       return _SSEResult(
         success: false,
         error: 'Error del servidor: ${response.statusCode}',
@@ -943,10 +1023,6 @@ class _SSEResult {
   final bool success;
   final Map<String, dynamic>? datos;
   final String? error;
-  
-  _SSEResult({
-    required this.success,
-    this.datos,
-    this.error,
-  });
+
+  _SSEResult({required this.success, this.datos, this.error});
 }

@@ -18,15 +18,15 @@
  */
 
 import {
-  baseStyles,
-  MEKANOS_COLORS,
   ActividadesPorEquipoPDF,
-  MedicionesPorEquipoPDF,
-  EvidenciasPorEquipoPDF,
+  baseStyles,
   EquipoOrdenPDF,
+  EvidenciasPorEquipoPDF,
   generarChecklistMultiEquipo,
-  generarMedicionesMultiEquipo,
   generarLeyendaEquipos,
+  generarMedicionesMultiEquipo,
+  MedicionesPorEquipoPDF,
+  MEKANOS_COLORS,
 } from './mekanos-base.template';
 
 export interface DatosCorrectivoOrdenPDF {
@@ -102,6 +102,12 @@ export interface DatosCorrectivoOrdenPDF {
   firmaTecnico?: string;
   firmaCliente?: string;
 
+  // ✅ FIX 05-ENE-2026: Datos del firmante para mostrar nombre/cargo
+  nombreTecnico?: string;
+  // cargoTecnico ya existe arriba en línea 55
+  nombreCliente?: string;
+  cargoCliente?: string;
+
   // ✅ MULTI-EQUIPOS (16-DIC-2025): Soporte para múltiples equipos
   esMultiEquipo?: boolean;
   actividadesPorEquipo?: ActividadesPorEquipoPDF[];
@@ -117,26 +123,26 @@ export interface TrabajoEjecutadoPDF {
   tiempoHoras: number;
   // ✅ FIX: Aceptar todos los códigos de simbología válidos
   resultado:
-    | 'COMPLETADO'
-    | 'PARCIAL'
-    | 'PENDIENTE'
-    | 'B'
-    | 'R'
-    | 'M'
-    | 'C'
-    | 'NA'
-    | 'I'
-    | 'LI'
-    | 'A'
-    | 'L'
-    | 'LA'
-    | 'S'
-    | 'NT'
-    | 'BA'
-    | 'F'
-    | 'RN'
-    | 'NF'
-    | string;
+  | 'COMPLETADO'
+  | 'PARCIAL'
+  | 'PENDIENTE'
+  | 'B'
+  | 'R'
+  | 'M'
+  | 'C'
+  | 'NA'
+  | 'I'
+  | 'LI'
+  | 'A'
+  | 'L'
+  | 'LA'
+  | 'S'
+  | 'NT'
+  | 'BA'
+  | 'F'
+  | 'RN'
+  | 'NF'
+  | string;
 }
 
 export interface RepuestoUtilizadoPDF {
@@ -192,9 +198,9 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         
         <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
         ${generarLeyendaEquipos(
-          datos.actividadesPorEquipo?.map((a) => a.equipo),
-          esMultiEquipo,
-        )}
+    datos.actividadesPorEquipo?.map((a) => a.equipo),
+    esMultiEquipo,
+  )}
         
         <!-- 2. DATOS DEL CLIENTE Y SERVICIO -->
         ${generarDatosCliente(datos)}
@@ -204,40 +210,37 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         
         <!-- 4. GENERAL (Trabajos ejecutados) -->
         <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-        ${
-          esMultiEquipo && datos.actividadesPorEquipo
-            ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
-            : generarSeccionGeneral(datos.trabajosEjecutados)
-        }
+        ${esMultiEquipo && datos.actividadesPorEquipo
+      ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
+      : generarSeccionGeneral(datos.trabajosEjecutados)
+    }
         
         <!-- 5. SIMBOLOGÍA -->
         ${generarSimbologia()}
         
         <!-- 6. MEDICIONES TÉCNICAS (solo si aplica) -->
         <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-        ${
-          esMultiEquipo && datos.medicionesPorEquipo
-            ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-            : tieneMediciones
-              ? generarMediciones(datos.mediciones!)
-              : ''
-        }
+        ${esMultiEquipo && datos.medicionesPorEquipo
+      ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+      : tieneMediciones
+        ? generarMediciones(datos.mediciones!)
+        : ''
+    }
     </div>
     
     <div class="page page-break">
         <!-- 7 y 8. REGISTRO FOTOGRÁFICO DEL SERVICIO + FOTOS GENERALES -->
         <!-- ✅ MULTI-EQUIPOS: Usar evidencias agrupadas por equipo si es multi-equipo -->
-        ${
-          esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-            ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
-            : generarEvidencias(datos.evidencias || [])
-        }
+        ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+      ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
+      : generarEvidencias(datos.evidencias || [])
+    }
         
         <!-- 9. OBSERVACIONES -->
         ${generarObservaciones(datos)}
         
         <!-- 10. FIRMAS -->
-        ${generarFirmas(datos.firmaTecnico, datos.firmaCliente)}
+        ${generarFirmas(datos)}
         
         <!-- 11. FOOTER -->
         ${generarFooter()}
@@ -368,8 +371,8 @@ const generarSeccionGeneral = (trabajos: TrabajoEjecutadoPDF[]): string => `
             </thead>
             <tbody>
                 ${trabajos
-                  .map(
-                    (t) => `
+    .map(
+      (t) => `
                 <tr>
                     <td>${t.descripcion}</td>
                     <td style="text-align: center;">
@@ -378,8 +381,8 @@ const generarSeccionGeneral = (trabajos: TrabajoEjecutadoPDF[]): string => `
                     <td>${t.sistema || ''}</td>
                 </tr>
                 `,
-                  )
-                  .join('')}
+    )
+    .join('')}
             </tbody>
         </table>
     </div>
@@ -475,8 +478,8 @@ const generarMediciones = (mediciones: MedicionCorrectivoPDF[]): string => `
             </thead>
             <tbody>
                 ${mediciones
-                  .map(
-                    (med) => `
+    .map(
+      (med) => `
                 <tr>
                     <td>${med.parametro}</td>
                     <td style="text-align: center; font-weight: bold;">${med.valorDespues}</td>
@@ -484,8 +487,8 @@ const generarMediciones = (mediciones: MedicionCorrectivoPDF[]): string => `
                     <td style="text-align: center;" class="alerta-${med.estado}">${med.estado}</td>
                 </tr>
                 `,
-                  )
-                  .join('')}
+    )
+    .join('')}
             </tbody>
         </table>
     </div>
@@ -580,15 +583,15 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
                 <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
                 <div class="evidencias-grid-compacto">
                     ${evidenciasTipo
-                      .map(
-                        (ev, idx) => `
+          .map(
+            (ev, idx) => `
                     <div class="evidencia-item-compacto">
                         <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
                         <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
                     </div>
                     `,
-                      )
-                      .join('')}
+          )
+          .join('')}
                 </div>
             </div>
             `;
@@ -635,22 +638,25 @@ const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
     `;
 };
 
-const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
+// ✅ FIX 05-ENE-2026: Mostrar nombre y cargo del técnico/cliente bajo la firma
+const generarFirmas = (datos: DatosCorrectivoOrdenPDF): string => `
     <div class="firmas-container">
         <div class="firma-box">
-            ${
-              firmaTecnico
-                ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
-                : `<div class="firma-line"></div>`
-            }
+            ${datos.firmaTecnico
+    ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+            <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || ''}</div>
+            <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable'}</div>
             <div class="firma-label">Firma Técnico Asignado</div>
         </div>
         <div class="firma-box">
-            ${
-              firmaCliente
-                ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
-                : `<div class="firma-line"></div>`
-            }
+            ${datos.firmaCliente
+    ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+            <div class="firma-nombre">${datos.nombreCliente || ''}</div>
+            <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
             <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
         </div>
     </div>
@@ -721,15 +727,15 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
                     </div>
                     <div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
                         ${evidenciasTipo
-                          .map(
-                            (ev: any, idx: number) => `
+              .map(
+                (ev: any, idx: number) => `
                             <div class="evidencia-item">
                                 <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
                                 <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
                             </div>
                         `,
-                          )
-                          .join('')}
+              )
+              .join('')}
                     </div>
                 </div>
                 `;

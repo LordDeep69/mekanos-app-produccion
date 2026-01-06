@@ -32,6 +32,27 @@ export class ClientesController {
     return this.clientesService.create(createDto, userId);
   }
 
+  /**
+   * ✅ OPTIMIZACIÓN 05-ENE-2026: Endpoint LIGERO para selectores
+   * Retorna solo id, nombre y NIT - ideal para dropdowns/autocomplete
+   * 
+   * @param q Término de búsqueda (nombre comercial, razón social, NIT)
+   * @param limit Máximo de resultados (default 20)
+   */
+  @Get('selector')
+  async getSelector(
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const limitNum = Math.min(parseInt(limit || '20'), 50); // Max 50
+    const items = await this.clientesService.findForSelector(q, limitNum);
+
+    return {
+      success: true,
+      data: items,
+    };
+  }
+
   @Get()
   async findAll(
     @Query('tipo_cliente') tipo_cliente?: string,

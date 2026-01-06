@@ -319,6 +319,32 @@ export class FinalizacionOrdenService {
         const startTime = Date.now();
         this.logger.log(`🚀 Iniciando finalización de orden ${dto.idOrden}`);
 
+        // 🔍 RESOLUCIÓN DE IDENTIDAD: Obtener id_empleado del técnico
+        // El mobile envía usuarioId (PK de tabla usuarios), pero actividades y mediciones 
+        // requieren id_empleado (PK de tabla empleados).
+        let idEmpleadoTecnico: number | null = null;
+        try {
+            const emp = await this.prisma.empleados.findFirst({
+                where: {
+                    persona: {
+                        usuarios: {
+                            id_usuario: dto.usuarioId
+                        }
+                    }
+                },
+                select: { id_empleado: true }
+            });
+            idEmpleadoTecnico = emp?.id_empleado || null;
+
+            if (idEmpleadoTecnico) {
+                this.logger.log(`   ✅ Identidad resuelta: usuarioId=${dto.usuarioId} -> idEmpleado=${idEmpleadoTecnico}`);
+            } else {
+                this.logger.warn(`   ⚠️ No se encontró registro de empleado para usuarioId=${dto.usuarioId}. Se usará fallback.`);
+            }
+        } catch (err) {
+            this.logger.error(`   ❌ Error resolviendo identidad del técnico: ${err}`);
+        }
+
         // Helper para emitir progreso
         const emitProgress = (
             step: FinalizacionStep,
@@ -348,7 +374,7 @@ export class FinalizacionOrdenService {
 
         try {
             // ========================================================================
-            // PASO 0: Validaciones iniciales
+            // PASO 0: Validaciones iniciales + Precarga de datos comunes
             // ========================================================================
             emitProgress('validando', 'in_progress', 'Validando datos de entrada...', 5);
             this.logger.log('📋 Paso 0: Validando datos de entrada...');
@@ -356,11 +382,21 @@ export class FinalizacionOrdenService {
             emitProgress('validando', 'completed', 'Datos validados correctamente', 10);
 
             // ========================================================================
-            // PASO 1: Obtener datos completos de la orden
+            // PASO 1: Obtener datos completos de la orden + Estado COMPLETADA (en paralelo)
+            // ✅ OPTIMIZACIÓN 31-DIC-2025: Precargar estado COMPLETADA aquí evita query posterior
             // ========================================================================
             emitProgress('obteniendo_orden', 'in_progress', 'Obteniendo datos de la orden...', 12);
             this.logger.log('📋 Paso 1: Obteniendo datos de la orden...');
-            const orden = await this.obtenerOrdenCompleta(dto.idOrden);
+
+            const [orden, estadoCompletada] = await Promise.all([
+                this.obtenerOrdenCompleta(dto.idOrden),
+                this.prisma.estados_orden.findFirst({ where: { codigo_estado: 'COMPLETADA' } }),
+            ]);
+
+            if (!estadoCompletada) {
+                throw new InternalServerErrorException('Estado COMPLETADA no encontrado en BD');
+            }
+
             emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
 
             // ========================================================================
@@ -391,19 +427,23 @@ export class FinalizacionOrdenService {
             this.logger.log(`   ✓ ${firmasResultado.length} firmas registradas`);
             emitProgress('firmas', 'completed', `${firmasResultado.length} firmas registradas`, 45);
 
-            // ✅ FIX: Vincular firma del cliente a la orden para conteo en sync
+            // ✅ FIX 05-ENE-2026: Vincular AMBAS firmas a la orden para trazabilidad completa
+            const firmaTecnico = firmasResultado.find(f => f.tipo === 'TECNICO');
             const firmaCliente = firmasResultado.find(f => f.tipo === 'CLIENTE');
-            if (firmaCliente) {
-                await this.prisma.ordenes_servicio.update({
-                    where: { id_orden_servicio: orden.id_orden_servicio },
-                    data: {
-                        id_firma_cliente: firmaCliente.id,
-                        nombre_quien_recibe: dto.firmas.cliente?.nombre || 'Cliente',
-                        cargo_quien_recibe: dto.firmas.cliente?.cargo || null,
-                    },
-                });
-                this.logger.log(`   ✓ Firma cliente vinculada a orden`);
-            }
+
+            await this.prisma.ordenes_servicio.update({
+                where: { id_orden_servicio: orden.id_orden_servicio },
+                data: {
+                    // Firma del técnico (NUEVA - evita mezclar firmas entre órdenes)
+                    id_firma_tecnico: firmaTecnico?.id || null,
+                    // Firma del cliente
+                    id_firma_cliente: firmaCliente?.id || null,
+                    nombre_quien_recibe: dto.firmas.cliente?.nombre || 'Cliente',
+                    cargo_quien_recibe: dto.firmas.cliente?.cargo || null,
+                },
+            });
+            this.logger.log(`   ✓ Firmas vinculadas a orden (técnico: ${firmaTecnico?.id}, cliente: ${firmaCliente?.id})`);
+
 
             // ========================================================================
             // PASO 3.5: Persistir actividades ejecutadas en BD (para estadísticas)
@@ -413,7 +453,7 @@ export class FinalizacionOrdenService {
             const actividadesGuardadas = await this.persistirActividades(
                 orden.id_orden_servicio,
                 dto.actividades,
-                dto.usuarioId,
+                idEmpleadoTecnico || dto.usuarioId, // Usar id_empleado resuelto
             );
             this.logger.log(`   ✓ ${actividadesGuardadas} actividades registradas`);
             emitProgress('actividades', 'completed', `${actividadesGuardadas} actividades registradas`, 52);
@@ -427,7 +467,7 @@ export class FinalizacionOrdenService {
                 const medicionesGuardadas = await this.persistirMediciones(
                     orden.id_orden_servicio,
                     dto.mediciones,
-                    dto.usuarioId,
+                    idEmpleadoTecnico || dto.usuarioId, // Usar id_empleado resuelto
                 );
                 this.logger.log(`   ✓ ${medicionesGuardadas} mediciones registradas`);
                 emitProgress('mediciones', 'completed', `${medicionesGuardadas} mediciones registradas`, 58);
@@ -513,6 +553,7 @@ export class FinalizacionOrdenService {
             this.logger.log('✅ Paso 8: Actualizando estado de la orden...');
             await this.actualizarEstadoOrden(
                 orden.id_orden_servicio,
+                estadoCompletada.id_estado, // ✅ OPTIMIZACIÓN: Usar estado precargado
                 dto.observaciones,
                 dto.usuarioId,
                 dto.horaEntrada,
@@ -641,7 +682,15 @@ export class FinalizacionOrdenService {
                     include: { tipos_equipo: true },
                 },
                 empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
-                    include: { persona: true },
+                    include: {
+                        persona: {
+                            include: {
+                                usuarios: {
+                                    select: { id_usuario: true }
+                                }
+                            }
+                        }
+                    },
                 },
                 tipos_servicio: true,
                 estados_orden: true,
@@ -842,33 +891,13 @@ export class FinalizacionOrdenService {
             );
         }
 
-        // Buscar firma existente para esta persona y tipo
-        const firmaExistente = await this.prisma.firmas_digitales.findFirst({
-            where: {
-                id_persona: idPersonaReal,
-                tipo_firma: firma.tipo,
-            },
-        });
+        // ✅ FIX 05-ENE-2026: SIEMPRE crear nueva firma para cada orden
+        // Antes: Hacía upsert por (id_persona, tipo_firma) causando que todas las
+        // órdenes del mismo técnico compartieran la misma firma (sobrescribiéndose)
+        // Ahora: Cada finalización crea una firma nueva y única para esa orden
 
-        if (firmaExistente) {
-            this.logger.log(`   🔄 Actualizando firma existente ID: ${firmaExistente.id_firma_digital} para persona ${idPersonaReal}`);
-            // Actualizar firma existente
-            return this.prisma.firmas_digitales.update({
-                where: { id_firma_digital: firmaExistente.id_firma_digital },
-                data: {
-                    firma_base64: firma.base64,
-                    formato_firma: (firma.formato || 'PNG').toUpperCase(),
-                    hash_firma: hash,
-                    fecha_captura: new Date(),
-                    observaciones: `Firma de ${firma.tipo} - Actualizada en finalización`,
-                    registrada_por: usuarioId,
-                    fecha_registro: new Date(),
-                },
-            });
-        }
+        this.logger.log(`   🆕 Creando nueva firma para persona ${idPersonaReal} (orden específica)`);
 
-        this.logger.log(`   🆕 Creando nueva firma para persona ${idPersonaReal}`);
-        // Crear nueva firma
         return this.prisma.firmas_digitales.create({
             data: {
                 id_persona: idPersonaReal,
@@ -877,9 +906,9 @@ export class FinalizacionOrdenService {
                 formato_firma: (firma.formato || 'PNG').toUpperCase(),
                 hash_firma: hash,
                 fecha_captura: new Date(),
-                es_firma_principal: firma.tipo === 'TECNICO',
+                es_firma_principal: false, // Solo la primera firma del técnico es principal
                 activa: true,
-                observaciones: `Firma de ${firma.tipo} - Finalización de orden${firma.idPersona === 0 ? ' (cliente sin registro)' : ''}`,
+                observaciones: `Firma de ${firma.tipo} - Orden ${orden.numero_orden}`,
                 registrada_por: usuarioId,
                 fecha_registro: new Date(),
             },
@@ -1314,7 +1343,7 @@ export class FinalizacionOrdenService {
         }
 
         const datosPDF = {
-            cliente: cliente?.persona?.razon_social || cliente?.persona?.nombre_completo || 'N/A',
+            cliente: cliente?.persona?.nombre_comercial || cliente?.persona?.nombre_completo || cliente?.persona?.razon_social || 'N/A',
             direccion: cliente?.persona?.direccion_principal || cliente?.persona?.ciudad || 'N/A',
             marcaEquipo: equipo?.nombre_equipo || 'N/A',
             serieEquipo: equipo?.numero_serie_equipo || 'N/A',
@@ -1371,6 +1400,11 @@ export class FinalizacionOrdenService {
             firmaCliente: dto.firmas.cliente?.base64
                 ? `data:image/${dto.firmas.cliente.formato || 'png'};base64,${dto.firmas.cliente.base64}`
                 : undefined,
+            // ✅ FIX 05-ENE-2026: Datos del firmante para mostrar nombre/cargo en el PDF
+            nombreTecnico: nombreTecnico,
+            cargoTecnico: 'Técnico Responsable',
+            nombreCliente: dto.nombreQuienRecibe || 'Cliente',
+            cargoCliente: dto.cargoQuienRecibe || 'Cliente / Autorizador',
         };
 
         return this.pdfService.generarPDF({
@@ -1475,7 +1509,7 @@ export class FinalizacionOrdenService {
 
             const emailData: OrdenEmailData = {
                 ordenNumero: orden.numero_orden,
-                clienteNombre: cliente?.persona?.razon_social || cliente?.persona?.nombre_completo || 'Cliente',
+                clienteNombre: cliente?.persona?.nombre_comercial || cliente?.persona?.nombre_completo || cliente?.persona?.razon_social || 'Cliente',
                 equipoDescripcion: equipoDesc,
                 tipoMantenimiento: tipoServicio?.nombre_tipo || tipoServicio?.codigo_tipo || 'PREVENTIVO',
                 fechaServicio: new Date().toLocaleDateString('es-CO'),
@@ -1503,23 +1537,16 @@ export class FinalizacionOrdenService {
 
     /**
      * Actualiza el estado de la orden a COMPLETADA
+     * ✅ OPTIMIZACIÓN 31-DIC-2025: Recibe idEstado precargado para evitar query adicional
      */
     private async actualizarEstadoOrden(
         idOrden: number,
+        idEstadoCompletada: number, // ✅ Ahora recibe el ID precargado
         observaciones: string,
         usuarioId: number,
         horaEntrada?: string,
         horaSalida?: string,
     ): Promise<void> {
-        // Obtener ID del estado COMPLETADA
-        const estadoCompletada = await this.prisma.estados_orden.findFirst({
-            where: { codigo_estado: 'COMPLETADA' },
-        });
-
-        if (!estadoCompletada) {
-            throw new InternalServerErrorException('Estado COMPLETADA no encontrado');
-        }
-
         // 🔧 FIX 20-DIC-2025: Obtener la orden para usar fecha_inicio_real existente
         // Esto evita violar el constraint chk_os_fecha_fin_posterior cuando la orden
         // fue iniciada en un día diferente al que se finaliza
@@ -1578,46 +1605,35 @@ export class FinalizacionOrdenService {
             }
         }
 
-        // Actualizar orden
-        // 🔬 DIAGNÓSTICO: Log del valor exacto de fecha_modificacion
+        // ✅ OPTIMIZACIÓN 31-DIC-2025: Usar transacción para update + historial en una sola operación
+        // Eliminado query de verificación (diagnóstico) que añadía ~2-3s innecesarios
         const fechaModificacionValue = new Date();
-        this.logger.log(`[🔬 DIAGNÓSTICO FINALIZACIÓN] Guardando fecha_modificacion:`);
-        this.logger.log(`   - new Date().toISOString(): ${fechaModificacionValue.toISOString()}`);
-        this.logger.log(`   - new Date().getTime(): ${fechaModificacionValue.getTime()}`);
-        this.logger.log(`   - Orden ID: ${idOrden}`);
 
-        await this.prisma.ordenes_servicio.update({
-            where: { id_orden_servicio: idOrden },
-            data: {
-                id_estado_actual: estadoCompletada.id_estado,
-                fecha_inicio_real: fechaInicioReal,
-                fecha_fin_real: fechaFinReal,
-                duracion_minutos: duracionMinutos,
-                observaciones_cierre: observaciones,
-                modificado_por: usuarioId,
-                fecha_modificacion: fechaModificacionValue,
-            },
-        });
-
-        // Verificar que se guardó correctamente
-        const ordenActualizada = await this.prisma.ordenes_servicio.findUnique({
-            where: { id_orden_servicio: idOrden },
-            select: { fecha_modificacion: true, id_estado_actual: true },
-        });
-        this.logger.log(`[🔬 DIAGNÓSTICO FINALIZACIÓN] Valor guardado en BD:`);
-        this.logger.log(`   - fecha_modificacion leída: ${ordenActualizada?.fecha_modificacion?.toISOString()}`);
-        this.logger.log(`   - id_estado_actual: ${ordenActualizada?.id_estado_actual}`);
-
-        // Registrar en historial
-        await this.prisma.historial_estados_orden.create({
-            data: {
-                id_orden_servicio: idOrden,
-                id_estado_nuevo: estadoCompletada.id_estado,
-                fecha_cambio: new Date(),
-                observaciones: `Orden finalizada. ${observaciones}`,
-                realizado_por: usuarioId,
-            },
-        });
+        await this.prisma.$transaction([
+            // 1. Actualizar orden
+            this.prisma.ordenes_servicio.update({
+                where: { id_orden_servicio: idOrden },
+                data: {
+                    id_estado_actual: idEstadoCompletada, // ✅ Usar parámetro precargado
+                    fecha_inicio_real: fechaInicioReal,
+                    fecha_fin_real: fechaFinReal,
+                    duracion_minutos: duracionMinutos,
+                    observaciones_cierre: observaciones,
+                    modificado_por: usuarioId,
+                    fecha_modificacion: fechaModificacionValue,
+                },
+            }),
+            // 2. Registrar en historial (en la misma transacción)
+            this.prisma.historial_estados_orden.create({
+                data: {
+                    id_orden_servicio: idOrden,
+                    id_estado_nuevo: idEstadoCompletada, // ✅ Usar parámetro precargado
+                    fecha_cambio: new Date(),
+                    observaciones: `Orden finalizada. ${observaciones}`,
+                    realizado_por: usuarioId,
+                },
+            }),
+        ]);
     }
 
     /**

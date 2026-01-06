@@ -5,6 +5,11 @@
  * Exporta todos los hooks personalizados
  */
 
-// Próximamente: useAuth, useDashboard, useOrdenes
-export { };
+export {
+    useCacheStats,
+    useCacheWarmup,
+    useInvalidateCache,
+    usePrefetchOnHover,
+    usePrefetchOnMount
+} from './use-prefetch';
 

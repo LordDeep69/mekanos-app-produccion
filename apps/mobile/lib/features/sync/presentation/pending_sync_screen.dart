@@ -28,7 +28,8 @@ class PendingSyncScreen extends ConsumerStatefulWidget {
 
 class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
   bool _isSyncingAll = false;
-  final Set<int> _syncingOrders = {}; // Órdenes individuales siendo sincronizadas
+  final Set<int> _syncingOrders =
+      {}; // Órdenes individuales siendo sincronizadas
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +62,9 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                 Text(
                   isOnline ? 'Conectado' : 'Sin conexión',
                   style: TextStyle(
-                    color: isOnline ? Colors.green.shade700 : Colors.red.shade700,
+                    color: isOnline
+                        ? Colors.green.shade700
+                        : Colors.red.shade700,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -82,7 +85,8 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         },
       ),
       floatingActionButton: pendientesAsync.maybeWhen(
-        data: (pendientes) => pendientes.isNotEmpty && isOnline && pendientes.length > 1
+        data: (pendientes) =>
+            pendientes.isNotEmpty && isOnline && pendientes.length > 1
             ? FloatingActionButton.extended(
                 onPressed: _isSyncingAll ? null : _syncAll,
                 icon: _isSyncingAll
@@ -96,9 +100,13 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                       )
                     : const Icon(Icons.cloud_upload),
                 label: Text(
-                  _isSyncingAll ? 'Subiendo...' : 'Subir Todas (${pendientes.length})',
+                  _isSyncingAll
+                      ? 'Subiendo...'
+                      : 'Subir Todas (${pendientes.length})',
                 ),
-                backgroundColor: _isSyncingAll ? Colors.grey : Colors.orange.shade700,
+                backgroundColor: _isSyncingAll
+                    ? Colors.grey
+                    : Colors.orange.shade700,
               )
             : null,
         orElse: () => null,
@@ -117,7 +125,11 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
               color: Colors.green.shade50,
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.cloud_done, size: 80, color: Colors.green.shade400),
+            child: Icon(
+              Icons.cloud_done,
+              size: 80,
+              color: Colors.green.shade400,
+            ),
           ),
           const SizedBox(height: 24),
           const Text(
@@ -159,7 +171,10 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                 Expanded(
                   child: Text(
                     'Conecta a Internet para subir tus órdenes',
-                    style: TextStyle(color: Colors.orange.shade800, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      color: Colors.orange.shade800,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -222,174 +237,232 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       statusText = 'Lista para subir';
     }
 
+    final Color backgroundColor = statusColor.withValues(alpha: 0.03);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: statusColor.withValues(alpha: 0.3), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header con estado
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.1),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            child: Row(
-              children: [
-                Icon(statusIcon, color: statusColor, size: 28),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Orden #${orden.idOrdenBackend}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        statusText,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Badge multi-equipo
-                if (info['esMultiEquipo'] == true)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Multi-Equipo',
-                      style: TextStyle(
-                        color: Colors.purple.shade700,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // Contenido
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Resumen de datos capturados
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    if (info['totalActividades'] != null && info['totalActividades'] > 0)
-                      _buildInfoChip(Icons.checklist, '${info['totalActividades']} act.'),
-                    if (info['totalMediciones'] != null && info['totalMediciones'] > 0)
-                      _buildInfoChip(Icons.speed, '${info['totalMediciones']} med.'),
-                    if (info['totalEvidencias'] != null && info['totalEvidencias'] > 0)
-                      _buildInfoChip(Icons.photo_camera, '${info['totalEvidencias']} fotos'),
-                  ],
-                ),
-                
-                const SizedBox(height: 12),
-
-                // Info de fechas
-                Row(
-                  children: [
-                    Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Guardado: ${_formatDate(orden.fechaCreacion)}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      elevation: 1.5,
+      shadowColor: statusColor.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        color: backgroundColor,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Indicador lateral enterprise
+              Container(
+                width: 6,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: statusColor.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(2, 0),
                     ),
                   ],
                 ),
-
-                // Error message
-                if (isError && orden.ultimoError != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.shade200),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header con estado
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      color: statusColor.withValues(alpha: 0.05),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              statusIcon,
+                              color: statusColor,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Orden #${orden.idOrdenBackend}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 17,
+                                    letterSpacing: 0.5,
+                                    color: Colors.blueGrey.shade900,
+                                  ),
+                                ),
+                                Text(
+                                  statusText,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (info['esMultiEquipo'] == true)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                'Multi-Equipo',
+                                style: TextStyle(
+                                  color: Colors.purple,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.warning_amber, size: 18, color: Colors.red.shade700),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            orden.ultimoError!.length > 80
-                                ? '${orden.ultimoError!.substring(0, 80)}...'
-                                : orden.ultimoError!,
-                            style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+
+                    // Contenido
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: [
+                              if (info['totalActividades'] > 0)
+                                _buildInfoChip(
+                                  Icons.checklist_rtl_rounded,
+                                  '${info['totalActividades']} act.',
+                                ),
+                              if (info['totalMediciones'] > 0)
+                                _buildInfoChip(
+                                  Icons.analytics_rounded,
+                                  '${info['totalMediciones']} med.',
+                                ),
+                              if (info['totalEvidencias'] > 0)
+                                _buildInfoChip(
+                                  Icons.camera_alt_rounded,
+                                  '${info['totalEvidencias']} fotos',
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.history_toggle_off_rounded,
+                                size: 14,
+                                color: Colors.blueGrey,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Guardado: ${_formatDate(orden.fechaCreacion)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          if (isError && orden.ultimoError != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.red.shade100),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 16,
+                                    color: Colors.red.shade700,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      orden.ultimoError!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.red.shade800,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    // Botón de acción
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: ElevatedButton.icon(
+                        onPressed: (isOnline && !isSyncingThis && !isEnProceso)
+                            ? () => _subirOrdenIndividual(orden.idOrdenLocal)
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade600,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // Botón SUBIR prominente
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: ElevatedButton.icon(
-              onPressed: (isOnline && !isSyncingThis && !isEnProceso)
-                  ? () => _subirOrdenIndividual(orden.idOrdenLocal)
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                disabledBackgroundColor: Colors.grey.shade300,
-              ),
-              icon: isSyncingThis
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+                        icon: isSyncingThis
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.cloud_upload_rounded, size: 20),
+                        label: Text(
+                          isSyncingThis ? 'SUBIENDO...' : 'SUBIR AL SERVIDOR',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
                       ),
-                    )
-                  : const Icon(Icons.cloud_upload, size: 20),
-              label: Text(
-                isSyncingThis
-                    ? 'Subiendo...'
-                    : (isOnline ? 'SUBIR AHORA' : 'Sin conexión'),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
+                    ),
+                  ],
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -439,7 +512,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         // El diálogo se cierra solo cuando el progreso llega a completado/error
         // Refrescar lista
         ref.invalidate(pendingSyncListProvider);
-        
+
         // Mostrar snackbar adicional si hay error
         if (!success) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -511,7 +584,8 @@ class _SyncProgressDialog extends ConsumerWidget {
 
     return PopScope(
       // No permitir cerrar con back mientras está en progreso
-      canPop: progress.pasoActual == SyncStep.completado ||
+      canPop:
+          progress.pasoActual == SyncStep.completado ||
           progress.pasoActual == SyncStep.error,
       child: AlertDialog(
         title: Row(
@@ -532,8 +606,8 @@ class _SyncProgressDialog extends ConsumerWidget {
                 progress.pasoActual == SyncStep.completado
                     ? '¡Sincronización Exitosa!'
                     : progress.pasoActual == SyncStep.error
-                        ? 'Error en Sincronización'
-                        : 'Sincronizando...',
+                    ? 'Error en Sincronización'
+                    : 'Sincronizando...',
                 style: const TextStyle(fontSize: 18),
               ),
             ),
@@ -545,7 +619,7 @@ class _SyncProgressDialog extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // ✅ 19-DIC-2025: Mostrar mensaje actual del servidor si está disponible
-              if (progress.mensajeActual != null && 
+              if (progress.mensajeActual != null &&
                   progress.pasoActual != SyncStep.completado &&
                   progress.pasoActual != SyncStep.error) ...[
                 Container(
@@ -577,27 +651,26 @@ class _SyncProgressDialog extends ConsumerWidget {
                   ),
                 ),
               ],
-              
+
               // ✅ 19-DIC-2025: Barra de progreso visual
-              if (progress.porcentaje > 0 && 
+              if (progress.porcentaje > 0 &&
                   progress.pasoActual != SyncStep.completado &&
                   progress.pasoActual != SyncStep.error) ...[
                 LinearProgressIndicator(
                   value: progress.porcentaje / 100,
                   backgroundColor: Colors.grey.shade200,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Colors.blue.shade600,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '${progress.porcentaje}%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 16),
               ],
-              
+
               // Lista de pasos con estados - Usando pasos visibles simplificados
               _buildStepItem(
                 step: SyncStep.preparando,
@@ -671,8 +744,11 @@ class _SyncProgressDialog extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.celebration,
-                          color: Colors.green.shade700, size: 20),
+                      Icon(
+                        Icons.celebration,
+                        color: Colors.green.shade700,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
@@ -700,9 +776,11 @@ class _SyncProgressDialog extends ConsumerWidget {
               onPressed: () {
                 Navigator.of(context).pop(); // Cerrar diálogo
               },
-              child: Text(progress.pasoActual == SyncStep.completado
-                  ? 'CONTINUAR'
-                  : 'CERRAR'),
+              child: Text(
+                progress.pasoActual == SyncStep.completado
+                    ? 'CONTINUAR'
+                    : 'CERRAR',
+              ),
             ),
         ],
       ),
@@ -737,7 +815,11 @@ class _SyncProgressDialog extends ConsumerWidget {
       );
     } else {
       color = Colors.grey.shade400;
-      leading = Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 22);
+      leading = Icon(
+        Icons.circle_outlined,
+        color: Colors.grey.shade400,
+        size: 22,
+      );
     }
 
     return Padding(

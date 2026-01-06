@@ -61,6 +61,36 @@ export class EquiposController {
   }
 
   /**
+   * ✅ OPTIMIZACIÓN 05-ENE-2026: Endpoint LIGERO para selectores
+   * Retorna solo id, código, nombre - ideal para dropdowns/autocomplete
+   * 
+   * @param q Término de búsqueda (código, nombre, serie)
+   * @param clienteId Filtrar por cliente
+   * @param sedeId Filtrar por sede
+   * @param limit Máximo de resultados (default 20)
+   */
+  @Get('selector')
+  @ApiOperation({ summary: 'Obtener equipos en formato ligero para selectores' })
+  async getSelector(
+    @Query('q') q?: string,
+    @Query('clienteId') clienteId?: string,
+    @Query('sedeId') sedeId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const items = await this.equiposGestionService.findForSelector({
+      search: q,
+      clienteId: clienteId ? parseInt(clienteId) : undefined,
+      sedeId: sedeId ? parseInt(sedeId) : undefined,
+      limit: Math.min(parseInt(limit || '20'), 50),
+    });
+
+    return {
+      success: true,
+      data: items,
+    };
+  }
+
+  /**
    * GET /api/equipos
    * Listar equipos con filtrado jerárquico enterprise (Cliente -> Sede)
    */

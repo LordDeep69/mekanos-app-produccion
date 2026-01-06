@@ -1,8 +1,15 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Hooks TanStack Query para Órdenes de Servicio
+ * 
+ * ENTERPRISE CACHE: Órdenes usan estrategia DYNAMIC (2min staleTime)
+ * para garantizar actualizaciones en tiempo real sin sacrificar rendimiento.
+ * 
+ * IMPORTANTE: Las mutaciones invalidan cache relacionado para
+ * garantizar que cambios de estado se reflejen inmediatamente.
  */
 
+import { CacheStrategy } from '@/lib/cache';
 import type {
     CambiarEstadoDto,
     CreateOrdenDto,
@@ -45,6 +52,7 @@ export function useEvidenciasOrden(idOrden: number) {
         queryKey: [...EVIDENCIAS_ORDEN_KEY, idOrden],
         queryFn: () => getEvidenciasOrden(idOrden),
         enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
 
@@ -56,6 +64,7 @@ export function useFirmasOrden(idOrden: number) {
         queryKey: [...FIRMAS_ORDEN_KEY, idOrden],
         queryFn: () => getFirmasOrden(idOrden),
         enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
 
@@ -69,6 +78,7 @@ export function useActividadesOrden(idOrden: number) {
         queryKey: [...ACTIVIDADES_ORDEN_KEY, idOrden],
         queryFn: () => getActividadesOrden(idOrden),
         enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
 
@@ -80,6 +90,7 @@ export function useMedicionesOrden(idOrden: number) {
         queryKey: [...MEDICIONES_ORDEN_KEY, idOrden],
         queryFn: () => getMedicionesOrden(idOrden),
         enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
 
@@ -93,6 +104,7 @@ export function useServiciosOrden(idOrden: number) {
         queryKey: [...SERVICIOS_ORDEN_KEY, idOrden],
         queryFn: () => getServiciosOrden(idOrden),
         enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
 
@@ -137,6 +149,7 @@ export function useOrdenes(params?: OrdenesQueryParams) {
     return useQuery({
         queryKey: [...ORDENES_KEY, params],
         queryFn: () => getOrdenes(params),
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
 
@@ -148,19 +161,25 @@ export function useOrden(id: number) {
         queryKey: [...ORDENES_KEY, id],
         queryFn: () => getOrden(id),
         enabled: !!id,
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
 
 /**
  * Hook para crear orden
  */
+// Dashboard keys para invalidación cruzada
+const DASHBOARD_KEY = ['dashboard'];
+
 export function useCrearOrden() {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: (data: CreateOrdenDto) => createOrden(data),
         onSuccess: () => {
+            // Invalidar órdenes Y dashboard para reflejar cambios en métricas
             queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
             toast.success('Orden creada exitosamente');
         },
         onError: (error: unknown) => {
@@ -182,7 +201,9 @@ export function useCambiarEstadoOrden() {
         mutationFn: ({ id, data }: { id: number; data: CambiarEstadoDto }) =>
             cambiarEstadoOrden(id, data),
         onSuccess: (result) => {
+            // ✅ ENTERPRISE: Invalidar órdenes Y dashboard para actualización en tiempo real
             queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
             toast.success(result.message || 'Estado actualizado');
         },
         onError: (error: unknown) => {
@@ -204,7 +225,9 @@ export function useAsignarTecnico() {
         mutationFn: ({ id, tecnicoId }: { id: number; tecnicoId: number }) =>
             asignarTecnico(id, tecnicoId),
         onSuccess: (result) => {
+            // Invalidar órdenes Y dashboard
             queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
             toast.success(result.message || 'Técnico asignado');
         },
         onError: (error: unknown) => {
@@ -226,7 +249,9 @@ export function useCancelarOrden() {
         mutationFn: ({ id, motivo }: { id: number; motivo?: string }) =>
             cancelarOrden(id, motivo),
         onSuccess: (result) => {
+            // Invalidar órdenes Y dashboard
             queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
             toast.success(result.message || 'Orden cancelada');
         },
         onError: (error: unknown) => {

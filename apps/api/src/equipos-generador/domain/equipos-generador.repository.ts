@@ -29,7 +29,7 @@ export interface CrearEquipoGeneradorData {
   capacidad_tanque_auxiliar_litros?: number;
   clase_aislamiento?: string;
   grado_proteccion_ip?: string;
-  año_fabricacion?: number;
+  a_o_fabricacion?: number;
   observaciones?: string;
   metadata?: any;
   creado_por: number;
@@ -63,7 +63,7 @@ export interface ActualizarEquipoGeneradorData {
   capacidad_tanque_auxiliar_litros?: number;
   clase_aislamiento?: string;
   grado_proteccion_ip?: string;
-  año_fabricacion?: number;
+  a_o_fabricacion?: number;
   observaciones?: string;
   metadata?: any;
   modificado_por: number;

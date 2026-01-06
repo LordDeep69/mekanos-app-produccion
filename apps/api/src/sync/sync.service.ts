@@ -803,9 +803,13 @@ export class SyncService {
       prioridad: o.prioridad as string,
       idCliente: o.id_cliente,
       nombreCliente:
+        o.clientes?.persona?.nombre_comercial ||
         o.clientes?.persona?.nombre_completo ||
         o.clientes?.persona?.razon_social ||
         'Sin nombre',
+      nombreComercial: o.clientes?.persona?.nombre_comercial || undefined,
+      nombreCompleto: o.clientes?.persona?.nombre_completo || undefined,
+      razonSocial: o.clientes?.persona?.razon_social || undefined,
       idSede: o.id_sede ?? undefined,
       nombreSede: o.sedes_cliente?.nombre_sede,
       direccionSede: o.sedes_cliente?.direccion_sede,
@@ -1048,6 +1052,11 @@ export class SyncService {
             codigo_estado: true,
           },
         },
+        clientes: {
+          include: {
+            persona: true,
+          },
+        },
       },
       orderBy: { fecha_modificacion: 'desc' },
       take: limit,
@@ -1091,6 +1100,11 @@ export class SyncService {
         estadoCodigo: o.estados_orden?.codigo_estado || 'DESCONOCIDO',
         idCliente: o.id_cliente || 1,
         id_cliente: o.id_cliente || 1, // Alias snake_case
+        nombreCliente:
+          o.clientes?.persona?.nombre_comercial ||
+          o.clientes?.persona?.nombre_completo ||
+          o.clientes?.persona?.razon_social ||
+          'Sin nombre',
         idEquipo: o.id_equipo || 1,
         id_equipo: o.id_equipo || 1, // Alias snake_case
         idTipoService: o.id_tipo_servicio || 1, // Fallback (legacy support)
@@ -1248,7 +1262,10 @@ export class SyncService {
       fechaProgramada: orden.fecha_programada?.toISOString(),
       prioridad: orden.prioridad || 'NORMAL',
       idCliente: orden.id_cliente,
-      nombreCliente: orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
+      nombreCliente: orden.clientes?.persona?.nombre_comercial || orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
+      nombreComercial: orden.clientes?.persona?.nombre_comercial || undefined,
+      nombreCompleto: orden.clientes?.persona?.nombre_completo || undefined,
+      razonSocial: orden.clientes?.persona?.razon_social || undefined,
       idSede: orden.id_sede ?? undefined,
       nombreSede: orden.sedes_cliente?.nombre_sede ?? undefined,
       direccionSede: orden.sedes_cliente?.direccion_sede ?? undefined,

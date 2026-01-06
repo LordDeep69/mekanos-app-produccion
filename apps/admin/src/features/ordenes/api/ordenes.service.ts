@@ -45,6 +45,22 @@ export async function getOrdenes(
     if (params?.prioridad) {
         queryParams.append('prioridad', params.prioridad);
     }
+    // ENTERPRISE: Nuevos parámetros de ordenamiento y filtrado
+    if (params?.sortBy) {
+        queryParams.append('sortBy', params.sortBy);
+    }
+    if (params?.sortOrder) {
+        queryParams.append('sortOrder', params.sortOrder);
+    }
+    if (params?.tipoServicioId !== undefined) {
+        queryParams.append('tipoServicioId', String(params.tipoServicioId));
+    }
+    if (params?.fechaDesde) {
+        queryParams.append('fechaDesde', params.fechaDesde);
+    }
+    if (params?.fechaHasta) {
+        queryParams.append('fechaHasta', params.fechaHasta);
+    }
 
     const url = queryParams.toString()
         ? `${ORDENES_BASE}?${queryParams.toString()}`

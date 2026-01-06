@@ -87,6 +87,8 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 // ✅ FASE 6 INVENTARIO: Motor Transaccional Enterprise (Sesión Dic 27)
 import { InventarioModule } from './inventario/inventario.module';
+// ✅ AGENDA ENTERPRISE: Centro de programación inteligente (Sesión Dic 29)
+import { AgendaModule } from './agenda/agenda.module';
 
 @Module({
   imports: [
@@ -180,6 +182,8 @@ import { InventarioModule } from './inventario/inventario.module';
     DashboardModule, // ✅ GET /dashboard - Métricas unificadas para admin
     // ✅ FASE 6 INVENTARIO: Motor Transaccional Enterprise (Sesión Dic 27)
     InventarioModule, // ✅ POST /inventario/entrada, /salida, /ajuste + GET /kardex, /dashboard
+    // ✅ AGENDA ENTERPRISE: Centro de programación inteligente (Sesión Dic 29)
+    AgendaModule, // ✅ GET /agenda/hoy, /semana, /mes, /metricas, /carga-tecnicos, /calendario
   ],
   controllers: [AppController],
   providers: [AppService],
