@@ -424,8 +424,12 @@ export class SyncService {
     }
 
     // 1. Obtener órdenes asignadas al técnico
-    const treintaDiasAtras = new Date();
-    treintaDiasAtras.setDate(treintaDiasAtras.getDate() - 30);
+    // ✅ FIX 06-ENE-2026: Reducido de 30 a 7 días para evitar ciclo infinito
+    // El móvil purga órdenes completadas según preferencias del usuario (1-30 días)
+    // Si el backend envía más días, el móvil las purga y luego las re-descarga
+    const DIAS_RETENCION_COMPLETADAS = 7;
+    const fechaLimiteCompletadas = new Date();
+    fechaLimiteCompletadas.setDate(fechaLimiteCompletadas.getDate() - DIAS_RETENCION_COMPLETADAS);
 
     // ✅ FIX CRÍTICO: Simplificar filtro para delta sync
     // El filtro OR con relaciones + fecha_modificacion causaba queries incorrectos en Prisma
@@ -567,10 +571,10 @@ export class SyncService {
         OR: [
           // Órdenes activas (no finales)
           { estados_orden: { es_estado_final: false } },
-          // Órdenes completadas en los últimos 30 días (para historial)
+          // Órdenes completadas en los últimos 7 días (para historial)
           {
             estados_orden: { es_estado_final: true },
-            fecha_fin_real: { gte: treintaDiasAtras },
+            fecha_fin_real: { gte: fechaLimiteCompletadas },
           },
         ],
       };
@@ -1038,9 +1042,27 @@ export class SyncService {
   }> {
     this.logger.log(`[Sync Inteligente] Obteniendo resúmenes para técnico ${tecnicoId} (limit: ${limit})`);
 
-    // Obtener las últimas N órdenes del técnico, ordenadas por fecha_modificacion DESC
+    // ✅ FIX 06-ENE-2026: Filtrar órdenes completadas antiguas para evitar ciclo infinito
+    // El móvil purga órdenes según preferencias del usuario, si enviamos más de lo que retiene,
+    // las purga y luego las re-descarga en un ciclo infinito
+    const DIAS_RETENCION_COMPLETADAS = 7;
+    const fechaLimiteCompletadas = new Date();
+    fechaLimiteCompletadas.setDate(fechaLimiteCompletadas.getDate() - DIAS_RETENCION_COMPLETADAS);
+
+    // Obtener las últimas N órdenes del técnico (activas + completadas recientes)
     const ordenes = await this.prisma.ordenes_servicio.findMany({
-      where: { id_tecnico_asignado: tecnicoId },
+      where: {
+        id_tecnico_asignado: tecnicoId,
+        OR: [
+          // Órdenes activas (no finales)
+          { estados_orden: { es_estado_final: false } },
+          // Órdenes completadas en los últimos 7 días
+          {
+            estados_orden: { es_estado_final: true },
+            fecha_fin_real: { gte: fechaLimiteCompletadas },
+          },
+        ],
+      },
       select: {
         id_orden_servicio: true,
         numero_orden: true,
