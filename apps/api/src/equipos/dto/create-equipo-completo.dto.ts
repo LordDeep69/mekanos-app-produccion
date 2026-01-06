@@ -18,6 +18,7 @@ import {
   IsJSON,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsPositive,
   IsString,
@@ -766,8 +767,8 @@ export class CreateEquipoCompletoDto {
    * Si no se proporciona, se usará el catálogo global.
    */
   @IsOptional()
-  @IsJSON()
-  config_parametros?: any;
+  @IsObject()
+  config_parametros?: Record<string, any>;
 }
 
 // 
