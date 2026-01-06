@@ -102,6 +102,18 @@ export interface DatosOrdenPDF {
 
   // ✅ MULTI-EQUIPOS (15-DIC-2025): Flag para detectar si es orden multi-equipo
   esMultiEquipo?: boolean;
+
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Unidades personalizadas por equipo
+  // Si no se proporciona, usa unidades por defecto (°C, PSI, V, Hz, etc.)
+  configUnidades?: {
+    temperatura?: string;  // °C, °F, K
+    presion?: string;      // PSI, bar, kPa, atm
+    voltaje?: string;      // V
+    frecuencia?: string;   // Hz
+    corriente?: string;    // A
+    velocidad?: string;    // RPM
+    vibracion?: string;    // mm/s
+  };
 }
 
 // ✅ MULTI-EQUIPOS: Datos de un equipo en la orden

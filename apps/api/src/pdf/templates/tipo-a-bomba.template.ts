@@ -237,6 +237,16 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
     (act: any) => !esActividadMedicion(act.descripcion || ''),
   );
 
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Unidades dinámicas con fallback
+  const u = datos.configUnidades || {};
+  const unidades = {
+    presion: u.presion || 'PSI',
+    voltaje: u.voltaje || 'V',
+    corriente: u.corriente || 'A',
+    temperatura: u.temperatura || '°C',
+    vibracion: u.vibracion || 'mm/s',
+  };
+
   // Obtener mediciones con NOMBRES EXACTOS del catálogo
   // (Los nombres corresponden a los registros en parametros_medicion)
   const presion = obtenerMedicionExacta(datos.mediciones, 'Medición de Presiones');
@@ -293,42 +303,42 @@ const generarChecklistBombas = (datos: DatosOrdenPDF): string => {
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Medición de las presiones</strong></td>
           <td style="text-align: center;"><span class="presion-value">${presion.valor}</span></td>
-          <td style="text-align: center;">PSI</td>
+          <td style="text-align: center;">${unidades.presion}</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Medición de voltaje</strong></td>
           <td style="text-align: center;"><span class="presion-value">${voltaje.valor}</span></td>
-          <td style="text-align: center;">V</td>
+          <td style="text-align: center;">${unidades.voltaje}</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Medición de amperaje</strong></td>
           <td style="text-align: center;"><span class="presion-value">${amperaje.valor}</span></td>
-          <td style="text-align: center;">A</td>
+          <td style="text-align: center;">${unidades.corriente}</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Temperatura</strong></td>
           <td style="text-align: center;"><span class="presion-value">${temperatura.valor}</span></td>
-          <td style="text-align: center;">°C</td>
+          <td style="text-align: center;">${unidades.temperatura}</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Vibración</strong></td>
           <td style="text-align: center;"><span class="presion-value">${vibracion.valor}</span></td>
-          <td style="text-align: center;">mm/s</td>
+          <td style="text-align: center;">${unidades.vibracion}</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Presostato - Presión encendido</strong></td>
           <td style="text-align: center;"><span class="presion-value">${presionEncendido.valor}</span></td>
-          <td style="text-align: center;">PSI</td>
+          <td style="text-align: center;">${unidades.presion}</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Presostato - Presión apagado</strong></td>
           <td style="text-align: center;"><span class="presion-value">${presionApagado.valor}</span></td>
-          <td style="text-align: center;">PSI</td>
+          <td style="text-align: center;">${unidades.presion}</td>
         </tr>
         <tr style="background: ${MEKANOS_COLORS.background};">
           <td><strong>Presión de tanques</strong></td>
           <td style="text-align: center;"><span class="presion-value">${presionTanques.valor}</span></td>
-          <td style="text-align: center;">PSI</td>
+          <td style="text-align: center;">${unidades.presion}</td>
         </tr>
         ${(datos.mediciones || [])
       .filter((m: any) => {

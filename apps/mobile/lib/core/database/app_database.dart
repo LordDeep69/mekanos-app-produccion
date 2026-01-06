@@ -187,6 +187,11 @@ class Equipos extends Table {
   IntColumn get idCliente => integer().nullable().references(Clientes, #id)();
   BoolColumn get activo => boolean().withDefault(const Constant(true))();
 
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Config personalizada
+  // JSON string con estructura: {"unidades": {...}, "rangos": {...}}
+  // Si es null o vacío, se usa catálogo global
+  TextColumn get configParametros => text().nullable()();
+
   // Sync control
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 
@@ -535,7 +540,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 13; // v13: Fix FK en ordenes_equipos (idEquipo sin referencia)
+  int get schemaVersion => 14; // v14: Flexibilización parámetros - configParametros en equipos
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -645,6 +650,13 @@ class AppDatabase extends _$AppDatabase {
         // (El FK a Equipos causaba fallas al sincronizar equipos que no existen localmente)
         await m.deleteTable('ordenes_equipos');
         await m.createTable(ordenesEquipos);
+      }
+      if (from < 14) {
+        // v14: FLEXIBILIZACIÓN PARÁMETROS - Agregar config_parametros a equipos
+        // JSON string con unidades y rangos personalizados por equipo
+        await customStatement(
+          'ALTER TABLE equipos ADD COLUMN config_parametros TEXT',
+        );
       }
     },
     beforeOpen: (details) async {

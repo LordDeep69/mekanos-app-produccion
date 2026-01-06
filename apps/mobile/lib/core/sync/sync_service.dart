@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -407,6 +409,16 @@ class SyncService {
         );
       }
       for (final entry in equiposData.entries) {
+        // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Descargar config personalizada
+        // NOTA: Después de ejecutar `flutter pub run build_runner build`, descomentar:
+        final configParam = entry.value['configParametros'];
+        String? configJson;
+        if (configParam != null &&
+            configParam is Map &&
+            configParam.isNotEmpty) {
+          configJson = jsonEncode(configParam);
+        }
+
         await _db.upsertEquipo(
           EquiposCompanion(
             id: Value(entry.key),
@@ -414,6 +426,8 @@ class SyncService {
             nombre: Value(entry.value['nombreEquipo'] as String? ?? ''),
             ubicacion: Value(entry.value['ubicacionEquipo'] as String?),
             idCliente: Value(entry.value['idCliente'] as int),
+            // TODO: Descomentar después de regenerar drift con build_runner
+            // configParametros: Value(configJson),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );

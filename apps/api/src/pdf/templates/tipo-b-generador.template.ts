@@ -446,25 +446,36 @@ const generarSeccionActividades = (
 const generarDatosModulo = (datos: DatosOrdenPDF): string => {
   const modulo = datos.datosModulo || {};
 
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Unidades dinámicas con fallback
+  const u = datos.configUnidades || {};
+  const unidades = {
+    velocidad: u.velocidad || 'RPM',
+    presion: u.presion || 'PSI',
+    temperatura: u.temperatura || '°C',
+    voltaje: u.voltaje || 'V',
+    frecuencia: u.frecuencia || 'Hz',
+    corriente: u.corriente || 'A',
+  };
+
   return `
   <div class="section">
     <div class="section-subtitle">REGISTRO DE DATOS DEL MÓDULO DE CONTROL</div>
     <div class="mediciones-grid">
       <div class="medicion-item">
         <div class="medicion-label">Velocidad Motor</div>
-        <div class="medicion-value">${modulo.rpm || '-'} RPM</div>
+        <div class="medicion-value">${modulo.rpm || '-'} ${unidades.velocidad}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Presión Aceite</div>
-        <div class="medicion-value">${modulo.presionAceite || '-'} PSI</div>
+        <div class="medicion-value">${modulo.presionAceite || '-'} ${unidades.presion}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Temp. Refrigerante</div>
-        <div class="medicion-value">${modulo.temperaturaRefrigerante || '-'} °C</div>
+        <div class="medicion-value">${modulo.temperaturaRefrigerante || '-'} ${unidades.temperatura}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Carga Batería</div>
-        <div class="medicion-value">${modulo.cargaBateria || '-'} V</div>
+        <div class="medicion-value">${modulo.cargaBateria || '-'} ${unidades.voltaje}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Horas Trabajo</div>
@@ -472,15 +483,15 @@ const generarDatosModulo = (datos: DatosOrdenPDF): string => {
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Voltaje Generador</div>
-        <div class="medicion-value">${modulo.voltaje || '-'} V</div>
+        <div class="medicion-value">${modulo.voltaje || '-'} ${unidades.voltaje}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Frecuencia</div>
-        <div class="medicion-value">${modulo.frecuencia || '-'} Hz</div>
+        <div class="medicion-value">${modulo.frecuencia || '-'} ${unidades.frecuencia}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Corriente</div>
-        <div class="medicion-value">${modulo.corriente || '-'} A</div>
+        <div class="medicion-value">${modulo.corriente || '-'} ${unidades.corriente}</div>
       </div>
     </div>
   </div>

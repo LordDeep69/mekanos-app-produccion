@@ -89,6 +89,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { InventarioModule } from './inventario/inventario.module';
 // ✅ AGENDA ENTERPRISE: Centro de programación inteligente (Sesión Dic 29)
 import { AgendaModule } from './agenda/agenda.module';
+// ✅ FLEXIBILIZACIÓN PARÁMETROS: Configuración personalizada por equipo (Sesión Ene 06)
 
 @Module({
   imports: [
@@ -184,6 +185,8 @@ import { AgendaModule } from './agenda/agenda.module';
     InventarioModule, // ✅ POST /inventario/entrada, /salida, /ajuste + GET /kardex, /dashboard
     // ✅ AGENDA ENTERPRISE: Centro de programación inteligente (Sesión Dic 29)
     AgendaModule, // ✅ GET /agenda/hoy, /semana, /mes, /metricas, /carga-tecnicos, /calendario
+    // ✅ FLEXIBILIZACIÓN PARÁMETROS: Config personalizada por equipo (Sesión Ene 06)
+    ConfigParametrosModule, // ✅ Servicio resolución cascada: equipo → plantilla → global
   ],
   controllers: [AppController],
   providers: [AppService],
