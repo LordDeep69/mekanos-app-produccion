@@ -155,6 +155,10 @@ export class PrismaOrdenServicioRepository {
       }
 
       return savedOrden;
+    }, {
+      // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
+      timeout: 30000,
+      maxWait: 10000,
     });
   }
 
@@ -163,6 +167,7 @@ export class PrismaOrdenServicioRepository {
    * Evita el findById pesado que causaba +10 segundos de latencia
    */
   async saveWithEquiposOptimizado(orden: any, equiposIds: number[]): Promise<any> {
+    // ✅ FIX: Aumentar timeout para conexiones lentas con Supabase
     return this.prisma.$transaction(async (tx) => {
       // 1. Crear la cabecera de la orden
       const savedOrden = await tx.ordenes_servicio.create({
@@ -203,6 +208,10 @@ export class PrismaOrdenServicioRepository {
 
       // ✅ Retornar directamente sin consulta adicional
       return savedOrden;
+    }, {
+      // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
+      timeout: 30000,
+      maxWait: 10000,
     });
   }
 
