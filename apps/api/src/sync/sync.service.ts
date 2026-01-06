@@ -423,18 +423,6 @@ export class SyncService {
       }
     }
 
-    // 1. Obtener órdenes asignadas al técnico
-    // ✅ FIX 06-ENE-2026: Reducido de 30 a 7 días para evitar ciclo infinito
-    // El móvil purga órdenes completadas según preferencias del usuario (1-30 días)
-    // Si el backend envía más días, el móvil las purga y luego las re-descarga
-    const DIAS_RETENCION_COMPLETADAS = 7;
-    const fechaLimiteCompletadas = new Date();
-    fechaLimiteCompletadas.setDate(fechaLimiteCompletadas.getDate() - DIAS_RETENCION_COMPLETADAS);
-
-    // ✅ FIX CRÍTICO: Simplificar filtro para delta sync
-    // El filtro OR con relaciones + fecha_modificacion causaba queries incorrectos en Prisma
-    // Para DELTA: Solo filtrar por fecha_modificacion (incluye TODAS las órdenes modificadas)
-    // Para FULL: Usar filtro OR para incluir activas + completadas recientes
     let baseFilter: any;
 
     if (since) {
@@ -444,14 +432,17 @@ export class SyncService {
       // cuando se usa `timestamp without time zone` + objetos Date de JavaScript
       // ========================================================================
       const sinceIsoString = since.toISOString();
-      this.logger.log(`[Sync Delta] Filtrando órdenes modificadas desde ${sinceIsoString}`);
+      this.logger.log(`[Sync Delta] Filtrando órdenes ACTIVAS modificadas desde ${sinceIsoString}`);
 
-      // Obtener IDs de órdenes modificadas usando query raw para garantizar comparación correcta
+      // 🚨 POLÍTICA: Solo órdenes ACTIVAS modificadas (NUNCA completadas)
+      // JOIN con estados_orden para filtrar solo es_estado_final = false
       const ordenesModificadas = await this.prisma.$queryRaw<{ id_orden_servicio: number }[]>`
-        SELECT id_orden_servicio 
-        FROM ordenes_servicio 
-        WHERE id_tecnico_asignado = ${tecnicoId}
-          AND fecha_modificacion >= ${sinceIsoString}::timestamp
+        SELECT os.id_orden_servicio 
+        FROM ordenes_servicio os
+        INNER JOIN estados_orden eo ON os.id_estado_actual = eo.id_estado
+        WHERE os.id_tecnico_asignado = ${tecnicoId}
+          AND os.fecha_modificacion >= ${sinceIsoString}::timestamp
+          AND eo.es_estado_final = false
       `;
 
       this.logger.log(`[🔬 DIAGNÓSTICO] Query raw encontró ${ordenesModificadas.length} órdenes modificadas`);
@@ -565,18 +556,10 @@ export class SyncService {
         id_orden_servicio: { in: ordenesIds },
       };
     } else {
-      // FULL SYNC: Filtro completo con OR para historial
+      // FULL SYNC: Solo órdenes ACTIVAS (NUNCA completadas)
       baseFilter = {
         id_tecnico_asignado: tecnicoId,
-        OR: [
-          // Órdenes activas (no finales)
-          { estados_orden: { es_estado_final: false } },
-          // Órdenes completadas en los últimos 7 días (para historial)
-          {
-            estados_orden: { es_estado_final: true },
-            fecha_fin_real: { gte: fechaLimiteCompletadas },
-          },
-        ],
+        estados_orden: { es_estado_final: false },
       };
     }
 
@@ -1040,28 +1023,19 @@ export class SyncService {
       urlPdf?: string;
     }>;
   }> {
-    this.logger.log(`[Sync Inteligente] Obteniendo resúmenes para técnico ${tecnicoId} (limit: ${limit})`);
+    // ========================================================================
+    // 🚨 POLÍTICA ENTERPRISE: CERO ÓRDENES COMPLETADAS DEL SERVIDOR
+    // ========================================================================
+    // El móvil NUNCA recibe órdenes completadas del servidor.
+    // Solo órdenes ACTIVAS (es_estado_final = false)
+    // ========================================================================
+    this.logger.log(`[🚨 COMPARE] POLÍTICA: Solo órdenes ACTIVAS para técnico ${tecnicoId}`);
 
-    // ✅ FIX 06-ENE-2026: Filtrar órdenes completadas antiguas para evitar ciclo infinito
-    // El móvil purga órdenes según preferencias del usuario, si enviamos más de lo que retiene,
-    // las purga y luego las re-descarga en un ciclo infinito
-    const DIAS_RETENCION_COMPLETADAS = 7;
-    const fechaLimiteCompletadas = new Date();
-    fechaLimiteCompletadas.setDate(fechaLimiteCompletadas.getDate() - DIAS_RETENCION_COMPLETADAS);
-
-    // Obtener las últimas N órdenes del técnico (activas + completadas recientes)
+    // Obtener órdenes del técnico (SOLO ACTIVAS)
     const ordenes = await this.prisma.ordenes_servicio.findMany({
       where: {
         id_tecnico_asignado: tecnicoId,
-        OR: [
-          // Órdenes activas (no finales)
-          { estados_orden: { es_estado_final: false } },
-          // Órdenes completadas en los últimos 7 días
-          {
-            estados_orden: { es_estado_final: true },
-            fecha_fin_real: { gte: fechaLimiteCompletadas },
-          },
-        ],
+        estados_orden: { es_estado_final: false },
       },
       select: {
         id_orden_servicio: true,
@@ -1179,6 +1153,12 @@ export class SyncService {
 
     if (!orden) {
       this.logger.warn(`[Sync Inteligente] Orden ${ordenId} no encontrada`);
+      return null;
+    }
+
+    // 🚨 POLÍTICA ENTERPRISE: NUNCA enviar órdenes completadas
+    if (orden.estados_orden?.es_estado_final) {
+      this.logger.warn(`[🚨 POLÍTICA] Orden ${ordenId} está COMPLETADA - NO se envía al móvil`);
       return null;
     }
 

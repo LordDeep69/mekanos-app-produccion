@@ -30,8 +30,8 @@ class StoragePreferences {
   static const String _keyLimpiezaAutomatica = 'storage_limpieza_automatica';
 
   // Valores por defecto
-  static const int defaultDiasRetencionCompletadas = 7;
-  static const int defaultDiasRetencionArchivos = 3;
+  static const int defaultDiasRetencionCompletadas = 1;
+  static const int defaultDiasRetencionArchivos = 1;
   static const int defaultMaxOrdenesHistorial = 15;
   static const bool defaultLimpiezaAutomatica = true;
 
