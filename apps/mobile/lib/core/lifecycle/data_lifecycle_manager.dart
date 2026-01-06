@@ -7,11 +7,13 @@ import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import '../storage/storage_preferences.dart';
 
 /// Provider para el servicio de ciclo de vida de datos
 final dataLifecycleManagerProvider = Provider<DataLifecycleManager>((ref) {
   final db = ref.watch(databaseProvider);
-  return DataLifecycleManager(db);
+  final prefs = ref.watch(storagePreferencesProvider);
+  return DataLifecycleManager(db, prefs);
 });
 
 /// ============================================================================
@@ -64,19 +66,29 @@ final dataLifecycleManagerProvider = Provider<DataLifecycleManager>((ref) {
 
 class DataLifecycleManager {
   final AppDatabase _db;
+  final StoragePreferences _prefs;
 
   // ============================================================================
-  // CONFIGURACIÓN DE POLÍTICAS (ajustables)
+  // CONFIGURACIÓN DE POLÍTICAS (valores por defecto, se actualizan desde prefs)
   // ============================================================================
 
-  /// Días de retención para órdenes completadas
-  static const int diasRetencionCompletadas = 7;
+  /// Días de retención para órdenes completadas (default, se lee de prefs)
+  int _diasRetencionCompletadas = 7;
 
-  /// Días de retención para archivos multimedia después de sync
-  static const int diasRetencionArchivosPostSync = 3;
+  /// Días de retención para archivos multimedia después de sync (default, se lee de prefs)
+  int _diasRetencionArchivosPostSync = 3;
 
   /// Máximo de órdenes en historial (soft limit para UI)
-  static const int maxOrdenesHistorial = 15;
+  int _maxOrdenesHistorial = 15;
+
+  /// Si la limpieza automática está activa
+  bool _limpiezaAutomaticaActiva = true;
+
+  // Getters para acceso externo
+  int get diasRetencionCompletadas => _diasRetencionCompletadas;
+  int get diasRetencionArchivosPostSync => _diasRetencionArchivosPostSync;
+  int get maxOrdenesHistorial => _maxOrdenesHistorial;
+  bool get limpiezaAutomaticaActiva => _limpiezaAutomaticaActiva;
 
   /// Estados considerados "finales" (candidatos a purga)
   static const List<String> estadosFinales = [
@@ -96,7 +108,22 @@ class DataLifecycleManager {
     'POR_SUBIR',
   ];
 
-  DataLifecycleManager(this._db);
+  DataLifecycleManager(this._db, this._prefs);
+
+  /// Carga las preferencias del usuario antes de ejecutar limpieza
+  Future<void> _cargarPreferencias() async {
+    final data = await _prefs.cargarPreferencias();
+    _diasRetencionCompletadas = data.diasRetencionCompletadas;
+    _diasRetencionArchivosPostSync = data.diasRetencionArchivos;
+    _maxOrdenesHistorial = data.maxOrdenesHistorial;
+    _limpiezaAutomaticaActiva = data.limpiezaAutomaticaActiva;
+
+    debugPrint('📋 [LIFECYCLE] Preferencias cargadas:');
+    debugPrint('   - Retención órdenes: $_diasRetencionCompletadas días');
+    debugPrint('   - Retención archivos: $_diasRetencionArchivosPostSync días');
+    debugPrint('   - Máx historial: $_maxOrdenesHistorial órdenes');
+    debugPrint('   - Limpieza automática: $_limpiezaAutomaticaActiva');
+  }
 
   // ============================================================================
   // MÉTODO PRINCIPAL: Limpieza Inteligente Completa
@@ -109,6 +136,9 @@ class DataLifecycleManager {
   /// SEGURIDAD: Este método NUNCA elimina datos que no hayan sido sincronizados.
   Future<PurgeResult> ejecutarLimpiezaInteligente() async {
     debugPrint('🧹 [LIFECYCLE] Iniciando limpieza inteligente de datos...');
+
+    // ✅ FIX 06-ENE-2026: Cargar preferencias del usuario antes de limpiar
+    await _cargarPreferencias();
 
     final resultado = PurgeResult();
     final stopwatch = Stopwatch()..start();
