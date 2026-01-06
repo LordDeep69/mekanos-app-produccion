@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -99,6 +101,9 @@ class EjecucionService {
             .toList();
 
         if (actividadesConMedicion.isNotEmpty && medicionesExistentes.isEmpty) {
+          // ✅ FLEXIBILIZACIÓN PARÁMETROS: Obtener config del equipo
+          final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
+
           int medicionesReparadas = 0;
           for (final act in actividadesConMedicion) {
             final parametro =
@@ -107,6 +112,12 @@ class EjecucionService {
                     .getSingleOrNull();
 
             if (parametro != null) {
+              // ✅ FLEXIBILIZACIÓN PARÁMETROS: Resolver rangos (equipo > catálogo)
+              final rangosCustom = _resolverRangosPersonalizados(
+                configParametrosJson: configEquipoJson,
+                codigoParametro: parametro.codigo,
+              );
+
               await _db.insertMedicion(
                 MedicionesCompanion.insert(
                   idOrden: idOrdenLocal,
@@ -114,10 +125,18 @@ class EjecucionService {
                   idParametro: parametro.id,
                   nombreParametro: parametro.nombre,
                   unidadMedida: parametro.unidad ?? '',
-                  rangoMinimoNormal: Value(parametro.valorMinimoNormal),
-                  rangoMaximoNormal: Value(parametro.valorMaximoNormal),
-                  rangoMinimoCritico: Value(parametro.valorMinimoCritico),
-                  rangoMaximoCritico: Value(parametro.valorMaximoCritico),
+                  rangoMinimoNormal: Value(
+                    rangosCustom?.minNormal ?? parametro.valorMinimoNormal,
+                  ),
+                  rangoMaximoNormal: Value(
+                    rangosCustom?.maxNormal ?? parametro.valorMaximoNormal,
+                  ),
+                  rangoMinimoCritico: Value(
+                    rangosCustom?.minCritico ?? parametro.valorMinimoCritico,
+                  ),
+                  rangoMaximoCritico: Value(
+                    rangosCustom?.maxCritico ?? parametro.valorMaximoCritico,
+                  ),
                   valor: const Value(null),
                   estadoValor: const Value(null),
                   isDirty: const Value(true),
@@ -207,6 +226,12 @@ class EjecucionService {
       // 5. Clonar actividades a la tabla transaccional
       // Y crear mediciones con SNAPSHOT completo para actividades de medición
       // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo si se proporciona
+      // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Obtener config del equipo
+      final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
+      if (configEquipoJson != null) {
+        debugPrint('✅ [CONFIG] Equipo tiene configuración personalizada');
+      }
+
       int instanciadas = 0;
       int medicionesCreadas = 0;
       String? primeraActividadNombre;
@@ -255,6 +280,12 @@ class EjecucionService {
                   .getSingleOrNull();
 
           if (parametro != null) {
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS: Resolver rangos (equipo > catálogo)
+            final rangosCustom = _resolverRangosPersonalizados(
+              configParametrosJson: configEquipoJson,
+              codigoParametro: parametro.codigo,
+            );
+
             // Crear fila de medición VACÍA con SNAPSHOT de rangos y unidad
             // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo
             await _db.insertMedicion(
@@ -264,13 +295,21 @@ class EjecucionService {
                 idParametro: parametro.id,
                 // ✅ MULTI-EQUIPOS: FK al equipo específico
                 idOrdenEquipo: Value(idOrdenEquipo),
-                // SNAPSHOT: Copiar datos del parámetro para offline
+                // SNAPSHOT: Usar rangos personalizados si existen, sino catálogo
                 nombreParametro: parametro.nombre,
                 unidadMedida: parametro.unidad ?? '',
-                rangoMinimoNormal: Value(parametro.valorMinimoNormal),
-                rangoMaximoNormal: Value(parametro.valorMaximoNormal),
-                rangoMinimoCritico: Value(parametro.valorMinimoCritico),
-                rangoMaximoCritico: Value(parametro.valorMaximoCritico),
+                rangoMinimoNormal: Value(
+                  rangosCustom?.minNormal ?? parametro.valorMinimoNormal,
+                ),
+                rangoMaximoNormal: Value(
+                  rangosCustom?.maxNormal ?? parametro.valorMaximoNormal,
+                ),
+                rangoMinimoCritico: Value(
+                  rangosCustom?.minCritico ?? parametro.valorMinimoCritico,
+                ),
+                rangoMaximoCritico: Value(
+                  rangosCustom?.maxCritico ?? parametro.valorMaximoCritico,
+                ),
                 // Valor NULL - se llenará cuando el técnico mida
                 valor: const Value(null),
                 estadoValor: const Value(null),
@@ -410,6 +449,13 @@ class EjecucionService {
                 .getSingleOrNull();
 
         if (parametro != null) {
+          // ✅ FLEXIBILIZACIÓN PARÁMETROS: Obtener config y resolver rangos
+          final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
+          final rangosCustom = _resolverRangosPersonalizados(
+            configParametrosJson: configEquipoJson,
+            codigoParametro: parametro.codigo,
+          );
+
           await _db.insertMedicion(
             MedicionesCompanion.insert(
               idOrden: idOrdenLocal,
@@ -418,10 +464,18 @@ class EjecucionService {
               idOrdenEquipo: Value(idOrdenEquipo),
               nombreParametro: parametro.nombre,
               unidadMedida: parametro.unidad ?? '',
-              rangoMinimoNormal: Value(parametro.valorMinimoNormal),
-              rangoMaximoNormal: Value(parametro.valorMaximoNormal),
-              rangoMinimoCritico: Value(parametro.valorMinimoCritico),
-              rangoMaximoCritico: Value(parametro.valorMaximoCritico),
+              rangoMinimoNormal: Value(
+                rangosCustom?.minNormal ?? parametro.valorMinimoNormal,
+              ),
+              rangoMaximoNormal: Value(
+                rangosCustom?.maxNormal ?? parametro.valorMaximoNormal,
+              ),
+              rangoMinimoCritico: Value(
+                rangosCustom?.minCritico ?? parametro.valorMinimoCritico,
+              ),
+              rangoMaximoCritico: Value(
+                rangosCustom?.maxCritico ?? parametro.valorMaximoCritico,
+              ),
               isDirty: const Value(true),
             ),
           );
@@ -530,6 +584,78 @@ class EjecucionService {
     }
 
     return await query.get();
+  }
+
+  // =========================================================================
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Resolución de rangos en cascada
+  // Prioridad: configParametros del equipo > catálogo global
+  // =========================================================================
+
+  /// Clase helper para rangos resueltos
+  /// Retorna los rangos personalizados del equipo si existen, o null para usar catálogo
+  _RangosResueltos? _resolverRangosPersonalizados({
+    required String? configParametrosJson,
+    required String codigoParametro,
+  }) {
+    if (configParametrosJson == null || configParametrosJson.isEmpty) {
+      return null;
+    }
+
+    try {
+      final config = jsonDecode(configParametrosJson) as Map<String, dynamic>;
+      final rangos = config['rangos'] as Map<String, dynamic>?;
+      if (rangos == null) return null;
+
+      // Mapeo de códigos de parámetro del catálogo a claves del config
+      // El frontend usa claves como "frecuencia_generador", "voltaje_generador", etc.
+      final mapaClaves = {
+        'GEN_FRECUENCIA': 'frecuencia_generador',
+        'GEN_VOLTAJE': 'voltaje_generador',
+        'GEN_TEMP_REFRIGERANTE': 'temperatura_refrigerante',
+        'GEN_PRESION_ACEITE': 'presion_aceite',
+        'GEN_RPM': 'velocidad_motor',
+        'GEN_CORRIENTE': 'corriente_generador',
+        // Bombas
+        'BOM_PRESION_DESCARGA': 'presion_descarga',
+        'BOM_PRESION_SUCCION': 'presion_succion',
+        'BOM_VOLTAJE': 'voltaje_motor',
+        'BOM_AMPERAJE': 'corriente_motor',
+        'BOM_VIBRACION': 'vibracion',
+        'BOM_TEMPERATURA': 'temperatura_motor',
+      };
+
+      final claveConfig = mapaClaves[codigoParametro.toUpperCase()];
+      if (claveConfig == null) return null;
+
+      final rangoParam = rangos[claveConfig] as Map<String, dynamic>?;
+      if (rangoParam == null) return null;
+
+      debugPrint(
+        '✅ [CONFIG] Usando rangos personalizados para $codigoParametro: $rangoParam',
+      );
+
+      return _RangosResueltos(
+        minNormal: (rangoParam['min_normal'] as num?)?.toDouble(),
+        maxNormal: (rangoParam['max_normal'] as num?)?.toDouble(),
+        minCritico: (rangoParam['min_critico'] as num?)?.toDouble(),
+        maxCritico: (rangoParam['max_critico'] as num?)?.toDouble(),
+      );
+    } catch (e) {
+      debugPrint('⚠️ [CONFIG] Error parseando configParametros: $e');
+      return null;
+    }
+  }
+
+  /// Obtiene el configParametros del equipo de una orden
+  Future<String?> _obtenerConfigEquipo(int idOrdenLocal) async {
+    final orden = await _db.getOrdenById(idOrdenLocal);
+    if (orden == null) return null;
+
+    final equipo = await (_db.select(
+      _db.equipos,
+    )..where((e) => e.id.equals(orden.idEquipo))).getSingleOrNull();
+
+    return equipo?.configParametros;
   }
 
   /// Calcula el estado del valor según los rangos
@@ -893,4 +1019,19 @@ class ResumenEjecucion {
   int get totalItems => totalActividades + totalMediciones;
 
   bool get tieneAlertas => malos > 0 || medicionesCriticas > 0;
+}
+
+/// ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Helper para rangos resueltos
+class _RangosResueltos {
+  final double? minNormal;
+  final double? maxNormal;
+  final double? minCritico;
+  final double? maxCritico;
+
+  _RangosResueltos({
+    this.minNormal,
+    this.maxNormal,
+    this.minCritico,
+    this.maxCritico,
+  });
 }
