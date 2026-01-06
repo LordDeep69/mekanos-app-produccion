@@ -226,12 +226,35 @@ export interface DatosBomba {
   radiador_panal_cm?: number;
 }
 
+// ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Tipos para config personalizada
+export interface ConfigParametros {
+  unidades?: {
+    temperatura?: string;
+    presion?: string;
+    voltaje?: string;
+    frecuencia?: string;
+    corriente?: string;
+    velocidad?: string;
+    vibracion?: string;
+    potencia?: string;
+  };
+  rangos?: Record<string, {
+    min_normal?: number;
+    max_normal?: number;
+    min_critico?: number;
+    max_critico?: number;
+    valor_ideal?: number;
+  }>;
+}
+
 export interface CreateEquipoPayload {
   tipo: TipoEquipo;
   datosEquipo: DatosEquipoBase;
   datosMotor?: DatosMotor;
   datosGenerador?: DatosGenerador;
   datosBomba?: DatosBomba;
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS: Config personalizada opcional
+  config_parametros?: ConfigParametros;
 }
 
 // 
