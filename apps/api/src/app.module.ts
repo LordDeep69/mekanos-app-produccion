@@ -90,6 +90,7 @@ import { InventarioModule } from './inventario/inventario.module';
 // ✅ AGENDA ENTERPRISE: Centro de programación inteligente (Sesión Dic 29)
 import { AgendaModule } from './agenda/agenda.module';
 // ✅ FLEXIBILIZACIÓN PARÁMETROS: Configuración personalizada por equipo (Sesión Ene 06)
+import { ConfigParametrosModule } from './config-parametros/config-parametros.module';
 
 @Module({
   imports: [
