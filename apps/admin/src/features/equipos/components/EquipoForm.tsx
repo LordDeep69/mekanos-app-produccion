@@ -341,6 +341,8 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
 }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoEquipo | null>(null);
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Estado para config personalizada
+  const [configParametros, setConfigParametros] = useState<Record<string, unknown>>({});
 
   const crearEquipoMutation = useCrearEquipo();
 
@@ -853,9 +855,14 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleFormSubmit = async (data: any) => {
-    console.log('Intentando registrar equipo:', data);
+    // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Incluir config en el payload
+    const payloadConConfig = {
+      ...data,
+      config_parametros: Object.keys(configParametros).length > 0 ? configParametros : undefined,
+    };
+    console.log('Intentando registrar equipo:', payloadConConfig);
     try {
-      const result = await crearEquipoMutation.mutateAsync(data as CreateEquipoPayload);
+      const result = await crearEquipoMutation.mutateAsync(payloadConConfig as CreateEquipoPayload);
       console.log('Resultado registro:', result);
       if (result.success && onSuccess) {
         onSuccess(result.data);
@@ -2532,6 +2539,18 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
             </div>
           )}
 
+          {/* ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Sección de Configuración Personalizada */}
+          {tipoSeleccionado && tipoSeleccionado !== 'MOTOR' && (
+            <div className="mt-8">
+              <ConfigParametrosEditor
+                tipoEquipo={tipoSeleccionado}
+                value={configParametros as any}
+                onChange={(config) => setConfigParametros(config)}
+                disabled={crearEquipoMutation.isPending}
+              />
+            </div>
+          )}
+
           <div className="flex justify-between items-center pt-4">
             <button type="button" onClick={() => setCurrentStep(2)} className="flex items-center gap-2 px-6 py-3 text-gray-500 font-bold hover:text-gray-800 transition-colors">
               <ChevronLeft className="w-5 h-5" /> Atrás
@@ -2562,8 +2581,8 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
 
         return (
           <div className={`p-6 rounded-3xl flex items-start gap-4 animate-in slide-in-from-bottom-2 ${isConflict
-              ? 'bg-amber-50 border-2 border-amber-300 text-amber-800'
-              : 'bg-red-50 border border-red-100 text-red-700'
+            ? 'bg-amber-50 border-2 border-amber-300 text-amber-800'
+            : 'bg-red-50 border border-red-100 text-red-700'
             }`}>
             <div className={`p-3 rounded-xl ${isConflict ? 'bg-amber-100' : 'bg-red-100'}`}>
               <AlertCircle className="w-7 h-7" />

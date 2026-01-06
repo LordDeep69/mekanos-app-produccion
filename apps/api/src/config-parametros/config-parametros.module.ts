@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigParametrosController } from './config-parametros.controller';
 import { ConfigParametrosService } from './config-parametros.service';
 
 /**
@@ -10,6 +11,7 @@ import { ConfigParametrosService } from './config-parametros.service';
  * - Obtener rangos de parámetros personalizados
  */
 @Module({
+    controllers: [ConfigParametrosController],
     providers: [ConfigParametrosService],
     exports: [ConfigParametrosService],
 })
