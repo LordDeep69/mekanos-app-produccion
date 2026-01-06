@@ -12,6 +12,8 @@
 // 5. Actualizar BD local transaccionalmente
 // ============================================================================
 
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -314,23 +316,20 @@ class SmartSyncService {
         '🧠 [SMART SYNC] ✅ Completado: $descargadas descargadas, $omitidas omitidas, $errores errores',
       );
 
-      // ✅ LIFECYCLE: Ejecutar limpieza post-sync para liberar espacio
-      if (descargadas > 0 || errores == 0) {
-        try {
-          debugPrint('🧹 [SMART SYNC] Ejecutando limpieza post-sync...');
-          final purgeResult = await _lifecycleManager
-              .ejecutarLimpiezaInteligente();
-          if (purgeResult.tuvoCambios) {
-            debugPrint(
-              '🧹 [SMART SYNC] Limpieza: ${purgeResult.totalPurgado} items liberados',
-            );
-          }
-        } catch (e) {
-          debugPrint(
-            '⚠️ [SMART SYNC] Error en limpieza post-sync (no crítico): $e',
-          );
-        }
-      }
+      // ❌ FIX 06-ENE-2026: DESHABILITADO - Causaba ciclo infinito
+      // La limpieza post-sync purgaba órdenes recién descargadas (con fechaFin antigua)
+      // y luego el próximo sync las volvía a descargar → ciclo infinito
+      // La limpieza ahora solo se ejecuta:
+      // - Al abrir la app (onAppResume)
+      // - Manualmente desde Configuración → Almacenamiento
+      //
+      // if (descargadas > 0 || errores == 0) {
+      //   try {
+      //     debugPrint('🧹 [SMART SYNC] Ejecutando limpieza post-sync...');
+      //     final purgeResult = await _lifecycleManager.ejecutarLimpiezaInteligente();
+      //     ...
+      //   } catch (e) { ... }
+      // }
 
       return SmartSyncResult(
         success: errores == 0,
@@ -406,15 +405,28 @@ class SmartSyncService {
       ),
     );
 
-    // Upsert equipo
+    // Upsert equipo - FIX 06-ENE-2026: Incluir configParametros
+    final configParam = ordenData['configParametros'];
+    String? configJson;
+    if (configParam != null && configParam is Map && configParam.isNotEmpty) {
+      configJson = jsonEncode(configParam);
+      final preview = configJson.length > 60
+          ? configJson.substring(0, 60)
+          : configJson;
+      debugPrint(
+        '\ud83d\udd0d [SMART SYNC] Equipo $idEquipo tiene configParametros: $preview...',
+      );
+    }
+
     await _db.upsertEquipo(
       EquiposCompanion(
         id: Value(idEquipo),
-        codigo: Value(''),
+        codigo: Value(ordenData['codigoEquipo'] as String? ?? ''),
         nombre: Value(ordenData['nombreEquipo'] as String? ?? ''),
         serie: Value(ordenData['serieEquipo'] as String?),
         ubicacion: Value(ordenData['ubicacionEquipo'] as String?),
         idCliente: Value(idCliente),
+        configParametros: Value(configJson),
         lastSyncedAt: Value(DateTime.now()),
       ),
     );
