@@ -52,6 +52,7 @@ import { StorageModule } from '../storage/storage.module';
     PdfModule,      // Generación de PDFs
     EmailModule,    // Envío de emails
     StorageModule,  // R2 + Cloudinary
+    ConfigParametrosModule, // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades dinámicas
   ],
   controllers: [OrdenesController],
   providers: [

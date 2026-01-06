@@ -302,6 +302,7 @@ export class FinalizacionOrdenService {
         private readonly r2Service: R2StorageService,
         private readonly pdfService: PdfService,
         private readonly emailService: EmailService,
+        private readonly configParametrosService: ConfigParametrosService,
     ) { }
 
     /**
@@ -1342,6 +1343,18 @@ export class FinalizacionOrdenService {
             }
         }
 
+        // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Obtener unidades personalizadas del equipo
+        let configUnidades: Record<string, string> | undefined;
+        if (equipo?.id_equipo) {
+            try {
+                const unidades = await this.configParametrosService.obtenerTodasLasUnidades(equipo.id_equipo);
+                configUnidades = unidades as Record<string, string>;
+                this.logger.log(`📐 Unidades personalizadas para equipo ${equipo.id_equipo}: ${JSON.stringify(configUnidades)}`);
+            } catch (e) {
+                this.logger.warn(`⚠️ No se pudieron obtener unidades personalizadas: ${e}`);
+            }
+        }
+
         const datosPDF = {
             cliente: cliente?.persona?.nombre_comercial || cliente?.persona?.nombre_completo || cliente?.persona?.razon_social || 'N/A',
             direccion: cliente?.persona?.direccion_principal || cliente?.persona?.ciudad || 'N/A',
@@ -1355,6 +1368,8 @@ export class FinalizacionOrdenService {
             tipoServicio: tipoServicio?.nombre || 'PREVENTIVO',
             numeroOrden: orden.numero_orden,
             datosModulo: { ...datosModuloMapeado, ...(dto.datosModulo || {}) },
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades personalizadas para PDF
+            configUnidades,
             // Actividades flat (para backward compatibility)
             actividades: dto.actividades.map(a => ({
                 sistema: a.sistema,

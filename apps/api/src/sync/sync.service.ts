@@ -817,6 +817,8 @@ export class SyncService {
       codigoEquipo: o.equipos?.codigo_equipo || '',
       nombreEquipo: o.equipos?.nombre_equipo || '',
       ubicacionEquipo: o.equipos?.ubicacion_texto,
+      // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Config personalizada del equipo
+      configParametros: o.equipos?.config_parametros || undefined,
       idTipoServicio: o.id_tipo_servicio!,
       codigoTipoServicio: o.tipos_servicio?.codigo_tipo || '',
       nombreTipoServicio: o.tipos_servicio?.nombre_tipo || '',
@@ -888,6 +890,8 @@ export class SyncService {
           codigoEquipo: oe.equipos?.codigo_equipo || '',
           nombreEquipo: oe.equipos?.nombre_equipo || '',
           ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
+          // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
+          configParametros: oe.equipos?.config_parametros || undefined,
         })) || [];
         // Log para diagnóstico de multi-equipos
         if (mapped.length > 1) {

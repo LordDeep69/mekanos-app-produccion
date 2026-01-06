@@ -426,8 +426,8 @@ class SyncService {
             nombre: Value(entry.value['nombreEquipo'] as String? ?? ''),
             ubicacion: Value(entry.value['ubicacionEquipo'] as String?),
             idCliente: Value(entry.value['idCliente'] as int),
-            // TODO: Descomentar después de regenerar drift con build_runner
-            // configParametros: Value(configJson),
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Config personalizada
+            configParametros: Value(configJson),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );
