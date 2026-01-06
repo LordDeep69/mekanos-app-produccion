@@ -410,13 +410,17 @@ class SyncService {
       }
       for (final entry in equiposData.entries) {
         // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Descargar config personalizada
-        // NOTA: Después de ejecutar `flutter pub run build_runner build`, descomentar:
         final configParam = entry.value['configParametros'];
         String? configJson;
         if (configParam != null &&
             configParam is Map &&
             configParam.isNotEmpty) {
           configJson = jsonEncode(configParam);
+          debugPrint(
+            '🔍 [SYNC] Equipo ${entry.key} tiene configParametros: ${configJson.substring(0, configJson.length > 80 ? 80 : configJson.length)}...',
+          );
+        } else {
+          debugPrint('⚠️ [SYNC] Equipo ${entry.key} SIN configParametros');
         }
 
         await _db.upsertEquipo(

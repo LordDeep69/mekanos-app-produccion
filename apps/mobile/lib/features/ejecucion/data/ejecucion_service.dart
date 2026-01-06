@@ -228,8 +228,18 @@ class EjecucionService {
       // ✅ MULTI-EQUIPOS: Incluir idOrdenEquipo si se proporciona
       // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Obtener config del equipo
       final configEquipoJson = await _obtenerConfigEquipo(idOrdenLocal);
-      if (configEquipoJson != null) {
-        debugPrint('✅ [CONFIG] Equipo tiene configuración personalizada');
+      debugPrint(
+        '🔍 [CONFIG] idOrdenLocal: $idOrdenLocal, idEquipo: ${orden.idEquipo}',
+      );
+      debugPrint('🔍 [CONFIG] configEquipoJson: ${configEquipoJson ?? "NULL"}');
+      if (configEquipoJson != null && configEquipoJson.isNotEmpty) {
+        debugPrint(
+          '✅ [CONFIG] Equipo tiene configuración personalizada: ${configEquipoJson.substring(0, configEquipoJson.length > 100 ? 100 : configEquipoJson.length)}...',
+        );
+      } else {
+        debugPrint(
+          '⚠️ [CONFIG] Equipo SIN configuración personalizada - usando catálogo global',
+        );
       }
 
       int instanciadas = 0;
