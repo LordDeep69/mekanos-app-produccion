@@ -31,7 +31,7 @@ async function bootstrap(): Promise<void> {
     app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
       const { method, url, body } = req;
       const timestamp = new Date().toISOString();
-      
+
       console.log(`[${timestamp}] [REQUEST] ${method} ${url}`);
       if (method !== 'GET' && body && Object.keys(body).length > 0) {
         console.log(`[BODY]`, JSON.stringify(body, null, 2));
@@ -118,8 +118,17 @@ async function bootstrap(): Promise<void> {
     console.log('✅ [DEBUG 5.2] Swagger configurado en /api/docs');
 
     console.log('🔧 [DEBUG 6/10] Configurando CORS...');
+    // Convertir CORS_ORIGIN en array si contiene múltiples orígenes
+    const corsOrigin = process.env.CORS_ORIGIN;
+    let origins: string | string[] = '*';
+    if (corsOrigin) {
+      origins = corsOrigin.includes(',')
+        ? corsOrigin.split(',').map(o => o.trim())
+        : corsOrigin;
+    }
+    console.log('📋 [DEBUG 6.1] CORS origins:', origins);
     app.enableCors({
-      origin: process.env.CORS_ORIGIN || '*',
+      origin: origins,
       credentials: true,
     });
     console.log('✅ [DEBUG 7/10] CORS habilitado');
