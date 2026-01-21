@@ -451,7 +451,7 @@ class OfflineSyncService {
   }
 
   /// Reintenta sincronizar una orden específica
-  /// 
+  ///
   /// ✅ FIX 18-DIC-2025: Mantener estado EN_PROCESO durante toda la operación
   /// para que la UI muestre el spinner y el técnico vea que está subiendo
   Future<bool> reintentarOrden(int idOrdenLocal) async {
@@ -484,14 +484,18 @@ class OfflineSyncService {
   /// ✅ ACTUALIZADO: Emite progreso para feedback visual en UI
   Future<bool> _procesarOrdenIndividual(OrdenesPendientesSyncData orden) async {
     try {
-      debugPrint('🔄 [SYNC-INDIVIDUAL] Procesando orden ${orden.idOrdenBackend}');
-      
+      debugPrint(
+        '🔄 [SYNC-INDIVIDUAL] Procesando orden ${orden.idOrdenBackend}',
+      );
+
       // ✅ PROGRESO: Iniciando
       _progressNotifier.iniciar(orden.idOrdenBackend);
       _progressNotifier.avanzar(SyncStep.preparando);
 
       // PASO 0: VERIFICAR SI LA ORDEN YA FUE COMPLETADA EN EL BACKEND
-      final verificacionInicial = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+      final verificacionInicial = await _verificarOrdenYaCompletada(
+        orden.idOrdenBackend,
+      );
       if (verificacionInicial['completada'] == true) {
         debugPrint('✅ [SYNC-INDIVIDUAL] Orden ya completada en backend');
         await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
@@ -504,13 +508,19 @@ class OfflineSyncService {
 
       // Decodificar payload
       final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
-      
+
       // ✅ 20-DIC-2025: NO marcar pasos locales como completados
       // El SSE del servidor marcará los pasos como completados cuando realmente se procesen
-      _progressNotifier.avanzar(SyncStep.preparando, mensaje: 'Conectando con servidor...');
+      _progressNotifier.avanzar(
+        SyncStep.preparando,
+        mensaje: 'Conectando con servidor...',
+      );
 
       // ✅ PROGRESO: Enviando al servidor
-      _progressNotifier.avanzar(SyncStep.validando, mensaje: 'Enviando al servidor...');
+      _progressNotifier.avanzar(
+        SyncStep.validando,
+        mensaje: 'Enviando al servidor...',
+      );
 
       // CRÍTICO: Asegurar que la orden esté en EN_PROCESO en el backend
       try {
@@ -519,7 +529,9 @@ class OfflineSyncService {
         final statusCode = iniciarError.response?.statusCode;
         if (statusCode == 400 || statusCode == 409) {
           // Verificar si ya está completada
-          final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+          final verificacion = await _verificarOrdenYaCompletada(
+            orden.idOrdenBackend,
+          );
           if (verificacion['completada'] == true) {
             await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
             await _marcarOrdenSincronizada(orden.idOrdenLocal, {
@@ -534,7 +546,9 @@ class OfflineSyncService {
       }
 
       // Enviar al backend con SSE para progreso en tiempo real
-      debugPrint('📤 [SYNC-INDIVIDUAL] Enviando a finalizar-completo-stream (SSE)...');
+      debugPrint(
+        '📤 [SYNC-INDIVIDUAL] Enviando a finalizar-completo-stream (SSE)...',
+      );
       final sseResult = await _enviarConProgresoSSE(
         idOrdenBackend: orden.idOrdenBackend,
         payload: payload,
@@ -542,19 +556,23 @@ class OfflineSyncService {
 
       if (sseResult.success) {
         debugPrint('✅ [SYNC-INDIVIDUAL] Éxito SSE - eliminando de cola');
-        
+
         await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
         try {
           await _marcarOrdenSincronizada(orden.idOrdenLocal, sseResult.datos);
         } catch (localError) {
-          debugPrint('⚠️ Error guardando estado local (no crítico): $localError');
+          debugPrint(
+            '⚠️ Error guardando estado local (no crítico): $localError',
+          );
         }
-        
+
         _progressNotifier.completar();
         return true;
       } else {
         // Error del SSE - verificar si la orden ya se completó en el backend
-        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        final verificacion = await _verificarOrdenYaCompletada(
+          orden.idOrdenBackend,
+        );
         if (verificacion['completada'] == true) {
           await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
           await _marcarOrdenSincronizada(orden.idOrdenLocal, {
@@ -571,10 +589,12 @@ class OfflineSyncService {
       }
     } on DioException catch (e) {
       debugPrint('❌ [SYNC-INDIVIDUAL] DioException: ${e.type} - ${e.message}');
-      
+
       final statusCode = e.response?.statusCode;
       if (statusCode == 400 || statusCode == 409) {
-        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        final verificacion = await _verificarOrdenYaCompletada(
+          orden.idOrdenBackend,
+        );
         if (verificacion['completada'] == true) {
           await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
           await _marcarOrdenSincronizada(orden.idOrdenLocal, {
@@ -593,7 +613,9 @@ class OfflineSyncService {
       for (int intento = 1; intento <= 3; intento++) {
         debugPrint('🔍 [SYNC-INDIVIDUAL] Verificación intento $intento/3...');
         await Future.delayed(Duration(seconds: intento * 5));
-        final verificacion = await _verificarOrdenYaCompletada(orden.idOrdenBackend);
+        final verificacion = await _verificarOrdenYaCompletada(
+          orden.idOrdenBackend,
+        );
         if (verificacion['completada'] == true) {
           await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
           await _marcarOrdenSincronizada(orden.idOrdenLocal, {
@@ -605,7 +627,8 @@ class OfflineSyncService {
       }
 
       // Marcar como error para reintento
-      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Error de conexión';
+      final errorMsg =
+          e.response?.data?.toString() ?? e.message ?? 'Error de conexión';
       await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
       _progressNotifier.error(errorMsg);
       return false;
@@ -619,15 +642,17 @@ class OfflineSyncService {
   }
 
   /// ✅ 20-DIC-2025: Envía la orden usando SSE para progreso en tiempo real
-  /// 
+  ///
   /// Este método usa el endpoint /finalizar-completo-stream que retorna
   /// Server-Sent Events (SSE) con el progreso de cada paso del backend.
   Future<_SSEResult> _enviarConProgresoSSE({
     required int idOrdenBackend,
     required Map<String, dynamic> payload,
   }) async {
-    debugPrint('📡 [SSE-OFFLINE] Iniciando envío con streaming para orden $idOrdenBackend');
-    
+    debugPrint(
+      '📡 [SSE-OFFLINE] Iniciando envío con streaming para orden $idOrdenBackend',
+    );
+
     try {
       final response = await _apiClient.post<ResponseBody>(
         '/ordenes/$idOrdenBackend/finalizar-completo-stream',
@@ -636,15 +661,12 @@ class OfflineSyncService {
           responseType: ResponseType.stream,
           sendTimeout: const Duration(minutes: 5),
           receiveTimeout: const Duration(minutes: 5),
-          headers: {
-            'Accept': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-          },
+          headers: {'Accept': 'text/event-stream', 'Cache-Control': 'no-cache'},
         ),
       );
-      
+
       debugPrint('📡 [SSE-OFFLINE] Response status: ${response.statusCode}');
-      
+
       // Aceptar 200 y 201
       final statusOk = response.statusCode == 200 || response.statusCode == 201;
       if (!statusOk) {
@@ -654,9 +676,9 @@ class OfflineSyncService {
           error: 'Error del servidor: ${response.statusCode}',
         );
       }
-      
+
       debugPrint('📡 [SSE-OFFLINE] Conexión SSE establecida');
-      
+
       final stream = response.data?.stream;
       if (stream == null) {
         debugPrint('❌ [SSE-OFFLINE] Stream es null');
@@ -665,34 +687,38 @@ class OfflineSyncService {
           error: 'No se recibió stream del servidor',
         );
       }
-      
-      debugPrint('📡 [SSE-OFFLINE] Stream obtenido, comenzando a leer eventos...');
-      
+
+      debugPrint(
+        '📡 [SSE-OFFLINE] Stream obtenido, comenzando a leer eventos...',
+      );
+
       // Variables para acumular el resultado final
       Map<String, dynamic>? resultadoFinal;
       String? ultimoError;
-      
+
       // Leer el stream línea por línea
       await for (final chunk in stream) {
         final lines = utf8.decode(chunk).split('\n');
-        
+
         for (final line in lines) {
           if (line.startsWith('data: ')) {
             final jsonStr = line.substring(6).trim();
             if (jsonStr.isEmpty) continue;
-            
+
             try {
               final evento = json.decode(jsonStr) as Map<String, dynamic>;
-              debugPrint('📡 [SSE-OFFLINE] Evento: ${evento['step']} - ${evento['status']}');
-              
+              debugPrint(
+                '📡 [SSE-OFFLINE] Evento: ${evento['step']} - ${evento['status']}',
+              );
+
               // Procesar el evento en el notifier
               _progressNotifier.procesarEventoBackend(evento);
-              
+
               // Si es el resultado final, guardarlo
               if (evento['step'] == 'result' && evento['data'] != null) {
                 resultadoFinal = evento['data'] as Map<String, dynamic>;
               }
-              
+
               // Si es error, guardarlo
               if (evento['status'] == 'error') {
                 ultimoError = evento['message'] as String?;
@@ -703,40 +729,33 @@ class OfflineSyncService {
           }
         }
       }
-      
+
       // Verificar resultado
       if (ultimoError != null) {
-        return _SSEResult(
-          success: false,
-          error: ultimoError,
-        );
+        return _SSEResult(success: false, error: ultimoError);
       }
-      
+
       if (resultadoFinal != null) {
         return _SSEResult(
           success: resultadoFinal['success'] as bool? ?? true,
           datos: resultadoFinal['datos'] as Map<String, dynamic>?,
         );
       }
-      
+
       // Si no hubo resultado explícito pero no hubo error, asumir éxito
       return _SSEResult(success: true);
-      
     } on DioException catch (e) {
       debugPrint('❌ [SSE-OFFLINE] DioException: ${e.message}');
-      
+
       // Si falla el SSE, hacer fallback al endpoint tradicional
       debugPrint('📡 [SSE-OFFLINE] Fallback a endpoint tradicional...');
       return _fallbackEnvioTradicional(idOrdenBackend, payload);
     } catch (e) {
       debugPrint('❌ [SSE-OFFLINE] Error inesperado: $e');
-      return _SSEResult(
-        success: false,
-        error: e.toString(),
-      );
+      return _SSEResult(success: false, error: e.toString());
     }
   }
-  
+
   /// Fallback al endpoint tradicional si SSE falla
   Future<_SSEResult> _fallbackEnvioTradicional(
     int idOrdenBackend,
@@ -744,8 +763,11 @@ class OfflineSyncService {
   ) async {
     try {
       // Marcar pasos manualmente para feedback local
-      _progressNotifier.avanzar(SyncStep.validando, mensaje: 'Enviando al servidor...');
-      
+      _progressNotifier.avanzar(
+        SyncStep.validando,
+        mensaje: 'Enviando al servidor...',
+      );
+
       final response = await _apiClient.post(
         '/ordenes/$idOrdenBackend/finalizar-completo',
         data: payload,
@@ -754,7 +776,7 @@ class OfflineSyncService {
           receiveTimeout: const Duration(minutes: 5),
         ),
       );
-      
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         // Simular pasos completados para feedback
         _progressNotifier.completarPaso(SyncStep.validando);
@@ -766,7 +788,7 @@ class OfflineSyncService {
         _progressNotifier.completarPaso(SyncStep.generando_pdf);
         _progressNotifier.avanzar(SyncStep.enviando_email);
         _progressNotifier.completarPaso(SyncStep.enviando_email);
-        
+
         Map<String, dynamic>? datos;
         if (response.data is Map) {
           datos = response.data as Map<String, dynamic>;
@@ -776,7 +798,7 @@ class OfflineSyncService {
           datos: datos?['datos'] as Map<String, dynamic>?,
         );
       }
-      
+
       return _SSEResult(
         success: false,
         error: 'Error del servidor: ${response.statusCode}',
@@ -863,12 +885,8 @@ class _SSEResult {
   final bool success;
   final Map<String, dynamic>? datos;
   final String? error;
-  
-  _SSEResult({
-    required this.success,
-    this.datos,
-    this.error,
-  });
+
+  _SSEResult({required this.success, this.datos, this.error});
 }
 
 // =============================================================================

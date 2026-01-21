@@ -36,7 +36,7 @@ import {
   CreateEquipoPayload,
   TipoEquipo
 } from '../types';
-import { ConfigParametrosEditor } from './ConfigParametrosEditor';
+import { ConfigParametros, ConfigParametrosEditor } from './ConfigParametrosEditor';
 
 // 
 // SCHEMAS DE VALIDACIÓN (Zod) - Robustos & Enterprise
@@ -343,7 +343,7 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
   const [currentStep, setCurrentStep] = useState(1);
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoEquipo | null>(null);
   // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Estado para config personalizada
-  const [configParametros, setConfigParametros] = useState<Record<string, unknown>>({});
+  const [configParametros, setConfigParametros] = useState<ConfigParametros>({});
 
   const crearEquipoMutation = useCrearEquipo();
 
@@ -2545,8 +2545,8 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
             <div className="mt-8">
               <ConfigParametrosEditor
                 tipoEquipo={tipoSeleccionado}
-                value={configParametros as any}
-                onChange={(config) => setConfigParametros(config)}
+                value={configParametros}
+                onChange={setConfigParametros}
                 disabled={crearEquipoMutation.isPending}
               />
             </div>

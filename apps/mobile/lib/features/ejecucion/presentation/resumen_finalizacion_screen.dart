@@ -669,11 +669,11 @@ class _ResumenFinalizacionScreenState
                   ),
                 ),
                 const SizedBox(width: 16),
-                Expanded(
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '📷 FOTOS GENERALES',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -681,8 +681,8 @@ class _ResumenFinalizacionScreenState
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
+                      SizedBox(height: 4),
+                      Text(
                         'Fotos ANTES, DURANTE y DESPUÉS',
                         style: TextStyle(color: Colors.white70, fontSize: 11),
                       ),
@@ -1026,9 +1026,9 @@ class _ResumenFinalizacionScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Icon(Icons.check_circle, color: Colors.green, size: 28),
             SizedBox(width: 8),
             Flexible(
@@ -1082,9 +1082,9 @@ class _ResumenFinalizacionScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Icon(Icons.cloud_sync, color: Colors.blue, size: 28),
             SizedBox(width: 8),
             Flexible(

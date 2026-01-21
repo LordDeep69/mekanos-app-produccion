@@ -21,7 +21,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
-import '../lifecycle/data_lifecycle_manager.dart';
 
 // ============================================================================
 // MODELOS
@@ -106,9 +105,8 @@ class SmartSyncResult {
 class SmartSyncService {
   final ApiClient _apiClient;
   final AppDatabase _db;
-  final DataLifecycleManager _lifecycleManager;
 
-  SmartSyncService(this._apiClient, this._db, this._lifecycleManager);
+  SmartSyncService(this._apiClient, this._db);
 
   /// Ejecuta la sincronización inteligente completa
   Future<SmartSyncResult> sincronizarInteligente(
@@ -326,8 +324,8 @@ class SmartSyncService {
       // if (descargadas > 0 || errores == 0) {
       //   try {
       //     debugPrint('🧹 [SMART SYNC] Ejecutando limpieza post-sync...');
-      //     final purgeResult = await _lifecycleManager.ejecutarLimpiezaInteligente();
-      //     ...
+      //     // El DataLifecycleManager se eliminó de este servicio para evitar el ciclo infinito
+      //     // y cumplir con el Principio de Responsabilidad Única.
       //   } catch (e) { ... }
       // }
 
@@ -513,7 +511,7 @@ class SmartSyncService {
     final ordenCompanion = OrdenesCompanion(
       idBackend: Value(resumen.id),
       numeroOrden: Value(resumen.numeroOrden),
-      version: Value(0),
+      version: const Value(0),
       idEstado: Value(idEstadoLocal),
       idCliente: Value(resumen.idCliente ?? 1),
       idEquipo: Value(resumen.idEquipo ?? 1),
@@ -619,6 +617,5 @@ class SmartSyncService {
 final smartSyncServiceProvider = Provider<SmartSyncService>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   final db = ref.watch(databaseProvider);
-  final lifecycleManager = ref.watch(dataLifecycleManagerProvider);
-  return SmartSyncService(apiClient, db, lifecycleManager);
+  return SmartSyncService(apiClient, db);
 });

@@ -24,6 +24,7 @@ export class PrismaEquipoRepository {
     numero_serie_equipo?: string | null;
     estado_equipo?: string;
     criticidad?: string;
+    config_parametros?: Record<string, any>;
     creado_por: number;
     modificado_por?: number | null;
   }) {
@@ -41,6 +42,7 @@ export class PrismaEquipoRepository {
           numero_serie_equipo: data.numero_serie_equipo,
           estado_equipo: data.estado_equipo as any,
           criticidad: data.criticidad as any,
+          config_parametros: data.config_parametros || undefined,
           modificado_por: data.modificado_por,
           fecha_modificacion: new Date(),
         },

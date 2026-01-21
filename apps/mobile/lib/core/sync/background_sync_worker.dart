@@ -186,7 +186,7 @@ final backgroundSyncWorkerProvider = Provider<BackgroundSyncWorker>((ref) {
       );
     }
   });
-  
+
   // ✅ ENTERPRISE: Escuchar cambios de conectividad para notificar
   connectivity.statusStream.listen((status) {
     if (status == ConnectivityStatus.online) {

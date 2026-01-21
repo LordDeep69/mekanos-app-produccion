@@ -147,6 +147,55 @@ export async function cancelarOrden(
     return response.data;
 }
 
+/**
+ * DTO para actualizar orden
+ */
+export interface UpdateOrdenDto {
+    id_sede?: number;
+    id_tipo_servicio?: number;
+    fecha_programada?: string;      // YYYY-MM-DD
+    hora_programada?: string;       // HH:mm
+    prioridad?: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+    origen_solicitud?: 'PROGRAMADO' | 'CLIENTE' | 'INTERNO' | 'EMERGENCIA' | 'GARANTIA';
+    descripcion_inicial?: string;
+    trabajo_realizado?: string;
+    observaciones_tecnico?: string;
+    observaciones?: string;         // Observaciones generales
+    observaciones_cierre?: string;  // Observaciones de cierre
+    requiere_firma_cliente?: boolean;
+}
+
+/**
+ * Actualizar orden de servicio
+ * Solo se puede editar si el estado NO es final (APROBADA, CANCELADA)
+ */
+export async function updateOrden(
+    id: number,
+    data: UpdateOrdenDto
+): Promise<{ success: boolean; message: string; data: Orden }> {
+    const response = await apiClient.put<{ success: boolean; message: string; data: Orden }>(
+        `${ORDENES_BASE}/${id}`,
+        data
+    );
+    return response.data;
+}
+
+/**
+ * Actualizar SOLO observaciones de cierre (endpoint atómico)
+ * Permite edición incluso en órdenes COMPLETADAS
+ * Diseñado para Portal Admin
+ */
+export async function updateObservacionesCierre(
+    id: number,
+    observaciones_cierre: string
+): Promise<{ success: boolean; message: string; data: { id_orden_servicio: number; observaciones_cierre: string } }> {
+    const response = await apiClient.patch<{ success: boolean; message: string; data: { id_orden_servicio: number; observaciones_cierre: string } }>(
+        `${ORDENES_BASE}/${id}/observaciones-cierre`,
+        { observaciones_cierre }
+    );
+    return response.data;
+}
+
 export interface AddServicioDetalleDto {
     id_servicio: number;
     cantidad: number;
@@ -225,4 +274,119 @@ export async function getFirmasOrden(idOrden: number): Promise<{ success: boolea
         `${ORDENES_BASE}/${idOrden}/firmas`
     );
     return response.data;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACTIVIDADES EJECUTADAS - EDICIÓN AVANZADA
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type EstadoActividad = 'B' | 'R' | 'M' | 'I' | 'C' | 'LI' | 'A' | 'L' | null;
+
+export interface UpdateActividadDto {
+    estado?: EstadoActividad;
+    observaciones?: string;
+    ejecutada?: boolean;
+}
+
+/**
+ * Actualizar actividad ejecutada (estado, observaciones, ejecutada)
+ */
+export async function updateActividad(
+    idActividad: number,
+    data: UpdateActividadDto
+): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.put<{ success: boolean; message: string }>(
+        `/actividades-ejecutadas/${idActividad}`,
+        data
+    );
+    return response.data;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEDICIONES - EDICIÓN AVANZADA
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface UpdateMedicionDto {
+    valorNumerico?: number;
+    valorTexto?: string;
+    observaciones?: string;
+}
+
+export interface MedicionResponse {
+    idMedicion: number;
+    idOrdenServicio: number;
+    idParametroMedicion: number;
+    valorNumerico?: number;
+    valorTexto?: string;
+    unidadMedida?: string;
+    fueraDeRango?: boolean;
+    nivelAlerta?: string;
+    mensajeAlerta?: string;
+    observaciones?: string;
+    parametrosMedicion?: {
+        nombreParametro?: string;
+        codigoParametro?: string;
+        valorMinimo?: number;
+        valorMaximo?: number;
+        valorCriticoMinimo?: number;
+        valorCriticoMaximo?: number;
+    };
+}
+
+/**
+ * Actualizar medición (valor numérico, texto, observaciones)
+ * El backend recalcula automáticamente fueraDeRango y nivelAlerta
+ */
+export async function updateMedicion(
+    idMedicion: number,
+    data: UpdateMedicionDto
+): Promise<MedicionResponse> {
+    const response = await apiClient.put<MedicionResponse>(
+        `/mediciones-servicio/${idMedicion}`,
+        data
+    );
+    return response.data;
+}
+
+// ========================================================================
+// GESTIÓN DE INFORMES PDF
+// ========================================================================
+
+export interface RegenerarPdfDto {
+    emailDestino?: string;
+    enviarEmail?: boolean;
+    asuntoEmail?: string;
+    mensajeEmail?: string;
+    guardarEnR2?: boolean;
+}
+
+export interface RegenerarPdfResponse {
+    success: boolean;
+    message: string;
+    pdfUrl?: string;
+    emailEnviado?: boolean;
+    filename?: string;
+    pdfBase64?: string;
+}
+
+/**
+ * Regenerar PDF de una orden y opcionalmente enviarlo por email
+ */
+export async function regenerarPdf(
+    idOrden: number,
+    data: RegenerarPdfDto
+): Promise<RegenerarPdfResponse> {
+    const response = await apiClient.post<RegenerarPdfResponse>(
+        `${ORDENES_BASE}/${idOrden}/pdf/regenerar`,
+        data
+    );
+    return response.data;
+}
+
+/**
+ * Obtener URL del PDF de una orden (para previsualización)
+ */
+export function getPdfUrl(idOrden: number): string {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    return `${baseUrl}${ORDENES_BASE}/${idOrden}/pdf`;
 }

@@ -1,11 +1,12 @@
 'use client';
 
 import {
-    useActualizarParametroMedicion,
-    useCrearParametroMedicion,
-    useEliminarParametroMedicion,
-    useParametrosMedicion
-} from '@/features/ordenes';
+    CATEGORIAS_PARAMETRO,
+    useCreateParametroMedicion,
+    useDeleteParametroMedicion,
+    useParametrosMedicion,
+    useUpdateParametroMedicion,
+} from '@/features/catalogos';
 import {
     Activity,
     AlertCircle,
@@ -24,16 +25,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-const CATEGORIAS_PARAMETRO = [
-    'MOTOR',
-    'ELECTRICO',
-    'HIDRAULICO',
-    'TRANSMISION',
-    'REFRIGERACION',
-    'COMBUSTIBLE',
-    'SEGURIDAD',
-    'GENERAL'
-];
+// Helper para obtener el label de la categoría
+function getCategoriaLabel(cat: string) {
+    return CATEGORIAS_PARAMETRO.find(c => c.value === cat)?.label || cat;
+}
 
 export default function ParametrosMedicionPage() {
     const [busqueda, setBusqueda] = useState('');
@@ -41,10 +36,11 @@ export default function ParametrosMedicionPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingParametro, setEditingParametro] = useState<any>(null);
 
-    const { data: parametros, isLoading, isError, refetch } = useParametrosMedicion();
-    const crearParametro = useCrearParametroMedicion();
-    const actualizarParametro = useActualizarParametroMedicion();
-    const eliminarParametro = useEliminarParametroMedicion();
+    const { data: response, isLoading, isError, refetch } = useParametrosMedicion({ activo: true, limit: 100 });
+    const parametros = response?.data || [];
+    const crearParametro = useCreateParametroMedicion();
+    const actualizarParametro = useUpdateParametroMedicion();
+    const eliminarParametro = useDeleteParametroMedicion();
 
     const handleEdit = (parametro: any) => {
         setEditingParametro(parametro);
@@ -57,12 +53,14 @@ export default function ParametrosMedicionPage() {
         }
     };
 
-    const filteredParametros = parametros?.filter(p => {
-        const matchesBusqueda = p.nombre_parametro.toLowerCase().includes(busqueda.toLowerCase()) ||
-            p.codigo_parametro.toLowerCase().includes(busqueda.toLowerCase());
+    const filteredParametros = parametros.filter(p => {
+        const nombre = p.nombre_parametro || '';
+        const codigo = p.codigo_parametro || '';
+        const term = busqueda.toLowerCase();
+        const matchesBusqueda = nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
         const matchesCategoria = !categoriaFiltro || p.categoria === categoriaFiltro;
         return matchesBusqueda && matchesCategoria;
-    }) || [];
+    });
 
     return (
         <div className="space-y-6">
@@ -105,7 +103,7 @@ export default function ParametrosMedicionPage() {
                 >
                     <option value="">Todas las categorías</option>
                     {CATEGORIAS_PARAMETRO.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat.value} value={cat.value}>{cat.label}</option>
                     ))}
                 </select>
             </div>
@@ -143,8 +141,8 @@ export default function ParametrosMedicionPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredParametros.map((param) => (
-                                    <tr key={param.id_parametro_medicion} className="hover:bg-blue-50/30 transition-colors group">
+                                {filteredParametros.map((param, idx) => (
+                                    <tr key={param.id_parametro_medicion ?? `param-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div>
                                                 <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
@@ -223,10 +221,26 @@ export default function ParametrosMedicionPage() {
                     onClose={() => setIsModalOpen(false)}
                     parametro={editingParametro}
                     onSubmit={async (formData: any) => {
+                        const dto = {
+                            codigoParametro: formData.codigo_parametro,
+                            nombreParametro: formData.nombre_parametro,
+                            unidadMedida: formData.unidad_medida,
+                            categoria: formData.categoria,
+                            descripcion: formData.descripcion,
+                            tipoDato: formData.tipo_dato,
+                            valorMinimoNormal: formData.valor_minimo_normal,
+                            valorMaximoNormal: formData.valor_maximo_normal,
+                            valorMinimoCritico: formData.valor_minimo_critico,
+                            valorMaximoCritico: formData.valor_maximo_critico,
+                            valorIdeal: formData.valor_ideal,
+                            esCriticoSeguridad: formData.es_critico_seguridad,
+                            esObligatorio: formData.es_obligatorio,
+                            decimalesPrecision: formData.decimales_precision,
+                        };
                         if (editingParametro) {
-                            await actualizarParametro.mutateAsync({ id: editingParametro.id_parametro_medicion, data: formData });
+                            await actualizarParametro.mutateAsync({ id: editingParametro.id_parametro_medicion, data: dto });
                         } else {
-                            await crearParametro.mutateAsync(formData);
+                            await crearParametro.mutateAsync(dto);
                         }
                         setIsModalOpen(false);
                     }}
@@ -341,7 +355,7 @@ function ParametroModal({ isOpen, onClose, parametro, onSubmit, isLoading }: any
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                             >
                                 {CATEGORIAS_PARAMETRO.map(cat => (
-                                    <option key={cat} value={cat}>{cat}</option>
+                                    <option key={cat.value} value={cat.value}>{cat.label}</option>
                                 ))}
                             </select>
                         </div>

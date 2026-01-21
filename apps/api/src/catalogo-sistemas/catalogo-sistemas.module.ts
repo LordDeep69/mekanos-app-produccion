@@ -10,6 +10,7 @@ import { PrismaCatalogoSistemasRepository } from './infrastructure/prisma-catalo
 import { ActualizarCatalogoSistemasHandler } from './application/handlers/actualizar-catalogo-sistemas.handler';
 import { CrearCatalogoSistemasHandler } from './application/handlers/crear-catalogo-sistemas.handler';
 import { EliminarCatalogoSistemasHandler } from './application/handlers/eliminar-catalogo-sistemas.handler';
+import { GetCatalogoSistemasConUsoHandler } from './application/handlers/get-catalogo-sistemas-con-uso.handler';
 import { ListarCatalogoSistemasHandler } from './application/handlers/listar-catalogo-sistemas.handler';
 import { ListarSistemasActivosHandler } from './application/handlers/listar-sistemas-activos.handler';
 import { ObtenerCatalogoSistemasPorCodigoHandler } from './application/handlers/obtener-catalogo-sistemas-por-codigo.handler';
@@ -29,6 +30,7 @@ const QueryHandlers = [
   ListarSistemasActivosHandler,
   ObtenerCatalogoSistemasPorIdHandler,
   ObtenerCatalogoSistemasPorCodigoHandler,
+  GetCatalogoSistemasConUsoHandler,
 ];
 
 @Module({
@@ -48,4 +50,4 @@ const QueryHandlers = [
   ],
   exports: ['ICatalogoSistemasRepository', CatalogoSistemasMapper],
 })
-export class CatalogoSistemasModule {}
+export class CatalogoSistemasModule { }

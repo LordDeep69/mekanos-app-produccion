@@ -206,10 +206,10 @@ function CargaTecnicosPanel() {
                                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                                         <div
                                             className={`h-full rounded-full ${tecnico.carga_porcentaje >= 80
-                                                    ? 'bg-red-500'
-                                                    : tecnico.carga_porcentaje >= 60
-                                                        ? 'bg-orange-500'
-                                                        : 'bg-green-500'
+                                                ? 'bg-red-500'
+                                                : tecnico.carga_porcentaje >= 60
+                                                    ? 'bg-orange-500'
+                                                    : 'bg-green-500'
                                                 }`}
                                             style={{ width: `${tecnico.carga_porcentaje}%` }}
                                         />
@@ -235,13 +235,16 @@ function ServiciosTable({ servicios, isLoading }: { servicios?: ServicioPrograma
         if (!searchTerm) return servicios;
 
         const term = searchTerm.toLowerCase();
-        return servicios.filter(
-            (s) =>
-                s.cliente.nombre.toLowerCase().includes(term) ||
-                s.equipo.codigo.toLowerCase().includes(term) ||
-                s.tipo_servicio.nombre.toLowerCase().includes(term) ||
-                s.contrato.codigo.toLowerCase().includes(term)
-        );
+        return servicios.filter((s) => {
+            const clienteNombre = s.cliente?.nombre || '';
+            const equipoCodigo = s.equipo?.codigo || '';
+            const tipoServicioNombre = s.tipo_servicio?.nombre || '';
+            const contratoCodigo = s.contrato?.codigo || '';
+            return clienteNombre.toLowerCase().includes(term) ||
+                equipoCodigo.toLowerCase().includes(term) ||
+                tipoServicioNombre.toLowerCase().includes(term) ||
+                contratoCodigo.toLowerCase().includes(term);
+        });
     }, [servicios, searchTerm]);
 
     if (isLoading) {
@@ -331,10 +334,10 @@ function ServiciosTable({ servicios, isLoading }: { servicios?: ServicioPrograma
                                     <TableCell>
                                         <span
                                             className={`font-bold ${servicio.dias_restantes < 0
-                                                    ? 'text-red-600'
-                                                    : servicio.dias_restantes <= 3
-                                                        ? 'text-orange-600'
-                                                        : 'text-gray-600'
+                                                ? 'text-red-600'
+                                                : servicio.dias_restantes <= 3
+                                                    ? 'text-orange-600'
+                                                    : 'text-gray-600'
                                                 }`}
                                         >
                                             {servicio.dias_restantes < 0

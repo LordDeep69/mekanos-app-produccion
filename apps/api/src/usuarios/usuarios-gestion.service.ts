@@ -275,7 +275,8 @@ export class UsuariosGestionService {
             email: emailUsuario.toLowerCase(),
             password_hash: passwordHash,
             debe_cambiar_password: debeCambiarPassword,
-            estado: (dto.datosUsuario.estado || 'PENDIENTE_ACTIVACION') as estado_usuario_enum,
+            estado: (dto.datosUsuario.estado || 'ACTIVO') as estado_usuario_enum,
+            fecha_activacion: new Date(),
             fecha_ultimo_cambio_password: new Date(),
           },
         });

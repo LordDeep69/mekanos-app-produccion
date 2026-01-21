@@ -1,6 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ✅ PERMISOS REQUERIDOS PARA PRODUCCIÓN -->
+    <!-- Internet para llamadas API -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Estado de red para detectar conectividad -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Cámara para capturar evidencias fotográficas -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Almacenamiento para guardar/leer fotos y PDFs -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
+    <!-- Permisos para Android 13+ (fotos/videos) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    
     <application
-        android:label="mekanos_mobile"
+        android:label="Mekanos"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -12,6 +12,7 @@ import { UpdateTiposServicioHandler } from './commands/update-tipos-servicio.han
 // Queries
 import { GetTiposServicioByCategoriaHandler } from './queries/get-tipos-servicio-by-categoria.handler';
 import { GetTiposServicioByIdHandler } from './queries/get-tipos-servicio-by-id.handler';
+import { GetTiposServicioDetalleCompletoHandler } from './queries/get-tipos-servicio-detalle-completo.handler';
 import { GetTiposServicioHandler } from './queries/get-tipos-servicio.handler';
 
 /**
@@ -41,7 +42,8 @@ import { GetTiposServicioHandler } from './queries/get-tipos-servicio.handler';
     GetTiposServicioHandler,
     GetTiposServicioByIdHandler,
     GetTiposServicioByCategoriaHandler,
+    GetTiposServicioDetalleCompletoHandler,
   ],
   exports: [PrismaTiposServicioRepository],
 })
-export class TiposServicioModule {}
+export class TiposServicioModule { }

@@ -31,6 +31,7 @@ import { CreateOrdenCommand } from './commands/create-orden.command';
 import { FinalizarOrdenCommand } from './commands/finalizar-orden.command';
 import { IniciarOrdenCommand } from './commands/iniciar-orden.command';
 import { ProgramarOrdenCommand } from './commands/programar-orden.command';
+import { UpdateOrdenCommand } from './commands/update-orden.command';
 
 // Queries
 import { GetOrdenByIdQuery } from './queries/get-orden-by-id.query';
@@ -445,12 +446,33 @@ export class OrdenesController {
   async getEvidencias(@Param('id', ParseIntPipe) id: number) {
     const evidencias = await this.prisma.evidencias_fotograficas.findMany({
       where: { id_orden_servicio: id },
+      include: {
+        actividades_ejecutadas: {
+          include: {
+            catalogo_actividades: true,
+          },
+        },
+      },
       orderBy: { fecha_captura: 'desc' },
     });
 
+    // Mapear para incluir descripción de actividad en la respuesta
+    const evidenciasConActividad = evidencias.map((ev) => ({
+      ...ev,
+      actividad_asociada: ev.actividades_ejecutadas
+        ? {
+          id_actividad: ev.actividades_ejecutadas.id_actividad_ejecutada,
+          descripcion_actividad:
+            ev.actividades_ejecutadas.catalogo_actividades?.descripcion_actividad ||
+            ev.actividades_ejecutadas.observaciones ||
+            null,
+        }
+        : null,
+    }));
+
     return {
       success: true,
-      data: evidencias,
+      data: evidenciasConActividad,
     };
   }
 
@@ -684,6 +706,127 @@ export class OrdenesController {
       success: true,
       message: 'Orden obtenida exitosamente',
       data: result,
+    };
+  }
+
+  /**
+   * PUT /api/ordenes/:id
+   * Actualiza campos editables de una orden
+   * Solo permite edición si el estado actual NO es final (APROBADA, CANCELADA)
+   */
+  @Put(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Actualizar orden de servicio',
+    description: `
+      Actualiza campos editables de una orden.
+      Solo se puede editar si el estado actual NO es final (APROBADA, CANCELADA).
+      
+      **Campos editables:**
+      - Sede cliente
+      - Tipo de servicio
+      - Fecha y hora programada
+      - Prioridad
+      - Origen de solicitud
+      - Descripción inicial
+      - Trabajo realizado
+      - Observaciones del técnico
+      - Requiere firma cliente
+    `,
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', example: 1 })
+  @ApiResponse({ status: 200, description: 'Orden actualizada exitosamente' })
+  @ApiResponse({ status: 400, description: 'Estado no permite edición' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateOrdenDto,
+    @UserId() userId: number,
+  ) {
+    // Construir DTO con fechas parseadas
+    const commandDto: any = { ...dto };
+
+    if (dto.fecha_programada) {
+      // ✅ FIX TIMEZONE: Agregar T12:00:00 para evitar offset de día
+      commandDto.fecha_programada = new Date(`${dto.fecha_programada}T12:00:00`);
+    }
+
+    if (dto.hora_programada) {
+      // Parsear hora HH:mm a Date
+      const [hours, minutes] = dto.hora_programada.split(':').map(Number);
+      const horaDate = new Date();
+      horaDate.setHours(hours, minutes, 0, 0);
+      commandDto.hora_programada = horaDate;
+    }
+
+    const command = new UpdateOrdenCommand(
+      id,
+      commandDto,
+      userId || 1, // Fallback si JWT no disponible
+    );
+
+    const result = await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Orden actualizada exitosamente',
+      data: result,
+    };
+  }
+
+  /**
+   * PATCH /api/ordenes/:id/observaciones-cierre
+   * Endpoint ATÓMICO para actualizar SOLO el campo observaciones_cierre
+   * Diseñado para Portal Admin - permite edición incluso en órdenes COMPLETADAS
+   */
+  @Patch(':id/observaciones-cierre')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Actualizar observaciones de cierre',
+    description: 'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA.',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
+  @ApiResponse({ status: 200, description: 'Observaciones actualizadas exitosamente' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  @ApiResponse({ status: 400, description: 'No se puede modificar orden en estado APROBADA/CANCELADA' })
+  async updateObservacionesCierre(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { observaciones_cierre: string },
+  ) {
+    // 1. Verificar que la orden existe y obtener estado actual
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      include: { estados_orden: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden ${id} no encontrada`);
+    }
+
+    // 2. Validar que no sea estado final bloqueado (APROBADA/CANCELADA)
+    const estadoCodigo = orden.estados_orden?.codigo_estado;
+    if (estadoCodigo === 'APROBADA' || estadoCodigo === 'CANCELADA') {
+      throw new BadRequestException(
+        `No se puede modificar una orden en estado ${estadoCodigo}`,
+      );
+    }
+
+    // 3. Actualizar SOLO observaciones_cierre (operación atómica)
+    const updated = await this.prisma.ordenes_servicio.update({
+      where: { id_orden_servicio: id },
+      data: {
+        observaciones_cierre: body.observaciones_cierre,
+        fecha_modificacion: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Observaciones de cierre actualizadas exitosamente',
+      data: {
+        id_orden_servicio: updated.id_orden_servicio,
+        observaciones_cierre: updated.observaciones_cierre,
+      },
     };
   }
 

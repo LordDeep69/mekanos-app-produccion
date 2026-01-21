@@ -8,6 +8,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,22 +23,34 @@ import 'features/auth/presentation/login_screen.dart';
 import 'features/orders/presentation/home_production_screen.dart';
 
 /// GlobalKey para ScaffoldMessenger (notificaciones globales)
-final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('es_CO', null);
+
+  // Inicializar Supabase en background
+  SupabaseConfig.initialize().catchError((_) {});
+
+  // Manejo de errores global
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
+    if (kDebugMode) {
+      debugPrint('🔴 Flutter Error: ${details.exception}');
+      debugPrint('📍 Stack: ${details.stack}');
+    }
   };
 
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    await initializeDateFormatting('es_CO', null);
-
-    // Inicializar Supabase en background
-    SupabaseConfig.initialize().catchError((_) {});
-
-    runApp(const ProviderScope(child: MekanosApp()));
-  }, (_, __) {});
+  runZonedGuarded(() => runApp(const ProviderScope(child: MekanosApp())), (
+    error,
+    stackTrace,
+  ) {
+    if (kDebugMode) {
+      debugPrint('🔴 Uncaught Error: $error');
+      debugPrint('📍 Stack: $stackTrace');
+    }
+  });
 }
 
 class MekanosApp extends ConsumerStatefulWidget {
@@ -66,7 +79,7 @@ class _MekanosAppState extends ConsumerState<MekanosApp> {
         // Sesión expirada - mostrar notificación y hacer logout
         final notificationService = ref.read(syncNotificationServiceProvider);
         notificationService.notifySessionExpired();
-        
+
         // Hacer logout después de mostrar notificación
         Future.delayed(const Duration(seconds: 2), () {
           ref.read(authStateProvider.notifier).logout();
@@ -77,7 +90,8 @@ class _MekanosAppState extends ConsumerState<MekanosApp> {
     return MaterialApp(
       title: 'Mekanos Técnicos',
       debugShowCheckedModeBanner: false,
-      scaffoldMessengerKey: scaffoldMessengerKey, // ✅ ENTERPRISE: Key global para SnackBars
+      scaffoldMessengerKey:
+          scaffoldMessengerKey, // ✅ ENTERPRISE: Key global para SnackBars
       // Localizaciones para DatePicker y otros widgets Material
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,

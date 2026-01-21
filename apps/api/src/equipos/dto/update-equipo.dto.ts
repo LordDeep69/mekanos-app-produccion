@@ -1,16 +1,17 @@
-import { IsString, IsInt, IsOptional, IsEnum, Matches, MinLength, MaxLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 /**
  * DTO para actualizar un equipo
  * ✅ FASE 2: Todos los campos opcionales, mapeados a schema real
+ * ✅ 07-ENE-2026: Agregado config_parametros para edición de unidades/rangos
  */
 export class UpdateEquipoDto {
   @IsOptional()
   @IsString({ message: 'codigo_equipo debe ser una cadena de texto' })
   @MinLength(1, { message: 'codigo_equipo no puede estar vacío' })
   @MaxLength(30, { message: 'codigo_equipo no puede exceder 30 caracteres' })
-  @Matches(/^[A-Z0-9\-]+$/, { 
-    message: 'codigo_equipo debe contener solo letras mayúsculas, números y guiones' 
+  @Matches(/^[A-Z0-9\-]+$/, {
+    message: 'codigo_equipo debe contener solo letras mayúsculas, números y guiones'
   })
   codigo_equipo?: string;
 
@@ -53,6 +54,9 @@ export class UpdateEquipoDto {
     message: 'criticidad debe ser un valor válido del enum'
   })
   criticidad?: string;
+
+  @IsOptional()
+  config_parametros?: Record<string, any>;
 
   // modificado_por se obtiene del JWT, no del body
 }

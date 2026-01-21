@@ -172,4 +172,45 @@ export class UsuariosService {
       );
     }
   }
+
+  /**
+   * Actualiza el estado de un usuario
+   * Estados válidos: ACTIVO, INACTIVO, PENDIENTE_ACTIVACION, SUSPENDIDO, ELIMINADO
+   */
+  async updateEstado(id: number, estado: string) {
+    try {
+      await this.findOne(id); // Verifica existencia
+
+      // Normalizar estado
+      const estadoNormalizado = estado.toUpperCase();
+      const estadosValidos = ['ACTIVO', 'INACTIVO', 'PENDIENTE_ACTIVACION', 'SUSPENDIDO', 'ELIMINADO'];
+
+      if (!estadosValidos.includes(estadoNormalizado)) {
+        throw new ConflictException(`Estado inválido. Estados válidos: ${estadosValidos.join(', ')}`);
+      }
+
+      const updateData: any = { estado: estadoNormalizado };
+
+      // Agregar fechas según el estado
+      if (estadoNormalizado === 'ACTIVO') {
+        updateData.fecha_activacion = new Date();
+      } else if (estadoNormalizado === 'INACTIVO' || estadoNormalizado === 'ELIMINADO') {
+        updateData.fecha_desactivacion = new Date();
+      }
+
+      await this.prisma.usuarios.update({
+        where: { id_usuario: id },
+        data: updateData,
+      });
+
+      return { success: true, estado: estadoNormalizado };
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException || error instanceof ConflictException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error al actualizar estado: ${(error as Error).message}`,
+      );
+    }
+  }
 }

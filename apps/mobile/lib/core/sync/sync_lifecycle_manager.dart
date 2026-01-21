@@ -136,9 +136,7 @@ class SyncLifecycleManager with WidgetsBindingObserver {
 
   /// Callback cuando se restaura la conectividad
   Future<void> _onConnectivityRestored() async {
-    debugPrint(
-      '🔄 [SYNC LIFECYCLE] Conectividad restaurada',
-    );
+    debugPrint('🔄 [SYNC LIFECYCLE] Conectividad restaurada');
 
     // ❌ SYNC MANUAL: Ya NO se procesan órdenes pendientes automáticamente
     // El técnico debe ir a "Órdenes por Subir" y presionar SUBIR manualmente

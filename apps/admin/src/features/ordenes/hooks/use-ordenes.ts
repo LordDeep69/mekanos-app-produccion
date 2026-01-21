@@ -31,7 +31,14 @@ import {
     getOrdenes,
     getServiciosOrden,
     removeServicioOrden,
+    updateActividad,
+    updateMedicion,
+    updateObservacionesCierre,
+    updateOrden,
     type AddServicioDetalleDto,
+    type UpdateActividadDto,
+    type UpdateMedicionDto,
+    type UpdateOrdenDto
 } from '../api/ordenes.service';
 
 // Query keys
@@ -264,6 +271,32 @@ export function useCancelarOrden() {
 }
 
 /**
+ * Hook para actualizar orden
+ * Solo permite edición si el estado NO es final (APROBADA, CANCELADA)
+ */
+export function useUpdateOrden() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: number; data: UpdateOrdenDto }) =>
+            updateOrden(id, data),
+        onSuccess: (result, { id }) => {
+            // Invalidar órdenes específica Y lista Y dashboard
+            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, id] });
+            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+            toast.success(result.message || 'Orden actualizada exitosamente');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al actualizar orden');
+        },
+    });
+}
+
+/**
  * Hook para refrescar lista de órdenes
  */
 export function useRefreshOrdenes() {
@@ -272,4 +305,75 @@ export function useRefreshOrdenes() {
     return {
         refresh: () => queryClient.invalidateQueries({ queryKey: ORDENES_KEY }),
     };
+}
+
+/**
+ * Hook para actualizar actividad ejecutada (estado B/M/C/NA, observaciones)
+ * Invalida cache de actividades de la orden para reflejar cambios inmediatamente
+ */
+export function useUpdateActividad() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ idActividad, data }: { idActividad: number; data: UpdateActividadDto }) =>
+            updateActividad(idActividad, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ACTIVIDADES_ORDEN_KEY });
+            toast.success('Actividad actualizada');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al actualizar actividad');
+        },
+    });
+}
+
+/**
+ * Hook para actualizar medición (valor, observaciones)
+ * El backend recalcula automáticamente fueraDeRango y nivelAlerta
+ */
+export function useUpdateMedicion() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ idMedicion, data }: { idMedicion: number; data: UpdateMedicionDto }) =>
+            updateMedicion(idMedicion, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: MEDICIONES_ORDEN_KEY });
+            toast.success('Medición actualizada');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al actualizar medición');
+        },
+    });
+}
+
+/**
+ * Hook ATÓMICO para actualizar observaciones de cierre
+ * Usa endpoint dedicado PATCH /ordenes/:id/observaciones-cierre
+ * Permite edición incluso en órdenes COMPLETADAS
+ */
+export function useUpdateObservacionesCierre() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, observaciones_cierre }: { id: number; observaciones_cierre: string }) =>
+            updateObservacionesCierre(id, observaciones_cierre),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
+            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            toast.success('Observaciones de cierre actualizadas');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al actualizar observaciones de cierre');
+        },
+    });
 }

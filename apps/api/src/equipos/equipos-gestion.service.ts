@@ -410,23 +410,61 @@ export class EquiposGestionService {
 
   /**
    * Listar equipos con datos polimórficos
+   * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
    */
   async listarEquiposCompletos(params: {
     id_cliente?: number;
     id_sede?: number;
-    tipo?: TipoEquipoDiscriminator;
+    tipo?: string;
     estado_equipo?: string;
+    search?: string;
+    sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
+    sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
   }) {
     try {
-      const { id_cliente, id_sede, estado_equipo, page = 1, limit = 20 } = params;
+      const {
+        id_cliente,
+        id_sede,
+        tipo,
+        estado_equipo,
+        search,
+        sortBy = 'codigo',
+        sortOrder = 'asc',
+        page = 1,
+        limit = 20
+      } = params;
       const skip = (page - 1) * limit;
 
       const where: any = { activo: true };
       if (id_cliente) where.id_cliente = id_cliente;
       if (id_sede) where.id_sede = id_sede;
       if (estado_equipo) where.estado_equipo = estado_equipo;
+
+      // Filtro por tipo (GENERADOR, BOMBA)
+      if (tipo === 'GENERADOR') {
+        where.equipos_generador = { isNot: null };
+      } else if (tipo === 'BOMBA') {
+        where.equipos_bomba = { isNot: null };
+      }
+
+      // Búsqueda por código, nombre, número de serie o cliente
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        where.OR = [
+          { codigo_equipo: { contains: searchTerm, mode: 'insensitive' } },
+          { nombre_equipo: { contains: searchTerm, mode: 'insensitive' } },
+          { numero_serie_equipo: { contains: searchTerm, mode: 'insensitive' } },
+          { clientes: { persona: { razon_social: { contains: searchTerm, mode: 'insensitive' } } } },
+          { clientes: { persona: { primer_nombre: { contains: searchTerm, mode: 'insensitive' } } } },
+        ];
+      }
+
+      // Ordenación dinámica
+      let orderBy: any = { codigo_equipo: sortOrder };
+      if (sortBy === 'nombre') orderBy = { nombre_equipo: sortOrder };
+      if (sortBy === 'fecha') orderBy = { fecha_creacion: sortOrder };
 
       const [equipos, total] = await Promise.all([
         this.prisma.equipos.findMany({
@@ -449,7 +487,7 @@ export class EquiposGestionService {
             equipos_bomba: true,
             equipos_motor: true,
           },
-          orderBy: { codigo_equipo: 'asc' },
+          orderBy,
         }),
         this.prisma.equipos.count({ where }),
       ]);
@@ -576,6 +614,7 @@ export class EquiposGestionService {
         tipo: tipoEquipo,
         estado_equipo: equipo.estado_equipo,
         criticidad: equipo.criticidad,
+        criticidad_justificacion: equipo.criticidad_justificacion,
         ubicacion_texto: equipo.ubicacion_texto,
         cliente: {
           id_cliente: equipo.id_cliente,
@@ -589,10 +628,40 @@ export class EquiposGestionService {
           : null,
         tipo_equipo: equipo.tipos_equipo,
         datos_especificos: datosEspecificos,
-        lecturas_horometro: equipo.lecturas_horometro,
-        historial_estados: equipo.historial_estados_equipo,
+        config_parametros: equipo.config_parametros || {},
+        // Fechas importantes
+        fecha_instalacion: equipo.fecha_instalacion,
+        fecha_inicio_servicio_mekanos: equipo.fecha_inicio_servicio_mekanos,
         fecha_creacion: equipo.fecha_creacion,
         fecha_modificacion: equipo.fecha_modificacion,
+        // Garantía
+        en_garantia: equipo.en_garantia,
+        fecha_inicio_garantia: equipo.fecha_inicio_garantia,
+        fecha_fin_garantia: equipo.fecha_fin_garantia,
+        proveedor_garantia: equipo.proveedor_garantia,
+        // Horas y mantenimiento
+        horas_actuales: equipo.horas_actuales,
+        fecha_ultima_lectura_horas: equipo.fecha_ultima_lectura_horas,
+        tipo_contrato: equipo.tipo_contrato,
+        // Intervalos override
+        intervalo_tipo_a_dias_override: equipo.intervalo_tipo_a_dias_override,
+        intervalo_tipo_a_horas_override: equipo.intervalo_tipo_a_horas_override,
+        intervalo_tipo_b_dias_override: equipo.intervalo_tipo_b_dias_override,
+        intervalo_tipo_b_horas_override: equipo.intervalo_tipo_b_horas_override,
+        criterio_intervalo_override: equipo.criterio_intervalo_override,
+        // Estado físico
+        estado_pintura: equipo.estado_pintura,
+        requiere_pintura: equipo.requiere_pintura,
+        // Observaciones
+        observaciones_generales: equipo.observaciones_generales,
+        configuracion_especial: equipo.configuracion_especial,
+        // Estado de baja
+        activo: equipo.activo,
+        fecha_baja: equipo.fecha_baja,
+        motivo_baja: equipo.motivo_baja,
+        // Relaciones
+        lecturas_horometro: equipo.lecturas_horometro,
+        historial_estados: equipo.historial_estados_equipo,
       };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -662,5 +731,172 @@ export class EquiposGestionService {
       serie: e.numero_serie_equipo,
       tipo: e.tipos_equipo?.nombre_tipo || e.tipos_equipo?.codigo_tipo,
     }));
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // MÉTODOS DE ACCIONES ESPECÍFICAS
+  // ✅ 08-ENE-2026: Cambio de estado y lectura de horómetro
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Cambiar estado del equipo con registro en historial
+   */
+  async cambiarEstadoEquipo(
+    idEquipo: number,
+    dto: CambiarEstadoEquipoDto,
+    userId: number
+  ) {
+    // 1. Verificar que el equipo existe
+    const equipo = await this.prisma.equipos.findUnique({
+      where: { id_equipo: idEquipo },
+      select: { id_equipo: true, codigo_equipo: true, estado_equipo: true },
+    });
+
+    if (!equipo) {
+      throw new NotFoundException(`No se encontró el equipo con ID ${idEquipo}`);
+    }
+
+    const estadoAnterior = equipo.estado_equipo;
+    const nuevoEstado = dto.nuevo_estado as estado_equipo_enum;
+
+    // 2. Si el estado es el mismo, no hacer nada
+    if (estadoAnterior === nuevoEstado) {
+      return {
+        id_equipo: equipo.id_equipo,
+        codigo_equipo: equipo.codigo_equipo,
+        estado_anterior: estadoAnterior,
+        estado_nuevo: nuevoEstado,
+        mensaje: 'El equipo ya se encuentra en este estado',
+      };
+    }
+
+    // 3. Actualizar estado y crear registro en historial (transacción)
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // Actualizar el estado del equipo
+      await tx.equipos.update({
+        where: { id_equipo: idEquipo },
+        data: {
+          estado_equipo: nuevoEstado,
+          modificado_por: userId,
+          fecha_modificacion: new Date(),
+        },
+      });
+
+      // Crear registro en historial
+      const historial = await tx.historial_estados_equipo.create({
+        data: {
+          id_equipo: idEquipo,
+          estado_anterior: estadoAnterior,
+          estado_nuevo: nuevoEstado,
+          motivo_cambio: dto.motivo_cambio,
+          cambiado_por: userId,
+          fecha_cambio: new Date(),
+        },
+      });
+
+      return historial;
+    });
+
+    return {
+      id_equipo: equipo.id_equipo,
+      codigo_equipo: equipo.codigo_equipo,
+      estado_anterior: estadoAnterior,
+      estado_nuevo: nuevoEstado,
+      motivo_cambio: dto.motivo_cambio,
+      fecha_cambio: resultado.fecha_cambio,
+      id_historial: resultado.id_historial,
+    };
+  }
+
+  /**
+   * Registrar nueva lectura de horómetro
+   */
+  async registrarLecturaHorometro(
+    idEquipo: number,
+    dto: RegistrarLecturaHorometroDto,
+    userId: number
+  ) {
+    // 1. Verificar que el equipo existe
+    const equipo = await this.prisma.equipos.findUnique({
+      where: { id_equipo: idEquipo },
+      select: {
+        id_equipo: true,
+        codigo_equipo: true,
+        horas_actuales: true,
+        fecha_ultima_lectura_horas: true,
+      },
+    });
+
+    if (!equipo) {
+      throw new NotFoundException(`No se encontró el equipo con ID ${idEquipo}`);
+    }
+
+    const horasActuales = equipo.horas_actuales ? Number(equipo.horas_actuales) : 0;
+    const nuevasHoras = dto.horas_lectura;
+
+    // 2. Validar que las nuevas horas no sean menores a las actuales
+    if (nuevasHoras < horasActuales) {
+      throw new BadRequestException(
+        `La lectura (${nuevasHoras} hrs) no puede ser menor a las horas actuales (${horasActuales} hrs)`
+      );
+    }
+
+    // 3. Calcular horas transcurridas y días
+    const horasTranscurridas = nuevasHoras - horasActuales;
+    let diasTranscurridos: number | null = null;
+    let horasPromedioDia: number | null = null;
+
+    if (equipo.fecha_ultima_lectura_horas) {
+      const fechaAnterior = new Date(equipo.fecha_ultima_lectura_horas);
+      const fechaActual = new Date();
+      const diffMs = fechaActual.getTime() - fechaAnterior.getTime();
+      diasTranscurridos = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      if (diasTranscurridos > 0) {
+        horasPromedioDia = parseFloat((horasTranscurridas / diasTranscurridos).toFixed(2));
+      }
+    }
+
+    // 4. Crear lectura y actualizar equipo (transacción)
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // Crear la lectura
+      const lectura = await tx.lecturas_horometro.create({
+        data: {
+          id_equipo: idEquipo,
+          horas_lectura: nuevasHoras,
+          fecha_lectura: new Date(),
+          tipo_lectura: dto.tipo_lectura as any || 'MANUAL',
+          horas_transcurridas: horasTranscurridas,
+          dias_transcurridos: diasTranscurridos,
+          horas_promedio_dia: horasPromedioDia,
+          observaciones: dto.observaciones,
+          registrado_por: userId,
+        },
+      });
+
+      // Actualizar horas en el equipo
+      await tx.equipos.update({
+        where: { id_equipo: idEquipo },
+        data: {
+          horas_actuales: nuevasHoras,
+          fecha_ultima_lectura_horas: new Date(),
+          modificado_por: userId,
+          fecha_modificacion: new Date(),
+        },
+      });
+
+      return lectura;
+    });
+
+    return {
+      id_lectura: resultado.id_lectura,
+      id_equipo: equipo.id_equipo,
+      codigo_equipo: equipo.codigo_equipo,
+      horas_anteriores: horasActuales,
+      horas_nuevas: nuevasHoras,
+      horas_transcurridas: horasTranscurridas,
+      dias_transcurridos: diasTranscurridos,
+      horas_promedio_dia: horasPromedioDia,
+      fecha_lectura: resultado.fecha_lectura,
+    };
   }
 }

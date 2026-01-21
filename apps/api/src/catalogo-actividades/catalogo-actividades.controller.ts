@@ -1,14 +1,14 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -19,7 +19,7 @@ import { UpdateCatalogoActividadesDto } from './dto/update-catalogo-actividades.
 @Controller('catalogo-actividades')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CatalogoActividadesController {
-  constructor(private readonly catalogoActividadesService: CatalogoActividadesService) {}
+  constructor(private readonly catalogoActividadesService: CatalogoActividadesService) { }
 
   @Post()
   create(@Body() createDto: CreateCatalogoActividadesDto) {
@@ -30,10 +30,25 @@ export class CatalogoActividadesController {
   findAll(
     @Query('page') pageStr?: string,
     @Query('limit') limitStr?: string,
+    @Query('tipoServicioId') tipoServicioIdStr?: string,
+    @Query('sistemaId') sistemaIdStr?: string,
+    @Query('tipoActividad') tipoActividad?: string,
+    @Query('activo') activoStr?: string,
   ) {
     const page = pageStr ? parseInt(pageStr, 10) : 1;
-    const limit = limitStr ? parseInt(limitStr, 10) : 10;
-    return this.catalogoActividadesService.findAll(page, limit);
+    const limit = limitStr ? parseInt(limitStr, 10) : 100;
+    const tipoServicioId = tipoServicioIdStr ? parseInt(tipoServicioIdStr, 10) : undefined;
+    const sistemaId = sistemaIdStr ? parseInt(sistemaIdStr, 10) : undefined;
+    const activo = activoStr !== undefined ? activoStr === 'true' : undefined;
+
+    return this.catalogoActividadesService.findAll({
+      page,
+      limit,
+      tipoServicioId,
+      sistemaId,
+      tipoActividad,
+      activo,
+    });
   }
 
   @Get(':id')

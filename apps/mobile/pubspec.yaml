@@ -59,6 +59,9 @@ dependencies:
   # Preferencias locales (configuración)
   shared_preferences: ^2.2.2
   
+  # TODO: Sentry para crash reporting - requiere ajuste de versión de Kotlin
+  # sentry_flutter: ^8.12.0
+  
   # UI
   cupertino_icons: ^1.0.8
 
@@ -70,6 +73,18 @@ dev_dependencies:
   # Generadores drift
   drift_dev: ^2.15.0
   build_runner: ^2.4.8
+  
+  # ✅ Generador de íconos
+  flutter_launcher_icons: ^0.14.3
+
+# ✅ Configuración de íconos de la app
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+  min_sdk_android: 21
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

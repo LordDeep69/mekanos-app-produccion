@@ -259,13 +259,26 @@ class SyncUploadService {
       );
 
       // 3. Recopilar evidencias y convertir a Base64
+      // ✅ OPTIMIZACIÓN 06-ENE-2026: Conversión PARALELA con Future.wait()
       final evidencias = await (_db.select(
         _db.evidencias,
       )..where((e) => e.idOrden.equals(idOrdenLocal))).get();
 
+      final startEvidencias = DateTime.now();
+      debugPrint(
+        '⚡ [PERF] Convirtiendo ${evidencias.length} evidencias a Base64 EN PARALELO...',
+      );
+
+      // Convertir TODAS las imágenes en paralelo
+      final base64Futures = evidencias.map(
+        (ev) => _imageToBase64(ev.rutaLocal),
+      );
+      final base64Results = await Future.wait(base64Futures);
+
       final evidenciasPayload = <Map<String, dynamic>>[];
-      for (final ev in evidencias) {
-        final base64 = await _imageToBase64(ev.rutaLocal);
+      for (int i = 0; i < evidencias.length; i++) {
+        final ev = evidencias[i];
+        final base64 = base64Results[i];
         // ✅ FIX: Validar que base64 no esté vacío (archivo corrupto/0 KB)
         if (base64 != null && base64.isNotEmpty) {
           // ✅ FIX: Mapear tipo de evidencia - GENERAL no es válido en backend
@@ -284,6 +297,13 @@ class SyncUploadService {
         }
       }
 
+      final evidenciasMs = DateTime.now()
+          .difference(startEvidencias)
+          .inMilliseconds;
+      debugPrint(
+        '⚡ [PERF] ${evidenciasPayload.length} evidencias convertidas en ${evidenciasMs}ms',
+      );
+
       // ✅ 20-DIC-2025: Solo actualizar mensaje de progreso
       _progressNotifier.avanzar(
         SyncStep.preparando,
@@ -291,6 +311,7 @@ class SyncUploadService {
       );
 
       // 4. Recopilar firmas y convertir a Base64
+      // ✅ OPTIMIZACIÓN 06-ENE-2026: Conversión PARALELA de firmas
       final firmas = await _db.getFirmasByOrden(idOrdenLocal);
       Map<String, dynamic>? firmasPayload;
 
@@ -302,7 +323,22 @@ class SyncUploadService {
           .firstOrNull;
 
       if (firmaTecnico != null) {
-        final base64Tecnico = await _imageToBase64(firmaTecnico.rutaLocal);
+        final startFirmas = DateTime.now();
+        debugPrint('⚡ [PERF] Convirtiendo firmas a Base64 EN PARALELO...');
+
+        // Convertir AMBAS firmas en paralelo (si existen)
+        final firmaFutures = <Future<String?>>[
+          _imageToBase64(firmaTecnico.rutaLocal),
+          if (firmaCliente != null) _imageToBase64(firmaCliente.rutaLocal),
+        ];
+        final firmaResults = await Future.wait(firmaFutures);
+
+        final base64Tecnico = firmaResults[0];
+        final base64Cliente = firmaResults.length > 1 ? firmaResults[1] : null;
+
+        final firmasMs = DateTime.now().difference(startFirmas).inMilliseconds;
+        debugPrint('⚡ [PERF] Firmas convertidas en ${firmasMs}ms');
+
         if (base64Tecnico != null) {
           firmasPayload = {
             'tecnico': {
@@ -312,15 +348,12 @@ class SyncUploadService {
             },
           };
 
-          if (firmaCliente != null) {
-            final base64Cliente = await _imageToBase64(firmaCliente.rutaLocal);
-            if (base64Cliente != null) {
-              firmasPayload['cliente'] = {
-                'tipo': 'CLIENTE',
-                'base64': base64Cliente,
-                'idPersona': 0, // Cliente sin ID específico
-              };
-            }
+          if (firmaCliente != null && base64Cliente != null) {
+            firmasPayload['cliente'] = {
+              'tipo': 'CLIENTE',
+              'base64': base64Cliente,
+              'idPersona': 0, // Cliente sin ID específico
+            };
           }
         }
       }

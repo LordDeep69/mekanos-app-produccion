@@ -49,7 +49,7 @@ interface RangosConfig {
     [parametro: string]: RangoParametro;
 }
 
-interface ConfigParametros {
+export interface ConfigParametros {
     unidades?: UnidadesConfig;
     rangos?: RangosConfig;
 }

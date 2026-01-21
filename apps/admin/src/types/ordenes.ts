@@ -59,6 +59,9 @@ export interface Orden {
     fecha_inicio_real?: string;
     fecha_fin_real?: string;
     observaciones?: string;
+    observaciones_cierre?: string;
+    observaciones_tecnico?: string;
+    trabajo_realizado?: string;
     fecha_creacion?: string;
     fecha_modificacion?: string;
 

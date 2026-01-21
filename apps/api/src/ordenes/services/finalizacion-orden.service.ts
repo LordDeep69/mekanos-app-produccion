@@ -496,20 +496,30 @@ export class FinalizacionOrdenService {
             emitProgress('generando_pdf', 'completed', `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`, 72);
 
             // ========================================================================
-            // PASO 5: Subir PDF a Cloudflare R2
+            // PASO 5+7: Subir PDF a R2 + Enviar email EN PARALELO
+            // ✅ OPTIMIZACIÓN 06-ENE-2026: Estos pasos son independientes (ambos solo necesitan pdfResult.buffer)
             // ========================================================================
-            emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF a la nube...', 74);
-            this.logger.log('☁️ Paso 5: Subiendo PDF a almacenamiento...');
-            const r2Result = await this.subirPDFaR2(
-                pdfResult.buffer,
-                orden.numero_orden,
-            );
-            emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 78);
+            emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF y enviando email en paralelo...', 74);
+            this.logger.log('⚡ [PERF] Pasos 5+7: Subiendo PDF a R2 + Enviando email EN PARALELO...');
+
+            const startParallel = Date.now();
+            const [r2Result, emailResult] = await Promise.all([
+                // Subir PDF a R2
+                this.subirPDFaR2(pdfResult.buffer, orden.numero_orden),
+                // Enviar email (no requiere URL de R2, solo el buffer del PDF)
+                this.enviarEmailInforme(orden, pdfResult, dto.emailAdicional),
+            ]);
+
+            const parallelTime = Date.now() - startParallel;
+            this.logger.log(`⚡ [PERF] R2 + Email completados en ${parallelTime}ms (paralelo)`);
+
+            emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 80);
+            emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 85);
 
             // ========================================================================
-            // PASO 6: Registrar documento en BD
+            // PASO 6: Registrar documento en BD (requiere URL de R2)
             // ========================================================================
-            emitProgress('registrando_doc', 'in_progress', 'Registrando documento en base de datos...', 80);
+            emitProgress('registrando_doc', 'in_progress', 'Registrando documento en base de datos...', 87);
             this.logger.log('💾 Paso 6: Registrando documento en base de datos...');
             const documentoResult = await this.registrarDocumento(
                 orden.id_orden_servicio,
@@ -519,19 +529,7 @@ export class FinalizacionOrdenService {
                 dto.usuarioId,
             );
             recursosCreados.documento = documentoResult.id;
-            emitProgress('registrando_doc', 'completed', 'Documento registrado', 85);
-
-            // ========================================================================
-            // PASO 7: Enviar email con PDF adjunto
-            // ========================================================================
-            emitProgress('enviando_email', 'in_progress', 'Enviando informe por email...', 87);
-            this.logger.log('📧 Paso 7: Enviando email con informe...');
-            const emailResult = await this.enviarEmailInforme(
-                orden,
-                pdfResult,
-                dto.emailAdicional,
-            );
-            emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 92);
+            emitProgress('registrando_doc', 'completed', 'Documento registrado', 90);
 
             // ========================================================================
             // PASO 7.5: Registrar lectura de horómetro (si existe)
@@ -808,23 +806,40 @@ export class FinalizacionOrdenService {
 
     /**
      * Procesa y registra firmas digitales
+     * ✅ OPTIMIZACIÓN 06-ENE-2026: Procesamiento PARALELO con Promise.all()
      */
     private async procesarFirmas(
         firmas: { tecnico: FirmaInput; cliente?: FirmaInput },
         usuarioId: number,
         orden: any,
     ): Promise<Array<{ id: number; tipo: string }>> {
-        const resultados: Array<{ id: number; tipo: string }> = [];
+        const startTime = Date.now();
+        this.logger.log(`⚡ [PERF] Procesando firmas EN PARALELO...`);
 
-        // Procesar firma del técnico
-        const firmaTecnico = await this.registrarFirma(firmas.tecnico, usuarioId, orden);
-        resultados.push({ id: firmaTecnico.id_firma_digital, tipo: 'TECNICO' });
+        // Construir array de promesas para procesamiento paralelo
+        const firmaPromises: Promise<{ id: number; tipo: string }>[] = [
+            // Firma del técnico (siempre requerida)
+            this.registrarFirma(firmas.tecnico, usuarioId, orden).then(f => ({
+                id: f.id_firma_digital,
+                tipo: 'TECNICO',
+            })),
+        ];
 
-        // Procesar firma del cliente si existe
+        // Agregar firma del cliente si existe
         if (firmas.cliente?.base64) {
-            const firmaCliente = await this.registrarFirma(firmas.cliente, usuarioId, orden);
-            resultados.push({ id: firmaCliente.id_firma_digital, tipo: 'CLIENTE' });
+            firmaPromises.push(
+                this.registrarFirma(firmas.cliente, usuarioId, orden).then(f => ({
+                    id: f.id_firma_digital,
+                    tipo: 'CLIENTE',
+                })),
+            );
         }
+
+        // Ejecutar TODAS las firmas en paralelo
+        const resultados = await Promise.all(firmaPromises);
+
+        const elapsed = Date.now() - startTime;
+        this.logger.log(`⚡ [PERF] ${resultados.length} firmas procesadas en ${elapsed}ms`);
 
         return resultados;
     }

@@ -60,9 +60,22 @@ export interface OrdenPdfData {
 }
 
 @Injectable()
-export class PdfService implements OnModuleDestroy {
+export class PdfService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PdfService.name);
   private browser: puppeteer.Browser | null = null;
+  private browserInitPromise: Promise<void> | null = null;
+
+  /**
+   * ✅ OPTIMIZACIÓN 07-ENE-2026: Pre-inicializar browser al cargar módulo
+   * Reduce latencia de ~1s en primera generación de PDF
+   */
+  async onModuleInit(): Promise<void> {
+    this.logger.log('🚀 Pre-inicializando Puppeteer browser (background)...');
+    // Inicializar en background sin bloquear startup
+    this.browserInitPromise = this.initBrowser().catch(err => {
+      this.logger.warn(`⚠️ Browser pre-init falló, se reiniciará en primera llamada: ${err.message}`);
+    });
+  }
 
   /**
    * Genera un PDF profesional MEKANOS
@@ -258,13 +271,19 @@ export class PdfService implements OnModuleDestroy {
   }
 
   /**
-   * ✅ FIX: Asegura que el browser esté conectado, reiniciando si es necesario
+   * ✅ OPTIMIZACIÓN 07-ENE-2026: Asegura browser conectado con soporte para pre-init
    */
   private async ensureBrowserConnected(): Promise<void> {
     try {
+      // Esperar pre-inicialización si está en curso
+      if (this.browserInitPromise) {
+        await this.browserInitPromise;
+        this.browserInitPromise = null;
+      }
+
       // Verificar si browser existe y está conectado
       if (this.browser && this.browser.connected) {
-        return; // Browser activo, nada que hacer
+        return; // Browser activo y listo ✅
       }
 
       // Si existe pero no está conectado, cerrarlo

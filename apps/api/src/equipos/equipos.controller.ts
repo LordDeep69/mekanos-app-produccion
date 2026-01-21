@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -143,6 +144,7 @@ export class EquiposController {
   /**
    * GET /api/equipos/listado-completo
    * Listar equipos con datos polimórficos incluidos
+   * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
    */
   @Get('listado-completo')
   @ApiOperation({ summary: 'Listar equipos con datos específicos según tipo' })
@@ -150,7 +152,11 @@ export class EquiposController {
     return this.equiposGestionService.listarEquiposCompletos({
       id_cliente: queryDto.id_cliente,
       id_sede: queryDto.id_sede,
+      tipo: queryDto.tipo,
       estado_equipo: queryDto.estado_equipo,
+      search: queryDto.search,
+      sortBy: queryDto.sortBy,
+      sortOrder: queryDto.sortOrder,
       page: queryDto.page,
       limit: queryDto.limit,
     });
@@ -220,6 +226,49 @@ export class EquiposController {
     return {
       success: true,
       message: 'Equipo eliminado exitosamente'
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ENDPOINTS DE ACCIONES ESPECÍFICAS
+  // ✅ 08-ENE-2026: Cambio de estado y lectura de horómetro
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * PATCH /api/equipos/:id/cambiar-estado
+   * Cambiar estado del equipo con registro en historial
+   */
+  @Patch(':id/cambiar-estado')
+  @ApiOperation({ summary: 'Cambiar estado del equipo con registro en historial' })
+  async cambiarEstado(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CambiarEstadoEquipoDto,
+    @UserId() userId: number
+  ) {
+    const resultado = await this.equiposGestionService.cambiarEstadoEquipo(id, dto, userId);
+    return {
+      success: true,
+      message: `Estado del equipo cambiado a ${dto.nuevo_estado}`,
+      data: resultado,
+    };
+  }
+
+  /**
+   * POST /api/equipos/:id/lectura-horometro
+   * Registrar nueva lectura de horómetro
+   */
+  @Post(':id/lectura-horometro')
+  @ApiOperation({ summary: 'Registrar nueva lectura de horómetro' })
+  async registrarLecturaHorometro(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RegistrarLecturaHorometroDto,
+    @UserId() userId: number
+  ) {
+    const resultado = await this.equiposGestionService.registrarLecturaHorometro(id, dto, userId);
+    return {
+      success: true,
+      message: 'Lectura de horómetro registrada exitosamente',
+      data: resultado,
     };
   }
 }

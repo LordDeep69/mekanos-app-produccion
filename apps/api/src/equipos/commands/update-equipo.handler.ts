@@ -1,7 +1,7 @@
+import { Inject, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { NotFoundException, Inject } from '@nestjs/common';
-import { UpdateEquipoCommand } from './update-equipo.command';
 import { PrismaEquipoRepository } from '../infrastructure/prisma-equipo.repository';
+import { UpdateEquipoCommand } from './update-equipo.command';
 
 /**
  * Handler para el comando UpdateEquipo
@@ -12,7 +12,7 @@ export class UpdateEquipoHandler implements ICommandHandler<UpdateEquipoCommand>
   constructor(
     @Inject('IEquipoRepository')
     private readonly equipoRepository: PrismaEquipoRepository
-  ) {}
+  ) { }
 
   async execute(command: UpdateEquipoCommand): Promise<any> {
     const { equipoId, dto, userId } = command;
@@ -35,6 +35,7 @@ export class UpdateEquipoHandler implements ICommandHandler<UpdateEquipoCommand>
       numero_serie_equipo: dto.numero_serie_equipo !== undefined ? dto.numero_serie_equipo : equipo.numero_serie_equipo,
       estado_equipo: dto.estado_equipo || (equipo.estado_equipo as string),
       criticidad: dto.criticidad || (equipo.criticidad as string),
+      config_parametros: dto.config_parametros !== undefined ? dto.config_parametros : (equipo.config_parametros as Record<string, any> | undefined),
       creado_por: equipo.creado_por,
       modificado_por: userId,
     });

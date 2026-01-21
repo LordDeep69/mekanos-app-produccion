@@ -14,8 +14,9 @@ export class UpdateOrdenCommand {
       descripcion_inicial?: string;
       trabajo_realizado?: string;
       observaciones_tecnico?: string;
+      observaciones_cierre?: string;
       requiere_firma_cliente?: boolean;
     },
     public readonly userId: number,
-  ) {}
+  ) { }
 }

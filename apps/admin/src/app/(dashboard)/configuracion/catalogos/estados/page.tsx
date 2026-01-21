@@ -1,11 +1,11 @@
 'use client';
 
 import {
-    useActualizarEstadoOrden,
-    useCrearEstadoOrden,
-    useEliminarEstadoOrden,
-    useEstadosOrden
-} from '@/features/ordenes';
+    useCreateEstadoOrden,
+    useDeleteEstadoOrden,
+    useEstadosOrden,
+    useUpdateEstadoOrden,
+} from '@/features/catalogos';
 import { cn } from '@/lib/utils';
 import { getEstadoColor } from '@/types/ordenes';
 import {
@@ -31,10 +31,12 @@ export default function EstadosOrdenPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEstado, setEditingEstado] = useState<any>(null);
 
-    const { data: estados, isLoading, isError, refetch } = useEstadosOrden();
-    const crearEstado = useCrearEstadoOrden();
-    const actualizarEstado = useActualizarEstadoOrden();
-    const eliminarEstado = useEliminarEstadoOrden();
+    const { data: response, isLoading, isError, refetch } = useEstadosOrden({ activo: true });
+    const crearEstado = useCreateEstadoOrden();
+    const actualizarEstado = useUpdateEstadoOrden();
+    const eliminarEstado = useDeleteEstadoOrden();
+
+    const estados = response?.data || [];
 
     const handleEdit = (estado: any) => {
         setEditingEstado(estado);
@@ -47,11 +49,12 @@ export default function EstadosOrdenPage() {
         }
     };
 
-    const filteredEstados = estados?.filter(e => {
-        const matchesBusqueda = e.nombre_estado.toLowerCase().includes(busqueda.toLowerCase()) ||
-            e.codigo_estado.toLowerCase().includes(busqueda.toLowerCase());
-        return matchesBusqueda;
-    }).sort((a, b) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0)) || [];
+    const filteredEstados = estados.filter(e => {
+        const nombre = e.nombre_estado || '';
+        const codigo = e.codigo_estado || '';
+        const term = busqueda.toLowerCase();
+        return nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
+    }).sort((a, b) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
 
     return (
         <div className="space-y-6">
@@ -121,8 +124,8 @@ export default function EstadosOrdenPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredEstados.map((estado) => (
-                                    <tr key={estado.id_estado} className="hover:bg-blue-50/30 transition-colors group">
+                                {filteredEstados.map((estado, idx) => (
+                                    <tr key={estado.id_estado ?? `estado-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-6 py-4 text-center">
                                             <span className="text-sm font-bold text-gray-400">#{estado.orden_visualizacion}</span>
                                         </td>
@@ -193,10 +196,20 @@ export default function EstadosOrdenPage() {
                     onClose={() => setIsModalOpen(false)}
                     estado={editingEstado}
                     onSubmit={async (formData: any) => {
+                        const dto = {
+                            codigoEstado: formData.codigo_estado,
+                            nombreEstado: formData.nombre_estado,
+                            descripcion: formData.descripcion,
+                            permiteEdicion: formData.permite_edicion,
+                            permiteEliminacion: formData.permite_eliminacion,
+                            esEstadoFinal: formData.es_estado_final,
+                            colorHex: formData.color_hex,
+                            ordenVisualizacion: Number(formData.orden_visualizacion),
+                        };
                         if (editingEstado) {
-                            await actualizarEstado.mutateAsync({ id: editingEstado.id_estado, data: formData });
+                            await actualizarEstado.mutateAsync({ id: editingEstado.id_estado, data: dto });
                         } else {
-                            await crearEstado.mutateAsync(formData);
+                            await crearEstado.mutateAsync(dto);
                         }
                         setIsModalOpen(false);
                     }}

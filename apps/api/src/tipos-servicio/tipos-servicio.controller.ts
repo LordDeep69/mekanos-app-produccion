@@ -21,6 +21,7 @@ import { CategoriaServicioEnum, CreateTiposServicioDto } from './dto/create-tipo
 import { UpdateTiposServicioDto } from './dto/update-tipos-servicio.dto';
 import { GetTiposServicioByCategoriaQuery } from './queries/get-tipos-servicio-by-categoria.query';
 import { GetTiposServicioByIdQuery } from './queries/get-tipos-servicio-by-id.query';
+import { GetTiposServicioDetalleCompletoQuery } from './queries/get-tipos-servicio-detalle-completo.query';
 import { GetTiposServicioQuery } from './queries/get-tipos-servicio.query';
 
 /**
@@ -241,6 +242,22 @@ export class TiposServicioController {
     return {
       success: true,
       message: `Tipos de servicio categoría ${categoria} obtenidos exitosamente`,
+      data: result,
+    };
+  }
+
+  @Get(':id/detalle-completo')
+  @ApiOperation({ summary: 'Obtener detalle completo del tipo de servicio con actividades agrupadas por sistema' })
+  @ApiResponse({ status: 200, description: 'Detalle completo obtenido' })
+  @ApiResponse({ status: 404, description: 'Tipo servicio no encontrado' })
+  async getDetalleCompleto(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.queryBus.execute(
+      new GetTiposServicioDetalleCompletoQuery(id),
+    );
+
+    return {
+      success: true,
+      message: 'Detalle completo obtenido exitosamente',
       data: result,
     };
   }
