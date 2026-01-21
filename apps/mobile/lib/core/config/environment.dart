@@ -13,28 +13,28 @@ import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 class Environment {
   Environment._();
 
-  /// ✅ IP del servidor en red local (tu PC)
-  /// IMPORTANTE: Cambiar esta IP si cambia tu red
-  static const String _localNetworkIp = '192.168.1.76';
+  /// ✅ Backend en producción (Render.com)
+  static const String _productionApiUrl = 'https://mekanos-api.onrender.com/api';
 
-  /// Puerto del backend
+  /// ✅ IP del servidor en red local (tu PC) - Solo para desarrollo
+  static const String _localNetworkIp = '192.168.1.76';
   static const int _backendPort = 3000;
 
   /// URL base del backend según el entorno de ejecución
   static String get apiBaseUrl {
+    // 🚀 PRODUCCIÓN: Siempre usar Render en RELEASE mode
+    if (kReleaseMode) {
+      return _productionApiUrl;
+    }
+
+    // 🔧 DESARROLLO: Usar localhost/emulador según plataforma
     if (kIsWeb) {
-      // Web siempre usa localhost
       return 'http://localhost:$_backendPort/api';
     }
 
     if (Platform.isAndroid) {
-      // En RELEASE (APK física) → usar IP de red local
-      // En DEBUG (emulador) → usar 10.0.2.2
-      if (kReleaseMode) {
-        return 'http://$_localNetworkIp:$_backendPort/api';
-      } else {
-        return 'http://10.0.2.2:$_backendPort/api';
-      }
+      // Emulador Android usa 10.0.2.2
+      return 'http://10.0.2.2:$_backendPort/api';
     }
 
     // iOS Simulator y otros usan localhost
