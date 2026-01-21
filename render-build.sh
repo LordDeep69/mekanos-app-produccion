@@ -22,7 +22,7 @@ cd ../..
 
 # 4. Instalar Chromium para Puppeteer
 echo "🌐 Installing Chromium for Puppeteer..."
-pnpm exec puppeteer browsers install chrome
+pnpx puppeteer browsers install chrome
 
 # 5. Build de la aplicación
 echo "🏗️ Building application..."
