@@ -12,34 +12,39 @@
   --mekanos-blue-light: #3290A6;
   --mekanos-green: #56A672;
   --mekanos-green-light: #9EC23D;
-  
+
   /* Semánticos */
   --mekanos-error: #DC2626;
   --mekanos-warning: #F59E0B;
   --mekanos-info: #3B82F6;
-  
+
   /* Variables shadcn/ui (requeridas por componentes) */
-  --background: 0 0% 95%; /* #F2F2F2 aproximado en HSL */
+  --background: 0 0% 95%;
+  /* #F2F2F2 aproximado en HSL */
   --foreground: 215 28% 17%;
   --card: 0 0% 100%;
   --card-foreground: 215 28% 17%;
   --popover: 0 0% 100%;
   --popover-foreground: 215 28% 17%;
-  --primary: 217 52% 30%; /* #244673 en HSL */
+  --primary: 217 52% 30%;
+  /* #244673 en HSL */
   --primary-foreground: 0 0% 95%;
-  --secondary: 192 52% 42%; /* #3290A6 en HSL */
+  --secondary: 192 52% 42%;
+  /* #3290A6 en HSL */
   --secondary-foreground: 0 0% 95%;
   --muted: 210 40% 96%;
   --muted-foreground: 215 16% 47%;
-  --accent: 145 31% 49%; /* #56A672 en HSL */
+  --accent: 145 31% 49%;
+  /* #56A672 en HSL */
   --accent-foreground: 0 0% 95%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
   --border: 214 32% 91%;
   --input: 214 32% 91%;
-  --ring: 217 52% 30%; /* Mismo que primary */
+  --ring: 217 52% 30%;
+  /* Mismo que primary */
   --radius: 0.5rem;
-  
+
   /* Sidebar específico */
   --sidebar-background: #244673;
   --sidebar-foreground: #F2F2F2;
@@ -51,7 +56,7 @@
   --color-foreground: hsl(var(--foreground));
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  
+
   /* Colores MEKANOS extendidos para uso directo */
   --color-mekanos-white: #F2F2F2;
   --color-mekanos-blue: #244673;
@@ -59,18 +64,18 @@
   --color-mekanos-blue-dark: #1a3456;
   --color-mekanos-green: #56A672;
   --color-mekanos-green-light: #9EC23D;
-  
+
   /* Estados */
   --color-mekanos-error: #DC2626;
   --color-mekanos-warning: #F59E0B;
   --color-mekanos-info: #3B82F6;
   --color-mekanos-success: #56A672;
-  
+
   /* Superficies */
   --color-card: hsl(var(--card));
   --color-sidebar: #244673;
   --color-sidebar-foreground: #F2F2F2;
-  
+
   /* shadcn variables como colores Tailwind */
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));

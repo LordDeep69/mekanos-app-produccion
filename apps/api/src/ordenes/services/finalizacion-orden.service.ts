@@ -196,6 +196,13 @@ export interface FinalizarOrdenDto {
 
     /** ID del usuario que finaliza (técnico) */
     usuarioId: number;
+
+    /** 
+     * Modo de finalización:
+     * - 'COMPLETO': Genera PDF y envía email (flujo tradicional)
+     * - 'SOLO_DATOS': Solo sube datos, sin PDF ni email (Admin genera desde portal)
+     */
+    modo?: 'COMPLETO' | 'SOLO_DATOS';
 }
 
 /**
@@ -274,17 +281,20 @@ export interface FinalizacionResult {
             id: number;
             tipo: string;
         }>;
+        /** Null si modo='SOLO_DATOS' (PDF se genera desde Admin Portal) */
         documento: {
             id: number;
             url: string;
             filename: string;
             tamanioKB: number;
-        };
+        } | null;
         email: {
             enviado: boolean;
             destinatario: string;
             messageId?: string;
         };
+        /** Modo usado: 'COMPLETO' o 'SOLO_DATOS' */
+        modo?: 'COMPLETO' | 'SOLO_DATOS';
     };
     tiempoTotal: number;
 }
@@ -475,64 +485,83 @@ export class FinalizacionOrdenService {
                 emitProgress('mediciones', 'completed', `${medicionesGuardadas} mediciones registradas`, 58);
             }
 
-            // ========================================================================
-            // PASO 4: Generar PDF con template real
-            // ========================================================================
-            emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 60);
-            this.logger.log('📄 Paso 4: Generando PDF con template profesional...');
-
-            // Mapear mediciones del array a datosModulo para el PDF (necesario también para horómetro abajo)
+            // Mapear mediciones del array a datosModulo (necesario para horómetro)
             const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
 
-            const tipoInforme = this.determinarTipoInforme(orden);
-            const pdfResult = await this.generarPDFOrden(
-                orden,
-                dto,
-                evidenciasResultado,
-                firmasResultado,
-                tipoInforme,
-                datosModuloMapeado,
-            );
-            emitProgress('generando_pdf', 'completed', `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`, 72);
+            // ========================================================================
+            // MODO DE FINALIZACIÓN: COMPLETO vs SOLO_DATOS
+            // ========================================================================
+            const modoCompleto = dto.modo !== 'SOLO_DATOS';
+
+            // Variables para resultados (pueden ser null en modo SOLO_DATOS)
+            let pdfResult: { buffer: Buffer; filename: string; size: number } | null = null;
+            let r2Result: { url: string } | null = null;
+            let emailResult: { enviado: boolean; destinatario: string; messageId?: string } = { enviado: false, destinatario: '' };
+            let documentoResult: { id: number } | null = null;
+
+            if (modoCompleto) {
+                // ========================================================================
+                // PASO 4: Generar PDF con template real (SOLO EN MODO COMPLETO)
+                // ========================================================================
+                emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 60);
+                this.logger.log('📄 Paso 4: Generando PDF con template profesional...');
+
+                const tipoInforme = this.determinarTipoInforme(orden);
+                pdfResult = await this.generarPDFOrden(
+                    orden,
+                    dto,
+                    evidenciasResultado,
+                    firmasResultado,
+                    tipoInforme,
+                    datosModuloMapeado,
+                );
+                emitProgress('generando_pdf', 'completed', `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`, 72);
+
+                // ========================================================================
+                // PASO 5+7: Subir PDF a R2 + Enviar email EN PARALELO (SOLO EN MODO COMPLETO)
+                // ========================================================================
+                emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF y enviando email en paralelo...', 74);
+                this.logger.log('⚡ [PERF] Pasos 5+7: Subiendo PDF a R2 + Enviando email EN PARALELO...');
+
+                const startParallel = Date.now();
+                const [r2Res, emailRes] = await Promise.all([
+                    this.subirPDFaR2(pdfResult.buffer, orden.numero_orden),
+                    this.enviarEmailInforme(orden, pdfResult, dto.emailAdicional),
+                ]);
+                r2Result = r2Res;
+                emailResult = emailRes;
+
+                const parallelTime = Date.now() - startParallel;
+                this.logger.log(`⚡ [PERF] R2 + Email completados en ${parallelTime}ms (paralelo)`);
+
+                emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 80);
+                emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 85);
+
+                // ========================================================================
+                // PASO 6: Registrar documento en BD (SOLO EN MODO COMPLETO)
+                // ========================================================================
+                emitProgress('registrando_doc', 'in_progress', 'Registrando documento en base de datos...', 87);
+                this.logger.log('💾 Paso 6: Registrando documento en base de datos...');
+                documentoResult = await this.registrarDocumento(
+                    orden.id_orden_servicio,
+                    orden.numero_orden,
+                    r2Result.url,
+                    pdfResult,
+                    dto.usuarioId,
+                );
+                recursosCreados.documento = documentoResult.id;
+                emitProgress('registrando_doc', 'completed', 'Documento registrado', 90);
+            } else {
+                // MODO SOLO_DATOS: Skip PDF, R2 y Email
+                this.logger.log('📋 Modo SOLO_DATOS: Saltando generación de PDF y envío de email');
+                emitProgress('generando_pdf', 'completed', 'PDF se generará desde Admin Portal', 72);
+                emitProgress('subiendo_pdf', 'completed', 'Omitido (modo solo datos)', 80);
+                emitProgress('enviando_email', 'completed', 'Email se enviará desde Admin Portal', 85);
+                emitProgress('registrando_doc', 'completed', 'Documento se registrará desde Admin Portal', 90);
+            }
 
             // ========================================================================
-            // PASO 5+7: Subir PDF a R2 + Enviar email EN PARALELO
-            // ✅ OPTIMIZACIÓN 06-ENE-2026: Estos pasos son independientes (ambos solo necesitan pdfResult.buffer)
-            // ========================================================================
-            emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF y enviando email en paralelo...', 74);
-            this.logger.log('⚡ [PERF] Pasos 5+7: Subiendo PDF a R2 + Enviando email EN PARALELO...');
-
-            const startParallel = Date.now();
-            const [r2Result, emailResult] = await Promise.all([
-                // Subir PDF a R2
-                this.subirPDFaR2(pdfResult.buffer, orden.numero_orden),
-                // Enviar email (no requiere URL de R2, solo el buffer del PDF)
-                this.enviarEmailInforme(orden, pdfResult, dto.emailAdicional),
-            ]);
-
-            const parallelTime = Date.now() - startParallel;
-            this.logger.log(`⚡ [PERF] R2 + Email completados en ${parallelTime}ms (paralelo)`);
-
-            emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 80);
-            emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 85);
-
-            // ========================================================================
-            // PASO 6: Registrar documento en BD (requiere URL de R2)
-            // ========================================================================
-            emitProgress('registrando_doc', 'in_progress', 'Registrando documento en base de datos...', 87);
-            this.logger.log('💾 Paso 6: Registrando documento en base de datos...');
-            const documentoResult = await this.registrarDocumento(
-                orden.id_orden_servicio,
-                orden.numero_orden,
-                r2Result.url,
-                pdfResult,
-                dto.usuarioId,
-            );
-            recursosCreados.documento = documentoResult.id;
-            emitProgress('registrando_doc', 'completed', 'Documento registrado', 90);
-
-            // ========================================================================
-            // PASO 7.5: Registrar lectura de horómetro (si existe)
+            // PASO 7.5: Registrar lectura de horómetro (si existe) - SIEMPRE
             // ========================================================================
             if (dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo) {
                 const horas = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
@@ -547,13 +576,13 @@ export class FinalizacionOrdenService {
             }
 
             // ========================================================================
-            // PASO 8: Actualizar estado de la orden
+            // PASO 8: Actualizar estado de la orden - SIEMPRE
             // ========================================================================
             emitProgress('actualizando_estado', 'in_progress', 'Actualizando estado de la orden...', 94);
             this.logger.log('✅ Paso 8: Actualizando estado de la orden...');
             await this.actualizarEstadoOrden(
                 orden.id_orden_servicio,
-                estadoCompletada.id_estado, // ✅ OPTIMIZACIÓN: Usar estado precargado
+                estadoCompletada.id_estado,
                 dto.observaciones,
                 dto.usuarioId,
                 dto.horaEntrada,
@@ -565,18 +594,21 @@ export class FinalizacionOrdenService {
             // RESULTADO EXITOSO
             // ========================================================================
             const tiempoTotal = Date.now() - startTime;
-            this.logger.log(`🎉 Orden ${orden.numero_orden} finalizada exitosamente en ${tiempoTotal}ms`);
+            const mensajeFinal = modoCompleto
+                ? `Orden ${orden.numero_orden} finalizada exitosamente`
+                : `Orden ${orden.numero_orden} datos sincronizados (PDF pendiente desde Admin)`;
+            this.logger.log(`🎉 ${mensajeFinal} en ${tiempoTotal}ms`);
 
-            // Emitir evento final de completado
-            emitProgress('completado', 'completed', `Orden ${orden.numero_orden} finalizada exitosamente`, 100, {
+            emitProgress('completado', 'completed', mensajeFinal, 100, {
                 tiempoTotal,
                 ordenId: orden.id_orden_servicio,
                 numeroOrden: orden.numero_orden,
+                modo: dto.modo || 'COMPLETO',
             });
 
             return {
                 success: true,
-                mensaje: `Orden ${orden.numero_orden} finalizada exitosamente`,
+                mensaje: mensajeFinal,
                 datos: {
                     orden: {
                         id: orden.id_orden_servicio,
@@ -585,13 +617,14 @@ export class FinalizacionOrdenService {
                     },
                     evidencias: evidenciasResultado,
                     firmas: firmasResultado,
-                    documento: {
+                    documento: documentoResult ? {
                         id: documentoResult.id,
-                        url: r2Result.url,
-                        filename: pdfResult.filename,
-                        tamanioKB: Math.round(pdfResult.size / 1024),
-                    },
+                        url: r2Result?.url || '',
+                        filename: pdfResult?.filename || '',
+                        tamanioKB: pdfResult ? Math.round(pdfResult.size / 1024) : 0,
+                    } : null,
                     email: emailResult,
+                    modo: dto.modo || 'COMPLETO',
                 },
                 tiempoTotal,
             };

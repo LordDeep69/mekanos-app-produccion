@@ -7,9 +7,12 @@
 - ✅ HTTPS automático
 - ⚠️ Sleep después de 15 min inactividad (se despierta con request)
 
-## Paso 1: Crear Cuenta en Render
+## ✅ DEPLOYMENT EXITOSO
 
-1. Ir a [render.com](https://render.com)
+**Status:** 🟢 LIVE  
+**URL:** https://mekanos-api.onrender.com  
+**Fecha:** 21 Enero 2026  
+**Commit:** `4828be0`
 2. Click "Get Started for Free"
 3. **Registrarse con GitHub** (lorddeep3@gmail.com)
 4. Autorizar acceso al repositorio

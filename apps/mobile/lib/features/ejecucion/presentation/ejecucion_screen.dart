@@ -14,6 +14,8 @@ import '../../evidencias/presentation/evidencias_actividad_bottom_sheet.dart';
 import '../../evidencias/presentation/evidencias_screen.dart';
 import '../../firmas/data/firma_service.dart';
 import '../../firmas/presentation/firmas_section.dart';
+import '../../settings/presentation/configuracion_screen.dart'
+    show modoFinalizacionProvider;
 import '../data/ejecucion_service.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
@@ -2477,6 +2479,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       text: _razonFallaActual ?? '',
     );
 
+    // ✅ MODO CONFIGURABLE: Usar modo guardado en Configuración como default
+    String modoSeleccionado = ref.read(modoFinalizacionProvider);
+
     // DEBUG: Log de valores iniciales
     print('🕐 Diálogo Finalización:');
     print('   Hora entrada default: ${horaEntradaController.text}');
@@ -2485,85 +2490,122 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     final resultado = await showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 8),
-            Text('Finalizar Servicio'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Row(
             children: [
-              const Text(
-                'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: horaEntradaController,
-                decoration: const InputDecoration(
-                  labelText: 'Hora de Entrada',
-                  hintText: 'HH:mm',
-                  prefixIcon: Icon(Icons.login),
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.datetime,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: horaSalidaController,
-                decoration: const InputDecoration(
-                  labelText: 'Hora de Salida',
-                  hintText: 'HH:mm',
-                  prefixIcon: Icon(Icons.logout),
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.datetime,
-              ),
-              if (_esCorrectivo) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: razonFallaController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Razón de la falla (opcional)',
-                    hintText: 'Describe la causa raíz o hallazgo principal',
-                    prefixIcon: Icon(Icons.bug_report),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 8),
+              Text('Finalizar Servicio'),
             ],
           ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: horaEntradaController,
+                  decoration: const InputDecoration(
+                    labelText: 'Hora de Entrada',
+                    hintText: 'HH:mm',
+                    prefixIcon: Icon(Icons.login),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.datetime,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: horaSalidaController,
+                  decoration: const InputDecoration(
+                    labelText: 'Hora de Salida',
+                    hintText: 'HH:mm',
+                    prefixIcon: Icon(Icons.logout),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.datetime,
+                ),
+                if (_esCorrectivo) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: razonFallaController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Razón de la falla (opcional)',
+                      hintText: 'Describe la causa raíz o hallazgo principal',
+                      prefixIcon: Icon(Icons.bug_report),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+                // ✅ MODO CONFIGURABLE: Selector de modo de finalización
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  'Modo de finalización:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                RadioListTile<String>(
+                  title: const Text('Completo'),
+                  subtitle: const Text(
+                    'Genera PDF y envía email automáticamente',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  value: 'COMPLETO',
+                  groupValue: modoSeleccionado,
+                  onChanged: (v) => setStateDialog(() => modoSeleccionado = v!),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                RadioListTile<String>(
+                  title: const Text('Solo datos'),
+                  subtitle: const Text(
+                    'Solo sube datos. PDF se genera desde Admin Portal',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  value: 'SOLO_DATOS',
+                  groupValue: modoSeleccionado,
+                  onChanged: (v) => setStateDialog(() => modoSeleccionado = v!),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                // DEBUG: Ver valores que se envían
+                print('🕐 DEBUG FINALIZACIÓN:');
+                print('   horaEntrada: ${horaEntradaController.text}');
+                print('   horaSalida: ${horaSalidaController.text}');
+                print('   modo: $modoSeleccionado');
+                Navigator.of(ctx).pop({
+                  'horaEntrada': horaEntradaController.text,
+                  'horaSalida': horaSalidaController.text,
+                  'observaciones': _observacionesController.text.isEmpty
+                      ? 'Servicio completado satisfactoriamente.'
+                      : _observacionesController.text,
+                  if (_esCorrectivo) 'razonFalla': razonFallaController.text,
+                  'modo': modoSeleccionado,
+                });
+              },
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text('FINALIZAR Y SINCRONIZAR'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              // DEBUG: Ver valores que se envían
-              print('🕐 DEBUG FINALIZACIÓN:');
-              print('   horaEntrada: ${horaEntradaController.text}');
-              print('   horaSalida: ${horaSalidaController.text}');
-              Navigator.of(ctx).pop({
-                'horaEntrada': horaEntradaController.text,
-                'horaSalida': horaSalidaController.text,
-                'observaciones': _observacionesController.text.isEmpty
-                    ? 'Servicio completado satisfactoriamente.'
-                    : _observacionesController.text,
-                if (_esCorrectivo) 'razonFalla': razonFallaController.text,
-              });
-            },
-            icon: const Icon(Icons.cloud_upload),
-            label: const Text('FINALIZAR Y SINCRONIZAR'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-          ),
-        ],
       ),
     );
 
@@ -2573,6 +2615,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         horaSalida: resultado['horaSalida']!,
         observaciones: resultado['observaciones']!,
         razonFalla: resultado['razonFalla'],
+        modo: resultado['modo'] ?? 'COMPLETO',
       );
     }
   }
@@ -2584,6 +2627,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     required String horaSalida,
     required String observaciones,
     String? razonFalla,
+    String modo = 'COMPLETO',
   }) async {
     // ✅ 19-DIC-2025: Mostrar diálogo con progreso reactivo
     showDialog(
@@ -2617,6 +2661,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         razonFalla: (razonFalla?.trim().isNotEmpty ?? false)
             ? razonFalla!.trim()
             : null,
+        modo: modo,
       );
 
       Navigator.of(context).pop(); // Cerrar loading

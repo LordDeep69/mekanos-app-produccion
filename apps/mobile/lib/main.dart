@@ -26,31 +26,34 @@ import 'features/orders/presentation/home_production_screen.dart';
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('es_CO', null);
+void main() {
+  // ✅ FIX: Todo debe estar en la MISMA zona para evitar "Zone mismatch"
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      await initializeDateFormatting('es_CO', null);
 
-  // Inicializar Supabase en background
-  SupabaseConfig.initialize().catchError((_) {});
+      // Inicializar Supabase en background
+      SupabaseConfig.initialize().catchError((_) {});
 
-  // Manejo de errores global
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    if (kDebugMode) {
-      debugPrint('🔴 Flutter Error: ${details.exception}');
-      debugPrint('📍 Stack: ${details.stack}');
-    }
-  };
+      // Manejo de errores global
+      FlutterError.onError = (FlutterErrorDetails details) {
+        FlutterError.presentError(details);
+        if (kDebugMode) {
+          debugPrint('🔴 Flutter Error: ${details.exception}');
+          debugPrint('📍 Stack: ${details.stack}');
+        }
+      };
 
-  runZonedGuarded(() => runApp(const ProviderScope(child: MekanosApp())), (
-    error,
-    stackTrace,
-  ) {
-    if (kDebugMode) {
-      debugPrint('🔴 Uncaught Error: $error');
-      debugPrint('📍 Stack: $stackTrace');
-    }
-  });
+      runApp(const ProviderScope(child: MekanosApp()));
+    },
+    (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('🔴 Uncaught Error: $error');
+        debugPrint('📍 Stack: $stackTrace');
+      }
+    },
+  );
 }
 
 class MekanosApp extends ConsumerStatefulWidget {

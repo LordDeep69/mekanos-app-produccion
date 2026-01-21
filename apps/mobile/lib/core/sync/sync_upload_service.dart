@@ -89,6 +89,7 @@ class SyncUploadService {
   /// [usuarioId] - ID del usuario/técnico que finaliza
   /// [emailAdicional] - Email opcional para enviar copia
   /// [razonFalla] - Opcional: Razón de la falla (solo para correctivos)
+  /// [modo] - Modo de finalización: 'COMPLETO' (PDF+email) o 'SOLO_DATOS' (solo sube datos)
   Future<SyncUploadResult> finalizarOrden({
     required int idOrdenLocal,
     required int idOrdenBackend,
@@ -98,6 +99,7 @@ class SyncUploadService {
     required int usuarioId,
     String? emailAdicional,
     String? razonFalla,
+    String modo = 'COMPLETO',
   }) async {
     try {
       // ✅ 19-DIC-2025: Iniciar progreso
@@ -404,6 +406,8 @@ class SyncUploadService {
         if (esMultiEquipo && medicionesPorEquipoPayload != null)
           'medicionesPorEquipo': medicionesPorEquipoPayload,
         'esMultiEquipo': esMultiEquipo,
+        // ✅ MODO CONFIGURABLE: 'COMPLETO' (PDF+email) o 'SOLO_DATOS'
+        'modo': modo,
       };
 
       debugPrint(

@@ -59,6 +59,16 @@ export enum NivelAlerta {
     CRITICAL = 'CRITICAL',
 }
 
+/**
+ * Modo de finalización de orden
+ * - COMPLETO: Sube datos + genera PDF + envía email (flujo tradicional)
+ * - SOLO_DATOS: Solo sube datos al backend, sin PDF ni email (Admin genera desde portal)
+ */
+export enum ModoFinalizacion {
+    COMPLETO = 'COMPLETO',
+    SOLO_DATOS = 'SOLO_DATOS',
+}
+
 // ============================================================================
 // DTOs ANIDADOS
 // ============================================================================
@@ -331,6 +341,15 @@ export class FinalizarOrdenCompletoDto {
     @IsString()
     @MaxLength(1000)
     razonFalla?: string;
+
+    @ApiPropertyOptional({
+        enum: ModoFinalizacion,
+        description: 'Modo de finalización: COMPLETO (PDF+email) o SOLO_DATOS (solo sube datos)',
+        default: ModoFinalizacion.COMPLETO,
+    })
+    @IsOptional()
+    @IsEnum(ModoFinalizacion)
+    modo?: ModoFinalizacion;
 }
 
 // ============================================================================

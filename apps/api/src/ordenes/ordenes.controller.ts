@@ -1143,6 +1143,7 @@ export class OrdenesController {
     console.log(`⏰ HORA ENTRADA: "${dto.horaEntrada}"`);
     console.log(`⏰ HORA SALIDA: "${dto.horaSalida}"`);
     console.log(`📝 OBSERVACIONES: "${dto.observaciones?.substring(0, 50)}..."`);
+    console.log(`🎛️ MODO FINALIZACIÓN: "${dto.modo || 'COMPLETO (default)'}"`);
     console.log('');
     console.log('🔬 ═══════════════════════════════════════════════════════════════');
     console.log('');
@@ -1190,6 +1191,8 @@ export class OrdenesController {
       horaSalida: dto.horaSalida,
       emailAdicional: dto.emailAdicional,
       usuarioId: userId || 1, // Fallback si JWT no disponible
+      // ✅ MODO CONFIGURABLE: Pasar modo de finalización al servicio
+      modo: (dto.modo || 'COMPLETO') as 'COMPLETO' | 'SOLO_DATOS',
     };
 
     // Ejecutar flujo completo de finalización
@@ -1300,6 +1303,8 @@ export class OrdenesController {
         horaSalida: dto.horaSalida,
         emailAdicional: dto.emailAdicional,
         usuarioId: userId || 1,
+        // ✅ MODO CONFIGURABLE: Pasar modo de finalización al servicio
+        modo: (dto.modo || 'COMPLETO') as 'COMPLETO' | 'SOLO_DATOS',
       };
 
       // Ejecutar flujo completo con callback de progreso

@@ -18,7 +18,7 @@ import '../../auth/data/auth_provider.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../historial/presentation/historial_screen.dart';
 import '../../notificaciones/presentation/notificaciones_badge.dart';
-import '../../settings/presentation/storage_settings_screen.dart';
+import '../../settings/presentation/configuracion_screen.dart';
 import '../../sync/presentation/pending_sync_screen.dart';
 import 'ordenes_list_screen.dart';
 
@@ -601,13 +601,13 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
         ),
         const SizedBox(height: 8),
         _buildActionTile(
-          icon: Icons.storage,
-          title: 'Almacenamiento',
-          subtitle: 'Gestión de espacio y limpieza',
-          color: Colors.orange,
+          icon: Icons.settings,
+          title: 'Configuración',
+          subtitle: 'Ajustes de la aplicación',
+          color: Colors.blueGrey,
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => StorageSettingsScreen()),
+            MaterialPageRoute(builder: (_) => const ConfiguracionScreen()),
           ),
         ),
       ],

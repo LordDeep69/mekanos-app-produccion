@@ -14,11 +14,17 @@ class Environment {
   Environment._();
 
   /// ✅ Backend en producción (Render.com)
-  static const String _productionApiUrl = 'https://mekanos-api.onrender.com/api';
+  static const String _productionApiUrl =
+      'https://mekanos-api.onrender.com/api';
 
   /// ✅ IP del servidor en red local (tu PC) - Solo para desarrollo
   static const String _localNetworkIp = '192.168.1.76';
   static const int _backendPort = 3000;
+
+  /// 🔧 CONFIGURACIÓN: Cambiar a true para usar backend local en desarrollo
+  /// false = usar Render (recomendado para pruebas de integración)
+  /// true = usar localhost (solo si tienes el backend corriendo localmente)
+  static const bool _useLocalBackendInDebug = false;
 
   /// URL base del backend según el entorno de ejecución
   static String get apiBaseUrl {
@@ -27,7 +33,12 @@ class Environment {
       return _productionApiUrl;
     }
 
-    // 🔧 DESARROLLO: Usar localhost/emulador según plataforma
+    // 🔧 DESARROLLO: Usar Render por defecto, o localhost si está configurado
+    if (!_useLocalBackendInDebug) {
+      return _productionApiUrl;
+    }
+
+    // Usar localhost/emulador según plataforma
     if (kIsWeb) {
       return 'http://localhost:$_backendPort/api';
     }
