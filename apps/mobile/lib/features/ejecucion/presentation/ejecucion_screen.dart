@@ -2490,122 +2490,117 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     final resultado = await showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green),
-              SizedBox(width: 8),
-              Text('Finalizar Servicio'),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: horaEntradaController,
-                  decoration: const InputDecoration(
-                    labelText: 'Hora de Entrada',
-                    hintText: 'HH:mm',
-                    prefixIcon: Icon(Icons.login),
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.datetime,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: horaSalidaController,
-                  decoration: const InputDecoration(
-                    labelText: 'Hora de Salida',
-                    hintText: 'HH:mm',
-                    prefixIcon: Icon(Icons.logout),
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.datetime,
-                ),
-                if (_esCorrectivo) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: razonFallaController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Razón de la falla (opcional)',
-                      hintText: 'Describe la causa raíz o hallazgo principal',
-                      prefixIcon: Icon(Icons.bug_report),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-                // ✅ MODO CONFIGURABLE: Selector de modo de finalización
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text(
-                  'Modo de finalización:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                RadioListTile<String>(
-                  title: const Text('Completo'),
-                  subtitle: const Text(
-                    'Genera PDF y envía email automáticamente',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  value: 'COMPLETO',
-                  groupValue: modoSeleccionado,
-                  onChanged: (v) => setStateDialog(() => modoSeleccionado = v!),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                RadioListTile<String>(
-                  title: const Text('Solo datos'),
-                  subtitle: const Text(
-                    'Solo sube datos. PDF se genera desde Admin Portal',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  value: 'SOLO_DATOS',
-                  groupValue: modoSeleccionado,
-                  onChanged: (v) => setStateDialog(() => modoSeleccionado = v!),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () {
-                // DEBUG: Ver valores que se envían
-                print('🕐 DEBUG FINALIZACIÓN:');
-                print('   horaEntrada: ${horaEntradaController.text}');
-                print('   horaSalida: ${horaSalidaController.text}');
-                print('   modo: $modoSeleccionado');
-                Navigator.of(ctx).pop({
-                  'horaEntrada': horaEntradaController.text,
-                  'horaSalida': horaSalidaController.text,
-                  'observaciones': _observacionesController.text.isEmpty
-                      ? 'Servicio completado satisfactoriamente.'
-                      : _observacionesController.text,
-                  if (_esCorrectivo) 'razonFalla': razonFallaController.text,
-                  'modo': modoSeleccionado,
-                });
-              },
-              icon: const Icon(Icons.cloud_upload),
-              label: const Text('FINALIZAR Y SINCRONIZAR'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            ),
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Finalizar Servicio'),
           ],
         ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: horaEntradaController,
+                decoration: const InputDecoration(
+                  labelText: 'Hora de Entrada',
+                  hintText: 'HH:mm',
+                  prefixIcon: Icon(Icons.login),
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.datetime,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: horaSalidaController,
+                decoration: const InputDecoration(
+                  labelText: 'Hora de Salida',
+                  hintText: 'HH:mm',
+                  prefixIcon: Icon(Icons.logout),
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.datetime,
+              ),
+              if (_esCorrectivo) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: razonFallaController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Razón de la falla (opcional)',
+                    hintText: 'Describe la causa raíz o hallazgo principal',
+                    prefixIcon: Icon(Icons.bug_report),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+              // ✅ MODO: Se usa el configurado en Configuración (sin selector aquí)
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.blue.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        modoSeleccionado == 'COMPLETO'
+                            ? 'Modo: Completo (PDF + Email)'
+                            : 'Modo: Solo datos',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              // DEBUG: Ver valores que se envían
+              print('🕐 DEBUG FINALIZACIÓN:');
+              print('   horaEntrada: ${horaEntradaController.text}');
+              print('   horaSalida: ${horaSalidaController.text}');
+              print('   modo: $modoSeleccionado');
+              Navigator.of(ctx).pop({
+                'horaEntrada': horaEntradaController.text,
+                'horaSalida': horaSalidaController.text,
+                'observaciones': _observacionesController.text.isEmpty
+                    ? 'Servicio completado satisfactoriamente.'
+                    : _observacionesController.text,
+                if (_esCorrectivo) 'razonFalla': razonFallaController.text,
+                'modo': modoSeleccionado,
+              });
+            },
+            icon: const Icon(Icons.cloud_upload),
+            label: const Text('FINALIZAR Y SINCRONIZAR'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+          ),
+        ],
       ),
     );
 
@@ -2633,7 +2628,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const _SyncProgressDialog(),
+      builder: (ctx) => _SyncProgressDialog(modo: modo),
     );
 
     try {
@@ -3405,7 +3400,8 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
 /// ✅ WIDGET DE DIÁLOGO DE PROGRESO DE SINCRONIZACIÓN
 /// Muestra el progreso en tiempo real de la subida al servidor
 class _SyncProgressDialog extends ConsumerWidget {
-  const _SyncProgressDialog();
+  final String modo;
+  const _SyncProgressDialog({this.modo = 'COMPLETO'});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3521,16 +3517,19 @@ class _SyncProgressDialog extends ConsumerWidget {
                 progress: progress,
                 icon: Icons.draw,
               ),
-              _buildStepItem(
-                step: SyncStep.generando_pdf,
-                progress: progress,
-                icon: Icons.picture_as_pdf,
-              ),
-              _buildStepItem(
-                step: SyncStep.enviando_email,
-                progress: progress,
-                icon: Icons.email,
-              ),
+              // ✅ Solo mostrar pasos de PDF/Email si el modo es COMPLETO
+              if (modo == 'COMPLETO') ...[
+                _buildStepItem(
+                  step: SyncStep.generando_pdf,
+                  progress: progress,
+                  icon: Icons.picture_as_pdf,
+                ),
+                _buildStepItem(
+                  step: SyncStep.enviando_email,
+                  progress: progress,
+                  icon: Icons.email,
+                ),
+              ],
 
               // Mensaje de error si hay
               if (progress.pasoActual == SyncStep.error &&
