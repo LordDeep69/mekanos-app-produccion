@@ -10,8 +10,8 @@ services:
     plan: free
     branch: fix/admin-order-creation-and-detail-sync
     rootDir: apps/api
-    buildCommand: cd /opt/render/project/src && npm install && cd apps/api && PUPPETEER_CACHE_DIR=/opt/render/project/src/apps/api/node_modules/.cache/puppeteer npx puppeteer browsers install chrome && npm run build
-    startCommand: npm run start:prod
+    buildCommand: bash apps/api/render-build.sh
+    startCommand: pnpm run start:prod
     healthCheckPath: /api/health
     envVars:
       - key: PUPPETEER_CACHE_DIR
