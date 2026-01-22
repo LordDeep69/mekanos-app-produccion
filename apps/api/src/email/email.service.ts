@@ -1,15 +1,21 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 
 /**
  * ============================================================================
  * EMAIL SERVICE - MEKANOS S.A.S
  * ============================================================================
- * Servicio profesional de envío de emails con Nodemailer.
- * Soporta Gmail SMTP con App Passwords.
+ * Servicio profesional de envío de emails.
+ * 
+ * PRIORIDAD DE PROVEEDORES:
+ * 1. Resend (API HTTP) - Recomendado para Render/Vercel
+ * 2. SMTP (Nodemailer) - Para servidores con puertos abiertos
+ * 3. Mock Mode - Si ninguno está configurado
  * 
  * CONFIGURACIÓN:
+ * - RESEND_API_KEY: API Key de Resend (prioridad)
  * - EMAIL_SMTP_HOST: smtp.gmail.com
  * - EMAIL_SMTP_PORT: 587
  * - EMAIL_SMTP_USER: usuario@gmail.com
@@ -63,8 +69,10 @@ export interface OrdenEmailData {
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
   private transporter: Transporter | null = null;
+  private resendClient: Resend | null = null;
   private fromEmail: string;
   private isConfigured = false;
+  private provider: 'resend' | 'smtp' | 'mock' = 'mock';
 
   constructor() {
     this.fromEmail = process.env.EMAIL_FROM || 'mekanossas2@gmail.com';
@@ -72,30 +80,57 @@ export class EmailService implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log('🔧 [EmailService] Iniciando configuración...');
-    await this.initializeTransporter();
+    await this.initializeEmailProvider();
   }
 
   /**
-   * Inicializa el transporter de Nodemailer
+   * Inicializa el proveedor de email (Resend > SMTP > Mock)
+   * ✅ FIX 22-ENE-2026: Agregar Resend como alternativa HTTP a SMTP
    */
-  private async initializeTransporter(): Promise<void> {
-    // ✅ FIX 22-ENE-2026: Aceptar ambos nombres de variables (EMAIL_SMTP_* o SMTP_*)
+  private async initializeEmailProvider(): Promise<void> {
+    // =======================================================================
+    // PASO 1: Intentar Resend (API HTTP - funciona en Render/Vercel)
+    // =======================================================================
+    const resendApiKey = process.env.RESEND_API_KEY;
+
+    this.logger.log(`📋 [EmailService] Verificando proveedores de email...`);
+    this.logger.log(`   RESEND_API_KEY: ${resendApiKey ? `✅ Configurado (${resendApiKey.substring(0, 8)}...)` : '❌ NO CONFIGURADO'}`);
+    this.logger.log(`   FROM: ${this.fromEmail}`);
+
+    if (resendApiKey) {
+      try {
+        this.resendClient = new Resend(resendApiKey);
+        this.isConfigured = true;
+        this.provider = 'resend';
+        this.logger.log('✅ [EmailService] Resend API inicializado correctamente');
+        this.logger.log(`   📧 Proveedor: Resend (HTTP API)`);
+        this.logger.log(`   📧 Remitente: ${this.fromEmail}`);
+        return; // Éxito con Resend, no intentar SMTP
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`❌ Error inicializando Resend: ${errorMsg}`);
+        this.resendClient = null;
+      }
+    }
+
+    // =======================================================================
+    // PASO 2: Intentar SMTP (Nodemailer - puede fallar en Render)
+    // =======================================================================
     const host = process.env.EMAIL_SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = parseInt(process.env.EMAIL_SMTP_PORT || process.env.SMTP_PORT || '587', 10);
     const user = process.env.EMAIL_SMTP_USER || process.env.SMTP_USER;
     const pass = process.env.EMAIL_SMTP_PASS || process.env.SMTP_PASS;
 
-    // Log de diagnóstico
     this.logger.log(`📋 [EmailService] Verificando credenciales SMTP...`);
     this.logger.log(`   HOST: ${host}`);
     this.logger.log(`   PORT: ${port}`);
     this.logger.log(`   USER: ${user ? `${user.substring(0, 5)}...${user.includes('@') ? '@' + user.split('@')[1] : ''}` : '❌ NO CONFIGURADO'}`);
     this.logger.log(`   PASS: ${pass ? `✅ Configurado (${pass.length} caracteres)` : '❌ NO CONFIGURADO'}`);
-    this.logger.log(`   FROM: ${this.fromEmail}`);
 
     if (!user || !pass) {
-      this.logger.warn('⚠️ Credenciales SMTP no configuradas - Modo MOCK activado');
-      this.logger.warn('   Configure EMAIL_SMTP_USER y EMAIL_SMTP_PASS en variables de entorno');
+      this.logger.warn('⚠️ Credenciales SMTP no configuradas');
+      this.logger.warn('⚠️ Modo MOCK activado - Los emails NO se enviarán');
+      this.logger.warn('   💡 Recomendación: Configure RESEND_API_KEY para enviar emails desde Render');
       return;
     }
 
@@ -105,32 +140,29 @@ export class EmailService implements OnModuleInit {
       this.transporter = nodemailer.createTransport({
         host,
         port,
-        secure: port === 465, // true para 465, false para otros puertos
-        auth: {
-          user,
-          pass
-        },
-        tls: {
-          rejectUnauthorized: false // Para desarrollo
-        }
+        secure: port === 465,
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false },
+        connectionTimeout: 10000, // 10 segundos timeout
       });
 
-      // Verificar conexión
       this.logger.log('🔍 [EmailService] Verificando conexión SMTP...');
       await this.transporter.verify();
 
       this.isConfigured = true;
-      this.logger.log('✅ Servicio de Email inicializado correctamente');
+      this.provider = 'smtp';
+      this.logger.log('✅ Servicio de Email SMTP inicializado correctamente');
       this.logger.log(`   📧 Remitente: ${this.fromEmail}`);
       this.logger.log(`   📡 SMTP: ${host}:${port}`);
-      this.logger.log(`   🔐 Usuario: ${user}`);
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`❌ Error inicializando transporter SMTP: ${errorMsg}`);
-      this.logger.error(`   Detalles: ${JSON.stringify(error, null, 2)}`);
+      this.logger.error(`❌ Error inicializando SMTP: ${errorMsg}`);
+      this.logger.warn('⚠️ SMTP falló - Render puede bloquear puertos SMTP');
+      this.logger.warn('   💡 Solución: Configure RESEND_API_KEY para enviar emails via HTTP');
       this.transporter = null;
       this.isConfigured = false;
+      this.provider = 'mock';
     }
   }
 
@@ -140,48 +172,87 @@ export class EmailService implements OnModuleInit {
    * =========================================================================
    */
   async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    if (!this.transporter) {
-      this.logger.log(`📧 [MOCK] Email enviado a ${options.to}`);
-      this.logger.log(`   Asunto: ${options.subject}`);
-      if (options.attachments?.length) {
-        this.logger.log(`   Adjuntos: ${options.attachments.map(a => a.filename).join(', ')}`);
+    // =========================================================================
+    // PROVEEDOR 1: Resend (HTTP API)
+    // =========================================================================
+    if (this.resendClient) {
+      try {
+        this.logger.log(`📧 [Resend] Enviando email a ${options.to}...`);
+
+        const { data, error } = await this.resendClient.emails.send({
+          from: `MEKANOS S.A.S <${this.fromEmail}>`,
+          to: Array.isArray(options.to) ? options.to : [options.to],
+          cc: options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : undefined,
+          bcc: options.bcc ? (Array.isArray(options.bcc) ? options.bcc : [options.bcc]) : undefined,
+          subject: options.subject,
+          html: options.html,
+          attachments: options.attachments?.map(att => ({
+            filename: att.filename,
+            content: att.content.toString('base64'),
+          })),
+        });
+
+        if (error) {
+          this.logger.error(`❌ [Resend] Error: ${error.message}`);
+          return { success: false, error: error.message };
+        }
+
+        this.logger.log(`✅ [Resend] Email enviado - ID: ${data?.id}`);
+        this.logger.log(`   📨 Destinatario: ${options.to}`);
+        this.logger.log(`   📋 Asunto: ${options.subject}`);
+        this.logger.log(`   📎 Adjuntos: ${options.attachments?.length || 0}`);
+
+        return { success: true, messageId: data?.id };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+        this.logger.error(`❌ [Resend] Error enviando email: ${errorMessage}`);
+        return { success: false, error: errorMessage };
       }
-      return { success: true, messageId: 'mock-' + Date.now() };
     }
 
-    try {
-      const mailOptions = {
-        from: {
-          name: 'MEKANOS S.A.S',
-          address: this.fromEmail
-        },
-        to: options.to,
-        cc: options.cc,
-        bcc: options.bcc,
-        subject: options.subject,
-        html: options.html,
-        attachments: options.attachments?.map(att => ({
-          filename: att.filename,
-          content: att.content,
-          contentType: att.contentType || 'application/pdf'
-        }))
-      };
+    // =========================================================================
+    // PROVEEDOR 2: SMTP (Nodemailer)
+    // =========================================================================
+    if (this.transporter) {
+      try {
+        const mailOptions = {
+          from: { name: 'MEKANOS S.A.S', address: this.fromEmail },
+          to: options.to,
+          cc: options.cc,
+          bcc: options.bcc,
+          subject: options.subject,
+          html: options.html,
+          attachments: options.attachments?.map(att => ({
+            filename: att.filename,
+            content: att.content,
+            contentType: att.contentType || 'application/pdf'
+          }))
+        };
 
-      const result = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`✅ Email enviado - ID: ${result.messageId}`);
-      this.logger.log(`   📨 Destinatario: ${options.to}`);
-      this.logger.log(`   📋 Asunto: ${options.subject}`);
-      this.logger.log(`   📎 Adjuntos: ${options.attachments?.length || 0}`);
-      this.logger.log(`   📬 Response: ${result.response || 'N/A'}`);
-      this.logger.log(`   ⚠️ NOTA: Verificar carpeta SPAM si no llega el email`);
+        const result = await this.transporter.sendMail(mailOptions);
+        this.logger.log(`✅ [SMTP] Email enviado - ID: ${result.messageId}`);
+        this.logger.log(`   📨 Destinatario: ${options.to}`);
+        this.logger.log(`   📋 Asunto: ${options.subject}`);
+        this.logger.log(`   📎 Adjuntos: ${options.attachments?.length || 0}`);
 
-      return { success: true, messageId: result.messageId };
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      this.logger.error(`❌ Error enviando email: ${errorMessage}`);
-      return { success: false, error: errorMessage };
+        return { success: true, messageId: result.messageId };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+        this.logger.error(`❌ [SMTP] Error enviando email: ${errorMessage}`);
+        return { success: false, error: errorMessage };
+      }
     }
+
+    // =========================================================================
+    // FALLBACK: Mock Mode (NO envía emails reales)
+    // =========================================================================
+    this.logger.warn(`📧 [MOCK] Email NO enviado a ${options.to}`);
+    this.logger.warn(`   Asunto: ${options.subject}`);
+    this.logger.warn(`   ⚠️ Configure RESEND_API_KEY para enviar emails reales`);
+    if (options.attachments?.length) {
+      this.logger.warn(`   Adjuntos: ${options.attachments.map(a => a.filename).join(', ')}`);
+    }
+    return { success: true, messageId: 'mock-' + Date.now() };
   }
 
   /**
@@ -584,11 +655,16 @@ export class EmailService implements OnModuleInit {
 
   /**
    * Verifica si el servicio está configurado
+   * ✅ FIX 22-ENE-2026: Incluir estado de Resend
    */
   checkConfiguration(): {
     configured: boolean;
     provider: string;
     from: string;
+    resend: {
+      configured: boolean;
+      apiKeyPrefix: string | null;
+    };
     smtp: {
       host: string;
       port: number;
@@ -596,14 +672,24 @@ export class EmailService implements OnModuleInit {
       passConfigured: boolean;
     };
   } {
-    // ✅ FIX 22-ENE-2026: Aceptar ambos nombres de variables
     const user = process.env.EMAIL_SMTP_USER || process.env.SMTP_USER;
     const pass = process.env.EMAIL_SMTP_PASS || process.env.SMTP_PASS;
+    const resendKey = process.env.RESEND_API_KEY;
+
+    const providerName = this.provider === 'resend'
+      ? 'Resend (HTTP API)'
+      : this.provider === 'smtp'
+        ? 'Nodemailer (SMTP)'
+        : 'Mock Mode (NO envía emails)';
 
     return {
       configured: this.isConfigured,
-      provider: this.isConfigured ? 'Nodemailer (SMTP)' : 'Mock Mode',
+      provider: providerName,
       from: this.fromEmail,
+      resend: {
+        configured: !!this.resendClient,
+        apiKeyPrefix: resendKey ? `${resendKey.substring(0, 8)}...` : null,
+      },
       smtp: {
         host: process.env.EMAIL_SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.EMAIL_SMTP_PORT || process.env.SMTP_PORT || '587', 10),
