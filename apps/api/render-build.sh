@@ -13,17 +13,23 @@ fi
 cd /opt/render/project/src
 echo "📍 Current directory: $(pwd)"
 
-# 3. Install all dependencies with pnpm
+# 3. Install all dependencies with pnpm (skip postinstall scripts first)
 echo "📦 Installing dependencies with pnpm..."
-pnpm install --frozen-lockfile
+pnpm install --no-frozen-lockfile --ignore-scripts
 
-# 4. Install Chrome for Puppeteer in the API workspace
+# 4. Generate Prisma client manually (after dependencies are installed)
+echo "🔧 Generating Prisma client..."
+cd packages/database
+pnpm exec prisma generate
+cd ../..
+
+# 5. Install Chrome for Puppeteer in the API workspace
 echo "🌐 Installing Chrome for Puppeteer..."
 cd apps/api
 export PUPPETEER_CACHE_DIR=/opt/render/project/src/apps/api/node_modules/.cache/puppeteer
 npx puppeteer browsers install chrome
 
-# 5. Build the API
+# 6. Build the API
 echo "🔨 Building API..."
 pnpm run build
 
