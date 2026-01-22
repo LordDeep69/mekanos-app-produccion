@@ -14,8 +14,9 @@ cd /opt/render/project/src
 echo "📍 Current directory: $(pwd)"
 
 # 3. Install all dependencies with pnpm (skip postinstall scripts first)
+# Include dev dependencies even in production for build tools like Prisma
 echo "📦 Installing dependencies with pnpm..."
-pnpm install --no-frozen-lockfile --ignore-scripts
+NODE_ENV=development pnpm install --no-frozen-lockfile --ignore-scripts
 
 # 4. Generate Prisma client manually (after dependencies are installed)
 echo "🔧 Generating Prisma client..."
