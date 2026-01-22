@@ -11,7 +11,7 @@ services:
     branch: fix/admin-order-creation-and-detail-sync
     rootDir: apps/api
     buildCommand: bash apps/api/render-build.sh
-    startCommand: pnpm run start:prod
+    startCommand: cd apps/api && pnpm run start:prod
     healthCheckPath: /api/health
     envVars:
       - key: PUPPETEER_CACHE_DIR
