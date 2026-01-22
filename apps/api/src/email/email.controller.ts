@@ -2,10 +2,10 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PdfService } from '../pdf/pdf.service';
 import {
-    EnviarEmailResponseDto,
-    EnviarInformeTecnicoDto,
-    EnviarOrdenCompletadaDto,
-    EnviarTestEmailDto,
+  EnviarEmailResponseDto,
+  EnviarInformeTecnicoDto,
+  EnviarOrdenCompletadaDto,
+  EnviarTestEmailDto,
 } from './dto';
 import { EmailService, OrdenEmailData } from './email.service';
 
@@ -33,7 +33,7 @@ export class EmailController {
   constructor(
     private readonly emailService: EmailService,
     private readonly pdfService: PdfService
-  ) {}
+  ) { }
 
   /**
    * =========================================================================
@@ -41,12 +41,12 @@ export class EmailController {
    * =========================================================================
    */
   @Get('status')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Estado del servicio de email',
     description: 'Verifica si el servicio de email está configurado correctamente'
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Estado del servicio',
     schema: {
       type: 'object',
@@ -63,17 +63,59 @@ export class EmailController {
 
   /**
    * =========================================================================
+   * GET /email/debug - Diagnóstico directo de variables de entorno
+   * =========================================================================
+   * ✅ FIX 22-ENE-2026: Endpoint para debugging de variables SMTP
+   */
+  @Get('debug')
+  @ApiOperation({
+    summary: 'Diagnóstico de variables SMTP',
+    description: 'Muestra el estado de las variables de entorno SMTP directamente'
+  })
+  getDebug() {
+    const emailSmtpUser = process.env.EMAIL_SMTP_USER;
+    const emailSmtpPass = process.env.EMAIL_SMTP_PASS;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    const effectiveUser = emailSmtpUser || smtpUser;
+    const effectivePass = emailSmtpPass || smtpPass;
+
+    return {
+      timestamp: new Date().toISOString(),
+      variables: {
+        EMAIL_SMTP_HOST: process.env.EMAIL_SMTP_HOST || '(not set)',
+        EMAIL_SMTP_PORT: process.env.EMAIL_SMTP_PORT || '(not set)',
+        EMAIL_SMTP_USER: emailSmtpUser ? `${emailSmtpUser.substring(0, 5)}...` : '(not set)',
+        EMAIL_SMTP_PASS: emailSmtpPass ? `✅ set (${emailSmtpPass.length} chars)` : '(not set)',
+        SMTP_HOST: process.env.SMTP_HOST || '(not set)',
+        SMTP_PORT: process.env.SMTP_PORT || '(not set)',
+        SMTP_USER: smtpUser ? `${smtpUser.substring(0, 5)}...` : '(not set)',
+        SMTP_PASS: smtpPass ? `✅ set (${smtpPass.length} chars)` : '(not set)',
+        EMAIL_FROM: process.env.EMAIL_FROM || '(not set)',
+      },
+      effective: {
+        user: effectiveUser ? `${effectiveUser.substring(0, 5)}...@${effectiveUser.split('@')[1] || '?'}` : '❌ NONE',
+        pass: effectivePass ? `✅ (${effectivePass.length} chars)` : '❌ NONE',
+        willUseMock: !effectiveUser || !effectivePass,
+      },
+      serviceState: this.emailService.checkConfiguration(),
+    };
+  }
+
+  /**
+   * =========================================================================
    * POST /email/test - Enviar email de prueba
    * =========================================================================
    */
   @Post('test')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Enviar email de prueba',
     description: 'Envía un email de prueba para verificar la configuración SMTP'
   })
   @ApiBody({ type: EnviarTestEmailDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Email enviado',
     type: EnviarEmailResponseDto
   })
@@ -88,13 +130,13 @@ export class EmailController {
    * =========================================================================
    */
   @Post('orden')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Enviar email de orden completada',
     description: 'Envía email de notificación de orden completada con enlace al PDF'
   })
   @ApiBody({ type: EnviarOrdenCompletadaDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Email enviado',
     type: EnviarEmailResponseDto
   })
@@ -127,13 +169,13 @@ export class EmailController {
    * =========================================================================
    */
   @Post('informe')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Enviar informe técnico con PDF adjunto',
     description: 'Envía email con informe técnico detallado y PDF adjunto'
   })
   @ApiBody({ type: EnviarInformeTecnicoDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Email enviado con PDF adjunto',
     type: EnviarEmailResponseDto
   })
@@ -173,13 +215,13 @@ export class EmailController {
    * =========================================================================
    */
   @Post('orden-simple')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Enviar email de orden con enlace a PDF (Legacy)',
     description: 'Envía email de orden completada con enlace para descargar el PDF. Use POST /email/orden en su lugar.'
   })
   @ApiBody({ type: EnviarOrdenCompletadaDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Email enviado',
     type: EnviarEmailResponseDto
   })

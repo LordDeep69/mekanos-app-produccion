@@ -65,6 +65,11 @@ class RegenerarPdfDto {
   @IsOptional()
   @IsBoolean()
   guardarEnR2?: boolean;
+
+  @ApiProperty({ description: 'Forzar regeneración aunque exista PDF en BD', default: false })
+  @IsOptional()
+  @IsBoolean()
+  forzarRegeneracion?: boolean;
 }
 
 /**
@@ -890,12 +895,86 @@ export class PdfController {
     emailEnviado?: boolean;
     filename?: string;
     pdfBase64?: string;
+    usoPdfExistente?: boolean;
   }> {
     this.logger.log(`🔄 Regenerando PDF para orden ${id}`);
 
     const idNumerico = parseInt(id, 10);
     if (isNaN(idNumerico)) {
       throw new NotFoundException(`ID de orden inválido: ${id}`);
+    }
+
+    // ========================================================================
+    // ✅ FIX 22-ENE-2026: Buscar PDF existente antes de regenerar
+    // ========================================================================
+    if (!dto.forzarRegeneracion) {
+      const pdfExistente = await this.prisma.documentos_generados.findFirst({
+        where: {
+          tipo_documento: 'INFORME_SERVICIO',
+          id_referencia: idNumerico,
+        },
+        orderBy: { fecha_generacion: 'desc' },
+      });
+
+      if (pdfExistente && pdfExistente.ruta_archivo) {
+        this.logger.log(`📄 PDF existente encontrado: ${pdfExistente.ruta_archivo}`);
+
+        // Si se solicita enviar email, descargar el PDF y enviarlo
+        if (dto.enviarEmail && dto.emailDestino) {
+          try {
+            // Descargar PDF desde R2
+            const response = await fetch(pdfExistente.ruta_archivo);
+            if (response.ok) {
+              const pdfBuffer = Buffer.from(await response.arrayBuffer());
+
+              // Obtener datos básicos de la orden para el email
+              const ordenBasica = await this.prisma.ordenes_servicio.findUnique({
+                where: { id_orden_servicio: idNumerico },
+                select: { numero_orden: true },
+              });
+
+              const resultado = await this.emailService.sendEmail({
+                to: dto.emailDestino,
+                subject: dto.asuntoEmail || `Informe de Mantenimiento - ${ordenBasica?.numero_orden || id}`,
+                html: `<p>Adjunto encontrará el informe de servicio.</p>`,
+                attachments: [{
+                  filename: `Informe_${ordenBasica?.numero_orden || id}.pdf`,
+                  content: pdfBuffer,
+                  contentType: 'application/pdf',
+                }],
+              });
+
+              this.logger.log(`📧 Email enviado usando PDF existente: ${resultado.success}`);
+
+              return {
+                success: true,
+                message: 'PDF existente enviado por email',
+                pdfUrl: pdfExistente.ruta_archivo,
+                emailEnviado: resultado.success,
+                filename: pdfExistente.numero_documento || `Informe_${id}.pdf`,
+                usoPdfExistente: true,
+              };
+            }
+          } catch (error) {
+            this.logger.warn(`⚠️ Error usando PDF existente, regenerando: ${error}`);
+            // Continuar con regeneración
+          }
+        } else {
+          // No se requiere email, solo retornar URL existente
+          return {
+            success: true,
+            message: 'PDF existente disponible (use forzarRegeneracion=true para regenerar)',
+            pdfUrl: pdfExistente.ruta_archivo,
+            emailEnviado: false,
+            filename: pdfExistente.numero_documento || `Informe_${id}.pdf`,
+            usoPdfExistente: true,
+          };
+        }
+      } else {
+        this.logger.log(`📄 No hay PDF existente, generando nuevo...`);
+      }
+    } else {
+      this.logger.log(`🔄 Forzando regeneración de PDF...`);
     }
 
     // Buscar orden con relaciones
