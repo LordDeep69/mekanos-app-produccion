@@ -14,6 +14,10 @@ services:
     startCommand: npm run start:prod
     healthCheckPath: /api/health
     envVars:
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/project/src/apps/api/node_modules/.cache/puppeteer
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "false"
       - key: NODE_ENV
         value: production
       - key: PORT

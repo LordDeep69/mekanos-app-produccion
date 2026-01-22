@@ -5,6 +5,7 @@
   "description": "Mekanos S.A.S - Equipment Management System",
   "scripts": {
     "postinstall": "npx puppeteer browsers install chrome",
+    "build:render": "npx puppeteer browsers install chrome && turbo run build",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "dev:api": "cd apps/api && pnpm dev",

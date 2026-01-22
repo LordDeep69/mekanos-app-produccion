@@ -16,8 +16,8 @@ import 'storage_settings_screen.dart';
 /// Provider para el modo de finalización persistente
 final modoFinalizacionProvider =
     StateNotifierProvider<ModoFinalizacionNotifier, String>((ref) {
-  return ModoFinalizacionNotifier();
-});
+      return ModoFinalizacionNotifier();
+    });
 
 class ModoFinalizacionNotifier extends StateNotifier<String> {
   ModoFinalizacionNotifier() : super('COMPLETO') {
@@ -25,16 +25,41 @@ class ModoFinalizacionNotifier extends StateNotifier<String> {
   }
 
   static const _key = 'modo_finalizacion_default';
+  bool _initialized = false;
+
+  /// Indica si el modo ya fue cargado de SharedPreferences
+  bool get initialized => _initialized;
 
   Future<void> _cargarModo() async {
-    final prefs = await SharedPreferences.getInstance();
-    state = prefs.getString(_key) ?? 'COMPLETO';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final modoGuardado = prefs.getString(_key);
+      if (modoGuardado != null &&
+          (modoGuardado == 'COMPLETO' || modoGuardado == 'SOLO_DATOS')) {
+        state = modoGuardado;
+      }
+      _initialized = true;
+    } catch (e) {
+      // Si falla, mantener el default
+      _initialized = true;
+    }
   }
 
   Future<void> setModo(String modo) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, modo);
-    state = modo;
+    if (modo != 'COMPLETO' && modo != 'SOLO_DATOS') return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, modo);
+      state = modo;
+    } catch (e) {
+      // Si falla el guardado, al menos actualizar el state en memoria
+      state = modo;
+    }
+  }
+
+  /// Forzar recarga desde SharedPreferences
+  Future<void> recargar() async {
+    await _cargarModo();
   }
 }
 

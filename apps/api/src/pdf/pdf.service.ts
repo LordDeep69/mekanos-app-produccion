@@ -311,11 +311,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * Inicializa el browser de Puppeteer
    */
   private async initBrowser(): Promise<void> {
+    const cacheDir = process.env.PUPPETEER_CACHE_DIR || 'default';
     this.logger.log('🚀 Inicializando Puppeteer browser...');
+    this.logger.log(`📍 PUPPETEER_CACHE_DIR: ${cacheDir}`);
 
     try {
       // En Render, Chrome se instala via postinstall script
-      // Puppeteer lo encuentra automáticamente en su cache path
+      // Puppeteer lo encuentra automáticamente en su cache path configurado en .puppeteerrc.cjs
       this.browser = await puppeteer.launch({
         headless: true,
         args: [
@@ -333,7 +335,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('✅ Browser inicializado correctamente');
     } catch (error: any) {
       this.logger.error(`❌ Error inicializando Puppeteer: ${error.message}`);
-      this.logger.error(`📍 Cache path: ${process.env.PUPPETEER_CACHE_DIR || 'default'}`);
+      this.logger.error(`📍 Cache path configurado: ${cacheDir}`);
+      this.logger.error(`📍 CWD: ${process.cwd()}`);
       throw new InternalServerErrorException(
         `Error inicializando generador de PDF: ${error.message}. ` +
         `Asegúrese de que Chrome está instalado (npx puppeteer browsers install chrome)`

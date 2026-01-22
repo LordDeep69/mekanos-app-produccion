@@ -64,8 +64,12 @@ final quickStatsProvider = FutureProvider.autoDispose<QuickStats>((ref) async {
         o.fechaProgramada!.day == hoy.day;
   }).length;
 
-  // v3.3: Órdenes con cambios locales pendientes de subir
-  final pendientesSubir = ordenes.where((o) => o.isDirty).length;
+  // v3.3 FIX: Órdenes con estado POR_SUBIR (completadas offline pendientes de sync)
+  // Usar estado específico, no isDirty genérico que puede incluir otros cambios
+  final pendientesSubir = ordenes.where((o) {
+    final codigo = estadoMap[o.idEstado] ?? '';
+    return codigo == 'POR_SUBIR';
+  }).length;
 
   return QuickStats(
     pendientes: pendientes,

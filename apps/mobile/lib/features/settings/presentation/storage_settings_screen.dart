@@ -103,7 +103,10 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
 
     try {
       final lifecycleManager = ref.read(dataLifecycleManagerProvider);
-      final result = await lifecycleManager.ejecutarLimpiezaInteligente();
+
+      // ✅ FIX: Usar limpieza forzada que elimina TODAS las fotos sincronizadas
+      // Los técnicos quieren que "Limpiar Ahora" elimine todo inmediatamente
+      final result = await lifecycleManager.limpiarFotosSincronizadasAhora();
 
       // Recargar estadísticas
       final stats = await lifecycleManager.getStorageStats();
@@ -116,10 +119,10 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
       if (mounted) {
         final mensaje = result.tuvoCambios
             ? 'Limpieza completada:\n'
-                  '• ${result.evidenciasPurgadas} evidencias liberadas\n'
-                  '• ${result.firmasPurgadas} firmas liberadas\n'
-                  '• ${result.ordenesPurgadas} órdenes eliminadas'
-            : 'No hay datos para limpiar en este momento.';
+                  '• ${result.evidenciasPurgadas} fotos eliminadas del dispositivo\n'
+                  '• ${result.firmasPurgadas} firmas eliminadas\n'
+                  '(Las fotos siguen disponibles en la nube)'
+            : 'No hay fotos sincronizadas para limpiar.';
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -427,6 +427,94 @@ class DataLifecycleManager {
   }
 
   // ============================================================================
+  // LIMPIEZA FORZADA DE FOTOS SINCRONIZADAS
+  // ============================================================================
+
+  /// Elimina TODAS las fotos y firmas que ya fueron sincronizadas a la nube.
+  /// NO espera el período de retención - elimina inmediatamente.
+  ///
+  /// Esto es lo que el técnico espera cuando presiona "Limpiar Ahora".
+  /// Las fotos ya están en Cloudinary, no necesitan estar en el dispositivo.
+  Future<PurgeResult> limpiarFotosSincronizadasAhora() async {
+    debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA de fotos sincronizadas...');
+
+    final resultado = PurgeResult();
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      // 1. Eliminar TODAS las evidencias sincronizadas (sin esperar días)
+      final evidencias = await (_db.select(
+        _db.evidencias,
+      )..where((e) => e.subida.equals(true))).get();
+
+      int evidenciasEliminadas = 0;
+      int bytesLiberados = 0;
+
+      for (final ev in evidencias) {
+        if (ev.urlRemota == null || ev.urlRemota!.isEmpty) continue;
+
+        final archivo = File(ev.rutaLocal);
+        if (await archivo.exists()) {
+          try {
+            final fileSize = await archivo.length();
+            await archivo.delete();
+            bytesLiberados += fileSize;
+            evidenciasEliminadas++;
+            debugPrint('🗑️ [LIFECYCLE] Foto eliminada: ${ev.rutaLocal}');
+          } catch (e) {
+            debugPrint('⚠️ [LIFECYCLE] Error eliminando foto: $e');
+          }
+        }
+      }
+
+      // 2. Eliminar TODAS las firmas sincronizadas
+      final firmas = await (_db.select(
+        _db.firmas,
+      )..where((f) => f.subida.equals(true))).get();
+
+      int firmasEliminadas = 0;
+
+      for (final firma in firmas) {
+        if (firma.urlRemota == null || firma.urlRemota!.isEmpty) continue;
+
+        final archivo = File(firma.rutaLocal);
+        if (await archivo.exists()) {
+          try {
+            final fileSize = await archivo.length();
+            await archivo.delete();
+            bytesLiberados += fileSize;
+            firmasEliminadas++;
+          } catch (e) {
+            debugPrint('⚠️ [LIFECYCLE] Error eliminando firma: $e');
+          }
+        }
+      }
+
+      resultado.evidenciasPurgadas = evidenciasEliminadas;
+      resultado.firmasPurgadas = firmasEliminadas;
+      _espacioLiberadoBytes = bytesLiberados;
+
+      stopwatch.stop();
+      resultado.duracionMs = stopwatch.elapsedMilliseconds;
+      resultado.success = true;
+
+      debugPrint('✅ [LIFECYCLE] Limpieza forzada completada:');
+      debugPrint('   📸 Fotos eliminadas: $evidenciasEliminadas');
+      debugPrint('   ✍️ Firmas eliminadas: $firmasEliminadas');
+      debugPrint(
+        '   💾 Espacio liberado: ${(bytesLiberados / 1024 / 1024).toStringAsFixed(2)} MB',
+      );
+    } catch (e, stack) {
+      resultado.success = false;
+      resultado.error = e.toString();
+      debugPrint('❌ [LIFECYCLE] Error en limpieza forzada: $e');
+      debugPrint('$stack');
+    }
+
+    return resultado;
+  }
+
+  // ============================================================================
   // VERIFICACIÓN DE SEGURIDAD
   // ============================================================================
 
