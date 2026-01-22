@@ -79,10 +79,11 @@ export class EmailService implements OnModuleInit {
    * Inicializa el transporter de Nodemailer
    */
   private async initializeTransporter(): Promise<void> {
-    const host = process.env.EMAIL_SMTP_HOST || 'smtp.gmail.com';
-    const port = parseInt(process.env.EMAIL_SMTP_PORT || '587', 10);
-    const user = process.env.EMAIL_SMTP_USER;
-    const pass = process.env.EMAIL_SMTP_PASS;
+    // ✅ FIX 22-ENE-2026: Aceptar ambos nombres de variables (EMAIL_SMTP_* o SMTP_*)
+    const host = process.env.EMAIL_SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.EMAIL_SMTP_PORT || process.env.SMTP_PORT || '587', 10);
+    const user = process.env.EMAIL_SMTP_USER || process.env.SMTP_USER;
+    const pass = process.env.EMAIL_SMTP_PASS || process.env.SMTP_PASS;
 
     // Log de diagnóstico
     this.logger.log(`📋 [EmailService] Verificando credenciales SMTP...`);
@@ -595,16 +596,17 @@ export class EmailService implements OnModuleInit {
       passConfigured: boolean;
     };
   } {
-    const user = process.env.EMAIL_SMTP_USER;
-    const pass = process.env.EMAIL_SMTP_PASS;
+    // ✅ FIX 22-ENE-2026: Aceptar ambos nombres de variables
+    const user = process.env.EMAIL_SMTP_USER || process.env.SMTP_USER;
+    const pass = process.env.EMAIL_SMTP_PASS || process.env.SMTP_PASS;
 
     return {
       configured: this.isConfigured,
       provider: this.isConfigured ? 'Nodemailer (SMTP)' : 'Mock Mode',
       from: this.fromEmail,
       smtp: {
-        host: process.env.EMAIL_SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.EMAIL_SMTP_PORT || '587', 10),
+        host: process.env.EMAIL_SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.EMAIL_SMTP_PORT || process.env.SMTP_PORT || '587', 10),
         user: user ? `${user.substring(0, 5)}...` : null,
         passConfigured: !!pass
       }

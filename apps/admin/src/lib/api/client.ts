@@ -27,7 +27,8 @@ import { getSession, signOut } from 'next-auth/react';
 // Configuración base
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
-const API_TIMEOUT = 30000; // 30 segundos
+// ✅ FIX 22-ENE-2026: Aumentado a 120s para operaciones de PDF que toman ~18-25s
+const API_TIMEOUT = 120000; // 120 segundos
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🚀 TOKEN CACHE ENTERPRISE
