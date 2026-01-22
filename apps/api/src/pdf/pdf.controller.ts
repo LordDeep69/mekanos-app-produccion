@@ -30,8 +30,10 @@ import {
   ApiTags
 } from '@nestjs/swagger';
 import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
+import { createHash } from 'crypto';
 import { Response } from 'express';
 import { EmailService } from '../email/email.service';
+import { R2StorageService } from '../storage/r2-storage.service';
 import { PdfService, TipoInforme } from './pdf.service';
 import { DatosOrdenPDF } from './templates';
 
@@ -98,7 +100,8 @@ export class PdfController {
   constructor(
     private readonly pdfService: PdfService,
     private readonly prisma: PrismaService,
-    private readonly emailService: EmailService, // Agregar EmailService al constructor
+    private readonly emailService: EmailService,
+    private readonly r2Service: R2StorageService,
   ) { }
 
   /**
@@ -1165,6 +1168,41 @@ export class PdfController {
     });
 
     this.logger.log(`✅ PDF regenerado: ${resultado.filename} (${resultado.size} bytes)`);
+
+    // ========================================================================
+    // SUBIR PDF A R2 Y REGISTRAR EN BD (por defecto true, excepto si explícitamente false)
+    // ========================================================================
+    let urlPdf: string | undefined;
+    if (dto.guardarEnR2 !== false) {
+      try {
+        // Subir a R2
+        const timestamp = Date.now();
+        const r2Filename = `${orden.numero_orden}/informe_${timestamp}.pdf`;
+        urlPdf = await this.r2Service.uploadPDF(resultado.buffer, r2Filename);
+        this.logger.log(`📎 PDF subido a R2: ${urlPdf}`);
+
+        // Registrar en documentos_generados
+        const hash = createHash('sha256').update(resultado.buffer).digest('hex');
+        await this.prisma.documentos_generados.create({
+          data: {
+            tipo_documento: 'INFORME_SERVICIO',
+            id_referencia: idNumerico,
+            numero_documento: `INF-${orden.numero_orden}-${timestamp}`,
+            ruta_archivo: urlPdf,
+            hash_sha256: hash,
+            tama_o_bytes: BigInt(resultado.size),
+            mime_type: 'application/pdf',
+            fecha_generacion: new Date(),
+            generado_por: 1, // Sistema
+            herramienta_generacion: 'MEKANOS-PDF-CONTROLLER-REGENERAR',
+          },
+        });
+        this.logger.log(`✅ Documento registrado en BD`);
+      } catch (error) {
+        this.logger.error(`❌ Error subiendo PDF a R2: ${error}`);
+        // No fallar todo el proceso por error de R2
+      }
+    }
 
     // Enviar por email si se solicita
     let emailEnviado = false;
