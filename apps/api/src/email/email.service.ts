@@ -71,6 +71,7 @@ export class EmailService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    this.logger.log('🔧 [EmailService] Iniciando configuración...');
     await this.initializeTransporter();
   }
 
@@ -83,13 +84,23 @@ export class EmailService implements OnModuleInit {
     const user = process.env.EMAIL_SMTP_USER;
     const pass = process.env.EMAIL_SMTP_PASS;
 
+    // Log de diagnóstico
+    this.logger.log(`📋 [EmailService] Verificando credenciales SMTP...`);
+    this.logger.log(`   HOST: ${host}`);
+    this.logger.log(`   PORT: ${port}`);
+    this.logger.log(`   USER: ${user ? `${user.substring(0, 5)}...${user.includes('@') ? '@' + user.split('@')[1] : ''}` : '❌ NO CONFIGURADO'}`);
+    this.logger.log(`   PASS: ${pass ? `✅ Configurado (${pass.length} caracteres)` : '❌ NO CONFIGURADO'}`);
+    this.logger.log(`   FROM: ${this.fromEmail}`);
+
     if (!user || !pass) {
       this.logger.warn('⚠️ Credenciales SMTP no configuradas - Modo MOCK activado');
-      this.logger.warn('   Configure EMAIL_SMTP_USER y EMAIL_SMTP_PASS en .env');
+      this.logger.warn('   Configure EMAIL_SMTP_USER y EMAIL_SMTP_PASS en variables de entorno');
       return;
     }
 
     try {
+      this.logger.log('🔌 [EmailService] Creando transporter SMTP...');
+
       this.transporter = nodemailer.createTransport({
         host,
         port,
@@ -104,15 +115,21 @@ export class EmailService implements OnModuleInit {
       });
 
       // Verificar conexión
+      this.logger.log('🔍 [EmailService] Verificando conexión SMTP...');
       await this.transporter.verify();
+
       this.isConfigured = true;
       this.logger.log('✅ Servicio de Email inicializado correctamente');
       this.logger.log(`   📧 Remitente: ${this.fromEmail}`);
       this.logger.log(`   📡 SMTP: ${host}:${port}`);
+      this.logger.log(`   🔐 Usuario: ${user}`);
 
     } catch (error) {
-      this.logger.error('❌ Error inicializando transporter:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Error inicializando transporter SMTP: ${errorMsg}`);
+      this.logger.error(`   Detalles: ${JSON.stringify(error, null, 2)}`);
       this.transporter = null;
+      this.isConfigured = false;
     }
   }
 
@@ -567,11 +584,30 @@ export class EmailService implements OnModuleInit {
   /**
    * Verifica si el servicio está configurado
    */
-  checkConfiguration(): { configured: boolean; provider: string; from: string } {
+  checkConfiguration(): {
+    configured: boolean;
+    provider: string;
+    from: string;
+    smtp: {
+      host: string;
+      port: number;
+      user: string | null;
+      passConfigured: boolean;
+    };
+  } {
+    const user = process.env.EMAIL_SMTP_USER;
+    const pass = process.env.EMAIL_SMTP_PASS;
+
     return {
       configured: this.isConfigured,
       provider: this.isConfigured ? 'Nodemailer (SMTP)' : 'Mock Mode',
-      from: this.fromEmail
+      from: this.fromEmail,
+      smtp: {
+        host: process.env.EMAIL_SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.EMAIL_SMTP_PORT || '587', 10),
+        user: user ? `${user.substring(0, 5)}...` : null,
+        passConfigured: !!pass
+      }
     };
   }
 
