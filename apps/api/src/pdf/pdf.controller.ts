@@ -65,6 +65,30 @@ class RegenerarPdfDto {
   guardarEnR2?: boolean;
 }
 
+/**
+ * DTO para enviar email con PDF existente
+ */
+class EnviarPdfExistenteDto {
+  @ApiProperty({ description: 'Email del destinatario', required: true })
+  @IsEmail()
+  emailDestino: string;
+
+  @ApiProperty({ description: 'Asunto personalizado del email', required: false })
+  @IsOptional()
+  @IsString()
+  asuntoEmail?: string;
+
+  @ApiProperty({ description: 'Mensaje personalizado para el email', required: false })
+  @IsOptional()
+  @IsString()
+  mensajeEmail?: string;
+
+  @ApiProperty({ description: 'Forzar regeneración aunque exista PDF', default: false })
+  @IsOptional()
+  @IsBoolean()
+  forzarRegeneracion?: boolean;
+}
+
 @ApiTags('PDF')
 @Controller()
 @ApiBearerAuth()
@@ -1199,6 +1223,204 @@ export class PdfController {
       emailEnviado,
       pdfBase64: resultado.buffer.toString('base64'),
     };
+  }
+
+  /**
+   * ========================================================================
+   * ENDPOINT OPTIMIZADO: Enviar email con PDF existente en R2
+   * ========================================================================
+   * Usa el PDF ya guardado en R2 sin regenerar. Mucho más rápido (~2s vs ~25s).
+   * Solo regenera si no existe PDF o si se fuerza con forzarRegeneracion=true.
+   */
+  @Post('ordenes/:id/pdf/enviar')
+  @ApiOperation({
+    summary: 'Enviar email con PDF existente (OPTIMIZADO)',
+    description: 'Envía el PDF ya guardado en R2 sin regenerar. Usa esto desde Admin Portal para reenviar informes.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: String })
+  @ApiBody({ type: EnviarPdfExistenteDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Email enviado exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        message: { type: 'string' },
+        usoPdfExistente: { type: 'boolean' },
+        urlPdf: { type: 'string' },
+      },
+    },
+  })
+  async enviarPdfExistente(
+    @Param('id') id: string,
+    @Body() dto: EnviarPdfExistenteDto,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    usoPdfExistente: boolean;
+    urlPdf?: string;
+    error?: string;
+  }> {
+    const idNumerico = parseInt(id, 10);
+    if (isNaN(idNumerico)) {
+      throw new NotFoundException(`ID de orden inválido: ${id}`);
+    }
+
+    this.logger.log(`📧 [ENVIAR-OPTIMIZADO] Orden ${id} -> ${dto.emailDestino}`);
+
+    // 1. Buscar orden básica
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: idNumerico },
+      select: {
+        numero_orden: true,
+        fecha_programada: true,
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+          select: {
+            persona: {
+              select: { primer_nombre: true, primer_apellido: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden con ID ${id} no encontrada`);
+    }
+
+    // 2. Buscar PDF existente en documentos_generados
+    let pdfBuffer: Buffer | null = null;
+    let urlPdf: string | null = null;
+    let usoPdfExistente = false;
+    let filename = `Informe_${orden.numero_orden}.pdf`;
+
+    if (!dto.forzarRegeneracion) {
+      const documento = await this.prisma.documentos_generados.findFirst({
+        where: {
+          id_referencia: idNumerico,
+          tipo_documento: 'INFORME_SERVICIO',
+        },
+        orderBy: { fecha_generacion: 'desc' },
+      });
+
+      if (documento?.ruta_archivo) {
+        urlPdf = documento.ruta_archivo;
+        this.logger.log(`✅ PDF existente encontrado: ${urlPdf}`);
+
+        // Descargar PDF desde R2
+        try {
+          const response = await fetch(urlPdf);
+          if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer();
+            pdfBuffer = Buffer.from(arrayBuffer);
+            usoPdfExistente = true;
+            filename = urlPdf.split('/').pop() || filename;
+            this.logger.log(`✅ PDF descargado: ${pdfBuffer.length} bytes`);
+          } else {
+            this.logger.warn(`⚠️ Error descargando PDF (${response.status}), se regenerará`);
+          }
+        } catch (error) {
+          this.logger.warn(`⚠️ Error fetch PDF: ${error}, se regenerará`);
+        }
+      }
+    }
+
+    // 3. Si no hay PDF existente o falló la descarga, llamar al endpoint de regenerar
+    if (!pdfBuffer) {
+      this.logger.log(`🔄 Regenerando PDF (no existe o forzado)...`);
+
+      // Llamar internamente al método regenerar
+      const regenerarResult = await this.regenerarPdfOrden(id, {
+        emailDestino: dto.emailDestino,
+        enviarEmail: true,
+        asuntoEmail: dto.asuntoEmail,
+        mensajeEmail: dto.mensajeEmail,
+      });
+
+      return {
+        success: regenerarResult.success,
+        message: regenerarResult.message,
+        usoPdfExistente: false,
+        urlPdf: undefined,
+        error: regenerarResult.success ? undefined : 'Error regenerando PDF',
+      };
+    }
+
+    // 4. Enviar email con PDF existente
+    const tecnico = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
+    const tecnicoNombre = tecnico
+      ? `${tecnico.primer_nombre || ''} ${tecnico.primer_apellido || ''}`.trim()
+      : 'Técnico';
+    const fechaServicio = orden.fecha_programada
+      ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
+      : new Date().toLocaleDateString('es-CO');
+
+    const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
+    const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
+
+    try {
+      const emailResult = await this.emailService.sendEmail({
+        to: dto.emailDestino,
+        subject: asunto,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #244673; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">MEKANOS S.A.S</h1>
+            </div>
+            <div style="padding: 30px; background: #f8f9fa;">
+              <h2 style="color: #244673;">Informe de Mantenimiento</h2>
+              <p style="color: #333; line-height: 1.6;">${mensaje}</p>
+              <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Orden:</strong> ${orden.numero_orden}</p>
+                <p><strong>Fecha:</strong> ${fechaServicio}</p>
+                <p><strong>Técnico:</strong> ${tecnicoNombre}</p>
+              </div>
+              <p style="color: #666; font-size: 14px;">
+                El informe PDF se encuentra adjunto a este correo.
+              </p>
+            </div>
+            <div style="background: #244673; padding: 15px; text-align: center;">
+              <p style="color: white; margin: 0; font-size: 12px;">
+                © ${new Date().getFullYear()} MEKANOS S.A.S - Todos los derechos reservados
+              </p>
+            </div>
+          </div>
+        `,
+        attachments: [{
+          filename,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        }],
+      });
+
+      if (emailResult.success) {
+        this.logger.log(`✅ Email enviado exitosamente a ${dto.emailDestino}`);
+        return {
+          success: true,
+          message: `Email enviado a ${dto.emailDestino} (PDF existente, sin regenerar)`,
+          usoPdfExistente: true,
+          urlPdf: urlPdf || undefined,
+        };
+      } else {
+        this.logger.error(`❌ Error enviando email: ${emailResult.error}`);
+        return {
+          success: false,
+          message: 'Error enviando email',
+          usoPdfExistente: true,
+          error: emailResult.error,
+        };
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Error en envío: ${errorMsg}`);
+      return {
+        success: false,
+        message: 'Error enviando email',
+        usoPdfExistente: true,
+        error: errorMsg,
+      };
+    }
   }
 
   /**
