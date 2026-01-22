@@ -4,6 +4,7 @@
   "private": true,
   "description": "Mekanos Backend API - NestJS + GraphQL",
   "scripts": {
+    "postinstall": "npx puppeteer browsers install chrome",
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "nest start",
