@@ -2,35 +2,41 @@
  * PÁGINA DE GESTIÓN DE EQUIPOS - MEKANOS S.A.S
  * 
  * Ruta: /equipos
+ * ✅ 08-ENE-2026: Refactorizado con búsqueda, filtros funcionales, ordenación y UX mejorada
  * 
  * Funcionalidades:
- * - Listado de equipos con filtros (cliente, tipo, estado)
- * - Crear nuevo equipo (modal con formulario dinámico)
+ * - Listado de equipos con filtros funcionales (tipo, estado)
+ * - Búsqueda por código, nombre, serie o cliente
+ * - Ordenación por código, nombre o fecha
+ * - Crear nuevo equipo (modal)
  * - Ver detalle de equipo
- * - Cambiar estado
+ * - Acciones rápidas (editar, cambiar estado)
  */
 
 'use client';
 
-import type { TipoEquipo } from '@/features/equipos';
+import type { EquipoListItem, TipoEquipo } from '@/features/equipos';
 import { EquipoForm, useEquipos } from '@/features/equipos';
 import { cn } from '@/lib/utils';
 import {
   AlertCircle,
   Building2,
-  ChevronLeft, ChevronRight,
+  ChevronLeft,
+  ChevronRight,
   Droplets,
+  Edit,
   Eye,
-  Loader2,
+  Grid3X3,
+  List,
   MapPin,
-  MoreVertical,
   Plus,
   RefreshCw,
   Search,
   X,
   Zap
 } from 'lucide-react';
-import { useState } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -56,15 +62,19 @@ function TipoBadge({ tipo }: { tipo: TipoEquipo }) {
 function EstadoBadge({ estado }: { estado: string }) {
   const colors: Record<string, string> = {
     OPERATIVO: 'bg-green-100 text-green-800',
+    STANDBY: 'bg-blue-100 text-blue-800',
+    INACTIVO: 'bg-gray-100 text-gray-600',
     EN_REPARACION: 'bg-yellow-100 text-yellow-800',
-    FUERA_DE_SERVICIO: 'bg-red-100 text-red-800',
+    FUERA_SERVICIO: 'bg-red-100 text-red-800',
     BAJA: 'bg-gray-100 text-gray-500',
   };
 
   const labels: Record<string, string> = {
     OPERATIVO: 'Operativo',
+    STANDBY: 'Standby',
+    INACTIVO: 'Inactivo',
     EN_REPARACION: 'En Reparación',
-    FUERA_DE_SERVICIO: 'Fuera de Servicio',
+    FUERA_SERVICIO: 'Fuera de Servicio',
     BAJA: 'Baja',
   };
 
@@ -128,34 +138,172 @@ function Modal({ isOpen, onClose, title, children }: ModalProps) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// SKELETON LOADING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function EquipoCardSkeleton() {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 animate-pulse">
+      <div className="flex items-start justify-between mb-3">
+        <div className="space-y-2">
+          <div className="h-4 w-24 bg-gray-200 rounded" />
+          <div className="h-5 w-40 bg-gray-200 rounded" />
+        </div>
+      </div>
+      <div className="flex gap-2 mb-3">
+        <div className="h-6 w-20 bg-gray-200 rounded-full" />
+        <div className="h-6 w-16 bg-gray-200 rounded-full" />
+      </div>
+      <div className="space-y-2">
+        <div className="h-4 w-32 bg-gray-200 rounded" />
+        <div className="h-4 w-28 bg-gray-200 rounded" />
+      </div>
+      <div className="mt-4 pt-3 border-t">
+        <div className="h-4 w-20 bg-gray-200 rounded ml-auto" />
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TARJETA DE EQUIPO
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md hover:border-blue-200 transition-all group">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="min-w-0 flex-1">
+          <span className="font-mono text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+            {equipo.codigo_equipo}
+          </span>
+          <h3 className="font-semibold text-gray-900 line-clamp-1 mt-1">
+            {equipo.nombre_equipo || 'Sin nombre'}
+          </h3>
+        </div>
+        <Link
+          href={`/equipos/${equipo.id_equipo}/editar`}
+          className="p-1.5 hover:bg-blue-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Editar"
+        >
+          <Edit className="h-4 w-4 text-blue-600" />
+        </Link>
+      </div>
+
+      {/* Badges */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        <TipoBadge tipo={equipo.tipo as TipoEquipo} />
+        <EstadoBadge estado={equipo.estado_equipo} />
+        <CriticidadBadge criticidad={equipo.criticidad} />
+      </div>
+
+      {/* Info */}
+      <div className="space-y-1.5 text-sm text-gray-600">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          <span className="line-clamp-1">{equipo.cliente?.nombre || 'Sin cliente'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          <span className="line-clamp-1">
+            {equipo.sede?.nombre || equipo.ubicacion_texto || 'Sin ubicación'}
+          </span>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex justify-end mt-4 pt-3 border-t border-gray-100">
+        <Link
+          href={`/equipos/${equipo.id_equipo}`}
+          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
+        >
+          <Eye className="h-4 w-4" />
+          Ver detalle
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PÁGINA PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
+type SortBy = 'codigo' | 'nombre' | 'fecha';
+type SortOrder = 'asc' | 'desc';
+
 export default function EquiposPage() {
+  // Estados de filtros y paginación
   const [page, setPage] = useState(1);
-  const [busqueda, setBusqueda] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState<string>('');
   const [estadoFiltro, setEstadoFiltro] = useState<string>('');
+  const [sortBy, setSortBy] = useState<SortBy>('codigo');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const { data, isLoading, isError, refetch } = useEquipos({
+  // Debounce de búsqueda (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Query con todos los parámetros
+  const { data, isLoading, isError, refetch, isFetching } = useEquipos({
     page,
     limit: 12,
     tipo: tipoFiltro || undefined,
     estado_equipo: estadoFiltro || undefined,
+    search: debouncedSearch || undefined,
+    sortBy,
+    sortOrder,
   });
-
-  const handleCreateSuccess = (_data: unknown) => {
-    setShowCreateModal(false);
-    refetch();
-    // TODO: Mostrar toast de éxito
-  };
 
   const equipos = data?.data || [];
   const pagination = data?.pagination;
 
+  // Conteo de filtros activos
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (tipoFiltro) count++;
+    if (estadoFiltro) count++;
+    if (debouncedSearch) count++;
+    return count;
+  }, [tipoFiltro, estadoFiltro, debouncedSearch]);
+
+  // Limpiar todos los filtros
+  const clearFilters = useCallback(() => {
+    setSearchInput('');
+    setDebouncedSearch('');
+    setTipoFiltro('');
+    setEstadoFiltro('');
+    setPage(1);
+  }, []);
+
+  // Toggle ordenación
+  const toggleSort = useCallback((field: SortBy) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  }, [sortBy]);
+
+  const handleCreateSuccess = useCallback(() => {
+    setShowCreateModal(false);
+    refetch();
+  }, [refetch]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -164,181 +312,282 @@ export default function EquiposPage() {
             Gestión de Equipos
           </h1>
           <p className="text-gray-500 mt-1">
-            Generadores, bombas y sistemas de potencia
+            {pagination ? `${pagination.total} equipos registrados` : 'Generadores, bombas y sistemas de potencia'}
           </p>
         </div>
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium"
         >
           <Plus className="h-5 w-5" />
           Nuevo Equipo
         </button>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      {/* Barra de búsqueda y filtros */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+        {/* Fila 1: Búsqueda */}
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por código, nombre o cliente..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="Buscar por código, nombre, serie o cliente..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
+            >
+              <X className="h-4 w-4 text-gray-400" />
+            </button>
+          )}
         </div>
 
-        <div className="flex gap-2">
+        {/* Fila 2: Filtros y ordenación */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filtro Tipo */}
           <select
             value={tipoFiltro}
             onChange={(e) => { setTipoFiltro(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className={cn(
+              'px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500',
+              tipoFiltro ? 'border-blue-300 bg-blue-50' : 'border-gray-300'
+            )}
           >
             <option value="">Todos los tipos</option>
-            <option value="GENERADOR">Generadores</option>
-            <option value="BOMBA">Bombas</option>
+            <option value="GENERADOR">🔌 Generadores</option>
+            <option value="BOMBA">💧 Bombas</option>
           </select>
 
+          {/* Filtro Estado */}
           <select
             value={estadoFiltro}
             onChange={(e) => { setEstadoFiltro(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className={cn(
+              'px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500',
+              estadoFiltro ? 'border-blue-300 bg-blue-50' : 'border-gray-300'
+            )}
           >
             <option value="">Todos los estados</option>
-            <option value="OPERATIVO">Operativo</option>
-            <option value="EN_REPARACION">En Reparación</option>
-            <option value="FUERA_DE_SERVICIO">Fuera de Servicio</option>
+            <option value="OPERATIVO">✅ Operativo</option>
+            <option value="STANDBY">⏸️ Standby</option>
+            <option value="EN_REPARACION">🔧 En Reparación</option>
+            <option value="FUERA_SERVICIO">❌ Fuera de Servicio</option>
+            <option value="BAJA">📦 Baja</option>
           </select>
 
+          {/* Separador */}
+          <div className="h-6 w-px bg-gray-300 hidden sm:block" />
+
+          {/* Ordenación */}
+          <div className="flex items-center gap-1">
+            <span className="text-sm text-gray-500 hidden sm:inline">Ordenar:</span>
+            <button
+              onClick={() => toggleSort('codigo')}
+              className={cn(
+                'px-2 py-1.5 text-sm rounded border transition-colors',
+                sortBy === 'codigo' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 hover:bg-gray-50'
+              )}
+            >
+              Código {sortBy === 'codigo' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+            <button
+              onClick={() => toggleSort('nombre')}
+              className={cn(
+                'px-2 py-1.5 text-sm rounded border transition-colors',
+                sortBy === 'nombre' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 hover:bg-gray-50'
+              )}
+            >
+              Nombre {sortBy === 'nombre' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+            <button
+              onClick={() => toggleSort('fecha')}
+              className={cn(
+                'px-2 py-1.5 text-sm rounded border transition-colors',
+                sortBy === 'fecha' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 hover:bg-gray-50'
+              )}
+            >
+              Fecha {sortBy === 'fecha' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+          </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Limpiar filtros */}
+          {activeFiltersCount > 0 && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded border border-red-200"
+            >
+              <X className="h-4 w-4" />
+              Limpiar ({activeFiltersCount})
+            </button>
+          )}
+
+          {/* Vista Grid/Lista */}
+          <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={cn('p-2', viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50')}
+              title="Vista cuadrícula"
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn('p-2', viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50')}
+              title="Vista lista"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Refrescar */}
           <button
             onClick={() => refetch()}
-            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            disabled={isFetching}
+            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            title="Actualizar"
           >
-            <RefreshCw className={cn('h-5 w-5 text-gray-600', isLoading && 'animate-spin')} />
+            <RefreshCw className={cn('h-4 w-4 text-gray-600', isFetching && 'animate-spin')} />
           </button>
         </div>
       </div>
 
-      {/* Loading */}
+      {/* Loading Skeleton */}
       {isLoading && (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => <EquipoCardSkeleton key={i} />)}
         </div>
       )}
 
       {/* Error */}
       {isError && (
-        <div className="flex flex-col items-center justify-center py-12 text-red-500">
-          <AlertCircle className="h-8 w-8 mb-2" />
-          <p className="font-medium">Error al cargar equipos</p>
-          <button onClick={() => refetch()} className="mt-2 text-sm text-blue-600 hover:underline">
+        <div className="flex flex-col items-center justify-center py-12 bg-red-50 rounded-lg border border-red-200">
+          <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
+          <p className="font-semibold text-red-700">Error al cargar equipos</p>
+          <p className="text-red-600 text-sm mt-1">Por favor, verifica tu conexión</p>
+          <button
+            onClick={() => refetch()}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
             Reintentar
           </button>
         </div>
       )}
 
-      {/* Grid de equipos */}
+      {/* Contenido */}
       {!isLoading && !isError && (
         <>
+          {/* Empty State */}
           {equipos.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <Zap className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-600 font-medium">No hay equipos registrados</p>
-              <p className="text-gray-500 text-sm">Haz clic en "Nuevo Equipo" para comenzar</p>
+            <div className="text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              {debouncedSearch || tipoFiltro || estadoFiltro ? (
+                <>
+                  <Search className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+                  <p className="text-gray-600 font-medium">No se encontraron equipos</p>
+                  <p className="text-gray-500 text-sm mt-1">Intenta con otros filtros o términos de búsqueda</p>
+                  <button
+                    onClick={clearFilters}
+                    className="mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200"
+                  >
+                    Limpiar filtros
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Zap className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+                  <p className="text-gray-600 font-medium">No hay equipos registrados</p>
+                  <p className="text-gray-500 text-sm mt-1">Comienza registrando tu primer equipo</p>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Nuevo Equipo
+                  </button>
+                </>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {equipos.map((equipo) => (
-                <div
-                  key={equipo.id_equipo}
-                  className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
-                >
-                  {/* Header de la tarjeta */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <span className="font-mono text-sm text-gray-500">{equipo.codigo_equipo}</span>
-                      <h3 className="font-semibold text-gray-900 line-clamp-1">
-                        {equipo.nombre_equipo || 'Sin nombre'}
-                      </h3>
-                    </div>
-                    <button className="p-1 hover:bg-gray-100 rounded">
-                      <MoreVertical className="h-4 w-4 text-gray-500" />
+            <>
+              {/* Grid de equipos */}
+              <div className={cn(
+                viewMode === 'grid'
+                  ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
+                  : 'space-y-3'
+              )}>
+                {equipos.map((equipo) => (
+                  <EquipoCard key={equipo.id_equipo} equipo={equipo} />
+                ))}
+              </div>
+
+              {/* Paginación */}
+              {pagination && pagination.totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+                  <p className="text-sm text-gray-600">
+                    Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> a{' '}
+                    <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> de{' '}
+                    <span className="font-medium">{pagination.total}</span> equipos
+                  </p>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      className={cn(
+                        'px-2 py-1 rounded border text-sm',
+                        page === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'
+                      )}
+                    >
+                      Primera
                     </button>
-                  </div>
+                    <button
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                      className={cn(
+                        'flex items-center gap-1 px-3 py-1.5 rounded border',
+                        page === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'
+                      )}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Anterior
+                    </button>
 
-                  {/* Badges */}
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    <TipoBadge tipo={equipo.tipo as TipoEquipo} />
-                    <EstadoBadge estado={equipo.estado_equipo} />
-                    <CriticidadBadge criticidad={equipo.criticidad} />
-                  </div>
+                    <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded border border-blue-200 font-medium">
+                      {page} / {pagination.totalPages}
+                    </span>
 
-                  {/* Info */}
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-gray-400" />
-                      <span className="line-clamp-1">{equipo.cliente.nombre}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-gray-400" />
-                      <span className="line-clamp-1">
-                        {equipo.sede?.nombre || equipo.ubicacion_texto || 'Sin ubicación'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="flex justify-end mt-4 pt-3 border-t">
-                    <button className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
-                      <Eye className="h-4 w-4" />
-                      Ver detalle
+                    <button
+                      onClick={() => setPage(page + 1)}
+                      disabled={page >= pagination.totalPages}
+                      className={cn(
+                        'flex items-center gap-1 px-3 py-1.5 rounded border',
+                        page >= pagination.totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'
+                      )}
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setPage(pagination.totalPages)}
+                      disabled={page >= pagination.totalPages}
+                      className={cn(
+                        'px-2 py-1 rounded border text-sm',
+                        page >= pagination.totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'
+                      )}
+                    >
+                      Última
                     </button>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Paginación */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4">
-              <p className="text-sm text-gray-600">
-                Mostrando {((pagination.page - 1) * pagination.limit) + 1} a{' '}
-                {Math.min(pagination.page * pagination.limit, pagination.total)} de{' '}
-                {pagination.total} equipos
-              </p>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage(page - 1)}
-                  disabled={page === 1}
-                  className={cn(
-                    'flex items-center gap-1 px-3 py-1 rounded border',
-                    page === 1
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  )}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Anterior
-                </button>
-                <button
-                  onClick={() => setPage(page + 1)}
-                  disabled={page >= pagination.totalPages}
-                  className={cn(
-                    'flex items-center gap-1 px-3 py-1 rounded border',
-                    page >= pagination.totalPages
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  )}
-                >
-                  Siguiente
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+              )}
+            </>
           )}
         </>
       )}

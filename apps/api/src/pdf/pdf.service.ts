@@ -15,17 +15,17 @@
  * #9EC23D - Verde Claro (destacados)
  */
 
-import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import {
-    DatosCorrectivoOrdenPDF,
-    DatosCotizacionPDF,
-    DatosOrdenPDF,
-    generarCorrectivoOrdenHTML,
-    generarCotizacionHTML,
-    generarTipoABombaHTML,
-    generarTipoAGeneradorHTML,
-    generarTipoBGeneradorHTML,
+  DatosCorrectivoOrdenPDF,
+  DatosCotizacionPDF,
+  DatosOrdenPDF,
+  generarCorrectivoOrdenHTML,
+  generarCotizacionHTML,
+  generarTipoABombaHTML,
+  generarTipoAGeneradorHTML,
+  generarTipoBGeneradorHTML,
 } from './templates';
 
 export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
@@ -60,9 +60,20 @@ export interface OrdenPdfData {
 }
 
 @Injectable()
-export class PdfService implements OnModuleDestroy {
+export class PdfService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PdfService.name);
   private browser: puppeteer.Browser | null = null;
+  private browserInitPromise: Promise<void> | null = null;
+
+  /**
+   * ✅ FIX 23-ENE-2026: NO pre-inicializar browser para ahorrar memoria
+   * En Render Free Tier (512MB), mantener Chrome idle consume demasiada RAM
+   * Ahora creamos/destruimos browser por cada generación de PDF
+   */
+  async onModuleInit(): Promise<void> {
+    this.logger.log('📋 PdfService listo (browser se creará bajo demanda para ahorrar memoria)');
+    // NO pre-inicializar - Chrome consume ~300MB idle
+  }
 
   /**
    * Genera un PDF profesional MEKANOS
@@ -75,8 +86,9 @@ export class PdfService implements OnModuleDestroy {
       // Obtener el HTML según el tipo de informe
       const html = this.obtenerHTML(options.tipoInforme, options.datos);
 
-      // ✅ FIX: Verificar que browser esté activo y conectado
-      await this.ensureBrowserConnected();
+      // ✅ FIX 23-ENE-2026: Crear browser fresco para cada PDF (libera memoria después)
+      this.logger.log('🚀 Iniciando Chrome para generación de PDF...');
+      await this.initBrowser();
 
       // Crear nueva página
       const page = await this.browser!.newPage();
@@ -94,10 +106,12 @@ export class PdfService implements OnModuleDestroy {
           '<meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
         );
 
-        // Configurar contenido con timeout extendido para imágenes
+        // 🔧 FIX 02-ENE-2026: Revertir a 'networkidle0' - Las imágenes son URLs de Cloudinary
+        // que necesitan cargarse via HTTP. 'domcontentloaded' NO espera las imágenes,
+        // causando que aparezcan en blanco en el PDF generado.
         await page.setContent(htmlConEncoding, {
           waitUntil: 'networkidle0',
-          timeout: 60000, // 60 segundos para cargar imágenes
+          timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
         });
 
         // Generar PDF
@@ -111,6 +125,7 @@ export class PdfService implements OnModuleDestroy {
             left: '0',
           },
           preferCSSPageSize: true,
+          timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
         });
 
         const buffer = Buffer.from(pdfBuffer);
@@ -127,6 +142,12 @@ export class PdfService implements OnModuleDestroy {
         };
       } finally {
         await page.close();
+        // ✅ FIX 23-ENE-2026: Cerrar browser inmediatamente para liberar ~300MB RAM
+        if (this.browser) {
+          this.logger.log('🔒 Cerrando Chrome para liberar memoria...');
+          await this.browser.close();
+          this.browser = null;
+        }
       }
     } catch (error: unknown) {
       const err = error as Error;
@@ -221,7 +242,7 @@ export class PdfService implements OnModuleDestroy {
         const caption = typeof e === 'string' ? undefined : e.caption;
         // Extraer tipo del caption si existe (formato "ANTES: descripción" o "DURANTE: descripción")
         const tipoMatch = caption?.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS):/i);
-        const tipo = tipoMatch 
+        const tipo = tipoMatch
           ? (tipoMatch[1].toUpperCase() === 'DESPUÉS' ? 'DESPUES' : tipoMatch[1].toUpperCase()) as 'ANTES' | 'DURANTE' | 'DESPUES'
           : 'DURANTE';
         return {
@@ -256,13 +277,19 @@ export class PdfService implements OnModuleDestroy {
   }
 
   /**
-   * ✅ FIX: Asegura que el browser esté conectado, reiniciando si es necesario
+   * ✅ OPTIMIZACIÓN 07-ENE-2026: Asegura browser conectado con soporte para pre-init
    */
   private async ensureBrowserConnected(): Promise<void> {
     try {
+      // Esperar pre-inicialización si está en curso
+      if (this.browserInitPromise) {
+        await this.browserInitPromise;
+        this.browserInitPromise = null;
+      }
+
       // Verificar si browser existe y está conectado
       if (this.browser && this.browser.connected) {
-        return; // Browser activo, nada que hacer
+        return; // Browser activo y listo ✅
       }
 
       // Si existe pero no está conectado, cerrarlo
@@ -290,22 +317,69 @@ export class PdfService implements OnModuleDestroy {
    * Inicializa el browser de Puppeteer
    */
   private async initBrowser(): Promise<void> {
+    const cacheDir = process.env.PUPPETEER_CACHE_DIR || 'default';
     this.logger.log('🚀 Inicializando Puppeteer browser...');
+    this.logger.log(`📍 PUPPETEER_CACHE_DIR: ${cacheDir}`);
 
-    this.browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-      ],
-    });
+    try {
+      // En Render, Chrome se instala via postinstall script
+      // Puppeteer lo encuentra automáticamente en su cache path configurado en .puppeteerrc.cjs
+      // ✅ FIX 23-ENE-2026: Configuración ultra-low-memory para Render Free Tier (512MB)
+      this.browser = await puppeteer.launch({
+        headless: true,
+        protocolTimeout: 120000,
+        args: [
+          // === CRÍTICOS PARA RENDER ===
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--single-process',
+          '--no-zygote',
 
-    this.logger.log('✅ Browser inicializado correctamente');
+          // === REDUCCIÓN DE MEMORIA ===
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-accelerated-2d-canvas',
+          '--disable-accelerated-jpeg-decoding',
+          '--disable-accelerated-mjpeg-decode',
+          '--disable-accelerated-video-decode',
+          '--disable-background-networking',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-breakpad',
+          '--disable-component-extensions-with-background-pages',
+          '--disable-component-update',
+          '--disable-default-apps',
+          '--disable-extensions',
+          '--disable-features=TranslateUI',
+          '--disable-hang-monitor',
+          '--disable-ipc-flooding-protection',
+          '--disable-popup-blocking',
+          '--disable-prompt-on-repost',
+          '--disable-renderer-backgrounding',
+          '--disable-sync',
+          '--enable-features=NetworkService,NetworkServiceInProcess',
+          '--force-color-profile=srgb',
+          '--metrics-recording-only',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+
+          // === LÍMITES DE MEMORIA EXPLÍCITOS ===
+          '--js-flags=--max-old-space-size=256',
+          '--memory-pressure-off',
+        ],
+      });
+
+      this.logger.log('✅ Browser inicializado correctamente');
+    } catch (error: any) {
+      this.logger.error(`❌ Error inicializando Puppeteer: ${error.message}`);
+      this.logger.error(`📍 Cache path configurado: ${cacheDir}`);
+      this.logger.error(`📍 CWD: ${process.cwd()}`);
+      throw new InternalServerErrorException(
+        `Error inicializando generador de PDF: ${error.message}. ` +
+        `Asegúrese de que Chrome está instalado (npx puppeteer browsers install chrome)`
+      );
+    }
   }
 
   /**

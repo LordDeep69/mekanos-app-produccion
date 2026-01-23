@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -120,6 +121,18 @@ export class UsuariosController {
     @Body() body: { newPassword: string },
   ) {
     return this.usuariosService.resetPassword(id, body.newPassword);
+  }
+
+  /**
+   * PATCH /usuarios/:id/estado
+   * Actualiza el estado de un usuario
+   */
+  @Patch(':id/estado')
+  updateEstado(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { estado: string },
+  ) {
+    return this.usuariosService.updateEstado(id, body.estado);
   }
 
   @Delete(':id')

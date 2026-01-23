@@ -22,6 +22,14 @@ export class PrismaCatalogoActividadesRepository implements CatalogoActividadesR
         nombre_sistema: true,
       },
     },
+    parametros_medicion: {
+      select: {
+        id_parametro_medicion: true,
+        codigo_parametro: true,
+        nombre_parametro: true,
+        unidad_medida: true,
+      },
+    },
   };
 
   private readonly INCLUDE_RELATIONS_DETAIL = {

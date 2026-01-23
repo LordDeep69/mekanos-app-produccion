@@ -54,7 +54,10 @@ export class OrdenResumenDto {
   @ApiPropertyOptional({ description: 'Versión de la orden (timestamp)' })
   version?: number;
 
-  @ApiPropertyOptional({ description: 'URL del PDF si existe' })
+  @ApiPropertyOptional({ description: 'Nombre del cliente con prioridad aplicada' })
+  nombreCliente?: string;
+
+  @ApiPropertyOptional({ description: 'URL del PDF si está disponible' })
   urlPdf?: string;
 }
 
@@ -221,6 +224,15 @@ export class SyncOrdenDownloadDto {
 
   @ApiProperty()
   nombreCliente: string;
+
+  @ApiPropertyOptional()
+  nombreComercial?: string;
+
+  @ApiPropertyOptional()
+  nombreCompleto?: string;
+
+  @ApiPropertyOptional()
+  razonSocial?: string;
 
   // Sede
   @ApiPropertyOptional()

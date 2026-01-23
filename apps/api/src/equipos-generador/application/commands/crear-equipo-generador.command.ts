@@ -33,10 +33,10 @@ export class CrearEquipoGeneradorCommand {
     public readonly capacidad_tanque_auxiliar_litros?: number,
     public readonly clase_aislamiento?: string,
     public readonly grado_proteccion_ip?: string,
-    public readonly año_fabricacion?: number,
+    public readonly a_o_fabricacion?: number,
     public readonly observaciones?: string,
     public readonly metadata?: Record<string, any>,
-  ) {}
+  ) { }
 }
 
 @CommandHandler(CrearEquipoGeneradorCommand)
@@ -44,7 +44,7 @@ export class CrearEquipoGeneradorHandler implements ICommandHandler<CrearEquipoG
   constructor(
     @Inject(EQUIPOS_GENERADOR_REPOSITORY_TOKEN)
     private readonly repository: IEquiposGeneradorRepository,
-  ) {}
+  ) { }
 
   async execute(command: CrearEquipoGeneradorCommand) {
     return this.repository.crear({
@@ -75,7 +75,7 @@ export class CrearEquipoGeneradorHandler implements ICommandHandler<CrearEquipoG
       capacidad_tanque_auxiliar_litros: command.capacidad_tanque_auxiliar_litros,
       clase_aislamiento: command.clase_aislamiento,
       grado_proteccion_ip: command.grado_proteccion_ip,
-      año_fabricacion: command.año_fabricacion,
+      a_o_fabricacion: command.a_o_fabricacion,
       observaciones: command.observaciones,
       metadata: command.metadata,
       creado_por: command.creado_por,

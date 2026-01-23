@@ -1,8 +1,13 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Hooks TanStack Query para Catálogos del Módulo de Órdenes
+ * 
+ * ENTERPRISE CACHE: Usa estrategias optimizadas por tipo de dato
+ * - STATIC (30min): Catálogos que casi nunca cambian
+ * - SEMI_STATIC (15min): Selectores de referencia
  */
 
+import { CacheStrategy } from '@/lib/cache';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -72,7 +77,7 @@ export function useServiciosComerciales(params?: { activo?: boolean; idTipoServi
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.serviciosComerciales, params],
         queryFn: () => getServiciosComerciales(params),
-        staleTime: 5 * 60 * 1000,
+        ...CacheStrategy.STATIC, // Catálogo estático - 30 min cache
     });
 }
 
@@ -119,7 +124,7 @@ export function useSistemas(params?: { activo?: boolean }) {
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.sistemas, params],
         queryFn: () => getSistemas(params),
-        staleTime: 5 * 60 * 1000,
+        ...CacheStrategy.STATIC, // Catálogo estático - 30 min cache
     });
 }
 
@@ -164,7 +169,7 @@ export function useParametrosMedicion(params?: { activo?: boolean; categoria?: s
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.parametros, params],
         queryFn: () => getParametrosMedicion(params),
-        staleTime: 5 * 60 * 1000,
+        ...CacheStrategy.STATIC, // Catálogo estático - 30 min cache
     });
 }
 
@@ -209,7 +214,7 @@ export function useActividadesCatalogo(params?: { activo?: boolean; idTipoServic
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.actividades, params],
         queryFn: () => getActividadesCatalogo(params),
-        staleTime: 5 * 60 * 1000,
+        ...CacheStrategy.STATIC, // Catálogo estático - 30 min cache
     });
 }
 
@@ -254,7 +259,7 @@ export function useTiposServicio(params?: { activo?: boolean; categoria?: string
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.tiposServicio, params],
         queryFn: () => getTiposServicio(params),
-        staleTime: 5 * 60 * 1000, // 5 minutos (catálogos cambian poco)
+        ...CacheStrategy.STATIC, // Catálogo estático - 30 min cache
     });
 }
 
@@ -329,7 +334,7 @@ export function useEstadosOrden(params?: { activo?: boolean; esEstadoFinal?: boo
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.estadosOrden, params],
         queryFn: () => getEstadosOrden(params),
-        staleTime: 5 * 60 * 1000,
+        ...CacheStrategy.STATIC, // Catálogo estático - 30 min cache
     });
 }
 
@@ -408,7 +413,7 @@ export function useClientesSelector(busqueda?: string, enabled = true) {
         queryKey: [...CATALOGOS_KEYS.clientes, busqueda],
         queryFn: () => getClientesSelector({ busqueda, limit: 50 }),
         enabled,
-        staleTime: 2 * 60 * 1000,
+        ...CacheStrategy.SEMI_STATIC, // Selector semi-estático - 15 min cache
     });
 }
 
@@ -435,7 +440,7 @@ export function useEquiposSelector(params?: {
         queryKey: [...CATALOGOS_KEYS.equipos, params],
         queryFn: () => getEquiposSelector({ ...params, limit: 50 }),
         enabled,
-        staleTime: 2 * 60 * 1000,
+        ...CacheStrategy.SEMI_STATIC, // Selector semi-estático - 15 min cache
     });
 }
 
@@ -458,7 +463,7 @@ export function useTecnicosSelector(busqueda?: string, enabled = true) {
         queryKey: [...CATALOGOS_KEYS.tecnicos, busqueda],
         queryFn: () => getTecnicosSelector({ busqueda, limit: 50 }),
         enabled,
-        staleTime: 2 * 60 * 1000,
+        ...CacheStrategy.SEMI_STATIC, // Selector semi-estático - 15 min cache
     });
 }
 

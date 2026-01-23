@@ -3,12 +3,19 @@
  */
 
 // Componentes
+export { ConfigParametrosEditor } from './components/ConfigParametrosEditor';
 export { EquipoForm } from './components/EquipoForm';
 
 // Servicios y hooks
 export {
-    equiposService, useActualizarEstadoEquipo,
-    useClientesParaSelect, useCrearEquipo, useEquipo, useEquipos
+    equiposService,
+    useActualizarEquipo,
+    useCambiarEstadoEquipo,
+    useClientesParaSelect,
+    useCrearEquipo,
+    useEquipo,
+    useEquipos,
+    useRegistrarLecturaHorometro
 } from './lib/equipos.service';
 
 // Tipos

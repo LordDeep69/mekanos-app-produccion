@@ -26,6 +26,22 @@ export class GetEquiposQueryDto {
   id_tipo_equipo?: number;
 
   @IsOptional()
+  @IsString({ message: 'tipo debe ser una cadena de texto' })
+  tipo?: string;
+
+  @IsOptional()
+  @IsString({ message: 'search debe ser una cadena de texto' })
+  search?: string;
+
+  @IsOptional()
+  @IsString({ message: 'sortBy debe ser una cadena de texto' })
+  sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
+
+  @IsOptional()
+  @IsString({ message: 'sortOrder debe ser una cadena de texto' })
+  sortOrder?: 'asc' | 'desc';
+
+  @IsOptional()
   @IsBoolean({ message: 'activo debe ser boolean' })
   activo?: boolean;
 
@@ -55,5 +71,5 @@ export class GetEquiposQuery {
     public readonly activo?: boolean,
     public readonly page?: number,
     public readonly limit?: number
-  ) {}
+  ) { }
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -396,13 +398,31 @@ class SyncService {
           ClientesCompanion(
             id: Value(entry.key),
             nombre: Value(
-              entry.value['nombreCliente'] as String? ?? 'Sin nombre',
+              entry.value['nombreComercial'] as String? ??
+                  entry.value['nombreCompleto'] as String? ??
+                  entry.value['razonSocial'] as String? ??
+                  entry.value['nombreCliente'] as String? ??
+                  'Sin nombre',
             ),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );
       }
       for (final entry in equiposData.entries) {
+        // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Descargar config personalizada
+        final configParam = entry.value['configParametros'];
+        String? configJson;
+        if (configParam != null &&
+            configParam is Map &&
+            configParam.isNotEmpty) {
+          configJson = jsonEncode(configParam);
+          debugPrint(
+            '🔍 [SYNC] Equipo ${entry.key} tiene configParametros: ${configJson.substring(0, configJson.length > 80 ? 80 : configJson.length)}...',
+          );
+        } else {
+          debugPrint('⚠️ [SYNC] Equipo ${entry.key} SIN configParametros');
+        }
+
         await _db.upsertEquipo(
           EquiposCompanion(
             id: Value(entry.key),
@@ -410,6 +430,8 @@ class SyncService {
             nombre: Value(entry.value['nombreEquipo'] as String? ?? ''),
             ubicacion: Value(entry.value['ubicacionEquipo'] as String?),
             idCliente: Value(entry.value['idCliente'] as int),
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Config personalizada
+            configParametros: Value(configJson),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );

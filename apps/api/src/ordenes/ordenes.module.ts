@@ -27,6 +27,7 @@ import { PrismaOrdenServicioRepository } from './infrastructure/prisma-orden-ser
 import { FinalizacionOrdenService } from './services/finalizacion-orden.service';
 
 // Módulos externos (para FinalizarOrden)
+import { ConfigParametrosModule } from '../config-parametros/config-parametros.module';
 import { EmailModule } from '../email/email.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { StorageModule } from '../storage/storage.module';
@@ -52,6 +53,7 @@ import { StorageModule } from '../storage/storage.module';
     PdfModule,      // Generación de PDFs
     EmailModule,    // Envío de emails
     StorageModule,  // R2 + Cloudinary
+    ConfigParametrosModule, // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades dinámicas
   ],
   controllers: [OrdenesController],
   providers: [

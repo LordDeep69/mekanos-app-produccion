@@ -99,16 +99,51 @@ export interface EquipoDetalle extends EquipoListItem {
     nombre_tipo: string;
     codigo_tipo: string;
   };
+  config_parametros?: ConfigParametros;
+  fecha_modificacion?: string;
+  // Campos de fechas importantes
+  fecha_instalacion?: string | null;
+  fecha_inicio_servicio_mekanos?: string | null;
+  // Campos de garantía
+  en_garantia?: boolean;
+  fecha_inicio_garantia?: string | null;
+  fecha_fin_garantia?: string | null;
+  proveedor_garantia?: string | null;
+  // Campos de horas y mantenimiento
+  horas_actuales?: number | string | null;
+  fecha_ultima_lectura_horas?: string | null;
+  tipo_contrato?: TipoContrato;
+  // Intervalos de mantenimiento override
+  intervalo_tipo_a_dias_override?: number | null;
+  intervalo_tipo_a_horas_override?: number | null;
+  intervalo_tipo_b_dias_override?: number | null;
+  intervalo_tipo_b_horas_override?: number | null;
+  criterio_intervalo_override?: CriterioIntervalo | null;
+  // Estado físico
+  estado_pintura?: EstadoPintura | null;
+  requiere_pintura?: boolean;
+  // Observaciones
+  observaciones_generales?: string | null;
+  configuracion_especial?: string | null;
+  criticidad_justificacion?: string | null;
+  // Estado de baja
+  activo?: boolean;
+  fecha_baja?: string | null;
+  motivo_baja?: string | null;
+  // Relaciones
   lecturas_horometro: Array<{
     id_lectura: number;
-    valor_lectura: number;
+    horas_lectura: number | string;
     fecha_lectura: string;
+    tipo_lectura?: string;
+    observaciones?: string | null;
   }>;
   historial_estados: Array<{
     id_historial: number;
-    estado_anterior: string;
+    estado_anterior: string | null;
     estado_nuevo: string;
     fecha_cambio: string;
+    motivo_cambio?: string | null;
   }>;
 }
 
@@ -226,12 +261,52 @@ export interface DatosBomba {
   radiador_panal_cm?: number;
 }
 
+// ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Tipos para config personalizada
+export interface ConfigParametros {
+  unidades?: {
+    temperatura?: string;
+    presion?: string;
+    voltaje?: string;
+    frecuencia?: string;
+    corriente?: string;
+    velocidad?: string;
+    vibracion?: string;
+    potencia?: string;
+  };
+  rangos?: Record<string, {
+    min_normal?: number;
+    max_normal?: number;
+    min_critico?: number;
+    max_critico?: number;
+    valor_ideal?: number;
+  }>;
+}
+
 export interface CreateEquipoPayload {
   tipo: TipoEquipo;
   datosEquipo: DatosEquipoBase;
   datosMotor?: DatosMotor;
   datosGenerador?: DatosGenerador;
   datosBomba?: DatosBomba;
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS: Config personalizada opcional
+  config_parametros?: ConfigParametros;
+}
+
+/**
+ * Payload para actualizar un equipo existente
+ * Basado en UpdateEquipoDto del backend NestJS
+ */
+export interface UpdateEquipoPayload {
+  codigo_equipo?: string;
+  id_cliente?: number;
+  id_tipo_equipo?: number;
+  ubicacion_texto?: string;
+  id_sede?: number;
+  nombre_equipo?: string;
+  numero_serie_equipo?: string;
+  estado_equipo?: EstadoEquipo;
+  criticidad?: Criticidad;
+  config_parametros?: ConfigParametros;
 }
 
 // 
@@ -252,6 +327,42 @@ export interface CreateEquipoResponse {
     estado_equipo: string;
     fecha_creacion: string;
     datos_especificos: Record<string, unknown>;
+  };
+}
+
+/**
+ * ✅ 08-ENE-2026: Response para cambiar estado de equipo
+ */
+export interface CambiarEstadoResponse {
+  success: boolean;
+  message: string;
+  data: {
+    id_equipo: number;
+    codigo_equipo: string;
+    estado_anterior: string;
+    estado_nuevo: string;
+    motivo_cambio?: string;
+    fecha_cambio: string;
+    id_historial: number;
+  };
+}
+
+/**
+ * ✅ 08-ENE-2026: Response para registrar lectura de horómetro
+ */
+export interface RegistrarLecturaResponse {
+  success: boolean;
+  message: string;
+  data: {
+    id_lectura: number;
+    id_equipo: number;
+    codigo_equipo: string;
+    horas_anteriores: number;
+    horas_nuevas: number;
+    horas_transcurridas: number;
+    dias_transcurridos: number | null;
+    horas_promedio_dia: number | null;
+    fecha_lectura: string;
   };
 }
 

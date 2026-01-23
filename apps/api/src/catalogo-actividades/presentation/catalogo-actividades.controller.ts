@@ -21,7 +21,7 @@ export class CatalogoActividadesController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
-  ) {}
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Crear nueva actividad de catálogo' })
@@ -33,23 +33,33 @@ export class CatalogoActividadesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar todas las actividades con paginación' })
+  @ApiOperation({ summary: 'Listar actividades con paginación y filtros' })
   @ApiResponse({ status: 200, description: 'Lista de actividades' })
   async listar(
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+    @Query('activo') activoStr?: string,
   ) {
-    return this.queryBus.execute(new ListarCatalogoActividadesQuery(+page, +limit));
+    const page = pageStr ? parseInt(pageStr, 10) : 1;
+    const limit = limitStr ? parseInt(limitStr, 10) : 100;
+    const activo = activoStr === 'true';
+
+    if (activo) {
+      return this.queryBus.execute(new ListarActividadesActivasQuery(page, limit));
+    }
+    return this.queryBus.execute(new ListarCatalogoActividadesQuery(page, limit));
   }
 
   @Get('activas')
   @ApiOperation({ summary: 'Listar actividades activas con paginación' })
   @ApiResponse({ status: 200, description: 'Lista de actividades activas' })
   async listarActivas(
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
   ) {
-    return this.queryBus.execute(new ListarActividadesActivasQuery(+page, +limit));
+    const page = pageStr ? parseInt(pageStr, 10) : 1;
+    const limit = limitStr ? parseInt(limitStr, 10) : 100;
+    return this.queryBus.execute(new ListarActividadesActivasQuery(page, limit));
   }
 
   @Get(':id')

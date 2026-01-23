@@ -8,11 +8,11 @@
 
 import { apiClient } from '@/lib/api/client';
 import type {
-    DashboardAlertas,
-    DashboardComercial,
-    DashboardCompleto,
-    DashboardOrdenes,
-    DashboardProductividad,
+  DashboardAlertas,
+  DashboardComercial,
+  DashboardCompleto,
+  DashboardOrdenes,
+  DashboardProductividad,
 } from '@/types/dashboard';
 
 const DASHBOARD_BASE = '/dashboard';
@@ -103,16 +103,22 @@ export interface OrdenRecienteUI {
  * Usa el endpoint de órdenes con paginación
  * Backend expone: @Controller('ordenes') en ordenes.controller.ts
  * 
+ * ENTERPRISE: Ordena por fecha_creacion DESC para mostrar las más recientes primero
  * MAPEO: Transforma la respuesta cruda del backend a la estructura UI
  */
 export async function getOrdenesRecientes(limit = 5): Promise<OrdenRecienteUI[]> {
   const response = await apiClient.get('/ordenes', {
-    params: { limit, page: 1 },
+    params: {
+      limit,
+      page: 1,
+      sortBy: 'fecha_creacion',  // ENTERPRISE: Ordenar por fecha de creación
+      sortOrder: 'desc',         // Más recientes primero
+    },
   });
 
   // Backend devuelve: { success, data: [...], pagination }
   const rawData = response.data?.data || response.data || [];
-  
+
   // Transformar al formato que espera la UI
   return rawData.map((orden: {
     id_orden_servicio?: number;
@@ -124,9 +130,9 @@ export async function getOrdenesRecientes(limit = 5): Promise<OrdenRecienteUI[]>
   }, index: number) => ({
     id: orden.id_orden_servicio || index + 1,
     numeroOrden: orden.numero_orden || `#${orden.id_orden_servicio}`,
-    cliente: orden.clientes?.persona?.razon_social 
-          || orden.clientes?.persona?.nombre_completo 
-          || 'Cliente sin nombre',
+    cliente: orden.clientes?.persona?.razon_social
+      || orden.clientes?.persona?.nombre_completo
+      || 'Cliente sin nombre',
     estado: orden.estados_orden?.nombre_estado || 'Pendiente',
     estadoCodigo: orden.estados_orden?.codigo_estado || 'PENDIENTE',
     fecha: orden.fecha_programada || orden.fecha_creacion || '',

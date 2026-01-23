@@ -12,20 +12,20 @@
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-    AlertCircle,
-    BadgeCheck,
-    Building2,
-    CheckCircle,
-    ChevronLeft,
-    ChevronRight,
-    Key,
-    Loader2,
-    Lock,
-    Mail,
-    MapPin,
-    Phone,
-    User,
-    UserPlus
+  AlertCircle,
+  BadgeCheck,
+  Building2,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Key,
+  Loader2,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+  User,
+  UserPlus
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -53,17 +53,17 @@ const usuarioSchema = z.object({
   celular: z.string().optional(),
   direccion_principal: z.string().optional(),
   ciudad: z.string().optional(),
-  
+
   // Paso 2: Acceso
   username: z.string().min(4, 'Mínimo 4 caracteres').max(50).regex(
-    /^[a-zA-Z0-9._-]+$/,
-    'Solo letras, números, puntos, guiones y guiones bajos'
+    /^[a-z0-9._-]+$/,
+    'Solo letras minúsculas, números, puntos y guiones (sin espacios)'
   ),
   email_usuario: z.string().email('Email inválido'),
   password: z.string().min(8, 'Mínimo 8 caracteres').optional(),
   confirmar_password: z.string().optional(),
   generar_password: z.boolean(),
-  
+
   // Paso 2.5: Datos empleado (opcional)
   crear_empleado: z.boolean(),
   cargo: z.string().optional(),
@@ -72,7 +72,7 @@ const usuarioSchema = z.object({
   telefono_emergencia: z.string().optional(),
   es_tecnico: z.boolean().optional(),
   es_asesor: z.boolean().optional(),
-  
+
   // Paso 3: Roles
   rolesIds: z.array(z.number()).min(1, 'Debe seleccionar al menos un rol'),
 }).superRefine((data, ctx) => {
@@ -93,7 +93,7 @@ const usuarioSchema = z.object({
       });
     }
   }
-  
+
   // Validar persona jurídica
   if (data.tipo_persona === 'JURIDICA' && !data.razon_social) {
     ctx.addIssue({
@@ -102,7 +102,7 @@ const usuarioSchema = z.object({
       path: ['razon_social'],
     });
   }
-  
+
   // Validar password manual
   if (!data.generar_password) {
     if (!data.password) {
@@ -120,7 +120,7 @@ const usuarioSchema = z.object({
       });
     }
   }
-  
+
   // Validar datos empleado
   if (data.crear_empleado) {
     if (!data.cargo) {
@@ -159,9 +159,9 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [personaEncontrada, setPersonaEncontrada] = useState<boolean>(false);
   const [usernameDisponible, setUsernameDisponible] = useState<boolean | null>(null);
-  
+
   const crearUsuarioMutation = useCrearUsuario();
-  
+
   const form = useForm<UsuarioFormData>({
     resolver: zodResolver(usuarioSchema),
     defaultValues: {
@@ -177,7 +177,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
   });
 
   const { watch, setValue, formState: { errors } } = form;
-  
+
   // Watchers
   const tipoIdentificacion = watch('tipo_identificacion');
   const numeroIdentificacion = watch('numero_identificacion');
@@ -218,7 +218,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
   // Auto-generar username desde nombre
   const primerNombre = watch('primer_nombre');
   const primerApellido = watch('primer_apellido');
-  
+
   useEffect(() => {
     if (primerNombre && primerApellido && !username) {
       const sugerencia = `${primerNombre.toLowerCase()}.${primerApellido.toLowerCase()}`
@@ -249,7 +249,10 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
           ciudad: data.ciudad,
         },
         datosUsuario: {
-          username: data.username,
+          username: data.username.trim().toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, '.'),
           email: data.email_usuario,
           password: data.generar_password ? undefined : data.password,
           debe_cambiar_password: data.generar_password,
@@ -267,7 +270,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
       };
 
       const result = await crearUsuarioMutation.mutateAsync(payload);
-      
+
       if (result.success && onSuccess) {
         onSuccess({
           id_usuario: result.data.id_usuario,
@@ -406,8 +409,8 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
             <div className="flex gap-4">
               <label className={cn(
                 'flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-all',
-                tipoPersona === 'NATURAL' 
-                  ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                tipoPersona === 'NATURAL'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
                   : 'border-gray-300 hover:border-gray-400'
               )}>
                 <input
@@ -421,8 +424,8 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
               </label>
               <label className={cn(
                 'flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer transition-all',
-                tipoPersona === 'JURIDICA' 
-                  ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                tipoPersona === 'JURIDICA'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
                   : 'border-gray-300 hover:border-gray-400'
               )}>
                 <input
@@ -574,10 +577,10 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
               {...form.register('username')}
               className={cn(
                 'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500',
-                errors.username ? 'border-red-500' 
+                errors.username ? 'border-red-500'
                   : usernameDisponible === false ? 'border-red-500'
-                  : usernameDisponible === true ? 'border-green-500'
-                  : 'border-gray-300'
+                    : usernameDisponible === true ? 'border-green-500'
+                      : 'border-gray-300'
               )}
               placeholder="Ej: juan.perez"
             />
@@ -794,7 +797,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
             </button>
           )}
         </div>
-        
+
         <div className="flex gap-3">
           {onCancel && (
             <button
@@ -805,7 +808,7 @@ export function UsuarioForm({ onSuccess, onCancel }: UsuarioFormProps) {
               Cancelar
             </button>
           )}
-          
+
           {currentStep < 3 ? (
             <button
               type="button"

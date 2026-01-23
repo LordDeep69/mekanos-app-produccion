@@ -2,21 +2,23 @@
  * MEKANOS S.A.S - Portal Admin
  * Hooks para Dashboard con TanStack Query
  *
+ * ENTERPRISE CACHE: Dashboard usa estrategia REALTIME (1min staleTime)
+ * para mantener métricas actualizadas con refetch automático.
+ *
  * RESILIENCIA: Cada hook es independiente.
  * Si un endpoint falla, los demás siguen funcionando.
- *
- * CACHÉ: staleTime de 5 minutos con refresh manual disponible.
  */
 
 'use client';
 
+import { CacheStrategy } from '@/lib/cache';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    getDashboardAlertas,
-    getDashboardComercial,
-    getDashboardOrdenes,
-    getDashboardProductividad,
-    getOrdenesRecientes,
+  getDashboardAlertas,
+  getDashboardComercial,
+  getDashboardOrdenes,
+  getDashboardProductividad,
+  getOrdenesRecientes,
 } from '../api/dashboard.service';
 
 // Keys para el caché
@@ -30,9 +32,6 @@ export const dashboardKeys = {
   ordenesRecientes: () => [...dashboardKeys.all, 'recientes'] as const,
 };
 
-// Configuración común: 5 minutos de staleTime
-const STALE_TIME = 1000 * 60 * 5; // 5 minutos
-
 /**
  * Hook para alertas del dashboard
  */
@@ -40,8 +39,8 @@ export function useDashboardAlertas() {
   return useQuery({
     queryKey: dashboardKeys.alertas(),
     queryFn: getDashboardAlertas,
-    staleTime: STALE_TIME,
-    retry: 2, // Reintentar 2 veces en caso de error
+    ...CacheStrategy.REALTIME, // Métricas en tiempo real - 1 min cache
+    retry: 2,
   });
 }
 
@@ -52,7 +51,7 @@ export function useDashboardOrdenes() {
   return useQuery({
     queryKey: dashboardKeys.ordenes(),
     queryFn: getDashboardOrdenes,
-    staleTime: STALE_TIME,
+    ...CacheStrategy.REALTIME, // Métricas en tiempo real - 1 min cache
     retry: 2,
   });
 }
@@ -64,7 +63,7 @@ export function useDashboardComercial() {
   return useQuery({
     queryKey: dashboardKeys.comercial(),
     queryFn: getDashboardComercial,
-    staleTime: STALE_TIME,
+    ...CacheStrategy.REALTIME, // Métricas en tiempo real - 1 min cache
     retry: 2,
   });
 }
@@ -76,7 +75,7 @@ export function useDashboardProductividad(mes?: number, anio?: number) {
   return useQuery({
     queryKey: dashboardKeys.productividad(mes, anio),
     queryFn: () => getDashboardProductividad(mes, anio),
-    staleTime: STALE_TIME,
+    ...CacheStrategy.REALTIME, // Métricas en tiempo real - 1 min cache
     retry: 2,
   });
 }
@@ -88,7 +87,7 @@ export function useOrdenesRecientes(limit = 5) {
   return useQuery({
     queryKey: dashboardKeys.ordenesRecientes(),
     queryFn: () => getOrdenesRecientes(limit),
-    staleTime: STALE_TIME,
+    ...CacheStrategy.REALTIME, // Métricas en tiempo real - 1 min cache
     retry: 2,
   });
 }

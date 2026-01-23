@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' show DateFormat;
@@ -12,7 +13,7 @@ import '../../firmas/presentation/firmas_section.dart';
 import '../data/ejecucion_service.dart';
 
 /// Pantalla de Resumen y Finalización de Orden - NIVEL ORDEN (no equipo)
-/// 
+///
 /// Para órdenes multi-equipo:
 /// - Muestra progreso de TODOS los equipos
 /// - Valida que TODOS los equipos estén completados
@@ -45,6 +46,8 @@ class _ResumenFinalizacionScreenState
   bool _tieneFirmaCliente = false;
   bool _esCorrectivo = false;
   String? _razonFallaActual;
+  late TextEditingController _observacionesController;
+  final _observacionesFocusNode = FocusNode();
 
   // Totales agregados de todos los equipos
   int _totalActividades = 0;
@@ -55,7 +58,15 @@ class _ResumenFinalizacionScreenState
   @override
   void initState() {
     super.initState();
+    _observacionesController = TextEditingController();
     _cargarDatos();
+  }
+
+  @override
+  void dispose() {
+    _observacionesController.dispose();
+    _observacionesFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _cargarDatos() async {
@@ -67,9 +78,9 @@ class _ResumenFinalizacionScreenState
       final firmaService = ref.read(firmaServiceProvider);
 
       // Cargar orden para detectar tipo
-      final orden = await (db.select(db.ordenes)
-            ..where((o) => o.idLocal.equals(widget.idOrdenLocal)))
-          .getSingleOrNull();
+      final orden = await (db.select(
+        db.ordenes,
+      )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
 
       if (orden != null) {
         final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
@@ -79,6 +90,7 @@ class _ResumenFinalizacionScreenState
             codigoTipo.toUpperCase().contains('CORR') ||
             numero.contains('CORR');
         _razonFallaActual = orden.razonFalla;
+        _observacionesController.text = orden.observacionesTecnico ?? '';
       }
 
       // Cargar equipos de la orden (si es multi-equipo)
@@ -119,7 +131,10 @@ class _ResumenFinalizacionScreenState
           final medConValor = mediciones.where((m) => m.valor != null).length;
 
           _estadosPorEquipo[equipo.idOrdenEquipo] = _EstadoEquipo(
-            nombreEquipo: equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+            nombreEquipo:
+                equipo.nombreSistema ??
+                equipo.nombreEquipo ??
+                'Equipo ${equipo.ordenSecuencia}',
             totalActividades: totalAct,
             actividadesCompletadas: completadasAct,
             totalMediciones: totalMed,
@@ -180,7 +195,7 @@ class _ResumenFinalizacionScreenState
       widget.idOrdenLocal,
       'CLIENTE',
     );
-    
+
     if (mounted) {
       setState(() {
         _tieneFirmaTecnico = tieneTecnico;
@@ -194,7 +209,7 @@ class _ResumenFinalizacionScreenState
     if (!_esMultiEquipo) {
       // Orden simple: solo verificar actividades + mediciones
       return _actividadesCompletadas >= _totalActividades &&
-             _medicionesConValor >= _totalMediciones;
+          _medicionesConValor >= _totalMediciones;
     }
 
     // Multi-equipo: verificar cada equipo
@@ -215,11 +230,29 @@ class _ResumenFinalizacionScreenState
     return incompletos;
   }
 
+  /// Guarda las observaciones generales en la BD
+  Future<void> _guardarObservacionesGenerales() async {
+    final db = ref.read(databaseProvider);
+    final texto = _observacionesController.text.trim();
+
+    await (db.update(
+      db.ordenes,
+    )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).write(
+      OrdenesCompanion(
+        observacionesTecnico: Value(texto.isEmpty ? null : texto),
+        updatedAt: Value(DateTime.now()),
+        isDirty: const Value(true),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final totalItems = _totalActividades + _totalMediciones;
     final completados = _actividadesCompletadas + _medicionesConValor;
-    final porcentaje = totalItems > 0 ? (completados / totalItems * 100).toInt() : 0;
+    final porcentaje = totalItems > 0
+        ? (completados / totalItems * 100).toInt()
+        : 0;
     final progresoCompleto = _todosEquiposCompletos();
 
     // Condición completa para finalizar
@@ -236,7 +269,10 @@ class _ResumenFinalizacionScreenState
             if (widget.numeroOrden != null)
               Text(
                 widget.numeroOrden!,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
               ),
           ],
         ),
@@ -265,7 +301,10 @@ class _ResumenFinalizacionScreenState
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.devices_other, color: Colors.blue.shade700),
+                            Icon(
+                              Icons.devices_other,
+                              color: Colors.blue.shade700,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -281,7 +320,12 @@ class _ResumenFinalizacionScreenState
                       ),
 
                     // Progreso general
-                    _buildProgresoGeneral(completados, totalItems, porcentaje, progresoCompleto),
+                    _buildProgresoGeneral(
+                      completados,
+                      totalItems,
+                      porcentaje,
+                      progresoCompleto,
+                    ),
                     const SizedBox(height: 16),
 
                     // Estado por equipo (solo multi-equipo)
@@ -294,6 +338,77 @@ class _ResumenFinalizacionScreenState
                     _buildFotosGeneralesCard(),
                     const SizedBox(height: 16),
 
+                    // ✅ NUEVO: Observaciones Generales (Movido aquí para que el cliente lo vea antes de firmar)
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.notes, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Observaciones Generales',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _observacionesController,
+                              focusNode: _observacionesFocusNode,
+                              maxLines: 4,
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Ingrese las observaciones generales del servicio...',
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                              ),
+                              onEditingComplete: () {
+                                _guardarObservacionesGenerales();
+                                _observacionesFocusNode.unfocus();
+                              },
+                              onTapOutside: (_) {
+                                _guardarObservacionesGenerales();
+                                _observacionesFocusNode.unfocus();
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Este campo será visible en el reporte PDF final.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
                     // Firmas Digitales
                     FirmasSection(
                       idOrden: widget.idOrdenLocal,
@@ -302,8 +417,12 @@ class _ResumenFinalizacionScreenState
                     const SizedBox(height: 32),
 
                     // Botón Finalizar
-                    _buildBotonFinalizar(puedeFinalizar, porcentaje, puedeFinalizarItems),
-                    
+                    _buildBotonFinalizar(
+                      puedeFinalizar,
+                      porcentaje,
+                      puedeFinalizarItems,
+                    ),
+
                     const SizedBox(height: 100), // Espacio para scroll
                   ],
                 ),
@@ -312,7 +431,12 @@ class _ResumenFinalizacionScreenState
     );
   }
 
-  Widget _buildProgresoGeneral(int completados, int totalItems, int porcentaje, bool progresoCompleto) {
+  Widget _buildProgresoGeneral(
+    int completados,
+    int totalItems,
+    int porcentaje,
+    bool progresoCompleto,
+  ) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -342,7 +466,10 @@ class _ResumenFinalizacionScreenState
                 ),
                 Text(
                   '$porcentaje%',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -367,12 +494,19 @@ class _ResumenFinalizacionScreenState
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 20),
+                    Icon(
+                      Icons.warning_amber,
+                      color: Colors.orange.shade700,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Hay equipos sin completar. Ejecuta cada equipo antes de finalizar.',
-                        style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.orange.shade700,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -414,7 +548,9 @@ class _ResumenFinalizacionScreenState
                   color: completo ? Colors.green.shade50 : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: completo ? Colors.green.shade300 : Colors.grey.shade300,
+                    color: completo
+                        ? Colors.green.shade300
+                        : Colors.grey.shade300,
                   ),
                 ),
                 child: Row(
@@ -423,10 +559,17 @@ class _ResumenFinalizacionScreenState
                       radius: 16,
                       backgroundColor: completo ? Colors.green : Colors.grey,
                       child: completo
-                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            )
                           : Text(
                               '${equipo.ordenSecuencia}',
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
                             ),
                     ),
                     const SizedBox(width: 12),
@@ -441,13 +584,19 @@ class _ResumenFinalizacionScreenState
                           const SizedBox(height: 2),
                           Text(
                             '📋 ${estado.actividadesCompletadas}/${estado.totalActividades} | 📏 ${estado.medicionesCompletadas}/${estado.totalMediciones}',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: completo ? Colors.green : Colors.orange,
                         borderRadius: BorderRadius.circular(12),
@@ -520,11 +669,11 @@ class _ResumenFinalizacionScreenState
                   ),
                 ),
                 const SizedBox(width: 16),
-                Expanded(
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '📷 FOTOS GENERALES',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
@@ -532,8 +681,8 @@ class _ResumenFinalizacionScreenState
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
+                      SizedBox(height: 4),
+                      Text(
                         'Fotos ANTES, DURANTE y DESPUÉS',
                         style: TextStyle(color: Colors.white70, fontSize: 11),
                       ),
@@ -553,7 +702,11 @@ class _ResumenFinalizacionScreenState
     );
   }
 
-  Widget _buildBotonFinalizar(bool puedeFinalizar, int porcentaje, bool puedeFinalizarItems) {
+  Widget _buildBotonFinalizar(
+    bool puedeFinalizar,
+    int porcentaje,
+    bool puedeFinalizarItems,
+  ) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
@@ -570,7 +723,9 @@ class _ResumenFinalizacionScreenState
           backgroundColor: puedeFinalizar ? Colors.green : Colors.orange,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
     );
@@ -578,7 +733,7 @@ class _ResumenFinalizacionScreenState
 
   void _mostrarFaltantes(int porcentaje, bool puedeFinalizarItems) {
     String faltantes = '';
-    
+
     if (!puedeFinalizarItems) {
       if (_esMultiEquipo) {
         final incompletos = _equiposIncompletos();
@@ -634,7 +789,6 @@ class _ResumenFinalizacionScreenState
     final horaSalidaController = TextEditingController(
       text: DateFormat('HH:mm').format(now),
     );
-    final observacionesController = TextEditingController();
     final razonFallaController = TextEditingController(
       text: _razonFallaActual ?? '',
     );
@@ -682,17 +836,6 @@ class _ResumenFinalizacionScreenState
                 ),
                 keyboardType: TextInputType.datetime,
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: observacionesController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Observaciones Generales',
-                  hintText: 'Observaciones del servicio...',
-                  prefixIcon: Icon(Icons.notes),
-                  border: OutlineInputBorder(),
-                ),
-              ),
               if (_esCorrectivo) ...[
                 const SizedBox(height: 12),
                 TextField(
@@ -719,9 +862,9 @@ class _ResumenFinalizacionScreenState
               Navigator.of(ctx).pop({
                 'horaEntrada': horaEntradaController.text,
                 'horaSalida': horaSalidaController.text,
-                'observaciones': observacionesController.text.isEmpty
+                'observaciones': _observacionesController.text.isEmpty
                     ? 'Servicio completado satisfactoriamente.'
-                    : observacionesController.text,
+                    : _observacionesController.text,
                 if (_esCorrectivo) 'razonFalla': razonFallaController.text,
               });
             },
@@ -800,9 +943,9 @@ class _ResumenFinalizacionScreenState
 
     try {
       final db = ref.read(databaseProvider);
-      final orden = await (db.select(db.ordenes)
-            ..where((o) => o.idLocal.equals(widget.idOrdenLocal)))
-          .getSingleOrNull();
+      final orden = await (db.select(
+        db.ordenes,
+      )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
 
       if (orden == null || orden.idBackend == null) {
         Navigator.of(context).pop(); // Cerrar loading
@@ -820,7 +963,9 @@ class _ResumenFinalizacionScreenState
         horaEntrada: horaEntrada,
         horaSalida: horaSalida,
         usuarioId: ref.read(authStateProvider).user?.id ?? 1,
-        razonFalla: (razonFalla?.trim().isNotEmpty ?? false) ? razonFalla!.trim() : null,
+        razonFalla: (razonFalla?.trim().isNotEmpty ?? false)
+            ? razonFalla!.trim()
+            : null,
       );
 
       Navigator.of(context).pop(); // Cerrar loading
@@ -858,7 +1003,7 @@ class _ResumenFinalizacionScreenState
 
   void _mostrarExitoOnline(SyncUploadResult resultado) {
     final datosRes = resultado.datos;
-    
+
     // ✅ 20-DIC-2025: Soportar ambas estructuras de respuesta
     // Puede venir como datosRes['datos'] (SSE) o datosRes directamente (endpoint tradicional)
     Map<String, dynamic>? datosInternos;
@@ -872,7 +1017,8 @@ class _ResumenFinalizacionScreenState
       }
     }
 
-    final evidenciasCount = (datosInternos?['evidencias'] as List?)?.length ?? 0;
+    final evidenciasCount =
+        (datosInternos?['evidencias'] as List?)?.length ?? 0;
     final firmasCount = (datosInternos?['firmas'] as List?)?.length ?? 0;
     final pdfGenerado = datosInternos?['documento'] != null;
     final emailEnviado = datosInternos?['email']?['enviado'] == true;
@@ -880,9 +1026,9 @@ class _ResumenFinalizacionScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Icon(Icons.check_circle, color: Colors.green, size: 28),
             SizedBox(width: 8),
             Flexible(
@@ -905,7 +1051,11 @@ class _ResumenFinalizacionScreenState
                 style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 16),
-              _buildResultadoItem(Icons.photo, 'Evidencias', '$evidenciasCount'),
+              _buildResultadoItem(
+                Icons.photo,
+                'Evidencias',
+                '$evidenciasCount',
+              ),
               _buildResultadoItem(Icons.gesture, 'Firmas', '$firmasCount'),
               if (pdfGenerado)
                 _buildResultadoItem(Icons.picture_as_pdf, 'PDF Generado', '✅'),
@@ -932,13 +1082,16 @@ class _ResumenFinalizacionScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Icon(Icons.cloud_sync, color: Colors.blue, size: 28),
             SizedBox(width: 8),
             Flexible(
-              child: Text('Servicio Completado', style: TextStyle(fontSize: 18)),
+              child: Text(
+                'Servicio Completado',
+                style: TextStyle(fontSize: 18),
+              ),
             ),
           ],
         ),
@@ -961,7 +1114,10 @@ class _ResumenFinalizacionScreenState
                     const Expanded(
                       child: Text(
                         '¡Servicio finalizado correctamente!',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -982,7 +1138,9 @@ class _ResumenFinalizacionScreenState
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade600,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -997,7 +1155,11 @@ class _ResumenFinalizacionScreenState
               ),
               const SizedBox(height: 16),
               _buildResultadoItem(Icons.save, 'Datos locales', 'Guardados ✅'),
-              _buildResultadoItem(Icons.cloud_upload, 'Subida al servidor', 'En proceso 🔄'),
+              _buildResultadoItem(
+                Icons.cloud_upload,
+                'Subida al servidor',
+                'En proceso 🔄',
+              ),
             ],
           ),
         ),

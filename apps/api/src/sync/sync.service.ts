@@ -423,14 +423,6 @@ export class SyncService {
       }
     }
 
-    // 1. Obtener órdenes asignadas al técnico
-    const treintaDiasAtras = new Date();
-    treintaDiasAtras.setDate(treintaDiasAtras.getDate() - 30);
-
-    // ✅ FIX CRÍTICO: Simplificar filtro para delta sync
-    // El filtro OR con relaciones + fecha_modificacion causaba queries incorrectos en Prisma
-    // Para DELTA: Solo filtrar por fecha_modificacion (incluye TODAS las órdenes modificadas)
-    // Para FULL: Usar filtro OR para incluir activas + completadas recientes
     let baseFilter: any;
 
     if (since) {
@@ -440,14 +432,17 @@ export class SyncService {
       // cuando se usa `timestamp without time zone` + objetos Date de JavaScript
       // ========================================================================
       const sinceIsoString = since.toISOString();
-      this.logger.log(`[Sync Delta] Filtrando órdenes modificadas desde ${sinceIsoString}`);
+      this.logger.log(`[Sync Delta] Filtrando órdenes ACTIVAS modificadas desde ${sinceIsoString}`);
 
-      // Obtener IDs de órdenes modificadas usando query raw para garantizar comparación correcta
+      // 🚨 POLÍTICA: Solo órdenes ACTIVAS modificadas (NUNCA completadas)
+      // JOIN con estados_orden para filtrar solo es_estado_final = false
       const ordenesModificadas = await this.prisma.$queryRaw<{ id_orden_servicio: number }[]>`
-        SELECT id_orden_servicio 
-        FROM ordenes_servicio 
-        WHERE id_tecnico_asignado = ${tecnicoId}
-          AND fecha_modificacion >= ${sinceIsoString}::timestamp
+        SELECT os.id_orden_servicio 
+        FROM ordenes_servicio os
+        INNER JOIN estados_orden eo ON os.id_estado_actual = eo.id_estado
+        WHERE os.id_tecnico_asignado = ${tecnicoId}
+          AND os.fecha_modificacion >= ${sinceIsoString}::timestamp
+          AND eo.es_estado_final = false
       `;
 
       this.logger.log(`[🔬 DIAGNÓSTICO] Query raw encontró ${ordenesModificadas.length} órdenes modificadas`);
@@ -561,18 +556,10 @@ export class SyncService {
         id_orden_servicio: { in: ordenesIds },
       };
     } else {
-      // FULL SYNC: Filtro completo con OR para historial
+      // FULL SYNC: Solo órdenes ACTIVAS (NUNCA completadas)
       baseFilter = {
         id_tecnico_asignado: tecnicoId,
-        OR: [
-          // Órdenes activas (no finales)
-          { estados_orden: { es_estado_final: false } },
-          // Órdenes completadas en los últimos 30 días (para historial)
-          {
-            estados_orden: { es_estado_final: true },
-            fecha_fin_real: { gte: treintaDiasAtras },
-          },
-        ],
+        estados_orden: { es_estado_final: false },
       };
     }
 
@@ -803,9 +790,13 @@ export class SyncService {
       prioridad: o.prioridad as string,
       idCliente: o.id_cliente,
       nombreCliente:
+        o.clientes?.persona?.nombre_comercial ||
         o.clientes?.persona?.nombre_completo ||
         o.clientes?.persona?.razon_social ||
         'Sin nombre',
+      nombreComercial: o.clientes?.persona?.nombre_comercial || undefined,
+      nombreCompleto: o.clientes?.persona?.nombre_completo || undefined,
+      razonSocial: o.clientes?.persona?.razon_social || undefined,
       idSede: o.id_sede ?? undefined,
       nombreSede: o.sedes_cliente?.nombre_sede,
       direccionSede: o.sedes_cliente?.direccion_sede,
@@ -813,6 +804,8 @@ export class SyncService {
       codigoEquipo: o.equipos?.codigo_equipo || '',
       nombreEquipo: o.equipos?.nombre_equipo || '',
       ubicacionEquipo: o.equipos?.ubicacion_texto,
+      // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Config personalizada del equipo
+      configParametros: o.equipos?.config_parametros || undefined,
       idTipoServicio: o.id_tipo_servicio!,
       codigoTipoServicio: o.tipos_servicio?.codigo_tipo || '',
       nombreTipoServicio: o.tipos_servicio?.nombre_tipo || '',
@@ -884,6 +877,8 @@ export class SyncService {
           codigoEquipo: oe.equipos?.codigo_equipo || '',
           nombreEquipo: oe.equipos?.nombre_equipo || '',
           ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
+          // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
+          configParametros: oe.equipos?.config_parametros || undefined,
         })) || [];
         // Log para diagnóstico de multi-equipos
         if (mapped.length > 1) {
@@ -1028,11 +1023,20 @@ export class SyncService {
       urlPdf?: string;
     }>;
   }> {
-    this.logger.log(`[Sync Inteligente] Obteniendo resúmenes para técnico ${tecnicoId} (limit: ${limit})`);
+    // ========================================================================
+    // 🚨 POLÍTICA ENTERPRISE: CERO ÓRDENES COMPLETADAS DEL SERVIDOR
+    // ========================================================================
+    // El móvil NUNCA recibe órdenes completadas del servidor.
+    // Solo órdenes ACTIVAS (es_estado_final = false)
+    // ========================================================================
+    this.logger.log(`[🚨 COMPARE] POLÍTICA: Solo órdenes ACTIVAS para técnico ${tecnicoId}`);
 
-    // Obtener las últimas N órdenes del técnico, ordenadas por fecha_modificacion DESC
+    // Obtener órdenes del técnico (SOLO ACTIVAS)
     const ordenes = await this.prisma.ordenes_servicio.findMany({
-      where: { id_tecnico_asignado: tecnicoId },
+      where: {
+        id_tecnico_asignado: tecnicoId,
+        estados_orden: { es_estado_final: false },
+      },
       select: {
         id_orden_servicio: true,
         numero_orden: true,
@@ -1046,6 +1050,11 @@ export class SyncService {
         estados_orden: {
           select: {
             codigo_estado: true,
+          },
+        },
+        clientes: {
+          include: {
+            persona: true,
           },
         },
       },
@@ -1091,6 +1100,11 @@ export class SyncService {
         estadoCodigo: o.estados_orden?.codigo_estado || 'DESCONOCIDO',
         idCliente: o.id_cliente || 1,
         id_cliente: o.id_cliente || 1, // Alias snake_case
+        nombreCliente:
+          o.clientes?.persona?.nombre_comercial ||
+          o.clientes?.persona?.nombre_completo ||
+          o.clientes?.persona?.razon_social ||
+          'Sin nombre',
         idEquipo: o.id_equipo || 1,
         id_equipo: o.id_equipo || 1, // Alias snake_case
         idTipoService: o.id_tipo_servicio || 1, // Fallback (legacy support)
@@ -1139,6 +1153,12 @@ export class SyncService {
 
     if (!orden) {
       this.logger.warn(`[Sync Inteligente] Orden ${ordenId} no encontrada`);
+      return null;
+    }
+
+    // 🚨 POLÍTICA ENTERPRISE: NUNCA enviar órdenes completadas
+    if (orden.estados_orden?.es_estado_final) {
+      this.logger.warn(`[🚨 POLÍTICA] Orden ${ordenId} está COMPLETADA - NO se envía al móvil`);
       return null;
     }
 
@@ -1248,7 +1268,10 @@ export class SyncService {
       fechaProgramada: orden.fecha_programada?.toISOString(),
       prioridad: orden.prioridad || 'NORMAL',
       idCliente: orden.id_cliente,
-      nombreCliente: orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
+      nombreCliente: orden.clientes?.persona?.nombre_comercial || orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
+      nombreComercial: orden.clientes?.persona?.nombre_comercial || undefined,
+      nombreCompleto: orden.clientes?.persona?.nombre_completo || undefined,
+      razonSocial: orden.clientes?.persona?.razon_social || undefined,
       idSede: orden.id_sede ?? undefined,
       nombreSede: orden.sedes_cliente?.nombre_sede ?? undefined,
       direccionSede: orden.sedes_cliente?.direccion_sede ?? undefined,

@@ -33,6 +33,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { ConfigParametrosService } from '../../config-parametros/config-parametros.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService, OrdenEmailData } from '../../email/email.service';
 import { PdfService, TipoInforme } from '../../pdf/pdf.service';
@@ -195,6 +196,13 @@ export interface FinalizarOrdenDto {
 
     /** ID del usuario que finaliza (técnico) */
     usuarioId: number;
+
+    /** 
+     * Modo de finalización:
+     * - 'COMPLETO': Genera PDF y envía email (flujo tradicional)
+     * - 'SOLO_DATOS': Solo sube datos, sin PDF ni email (Admin genera desde portal)
+     */
+    modo?: 'COMPLETO' | 'SOLO_DATOS';
 }
 
 /**
@@ -273,17 +281,20 @@ export interface FinalizacionResult {
             id: number;
             tipo: string;
         }>;
+        /** Null si modo='SOLO_DATOS' (PDF se genera desde Admin Portal) */
         documento: {
             id: number;
             url: string;
             filename: string;
             tamanioKB: number;
-        };
+        } | null;
         email: {
             enviado: boolean;
             destinatario: string;
             messageId?: string;
         };
+        /** Modo usado: 'COMPLETO' o 'SOLO_DATOS' */
+        modo?: 'COMPLETO' | 'SOLO_DATOS';
     };
     tiempoTotal: number;
 }
@@ -302,6 +313,7 @@ export class FinalizacionOrdenService {
         private readonly r2Service: R2StorageService,
         private readonly pdfService: PdfService,
         private readonly emailService: EmailService,
+        private readonly configParametrosService: ConfigParametrosService,
     ) { }
 
     /**
@@ -318,6 +330,32 @@ export class FinalizacionOrdenService {
     ): Promise<FinalizacionResult> {
         const startTime = Date.now();
         this.logger.log(`🚀 Iniciando finalización de orden ${dto.idOrden}`);
+
+        // 🔍 RESOLUCIÓN DE IDENTIDAD: Obtener id_empleado del técnico
+        // El mobile envía usuarioId (PK de tabla usuarios), pero actividades y mediciones 
+        // requieren id_empleado (PK de tabla empleados).
+        let idEmpleadoTecnico: number | null = null;
+        try {
+            const emp = await this.prisma.empleados.findFirst({
+                where: {
+                    persona: {
+                        usuarios: {
+                            id_usuario: dto.usuarioId
+                        }
+                    }
+                },
+                select: { id_empleado: true }
+            });
+            idEmpleadoTecnico = emp?.id_empleado || null;
+
+            if (idEmpleadoTecnico) {
+                this.logger.log(`   ✅ Identidad resuelta: usuarioId=${dto.usuarioId} -> idEmpleado=${idEmpleadoTecnico}`);
+            } else {
+                this.logger.warn(`   ⚠️ No se encontró registro de empleado para usuarioId=${dto.usuarioId}. Se usará fallback.`);
+            }
+        } catch (err) {
+            this.logger.error(`   ❌ Error resolviendo identidad del técnico: ${err}`);
+        }
 
         // Helper para emitir progreso
         const emitProgress = (
@@ -348,7 +386,7 @@ export class FinalizacionOrdenService {
 
         try {
             // ========================================================================
-            // PASO 0: Validaciones iniciales
+            // PASO 0: Validaciones iniciales + Precarga de datos comunes
             // ========================================================================
             emitProgress('validando', 'in_progress', 'Validando datos de entrada...', 5);
             this.logger.log('📋 Paso 0: Validando datos de entrada...');
@@ -356,11 +394,21 @@ export class FinalizacionOrdenService {
             emitProgress('validando', 'completed', 'Datos validados correctamente', 10);
 
             // ========================================================================
-            // PASO 1: Obtener datos completos de la orden
+            // PASO 1: Obtener datos completos de la orden + Estado COMPLETADA (en paralelo)
+            // ✅ OPTIMIZACIÓN 31-DIC-2025: Precargar estado COMPLETADA aquí evita query posterior
             // ========================================================================
             emitProgress('obteniendo_orden', 'in_progress', 'Obteniendo datos de la orden...', 12);
             this.logger.log('📋 Paso 1: Obteniendo datos de la orden...');
-            const orden = await this.obtenerOrdenCompleta(dto.idOrden);
+
+            const [orden, estadoCompletada] = await Promise.all([
+                this.obtenerOrdenCompleta(dto.idOrden),
+                this.prisma.estados_orden.findFirst({ where: { codigo_estado: 'COMPLETADA' } }),
+            ]);
+
+            if (!estadoCompletada) {
+                throw new InternalServerErrorException('Estado COMPLETADA no encontrado en BD');
+            }
+
             emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
 
             // ========================================================================
@@ -391,19 +439,23 @@ export class FinalizacionOrdenService {
             this.logger.log(`   ✓ ${firmasResultado.length} firmas registradas`);
             emitProgress('firmas', 'completed', `${firmasResultado.length} firmas registradas`, 45);
 
-            // ✅ FIX: Vincular firma del cliente a la orden para conteo en sync
+            // ✅ FIX 05-ENE-2026: Vincular AMBAS firmas a la orden para trazabilidad completa
+            const firmaTecnico = firmasResultado.find(f => f.tipo === 'TECNICO');
             const firmaCliente = firmasResultado.find(f => f.tipo === 'CLIENTE');
-            if (firmaCliente) {
-                await this.prisma.ordenes_servicio.update({
-                    where: { id_orden_servicio: orden.id_orden_servicio },
-                    data: {
-                        id_firma_cliente: firmaCliente.id,
-                        nombre_quien_recibe: dto.firmas.cliente?.nombre || 'Cliente',
-                        cargo_quien_recibe: dto.firmas.cliente?.cargo || null,
-                    },
-                });
-                this.logger.log(`   ✓ Firma cliente vinculada a orden`);
-            }
+
+            await this.prisma.ordenes_servicio.update({
+                where: { id_orden_servicio: orden.id_orden_servicio },
+                data: {
+                    // Firma del técnico (NUEVA - evita mezclar firmas entre órdenes)
+                    id_firma_tecnico: firmaTecnico?.id || null,
+                    // Firma del cliente
+                    id_firma_cliente: firmaCliente?.id || null,
+                    nombre_quien_recibe: dto.firmas.cliente?.nombre || 'Cliente',
+                    cargo_quien_recibe: dto.firmas.cliente?.cargo || null,
+                },
+            });
+            this.logger.log(`   ✓ Firmas vinculadas a orden (técnico: ${firmaTecnico?.id}, cliente: ${firmaCliente?.id})`);
+
 
             // ========================================================================
             // PASO 3.5: Persistir actividades ejecutadas en BD (para estadísticas)
@@ -413,7 +465,7 @@ export class FinalizacionOrdenService {
             const actividadesGuardadas = await this.persistirActividades(
                 orden.id_orden_servicio,
                 dto.actividades,
-                dto.usuarioId,
+                idEmpleadoTecnico || dto.usuarioId, // Usar id_empleado resuelto
             );
             this.logger.log(`   ✓ ${actividadesGuardadas} actividades registradas`);
             emitProgress('actividades', 'completed', `${actividadesGuardadas} actividades registradas`, 52);
@@ -427,72 +479,89 @@ export class FinalizacionOrdenService {
                 const medicionesGuardadas = await this.persistirMediciones(
                     orden.id_orden_servicio,
                     dto.mediciones,
-                    dto.usuarioId,
+                    idEmpleadoTecnico || dto.usuarioId, // Usar id_empleado resuelto
                 );
                 this.logger.log(`   ✓ ${medicionesGuardadas} mediciones registradas`);
                 emitProgress('mediciones', 'completed', `${medicionesGuardadas} mediciones registradas`, 58);
             }
 
-            // ========================================================================
-            // PASO 4: Generar PDF con template real
-            // ========================================================================
-            emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 60);
-            this.logger.log('📄 Paso 4: Generando PDF con template profesional...');
-
-            // Mapear mediciones del array a datosModulo para el PDF (necesario también para horómetro abajo)
+            // Mapear mediciones del array a datosModulo (necesario para horómetro)
             const datosModuloMapeado = this.mapearMedicionesADatosModulo(dto.mediciones || []);
 
-            const tipoInforme = this.determinarTipoInforme(orden);
-            const pdfResult = await this.generarPDFOrden(
-                orden,
-                dto,
-                evidenciasResultado,
-                firmasResultado,
-                tipoInforme,
-                datosModuloMapeado,
-            );
-            emitProgress('generando_pdf', 'completed', `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`, 72);
+            // ========================================================================
+            // MODO DE FINALIZACIÓN: COMPLETO vs SOLO_DATOS
+            // ========================================================================
+            const modoCompleto = dto.modo !== 'SOLO_DATOS';
+
+            // Variables para resultados (pueden ser null en modo SOLO_DATOS)
+            let pdfResult: { buffer: Buffer; filename: string; size: number } | null = null;
+            let r2Result: { url: string } | null = null;
+            let emailResult: { enviado: boolean; destinatario: string; messageId?: string } = { enviado: false, destinatario: '' };
+            let documentoResult: { id: number } | null = null;
+
+            if (modoCompleto) {
+                // ========================================================================
+                // PASO 4: Generar PDF con template real (SOLO EN MODO COMPLETO)
+                // ========================================================================
+                emitProgress('generando_pdf', 'in_progress', 'Generando informe PDF...', 60);
+                this.logger.log('📄 Paso 4: Generando PDF con template profesional...');
+
+                const tipoInforme = this.determinarTipoInforme(orden);
+                pdfResult = await this.generarPDFOrden(
+                    orden,
+                    dto,
+                    evidenciasResultado,
+                    firmasResultado,
+                    tipoInforme,
+                    datosModuloMapeado,
+                );
+                emitProgress('generando_pdf', 'completed', `PDF generado (${Math.round(pdfResult.size / 1024)} KB)`, 72);
+
+                // ========================================================================
+                // PASO 5+7: Subir PDF a R2 + Enviar email EN PARALELO (SOLO EN MODO COMPLETO)
+                // ========================================================================
+                emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF y enviando email en paralelo...', 74);
+                this.logger.log('⚡ [PERF] Pasos 5+7: Subiendo PDF a R2 + Enviando email EN PARALELO...');
+
+                const startParallel = Date.now();
+                const [r2Res, emailRes] = await Promise.all([
+                    this.subirPDFaR2(pdfResult.buffer, orden.numero_orden),
+                    this.enviarEmailInforme(orden, pdfResult, dto.emailAdicional),
+                ]);
+                r2Result = r2Res;
+                emailResult = emailRes;
+
+                const parallelTime = Date.now() - startParallel;
+                this.logger.log(`⚡ [PERF] R2 + Email completados en ${parallelTime}ms (paralelo)`);
+
+                emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 80);
+                emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 85);
+
+                // ========================================================================
+                // PASO 6: Registrar documento en BD (SOLO EN MODO COMPLETO)
+                // ========================================================================
+                emitProgress('registrando_doc', 'in_progress', 'Registrando documento en base de datos...', 87);
+                this.logger.log('💾 Paso 6: Registrando documento en base de datos...');
+                documentoResult = await this.registrarDocumento(
+                    orden.id_orden_servicio,
+                    orden.numero_orden,
+                    r2Result.url,
+                    pdfResult,
+                    dto.usuarioId,
+                );
+                recursosCreados.documento = documentoResult.id;
+                emitProgress('registrando_doc', 'completed', 'Documento registrado', 90);
+            } else {
+                // MODO SOLO_DATOS: Skip PDF, R2 y Email
+                this.logger.log('📋 Modo SOLO_DATOS: Saltando generación de PDF y envío de email');
+                emitProgress('generando_pdf', 'completed', 'PDF se generará desde Admin Portal', 72);
+                emitProgress('subiendo_pdf', 'completed', 'Omitido (modo solo datos)', 80);
+                emitProgress('enviando_email', 'completed', 'Email se enviará desde Admin Portal', 85);
+                emitProgress('registrando_doc', 'completed', 'Documento se registrará desde Admin Portal', 90);
+            }
 
             // ========================================================================
-            // PASO 5: Subir PDF a Cloudflare R2
-            // ========================================================================
-            emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF a la nube...', 74);
-            this.logger.log('☁️ Paso 5: Subiendo PDF a almacenamiento...');
-            const r2Result = await this.subirPDFaR2(
-                pdfResult.buffer,
-                orden.numero_orden,
-            );
-            emitProgress('subiendo_pdf', 'completed', 'PDF almacenado en la nube', 78);
-
-            // ========================================================================
-            // PASO 6: Registrar documento en BD
-            // ========================================================================
-            emitProgress('registrando_doc', 'in_progress', 'Registrando documento en base de datos...', 80);
-            this.logger.log('💾 Paso 6: Registrando documento en base de datos...');
-            const documentoResult = await this.registrarDocumento(
-                orden.id_orden_servicio,
-                orden.numero_orden,
-                r2Result.url,
-                pdfResult,
-                dto.usuarioId,
-            );
-            recursosCreados.documento = documentoResult.id;
-            emitProgress('registrando_doc', 'completed', 'Documento registrado', 85);
-
-            // ========================================================================
-            // PASO 7: Enviar email con PDF adjunto
-            // ========================================================================
-            emitProgress('enviando_email', 'in_progress', 'Enviando informe por email...', 87);
-            this.logger.log('📧 Paso 7: Enviando email con informe...');
-            const emailResult = await this.enviarEmailInforme(
-                orden,
-                pdfResult,
-                dto.emailAdicional,
-            );
-            emitProgress('enviando_email', 'completed', emailResult.enviado ? 'Email enviado' : 'Email no enviado (sin destinatario)', 92);
-
-            // ========================================================================
-            // PASO 7.5: Registrar lectura de horómetro (si existe)
+            // PASO 7.5: Registrar lectura de horómetro (si existe) - SIEMPRE
             // ========================================================================
             if (dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo) {
                 const horas = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
@@ -507,12 +576,13 @@ export class FinalizacionOrdenService {
             }
 
             // ========================================================================
-            // PASO 8: Actualizar estado de la orden
+            // PASO 8: Actualizar estado de la orden - SIEMPRE
             // ========================================================================
             emitProgress('actualizando_estado', 'in_progress', 'Actualizando estado de la orden...', 94);
             this.logger.log('✅ Paso 8: Actualizando estado de la orden...');
             await this.actualizarEstadoOrden(
                 orden.id_orden_servicio,
+                estadoCompletada.id_estado,
                 dto.observaciones,
                 dto.usuarioId,
                 dto.horaEntrada,
@@ -524,18 +594,21 @@ export class FinalizacionOrdenService {
             // RESULTADO EXITOSO
             // ========================================================================
             const tiempoTotal = Date.now() - startTime;
-            this.logger.log(`🎉 Orden ${orden.numero_orden} finalizada exitosamente en ${tiempoTotal}ms`);
+            const mensajeFinal = modoCompleto
+                ? `Orden ${orden.numero_orden} finalizada exitosamente`
+                : `Orden ${orden.numero_orden} datos sincronizados (PDF pendiente desde Admin)`;
+            this.logger.log(`🎉 ${mensajeFinal} en ${tiempoTotal}ms`);
 
-            // Emitir evento final de completado
-            emitProgress('completado', 'completed', `Orden ${orden.numero_orden} finalizada exitosamente`, 100, {
+            emitProgress('completado', 'completed', mensajeFinal, 100, {
                 tiempoTotal,
                 ordenId: orden.id_orden_servicio,
                 numeroOrden: orden.numero_orden,
+                modo: dto.modo || 'COMPLETO',
             });
 
             return {
                 success: true,
-                mensaje: `Orden ${orden.numero_orden} finalizada exitosamente`,
+                mensaje: mensajeFinal,
                 datos: {
                     orden: {
                         id: orden.id_orden_servicio,
@@ -544,13 +617,14 @@ export class FinalizacionOrdenService {
                     },
                     evidencias: evidenciasResultado,
                     firmas: firmasResultado,
-                    documento: {
+                    documento: documentoResult ? {
                         id: documentoResult.id,
-                        url: r2Result.url,
-                        filename: pdfResult.filename,
-                        tamanioKB: Math.round(pdfResult.size / 1024),
-                    },
+                        url: r2Result?.url || '',
+                        filename: pdfResult?.filename || '',
+                        tamanioKB: pdfResult ? Math.round(pdfResult.size / 1024) : 0,
+                    } : null,
                     email: emailResult,
+                    modo: dto.modo || 'COMPLETO',
                 },
                 tiempoTotal,
             };
@@ -641,7 +715,15 @@ export class FinalizacionOrdenService {
                     include: { tipos_equipo: true },
                 },
                 empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
-                    include: { persona: true },
+                    include: {
+                        persona: {
+                            include: {
+                                usuarios: {
+                                    select: { id_usuario: true }
+                                }
+                            }
+                        }
+                    },
                 },
                 tipos_servicio: true,
                 estados_orden: true,
@@ -757,23 +839,40 @@ export class FinalizacionOrdenService {
 
     /**
      * Procesa y registra firmas digitales
+     * ✅ OPTIMIZACIÓN 06-ENE-2026: Procesamiento PARALELO con Promise.all()
      */
     private async procesarFirmas(
         firmas: { tecnico: FirmaInput; cliente?: FirmaInput },
         usuarioId: number,
         orden: any,
     ): Promise<Array<{ id: number; tipo: string }>> {
-        const resultados: Array<{ id: number; tipo: string }> = [];
+        const startTime = Date.now();
+        this.logger.log(`⚡ [PERF] Procesando firmas EN PARALELO...`);
 
-        // Procesar firma del técnico
-        const firmaTecnico = await this.registrarFirma(firmas.tecnico, usuarioId, orden);
-        resultados.push({ id: firmaTecnico.id_firma_digital, tipo: 'TECNICO' });
+        // Construir array de promesas para procesamiento paralelo
+        const firmaPromises: Promise<{ id: number; tipo: string }>[] = [
+            // Firma del técnico (siempre requerida)
+            this.registrarFirma(firmas.tecnico, usuarioId, orden).then(f => ({
+                id: f.id_firma_digital,
+                tipo: 'TECNICO',
+            })),
+        ];
 
-        // Procesar firma del cliente si existe
+        // Agregar firma del cliente si existe
         if (firmas.cliente?.base64) {
-            const firmaCliente = await this.registrarFirma(firmas.cliente, usuarioId, orden);
-            resultados.push({ id: firmaCliente.id_firma_digital, tipo: 'CLIENTE' });
+            firmaPromises.push(
+                this.registrarFirma(firmas.cliente, usuarioId, orden).then(f => ({
+                    id: f.id_firma_digital,
+                    tipo: 'CLIENTE',
+                })),
+            );
         }
+
+        // Ejecutar TODAS las firmas en paralelo
+        const resultados = await Promise.all(firmaPromises);
+
+        const elapsed = Date.now() - startTime;
+        this.logger.log(`⚡ [PERF] ${resultados.length} firmas procesadas en ${elapsed}ms`);
 
         return resultados;
     }
@@ -842,33 +941,13 @@ export class FinalizacionOrdenService {
             );
         }
 
-        // Buscar firma existente para esta persona y tipo
-        const firmaExistente = await this.prisma.firmas_digitales.findFirst({
-            where: {
-                id_persona: idPersonaReal,
-                tipo_firma: firma.tipo,
-            },
-        });
+        // ✅ FIX 05-ENE-2026: SIEMPRE crear nueva firma para cada orden
+        // Antes: Hacía upsert por (id_persona, tipo_firma) causando que todas las
+        // órdenes del mismo técnico compartieran la misma firma (sobrescribiéndose)
+        // Ahora: Cada finalización crea una firma nueva y única para esa orden
 
-        if (firmaExistente) {
-            this.logger.log(`   🔄 Actualizando firma existente ID: ${firmaExistente.id_firma_digital} para persona ${idPersonaReal}`);
-            // Actualizar firma existente
-            return this.prisma.firmas_digitales.update({
-                where: { id_firma_digital: firmaExistente.id_firma_digital },
-                data: {
-                    firma_base64: firma.base64,
-                    formato_firma: (firma.formato || 'PNG').toUpperCase(),
-                    hash_firma: hash,
-                    fecha_captura: new Date(),
-                    observaciones: `Firma de ${firma.tipo} - Actualizada en finalización`,
-                    registrada_por: usuarioId,
-                    fecha_registro: new Date(),
-                },
-            });
-        }
+        this.logger.log(`   🆕 Creando nueva firma para persona ${idPersonaReal} (orden específica)`);
 
-        this.logger.log(`   🆕 Creando nueva firma para persona ${idPersonaReal}`);
-        // Crear nueva firma
         return this.prisma.firmas_digitales.create({
             data: {
                 id_persona: idPersonaReal,
@@ -877,9 +956,9 @@ export class FinalizacionOrdenService {
                 formato_firma: (firma.formato || 'PNG').toUpperCase(),
                 hash_firma: hash,
                 fecha_captura: new Date(),
-                es_firma_principal: firma.tipo === 'TECNICO',
+                es_firma_principal: false, // Solo la primera firma del técnico es principal
                 activa: true,
-                observaciones: `Firma de ${firma.tipo} - Finalización de orden${firma.idPersona === 0 ? ' (cliente sin registro)' : ''}`,
+                observaciones: `Firma de ${firma.tipo} - Orden ${orden.numero_orden}`,
                 registrada_por: usuarioId,
                 fecha_registro: new Date(),
             },
@@ -1313,8 +1392,20 @@ export class FinalizacionOrdenService {
             }
         }
 
+        // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Obtener unidades personalizadas del equipo
+        let configUnidades: Record<string, string> | undefined;
+        if (equipo?.id_equipo) {
+            try {
+                const unidades = await this.configParametrosService.obtenerTodasLasUnidades(equipo.id_equipo);
+                configUnidades = unidades as Record<string, string>;
+                this.logger.log(`📐 Unidades personalizadas para equipo ${equipo.id_equipo}: ${JSON.stringify(configUnidades)}`);
+            } catch (e) {
+                this.logger.warn(`⚠️ No se pudieron obtener unidades personalizadas: ${e}`);
+            }
+        }
+
         const datosPDF = {
-            cliente: cliente?.persona?.razon_social || cliente?.persona?.nombre_completo || 'N/A',
+            cliente: cliente?.persona?.nombre_comercial || cliente?.persona?.nombre_completo || cliente?.persona?.razon_social || 'N/A',
             direccion: cliente?.persona?.direccion_principal || cliente?.persona?.ciudad || 'N/A',
             marcaEquipo: equipo?.nombre_equipo || 'N/A',
             serieEquipo: equipo?.numero_serie_equipo || 'N/A',
@@ -1326,6 +1417,8 @@ export class FinalizacionOrdenService {
             tipoServicio: tipoServicio?.nombre || 'PREVENTIVO',
             numeroOrden: orden.numero_orden,
             datosModulo: { ...datosModuloMapeado, ...(dto.datosModulo || {}) },
+            // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades personalizadas para PDF
+            configUnidades,
             // Actividades flat (para backward compatibility)
             actividades: dto.actividades.map(a => ({
                 sistema: a.sistema,
@@ -1371,6 +1464,11 @@ export class FinalizacionOrdenService {
             firmaCliente: dto.firmas.cliente?.base64
                 ? `data:image/${dto.firmas.cliente.formato || 'png'};base64,${dto.firmas.cliente.base64}`
                 : undefined,
+            // ✅ FIX 05-ENE-2026: Datos del firmante para mostrar nombre/cargo en el PDF
+            nombreTecnico: nombreTecnico,
+            cargoTecnico: 'Técnico Responsable',
+            nombreCliente: dto.nombreQuienRecibe || 'Cliente',
+            cargoCliente: dto.cargoQuienRecibe || 'Cliente / Autorizador',
         };
 
         return this.pdfService.generarPDF({
@@ -1475,7 +1573,7 @@ export class FinalizacionOrdenService {
 
             const emailData: OrdenEmailData = {
                 ordenNumero: orden.numero_orden,
-                clienteNombre: cliente?.persona?.razon_social || cliente?.persona?.nombre_completo || 'Cliente',
+                clienteNombre: cliente?.persona?.nombre_comercial || cliente?.persona?.nombre_completo || cliente?.persona?.razon_social || 'Cliente',
                 equipoDescripcion: equipoDesc,
                 tipoMantenimiento: tipoServicio?.nombre_tipo || tipoServicio?.codigo_tipo || 'PREVENTIVO',
                 fechaServicio: new Date().toLocaleDateString('es-CO'),
@@ -1503,23 +1601,16 @@ export class FinalizacionOrdenService {
 
     /**
      * Actualiza el estado de la orden a COMPLETADA
+     * ✅ OPTIMIZACIÓN 31-DIC-2025: Recibe idEstado precargado para evitar query adicional
      */
     private async actualizarEstadoOrden(
         idOrden: number,
+        idEstadoCompletada: number, // ✅ Ahora recibe el ID precargado
         observaciones: string,
         usuarioId: number,
         horaEntrada?: string,
         horaSalida?: string,
     ): Promise<void> {
-        // Obtener ID del estado COMPLETADA
-        const estadoCompletada = await this.prisma.estados_orden.findFirst({
-            where: { codigo_estado: 'COMPLETADA' },
-        });
-
-        if (!estadoCompletada) {
-            throw new InternalServerErrorException('Estado COMPLETADA no encontrado');
-        }
-
         // 🔧 FIX 20-DIC-2025: Obtener la orden para usar fecha_inicio_real existente
         // Esto evita violar el constraint chk_os_fecha_fin_posterior cuando la orden
         // fue iniciada en un día diferente al que se finaliza
@@ -1578,46 +1669,35 @@ export class FinalizacionOrdenService {
             }
         }
 
-        // Actualizar orden
-        // 🔬 DIAGNÓSTICO: Log del valor exacto de fecha_modificacion
+        // ✅ OPTIMIZACIÓN 31-DIC-2025: Usar transacción para update + historial en una sola operación
+        // Eliminado query de verificación (diagnóstico) que añadía ~2-3s innecesarios
         const fechaModificacionValue = new Date();
-        this.logger.log(`[🔬 DIAGNÓSTICO FINALIZACIÓN] Guardando fecha_modificacion:`);
-        this.logger.log(`   - new Date().toISOString(): ${fechaModificacionValue.toISOString()}`);
-        this.logger.log(`   - new Date().getTime(): ${fechaModificacionValue.getTime()}`);
-        this.logger.log(`   - Orden ID: ${idOrden}`);
 
-        await this.prisma.ordenes_servicio.update({
-            where: { id_orden_servicio: idOrden },
-            data: {
-                id_estado_actual: estadoCompletada.id_estado,
-                fecha_inicio_real: fechaInicioReal,
-                fecha_fin_real: fechaFinReal,
-                duracion_minutos: duracionMinutos,
-                observaciones_cierre: observaciones,
-                modificado_por: usuarioId,
-                fecha_modificacion: fechaModificacionValue,
-            },
-        });
-
-        // Verificar que se guardó correctamente
-        const ordenActualizada = await this.prisma.ordenes_servicio.findUnique({
-            where: { id_orden_servicio: idOrden },
-            select: { fecha_modificacion: true, id_estado_actual: true },
-        });
-        this.logger.log(`[🔬 DIAGNÓSTICO FINALIZACIÓN] Valor guardado en BD:`);
-        this.logger.log(`   - fecha_modificacion leída: ${ordenActualizada?.fecha_modificacion?.toISOString()}`);
-        this.logger.log(`   - id_estado_actual: ${ordenActualizada?.id_estado_actual}`);
-
-        // Registrar en historial
-        await this.prisma.historial_estados_orden.create({
-            data: {
-                id_orden_servicio: idOrden,
-                id_estado_nuevo: estadoCompletada.id_estado,
-                fecha_cambio: new Date(),
-                observaciones: `Orden finalizada. ${observaciones}`,
-                realizado_por: usuarioId,
-            },
-        });
+        await this.prisma.$transaction([
+            // 1. Actualizar orden
+            this.prisma.ordenes_servicio.update({
+                where: { id_orden_servicio: idOrden },
+                data: {
+                    id_estado_actual: idEstadoCompletada, // ✅ Usar parámetro precargado
+                    fecha_inicio_real: fechaInicioReal,
+                    fecha_fin_real: fechaFinReal,
+                    duracion_minutos: duracionMinutos,
+                    observaciones_cierre: observaciones,
+                    modificado_por: usuarioId,
+                    fecha_modificacion: fechaModificacionValue,
+                },
+            }),
+            // 2. Registrar en historial (en la misma transacción)
+            this.prisma.historial_estados_orden.create({
+                data: {
+                    id_orden_servicio: idOrden,
+                    id_estado_nuevo: idEstadoCompletada, // ✅ Usar parámetro precargado
+                    fecha_cambio: new Date(),
+                    observaciones: `Orden finalizada. ${observaciones}`,
+                    realizado_por: usuarioId,
+                },
+            }),
+        ]);
     }
 
     /**

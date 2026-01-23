@@ -1,5 +1,6 @@
 import { DatabaseModule } from '@mekanos/database';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { EmailModule } from '../email/email.module';
 import { StorageModule } from '../storage/storage.module';
 import { PdfController } from './pdf.controller';
 import { PdfService } from './pdf.service';
@@ -12,6 +13,7 @@ import { PdfService } from './pdf.service';
  * 
  * Endpoints:
  * - GET /ordenes/:id/pdf - PDF de orden específica
+ * - POST /ordenes/:id/pdf/regenerar - Regenerar PDF y enviar por email
  * - GET /pdf/prueba - PDF de prueba
  * 
  * Templates:
@@ -21,9 +23,9 @@ import { PdfService } from './pdf.service';
  * - COTIZACION: Cotización comercial
  */
 @Module({
-  imports: [DatabaseModule, StorageModule],
+  imports: [DatabaseModule, StorageModule, forwardRef(() => EmailModule)],
   controllers: [PdfController],
   providers: [PdfService],
   exports: [PdfService],
 })
-export class PdfModule {}
+export class PdfModule { }

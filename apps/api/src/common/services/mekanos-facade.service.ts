@@ -149,7 +149,7 @@ export interface SubirPdfResult {
 /**
  * Tipos de documento para numeración
  */
-export type TipoDocumento = 
+export type TipoDocumento =
   | 'ORDEN_SERVICIO'
   | 'COTIZACION'
   | 'INFORME'
@@ -207,7 +207,7 @@ export interface CambiarEstadoResult {
 @Injectable()
 export class MekanosFacadeService implements OnModuleInit {
   private readonly logger = new Logger(MekanosFacadeService.name);
-  
+
   // Referencias a servicios (lazy loading)
   private _numeracionService: any = null;
   private _pdfService: any = null;
@@ -216,7 +216,7 @@ export class MekanosFacadeService implements OnModuleInit {
   private _r2StorageService: any = null;
   private _prisma: any = null;
 
-  constructor(private readonly moduleRef: ModuleRef) {}
+  constructor(private readonly moduleRef: ModuleRef) { }
 
   async onModuleInit() {
     this.logger.log('🚀 MekanosFacadeService inicializado - Fachada unificada lista');
@@ -335,7 +335,7 @@ export class MekanosFacadeService implements OnModuleInit {
       };
 
       const result = await service.generateNumber(tipoMap[tipo]);
-      
+
       return {
         success: true,
         codigo: result.code,
@@ -376,7 +376,7 @@ export class MekanosFacadeService implements OnModuleInit {
     try {
       const pdfService = await this.getPdfService();
       const prisma = await this.getPrisma();
-      
+
       if (!pdfService) {
         return { success: false, error: 'PdfService no disponible' };
       }
@@ -386,7 +386,7 @@ export class MekanosFacadeService implements OnModuleInit {
 
       // Obtener datos de la orden
       const idOrden = typeof input.idOrden === 'string' ? input.idOrden : input.idOrden.toString();
-      
+
       const orden = await prisma.ordenes_servicio.findUnique({
         where: { id: idOrden },
         include: {
@@ -405,7 +405,7 @@ export class MekanosFacadeService implements OnModuleInit {
 
       // Mapear datos para el PDF
       const datosOrden = this.mapearDatosOrdenParaPdf(orden);
-      
+
       // Generar PDF
       const tipo = input.tipo || 'GENERADOR_A';
       const resultado = await pdfService.generarPDF({
@@ -461,7 +461,7 @@ export class MekanosFacadeService implements OnModuleInit {
       fechaInicio: orden.fecha_inicio_real,
       fechaFin: orden.fecha_fin_real,
       // Técnico
-      tecnicoNombre: orden.tecnico_asignado?.persona 
+      tecnicoNombre: orden.tecnico_asignado?.persona
         ? `${orden.tecnico_asignado.persona.nombres} ${orden.tecnico_asignado.persona.apellidos}`
         : 'Sin asignar',
       // Actividades
@@ -516,14 +516,14 @@ export class MekanosFacadeService implements OnModuleInit {
   async enviarEmail(input: EnviarEmailInput): Promise<EnviarEmailResult> {
     try {
       const emailService = await this.getEmailService();
-      
+
       if (!emailService) {
         return { success: false, error: 'EmailService no disponible' };
       }
 
       // Construir contenido HTML según template
       let html: string;
-      
+
       if (input.template === 'PERSONALIZADO' && input.contenidoHtml) {
         html = input.contenidoHtml;
       } else if (input.template === 'ORDEN_COMPLETADA' && input.datos?.numeroOrden) {
@@ -569,7 +569,7 @@ export class MekanosFacadeService implements OnModuleInit {
   private construirHtmlBasico(titulo: string, datos?: Record<string, any>): string {
     const MEKANOS_BLUE = '#244673';
     const MEKANOS_LIGHT = '#3290A6';
-    
+
     let contenidoDatos = '';
     if (datos) {
       contenidoDatos = Object.entries(datos)
@@ -632,7 +632,7 @@ export class MekanosFacadeService implements OnModuleInit {
   async subirImagen(input: SubirImagenInput): Promise<SubirImagenResult> {
     try {
       const cloudinaryService = await this.getCloudinaryService();
-      
+
       if (!cloudinaryService) {
         return { success: false, error: 'CloudinaryService no disponible' };
       }
@@ -670,13 +670,13 @@ export class MekanosFacadeService implements OnModuleInit {
   async subirPdf(input: SubirPdfInput): Promise<SubirPdfResult> {
     try {
       const r2Service = await this.getR2StorageService();
-      
+
       if (!r2Service) {
         return { success: false, error: 'R2StorageService no disponible' };
       }
 
-      const filename = input.carpeta 
-        ? `${input.carpeta}/${input.nombre}` 
+      const filename = input.carpeta
+        ? `${input.carpeta}/${input.nombre}`
         : input.nombre;
 
       const url = await r2Service.uploadPDF(input.pdf, filename);
@@ -710,7 +710,7 @@ export class MekanosFacadeService implements OnModuleInit {
   async cambiarEstadoOrden(input: CambiarEstadoOrdenInput): Promise<CambiarEstadoResult> {
     try {
       const prisma = await this.getPrisma();
-      
+
       if (!prisma) {
         return { success: false, error: 'Base de datos no disponible' };
       }
@@ -872,10 +872,10 @@ export class MekanosFacadeService implements OnModuleInit {
       });
 
       if (!emailResult.success) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           pdfUrl: pdfResult.url,
-          error: `PDF generado pero error enviando email: ${emailResult.error}` 
+          error: `PDF generado pero error enviando email: ${emailResult.error}`
         };
       }
 

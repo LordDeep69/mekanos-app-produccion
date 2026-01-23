@@ -113,7 +113,11 @@ const empleadoFormSchema = z.object({
     titulo_obtenido: z.string().max(200).optional(),
     // Paso 3: Acceso Sistema
     crear_usuario: z.boolean(),
-    username: z.string().max(50).optional(),
+    username: z.string()
+        .max(50)
+        .regex(/^[a-z0-9._-]+$/, 'Solo letras minúsculas, números, puntos, guiones y sin espacios')
+        .optional()
+        .or(z.literal('')),
     password: z.string().max(255).optional(),
     enviar_email_bienvenida: z.boolean(),
 });
@@ -200,7 +204,12 @@ export function EmpleadoForm({ onSuccess, onCancel }: EmpleadoFormProps) {
                     ciudad: data.ciudad,
                 },
                 datosUsuario: data.crear_usuario ? {
-                    username: data.username || data.email_principal.split('@')[0],
+                    username: (data.username || data.email_principal.split('@')[0])
+                        .trim()
+                        .toLowerCase()
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/\s+/g, '.'),
                     email: data.email_principal,
                     password: data.password || undefined,
                     enviar_email_bienvenida: data.enviar_email_bienvenida,

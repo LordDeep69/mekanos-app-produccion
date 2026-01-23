@@ -418,11 +418,7 @@ class _EvidenciasActividadBottomSheetState
                   color: Colors.red.withValues(alpha: 0.85),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.close,
-                  color: Colors.white,
-                  size: 14,
-                ),
+                child: const Icon(Icons.close, color: Colors.white, size: 14),
               ),
             ),
           ),

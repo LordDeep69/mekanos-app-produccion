@@ -2984,6 +2984,17 @@ class $EquiposTable extends Equipos with TableInfo<$EquiposTable, Equipo> {
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _configParametrosMeta = const VerificationMeta(
+    'configParametros',
+  );
+  @override
+  late final GeneratedColumn<String> configParametros = GeneratedColumn<String>(
+    'config_parametros',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _lastSyncedAtMeta = const VerificationMeta(
     'lastSyncedAt',
   );
@@ -3007,6 +3018,7 @@ class $EquiposTable extends Equipos with TableInfo<$EquiposTable, Equipo> {
     tipoEquipo,
     idCliente,
     activo,
+    configParametros,
     lastSyncedAt,
   ];
   @override
@@ -3082,6 +3094,15 @@ class $EquiposTable extends Equipos with TableInfo<$EquiposTable, Equipo> {
         activo.isAcceptableOrUnknown(data['activo']!, _activoMeta),
       );
     }
+    if (data.containsKey('config_parametros')) {
+      context.handle(
+        _configParametrosMeta,
+        configParametros.isAcceptableOrUnknown(
+          data['config_parametros']!,
+          _configParametrosMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_synced_at')) {
       context.handle(
         _lastSyncedAtMeta,
@@ -3140,6 +3161,10 @@ class $EquiposTable extends Equipos with TableInfo<$EquiposTable, Equipo> {
         DriftSqlType.bool,
         data['${effectivePrefix}activo'],
       )!,
+      configParametros: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}config_parametros'],
+      ),
       lastSyncedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_synced_at'],
@@ -3164,6 +3189,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
   final String? tipoEquipo;
   final int? idCliente;
   final bool activo;
+  final String? configParametros;
   final DateTime? lastSyncedAt;
   const Equipo({
     required this.id,
@@ -3176,6 +3202,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
     this.tipoEquipo,
     this.idCliente,
     required this.activo,
+    this.configParametros,
     this.lastSyncedAt,
   });
   @override
@@ -3203,6 +3230,9 @@ class Equipo extends DataClass implements Insertable<Equipo> {
       map['id_cliente'] = Variable<int>(idCliente);
     }
     map['activo'] = Variable<bool>(activo);
+    if (!nullToAbsent || configParametros != null) {
+      map['config_parametros'] = Variable<String>(configParametros);
+    }
     if (!nullToAbsent || lastSyncedAt != null) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
     }
@@ -3233,6 +3263,9 @@ class Equipo extends DataClass implements Insertable<Equipo> {
           ? const Value.absent()
           : Value(idCliente),
       activo: Value(activo),
+      configParametros: configParametros == null && nullToAbsent
+          ? const Value.absent()
+          : Value(configParametros),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSyncedAt),
@@ -3255,6 +3288,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
       tipoEquipo: serializer.fromJson<String?>(json['tipoEquipo']),
       idCliente: serializer.fromJson<int?>(json['idCliente']),
       activo: serializer.fromJson<bool>(json['activo']),
+      configParametros: serializer.fromJson<String?>(json['configParametros']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
     );
   }
@@ -3272,6 +3306,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
       'tipoEquipo': serializer.toJson<String?>(tipoEquipo),
       'idCliente': serializer.toJson<int?>(idCliente),
       'activo': serializer.toJson<bool>(activo),
+      'configParametros': serializer.toJson<String?>(configParametros),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
     };
   }
@@ -3287,6 +3322,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
     Value<String?> tipoEquipo = const Value.absent(),
     Value<int?> idCliente = const Value.absent(),
     bool? activo,
+    Value<String?> configParametros = const Value.absent(),
     Value<DateTime?> lastSyncedAt = const Value.absent(),
   }) => Equipo(
     id: id ?? this.id,
@@ -3299,6 +3335,9 @@ class Equipo extends DataClass implements Insertable<Equipo> {
     tipoEquipo: tipoEquipo.present ? tipoEquipo.value : this.tipoEquipo,
     idCliente: idCliente.present ? idCliente.value : this.idCliente,
     activo: activo ?? this.activo,
+    configParametros: configParametros.present
+        ? configParametros.value
+        : this.configParametros,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
   );
   Equipo copyWithCompanion(EquiposCompanion data) {
@@ -3315,6 +3354,9 @@ class Equipo extends DataClass implements Insertable<Equipo> {
           : this.tipoEquipo,
       idCliente: data.idCliente.present ? data.idCliente.value : this.idCliente,
       activo: data.activo.present ? data.activo.value : this.activo,
+      configParametros: data.configParametros.present
+          ? data.configParametros.value
+          : this.configParametros,
       lastSyncedAt: data.lastSyncedAt.present
           ? data.lastSyncedAt.value
           : this.lastSyncedAt,
@@ -3334,6 +3376,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
           ..write('tipoEquipo: $tipoEquipo, ')
           ..write('idCliente: $idCliente, ')
           ..write('activo: $activo, ')
+          ..write('configParametros: $configParametros, ')
           ..write('lastSyncedAt: $lastSyncedAt')
           ..write(')'))
         .toString();
@@ -3351,6 +3394,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
     tipoEquipo,
     idCliente,
     activo,
+    configParametros,
     lastSyncedAt,
   );
   @override
@@ -3367,6 +3411,7 @@ class Equipo extends DataClass implements Insertable<Equipo> {
           other.tipoEquipo == this.tipoEquipo &&
           other.idCliente == this.idCliente &&
           other.activo == this.activo &&
+          other.configParametros == this.configParametros &&
           other.lastSyncedAt == this.lastSyncedAt);
 }
 
@@ -3381,6 +3426,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
   final Value<String?> tipoEquipo;
   final Value<int?> idCliente;
   final Value<bool> activo;
+  final Value<String?> configParametros;
   final Value<DateTime?> lastSyncedAt;
   const EquiposCompanion({
     this.id = const Value.absent(),
@@ -3393,6 +3439,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
     this.tipoEquipo = const Value.absent(),
     this.idCliente = const Value.absent(),
     this.activo = const Value.absent(),
+    this.configParametros = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
   });
   EquiposCompanion.insert({
@@ -3406,6 +3453,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
     this.tipoEquipo = const Value.absent(),
     this.idCliente = const Value.absent(),
     this.activo = const Value.absent(),
+    this.configParametros = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
   }) : codigo = Value(codigo),
        nombre = Value(nombre);
@@ -3420,6 +3468,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
     Expression<String>? tipoEquipo,
     Expression<int>? idCliente,
     Expression<bool>? activo,
+    Expression<String>? configParametros,
     Expression<DateTime>? lastSyncedAt,
   }) {
     return RawValuesInsertable({
@@ -3433,6 +3482,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
       if (tipoEquipo != null) 'tipo_equipo': tipoEquipo,
       if (idCliente != null) 'id_cliente': idCliente,
       if (activo != null) 'activo': activo,
+      if (configParametros != null) 'config_parametros': configParametros,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
     });
   }
@@ -3448,6 +3498,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
     Value<String?>? tipoEquipo,
     Value<int?>? idCliente,
     Value<bool>? activo,
+    Value<String?>? configParametros,
     Value<DateTime?>? lastSyncedAt,
   }) {
     return EquiposCompanion(
@@ -3461,6 +3512,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
       tipoEquipo: tipoEquipo ?? this.tipoEquipo,
       idCliente: idCliente ?? this.idCliente,
       activo: activo ?? this.activo,
+      configParametros: configParametros ?? this.configParametros,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
     );
   }
@@ -3498,6 +3550,9 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
     if (activo.present) {
       map['activo'] = Variable<bool>(activo.value);
     }
+    if (configParametros.present) {
+      map['config_parametros'] = Variable<String>(configParametros.value);
+    }
     if (lastSyncedAt.present) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt.value);
     }
@@ -3517,6 +3572,7 @@ class EquiposCompanion extends UpdateCompanion<Equipo> {
           ..write('tipoEquipo: $tipoEquipo, ')
           ..write('idCliente: $idCliente, ')
           ..write('activo: $activo, ')
+          ..write('configParametros: $configParametros, ')
           ..write('lastSyncedAt: $lastSyncedAt')
           ..write(')'))
         .toString();
@@ -13987,6 +14043,7 @@ typedef $$EquiposTableCreateCompanionBuilder =
       Value<String?> tipoEquipo,
       Value<int?> idCliente,
       Value<bool> activo,
+      Value<String?> configParametros,
       Value<DateTime?> lastSyncedAt,
     });
 typedef $$EquiposTableUpdateCompanionBuilder =
@@ -14001,6 +14058,7 @@ typedef $$EquiposTableUpdateCompanionBuilder =
       Value<String?> tipoEquipo,
       Value<int?> idCliente,
       Value<bool> activo,
+      Value<String?> configParametros,
       Value<DateTime?> lastSyncedAt,
     });
 
@@ -14096,6 +14154,11 @@ class $$EquiposTableFilterComposer
 
   ColumnFilters<bool> get activo => $composableBuilder(
     column: $table.activo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get configParametros => $composableBuilder(
+    column: $table.configParametros,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14207,6 +14270,11 @@ class $$EquiposTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get configParametros => $composableBuilder(
+    column: $table.configParametros,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get lastSyncedAt => $composableBuilder(
     column: $table.lastSyncedAt,
     builder: (column) => ColumnOrderings(column),
@@ -14273,6 +14341,11 @@ class $$EquiposTableAnnotationComposer
 
   GeneratedColumn<bool> get activo =>
       $composableBuilder(column: $table.activo, builder: (column) => column);
+
+  GeneratedColumn<String> get configParametros => $composableBuilder(
+    column: $table.configParametros,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get lastSyncedAt => $composableBuilder(
     column: $table.lastSyncedAt,
@@ -14366,6 +14439,7 @@ class $$EquiposTableTableManager
                 Value<String?> tipoEquipo = const Value.absent(),
                 Value<int?> idCliente = const Value.absent(),
                 Value<bool> activo = const Value.absent(),
+                Value<String?> configParametros = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
               }) => EquiposCompanion(
                 id: id,
@@ -14378,6 +14452,7 @@ class $$EquiposTableTableManager
                 tipoEquipo: tipoEquipo,
                 idCliente: idCliente,
                 activo: activo,
+                configParametros: configParametros,
                 lastSyncedAt: lastSyncedAt,
               ),
           createCompanionCallback:
@@ -14392,6 +14467,7 @@ class $$EquiposTableTableManager
                 Value<String?> tipoEquipo = const Value.absent(),
                 Value<int?> idCliente = const Value.absent(),
                 Value<bool> activo = const Value.absent(),
+                Value<String?> configParametros = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
               }) => EquiposCompanion.insert(
                 id: id,
@@ -14404,6 +14480,7 @@ class $$EquiposTableTableManager
                 tipoEquipo: tipoEquipo,
                 idCliente: idCliente,
                 activo: activo,
+                configParametros: configParametros,
                 lastSyncedAt: lastSyncedAt,
               ),
           withReferenceMapper: (p0) => p0

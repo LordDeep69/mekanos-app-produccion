@@ -761,10 +761,13 @@ model equipos {
   modificado_por                            Int?
   fecha_modificacion                        DateTime?                  @db.Timestamp(6)
   metadata                                  Json?
+  config_parametros                         Json?                      @default("{}")
+  id_plantilla_parametros                   Int?
   archivos_equipo                           archivos_equipo[]
   componentes_equipo                        componentes_equipo[]
   cotizaciones                              cotizaciones[]
   cronogramas_servicio                      cronogramas_servicio[]
+  plantillas_parametros                     plantillas_parametros?     @relation(fields: [id_plantilla_parametros], references: [id_plantilla], onUpdate: NoAction)
   clientes                                  clientes                   @relation(fields: [id_cliente], references: [id_cliente], onUpdate: NoAction, map: "fk_equipos_cliente")
   usuarios_equipos_creado_porTousuarios     usuarios                   @relation("equipos_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onUpdate: NoAction, map: "fk_equipos_creado_por")
   usuarios_equipos_modificado_porTousuarios usuarios?                  @relation("equipos_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onDelete: Restrict, onUpdate: NoAction, map: "fk_equipos_modificado_por")
@@ -783,6 +786,8 @@ model equipos {
   @@index([id_cliente, id_sede], map: "idx_equipos_cliente_sede")
   @@index([codigo_equipo], map: "idx_equipos_codigo")
   @@index([id_tipo_equipo], map: "idx_equipos_tipo")
+  @@index([id_cliente], map: "idx_equipos_cliente")
+  @@index([config_parametros], map: "idx_equipos_config_parametros", type: Gin)
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1071,21 +1076,22 @@ model firmas_administrativas {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model firmas_digitales {
-  id_firma_digital   Int                     @id @default(autoincrement())
-  id_persona         Int
-  tipo_firma         tipo_firma_digital_enum
-  firma_base64       String
-  formato_firma      String?                 @default("PNG") @db.VarChar(10)
-  hash_firma         String                  @db.VarChar(64)
-  fecha_captura      DateTime?               @default(now()) @db.Timestamp(6)
-  es_firma_principal Boolean?                @default(false)
-  activa             Boolean?                @default(true)
-  observaciones      String?
-  registrada_por     Int
-  fecha_registro     DateTime?               @default(now()) @db.Timestamp(6)
-  persona            personas                @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_firma_persona")
-  usuarios           usuarios                @relation(fields: [registrada_por], references: [id_usuario], onDelete: SetNull, onUpdate: NoAction, map: "fk_firma_registrada_por")
-  ordenes_servicio   ordenes_servicio[]
+  id_firma_digital                                                     Int                     @id @default(autoincrement())
+  id_persona                                                           Int
+  tipo_firma                                                           tipo_firma_digital_enum
+  firma_base64                                                         String
+  formato_firma                                                        String?                 @default("PNG") @db.VarChar(10)
+  hash_firma                                                           String                  @db.VarChar(64)
+  fecha_captura                                                        DateTime?               @default(now()) @db.Timestamp(6)
+  es_firma_principal                                                   Boolean?                @default(false)
+  activa                                                               Boolean?                @default(true)
+  observaciones                                                        String?
+  registrada_por                                                       Int
+  fecha_registro                                                       DateTime?               @default(now()) @db.Timestamp(6)
+  persona                                                              personas                @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_firma_persona")
+  usuarios                                                             usuarios                @relation(fields: [registrada_por], references: [id_usuario], onDelete: SetNull, onUpdate: NoAction, map: "fk_firma_registrada_por")
+  ordenes_servicio_ordenes_servicio_id_firma_tecnicoTofirmas_digitales ordenes_servicio[]      @relation("ordenes_servicio_id_firma_tecnicoTofirmas_digitales")
+  ordenes_servicio                                                     ordenes_servicio[]
 
   @@index([hash_firma], map: "idx_firma_hash")
 }
@@ -1565,6 +1571,7 @@ model ordenes_compra_detalle {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains an index with non-default null sort order and requires additional setup for migrations. Visit https://pris.ly/d/default-index-null-ordering for more info.
 model ordenes_servicio {
   id_orden_servicio                                                                        Int                        @id @default(autoincrement())
   numero_orden                                                                             String                     @unique @db.VarChar(50)
@@ -1610,6 +1617,7 @@ model ordenes_servicio {
   fecha_creacion                                                                           DateTime?                  @default(now()) @db.Timestamp(6)
   modificado_por                                                                           Int?
   fecha_modificacion                                                                       DateTime?                  @db.Timestamp(6)
+  id_firma_tecnico                                                                         Int?
   actividades_ejecutadas                                                                   actividades_ejecutadas[]
   componentes_usados                                                                       componentes_usados[]
   cotizaciones                                                                             cotizaciones[]
@@ -1623,6 +1631,7 @@ model ordenes_servicio {
   movimientos_inventario                                                                   movimientos_inventario[]
   ordenes_actividades_plan                                                                 ordenes_actividades_plan[]
   ordenes_equipos                                                                          ordenes_equipos[]
+  firmas_digitales_ordenes_servicio_id_firma_tecnicoTofirmas_digitales                     firmas_digitales?          @relation("ordenes_servicio_id_firma_tecnicoTofirmas_digitales", fields: [id_firma_tecnico], references: [id_firma_digital], map: "fk_orden_firma_tecnico")
   usuarios_ordenes_servicio_aprobada_porTousuarios                                         usuarios?                  @relation("ordenes_servicio_aprobada_porTousuarios", fields: [aprobada_por], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
   usuarios_ordenes_servicio_creado_porTousuarios                                           usuarios                   @relation("ordenes_servicio_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
   clientes                                                                                 clientes                   @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction)
@@ -1642,6 +1651,11 @@ model ordenes_servicio {
   @@index([id_equipo, fecha_programada(sort: Desc)], map: "idx_os_equipo_fecha")
   @@index([id_estado_actual, fecha_programada], map: "idx_os_estados_activos")
   @@index([id_tecnico_asignado, id_estado_actual], map: "idx_os_tecnico_estado")
+  @@index([id_cliente, id_estado_actual], map: "idx_ordenes_cliente_estado")
+  @@index([id_estado_actual, fecha_programada(sort: Desc)], map: "idx_ordenes_estado_fecha")
+  @@index([fecha_creacion(sort: Desc)], map: "idx_ordenes_fecha_creacion")
+  @@index([id_firma_tecnico], map: "idx_ordenes_firma_tecnico")
+  @@index([prioridad, id_estado_actual], map: "idx_ordenes_prioridad_estado")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1742,6 +1756,7 @@ model personas {
   usuarios               usuarios?
 
   @@unique([tipo_identificacion, numero_identificacion], map: "uk_identificacion")
+  @@index([numero_identificacion], map: "idx_personas_identificacion")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -2071,6 +2086,7 @@ model tipos_equipo {
   catalogo_servicios                             catalogo_servicios[]
   equipos                                        equipos[]
   parametros_medicion                            parametros_medicion[]
+  plantillas_parametros                          plantillas_parametros[]
   usuarios_tipos_equipo_creado_porTousuarios     usuarios?                @relation("tipos_equipo_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onDelete: Restrict, onUpdate: NoAction, map: "fk_tipos_equipo_creado_por")
   usuarios_tipos_equipo_modificado_porTousuarios usuarios?                @relation("tipos_equipo_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onDelete: Restrict, onUpdate: NoAction, map: "fk_tipos_equipo_modificado_por")
   tipos_servicio                                 tipos_servicio[]
@@ -2230,6 +2246,8 @@ model usuarios {
   permisos                                                                 permisos[]
   plantillas_informe_plantillas_informe_creado_porTousuarios               plantillas_informe[]           @relation("plantillas_informe_creado_porTousuarios")
   plantillas_informe_plantillas_informe_modificado_porTousuarios           plantillas_informe[]           @relation("plantillas_informe_modificado_porTousuarios")
+  plantillas_parametros_plantillas_parametros_creado_porTousuarios         plantillas_parametros[]        @relation("plantillas_parametros_creado_porTousuarios")
+  plantillas_parametros_plantillas_parametros_modificado_porTousuarios     plantillas_parametros[]        @relation("plantillas_parametros_modificado_porTousuarios")
   propuestas_correctivo_propuestas_correctivo_aprobada_porTousuarios       propuestas_correctivo[]        @relation("propuestas_correctivo_aprobada_porTousuarios")
   propuestas_correctivo_propuestas_correctivo_modificado_porTousuarios     propuestas_correctivo[]        @relation("propuestas_correctivo_modificado_porTousuarios")
   proveedores_proveedores_bloqueado_porTousuarios                          proveedores[]                  @relation("proveedores_bloqueado_porTousuarios")
@@ -2327,6 +2345,26 @@ model ordenes_equipos {
   @@index([id_equipo], map: "idx_oe_equipo")
   @@index([id_orden_servicio], map: "idx_oe_orden")
   @@index([id_orden_servicio, orden_secuencia], map: "idx_oe_orden_secuencia")
+}
+
+model plantillas_parametros {
+  id_plantilla                                            Int           @id @default(autoincrement())
+  codigo_plantilla                                        String        @unique @db.VarChar(50)
+  nombre                                                  String        @db.VarChar(100)
+  descripcion                                             String?
+  marca                                                   String?       @db.VarChar(50)
+  modelo                                                  String?       @db.VarChar(50)
+  id_tipo_equipo                                          Int?
+  configuracion                                           Json          @default("{}")
+  activo                                                  Boolean?      @default(true)
+  creado_por                                              Int?
+  fecha_creacion                                          DateTime?     @default(now()) @db.Timestamp(6)
+  modificado_por                                          Int?
+  fecha_modificacion                                      DateTime?     @db.Timestamp(6)
+  equipos                                                 equipos[]
+  usuarios_plantillas_parametros_creado_porTousuarios     usuarios?     @relation("plantillas_parametros_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onUpdate: NoAction)
+  tipos_equipo                                            tipos_equipo? @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onUpdate: NoAction)
+  usuarios_plantillas_parametros_modificado_porTousuarios usuarios?     @relation("plantillas_parametros_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onUpdate: NoAction)
 }
 
 /// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -2723,7 +2761,6 @@ enum periodicidad_mantenimiento_enum {
 
 /// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 enum prioridad_enum {
-  BAJA
   NORMAL
   ALTA
   URGENTE

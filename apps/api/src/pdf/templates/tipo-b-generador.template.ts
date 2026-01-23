@@ -18,8 +18,8 @@ import {
   DatosOrdenPDF,
   EvidenciasPorEquipoPDF,
   generarChecklistMultiEquipo,
-  generarMedicionesMultiEquipo,
   generarLeyendaEquipos,
+  generarMedicionesMultiEquipo,
   MEKANOS_COLORS,
 } from './mekanos-base.template';
 
@@ -119,9 +119,9 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
     ${generarLeyendaEquipos(
-      datos.actividadesPorEquipo?.map((a) => a.equipo),
-      esMultiEquipo,
-    )}
+    datos.actividadesPorEquipo?.map((a) => a.equipo),
+    esMultiEquipo,
+  )}
     
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
     ${generarDatosCliente(datos)}
@@ -133,18 +133,16 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- SECCIÓN INSUMOS (VERIFICACIÓN FOTOGRÁFICA) -->
     <!-- ✅ MULTI-EQUIPOS (17-DIC-2025): Usar versión multi-equipo si aplica -->
-    ${
-      esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-        ? generarSeccionInsumosMultiEquipo(datos.evidenciasPorEquipo)
-        : generarSeccionInsumos(datos.evidencias)
+    ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+      ? generarSeccionInsumosMultiEquipo(datos.evidenciasPorEquipo)
+      : generarSeccionInsumos(datos.evidencias)
     }
     
     <!-- LISTA DE ACTIVIDADES DE MANTENIMIENTO -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${
-      esMultiEquipo && datos.actividadesPorEquipo
-        ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
-        : generarTodasLasActividades(datos.actividades)
+    ${esMultiEquipo && datos.actividadesPorEquipo
+      ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
+      : generarTodasLasActividades(datos.actividades)
     }
     
     <!-- REGISTRO DE DATOS DEL MÓDULO DE CONTROL -->
@@ -155,29 +153,27 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- ✅ FIX 17-DIC-2025: MEDICIONES TÉCNICAS (si hay) -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-    ${
-      esMultiEquipo && datos.medicionesPorEquipo && datos.medicionesPorEquipo.length > 0
-        ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-        : datos.mediciones && datos.mediciones.length > 0
-          ? generarMediciones(datos.mediciones)
-          : ''
+    ${esMultiEquipo && datos.medicionesPorEquipo && datos.medicionesPorEquipo.length > 0
+      ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
+      : datos.mediciones && datos.mediciones.length > 0
+        ? generarMediciones(datos.mediciones)
+        : ''
     }
   </div>
   
   <div class="page page-break">
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
     <!-- ✅ MULTI-EQUIPOS: Usar evidencias agrupadas por equipo si es multi-equipo -->
-    ${
-      esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-        ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
-        : generarEvidencias(datos.evidencias)
+    ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
+      ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
+      : generarEvidencias(datos.evidencias)
     }
     
     <!-- OBSERVACIONES -->
     ${generarObservaciones(datos.observaciones)}
     
     <!-- FIRMAS -->
-    ${generarFirmas(datos.firmaTecnico, datos.firmaCliente)}
+    ${generarFirmas(datos)}
     
     <!-- FOOTER -->
     ${generarFooter()}
@@ -327,8 +323,8 @@ const generarMediciones = (mediciones: any[]): string => `
       </thead>
       <tbody>
         ${mediciones
-          .map(
-            (med) => `
+    .map(
+      (med) => `
           <tr>
             <td>${med.parametro}</td>
             <td style="text-align: center; font-weight: bold;">${med.valor}</td>
@@ -336,8 +332,8 @@ const generarMediciones = (mediciones: any[]): string => `
             <td style="text-align: center;" class="alerta-${med.nivelAlerta || 'OK'}">${med.nivelAlerta || 'OK'}</td>
           </tr>
         `,
-          )
-          .join('')}
+    )
+    .join('')}
       </tbody>
     </table>
   </div>
@@ -386,9 +382,9 @@ const generarTodasLasActividades = (actividades: any[]): string => {
       </thead>
       <tbody>
         ${actividadesChecklist
-          .map((act) => {
-            const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
-            return `
+      .map((act) => {
+        const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
+        return `
           <tr${esCambio ? ' style="background: #E8F5E9;"' : ''}>
             <td>${act.descripcion || 'Actividad'}${esCambio ? ' <span class="cambio-badge">CAMBIO</span>' : ''}</td>
             <td style="text-align: center;">
@@ -397,8 +393,8 @@ const generarTodasLasActividades = (actividades: any[]): string => {
             <td style="font-size: 9px;">${act.observaciones || ''}</td>
           </tr>
         `;
-          })
-          .join('')}
+      })
+      .join('')}
       </tbody>
     </table>
   </div>
@@ -428,9 +424,9 @@ const generarSeccionActividades = (
       </thead>
       <tbody>
         ${actividades
-          .map((act) => {
-            const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
-            return `
+      .map((act) => {
+        const esCambio = (act.descripcion || '').toLowerCase().includes('cambio');
+        return `
           <tr${esCambio ? ' style="background: #E8F5E9;"' : ''}>
             <td>${act.descripcion}${esCambio ? ' <span class="cambio-badge">CAMBIO</span>' : ''}</td>
             <td style="text-align: center;">
@@ -439,8 +435,8 @@ const generarSeccionActividades = (
             <td>${act.observaciones || ''}</td>
           </tr>
         `;
-          })
-          .join('')}
+      })
+      .join('')}
       </tbody>
     </table>
   </div>
@@ -450,25 +446,36 @@ const generarSeccionActividades = (
 const generarDatosModulo = (datos: DatosOrdenPDF): string => {
   const modulo = datos.datosModulo || {};
 
+  // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Unidades dinámicas con fallback
+  const u = datos.configUnidades || {};
+  const unidades = {
+    velocidad: u.velocidad || 'RPM',
+    presion: u.presion || 'PSI',
+    temperatura: u.temperatura || '°C',
+    voltaje: u.voltaje || 'V',
+    frecuencia: u.frecuencia || 'Hz',
+    corriente: u.corriente || 'A',
+  };
+
   return `
   <div class="section">
     <div class="section-subtitle">REGISTRO DE DATOS DEL MÓDULO DE CONTROL</div>
     <div class="mediciones-grid">
       <div class="medicion-item">
         <div class="medicion-label">Velocidad Motor</div>
-        <div class="medicion-value">${modulo.rpm || '-'} RPM</div>
+        <div class="medicion-value">${modulo.rpm || '-'} ${unidades.velocidad}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Presión Aceite</div>
-        <div class="medicion-value">${modulo.presionAceite || '-'} PSI</div>
+        <div class="medicion-value">${modulo.presionAceite || '-'} ${unidades.presion}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Temp. Refrigerante</div>
-        <div class="medicion-value">${modulo.temperaturaRefrigerante || '-'} °C</div>
+        <div class="medicion-value">${modulo.temperaturaRefrigerante || '-'} ${unidades.temperatura}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Carga Batería</div>
-        <div class="medicion-value">${modulo.cargaBateria || '-'} V</div>
+        <div class="medicion-value">${modulo.cargaBateria || '-'} ${unidades.voltaje}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Horas Trabajo</div>
@@ -476,15 +483,15 @@ const generarDatosModulo = (datos: DatosOrdenPDF): string => {
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Voltaje Generador</div>
-        <div class="medicion-value">${modulo.voltaje || '-'} V</div>
+        <div class="medicion-value">${modulo.voltaje || '-'} ${unidades.voltaje}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Frecuencia</div>
-        <div class="medicion-value">${modulo.frecuencia || '-'} Hz</div>
+        <div class="medicion-value">${modulo.frecuencia || '-'} ${unidades.frecuencia}</div>
       </div>
       <div class="medicion-item">
         <div class="medicion-label">Corriente</div>
-        <div class="medicion-value">${modulo.corriente || '-'} A</div>
+        <div class="medicion-value">${modulo.corriente || '-'} ${unidades.corriente}</div>
       </div>
     </div>
   </div>
@@ -625,15 +632,15 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
         <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
         <div class="evidencias-grid-compacto">
           ${evidenciasTipo
-            .map(
-              (ev, idx) => `
+          .map(
+            (ev, idx) => `
             <div class="evidencia-item-compacto">
               <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
           `,
-            )
-            .join('')}
+          )
+          .join('')}
         </div>
       </div>
     `;
@@ -657,23 +664,25 @@ const generarObservaciones = (observaciones: string): string => `
   </div>
 `;
 
-// ✅ FIX: Unificar estilo de firmas con Tipo A Generador
-const generarFirmas = (firmaTecnico?: string, firmaCliente?: string): string => `
+// ✅ FIX 05-ENE-2026: Mostrar nombre y cargo del técnico/cliente bajo la firma
+const generarFirmas = (datos: DatosOrdenPDF): string => `
   <div class="firmas-container">
     <div class="firma-box">
-      ${
-        firmaTecnico
-          ? `<div class="firma-imagen"><img src="${firmaTecnico}" alt="Firma Técnico" /></div>`
-          : `<div class="firma-line"></div>`
-      }
+      ${datos.firmaTecnico
+    ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+      <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || ''}</div>
+      <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable'}</div>
       <div class="firma-label">Firma Técnico Asignado</div>
     </div>
     <div class="firma-box">
-      ${
-        firmaCliente
-          ? `<div class="firma-imagen"><img src="${firmaCliente}" alt="Firma Cliente" /></div>`
-          : `<div class="firma-line"></div>`
-      }
+      ${datos.firmaCliente
+    ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" /></div>`
+    : `<div class="firma-line"></div>`
+  }
+      <div class="firma-nombre">${datos.nombreCliente || ''}</div>
+      <div class="firma-cargo">${datos.cargoCliente || 'Cliente / Autorizador'}</div>
       <div class="firma-label">Firma y Sello de Quien Solicita el Servicio</div>
     </div>
   </div>

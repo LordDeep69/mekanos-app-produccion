@@ -1,17 +1,6 @@
 'use client';
 
 import {
-    useActualizarTipoServicio,
-    useCrearTipoServicio,
-    useEliminarTipoServicio,
-    useTiposServicio
-} from '@/features/ordenes';
-import {
-    getCategoriaServicioColor,
-    getCategoriaServicioLabel
-} from '@/features/ordenes/api/catalogos.service';
-import { cn } from '@/lib/utils';
-import {
     AlertCircle,
     Check,
     CheckSquare,
@@ -26,29 +15,37 @@ import {
     X
 } from 'lucide-react';
 import { useState } from 'react';
+import {
+    CATEGORIAS_SERVICIO,
+    useCreateTipoServicio,
+    useDeleteTipoServicio,
+    useTiposServicio,
+    useUpdateTipoServicio
+} from '../../../../../features/catalogos';
+import { TipoServicioDetailDrawer } from '../../../../../features/catalogos/components/tipo-servicio-detail-drawer';
+import { cn } from '../../../../../lib/utils';
 
-const CATEGORIAS = [
-    'PREVENTIVO',
-    'CORRECTIVO',
-    'PREDICTIVO',
-    'EMERGENCIA',
-    'INSTALACION',
-    'RETIRO',
-    'INSPECCION',
-    'DIAGNOSTICO',
-    'ESPECIALIZADO'
-];
+// Helpers para colores y labels
+function getCategoriaColor(cat: string) {
+    return CATEGORIAS_SERVICIO.find(c => c.value === cat)?.color || 'bg-gray-100 text-gray-800';
+}
+function getCategoriaLabel(cat: string) {
+    return CATEGORIAS_SERVICIO.find(c => c.value === cat)?.label || cat;
+}
 
 export default function TiposServicioPage() {
     const [busqueda, setBusqueda] = useState('');
     const [categoriaFiltro, setCategoriaFiltro] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingTipo, setEditingTipo] = useState<any>(null);
+    const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
 
-    const { data: tipos, isLoading, isError, refetch } = useTiposServicio();
-    const crearTipo = useCrearTipoServicio();
-    const actualizarTipo = useActualizarTipoServicio();
-    const eliminarTipo = useEliminarTipoServicio();
+    const { data: response, isLoading, isError, refetch } = useTiposServicio({ activo: true });
+    const crearTipo = useCreateTipoServicio();
+    const actualizarTipo = useUpdateTipoServicio();
+    const eliminarTipo = useDeleteTipoServicio();
+
+    const tipos = response?.data || [];
 
     const handleEdit = (tipo: any) => {
         setEditingTipo(tipo);
@@ -61,12 +58,14 @@ export default function TiposServicioPage() {
         }
     };
 
-    const filteredTipos = tipos?.filter(t => {
-        const matchesBusqueda = t.nombre_tipo.toLowerCase().includes(busqueda.toLowerCase()) ||
-            t.codigo_tipo.toLowerCase().includes(busqueda.toLowerCase());
+    const filteredTipos = tipos.filter(t => {
+        const nombre = t.nombre_tipo || '';
+        const codigo = t.codigo_tipo || '';
+        const term = busqueda.toLowerCase();
+        const matchesBusqueda = nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
         const matchesCategoria = !categoriaFiltro || t.categoria === categoriaFiltro;
         return matchesBusqueda && matchesCategoria;
-    }) || [];
+    });
 
     return (
         <div className="space-y-6">
@@ -108,8 +107,8 @@ export default function TiposServicioPage() {
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                 >
                     <option value="">Todas las categorías</option>
-                    {CATEGORIAS.map(cat => (
-                        <option key={cat} value={cat}>{getCategoriaServicioLabel(cat)}</option>
+                    {CATEGORIAS_SERVICIO.map(cat => (
+                        <option key={cat.value} value={cat.value}>{cat.label}</option>
                     ))}
                 </select>
             </div>
@@ -148,8 +147,12 @@ export default function TiposServicioPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredTipos.map((tipo) => (
-                                    <tr key={tipo.id_tipo_servicio} className="hover:bg-blue-50/30 transition-colors group">
+                                {filteredTipos.map((tipo, idx) => (
+                                    <tr
+                                        key={tipo.id_tipo_servicio ?? `tipo-${idx}`}
+                                        className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                                        onClick={() => setSelectedTipoId(tipo.id_tipo_servicio)}
+                                    >
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div
@@ -167,9 +170,9 @@ export default function TiposServicioPage() {
                                         <td className="px-6 py-4">
                                             <span className={cn(
                                                 "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                                                getCategoriaServicioColor(tipo.categoria)
+                                                getCategoriaColor(tipo.categoria)
                                             )}>
-                                                {getCategoriaServicioLabel(tipo.categoria)}
+                                                {getCategoriaLabel(tipo.categoria)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
@@ -194,14 +197,14 @@ export default function TiposServicioPage() {
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
-                                                    onClick={() => handleEdit(tipo)}
+                                                    onClick={(e) => { e.stopPropagation(); handleEdit(tipo); }}
                                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                                                     title="Editar"
                                                 >
                                                     <Edit className="h-4 w-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(tipo.id_tipo_servicio)}
+                                                    onClick={(e) => { e.stopPropagation(); handleDelete(tipo.id_tipo_servicio); }}
                                                     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                                                     title="Desactivar"
                                                 >
@@ -225,13 +228,39 @@ export default function TiposServicioPage() {
                     tipo={editingTipo}
                     onSubmit={async (formData: any) => {
                         if (editingTipo) {
-                            await actualizarTipo.mutateAsync({ id: editingTipo.id_tipo_servicio, data: formData });
+                            await actualizarTipo.mutateAsync({
+                                id: editingTipo.id_tipo_servicio, data: {
+                                    nombreTipo: formData.nombre_tipo,
+                                    codigoTipo: formData.codigo_tipo,
+                                    categoria: formData.categoria,
+                                    descripcion: formData.descripcion,
+                                    tieneChecklist: formData.tiene_checklist,
+                                    duracionEstimadaHoras: formData.duracion_estimada_horas,
+                                    colorHex: formData.color_hex,
+                                }
+                            });
                         } else {
-                            await crearTipo.mutateAsync(formData);
+                            await crearTipo.mutateAsync({
+                                nombreTipo: formData.nombre_tipo,
+                                codigoTipo: formData.codigo_tipo,
+                                categoria: formData.categoria,
+                                descripcion: formData.descripcion,
+                                tieneChecklist: formData.tiene_checklist,
+                                duracionEstimadaHoras: formData.duracion_estimada_horas,
+                                colorHex: formData.color_hex,
+                            });
                         }
                         setIsModalOpen(false);
                     }}
                     isLoading={crearTipo.isPending || actualizarTipo.isPending}
+                />
+            )}
+
+            {/* Drawer de Detalle Master-Detail */}
+            {selectedTipoId && (
+                <TipoServicioDetailDrawer
+                    tipoServicioId={selectedTipoId}
+                    onClose={() => setSelectedTipoId(null)}
                 />
             )}
         </div>
@@ -305,8 +334,8 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
                             onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                         >
-                            {CATEGORIAS.map(cat => (
-                                <option key={cat} value={cat}>{getCategoriaServicioLabel(cat)}</option>
+                            {CATEGORIAS_SERVICIO.map(cat => (
+                                <option key={cat.value} value={cat.value}>{cat.label}</option>
                             ))}
                         </select>
                     </div>

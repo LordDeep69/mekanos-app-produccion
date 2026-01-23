@@ -544,22 +544,45 @@ class HistorialService {
         final data = response.data['data'];
         String? urlPdf;
 
-        // Buscar URL del PDF en diferentes lugares posibles
-        if (data['url_pdf'] != null) {
-          urlPdf = data['url_pdf'];
-        } else if (data['urlPdf'] != null) {
-          urlPdf = data['urlPdf'];
-        } else if (data['documento'] != null &&
-            data['documento']['url'] != null) {
+        // ✅ 03-ENE-2026: Buscar URL del PDF en múltiples estructuras posibles
+        // 1. informes[0].documentos_generados.ruta_archivo (estructura Prisma)
+        // 2. url_pdf / urlPdf (estructura plana)
+        // 3. documento.url (estructura del servicio de finalización)
+
+        // Primero: buscar en informes (estructura Prisma con relación)
+        if (data['informes'] != null && data['informes'] is List) {
+          final informes = data['informes'] as List;
+          if (informes.isNotEmpty) {
+            final ultimoInforme = informes.first;
+            if (ultimoInforme['documentos_generados'] != null) {
+              urlPdf = ultimoInforme['documentos_generados']['ruta_archivo'];
+            }
+          }
+        }
+
+        // Fallback: campos directos
+        urlPdf ??= data['url_pdf'];
+        urlPdf ??= data['urlPdf'];
+
+        // Fallback: estructura documento
+        if (urlPdf == null && data['documento'] != null) {
           urlPdf = data['documento']['url'];
-        } else if (data['documentos'] != null && data['documentos'] is List) {
+        }
+
+        // Fallback: array de documentos
+        if (urlPdf == null &&
+            data['documentos'] != null &&
+            data['documentos'] is List) {
           final docs = data['documentos'] as List;
           final pdfDoc = docs.firstWhere(
             (d) => d['tipo_documento'] == 'PDF' || d['tipoDocumento'] == 'PDF',
             orElse: () => null,
           );
           if (pdfDoc != null) {
-            urlPdf = pdfDoc['url'] ?? pdfDoc['url_documento'];
+            urlPdf =
+                pdfDoc['url'] ??
+                pdfDoc['url_documento'] ??
+                pdfDoc['ruta_archivo'];
           }
         }
 

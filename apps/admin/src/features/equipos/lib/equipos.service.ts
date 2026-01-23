@@ -7,10 +7,13 @@
 
 import { apiClient } from '@/lib/api/client';
 import type {
-    CreateEquipoPayload,
-    CreateEquipoResponse,
-    EquipoDetalle,
-    EquiposListadoResponse
+  CambiarEstadoResponse,
+  CreateEquipoPayload,
+  CreateEquipoResponse,
+  EquipoDetalle,
+  EquiposListadoResponse,
+  RegistrarLecturaResponse,
+  UpdateEquipoPayload
 } from '../types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -20,6 +23,7 @@ import type {
 export const equiposService = {
   /**
    * Obtiene el listado paginado de equipos con datos polimórficos
+   * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
    */
   async listarEquipos(params?: {
     page?: number;
@@ -28,19 +32,25 @@ export const equiposService = {
     id_sede?: number;
     estado_equipo?: string;
     tipo?: string;
+    search?: string;
+    sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
+    sortOrder?: 'asc' | 'desc';
   }): Promise<EquiposListadoResponse> {
     const searchParams = new URLSearchParams();
-    
+
     if (params?.page) searchParams.append('page', params.page.toString());
     if (params?.limit) searchParams.append('limit', params.limit.toString());
     if (params?.id_cliente) searchParams.append('id_cliente', params.id_cliente.toString());
     if (params?.id_sede) searchParams.append('id_sede', params.id_sede.toString());
     if (params?.estado_equipo) searchParams.append('estado_equipo', params.estado_equipo);
     if (params?.tipo) searchParams.append('tipo', params.tipo);
-    
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.sortBy) searchParams.append('sortBy', params.sortBy);
+    if (params?.sortOrder) searchParams.append('sortOrder', params.sortOrder);
+
     const query = searchParams.toString();
     const url = `/equipos/listado-completo${query ? `?${query}` : ''}`;
-    
+
     const response = await apiClient.get<EquiposListadoResponse>(url);
     return response.data;
   },
@@ -67,12 +77,40 @@ export const equiposService = {
   },
 
   /**
-   * Actualiza el estado de un equipo
+   * Actualiza un equipo completo (datos base + config_parametros)
    */
-  async actualizarEstado(id: number, estado: string): Promise<{ success: boolean }> {
-    const response = await apiClient.patch<{ success: boolean }>(
+  async actualizarEquipo(id: number, payload: UpdateEquipoPayload): Promise<{ success: boolean; data: EquipoDetalle }> {
+    const response = await apiClient.put<{ success: boolean; data: EquipoDetalle }>(
       `/equipos/${id}`,
-      { estado_equipo: estado }
+      payload
+    );
+    return response.data;
+  },
+
+  /**
+   * ✅ 08-ENE-2026: Cambiar estado del equipo con historial
+   */
+  async cambiarEstado(
+    id: number,
+    payload: { nuevo_estado: string; motivo_cambio?: string }
+  ): Promise<CambiarEstadoResponse> {
+    const response = await apiClient.patch<CambiarEstadoResponse>(
+      `/equipos/${id}/cambiar-estado`,
+      payload
+    );
+    return response.data;
+  },
+
+  /**
+   * ✅ 08-ENE-2026: Registrar lectura de horómetro
+   */
+  async registrarLecturaHorometro(
+    id: number,
+    payload: { horas_lectura: number; observaciones?: string }
+  ): Promise<RegistrarLecturaResponse> {
+    const response = await apiClient.post<RegistrarLecturaResponse>(
+      `/equipos/${id}/lectura-horometro`,
+      payload
     );
     return response.data;
   },
@@ -118,6 +156,7 @@ export const clientesKeys = {
 
 /**
  * Hook para obtener listado de equipos
+ * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
  */
 export function useEquipos(params?: {
   page?: number;
@@ -126,10 +165,14 @@ export function useEquipos(params?: {
   id_sede?: number;
   estado_equipo?: string;
   tipo?: string;
+  search?: string;
+  sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
+  sortOrder?: 'asc' | 'desc';
 }) {
   return useQuery({
     queryKey: equiposKeys.list(params || {}),
     queryFn: () => equiposService.listarEquipos(params),
+    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -149,7 +192,7 @@ export function useEquipo(id: number) {
  */
 export function useCrearEquipo() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: (payload: CreateEquipoPayload) => equiposService.crearEquipo(payload),
     onSuccess: () => {
@@ -170,16 +213,55 @@ export function useClientesParaSelect() {
 }
 
 /**
- * Hook para actualizar estado de equipo
+ * ✅ 08-ENE-2026: Hook para cambiar estado de equipo con historial
  */
-export function useActualizarEstadoEquipo() {
+export function useCambiarEstadoEquipo() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: ({ id, estado }: { id: number; estado: string }) =>
-      equiposService.actualizarEstado(id, estado),
-    onSuccess: () => {
+    mutationFn: ({ id, nuevo_estado, motivo_cambio }: {
+      id: number;
+      nuevo_estado: string;
+      motivo_cambio?: string
+    }) => equiposService.cambiarEstado(id, { nuevo_estado, motivo_cambio }),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: equiposKeys.detail(variables.id) });
+    },
+  });
+}
+
+/**
+ * ✅ 08-ENE-2026: Hook para registrar lectura de horómetro
+ */
+export function useRegistrarLecturaHorometro() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, horas_lectura, observaciones }: {
+      id: number;
+      horas_lectura: number;
+      observaciones?: string
+    }) => equiposService.registrarLecturaHorometro(id, { horas_lectura, observaciones }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: equiposKeys.detail(variables.id) });
+    },
+  });
+}
+
+/**
+ * Hook para actualizar equipo completo
+ */
+export function useActualizarEquipo() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: UpdateEquipoPayload }) =>
+      equiposService.actualizarEquipo(id, payload),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: equiposKeys.detail(variables.id) });
     },
   });
 }

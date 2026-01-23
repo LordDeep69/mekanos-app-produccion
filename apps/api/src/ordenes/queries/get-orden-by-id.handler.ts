@@ -8,19 +8,12 @@ export class GetOrdenByIdHandler implements IQueryHandler<GetOrdenByIdQuery> {
   constructor(private readonly repository: PrismaOrdenServicioRepository) { }
 
   async execute(query: GetOrdenByIdQuery): Promise<any> {
-    const orden = await this.repository.findById(query.ordenId);
+    // ✅ OPTIMIZADO 05-ENE-2026: Usar findByIdOptimizado para carga rápida
+    // Las relaciones pesadas (actividades, mediciones, evidencias) se cargan bajo demanda
+    const orden = await this.repository.findByIdOptimizado(query.ordenId);
 
     if (!orden) {
       throw new NotFoundException(`Orden de servicio ${query.ordenId} no encontrada`);
-    }
-
-    // Serializar BigInt en evidencias_fotograficas
-    if (orden.evidencias_fotograficas) {
-      orden.evidencias_fotograficas = orden.evidencias_fotograficas.map((ev: any) => ({
-        ...ev,
-        tama_o_bytes: ev.tama_o_bytes ? Number(ev.tama_o_bytes) : null,
-        tama_o_original_bytes: ev.tama_o_original_bytes ? Number(ev.tama_o_original_bytes) : null,
-      }));
     }
 
     // ✅ FIX: Transformar ordenes_equipos para que use 'equipo' (singular) en lugar de 'equipos' (plural)

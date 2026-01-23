@@ -18,6 +18,7 @@ import '../../auth/data/auth_provider.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../historial/presentation/historial_screen.dart';
 import '../../notificaciones/presentation/notificaciones_badge.dart';
+import '../../settings/presentation/configuracion_screen.dart';
 import '../../sync/presentation/pending_sync_screen.dart';
 import 'ordenes_list_screen.dart';
 
@@ -63,12 +64,20 @@ final quickStatsProvider = FutureProvider.autoDispose<QuickStats>((ref) async {
         o.fechaProgramada!.day == hoy.day;
   }).length;
 
+  // v3.3 FIX: Órdenes con estado POR_SUBIR (completadas offline pendientes de sync)
+  // Usar estado específico, no isDirty genérico que puede incluir otros cambios
+  final pendientesSubir = ordenes.where((o) {
+    final codigo = estadoMap[o.idEstado] ?? '';
+    return codigo == 'POR_SUBIR';
+  }).length;
+
   return QuickStats(
     pendientes: pendientes,
     enProceso: enProceso,
     completadas: completadas,
     ordenesHoy: ordenesHoy,
     totalOrdenes: ordenes.length,
+    pendientesSubir: pendientesSubir,
   );
 });
 
@@ -78,6 +87,7 @@ class QuickStats {
   final int completadas;
   final int ordenesHoy;
   final int totalOrdenes;
+  final int pendientesSubir;
 
   QuickStats({
     required this.pendientes,
@@ -85,6 +95,7 @@ class QuickStats {
     required this.completadas,
     required this.ordenesHoy,
     required this.totalOrdenes,
+    required this.pendientesSubir,
   });
 
   factory QuickStats.empty() => QuickStats(
@@ -93,6 +104,7 @@ class QuickStats {
     completadas: 0,
     ordenesHoy: 0,
     totalOrdenes: 0,
+    pendientesSubir: 0,
   );
 }
 
@@ -469,18 +481,33 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
             theme,
             onTap: () => _navigateToHistorial(),
           ),
-          _buildStatCard(
-            'Hoy',
-            stats.ordenesHoy.toString(),
-            Icons.today,
-            Colors.purple,
-            theme,
-            onTap: () => _navigateToOrdenesHoy(),
-          ),
+          // v3.3: Mostrar 'Por Subir' si hay órdenes dirty, sino mostrar 'Hoy'
+          stats.pendientesSubir > 0
+              ? _buildStatCard(
+                  'Por Subir',
+                  stats.pendientesSubir.toString(),
+                  Icons.cloud_upload,
+                  Colors.deepPurple,
+                  theme,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PendingSyncScreen(),
+                    ),
+                  ),
+                )
+              : _buildStatCard(
+                  'Hoy',
+                  stats.ordenesHoy.toString(),
+                  Icons.today,
+                  Colors.purple,
+                  theme,
+                  onTap: () => _navigateToOrdenesHoy(),
+                ),
         ],
       ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) =>
+      error: (error, stack) =>
           const Center(child: Text('Error cargando estadísticas')),
     );
   }
@@ -494,10 +521,17 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
     VoidCallback? onTap,
   }) {
     return Card(
+      elevation: 1.5,
+      shadowColor: color.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.02),
+            border: Border(left: BorderSide(color: color, width: 4)),
+          ),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -506,20 +540,31 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(icon, color: color, size: 24),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: color, size: 20),
+                  ),
                   Text(
                     value,
-                    style: theme.textTheme.headlineMedium?.copyWith(
+                    style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: color,
+                      letterSpacing: -0.5,
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
               Text(
-                label,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                label.toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.blueGrey.shade700,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
                 ),
               ),
             ],
@@ -556,6 +601,17 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => DashboardScreen()),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildActionTile(
+          icon: Icons.settings,
+          title: 'Configuración',
+          subtitle: 'Ajustes de la aplicación',
+          color: Colors.blueGrey,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ConfiguracionScreen()),
           ),
         ),
       ],

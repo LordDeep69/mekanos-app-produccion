@@ -211,98 +211,77 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
       }
 
       // v3.2: Estado disponible para todos los filtros
-      final estadoOrden = detalle.codigoEstado.toUpperCase();
+      final estado = detalle.codigoEstado.toUpperCase();
 
-      // Filtro de estado
-      if (_filtroEstado != FiltroEstado.todos) {
-        switch (_filtroEstado) {
-          case FiltroEstado.programada:
-            if (estadoOrden != 'PROGRAMADA') return false;
-            break;
-          case FiltroEstado.enProceso:
-            if (estadoOrden != 'EN_PROCESO') return false;
-            break;
-          // v3.1: Eliminado 'pendiente' y 'pendientesTodos' - estandarizado a 'enProceso'
-          case FiltroEstado.completada:
-            if (estadoOrden != 'COMPLETADA') return false;
-            break;
-          case FiltroEstado.cancelada:
-            if (estadoOrden != 'CANCELADA') return false;
-            break;
-          case FiltroEstado.cerrada:
-            if (estadoOrden != 'CERRADA') return false;
-            break;
-          case FiltroEstado.porSubir:
-            // ✅ 20-DIC-2025: Filtrar órdenes pendientes de subir
-            if (estadoOrden != 'POR_SUBIR') return false;
-            break;
-          default:
-            break;
-        }
+      // Filtro por estado
+      switch (_filtroEstado) {
+        case FiltroEstado.todos:
+          break;
+        case FiltroEstado.programada:
+          if (estado != 'PROGRAMADA' &&
+              estado != 'ASIGNADA' &&
+              estado != 'APROBADA' &&
+              estado != 'PENDIENTE') {
+            return false;
+          }
+          break;
+        case FiltroEstado.enProceso:
+          if (estado != 'EN_PROCESO') return false;
+          break;
+        case FiltroEstado.completada:
+          if (estado != 'COMPLETADA') return false;
+          break;
+        case FiltroEstado.cancelada:
+          if (estado != 'CANCELADA') return false;
+          break;
+        case FiltroEstado.cerrada:
+          if (estado != 'CERRADA') return false;
+          break;
+        case FiltroEstado.porSubir:
+          if (!orden.isDirty) return false;
+          break;
       }
 
-      // Filtro de prioridad
-      if (_filtroPrioridad != FiltroPrioridad.todos) {
-        final prioridadOrden = detalle.prioridadFormateada.toUpperCase();
-        switch (_filtroPrioridad) {
-          case FiltroPrioridad.alta:
-            if (prioridadOrden != 'ALTA') return false;
-            break;
-          case FiltroPrioridad.normal:
-            if (prioridadOrden != 'MEDIA' && prioridadOrden != 'NORMAL') {
-              return false;
-            }
-            break;
-          case FiltroPrioridad.baja:
-            if (prioridadOrden != 'BAJA') return false;
-            break;
-          case FiltroPrioridad.urgente:
-            // v3.2: Urgentes = URGENTE + NO completadas/cerradas/canceladas
-            if (prioridadOrden != 'URGENTE') return false;
-            // Excluir órdenes finalizadas (solo mostrar activas)
-            final estadosFinalizados = ['COMPLETADA', 'CERRADA', 'CANCELADA'];
-            if (estadosFinalizados.contains(estadoOrden)) return false;
-            break;
-          default:
-            break;
-        }
+      // Filtro por prioridad
+      switch (_filtroPrioridad) {
+        case FiltroPrioridad.todos:
+          break;
+        case FiltroPrioridad.urgente:
+          if (orden.prioridad.toUpperCase() != 'URGENTE') return false;
+          break;
+        case FiltroPrioridad.alta:
+          if (orden.prioridad.toUpperCase() != 'ALTA') return false;
+          break;
+        case FiltroPrioridad.normal:
+          if (orden.prioridad.toUpperCase() != 'NORMAL') return false;
+          break;
+        case FiltroPrioridad.baja:
+          if (orden.prioridad.toUpperCase() != 'BAJA') return false;
+          break;
       }
 
-      // Filtro de fecha
-      if (_filtroFecha != FiltroFecha.todos && orden.fechaProgramada != null) {
+      // Filtro por fecha
+      final fechaOrden = orden.fechaProgramada;
+      if (fechaOrden != null) {
         final ahora = DateTime.now();
-        final fechaOrden = orden.fechaProgramada!;
+        final hoy = DateTime(ahora.year, ahora.month, ahora.day);
 
         switch (_filtroFecha) {
+          case FiltroFecha.todos:
+            break;
           case FiltroFecha.hoy:
-            if (fechaOrden.year != ahora.year ||
-                fechaOrden.month != ahora.month ||
-                fechaOrden.day != ahora.day) {
-              return false;
-            }
+            final fechaSolo = DateTime(
+              fechaOrden.year,
+              fechaOrden.month,
+              fechaOrden.day,
+            );
+            if (fechaSolo != hoy) return false;
             break;
           case FiltroFecha.estaSemana:
-            final inicioSemana = ahora.subtract(
-              Duration(days: ahora.weekday - 1),
-            );
+            final inicioSemana = hoy.subtract(Duration(days: hoy.weekday - 1));
             final finSemana = inicioSemana.add(const Duration(days: 6));
-            if (fechaOrden.isBefore(
-                  DateTime(
-                    inicioSemana.year,
-                    inicioSemana.month,
-                    inicioSemana.day,
-                  ),
-                ) ||
-                fechaOrden.isAfter(
-                  DateTime(
-                    finSemana.year,
-                    finSemana.month,
-                    finSemana.day,
-                    23,
-                    59,
-                    59,
-                  ),
-                )) {
+            if (fechaOrden.isBefore(inicioSemana) ||
+                fechaOrden.isAfter(finSemana.add(const Duration(days: 1)))) {
               return false;
             }
             break;
@@ -314,19 +293,23 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
             break;
           case FiltroFecha.fechaEspecifica:
             if (_fechaEspecifica != null) {
-              if (fechaOrden.year != _fechaEspecifica!.year ||
-                  fechaOrden.month != _fechaEspecifica!.month ||
-                  fechaOrden.day != _fechaEspecifica!.day) {
-                return false;
-              }
+              final fechaSolo = DateTime(
+                fechaOrden.year,
+                fechaOrden.month,
+                fechaOrden.day,
+              );
+              final especificaSolo = DateTime(
+                _fechaEspecifica!.year,
+                _fechaEspecifica!.month,
+                _fechaEspecifica!.day,
+              );
+              if (fechaSolo != especificaSolo) return false;
             }
-            break;
-          default:
             break;
         }
       }
 
-      // ✅ NUEVO: Filtro por Tipo de Servicio
+      // Filtro por tipo de servicio
       if (_filtroTipoServicio != FiltroTipoServicio.todos) {
         final tipoServicio = detalle.tipoServicio;
         if (tipoServicio == null) return false;
@@ -334,30 +317,32 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
 
         switch (_filtroTipoServicio) {
           case FiltroTipoServicio.todos:
-            // Ya filtrado arriba, no entra aquí
             break;
           case FiltroTipoServicio.genPrevA:
             if (!codigoTipo.contains('GEN_PREV_A') &&
                 !codigoTipo.contains('GEN_PREV_TIPO_A')) {
               return false;
             }
+            break;
           case FiltroTipoServicio.genPrevB:
             if (!codigoTipo.contains('GEN_PREV_B') &&
                 !codigoTipo.contains('GEN_PREV_TIPO_B')) {
               return false;
             }
+            break;
           case FiltroTipoServicio.bomPrevA:
             if (!codigoTipo.contains('BOM_PREV')) return false;
+            break;
           case FiltroTipoServicio.correctivo:
-            // ✅ Compatible con CORRECTIVO (antiguo) y GEN_CORR/BOM_CORR (nuevos)
             if (!codigoTipo.contains('CORR')) return false;
+            break;
         }
       }
 
       return true;
     }).toList();
 
-    // ✅ NUEVO: Aplicar ordenamiento
+    // ✅ Aplicar ordenamiento
     switch (_ordenLista) {
       case OrdenLista.recientesPrimero:
         filtradas.sort(
@@ -825,7 +810,7 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
                     ),
                     backgroundColor: _filtroFecha == FiltroFecha.fechaEspecifica
                         ? Colors.deepPurple
-                        : Colors.deepPurple.withOpacity(0.1),
+                        : Colors.deepPurple.withValues(alpha: 0.1),
                     onPressed: () async {
                       final fecha = await showDatePicker(
                         context: context,
@@ -1028,7 +1013,7 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
         ),
         selected: selected,
         onSelected: (_) => onTap(),
-        backgroundColor: color.withOpacity(0.1),
+        backgroundColor: color.withValues(alpha: 0.1),
         selectedColor: color,
         checkmarkColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1124,7 +1109,7 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
 class _OrdenCardOptimizado extends StatelessWidget {
   final Ordene orden;
   final OrdenConDetalles? detalles;
-  final VoidCallback? onReturn; // ✅ FIX: Callback para refrescar al volver
+  final VoidCallback? onReturn;
 
   const _OrdenCardOptimizado({
     required this.orden,
@@ -1132,160 +1117,71 @@ class _OrdenCardOptimizado extends StatelessWidget {
     this.onReturn,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    // Si no hay detalles aún, mostrar placeholder ligero
-    if (detalles == null) {
-      return Card(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        elevation: 1,
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(12),
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const SizedBox(width: 28, height: 28),
-          ),
-          title: Text(
-            orden.numeroOrden,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          subtitle: const Text('Cargando...', style: TextStyle(fontSize: 12)),
-          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-        ),
-      );
+  /// v3.5 UI/UX: Obtener color representativo del estado (Enterprise Standard)
+  Color _getEstadoColor(String codigoEstado) {
+    switch (codigoEstado.toUpperCase()) {
+      case 'ASIGNADA':
+      case 'PROGRAMADA':
+        return Colors.blue.shade700;
+      case 'APROBADA':
+        return Colors.teal.shade600;
+      case 'PENDIENTE':
+        return Colors.orange.shade700;
+      case 'EN_PROCESO':
+        return Colors.amber.shade800;
+      case 'EN_ESPERA_REPUESTO':
+        return Colors.deepOrange.shade600;
+      case 'POR_SUBIR':
+        return Colors.deepPurple.shade600;
+      case 'COMPLETADA':
+        return Colors.green.shade600;
+      case 'CERRADA':
+        return Colors.blueGrey.shade600;
+      case 'CANCELADA':
+        return Colors.red.shade600;
+      default:
+        return Colors.grey.shade600;
     }
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 2,
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(12),
-        leading: _buildEstadoChip(detalles!.codigoEstado),
-        title: Text(
-          orden.numeroOrden,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.person_outline, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    detalles!.nombreCliente,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                const Icon(
-                  Icons.precision_manufacturing,
-                  size: 16,
-                  color: Colors.grey,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    detalles!.nombreEquipo,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  detalles!.fechaProgramadaFormateada,
-                  style: const TextStyle(fontSize: 12),
-                ),
-                const SizedBox(width: 16),
-                _buildPrioridadChip(detalles!.prioridadFormateada),
-              ],
-            ),
-          ],
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
-            ),
-          ).then((_) {
-            // ✅ FIX: Recargar órdenes al volver para reflejar cambios de estado
-            onReturn?.call();
-          });
-        },
-      ),
-    );
   }
 
-  /// v3.3 UI/UX: Chip de estado mejorado con todos los estados de Supabase
-  Widget _buildEstadoChip(String codigoEstado) {
-    Color color;
+  /// v3.5 UI/UX: Chip de estado con iconografía estandarizada enterprise
+  Widget _buildEstadoIcon(String codigoEstado) {
+    final Color color = _getEstadoColor(codigoEstado);
     IconData icon;
     switch (codigoEstado.toUpperCase()) {
       case 'ASIGNADA':
-        color = Colors.blue.shade600;
-        icon = Icons.assignment_ind;
-      case 'APROBADA':
-        color = Colors.teal;
-        icon = Icons.verified_outlined;
-      case 'PENDIENTE':
-        color = Colors.orange;
-        icon = Icons.pending_outlined;
       case 'PROGRAMADA':
-        color = Colors.indigo;
-        icon = Icons.schedule;
+      case 'APROBADA':
+        icon = Icons.event_available;
+      case 'PENDIENTE':
+        icon = Icons.timer_outlined;
       case 'EN_PROCESO':
-        color = Colors.amber.shade700;
         icon = Icons.engineering;
       case 'EN_ESPERA_REPUESTO':
-        color = Colors.deepOrange;
-        icon = Icons.inventory_2_outlined;
+        icon = Icons.hourglass_empty;
       case 'POR_SUBIR':
-        color = Colors.deepPurple;
         icon = Icons.cloud_upload_outlined;
       case 'COMPLETADA':
-        color = Colors.green.shade600;
         icon = Icons.check_circle;
       case 'CERRADA':
-        color = Colors.blueGrey;
         icon = Icons.lock_outline;
       case 'CANCELADA':
-        color = Colors.red.shade400;
-        icon = Icons.cancel_outlined;
+        icon = Icons.block;
       default:
-        color = Colors.grey;
         icon = Icons.help_outline;
     }
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
       ),
-      child: Icon(icon, color: color, size: 26),
+      child: Icon(icon, color: color, size: 28),
     );
   }
 
-  /// v3.3 UI/UX: Chip de prioridad mejorado con mejor contraste
+  /// v3.5 UI/UX: Chip de prioridad mejorado con mejor contraste
   Widget _buildPrioridadChip(String prioridad) {
     Color color;
     IconData? icon;
@@ -1329,6 +1225,230 @@ class _OrdenCardOptimizado extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Si no hay detalles aún, mostrar placeholder ligero
+    if (detalles == null) {
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        elevation: 1,
+        child: ListTile(
+          contentPadding: const EdgeInsets.all(12),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const SizedBox(width: 28, height: 28),
+          ),
+          title: Text(
+            orden.numeroOrden,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: const Text('Cargando...', style: TextStyle(fontSize: 12)),
+          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        ),
+      );
+    }
+
+    final Color estadoColor = _getEstadoColor(detalles!.codigoEstado);
+    final Color backgroundColor = estadoColor.withValues(alpha: 0.03);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      elevation: 1.5,
+      shadowColor: estadoColor.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
+            ),
+          ).then((_) {
+            onReturn?.call();
+          });
+        },
+        child: Container(
+          color: backgroundColor, // ✅ Subtle background tint
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Indicador lateral de estado (Enterprise Design)
+                Container(
+                  width: 6,
+                  decoration: BoxDecoration(
+                    color: estadoColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: estadoColor.withValues(alpha: 0.3),
+                        blurRadius: 4,
+                        offset: const Offset(2, 0),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        // Icono de estado centralizado con mayor contraste
+                        _buildEstadoIcon(detalles!.codigoEstado),
+                        const SizedBox(width: 12),
+                        // Información de la orden
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      orden.numeroOrden,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        letterSpacing: 0.5,
+                                        color: Colors.blueGrey.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                  if (orden.isDirty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: Colors.amber.shade300,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.cloud_off,
+                                            size: 10,
+                                            color: Colors.amber.shade800,
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            'LOCAL',
+                                            style: TextStyle(
+                                              fontSize: 8,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.amber.shade900,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.business_rounded,
+                                    size: 14,
+                                    color: Colors.blueGrey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      detalles!.nombreCliente,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade800,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.settings_suggest_rounded,
+                                    size: 14,
+                                    color: Colors.blueGrey,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      detalles!.nombreEquipo,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.calendar_today_rounded,
+                                        size: 14,
+                                        color: Colors.blueGrey,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        detalles!.fechaProgramadaFormateada,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  _buildPrioridadChip(
+                                    detalles!.prioridadFormateada,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Colors.grey,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

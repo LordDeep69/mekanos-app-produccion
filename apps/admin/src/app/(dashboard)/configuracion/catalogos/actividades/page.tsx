@@ -1,63 +1,197 @@
 'use client';
 
 import {
-    useActividadesCatalogo,
-    useActualizarActividadCatalogo,
-    useCrearActividadCatalogo,
-    useEliminarActividadCatalogo,
-    useParametrosMedicion,
-    useSistemas,
-    useTiposServicio
-} from '@/features/ordenes';
-import { getTipoActividadColor } from '@/features/ordenes/api/catalogos.service';
+    TIPOS_ACTIVIDAD,
+    useCatalogoActividades,
+    useCreateCatalogoActividad,
+    useDeleteCatalogoActividad,
+    useTiposServicio,
+    useUpdateCatalogoActividad,
+} from '@/features/catalogos';
+import { useCatalogoSistemas } from '@/features/catalogos/hooks/use-catalogo-sistemas';
+import { useParametrosMedicion } from '@/features/catalogos/hooks/use-parametros-medicion';
 import { cn } from '@/lib/utils';
 import {
     Activity,
     AlertCircle,
     AlertTriangle,
     Check,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    ClipboardCheck,
     ClipboardList,
     Clock,
-    Database,
+    Cog,
     Edit,
+    Filter,
+    Gauge,
     Info,
     Layers,
+    ListChecks,
     Loader2,
     Plus,
     Search,
+    Settings2,
+    Sparkles,
     Trash2,
-    X
+    Wrench,
+    X,
+    Zap
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-const TIPOS_ACTIVIDAD = [
-    'INSPECCION',
-    'LIMPIEZA',
-    'AJUSTE',
-    'REEMPLAZO',
-    'MEDICION',
-    'PRUEBA'
-];
+// Helper para color de tipo de actividad
+function getTipoActividadColor(tipo: string) {
+    return TIPOS_ACTIVIDAD.find(t => t.value === tipo)?.color || 'bg-gray-100 text-gray-800';
+}
+
+// Helper para obtener el icono del tipo de actividad
+function getTipoActividadIcon(tipo: string) {
+    const iconMap: Record<string, any> = {
+        'INSPECCION': CheckCircle2,
+        'MEDICION': Gauge,
+        'LIMPIEZA': Sparkles,
+        'LUBRICACION': Zap,
+        'AJUSTE': Settings2,
+        'CAMBIO': Wrench,
+        'PRUEBA': Activity,
+        'VERIFICACION': ClipboardCheck,
+    };
+    return iconMap[tipo] || ClipboardCheck;
+}
+
+// Colores para tipos de servicio
+const SERVICE_COLORS: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+    'GEN_PREV_A': { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', accent: 'bg-emerald-500' },
+    'GEN_PREV_B': { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700', accent: 'bg-teal-500' },
+    'BOM_PREV_A': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', accent: 'bg-blue-500' },
+    'BOM_PREV_B': { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', accent: 'bg-indigo-500' },
+    'GEN_CORR': { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', accent: 'bg-orange-500' },
+    'BOM_CORR': { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', accent: 'bg-amber-500' },
+    'EMERGENCIA': { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', accent: 'bg-red-500' },
+};
+
+const DEFAULT_COLOR = { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-700', accent: 'bg-gray-500' };
 
 export default function ActividadesCatalogoPage() {
     const [busqueda, setBusqueda] = useState('');
     const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>('');
     const [filtroSistema, setFiltroSistema] = useState<string>('');
+    const [filtroTipoActividad, setFiltroTipoActividad] = useState<string>('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingActividad, setEditingActividad] = useState<any>(null);
+    const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
 
-    const { data: actividades, isLoading, isError, refetch } = useActividadesCatalogo({
-        idTipoServicio: filtroTipoServicio ? Number(filtroTipoServicio) : undefined,
-        idSistema: filtroSistema ? Number(filtroSistema) : undefined,
-    });
+    const { data: response, isLoading, isError, refetch } = useCatalogoActividades({ activo: true });
+    const actividades = response?.data || [];
 
-    const { data: tiposServicio } = useTiposServicio({ activo: true });
-    const { data: sistemas } = useSistemas({ activo: true });
-    const { data: parametros } = useParametrosMedicion({ activo: true });
+    const { data: tiposServicioResponse } = useTiposServicio({ activo: true });
+    const tiposServicio = tiposServicioResponse?.data || [];
 
-    const crearActividad = useCrearActividadCatalogo();
-    const actualizarActividad = useActualizarActividadCatalogo();
-    const eliminarActividad = useEliminarActividadCatalogo();
+    const { data: sistemasResponse } = useCatalogoSistemas({ activo: true });
+    const sistemas = sistemasResponse?.data || [];
+
+    const { data: parametrosResponse } = useParametrosMedicion({ activo: true });
+    const parametros = parametrosResponse?.data || [];
+
+    const crearActividad = useCreateCatalogoActividad();
+    const actualizarActividad = useUpdateCatalogoActividad();
+    const eliminarActividad = useDeleteCatalogoActividad();
+
+    // Filtrar actividades
+    const filteredActividades = useMemo(() => {
+        return actividades.filter(a => {
+            const desc = (a.descripcionActividad || a.descripcion_actividad || '').toLowerCase();
+            const code = (a.codigoActividad || a.codigo_actividad || '').toLowerCase();
+            const matchBusqueda = !busqueda || desc.includes(busqueda.toLowerCase()) || code.includes(busqueda.toLowerCase());
+
+            const tipoServId = a.idTipoServicio || a.id_tipo_servicio;
+            const matchServicio = !filtroTipoServicio || String(tipoServId) === filtroTipoServicio;
+
+            const sistemaId = a.idSistema || a.id_sistema;
+            const matchSistema = !filtroSistema || String(sistemaId) === filtroSistema;
+
+            const tipoAct = a.tipoActividad || a.tipo_actividad;
+            const matchTipoAct = !filtroTipoActividad || tipoAct === filtroTipoActividad;
+
+            return matchBusqueda && matchServicio && matchSistema && matchTipoAct;
+        });
+    }, [actividades, busqueda, filtroTipoServicio, filtroSistema, filtroTipoActividad]);
+
+    // Agrupar por tipo de servicio
+    const groupedByService = useMemo(() => {
+        const groups: Record<string, {
+            servicio: any;
+            actividades: any[];
+            bySystem: Record<string, any[]>;
+        }> = {};
+
+        filteredActividades.forEach(act => {
+            const tipoServId = String(act.idTipoServicio || act.id_tipo_servicio || 'sin_servicio');
+            const servicio = act.tipoServicio || act.tipos_servicio;
+
+            if (!groups[tipoServId]) {
+                groups[tipoServId] = { servicio, actividades: [], bySystem: {} };
+            }
+            groups[tipoServId].actividades.push(act);
+
+            // Agrupar por sistema dentro del servicio
+            const sistemaId = String(act.idSistema || act.id_sistema || 'general');
+            const sistemaNombre = act.sistema?.nombreSistema || act.catalogo_sistemas?.nombre_sistema || 'General';
+            if (!groups[tipoServId].bySystem[sistemaId]) {
+                groups[tipoServId].bySystem[sistemaId] = [];
+            }
+            groups[tipoServId].bySystem[sistemaId].push({ ...act, sistemaNombre });
+        });
+
+        // Ordenar actividades dentro de cada grupo
+        Object.values(groups).forEach(group => {
+            group.actividades.sort((a, b) => (a.ordenEjecucion || a.orden_ejecucion || 0) - (b.ordenEjecucion || b.orden_ejecucion || 0));
+            Object.values(group.bySystem).forEach(acts => {
+                acts.sort((a, b) => (a.ordenEjecucion || a.orden_ejecucion || 0) - (b.ordenEjecucion || b.orden_ejecucion || 0));
+            });
+        });
+
+        return groups;
+    }, [filteredActividades]);
+
+    // Métricas
+    const metricas = useMemo(() => {
+        const total = actividades.length;
+        const obligatorias = actividades.filter(a => a.esObligatoria ?? a.es_obligatoria).length;
+        const mediciones = actividades.filter(a => (a.tipoActividad || a.tipo_actividad) === 'MEDICION').length;
+        const porServicio = Object.keys(groupedByService).length;
+
+        // Contar por tipo de actividad
+        const porTipo: Record<string, number> = {};
+        actividades.forEach(a => {
+            const tipo = a.tipoActividad || a.tipo_actividad || 'OTRO';
+            porTipo[tipo] = (porTipo[tipo] || 0) + 1;
+        });
+
+        return { total, obligatorias, mediciones, porServicio, porTipo };
+    }, [actividades, groupedByService]);
+
+    const toggleService = (serviceId: string) => {
+        setExpandedServices(prev => {
+            const next = new Set(prev);
+            if (next.has(serviceId)) {
+                next.delete(serviceId);
+            } else {
+                next.add(serviceId);
+            }
+            return next;
+        });
+    };
+
+    const expandAll = () => {
+        setExpandedServices(new Set(Object.keys(groupedByService)));
+    };
+
+    const collapseAll = () => {
+        setExpandedServices(new Set());
+    };
 
     const handleEdit = (actividad: any) => {
         setEditingActividad(actividad);
@@ -70,175 +204,336 @@ export default function ActividadesCatalogoPage() {
         }
     };
 
-    const filteredActividades = actividades?.filter(a =>
-        a.descripcion_actividad.toLowerCase().includes(busqueda.toLowerCase()) ||
-        a.codigo_actividad.toLowerCase().includes(busqueda.toLowerCase())
-    ).sort((a, b) => (a.orden_ejecucion || 0) - (b.orden_ejecucion || 0)) || [];
+    const clearFilters = () => {
+        setBusqueda('');
+        setFiltroTipoServicio('');
+        setFiltroSistema('');
+        setFiltroTipoActividad('');
+    };
+
+    const hasActiveFilters = busqueda || filtroTipoServicio || filtroSistema || filtroTipoActividad;
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Database className="h-7 w-7 text-blue-600" />
-                        Catálogo de Actividades
-                    </h1>
-                    <p className="text-gray-500 mt-1">
-                        Define los checklists maestros por tipo de servicio y sistema
-                    </p>
-                </div>
-                <button
-                    onClick={() => { setEditingActividad(null); setIsModalOpen(true); }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
-                >
-                    <Plus className="h-4 w-4" />
-                    Nueva Actividad
-                </button>
-            </div>
-
-            {/* Filtros */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar actividad..."
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
-                </div>
-                <select
-                    value={filtroTipoServicio}
-                    onChange={(e) => setFiltroTipoServicio(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                >
-                    <option value="">Todos los servicios</option>
-                    {tiposServicio?.map((t: any) => (
-                        <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>{t.nombre_tipo}</option>
-                    ))}
-                </select>
-                <select
-                    value={filtroSistema}
-                    onChange={(e) => setFiltroSistema(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                >
-                    <option value="">Todos los sistemas</option>
-                    {sistemas?.map((s: any) => (
-                        <option key={s.id_sistema} value={s.id_sistema}>{s.nombre_sistema}</option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Tabla */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20">
-                        <Loader2 className="h-10 w-10 animate-spin text-blue-500 mb-4" />
-                        <p className="text-gray-500 font-medium">Cargando catálogo de actividades...</p>
+            {/* Header con métricas */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                    <div>
+                        <h1 className="text-2xl font-bold flex items-center gap-3">
+                            <div className="p-2 bg-blue-500/20 rounded-xl">
+                                <ListChecks className="h-7 w-7 text-blue-400" />
+                            </div>
+                            Catálogo de Actividades
+                        </h1>
+                        <p className="text-slate-400 mt-2 text-sm">
+                            Gestiona los checklists maestros organizados por tipo de servicio y sistema
+                        </p>
                     </div>
-                ) : isError ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-red-500">
-                        <AlertCircle className="h-12 w-12 mb-4" />
-                        <p className="font-bold text-lg">Error al sincronizar catálogo</p>
-                        <button onClick={() => refetch()} className="mt-4 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
-                            Reintentar
+                    <button
+                        onClick={() => { setEditingActividad(null); setIsModalOpen(true); }}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 font-semibold transition-all shadow-lg shadow-blue-600/30 hover:shadow-blue-500/40"
+                    >
+                        <Plus className="h-5 w-5" />
+                        Nueva Actividad
+                    </button>
+                </div>
+
+                {/* Métricas Dashboard */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-500/20 rounded-lg">
+                                <ClipboardList className="h-5 w-5 text-blue-400" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{metricas.total}</p>
+                                <p className="text-xs text-slate-400">Total Actividades</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-amber-500/20 rounded-lg">
+                                <AlertTriangle className="h-5 w-5 text-amber-400" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{metricas.obligatorias}</p>
+                                <p className="text-xs text-slate-400">Obligatorias</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-cyan-500/20 rounded-lg">
+                                <Gauge className="h-5 w-5 text-cyan-400" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{metricas.mediciones}</p>
+                                <p className="text-xs text-slate-400">Con Medición</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-500/20 rounded-lg">
+                                <Cog className="h-5 w-5 text-emerald-400" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{metricas.porServicio}</p>
+                                <p className="text-xs text-slate-400">Tipos de Servicio</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Filtros Avanzados */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-4">
+                    <Filter className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-semibold text-gray-700">Filtros</span>
+                    {hasActiveFilters && (
+                        <button onClick={clearFilters} className="ml-auto text-xs text-blue-600 hover:text-blue-700 font-medium">
+                            Limpiar filtros
+                        </button>
+                    )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por nombre o código..."
+                            value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-gray-50"
+                        />
+                    </div>
+                    <select
+                        value={filtroTipoServicio}
+                        onChange={(e) => setFiltroTipoServicio(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-gray-50"
+                    >
+                        <option value="">Todos los servicios</option>
+                        {tiposServicio.map((t: any) => (
+                            <option key={`svc-${t.id_tipo_servicio || t.idTipoServicio}`} value={t.id_tipo_servicio || t.idTipoServicio}>
+                                {t.nombre_tipo || t.nombreTipo}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        value={filtroSistema}
+                        onChange={(e) => setFiltroSistema(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-gray-50"
+                    >
+                        <option value="">Todos los sistemas</option>
+                        {sistemas.map((s: any) => (
+                            <option key={`sys-${s.id_sistema || s.idSistema}`} value={s.id_sistema || s.idSistema}>
+                                {s.nombre_sistema || s.nombreSistema}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        value={filtroTipoActividad}
+                        onChange={(e) => setFiltroTipoActividad(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-gray-50"
+                    >
+                        <option value="">Todos los tipos</option>
+                        {TIPOS_ACTIVIDAD.map(tipo => (
+                            <option key={`tipo-${tipo.value}`} value={tipo.value}>{tipo.label}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {/* Controles de expansión */}
+            {!isLoading && !isError && Object.keys(groupedByService).length > 0 && (
+                <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500">
+                        Mostrando <span className="font-semibold text-gray-700">{filteredActividades.length}</span> actividades
+                        {hasActiveFilters && <span className="text-blue-600"> (filtradas)</span>}
+                    </p>
+                    <div className="flex gap-2">
+                        <button onClick={expandAll} className="text-xs px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                            Expandir todo
+                        </button>
+                        <button onClick={collapseAll} className="text-xs px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                            Colapsar todo
                         </button>
                     </div>
-                ) : filteredActividades.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                        <Database className="h-16 w-16 mb-4 opacity-20" />
-                        <p className="text-lg font-medium">No hay actividades en esta categoría</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider w-16 text-center">#</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actividad</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Contexto</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Detalles</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {filteredActividades.map((act) => (
-                                    <tr key={act.id_actividad_catalogo} className="hover:bg-blue-50/30 transition-colors group">
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="text-sm font-bold text-gray-400">{act.orden_ejecucion}</span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div>
-                                                <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
-                                                    {act.descripcion_actividad}
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-[10px] font-mono text-gray-400 uppercase">{act.codigo_actividad}</span>
-                                                    <span className={cn(
-                                                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                                                        getTipoActividadColor(act.tipo_actividad)
-                                                    )}>
-                                                        {act.tipo_actividad}
+                </div>
+            )}
+
+            {/* Contenido Principal */}
+            {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-200">
+                    <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
+                    <p className="text-gray-500 font-medium">Cargando catálogo de actividades...</p>
+                </div>
+            ) : isError ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-red-200">
+                    <AlertCircle className="h-14 w-14 text-red-400 mb-4" />
+                    <p className="font-bold text-lg text-red-600">Error al cargar el catálogo</p>
+                    <button onClick={() => refetch()} className="mt-4 px-5 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 font-medium transition-colors">
+                        Reintentar
+                    </button>
+                </div>
+            ) : filteredActividades.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-200">
+                    <ListChecks className="h-16 w-16 text-gray-300 mb-4" />
+                    <p className="text-lg font-semibold text-gray-500">No hay actividades que coincidan</p>
+                    {hasActiveFilters && (
+                        <button onClick={clearFilters} className="mt-3 text-blue-600 hover:text-blue-700 text-sm font-medium">
+                            Limpiar filtros
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {Object.entries(groupedByService).map(([serviceId, group]) => {
+                        const isExpanded = expandedServices.has(serviceId);
+                        const serviceCodigo = group.servicio?.codigoTipoServicio || group.servicio?.codigo_tipo || '';
+                        const colors = SERVICE_COLORS[serviceCodigo] || DEFAULT_COLOR;
+                        const serviceNombre = group.servicio?.nombreTipoServicio || group.servicio?.nombre_tipo || 'Sin Servicio';
+
+                        return (
+                            <div key={`service-group-${serviceId}`} className={cn("rounded-2xl border-2 overflow-hidden transition-all", colors.border, colors.bg)}>
+                                {/* Header del Servicio */}
+                                <button
+                                    onClick={() => toggleService(serviceId)}
+                                    className={cn("w-full flex items-center justify-between p-4 hover:bg-white/50 transition-colors")}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className={cn("w-1.5 h-12 rounded-full", colors.accent)} />
+                                        <div className="text-left">
+                                            <div className="flex items-center gap-2">
+                                                <span className={cn("text-xs font-mono px-2 py-0.5 rounded-md bg-white/60", colors.text)}>
+                                                    {serviceCodigo}
+                                                </span>
+                                                <h3 className={cn("font-bold text-lg", colors.text)}>{serviceNombre}</h3>
+                                            </div>
+                                            <p className="text-sm text-gray-500 mt-0.5">
+                                                {group.actividades.length} actividades • {Object.keys(group.bySystem).length} sistemas
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="hidden sm:flex items-center gap-2">
+                                            {Object.entries(metricas.porTipo).slice(0, 4).map(([tipo, count]) => {
+                                                const tipoInService = group.actividades.filter(a => (a.tipoActividad || a.tipo_actividad) === tipo).length;
+                                                if (tipoInService === 0) return null;
+                                                const Icon = getTipoActividadIcon(tipo);
+                                                return (
+                                                    <span key={`metric-${serviceId}-${tipo}`} className={cn("flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium", getTipoActividadColor(tipo))}>
+                                                        <Icon className="h-3 w-3" /> {tipoInService}
                                                     </span>
+                                                );
+                                            })}
+                                        </div>
+                                        {isExpanded ? (
+                                            <ChevronDown className={cn("h-5 w-5", colors.text)} />
+                                        ) : (
+                                            <ChevronRight className={cn("h-5 w-5", colors.text)} />
+                                        )}
+                                    </div>
+                                </button>
+
+                                {/* Contenido expandido */}
+                                {isExpanded && (
+                                    <div className="bg-white border-t border-gray-100">
+                                        {Object.entries(group.bySystem).map(([sistemaId, acts]) => (
+                                            <div key={`system-${serviceId}-${sistemaId}`} className="border-b border-gray-50 last:border-b-0">
+                                                {/* Header del Sistema */}
+                                                <div className="px-6 py-3 bg-gray-50/50 flex items-center gap-2">
+                                                    <Layers className="h-4 w-4 text-purple-500" />
+                                                    <span className="text-sm font-semibold text-gray-700">
+                                                        {acts[0]?.sistemaNombre || 'General'}
+                                                    </span>
+                                                    <span className="text-xs text-gray-400 ml-1">({acts.length})</span>
+                                                </div>
+
+                                                {/* Lista de Actividades */}
+                                                <div className="divide-y divide-gray-50">
+                                                    {acts.map((act, idx) => {
+                                                        const Icon = getTipoActividadIcon(act.tipoActividad || act.tipo_actividad || '');
+                                                        return (
+                                                            <div key={`act-${serviceId}-${sistemaId}-${act.idActividadCatalogo || act.id_actividad_catalogo || idx}`}
+                                                                className="px-6 py-3 hover:bg-blue-50/30 transition-colors group flex items-center gap-4">
+                                                                {/* Orden */}
+                                                                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                                                    {act.ordenEjecucion || act.orden_ejecucion}
+                                                                </div>
+
+                                                                {/* Info Principal */}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="font-medium text-gray-900 group-hover:text-blue-700 transition-colors truncate">
+                                                                        {act.descripcionActividad || act.descripcion_actividad}
+                                                                    </p>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <span className="text-[10px] font-mono text-gray-400">
+                                                                            {act.codigoActividad || act.codigo_actividad}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Badges */}
+                                                                <div className="hidden lg:flex items-center gap-2">
+                                                                    <span className={cn(
+                                                                        "flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold",
+                                                                        getTipoActividadColor(act.tipoActividad || act.tipo_actividad || '')
+                                                                    )}>
+                                                                        <Icon className="h-3 w-3" />
+                                                                        {act.tipoActividad || act.tipo_actividad}
+                                                                    </span>
+
+                                                                    {(act.esObligatoria ?? act.es_obligatoria) && (
+                                                                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold">
+                                                                            OBLIGATORIA
+                                                                        </span>
+                                                                    )}
+
+                                                                    {(act.tiempoEstimadoMinutos || act.tiempo_estimado_minutos) && (
+                                                                        <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold">
+                                                                            <Clock className="h-3 w-3" />
+                                                                            {act.tiempoEstimadoMinutos || act.tiempo_estimado_minutos}m
+                                                                        </span>
+                                                                    )}
+
+                                                                    {(act.idParametroMedicion || act.id_parametro_medicion) && (
+                                                                        <span className="flex items-center gap-1 px-2 py-1 bg-cyan-100 text-cyan-700 rounded-lg text-xs font-semibold">
+                                                                            <Gauge className="h-3 w-3" />
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Acciones */}
+                                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <button
+                                                                        onClick={() => handleEdit(act)}
+                                                                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                                                                    >
+                                                                        <Edit className="h-4 w-4" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDelete(act.idActividadCatalogo || act.id_actividad_catalogo || 0)}
+                                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                                                    <ClipboardList className="h-3 w-3 text-blue-500" />
-                                                    <span className="font-medium">{act.tipos_servicio?.nombre_tipo || 'Sin servicio'}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                                                    <Layers className="h-3 w-3 text-purple-500" />
-                                                    <span className="font-medium">{act.catalogo_sistemas?.nombre_sistema || 'General'}</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-wrap gap-2">
-                                                {act.es_obligatoria && (
-                                                    <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded border border-amber-100 text-[10px] font-bold">
-                                                        OBLIGATORIA
-                                                    </span>
-                                                )}
-                                                {act.tiempo_estimado_minutos && (
-                                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 text-[10px] font-bold">
-                                                        <Clock className="h-3 w-3" /> {act.tiempo_estimado_minutos}m
-                                                    </span>
-                                                )}
-                                                {act.id_parametro_medicion && (
-                                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-cyan-50 text-cyan-600 rounded border border-cyan-100 text-[10px] font-bold">
-                                                        <Activity className="h-3 w-3" /> MEDICIÓN
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleEdit(act)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(act.id_actividad_catalogo)}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Modal */}
             {isModalOpen && (
@@ -250,10 +545,26 @@ export default function ActividadesCatalogoPage() {
                     sistemas={sistemas || []}
                     parametros={parametros || []}
                     onSubmit={async (formData: any) => {
+                        const dto = {
+                            codigoActividad: formData.codigo_actividad,
+                            descripcionActividad: formData.descripcion_actividad,
+                            idTipoServicio: Number(formData.id_tipo_servicio),
+                            idSistema: formData.id_sistema ? Number(formData.id_sistema) : undefined,
+                            tipoActividad: formData.tipo_actividad,
+                            ordenEjecucion: Number(formData.orden_ejecucion),
+                            esObligatoria: formData.es_obligatoria,
+                            tiempoEstimadoMinutos: formData.tiempo_estimado_minutos ? Number(formData.tiempo_estimado_minutos) : undefined,
+                            idParametroMedicion: formData.id_parametro_medicion ? Number(formData.id_parametro_medicion) : undefined,
+                            instrucciones: formData.instrucciones || undefined,
+                            precauciones: formData.precauciones || undefined,
+                        };
                         if (editingActividad) {
-                            await actualizarActividad.mutateAsync({ id: editingActividad.id_actividad_catalogo, data: formData });
+                            await actualizarActividad.mutateAsync({
+                                id: editingActividad.idActividadCatalogo || editingActividad.id_actividad_catalogo,
+                                data: dto
+                            });
                         } else {
-                            await crearActividad.mutateAsync(formData);
+                            await crearActividad.mutateAsync(dto);
                         }
                         setIsModalOpen(false);
                     }}
@@ -340,7 +651,7 @@ function ActividadModal({ isOpen, onClose, actividad, tiposServicio, sistemas, p
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                             >
                                 {TIPOS_ACTIVIDAD.map(tipo => (
-                                    <option key={tipo} value={tipo}>{tipo}</option>
+                                    <option key={tipo.value} value={tipo.value}>{tipo.label}</option>
                                 ))}
                             </select>
                         </div>

@@ -12,6 +12,8 @@
 // 5. Actualizar BD local transaccionalmente
 // ============================================================================
 
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +34,7 @@ class OrdenResumen {
   final String estadoCodigo;
   final String fechaModificacion;
   final String? urlPdf;
+  final String? nombreCliente;
 
   final int? idCliente;
   final int? idEquipo;
@@ -44,6 +47,7 @@ class OrdenResumen {
     required this.estadoCodigo,
     required this.fechaModificacion,
     this.urlPdf,
+    this.nombreCliente,
     this.idCliente,
     this.idEquipo,
     this.idTipoServicio,
@@ -57,6 +61,7 @@ class OrdenResumen {
       estadoCodigo: json['estadoCodigo'] as String,
       fechaModificacion: json['fechaModificacion'] as String,
       urlPdf: json['urlPdf'] as String?,
+      nombreCliente: json['nombreCliente'] as String?,
       idCliente: json['id_cliente'] as int?,
       idEquipo: json['id_equipo'] as int?,
       idTipoServicio: json['id_tipo_servicio'] as int?,
@@ -207,7 +212,17 @@ class SmartSyncService {
             );
             aDescargar.add(ordenServidor);
           } else {
-            // Sin cambios → SKIP
+            // Sin cambios en la orden, pero igual actualizamos el nombre del cliente por si cambió la prioridad/dato
+            if (ordenServidor.idCliente != null &&
+                ordenServidor.nombreCliente != null) {
+              await _db.upsertCliente(
+                ClientesCompanion(
+                  id: Value(ordenServidor.idCliente!),
+                  nombre: Value(ordenServidor.nombreCliente!),
+                  lastSyncedAt: Value(DateTime.now()),
+                ),
+              );
+            }
             omitidas++;
           }
         }
@@ -241,6 +256,19 @@ class SmartSyncService {
                 idEstadoLocal,
                 ordenResumen.urlPdf,
               );
+
+              // ✅ 03-ENE-2026: Asegurar que el nombre del cliente se actualice con la prioridad correcta
+              if (ordenResumen.idCliente != null &&
+                  ordenResumen.nombreCliente != null) {
+                await _db.upsertCliente(
+                  ClientesCompanion(
+                    id: Value(ordenResumen.idCliente!),
+                    nombre: Value(ordenResumen.nombreCliente!),
+                    lastSyncedAt: Value(DateTime.now()),
+                  ),
+                );
+              }
+
               ordenesDescargadas.add(ordenResumen.numeroOrden);
               descargadas++;
               debugPrint(
@@ -285,6 +313,21 @@ class SmartSyncService {
       debugPrint(
         '🧠 [SMART SYNC] ✅ Completado: $descargadas descargadas, $omitidas omitidas, $errores errores',
       );
+
+      // ❌ FIX 06-ENE-2026: DESHABILITADO - Causaba ciclo infinito
+      // La limpieza post-sync purgaba órdenes recién descargadas (con fechaFin antigua)
+      // y luego el próximo sync las volvía a descargar → ciclo infinito
+      // La limpieza ahora solo se ejecuta:
+      // - Al abrir la app (onAppResume)
+      // - Manualmente desde Configuración → Almacenamiento
+      //
+      // if (descargadas > 0 || errores == 0) {
+      //   try {
+      //     debugPrint('🧹 [SMART SYNC] Ejecutando limpieza post-sync...');
+      //     // El DataLifecycleManager se eliminó de este servicio para evitar el ciclo infinito
+      //     // y cumplir con el Principio de Responsabilidad Única.
+      //   } catch (e) { ... }
+      // }
 
       return SmartSyncResult(
         success: errores == 0,
@@ -360,15 +403,28 @@ class SmartSyncService {
       ),
     );
 
-    // Upsert equipo
+    // Upsert equipo - FIX 06-ENE-2026: Incluir configParametros
+    final configParam = ordenData['configParametros'];
+    String? configJson;
+    if (configParam != null && configParam is Map && configParam.isNotEmpty) {
+      configJson = jsonEncode(configParam);
+      final preview = configJson.length > 60
+          ? configJson.substring(0, 60)
+          : configJson;
+      debugPrint(
+        '\ud83d\udd0d [SMART SYNC] Equipo $idEquipo tiene configParametros: $preview...',
+      );
+    }
+
     await _db.upsertEquipo(
       EquiposCompanion(
         id: Value(idEquipo),
-        codigo: Value(''),
+        codigo: Value(ordenData['codigoEquipo'] as String? ?? ''),
         nombre: Value(ordenData['nombreEquipo'] as String? ?? ''),
         serie: Value(ordenData['serieEquipo'] as String?),
         ubicacion: Value(ordenData['ubicacionEquipo'] as String?),
         idCliente: Value(idCliente),
+        configParametros: Value(configJson),
         lastSyncedAt: Value(DateTime.now()),
       ),
     );
@@ -455,7 +511,7 @@ class SmartSyncService {
     final ordenCompanion = OrdenesCompanion(
       idBackend: Value(resumen.id),
       numeroOrden: Value(resumen.numeroOrden),
-      version: Value(0),
+      version: const Value(0),
       idEstado: Value(idEstadoLocal),
       idCliente: Value(resumen.idCliente ?? 1),
       idEquipo: Value(resumen.idEquipo ?? 1),

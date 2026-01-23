@@ -1,16 +1,16 @@
 import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpCode,
-    HttpStatus,
-    Param,
-    ParseIntPipe,
-    Post,
-    Put,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -31,6 +31,7 @@ import { ListarCatalogoSistemasQuery } from '../application/handlers/listar-cata
 import { ListarSistemasActivosQuery } from '../application/handlers/listar-sistemas-activos.handler';
 import { ObtenerCatalogoSistemasPorCodigoQuery } from '../application/handlers/obtener-catalogo-sistemas-por-codigo.handler';
 import { ObtenerCatalogoSistemasPorIdQuery } from '../application/handlers/obtener-catalogo-sistemas-por-id.handler';
+import { GetCatalogoSistemasConUsoQuery } from '../application/queries/get-catalogo-sistemas-con-uso.query';
 
 @ApiTags('Catálogo de Sistemas')
 @ApiBearerAuth()
@@ -40,7 +41,7 @@ export class CatalogoSistemasController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
-  ) {}
+  ) { }
 
   /**
    * GET /catalogo-sistemas?page=1&limit=10
@@ -71,6 +72,26 @@ export class CatalogoSistemasController {
   @ApiResponse({ status: 200, description: 'Lista de sistemas activos obtenida exitosamente' })
   async listarSistemasActivos(): Promise<CatalogoSistemasResponseDto[]> {
     const query = new ListarSistemasActivosQuery();
+    return this.queryBus.execute(query);
+  }
+
+  /**
+   * GET /catalogo-sistemas/con-uso?page=1&limit=10
+   * Obtener sistemas con indicadores de uso
+   */
+  @Get('con-uso')
+  @ApiOperation({ summary: 'Obtener sistemas con indicadores de uso' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiResponse({ status: 200, description: 'Sistemas con indicadores de uso obtenidos exitosamente' })
+  async listarSistemasConUso(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+  ): Promise<{
+    data: any[];
+    meta: { total: number; page: number; limit: number };
+  }> {
+    const query = new GetCatalogoSistemasConUsoQuery(parseInt(page), parseInt(limit));
     return this.queryBus.execute(query);
   }
 

@@ -31,6 +31,7 @@ import { CreateOrdenCommand } from './commands/create-orden.command';
 import { FinalizarOrdenCommand } from './commands/finalizar-orden.command';
 import { IniciarOrdenCommand } from './commands/iniciar-orden.command';
 import { ProgramarOrdenCommand } from './commands/programar-orden.command';
+import { UpdateOrdenCommand } from './commands/update-orden.command';
 
 // Queries
 import { GetOrdenByIdQuery } from './queries/get-orden-by-id.query';
@@ -419,66 +420,178 @@ export class OrdenesController {
     };
   }
 
+  /**
+   * GET /api/ordenes/:id/servicios
+   * Obtener detalles de servicios comerciales de una orden
+   */
+  @Get(':id/servicios')
+  @UseGuards(JwtAuthGuard)
+  async getServicios(@Param('id', ParseIntPipe) id: number) {
+    const servicios = await this.prisma.detalle_servicios_orden.findMany({
+      where: { id_orden_servicio: id },
+      include: {
+        catalogo_servicios: true,
+      },
+      orderBy: { fecha_registro: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: servicios,
+    };
+  }
+
   @Get(':id/evidencias')
   @UseGuards(JwtAuthGuard)
   async getEvidencias(@Param('id', ParseIntPipe) id: number) {
     const evidencias = await this.prisma.evidencias_fotograficas.findMany({
       where: { id_orden_servicio: id },
+      include: {
+        actividades_ejecutadas: {
+          include: {
+            catalogo_actividades: true,
+          },
+        },
+      },
       orderBy: { fecha_captura: 'desc' },
     });
 
+    // Mapear para incluir descripción de actividad en la respuesta
+    const evidenciasConActividad = evidencias.map((ev) => ({
+      ...ev,
+      actividad_asociada: ev.actividades_ejecutadas
+        ? {
+          id_actividad: ev.actividades_ejecutadas.id_actividad_ejecutada,
+          descripcion_actividad:
+            ev.actividades_ejecutadas.catalogo_actividades?.descripcion_actividad ||
+            ev.actividades_ejecutadas.observaciones ||
+            null,
+        }
+        : null,
+    }));
+
     return {
       success: true,
-      data: evidencias,
+      data: evidenciasConActividad,
     };
   }
 
   @Get(':id/firmas')
   @UseGuards(JwtAuthGuard)
   async getFirmas(@Param('id', ParseIntPipe) id: number) {
-    // 1. Obtener la orden para ver la firma del cliente vinculada
-    const orden = await this.prisma.ordenes_servicio.findUnique({
-      where: { id_orden_servicio: id },
-      select: { id_firma_cliente: true, id_tecnico_asignado: true },
-    });
+    // ✅ FIX 05-ENE-2026: Obtener firmas ESPECÍFICAS de esta orden
+    // Antes: Buscaba "la última firma del técnico" mezclando firmas entre órdenes
+    // Ahora: Usa id_firma_tecnico e id_firma_cliente vinculados a cada orden
 
-    if (!orden) {
+    // Usar $queryRaw para acceder a id_firma_tecnico (campo nuevo no en Prisma Client aún)
+    const ordenData = await this.prisma.$queryRaw<any[]>`
+      SELECT id_firma_cliente, id_firma_tecnico, nombre_quien_recibe, cargo_quien_recibe 
+      FROM ordenes_servicio WHERE id_orden_servicio = ${id}
+    `;
+
+    if (!ordenData || ordenData.length === 0) {
       throw new NotFoundException('Orden no encontrada');
     }
+    const orden = ordenData[0];
 
-    const idsFirmas = [];
+    // Recolectar IDs de firmas vinculadas a ESTA orden específica
+    const idsFirmas: number[] = [];
+    if (orden.id_firma_tecnico) idsFirmas.push(orden.id_firma_tecnico);
     if (orden.id_firma_cliente) idsFirmas.push(orden.id_firma_cliente);
 
-    // 2. Buscar firmas vinculadas (incluyendo la del técnico si existe)
-    // El técnico firma cada vez que finaliza, buscamos la última firma de ese técnico
-    const todasLasFirmas = await this.prisma.firmas_digitales.findMany({
-      where: {
-        OR: [
-          { id_firma_digital: { in: idsFirmas } },
-          {
-            AND: [
-              { id_persona: { not: 0 } }, // Persona real
-              { tipo_firma: 'TECNICO' },
-              {
-                persona: {
-                  empleados: {
-                    id_empleado: orden.id_tecnico_asignado || -1
-                  }
-                }
-              }
-            ]
+    let firmasOrden: any[] = [];
+
+    if (idsFirmas.length > 0) {
+      // ✅ Órdenes NUEVAS: Usar FKs vinculadas
+      firmasOrden = await this.prisma.firmas_digitales.findMany({
+        where: { id_firma_digital: { in: idsFirmas } },
+        include: { persona: true },
+      });
+    } else {
+      // ✅ FALLBACK para órdenes ANTIGUAS (sin FK vinculada)
+      // Buscar firmas por id_persona del técnico asignado + última firma del cliente
+      const ordenCompleta = await this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: id },
+        select: {
+          id_tecnico_asignado: true,
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+            select: { id_persona: true }
           }
-        ]
-      },
-      include: {
-        persona: true
-      },
-      orderBy: { fecha_registro: 'desc' }
-    });
+        },
+      });
+
+      const idPersonaTecnico = ordenCompleta?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_persona;
+
+      if (idPersonaTecnico) {
+        // Buscar última firma del técnico
+        const firmaTecnico = await this.prisma.firmas_digitales.findFirst({
+          where: { id_persona: idPersonaTecnico, tipo_firma: 'TECNICO' },
+          orderBy: { fecha_registro: 'desc' },
+          include: { persona: true },
+        });
+        if (firmaTecnico) firmasOrden.push(firmaTecnico);
+      }
+
+      // Buscar firma del cliente (si hay id_firma_cliente aunque sea null el técnico)
+      if (orden.id_firma_cliente) {
+        const firmaCliente = await this.prisma.firmas_digitales.findUnique({
+          where: { id_firma_digital: orden.id_firma_cliente },
+          include: { persona: true },
+        });
+        if (firmaCliente) firmasOrden.push(firmaCliente);
+      }
+    }
+
+    // Mapear para incluir nombre_firmante desde persona
+    const firmasConNombre = firmasOrden.map(f => ({
+      ...f,
+      nombre_firmante: f.persona
+        ? `${(f.persona as any).primer_nombre || (f.persona as any).nombres || ''} ${(f.persona as any).primer_apellido || (f.persona as any).apellidos || ''}`.trim()
+        : (f.tipo_firma === 'CLIENTE' ? orden.nombre_quien_recibe : 'Sin nombre'),
+      cargo_firmante: f.tipo_firma === 'TECNICO'
+        ? 'Técnico Responsable'
+        : (orden.cargo_quien_recibe || 'Cliente / Autorizador'),
+    }));
 
     return {
       success: true,
-      data: todasLasFirmas,
+      data: firmasConNombre,
+    };
+  }
+
+  /**
+   * GET /api/ordenes/:id/pdf-url
+   * Obtiene la URL del PDF del informe de servicio (sin generar)
+   */
+  @Get(':id/pdf-url')
+  @UseGuards(JwtAuthGuard)
+  async getPdfUrl(@Param('id', ParseIntPipe) id: number) {
+    console.log(`[PDF-URL] Buscando URL del PDF para orden id=${id}`);
+
+    // Buscar documento PDF directamente por id_referencia (= id_orden_servicio)
+    const documento = await this.prisma.documentos_generados.findFirst({
+      where: {
+        id_referencia: id,
+        tipo_documento: 'INFORME_SERVICIO',
+      },
+      orderBy: { fecha_generacion: 'desc' },
+      select: {
+        id_documento: true,
+        ruta_archivo: true,
+        fecha_generacion: true,
+        numero_documento: true,
+      },
+    });
+
+    console.log(`[PDF] Resultado para orden ${id}:`, documento ? documento.ruta_archivo : 'NO ENCONTRADO');
+
+    return {
+      success: true,
+      data: documento ? {
+        url: documento.ruta_archivo,
+        fecha: documento.fecha_generacion,
+        numero: documento.numero_documento,
+      } : null,
     };
   }
 
@@ -512,7 +625,9 @@ export class OrdenesController {
       dto.id_sede_cliente,
       dto.descripcion_inicial,
       dto.prioridad,
-      dto.fecha_programada ? new Date(dto.fecha_programada) : undefined,
+      // ✅ FIX TIMEZONE: Agregar T12:00:00 para evitar offset de día
+      // "2026-01-05" → "2026-01-05T12:00:00" (mediodía evita problemas de timezone)
+      dto.fecha_programada ? new Date(`${dto.fecha_programada}T12:00:00`) : undefined,
       tecnicoId,
       userId
     );
@@ -530,7 +645,9 @@ export class OrdenesController {
 
   /**
    * GET /api/ordenes
-   * Lista órdenes con paginación y filtros
+   * Lista órdenes con paginación, filtros y ordenamiento
+   * 
+   * ENTERPRISE: Soporta sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta
    */
   @Get()
   async findAll(
@@ -541,6 +658,11 @@ export class OrdenesController {
     @Query('idTecnico') idTecnico?: string,
     @Query('estado') estado?: string,
     @Query('prioridad') prioridad?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+    @Query('tipoServicioId') tipoServicioId?: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
   ) {
     const query = new GetOrdenesQuery(
       page ? parseInt(page, 10) : 1,
@@ -550,6 +672,11 @@ export class OrdenesController {
       idTecnico ? parseInt(idTecnico, 10) : undefined,
       estado,
       prioridad,
+      sortBy || 'fecha_creacion',
+      sortOrder || 'desc',
+      tipoServicioId ? parseInt(tipoServicioId, 10) : undefined,
+      fechaDesde,
+      fechaHasta,
     );
 
     const result = await this.queryBus.execute(query);
@@ -579,6 +706,127 @@ export class OrdenesController {
       success: true,
       message: 'Orden obtenida exitosamente',
       data: result,
+    };
+  }
+
+  /**
+   * PUT /api/ordenes/:id
+   * Actualiza campos editables de una orden
+   * Solo permite edición si el estado actual NO es final (APROBADA, CANCELADA)
+   */
+  @Put(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Actualizar orden de servicio',
+    description: `
+      Actualiza campos editables de una orden.
+      Solo se puede editar si el estado actual NO es final (APROBADA, CANCELADA).
+      
+      **Campos editables:**
+      - Sede cliente
+      - Tipo de servicio
+      - Fecha y hora programada
+      - Prioridad
+      - Origen de solicitud
+      - Descripción inicial
+      - Trabajo realizado
+      - Observaciones del técnico
+      - Requiere firma cliente
+    `,
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', example: 1 })
+  @ApiResponse({ status: 200, description: 'Orden actualizada exitosamente' })
+  @ApiResponse({ status: 400, description: 'Estado no permite edición' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateOrdenDto,
+    @UserId() userId: number,
+  ) {
+    // Construir DTO con fechas parseadas
+    const commandDto: any = { ...dto };
+
+    if (dto.fecha_programada) {
+      // ✅ FIX TIMEZONE: Agregar T12:00:00 para evitar offset de día
+      commandDto.fecha_programada = new Date(`${dto.fecha_programada}T12:00:00`);
+    }
+
+    if (dto.hora_programada) {
+      // Parsear hora HH:mm a Date
+      const [hours, minutes] = dto.hora_programada.split(':').map(Number);
+      const horaDate = new Date();
+      horaDate.setHours(hours, minutes, 0, 0);
+      commandDto.hora_programada = horaDate;
+    }
+
+    const command = new UpdateOrdenCommand(
+      id,
+      commandDto,
+      userId || 1, // Fallback si JWT no disponible
+    );
+
+    const result = await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Orden actualizada exitosamente',
+      data: result,
+    };
+  }
+
+  /**
+   * PATCH /api/ordenes/:id/observaciones-cierre
+   * Endpoint ATÓMICO para actualizar SOLO el campo observaciones_cierre
+   * Diseñado para Portal Admin - permite edición incluso en órdenes COMPLETADAS
+   */
+  @Patch(':id/observaciones-cierre')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Actualizar observaciones de cierre',
+    description: 'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA.',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
+  @ApiResponse({ status: 200, description: 'Observaciones actualizadas exitosamente' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  @ApiResponse({ status: 400, description: 'No se puede modificar orden en estado APROBADA/CANCELADA' })
+  async updateObservacionesCierre(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { observaciones_cierre: string },
+  ) {
+    // 1. Verificar que la orden existe y obtener estado actual
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      include: { estados_orden: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden ${id} no encontrada`);
+    }
+
+    // 2. Validar que no sea estado final bloqueado (APROBADA/CANCELADA)
+    const estadoCodigo = orden.estados_orden?.codigo_estado;
+    if (estadoCodigo === 'APROBADA' || estadoCodigo === 'CANCELADA') {
+      throw new BadRequestException(
+        `No se puede modificar una orden en estado ${estadoCodigo}`,
+      );
+    }
+
+    // 3. Actualizar SOLO observaciones_cierre (operación atómica)
+    const updated = await this.prisma.ordenes_servicio.update({
+      where: { id_orden_servicio: id },
+      data: {
+        observaciones_cierre: body.observaciones_cierre,
+        fecha_modificacion: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Observaciones de cierre actualizadas exitosamente',
+      data: {
+        id_orden_servicio: updated.id_orden_servicio,
+        observaciones_cierre: updated.observaciones_cierre,
+      },
     };
   }
 
@@ -895,6 +1143,7 @@ export class OrdenesController {
     console.log(`⏰ HORA ENTRADA: "${dto.horaEntrada}"`);
     console.log(`⏰ HORA SALIDA: "${dto.horaSalida}"`);
     console.log(`📝 OBSERVACIONES: "${dto.observaciones?.substring(0, 50)}..."`);
+    console.log(`🎛️ MODO FINALIZACIÓN: "${dto.modo || 'COMPLETO (default)'}"`);
     console.log('');
     console.log('🔬 ═══════════════════════════════════════════════════════════════');
     console.log('');
@@ -942,6 +1191,8 @@ export class OrdenesController {
       horaSalida: dto.horaSalida,
       emailAdicional: dto.emailAdicional,
       usuarioId: userId || 1, // Fallback si JWT no disponible
+      // ✅ MODO CONFIGURABLE: Pasar modo de finalización al servicio
+      modo: (dto.modo || 'COMPLETO') as 'COMPLETO' | 'SOLO_DATOS',
     };
 
     // Ejecutar flujo completo de finalización
@@ -1052,6 +1303,8 @@ export class OrdenesController {
         horaSalida: dto.horaSalida,
         emailAdicional: dto.emailAdicional,
         usuarioId: userId || 1,
+        // ✅ MODO CONFIGURABLE: Pasar modo de finalización al servicio
+        modo: (dto.modo || 'COMPLETO') as 'COMPLETO' | 'SOLO_DATOS',
       };
 
       // Ejecutar flujo completo con callback de progreso

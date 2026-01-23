@@ -1,0 +1,68 @@
+# Render.com Blueprint Configuration
+# Mekanos API - NestJS Backend
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: mekanos-api
+    runtime: node
+    region: oregon
+    plan: free
+    branch: fix/admin-order-creation-and-detail-sync
+    rootDir: apps/api
+    buildCommand: bash apps/api/render-build.sh
+    startCommand: bash apps/api/render-start.sh
+    healthCheckPath: /api/health
+    envVars:
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/project/src/apps/api/node_modules/.cache/puppeteer
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "false"
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRATION
+        value: 15m
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_REFRESH_EXPIRATION
+        value: 7d
+      - key: CORS_ORIGIN
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME_PLANTAS
+        sync: false
+      - key: CLOUDINARY_API_KEY_PLANTAS
+        sync: false
+      - key: CLOUDINARY_API_SECRET_PLANTAS
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME_BOMBAS
+        sync: false
+      - key: CLOUDINARY_API_KEY_BOMBAS
+        sync: false
+      - key: CLOUDINARY_API_SECRET_BOMBAS
+        sync: false
+      - key: R2_PLANTAS_ACCOUNT_ID
+        sync: false
+      - key: R2_PLANTAS_ACCESS_KEY_ID
+        sync: false
+      - key: R2_PLANTAS_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_PLANTAS_BUCKET_NAME
+        sync: false
+      - key: R2_PUBLIC_URL
+        sync: false
+      - key: EMAIL_SMTP_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_SMTP_PORT
+        value: 587
+      - key: EMAIL_SMTP_USER
+        sync: false
+      - key: EMAIL_SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { PrismaModule } from '../database/prisma.module';
+import { StorageModule } from '../storage/storage.module';
 import { EvidenciasController } from './evidencias.controller';
 
 // Repository
@@ -39,7 +40,7 @@ const QueryHandlers = [
 ];
 
 @Module({
-  imports: [CqrsModule, PrismaModule],
+  imports: [CqrsModule, PrismaModule, StorageModule],
   controllers: [EvidenciasController],
   providers: [
     {
@@ -52,5 +53,5 @@ const QueryHandlers = [
   ],
   exports: ['IEvidenciasRepository'],
 })
-export class EvidenciasModule {}
+export class EvidenciasModule { }
 

@@ -6,51 +6,51 @@
 'use client';
 
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table';
 import {
-    TIPO_CLIENTE_LABELS,
-    TipoClienteEnum,
-    type ClienteConPersona
+  TIPO_CLIENTE_LABELS,
+  TipoClienteEnum,
+  type ClienteConPersona
 } from '@/types/clientes';
 import {
-    Building2,
-    ChevronLeft,
-    ChevronRight,
-    Eye,
-    Mail,
-    Pencil,
-    Phone,
-    Plus,
-    RefreshCw,
-    Search,
-    Trash2,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Mail,
+  Pencil,
+  Phone,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -110,17 +110,27 @@ export function ClientesTable() {
     router.push('/clientes/nuevo');
   };
 
-  // Obtener nombre del cliente (persona natural o jurídica)
+  // Obtener nombre del cliente (Priorizar nombre_comercial > nombre_completo > razon_social)
   const getClienteName = (cliente: ClienteConPersona): string => {
     const persona = cliente.persona;
     if (!persona) return `Cliente #${cliente.id_cliente}`;
-    
-    if (persona.tipo_persona === 'JURIDICA') {
-      return persona.razon_social || persona.nombre_comercial || 'Sin nombre';
+
+    // 1. Si tiene nombre_comercial, usarlo primero (ej: "EDIFICIO MILANO")
+    if (persona.nombre_comercial && persona.nombre_comercial.trim()) {
+      return persona.nombre_comercial;
     }
-    return persona.nombre_completo || 
-           `${persona.primer_nombre || ''} ${persona.primer_apellido || ''}`.trim() || 
-           'Sin nombre';
+
+    // 2. Si tiene nombre_completo, usarlo
+    if (persona.nombre_completo && persona.nombre_completo.trim()) {
+      return persona.nombre_completo;
+    }
+
+    // 3. Construir nombre desde primer_nombre + primer_apellido
+    const nombrePersona = `${persona.primer_nombre || ''} ${persona.primer_apellido || ''}`.trim();
+    if (nombrePersona) return nombrePersona;
+
+    // 4. Fallback: razón social
+    return persona.razon_social || 'Sin nombre';
   };
 
   const getNit = (cliente: ClienteConPersona): string => {
@@ -228,7 +238,7 @@ export function ClientesTable() {
               </TableRow>
             ) : (
               clientes.map((cliente) => (
-                <TableRow 
+                <TableRow
                   key={cliente.id_cliente}
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => handleView(cliente.id_cliente)}

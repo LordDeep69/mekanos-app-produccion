@@ -24,29 +24,29 @@
  */
 
 import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    InternalServerErrorException,
-    Logger,
-    NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import {
-    cargo_empleado_enum,
-    estado_usuario_enum,
-    nivel_academico_enum,
-    Prisma,
-    tipo_contrato_empleado_enum
+  cargo_empleado_enum,
+  estado_usuario_enum,
+  nivel_academico_enum,
+  Prisma,
+  tipo_contrato_empleado_enum
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import {
-    BuscarPersonaDto,
-    CreateUsuarioCompletoDto,
-    DatosPersonaDto,
-    PersonaExistenteResponse,
-    UsuarioCompletoResponse,
+  BuscarPersonaDto,
+  CreateUsuarioCompletoDto,
+  DatosPersonaDto,
+  PersonaExistenteResponse,
+  UsuarioCompletoResponse,
 } from './dto/create-usuario-completo.dto';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -58,7 +58,20 @@ export class UsuariosGestionService {
   private readonly logger = new Logger(UsuariosGestionService.name);
   private readonly SALT_ROUNDS = 12;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
+
+  /**
+   * Normaliza el username para cumplir con las restricciones de BD (sin espacios, sin acentos)
+   */
+  private normalizarUsername(username: string): string {
+    return username
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+      .replace(/\s+/g, '.') // Cambiar espacios por puntos
+      .replace(/[^a-z0-9._-]/g, ''); // Solo permitir alfanuméricos y . _ -
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════════
   // MÉTODO PRINCIPAL: CREAR USUARIO COMPLETO
@@ -82,9 +95,12 @@ export class UsuariosGestionService {
   async crearUsuarioCompleto(
     dto: CreateUsuarioCompletoDto,
   ): Promise<UsuarioCompletoResponse> {
+    const usernameNormalizado = this.normalizarUsername(dto.datosUsuario.username);
+
     this.logger.log('═══════════════════════════════════════════════════════════');
     this.logger.log('INICIANDO CREACIÓN DE USUARIO COMPLETO');
     this.logger.log(`Username solicitado: ${dto.datosUsuario.username}`);
+    this.logger.log(`Username normalizado: ${usernameNormalizado}`);
     this.logger.log(`Persona: ${dto.datosPersona.numero_identificacion}`);
     this.logger.log('═══════════════════════════════════════════════════════════');
 
@@ -100,7 +116,7 @@ export class UsuariosGestionService {
       const usernameExiste = await this.prisma.usuarios.findFirst({
         where: {
           username: {
-            equals: dto.datosUsuario.username,
+            equals: usernameNormalizado,
             mode: 'insensitive',
           },
         },
@@ -108,7 +124,7 @@ export class UsuariosGestionService {
 
       if (usernameExiste) {
         throw new ConflictException(
-          `El username "${dto.datosUsuario.username}" ya está en uso`,
+          `El username "${usernameNormalizado}" ya está en uso`,
         );
       }
 
@@ -255,11 +271,12 @@ export class UsuariosGestionService {
         const usuario = await tx.usuarios.create({
           data: {
             id_persona: persona.id_persona,
-            username: dto.datosUsuario.username,
+            username: usernameNormalizado,
             email: emailUsuario.toLowerCase(),
             password_hash: passwordHash,
             debe_cambiar_password: debeCambiarPassword,
-            estado: (dto.datosUsuario.estado || 'PENDIENTE_ACTIVACION') as estado_usuario_enum,
+            estado: (dto.datosUsuario.estado || 'ACTIVO') as estado_usuario_enum,
+            fecha_activacion: new Date(),
             fecha_ultimo_cambio_password: new Date(),
           },
         });

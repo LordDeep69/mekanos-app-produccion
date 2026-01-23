@@ -1,11 +1,12 @@
 'use client';
 
 import {
-    useActualizarSistema,
-    useCrearSistema,
-    useEliminarSistema,
-    useSistemas
-} from '@/features/ordenes';
+    APLICA_A_OPTIONS,
+    useCreateCatalogoSistema,
+    useDeleteCatalogoSistema,
+    useUpdateCatalogoSistema,
+    type NivelUso
+} from '@/features/catalogos';
 import {
     AlertCircle,
     Check,
@@ -21,15 +22,24 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+// Helpers para indicadores de uso
+const NIVEL_USO_CONFIG: Record<NivelUso, { label: string; color: string; bgColor: string }> = {
+    alto: { label: 'Alto', color: 'text-green-700', bgColor: 'bg-green-100' },
+    medio: { label: 'Medio', color: 'text-blue-700', bgColor: 'bg-blue-100' },
+    bajo: { label: 'Bajo', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
+    sin_uso: { label: 'Sin uso', color: 'text-gray-500', bgColor: 'bg-gray-100' },
+};
+
 export default function SistemasPage() {
     const [busqueda, setBusqueda] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSistema, setEditingSistema] = useState<any>(null);
 
-    const { data: sistemas, isLoading, isError, refetch } = useSistemas();
-    const crearSistema = useCrearSistema();
-    const actualizarSistema = useActualizarSistema();
-    const eliminarSistema = useEliminarSistema();
+    const { data: response, isLoading, isError, refetch } = useCatalogoSistemasConUso({ limit: 100 });
+    const sistemas = response?.data || [];
+    const crearSistema = useCreateCatalogoSistema();
+    const actualizarSistema = useUpdateCatalogoSistema();
+    const eliminarSistema = useDeleteCatalogoSistema();
 
     const handleEdit = (sistema: any) => {
         setEditingSistema(sistema);
@@ -42,11 +52,12 @@ export default function SistemasPage() {
         }
     };
 
-    const filteredSistemas = sistemas?.filter(s => {
-        const matchesBusqueda = s.nombre_sistema.toLowerCase().includes(busqueda.toLowerCase()) ||
-            s.codigo_sistema.toLowerCase().includes(busqueda.toLowerCase());
-        return matchesBusqueda;
-    }).sort((a, b) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0)) || [];
+    const filteredSistemas = sistemas.filter(s => {
+        const nombre = s.nombre_sistema || '';
+        const codigo = s.codigo_sistema || '';
+        const term = busqueda.toLowerCase();
+        return nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
+    }).sort((a, b) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
 
     return (
         <div className="space-y-6">
@@ -111,13 +122,14 @@ export default function SistemasPage() {
                                 <tr className="bg-gray-50 border-b border-gray-100">
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider w-16 text-center">Orden</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Sistema</th>
+                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Actividades</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Aplica a</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredSistemas.map((sistema) => (
-                                    <tr key={sistema.id_sistema} className="hover:bg-blue-50/30 transition-colors group">
+                                {filteredSistemas.map((sistema, idx) => (
+                                    <tr key={sistema.id_sistema ?? `sistema-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-6 py-4 text-center">
                                             <span className="text-sm font-bold text-gray-400">#{sistema.orden_visualizacion}</span>
                                         </td>
@@ -137,13 +149,32 @@ export default function SistemasPage() {
                                                 </div>
                                             </div>
                                         </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Activity className="h-4 w-4 text-gray-400" />
+                                                    <span className="text-lg font-bold text-gray-800">
+                                                        {(sistema as any).total_actividades ?? 0}
+                                                    </span>
+                                                </div>
+                                                {(sistema as any).nivel_uso && (
+                                                    <span className={cn(
+                                                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                                                        NIVEL_USO_CONFIG[(sistema as any).nivel_uso]?.bgColor || 'bg-gray-100',
+                                                        NIVEL_USO_CONFIG[(sistema as any).nivel_uso]?.color || 'text-gray-500'
+                                                    )}>
+                                                        {NIVEL_USO_CONFIG[(sistema as any).nivel_uso]?.label || 'N/A'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
-                                                {sistema.aplica_a?.length > 0 ? sistema.aplica_a.map((tipo: string) => (
-                                                    <span key={tipo} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold uppercase">
-                                                        {tipo}
+                                                {sistema.aplica_a ? (
+                                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold uppercase">
+                                                        {APLICA_A_OPTIONS.find(o => o.value === sistema.aplica_a)?.label || sistema.aplica_a}
                                                     </span>
-                                                )) : (
+                                                ) : (
                                                     <span className="text-xs text-gray-400 italic">Todos los equipos</span>
                                                 )}
                                             </div>
@@ -179,10 +210,18 @@ export default function SistemasPage() {
                     onClose={() => setIsModalOpen(false)}
                     sistema={editingSistema}
                     onSubmit={async (formData: any) => {
+                        const dto = {
+                            codigoSistema: formData.codigo_sistema,
+                            nombreSistema: formData.nombre_sistema,
+                            descripcion: formData.descripcion,
+                            aplicaA: formData.aplica_a,
+                            ordenVisualizacion: Number(formData.orden_visualizacion),
+                            colorHex: formData.color_hex,
+                        };
                         if (editingSistema) {
-                            await actualizarSistema.mutateAsync({ id: editingSistema.id_sistema, data: formData });
+                            await actualizarSistema.mutateAsync({ id: editingSistema.id_sistema, data: dto });
                         } else {
-                            await crearSistema.mutateAsync(formData);
+                            await crearSistema.mutateAsync(dto);
                         }
                         setIsModalOpen(false);
                     }}

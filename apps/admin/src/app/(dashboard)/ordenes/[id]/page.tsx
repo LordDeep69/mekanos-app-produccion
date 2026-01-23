@@ -33,9 +33,18 @@ import {
     useServiciosOrden,
     useTecnicosSelector,
 } from '@/features/ordenes';
+import { ActividadCardAdvanced, ResumenEstados } from '@/features/ordenes/components/actividad-card-advanced';
+import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gallery';
+import { FirmasSection } from '@/features/ordenes/components/firmas-section';
+import { GestionInformeSection } from '@/features/ordenes/components/gestion-informe-section';
+import { HistorialEstados } from '@/features/ordenes/components/historial-estados';
+import { MedicionCardAdvanced, ResumenMediciones } from '@/features/ordenes/components/medicion-card-advanced';
+import { ObservacionesCierreSection } from '@/features/ordenes/components/observaciones-section';
+import { OrdenEditModal } from '@/features/ordenes/components/orden-edit-modal';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { cn } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
+import { useQuery } from '@tanstack/react-query';
 import {
     AlertCircle,
     ArrowLeft,
@@ -59,6 +68,7 @@ import {
     Wrench,
     XCircle
 } from 'lucide-react';
+import { getSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -201,9 +211,13 @@ function ActionButton({
 function formatDisplayDate(dateStr?: string) {
     if (!dateStr) return 'Sin programar';
     try {
-        // Si ya incluye la hora o zona horaria, no añadir T12:00:00
-        const finalDateStr = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`;
-        return new Date(finalDateStr).toLocaleDateString('es-CO', {
+        // ✅ FIX TIMEZONE: Extraer solo la parte de fecha (YYYY-MM-DD) y crear fecha local
+        // Evita problemas de timezone cuando el string viene como ISO con UTC
+        const datePart = dateStr.split('T')[0]; // "2026-01-05T00:00:00.000Z" → "2026-01-05"
+        const [year, month, day] = datePart.split('-').map(Number);
+        // Crear fecha local (sin conversión UTC)
+        const localDate = new Date(year, month - 1, day);
+        return localDate.toLocaleDateString('es-CO', {
             weekday: 'long',
             day: '2-digit',
             month: 'long',
@@ -221,8 +235,49 @@ function TabGeneral({ orden }: { orden: Orden }) {
         ? new Date(orden.fecha_creacion).toLocaleString('es-CO')
         : '-';
 
+    const fechaFinalizacion = orden.fecha_fin_real
+        ? new Date(orden.fecha_fin_real).toLocaleString('es-CO')
+        : null;
+
+    const horaInicio = orden.fecha_inicio_real
+        ? new Date(orden.fecha_inicio_real).toLocaleString('es-CO')
+        : null;
+
+    // ✅ FIX: Solo mostrar banner si tiene fecha_fin_real (servicio realmente finalizado)
+    // No mostrar para órdenes recién creadas o estados administrativos
+    const servicioFinalizado = !!orden.fecha_fin_real;
+
     return (
         <div className="space-y-6">
+            {/* Banner de Orden Completada - Solo si tiene fecha_fin_real */}
+            {servicioFinalizado && (
+                <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-lg">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                            <CheckCircle2 className="h-8 w-8" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-xl font-bold">Servicio Finalizado</h3>
+                            <div className="text-green-100 text-sm space-y-0.5">
+                                {horaInicio && <p>🕐 Inicio: {horaInicio}</p>}
+                                <p>✅ Fin: {fechaFinalizacion}</p>
+                            </div>
+                        </div>
+                        {orden.informes?.[0]?.url_pdf && (
+                            <a
+                                href={orden.informes[0].url_pdf}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-4 py-2 bg-white text-green-700 rounded-xl font-bold text-sm hover:bg-green-50 transition-all shadow-lg"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Ver Informe PDF
+                            </a>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Grid de información */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <InfoCard
@@ -293,27 +348,17 @@ function TabGeneral({ orden }: { orden: Orden }) {
                 </div>
             )}
 
-            {/* Observaciones */}
-            {orden.observaciones && (
-                <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                    <h4 className="text-sm font-medium text-amber-800 mb-2">Observaciones</h4>
-                    <p className="text-amber-700">{orden.observaciones}</p>
-                </div>
-            )}
+            {/* Observaciones de Cierre - Editables por Admin */}
+            <ObservacionesCierreSection orden={orden} />
 
-            {/* Timeline de estados (placeholder) */}
-            <div className="bg-white rounded-lg border p-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-4">Historial de Estados</h4>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Clock className="h-4 w-4" />
-                    <span>Historial disponible próximamente</span>
-                </div>
-            </div>
+            {/* Historial de Estados */}
+            <HistorialEstados idOrden={orden.id_orden_servicio} />
         </div>
     );
 }
 
 function TabEjecucion({ orden }: { orden: Orden }) {
+    const [subTab, setSubTab] = useState<'checklist' | 'mediciones'>('checklist');
     const { data: actividadesData, isLoading: isLoadingAct } = useActividadesOrden(orden.id_orden_servicio);
     const { data: medicionesData, isLoading: isLoadingMed } = useMedicionesOrden(orden.id_orden_servicio);
 
@@ -325,11 +370,16 @@ function TabEjecucion({ orden }: { orden: Orden }) {
         ? Math.round((actividadesCompletadas / actividades.length) * 100)
         : 0;
 
+    // Contadores para mediciones
+    const medicionesOk = mediciones.filter((m: any) => !m.fuera_de_rango && m.nivel_alerta !== 'CRITICO' && m.nivel_alerta !== 'ADVERTENCIA').length;
+    const medicionesAlerta = mediciones.filter((m: any) => m.nivel_alerta === 'ADVERTENCIA').length;
+    const medicionesCritico = mediciones.filter((m: any) => m.fuera_de_rango || m.nivel_alerta === 'CRITICO').length;
+
     return (
-        <div className="space-y-6">
-            {/* Progreso */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
+        <div className="space-y-4">
+            {/* Progreso General */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
                     <div>
                         <h4 className="font-bold text-gray-900">Progreso de Ejecución</h4>
                         <p className="text-xs text-gray-500">Avance basado en checklist técnico</p>
@@ -338,144 +388,112 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                         {actividadesCompletadas} / {actividades.length} actividades
                     </span>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden border border-gray-200">
+                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden border border-gray-200">
                     <div
-                        className="bg-blue-600 h-full transition-all duration-500 ease-out"
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-full transition-all duration-500 ease-out"
                         style={{ width: `${porcentajeProgreso}%` }}
                     />
                 </div>
-                <div className="flex justify-between mt-2">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Inicio del servicio</p>
-                    <p className="text-sm font-black text-blue-900">{porcentajeProgreso}% COMPLETADO</p>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Cierre técnico</p>
-                </div>
+                <p className="text-center text-sm font-black text-blue-900 mt-2">{porcentajeProgreso}% COMPLETADO</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Actividades */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                        <h4 className="font-bold text-gray-900 flex items-center gap-2">
-                            <Play className="h-5 w-5 text-blue-600" />
-                            Checklist de Actividades
-                        </h4>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto max-h-[500px] p-2 space-y-2">
-                        {isLoadingAct ? (
-                            <div className="flex justify-center py-12">
-                                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                            </div>
-                        ) : actividades.length === 0 ? (
-                            <div className="text-center py-12 text-gray-500">
-                                <Play className="h-12 w-12 mx-auto mb-3 text-gray-200" />
-                                <p className="font-medium">No hay actividades registradas</p>
-                                <p className="text-xs">Las actividades se sincronizan desde la App Móvil</p>
-                            </div>
-                        ) : (
-                            actividades.map((act: any) => (
-                                <div
-                                    key={act.id_actividad_ejecutada}
-                                    className={cn(
-                                        "flex items-start gap-3 p-3 rounded-xl border transition-all",
-                                        act.ejecutada
-                                            ? "bg-green-50 border-green-100"
-                                            : "bg-white border-gray-100 opacity-60"
-                                    )}
-                                >
-                                    <div className={cn(
-                                        "mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center border",
-                                        act.ejecutada
-                                            ? "bg-green-500 border-green-500 text-white"
-                                            : "border-gray-300 bg-white text-transparent"
-                                    )}>
-                                        <Check className="h-3.5 w-3.5" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className={cn(
-                                            "text-sm font-bold",
-                                            act.ejecutada ? "text-green-900" : "text-gray-700"
-                                        )}>
-                                            {act.id_actividad_catalogo ? act.catalogo_actividades?.descripcion_actividad : act.descripcion_manual}
-                                        </p>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            {act.sistema && (
-                                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
-                                                    {act.sistema}
-                                                </span>
-                                            )}
-                                            {act.fecha_ejecucion && (
-                                                <span className="text-[10px] text-gray-400">
-                                                    {new Date(act.fecha_ejecucion).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {act.observaciones && (
-                                            <p className="text-xs text-gray-500 mt-1 italic border-l-2 border-gray-200 pl-2">
-                                                "{act.observaciones}"
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            ))
+            {/* SubTabs: Checklist | Mediciones */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                {/* Tab Headers */}
+                <div className="flex border-b border-gray-200">
+                    <button
+                        onClick={() => setSubTab('checklist')}
+                        className={`flex-1 py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${subTab === 'checklist'
+                                ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
+                                : 'text-gray-500 hover:bg-gray-50'
+                            }`}
+                    >
+                        <Play className="h-4 w-4" />
+                        Checklist de Actividades
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${subTab === 'checklist' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                            {actividades.length}
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setSubTab('mediciones')}
+                        className={`flex-1 py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${subTab === 'mediciones'
+                                ? 'text-purple-600 bg-purple-50 border-b-2 border-purple-600'
+                                : 'text-gray-500 hover:bg-gray-50'
+                            }`}
+                    >
+                        <Settings className="h-4 w-4" />
+                        Mediciones Técnicas
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${subTab === 'mediciones' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                            {mediciones.length}
+                        </span>
+                        {medicionesCritico > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white font-bold">
+                                {medicionesCritico} ⚠
+                            </span>
                         )}
-                    </div>
+                    </button>
                 </div>
 
-                {/* Mediciones */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                        <h4 className="font-bold text-gray-900 flex items-center gap-2">
-                            <Settings className="h-5 w-5 text-purple-600" />
-                            Mediciones Técnicas
-                        </h4>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto max-h-[500px] p-2">
-                        {isLoadingMed ? (
-                            <div className="flex justify-center py-12">
-                                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                            </div>
-                        ) : mediciones.length === 0 ? (
-                            <div className="text-center py-12 text-gray-500">
-                                <Settings className="h-12 w-12 mx-auto mb-3 text-gray-200" />
-                                <p className="font-medium">Sin mediciones de campo</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {mediciones.map((med: any) => (
-                                    <div
-                                        key={med.id_medicion}
-                                        className={cn(
-                                            "p-3 rounded-xl border flex flex-col justify-between transition-all",
-                                            med.fuera_de_rango ? "bg-red-50 border-red-100 ring-1 ring-red-200" : "bg-white border-gray-100"
-                                        )}
-                                    >
-                                        <div>
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">
-                                                {med.parametros_medicion?.nombre_parametro}
-                                            </p>
-                                            <p className={cn(
-                                                "text-xl font-black mt-1",
-                                                med.fuera_de_rango ? "text-red-700" : "text-blue-900"
-                                            )}>
-                                                {med.valor_numerico ?? med.valor_texto}
-                                                <span className="text-xs font-bold text-gray-400 ml-1">
-                                                    {med.unidad_medida}
-                                                </span>
-                                            </p>
-                                        </div>
-                                        {med.fuera_de_rango && (
-                                            <div className="mt-2 flex items-center gap-1.5 text-red-600 font-bold text-[10px] animate-pulse">
-                                                <AlertCircle className="h-3 w-3" />
-                                                FUERA DE RANGO
-                                            </div>
-                                        )}
+                {/* Tab Content */}
+                <div className="p-4">
+                    {subTab === 'checklist' && (
+                        <div className="space-y-3">
+                            {isLoadingAct ? (
+                                <div className="flex justify-center py-12">
+                                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                                </div>
+                            ) : actividades.length === 0 ? (
+                                <div className="text-center py-12 text-gray-500">
+                                    <Play className="h-12 w-12 mx-auto mb-3 text-gray-200" />
+                                    <p className="font-medium">No hay actividades registradas</p>
+                                    <p className="text-xs">Las actividades se sincronizan desde la App Móvil</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <ResumenEstados actividades={actividades} />
+                                    <div className="space-y-2">
+                                        {actividades.map((act: any) => (
+                                            <ActividadCardAdvanced
+                                                key={act.id_actividad_ejecutada}
+                                                actividad={act}
+                                                idOrdenServicio={orden.id_orden_servicio}
+                                            />
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {subTab === 'mediciones' && (
+                        <div className="space-y-3">
+                            {isLoadingMed ? (
+                                <div className="flex justify-center py-12">
+                                    <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                                </div>
+                            ) : mediciones.length === 0 ? (
+                                <div className="text-center py-12 text-gray-500">
+                                    <Settings className="h-12 w-12 mx-auto mb-3 text-gray-200" />
+                                    <p className="font-medium">Sin mediciones de campo</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <ResumenMediciones mediciones={mediciones} />
+                                    <div className="space-y-2">
+                                        {mediciones.map((med: any) => (
+                                            <MedicionCardAdvanced
+                                                key={med.id_medicion}
+                                                medicion={med}
+                                                idOrdenServicio={orden.id_orden_servicio}
+                                            />
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -731,150 +749,38 @@ function TabDocumentos({ orden }: { orden: Orden }) {
     const { data: evidenciasData, isLoading: isLoadingEv } = useEvidenciasOrden(orden.id_orden_servicio);
     const { data: firmasData, isLoading: isLoadingFi } = useFirmasOrden(orden.id_orden_servicio);
 
+    // ✅ FIX 05-ENE-2026: Obtener URL del PDF desde documentos_generados
+    const { data: pdfData } = useQuery({
+        queryKey: ['orden-pdf-url', orden.id_orden_servicio],
+        queryFn: async () => {
+            const session = await getSession();
+            const token = (session as any)?.accessToken;
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ordenes/${orden.id_orden_servicio}/pdf-url`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            return res.json();
+        },
+        enabled: orden.estados_orden?.codigo_estado === 'COMPLETADA' || orden.estados_orden?.codigo_estado === 'APROBADA',
+    });
+    const urlPdf = pdfData?.data?.url || null;
+
     const evidencias = evidenciasData?.data || [];
     const firmas = firmasData?.data || [];
 
-    const firmaTecnico = firmas.find((f: any) => f.tipo_firma === 'TECNICO');
-    const firmaCliente = firmas.find((f: any) => f.tipo_firma === 'CLIENTE');
 
-    // Agrupar evidencias por equipo (para multi-equipos)
-    const evidenciasPorEquipo = evidencias.reduce((acc: any, ev: any) => {
-        const key = ev.id_orden_equipo || 'GENERAL';
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(ev);
-        return acc;
-    }, {});
 
     return (
         <div className="space-y-6">
-            {/* Firmas Digitales */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-purple-600" />
-                    Firmas de Conformidad
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Firma Técnico */}
-                    <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50 flex flex-col items-center">
-                        <p className="text-xs font-bold text-gray-400 uppercase mb-4">Firma del Técnico</p>
-                        {isLoadingFi ? (
-                            <Loader2 className="h-8 w-8 animate-spin text-purple-500 my-4" />
-                        ) : firmaTecnico ? (
-                            <div className="bg-white p-2 rounded-lg border border-gray-200 w-full">
-                                <img
-                                    src={firmaTecnico.url_firma}
-                                    alt="Firma Técnico"
-                                    className="h-32 object-contain mx-auto"
-                                />
-                                <div className="mt-2 text-center border-t border-gray-50 pt-2">
-                                    <p className="text-sm font-bold text-gray-900">{firmaTecnico.nombre_firmante}</p>
-                                    <p className="text-[10px] text-gray-500 uppercase">{firmaTecnico.cargo_firmante || 'Técnico Responsable'}</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-40 text-gray-400 italic">
-                                <User className="h-12 w-12 mb-2 opacity-20" />
-                                <p className="text-sm">Pendiente de firma</p>
-                            </div>
-                        )}
-                    </div>
+            {/* Gestión de Informe PDF - NUEVO */}
+            <GestionInformeSection orden={orden} />
 
-                    {/* Firma Cliente */}
-                    <div className="border border-gray-100 rounded-2xl p-4 bg-gray-50 flex flex-col items-center">
-                        <p className="text-xs font-bold text-gray-400 uppercase mb-4">Firma del Cliente</p>
-                        {isLoadingFi ? (
-                            <Loader2 className="h-8 w-8 animate-spin text-purple-500 my-4" />
-                        ) : firmaCliente ? (
-                            <div className="bg-white p-2 rounded-lg border border-gray-200 w-full">
-                                <img
-                                    src={firmaCliente.url_firma}
-                                    alt="Firma Cliente"
-                                    className="h-32 object-contain mx-auto"
-                                />
-                                <div className="mt-2 text-center border-t border-gray-50 pt-2">
-                                    <p className="text-sm font-bold text-gray-900">{firmaCliente.nombre_firmante}</p>
-                                    <p className="text-[10px] text-gray-500 uppercase">{firmaCliente.cargo_firmante || 'Cliente / Autorizador'}</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-40 text-gray-400 italic">
-                                <User className="h-12 w-12 mb-2 opacity-20" />
-                                <p className="text-sm">Pendiente de firma</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            {/* Firmas Digitales - Componente Avanzado */}
+            <FirmasSection firmas={firmas} isLoading={isLoadingFi} />
 
-            {/* Evidencias Fotográficas */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                    <h4 className="font-bold text-gray-900 flex items-center gap-2">
-                        <Camera className="h-5 w-5 text-blue-600" />
-                        Evidencias Fotográficas
-                    </h4>
-                    <span className="text-xs font-bold text-gray-500 bg-gray-200 px-2 py-1 rounded-full">
-                        {evidencias.length} fotos
-                    </span>
-                </div>
+            {/* Evidencias Fotográficas - Componente Avanzado con Lightbox */}
+            <EvidenciasGallery evidencias={evidencias} isLoading={isLoadingEv} />
 
-                <div className="p-6">
-                    {isLoadingEv ? (
-                        <div className="flex justify-center py-12">
-                            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                        </div>
-                    ) : evidencias.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                            <Camera className="h-16 w-16 mx-auto mb-3 text-gray-200" />
-                            <p className="font-medium">No hay evidencias registradas</p>
-                            <p className="text-sm">Las fotos se capturan desde la app móvil durante el servicio</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-8">
-                            {Object.entries(evidenciasPorEquipo).map(([idEquipo, fotos]: [string, any]) => {
-                                const equipo = orden.ordenes_equipos?.find(oe => oe.id_orden_equipo === Number(idEquipo))?.equipo;
-                                return (
-                                    <div key={idEquipo} className="space-y-4">
-                                        {idEquipo !== 'GENERAL' && (
-                                            <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                                                <Wrench className="h-4 w-4 text-blue-500" />
-                                                <h5 className="text-sm font-black text-gray-700 uppercase">
-                                                    Equipo: {equipo?.codigo_equipo} - {equipo?.nombre_equipo}
-                                                </h5>
-                                            </div>
-                                        )}
-                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                            {fotos.map((foto: any) => (
-                                                <div
-                                                    key={foto.id_evidencia}
-                                                    className="group relative bg-gray-100 rounded-xl overflow-hidden border border-gray-200 hover:ring-2 hover:ring-blue-500 transition-all cursor-zoom-in"
-                                                >
-                                                    <img
-                                                        src={foto.url_archivo}
-                                                        alt={foto.descripcion || 'Evidencia'}
-                                                        className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
-                                                    />
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
-                                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{foto.tipo_evidencia}</span>
-                                                        <p className="text-xs text-white font-medium line-clamp-2">{foto.descripcion || 'Sin descripción'}</p>
-                                                    </div>
-                                                    <div className="absolute top-2 right-2">
-                                                        <span className="bg-black/50 backdrop-blur-md text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                                                            {foto.tipo_evidencia}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Documentos Generados (Informe PDF) */}
+            {/* Documentos Generados (Informe PDF) - Legacy */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <FileText className="h-5 w-5 text-red-600" />
@@ -890,16 +796,16 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                     </div>
                     {orden.estados_orden?.codigo_estado === 'COMPLETADA' || orden.estados_orden?.codigo_estado === 'APROBADA' ? (
                         <a
-                            href={orden.informes?.[0]?.url_pdf || '#'}
+                            href={urlPdf || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                             className={cn(
                                 "px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center gap-2",
-                                !orden.informes?.[0]?.url_pdf && "opacity-50 cursor-not-allowed pointer-events-none"
+                                !urlPdf && "opacity-50 cursor-not-allowed pointer-events-none"
                             )}
                         >
                             <FileText className="h-4 w-4" />
-                            {orden.informes?.[0]?.url_pdf ? 'Descargar PDF' : 'PDF no disponible'}
+                            {urlPdf ? 'Descargar PDF' : 'PDF no disponible'}
                         </a>
                     ) : (
                         <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">No generado aún</span>
@@ -1061,6 +967,7 @@ export default function OrdenDetallePage() {
     // Estados para Modales
     const [isAsignarModalOpen, setIsAsignarModalOpen] = useState(false);
     const [isCancelarModalOpen, setIsCancelarModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [motivoCancelacion, setMotivoCancelacion] = useState('');
 
     const { data, isLoading, isError, refetch } = useOrden(id);
@@ -1204,8 +1111,9 @@ export default function OrdenDetallePage() {
                         <>
                             <ActionButton
                                 icon={Edit}
-                                label="Editar"
-                                variant="default"
+                                label="Editar Orden"
+                                variant="primary"
+                                onClick={() => setIsEditModalOpen(true)}
                             />
                             {estadoActual === 'PROGRAMADA' && (
                                 <ActionButton
@@ -1265,6 +1173,13 @@ export default function OrdenDetallePage() {
                     isLoading={cancelarOrden.isPending}
                 />
             )}
+
+            {/* Modal de Edición de Orden */}
+            <OrdenEditModal
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
+                orden={orden}
+            />
 
             {/* Tabs */}
             <div className="border-b border-gray-200">

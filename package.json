@@ -4,6 +4,8 @@
   "private": true,
   "description": "Mekanos S.A.S - Equipment Management System",
   "scripts": {
+    "postinstall": "npx puppeteer browsers install chrome",
+    "build:render": "npx puppeteer browsers install chrome && turbo run build",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "dev:api": "cd apps/api && pnpm dev",
@@ -31,7 +33,7 @@
   },
   "packageManager": "pnpm@8.11.0",
   "engines": {
-    "node": ">=18.0.0",
+    "node": "20.x",
     "pnpm": ">=8.0.0"
   },
   "lint-staged": {

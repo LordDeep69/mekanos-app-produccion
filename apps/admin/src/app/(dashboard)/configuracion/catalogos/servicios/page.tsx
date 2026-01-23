@@ -52,10 +52,12 @@ export default function CatalogoServiciosComercialesPage() {
         }
     };
 
-    const filteredServicios = servicios?.filter(s =>
-        s.nombre_servicio.toLowerCase().includes(busqueda.toLowerCase()) ||
-        s.codigo_servicio.toLowerCase().includes(busqueda.toLowerCase())
-    ) || [];
+    const filteredServicios = servicios?.filter(s => {
+        const nombre = s.nombre_servicio || '';
+        const codigo = s.codigo_servicio || '';
+        const term = busqueda.toLowerCase();
+        return nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
+    }) || [];
 
     return (
         <div className="space-y-6">
@@ -136,8 +138,8 @@ export default function CatalogoServiciosComercialesPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredServicios.map((servicio) => (
-                                    <tr key={servicio.id_servicio} className="hover:bg-blue-50/30 transition-colors group">
+                                {filteredServicios.map((servicio, idx) => (
+                                    <tr key={servicio.id_servicio ?? `servicio-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div>
                                                 <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
