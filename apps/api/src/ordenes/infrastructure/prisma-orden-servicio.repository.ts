@@ -188,6 +188,7 @@ export class PrismaOrdenServicioRepository {
           descripcion_inicial: orden.descripcion_inicial || null,
           requiere_firma_cliente: orden.requiere_firma_cliente !== undefined ? orden.requiere_firma_cliente : true,
           creado_por: orden.creado_por,
+          fecha_modificacion: new Date(), // ✅ FIX 23-ENE-2026: Sync delta necesita esta fecha
         },
         // ✅ INCLUDE LITE: Solo datos esenciales para respuesta inmediata
         include: this.INCLUDE_LITE,
@@ -309,6 +310,7 @@ export class PrismaOrdenServicioRepository {
           descripcion_inicial: dbData.descripcion_inicial || null,
           requiere_firma_cliente: dbData.requiere_firma_cliente !== undefined ? dbData.requiere_firma_cliente : true,
           creado_por: dbData.creado_por,
+          fecha_modificacion: new Date(), // ✅ FIX 23-ENE-2026: Sync delta necesita esta fecha
         },
         // ❌ ELIMINADO include pesado - evita timeout en CREATE
       });
