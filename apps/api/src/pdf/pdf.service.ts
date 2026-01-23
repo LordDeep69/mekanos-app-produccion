@@ -15,7 +15,7 @@
  * #9EC23D - Verde Claro (destacados)
  */
 
-import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import {
   DatosCorrectivoOrdenPDF,
@@ -66,15 +66,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private browserInitPromise: Promise<void> | null = null;
 
   /**
-   * ✅ OPTIMIZACIÓN 07-ENE-2026: Pre-inicializar browser al cargar módulo
-   * Reduce latencia de ~1s en primera generación de PDF
+   * ✅ FIX 23-ENE-2026: NO pre-inicializar browser para ahorrar memoria
+   * En Render Free Tier (512MB), mantener Chrome idle consume demasiada RAM
+   * Ahora creamos/destruimos browser por cada generación de PDF
    */
   async onModuleInit(): Promise<void> {
-    this.logger.log('🚀 Pre-inicializando Puppeteer browser (background)...');
-    // Inicializar en background sin bloquear startup
-    this.browserInitPromise = this.initBrowser().catch(err => {
-      this.logger.warn(`⚠️ Browser pre-init falló, se reiniciará en primera llamada: ${err.message}`);
-    });
+    this.logger.log('📋 PdfService listo (browser se creará bajo demanda para ahorrar memoria)');
+    // NO pre-inicializar - Chrome consume ~300MB idle
   }
 
   /**
@@ -88,8 +86,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       // Obtener el HTML según el tipo de informe
       const html = this.obtenerHTML(options.tipoInforme, options.datos);
 
-      // ✅ FIX: Verificar que browser esté activo y conectado
-      await this.ensureBrowserConnected();
+      // ✅ FIX 23-ENE-2026: Crear browser fresco para cada PDF (libera memoria después)
+      this.logger.log('🚀 Iniciando Chrome para generación de PDF...');
+      await this.initBrowser();
 
       // Crear nueva página
       const page = await this.browser!.newPage();
@@ -143,6 +142,12 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         };
       } finally {
         await page.close();
+        // ✅ FIX 23-ENE-2026: Cerrar browser inmediatamente para liberar ~300MB RAM
+        if (this.browser) {
+          this.logger.log('🔒 Cerrando Chrome para liberar memoria...');
+          await this.browser.close();
+          this.browser = null;
+        }
       }
     } catch (error: unknown) {
       const err = error as Error;
@@ -319,18 +324,49 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     try {
       // En Render, Chrome se instala via postinstall script
       // Puppeteer lo encuentra automáticamente en su cache path configurado en .puppeteerrc.cjs
+      // ✅ FIX 23-ENE-2026: Configuración ultra-low-memory para Render Free Tier (512MB)
       this.browser = await puppeteer.launch({
         headless: true,
-        protocolTimeout: 120000, // ✅ FIX 23-ENE-2026: 120s para Render free tier
+        protocolTimeout: 120000,
         args: [
+          // === CRÍTICOS PARA RENDER ===
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
+          '--single-process',
           '--no-zygote',
+
+          // === REDUCCIÓN DE MEMORIA ===
           '--disable-gpu',
-          '--single-process', // Necesario en algunos entornos serverless
+          '--disable-software-rasterizer',
+          '--disable-accelerated-2d-canvas',
+          '--disable-accelerated-jpeg-decoding',
+          '--disable-accelerated-mjpeg-decode',
+          '--disable-accelerated-video-decode',
+          '--disable-background-networking',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-breakpad',
+          '--disable-component-extensions-with-background-pages',
+          '--disable-component-update',
+          '--disable-default-apps',
+          '--disable-extensions',
+          '--disable-features=TranslateUI',
+          '--disable-hang-monitor',
+          '--disable-ipc-flooding-protection',
+          '--disable-popup-blocking',
+          '--disable-prompt-on-repost',
+          '--disable-renderer-backgrounding',
+          '--disable-sync',
+          '--enable-features=NetworkService,NetworkServiceInProcess',
+          '--force-color-profile=srgb',
+          '--metrics-recording-only',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+
+          // === LÍMITES DE MEMORIA EXPLÍCITOS ===
+          '--js-flags=--max-old-space-size=256',
+          '--memory-pressure-off',
         ],
       });
 
