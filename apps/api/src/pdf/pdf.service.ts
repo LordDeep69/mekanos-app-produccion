@@ -112,7 +112,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         // causando que aparezcan en blanco en el PDF generado.
         await page.setContent(htmlConEncoding, {
           waitUntil: 'networkidle0',
-          timeout: 60000, // 60 segundos para permitir carga de imágenes de Cloudinary
+          timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
         });
 
         // Generar PDF
@@ -126,6 +126,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             left: '0',
           },
           preferCSSPageSize: true,
+          timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
         });
 
         const buffer = Buffer.from(pdfBuffer);
@@ -320,6 +321,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       // Puppeteer lo encuentra automáticamente en su cache path configurado en .puppeteerrc.cjs
       this.browser = await puppeteer.launch({
         headless: true,
+        protocolTimeout: 120000, // ✅ FIX 23-ENE-2026: 120s para Render free tier
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
