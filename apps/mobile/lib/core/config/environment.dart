@@ -13,9 +13,9 @@ import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 class Environment {
   Environment._();
 
-  /// ✅ Backend en producción (Render.com)
+  /// ✅ Backend en producción (Railway)
   static const String _productionApiUrl =
-      'https://mekanos-api.onrender.com/api';
+      'https://mekanosapi-production-b170.up.railway.app/api';
 
   /// ✅ IP del servidor en red local (tu PC) - Solo para desarrollo
   static const String _localNetworkIp = '192.168.1.76';
