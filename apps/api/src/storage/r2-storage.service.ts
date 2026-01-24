@@ -71,15 +71,21 @@ export class R2StorageService implements OnModuleInit {
       await this.s3Client.send(putCommand);
       this.logger.log(`✅ PDF subido a R2: ${key}`);
 
-      // ✅ FIX 24-ENE-2026: Generar URL firmada (7 días = 604800 segundos)
-      // R2 no permite acceso público directo, necesita URLs firmadas
+      // ✅ FIX 24-ENE-2026: URLs permanentes si R2_PUBLIC_URL está configurado
+      // El usuario debe habilitar "Public Access" en Cloudflare R2 Dashboard
+      if (process.env.R2_PUBLIC_URL) {
+        const publicUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+        this.logger.log(`🔗 URL pública permanente: ${publicUrl}`);
+        return publicUrl;
+      }
+
+      // Fallback: URL firmada (7 días) si no hay acceso público
+      this.logger.warn('⚠️ R2_PUBLIC_URL no configurado - usando URL firmada (expira en 7 días)');
       const getCommand = new GetObjectCommand({
         Bucket: this.bucketName,
         Key: key,
       });
       const signedUrl = await getSignedUrl(this.s3Client, getCommand, { expiresIn: 604800 });
-      this.logger.log(`🔗 URL firmada generada (expira en 7 días)`);
-
       return signedUrl;
 
     } catch (error) {

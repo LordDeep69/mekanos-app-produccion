@@ -1249,7 +1249,7 @@ export class PdfController {
     this.logger.log(`✅ PDF regenerado: ${resultado.filename} (${resultado.size} bytes)`);
 
     // ========================================================================
-    // SUBIR PDF A R2 Y REGISTRAR EN BD (por defecto true, excepto si explícitamente false)
+    // SUBIR PDF A R2 Y REGISTRAR/ACTUALIZAR EN BD
     // ========================================================================
     let urlPdf: string | undefined;
     if (dto.guardarEnR2 !== false) {
@@ -1260,23 +1260,47 @@ export class PdfController {
         urlPdf = await this.r2Service.uploadPDF(resultado.buffer, r2Filename);
         this.logger.log(`📎 PDF subido a R2: ${urlPdf}`);
 
-        // Registrar en documentos_generados
+        // ✅ FIX 24-ENE-2026: Buscar documento existente y ACTUALIZAR en lugar de crear nuevo
         const hash = createHash('sha256').update(resultado.buffer).digest('hex');
-        await this.prisma.documentos_generados.create({
-          data: {
+        const documentoExistente = await this.prisma.documentos_generados.findFirst({
+          where: {
             tipo_documento: 'INFORME_SERVICIO',
             id_referencia: idNumerico,
-            numero_documento: `INF-${orden.numero_orden}-${timestamp}`,
-            ruta_archivo: urlPdf,
-            hash_sha256: hash,
-            tama_o_bytes: BigInt(resultado.size),
-            mime_type: 'application/pdf',
-            fecha_generacion: new Date(),
-            generado_por: 1, // Sistema
-            herramienta_generacion: 'MEKANOS-PDF-CONTROLLER-REGENERAR',
           },
+          orderBy: { fecha_generacion: 'desc' },
         });
-        this.logger.log(`✅ Documento registrado en BD`);
+
+        if (documentoExistente) {
+          // ACTUALIZAR registro existente
+          await this.prisma.documentos_generados.update({
+            where: { id_documento: documentoExistente.id_documento },
+            data: {
+              ruta_archivo: urlPdf,
+              hash_sha256: hash,
+              tama_o_bytes: BigInt(resultado.size),
+              fecha_generacion: new Date(),
+              herramienta_generacion: 'MEKANOS-PDF-CONTROLLER-REGENERAR',
+            },
+          });
+          this.logger.log(`✅ Documento actualizado en BD (id: ${documentoExistente.id_documento})`);
+        } else {
+          // CREAR nuevo registro solo si no existe
+          await this.prisma.documentos_generados.create({
+            data: {
+              tipo_documento: 'INFORME_SERVICIO',
+              id_referencia: idNumerico,
+              numero_documento: `INF-${orden.numero_orden}-${timestamp}`,
+              ruta_archivo: urlPdf,
+              hash_sha256: hash,
+              tama_o_bytes: BigInt(resultado.size),
+              mime_type: 'application/pdf',
+              fecha_generacion: new Date(),
+              generado_por: 1, // Sistema
+              herramienta_generacion: 'MEKANOS-PDF-CONTROLLER-REGENERAR',
+            },
+          });
+          this.logger.log(`✅ Documento creado en BD`);
+        }
       } catch (error) {
         this.logger.error(`❌ Error subiendo PDF a R2: ${error}`);
         // No fallar todo el proceso por error de R2

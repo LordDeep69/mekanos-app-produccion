@@ -94,6 +94,14 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         });
     };
 
+    // ✅ FIX 24-ENE-2026: Forzar regeneración del PDF (actualiza URL en BD)
+    const handleForzarRegeneracion = async () => {
+        await regenerarMutation.mutateAsync({
+            enviarEmail: false,
+            forzarRegeneracion: true,
+        });
+    };
+
     // Regenerar y enviar por email
     const handleEnviarPdf = async () => {
         const email = useCustomEmail ? emailDestino : clienteEmail;
@@ -225,6 +233,24 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                     <Mail className="h-5 w-5" />
                     Enviar Informe por Email
                 </button>
+
+                {/* ✅ FIX 24-ENE-2026: Indicador de PDF existente con opción de forzar regeneración */}
+                {urlPdfExistente && !regenerarMutation.isSuccess && (
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-700 flex items-center gap-1.5">
+                            <Check className="h-3.5 w-3.5" />
+                            PDF existente disponible
+                        </p>
+                        <button
+                            onClick={handleForzarRegeneracion}
+                            disabled={regenerarMutation.isPending}
+                            className="text-xs font-medium text-amber-700 hover:text-amber-900 hover:underline disabled:opacity-50 flex items-center gap-1"
+                        >
+                            <RefreshCw className="h-3 w-3" />
+                            Actualizar URL
+                        </button>
+                    </div>
+                )}
 
                 {/* Mensaje de éxito */}
                 {regenerarMutation.isSuccess && regenerarMutation.data && (

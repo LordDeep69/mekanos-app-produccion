@@ -358,6 +358,7 @@ export interface RegenerarPdfDto {
     asuntoEmail?: string;
     mensajeEmail?: string;
     guardarEnR2?: boolean;
+    forzarRegeneracion?: boolean; // ✅ Forzar regeneración aunque exista PDF
 }
 
 export interface RegenerarPdfResponse {
