@@ -322,11 +322,14 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`📍 PUPPETEER_CACHE_DIR: ${cacheDir}`);
 
     try {
-      // En Render, Chrome se instala via postinstall script
-      // Puppeteer lo encuentra automáticamente en su cache path configurado en .puppeteerrc.cjs
+      // ✅ FIX 24-ENE-2026: Railway - Especificar executablePath explícitamente
+      const executablePath = puppeteer.executablePath();
+      this.logger.log(`📍 Chrome executable path: ${executablePath}`);
+      
       // ✅ FIX 23-ENE-2026: Configuración ultra-low-memory para Render Free Tier (512MB)
       this.browser = await puppeteer.launch({
         headless: true,
+        executablePath,
         protocolTimeout: 120000,
         args: [
           // === CRÍTICOS PARA RENDER ===
