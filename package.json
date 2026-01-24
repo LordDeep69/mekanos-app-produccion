@@ -4,7 +4,6 @@
   "private": true,
   "description": "Mekanos S.A.S - Equipment Management System",
   "scripts": {
-    "postinstall": "echo 'Puppeteer Chrome will be installed by apps/api'",
     "build:render": "npx puppeteer browsers install chrome && turbo run build",
     "build": "turbo run build",
     "dev": "turbo run dev",
