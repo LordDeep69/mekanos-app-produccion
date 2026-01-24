@@ -16,6 +16,8 @@
  */
 
 import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
 import * as puppeteer from 'puppeteer';
 import {
   DatosCorrectivoOrdenPDF,
@@ -317,15 +319,40 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * Inicializa el browser de Puppeteer
    */
   private async initBrowser(): Promise<void> {
-    const cacheDir = process.env.PUPPETEER_CACHE_DIR || 'default';
+    const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/tmp/.cache/puppeteer';
     this.logger.log('🚀 Inicializando Puppeteer browser...');
     this.logger.log(`📍 PUPPETEER_CACHE_DIR: ${cacheDir}`);
 
     try {
-      // ✅ FIX 24-ENE-2026: Railway - Especificar executablePath explícitamente
-      const executablePath = puppeteer.executablePath();
-      this.logger.log(`📍 Chrome executable path: ${executablePath}`);
-      
+      // ✅ FIX 24-ENE-2026: Railway - Instalar Chrome dinámicamente en runtime si no existe
+      let executablePath = puppeteer.executablePath();
+      this.logger.log(`📍 Chrome executable path esperado: ${executablePath}`);
+
+      // Verificar si Chrome existe, si no, instalarlo
+      if (!fs.existsSync(executablePath)) {
+        this.logger.warn('⚠️ Chrome no encontrado, instalando en runtime...');
+        try {
+          // Instalar Chrome con la variable de entorno correcta
+          const installCmd = `PUPPETEER_CACHE_DIR=${cacheDir} npx puppeteer browsers install chrome`;
+          this.logger.log(`📦 Ejecutando: ${installCmd}`);
+          execSync(installCmd, {
+            stdio: 'inherit',
+            timeout: 120000,
+            env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir }
+          });
+          this.logger.log('✅ Chrome instalado correctamente');
+
+          // Actualizar el path después de la instalación
+          executablePath = puppeteer.executablePath();
+          this.logger.log(`📍 Nuevo Chrome executable path: ${executablePath}`);
+        } catch (installError: any) {
+          this.logger.error(`❌ Error instalando Chrome: ${installError.message}`);
+          throw new Error(`No se pudo instalar Chrome: ${installError.message}`);
+        }
+      } else {
+        this.logger.log('✅ Chrome encontrado en el path esperado');
+      }
+
       // ✅ FIX 23-ENE-2026: Configuración ultra-low-memory para Render Free Tier (512MB)
       this.browser = await puppeteer.launch({
         headless: true,
