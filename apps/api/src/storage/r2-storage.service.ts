@@ -60,7 +60,7 @@ export class R2StorageService implements OnModuleInit {
     const key = `ordenes/pdfs/${filename}`;
     this.logger.log(`📤 Subiendo PDF a R2: ${key} (${buffer.length} bytes)`);
 
-    const command = new PutObjectCommand({
+    const putCommand = new PutObjectCommand({
       Bucket: this.bucketName,
       Key: key,
       Body: buffer,
@@ -68,13 +68,19 @@ export class R2StorageService implements OnModuleInit {
     });
 
     try {
-      await this.s3Client.send(command);
+      await this.s3Client.send(putCommand);
+      this.logger.log(`✅ PDF subido a R2: ${key}`);
 
-      // Construir URL pública
-      const baseUrl = process.env.R2_PUBLIC_URL || `https://${this.bucketName}.r2.cloudflarestorage.com`;
-      const publicUrl = `${baseUrl}/${key}`;
-      this.logger.log(`✅ PDF subido exitosamente: ${publicUrl}`);
-      return publicUrl;
+      // ✅ FIX 24-ENE-2026: Generar URL firmada (7 días = 604800 segundos)
+      // R2 no permite acceso público directo, necesita URLs firmadas
+      const getCommand = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+      const signedUrl = await getSignedUrl(this.s3Client, getCommand, { expiresIn: 604800 });
+      this.logger.log(`🔗 URL firmada generada (expira en 7 días)`);
+
+      return signedUrl;
 
     } catch (error) {
       this.logger.error(`❌ Error subiendo PDF a R2: ${error}`);
