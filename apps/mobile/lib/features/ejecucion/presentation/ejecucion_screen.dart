@@ -1204,24 +1204,30 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   // ==========================================================================
 
   /// Detecta el tipo de actividad especial
+  /// ✅ FIX 26-ENE-2026: Lógica refinada para detectar correctamente cada tipo
   String? _getTipoActividadEspecial(String descripcion) {
     final desc = descripcion.toUpperCase();
 
-    // Nivel de combustible
-    if (desc.contains('NIVEL DE COMBUSTIBLE') ||
-        desc.contains('NIVEL COMBUSTIBLE') ||
-        desc.contains('TANQUE DE COMBUSTIBLE')) {
+    // 1. PRIMERO: Detectar actividades SI/NO (terminan con "(SI/NO)")
+    if (desc.contains('(SI/NO)') || desc.contains('(S/N)')) {
+      return 'SI_NO';
+    }
+
+    // 2. Nivel de combustible - SOLO si es específicamente sobre NIVEL, no sobre TANQUE
+    // "REVISAR NIVEL DE COMBUSTIBLE" → selector de nivel
+    // "REVISAR TANQUE DE COMBUSTIBLE" → B/M/C/NA (revisar estado del tanque)
+    if ((desc.contains('NIVEL DE COMBUSTIBLE') ||
+            desc.contains('NIVEL COMBUSTIBLE')) &&
+        !desc.contains('TANQUE')) {
       return 'NIVEL_COMBUSTIBLE';
     }
 
-    // Nivel de aceite
-    if (desc.contains('NIVEL DE ACEITE') ||
-        desc.contains('NIVEL ACEITE') ||
-        desc.contains('REVISAR ACEITE')) {
+    // 3. Nivel de aceite - SOLO si es específicamente sobre NIVEL
+    if (desc.contains('NIVEL DE ACEITE') || desc.contains('NIVEL ACEITE')) {
       return 'NIVEL_ACEITE';
     }
 
-    // Horas de trabajo / Horómetro
+    // 4. Horas de trabajo / Horómetro
     if (desc.contains('HOROMETRO') ||
         desc.contains('HORÓMETRO') ||
         desc.contains('HORAS DE TRABAJO') ||
@@ -1230,17 +1236,18 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       return 'HOROMETRO';
     }
 
-    // Estado de batería
-    if (desc.contains('ESTADO DE BATERIA') ||
-        desc.contains('ESTADO BATERIA') ||
-        desc.contains('BATERÍA') ||
-        desc.contains('BATERIA') ||
-        desc.contains('CARGA DE BATERIA') ||
-        desc.contains('NIVEL BATERIA')) {
+    // 5. Estado de batería - SOLO para actividades específicas de CARGA/ELECTROLITOS
+    // "CARGA DE BATERIA" o "ELECTROLITOS" → selector porcentaje
+    // "CARGADOR DE BATERIA" o "SISTEMA DE CARGA" → B/M/C/NA (revisar estado)
+    if ((desc.contains('CARGA DE BATERIA') ||
+            desc.contains('ELECTROLITOS DE BATERIA') ||
+            desc.contains('ELECTROLITOS BATERIA')) &&
+        !desc.contains('CARGADOR') &&
+        !desc.contains('SISTEMA DE CARGA')) {
       return 'BATERIA';
     }
 
-    // Temperatura
+    // 6. Temperatura
     if (desc.contains('TEMPERATURA') || desc.contains('TEMP.')) {
       return 'TEMPERATURA';
     }
@@ -1253,6 +1260,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     final tipo = _getTipoActividadEspecial(actividad.descripcion);
 
     switch (tipo) {
+      case 'SI_NO':
+        return _buildSiNoSelector(actividad);
       case 'NIVEL_COMBUSTIBLE':
         return _buildNivelCombustibleSelector(actividad);
       case 'NIVEL_ACEITE':
@@ -1268,7 +1277,80 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     }
   }
 
+  /// ✅ FIX 26-ENE-2026: Widget selector SÍ/NO para actividades tipo pregunta
+  Widget _buildSiNoSelector(ActividadesEjecutada actividad) {
+    final observacion = actividad.observacion ?? '';
+    final valorActual = observacion.startsWith('RESPUESTA: ')
+        ? observacion.substring(11)
+        : '';
+
+    final opciones = [
+      ('SI', 'SÍ', Colors.green, Icons.check_circle),
+      ('NO', 'NO', Colors.red, Icons.cancel),
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: opciones.map((opcion) {
+        final codigo = opcion.$1;
+        final label = opcion.$2;
+        final color = opcion.$3;
+        final icon = opcion.$4;
+        final isSelected = valorActual == codigo;
+
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Material(
+              color: isSelected ? color : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              elevation: isSelected ? 2 : 0,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  // SÍ = B (Bueno), NO = C (Cambio/Atención requerida)
+                  final simb = codigo == 'SI' ? 'B' : 'C';
+                  _marcarActividadEspecial(
+                    actividad.idLocal,
+                    'RESPUESTA: $codigo',
+                    simb,
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 20,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 24,
+                        color: isSelected ? Colors.white : color,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: isSelected ? Colors.white : color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   /// Widget selector de nivel de combustible con opciones visuales
+  /// ✅ FIX 26-ENE-2026: Agregado botón "Otro" para valores personalizados
   Widget _buildNivelCombustibleSelector(ActividadesEjecutada actividad) {
     // Obtener el valor actual de la observación (si existe)
     // Formato guardado: "NIVEL: LLENO" -> extraer "LLENO"
@@ -1286,63 +1368,116 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       ('VACIO', 'Vacío', Colors.red, Icons.local_gas_station_outlined),
     ];
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: opciones.map((opcion) {
-        final codigo = opcion.$1;
-        final label = opcion.$2;
-        final color = opcion.$3;
-        final icon = opcion.$4;
-        final isSelected = valorActual == codigo;
+    // Verificar si es valor personalizado
+    final esValorPersonalizado =
+        valorActual.isNotEmpty && !opciones.any((o) => o.$1 == valorActual);
 
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Material(
-              color: isSelected ? color : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () {
-                  // Simbología según nivel: VACIO/1/4 = M, MEDIO = C, resto = B
-                  final simb = (codigo == 'VACIO' || codigo == '1/4')
-                      ? 'M'
-                      : (codigo == 'MEDIO')
-                      ? 'C'
-                      : 'B';
-                  _marcarActividadEspecial(
-                    actividad.idLocal,
-                    'NIVEL: $codigo',
-                    simb,
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        icon,
-                        size: 18,
-                        color: isSelected ? Colors.white : color,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          color: isSelected ? Colors.white : color,
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ...opciones.map((opcion) {
+              final codigo = opcion.$1;
+              final label = opcion.$2;
+              final color = opcion.$3;
+              final icon = opcion.$4;
+              final isSelected = valorActual == codigo;
+
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Material(
+                    color: isSelected ? color : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () {
+                        // Simbología según nivel: VACIO/1/4 = M, MEDIO = C, resto = B
+                        final simb = (codigo == 'VACIO' || codigo == '1/4')
+                            ? 'M'
+                            : (codigo == 'MEDIO')
+                            ? 'C'
+                            : 'B';
+                        _marcarActividadEspecial(
+                          actividad.idLocal,
+                          'NIVEL: $codigo',
+                          simb,
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 18,
+                              color: isSelected ? Colors.white : color,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                color: isSelected ? Colors.white : color,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+            // Botón "Otro" para valor personalizado
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Material(
+                color: esValorPersonalizado
+                    ? Colors.blue
+                    : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _mostrarDialogoNivelCombustible(actividad),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 8,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.edit,
+                          size: 18,
+                          color: esValorPersonalizado
+                              ? Colors.white
+                              : Colors.blue,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          esValorPersonalizado ? valorActual : 'Otro',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            color: esValorPersonalizado
+                                ? Colors.white
+                                : Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      }).toList(),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1514,6 +1649,66 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
     if (resultado != null && resultado.isNotEmpty) {
       await _marcarHorometro(actividad.idLocal, resultado);
+    }
+  }
+
+  /// ✅ FIX 26-ENE-2026: Muestra diálogo para ingresar nivel de combustible personalizado
+  Future<void> _mostrarDialogoNivelCombustible(
+    ActividadesEjecutada actividad,
+  ) async {
+    final controller = TextEditingController();
+    final observacion = actividad.observacion ?? '';
+    if (observacion.startsWith('NIVEL: ')) {
+      final valorActual = observacion.substring(7);
+      // Solo pre-llenar si es un valor personalizado (contiene %)
+      if (valorActual.contains('%')) {
+        controller.text = valorActual.replaceAll('%', '');
+      }
+    }
+
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.local_gas_station, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Nivel de Combustible'),
+          ],
+        ),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Porcentaje de combustible',
+            hintText: 'Ej: 84',
+            suffixText: '%',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado != null && resultado.isNotEmpty) {
+      final porcentaje = int.tryParse(resultado) ?? 0;
+      // Simbología según porcentaje: <25% = M, 25-50% = C, >50% = B
+      final simb = porcentaje < 25 ? 'M' : (porcentaje < 50 ? 'C' : 'B');
+      await _marcarActividadEspecial(
+        actividad.idLocal,
+        'NIVEL: $resultado%',
+        simb,
+      );
     }
   }
 
