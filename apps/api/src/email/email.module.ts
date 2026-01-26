@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { PdfModule } from '../pdf/pdf.module';
+import { EmailTemplatesService } from './email-templates.service';
 import { EmailController } from './email.controller';
 import { EmailService } from './email.service';
 
@@ -14,7 +15,7 @@ import { EmailService } from './email.service';
 @Module({
   imports: [forwardRef(() => PdfModule)],
   controllers: [EmailController],
-  providers: [EmailService],
-  exports: [EmailService]
+  providers: [EmailService, EmailTemplatesService],
+  exports: [EmailService, EmailTemplatesService]
 })
-export class EmailModule {}
+export class EmailModule { }

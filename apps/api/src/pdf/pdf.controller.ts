@@ -32,6 +32,7 @@ import {
 import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
 import { createHash } from 'crypto';
 import { Response } from 'express';
+import { EmailTemplatesService } from '../email/email-templates.service';
 import { EmailService } from '../email/email.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { PdfService, TipoInforme } from './pdf.service';
@@ -106,6 +107,7 @@ export class PdfController {
     private readonly pdfService: PdfService,
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly emailTemplates: EmailTemplatesService,
     private readonly r2Service: R2StorageService,
   ) { }
 
@@ -1317,33 +1319,20 @@ export class PdfController {
         const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
         const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
+        const htmlTemplate = this.emailTemplates.generateInformeMantenimientoTemplate({
+          ordenNumero: orden.numero_orden,
+          tipoServicio: orden.tipos_servicio?.nombre_tipo || 'Mantenimiento',
+          clienteNombre: clienteNombre,
+          fechaServicio: datosOrden.fecha,
+          tecnicoNombre: datosOrden.tecnico,
+          equipoNombre: marcaEquipo !== 'N/A' ? `${marcaEquipo} - ${serieEquipo}` : undefined,
+          mensajePersonalizado: mensaje,
+        });
+
         await this.emailService.sendEmail({
           to: clienteEmail,
           subject: asunto,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background: #244673; padding: 20px; text-align: center;">
-                <h1 style="color: white; margin: 0;">MEKANOS S.A.S</h1>
-              </div>
-              <div style="padding: 30px; background: #f8f9fa;">
-                <h2 style="color: #244673;">Informe de Mantenimiento</h2>
-                <p style="color: #333; line-height: 1.6;">${mensaje}</p>
-                <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Orden:</strong> ${orden.numero_orden}</p>
-                  <p><strong>Fecha:</strong> ${datosOrden.fecha}</p>
-                  <p><strong>Técnico:</strong> ${datosOrden.tecnico}</p>
-                </div>
-                <p style="color: #666; font-size: 14px;">
-                  El informe PDF se encuentra adjunto a este correo.
-                </p>
-              </div>
-              <div style="background: #244673; padding: 15px; text-align: center;">
-                <p style="color: white; margin: 0; font-size: 12px;">
-                  © ${new Date().getFullYear()} MEKANOS S.A.S - Todos los derechos reservados
-                </p>
-              </div>
-            </div>
-          `,
+          html: htmlTemplate,
           attachments: [{
             filename: resultado.filename,
             content: resultado.buffer,
@@ -1509,33 +1498,19 @@ export class PdfController {
     const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
     try {
+      const htmlTemplate = this.emailTemplates.generateInformeMantenimientoTemplate({
+        ordenNumero: orden.numero_orden,
+        tipoServicio: 'Mantenimiento',
+        clienteNombre: dto.emailDestino.split('@')[0],
+        fechaServicio,
+        tecnicoNombre,
+        mensajePersonalizado: mensaje,
+      });
+
       const emailResult = await this.emailService.sendEmail({
         to: dto.emailDestino,
         subject: asunto,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: #244673; padding: 20px; text-align: center;">
-              <h1 style="color: white; margin: 0;">MEKANOS S.A.S</h1>
-            </div>
-            <div style="padding: 30px; background: #f8f9fa;">
-              <h2 style="color: #244673;">Informe de Mantenimiento</h2>
-              <p style="color: #333; line-height: 1.6;">${mensaje}</p>
-              <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>Orden:</strong> ${orden.numero_orden}</p>
-                <p><strong>Fecha:</strong> ${fechaServicio}</p>
-                <p><strong>Técnico:</strong> ${tecnicoNombre}</p>
-              </div>
-              <p style="color: #666; font-size: 14px;">
-                El informe PDF se encuentra adjunto a este correo.
-              </p>
-            </div>
-            <div style="background: #244673; padding: 15px; text-align: center;">
-              <p style="color: white; margin: 0; font-size: 12px;">
-                © ${new Date().getFullYear()} MEKANOS S.A.S - Todos los derechos reservados
-              </p>
-            </div>
-          </div>
-        `,
+        html: htmlTemplate,
         attachments: [{
           filename,
           content: pdfBuffer,
