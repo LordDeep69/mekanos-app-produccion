@@ -1237,8 +1237,12 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     }
 
     // 5. Electrolitos de batería - Selector tipo nivel (Full/OK/Bajo/Crítico)
+    // ✅ FIX 26-ENE-2026: Incluir variantes con y sin tilde
     if (desc.contains('ELECTROLITOS DE BATERIA') ||
-        desc.contains('ELECTROLITOS BATERIA')) {
+        desc.contains('ELECTROLITOS DE BATERÍA') ||
+        desc.contains('ELECTROLITOS BATERIA') ||
+        desc.contains('ELECTROLITOS BATERÍA') ||
+        desc.contains('ELECTROLITOS')) {
       return 'ELECTROLITOS';
     }
 
