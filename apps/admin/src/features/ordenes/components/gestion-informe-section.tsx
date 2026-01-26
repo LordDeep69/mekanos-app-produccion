@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { getSession } from 'next-auth/react';
 import { useState } from 'react';
-import { regenerarPdf, type RegenerarPdfDto } from '../api/ordenes.service';
+import { enviarPdfExistente, regenerarPdf, type EnviarPdfExistenteDto, type RegenerarPdfDto } from '../api/ordenes.service';
 
 interface GestionInformeSectionProps {
     orden: Orden;
@@ -76,6 +76,14 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         },
     });
 
+    // Mutation para enviar PDF existente (sin regenerar)
+    const enviarPdfMutation = useMutation({
+        mutationFn: (data: EnviarPdfExistenteDto) => enviarPdfExistente(orden.id_orden_servicio, data),
+        onSuccess: () => {
+            onUpdate?.();
+        },
+    });
+
     // Convertir base64 a Blob
     function base64ToBlob(base64: string, contentType: string): Blob {
         const byteCharacters = atob(base64);
@@ -104,12 +112,11 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             return;
         }
 
-        await regenerarMutation.mutateAsync({
-            enviarEmail: true,
+        // ✅ USAR PDF EXISTENTE - No regenerar
+        await enviarPdfMutation.mutateAsync({
             emailDestino: email,
             asuntoEmail: asuntoEmail || undefined,
             mensajeEmail: mensajeEmail || undefined,
-            forzarRegeneracion: true, // SIEMPRE regenerar al enviar
         });
 
         setShowEmailModal(false);

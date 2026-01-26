@@ -385,6 +385,34 @@ export async function regenerarPdf(
 }
 
 /**
+ * Enviar PDF existente por email sin regenerar
+ */
+export interface EnviarPdfExistenteDto {
+    emailDestino: string;
+    asuntoEmail?: string;
+    mensajeEmail?: string;
+}
+
+export interface EnviarPdfExistenteResponse {
+    success: boolean;
+    message: string;
+    usoPdfExistente: boolean;
+    urlPdf?: string;
+    error?: string;
+}
+
+export async function enviarPdfExistente(
+    idOrden: number,
+    data: EnviarPdfExistenteDto
+): Promise<EnviarPdfExistenteResponse> {
+    const response = await apiClient.post<EnviarPdfExistenteResponse>(
+        `${ORDENES_BASE}/${idOrden}/pdf/enviar`,
+        data
+    );
+    return response.data;
+}
+
+/**
  * Obtener URL del PDF de una orden (para previsualización)
  */
 export function getPdfUrl(idOrden: number): string {
