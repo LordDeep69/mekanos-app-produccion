@@ -1742,6 +1742,7 @@ export class FinalizacionOrdenService {
     /**
      * Persiste las actividades ejecutadas en BD para estadísticas y trazabilidad
      * ✅ OPTIMIZADO: Precarga catálogo + batch insert con createMany
+     * ✅ FIX 26-ENE-2026: Idempotencia real - verificar si ya existen registros
      */
     private async persistirActividades(
         idOrden: number,
@@ -1749,6 +1750,16 @@ export class FinalizacionOrdenService {
         usuarioId: number,
     ): Promise<number> {
         if (actividades.length === 0) return 0;
+
+        // ✅ IDEMPOTENCIA: Verificar si ya hay actividades para esta orden
+        const actividadesExistentes = await this.prisma.actividades_ejecutadas.count({
+            where: { id_orden_servicio: idOrden },
+        });
+
+        if (actividadesExistentes > 0) {
+            this.logger.warn(`⚠️ IDEMPOTENCIA: Ya existen ${actividadesExistentes} actividades para orden ${idOrden}. Saltando inserción.`);
+            return 0; // No insertar duplicados
+        }
 
         // PASO 1: Precargar TODO el catálogo en UNA sola query
         const catalogoCompleto = await this.prisma.catalogo_actividades.findMany({
@@ -1795,6 +1806,7 @@ export class FinalizacionOrdenService {
     /**
      * Persiste las mediciones en BD para estadísticas y trazabilidad
      * ✅ OPTIMIZADO: Precarga parámetros + batch insert con createMany
+     * ✅ FIX 26-ENE-2026: Idempotencia real - verificar si ya existen registros
      */
     private async persistirMediciones(
         idOrden: number,
@@ -1802,6 +1814,16 @@ export class FinalizacionOrdenService {
         usuarioId: number,
     ): Promise<number> {
         if (mediciones.length === 0) return 0;
+
+        // ✅ IDEMPOTENCIA: Verificar si ya hay mediciones para esta orden
+        const medicionesExistentes = await this.prisma.mediciones_servicio.count({
+            where: { id_orden_servicio: idOrden },
+        });
+
+        if (medicionesExistentes > 0) {
+            this.logger.warn(`⚠️ IDEMPOTENCIA: Ya existen ${medicionesExistentes} mediciones para orden ${idOrden}. Saltando inserción.`);
+            return 0; // No insertar duplicados
+        }
 
         // PASO 1: Precargar TODOS los parámetros en UNA sola query
         const parametrosCompletos = await this.prisma.parametros_medicion.findMany({
