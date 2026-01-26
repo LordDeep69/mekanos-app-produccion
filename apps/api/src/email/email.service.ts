@@ -107,6 +107,7 @@ export class EmailService implements OnModuleInit {
 
     if (clientId && clientSecret && refreshToken) {
       try {
+        this.logger.log('🔌 [EmailService] Creando cliente OAuth2 para Gmail API...');
         const OAuth2 = google.auth.OAuth2;
         this.gmailOAuth2Client = new OAuth2(
           clientId,
@@ -115,6 +116,7 @@ export class EmailService implements OnModuleInit {
         );
         this.gmailOAuth2Client.setCredentials({ refresh_token: refreshToken });
 
+        this.logger.log('🔍 [EmailService] Verificando access token...');
         // Verificar que podemos obtener access token
         const { token } = await this.gmailOAuth2Client.getAccessToken();
         if (token) {
@@ -124,12 +126,18 @@ export class EmailService implements OnModuleInit {
           this.logger.log(`   📧 Proveedor: Gmail API (OAuth2 HTTPS)`);
           this.logger.log(`   📧 Remitente: ${this.fromEmail}`);
           return; // Éxito con Gmail API, no intentar SMTP
+        } else {
+          this.logger.warn('⚠️ [EmailService] No se pudo obtener access token (token es null)');
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : 'N/A';
         this.logger.error(`❌ Error inicializando Gmail API: ${errorMsg}`);
+        this.logger.error(`   Stack: ${errorStack}`);
         this.gmailOAuth2Client = null;
       }
+    } else {
+      this.logger.warn('⚠️ [EmailService] Credenciales Gmail API incompletas, saltando...');
     }
 
     // =======================================================================

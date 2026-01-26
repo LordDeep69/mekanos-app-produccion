@@ -910,7 +910,7 @@ export class PdfController {
     if (!dto.forzarRegeneracion) {
       const pdfExistente = await this.prisma.documentos_generados.findFirst({
         where: {
-          tipo_documento: 'INFORME_SERVICIO',
+          tipo_documento: 'INFORME_MANTENIMIENTO',
           id_referencia: idNumerico,
         },
         orderBy: { fecha_generacion: 'desc' },
@@ -1264,7 +1264,7 @@ export class PdfController {
         const hash = createHash('sha256').update(resultado.buffer).digest('hex');
         const documentoExistente = await this.prisma.documentos_generados.findFirst({
           where: {
-            tipo_documento: 'INFORME_SERVICIO',
+            tipo_documento: 'INFORME_MANTENIMIENTO',
             id_referencia: idNumerico,
           },
           orderBy: { fecha_generacion: 'desc' },
@@ -1287,7 +1287,7 @@ export class PdfController {
           // CREAR nuevo registro solo si no existe
           await this.prisma.documentos_generados.create({
             data: {
-              tipo_documento: 'INFORME_SERVICIO',
+              tipo_documento: 'INFORME_MANTENIMIENTO',
               id_referencia: idNumerico,
               numero_documento: `INF-${orden.numero_orden}-${timestamp}`,
               ruta_archivo: urlPdf,
@@ -1448,7 +1448,7 @@ export class PdfController {
       const documento = await this.prisma.documentos_generados.findFirst({
         where: {
           id_referencia: idNumerico,
-          tipo_documento: 'INFORME_SERVICIO',
+          tipo_documento: 'INFORME_MANTENIMIENTO',
         },
         orderBy: { fecha_generacion: 'desc' },
       });
