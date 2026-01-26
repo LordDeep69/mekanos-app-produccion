@@ -1319,13 +1319,32 @@ export class PdfController {
         const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
         const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
+        const tipoServicioDetallado = orden.tipos_servicio?.nombre_tipo || 'Mantenimiento';
+        const codigoTipo = orden.tipos_servicio?.codigo_tipo || '';
+        let tipoServicioCompleto = tipoServicioDetallado;
+        if (codigoTipo.includes('PREVENTIVO_A')) {
+          tipoServicioCompleto = `Mantenimiento Preventivo Tipo A`;
+        } else if (codigoTipo.includes('PREVENTIVO_B')) {
+          tipoServicioCompleto = `Mantenimiento Preventivo Tipo B`;
+        } else if (codigoTipo.includes('CORRECTIVO')) {
+          tipoServicioCompleto = `Mantenimiento Correctivo`;
+        }
+
         const htmlTemplate = this.emailTemplates.generateInformeMantenimientoTemplate({
           ordenNumero: orden.numero_orden,
-          tipoServicio: orden.tipos_servicio?.nombre_tipo || 'Mantenimiento',
+          tipoServicio: tipoServicioDetallado,
+          tipoServicioDetallado: tipoServicioCompleto,
           clienteNombre: clienteNombre,
+          clienteDireccion: clienteDireccion !== 'N/A' ? clienteDireccion : undefined,
+          clienteCiudad: 'Cartagena de Indias',
+          equipoNombre: marcaEquipo !== 'N/A' ? marcaEquipo : undefined,
+          equipoMarca: marcaEquipo !== 'N/A' ? marcaEquipo : undefined,
+          equipoSerie: serieEquipo !== 'N/A' ? serieEquipo : undefined,
+          equipoUbicacion: clienteDireccion !== 'N/A' ? clienteDireccion : undefined,
           fechaServicio: datosOrden.fecha,
           tecnicoNombre: datosOrden.tecnico,
-          equipoNombre: marcaEquipo !== 'N/A' ? `${marcaEquipo} - ${serieEquipo}` : undefined,
+          tecnicoCargo: 'Técnico Especializado',
+          estadoServicio: 'COMPLETADO',
           mensajePersonalizado: mensaje,
         });
 
@@ -1498,12 +1517,47 @@ export class PdfController {
     const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
     try {
+      const clienteOrden = await this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: idNumerico },
+        include: {
+          clientes: { include: { persona: true } },
+          tipos_servicio: true,
+          equipos: true,
+        },
+      });
+
+      const clientePersona = clienteOrden?.clientes?.persona;
+      const clienteNombreCompleto = clientePersona?.nombre_comercial || clientePersona?.razon_social || dto.emailDestino.split('@')[0];
+      const clienteDireccion = clientePersona?.direccion_principal || clienteOrden?.direccion_servicio;
+      const marcaEquipo = clienteOrden?.equipos?.nombre_equipo;
+      const serieEquipo = clienteOrden?.equipos?.numero_serie_equipo;
+      const tipoServicioNombre = clienteOrden?.tipos_servicio?.nombre_tipo || 'Mantenimiento';
+      const codigoTipo = clienteOrden?.tipos_servicio?.codigo_tipo || '';
+
+      let tipoServicioCompleto = tipoServicioNombre;
+      if (codigoTipo.includes('PREVENTIVO_A')) {
+        tipoServicioCompleto = `Mantenimiento Preventivo Tipo A`;
+      } else if (codigoTipo.includes('PREVENTIVO_B')) {
+        tipoServicioCompleto = `Mantenimiento Preventivo Tipo B`;
+      } else if (codigoTipo.includes('CORRECTIVO')) {
+        tipoServicioCompleto = `Mantenimiento Correctivo`;
+      }
+
       const htmlTemplate = this.emailTemplates.generateInformeMantenimientoTemplate({
         ordenNumero: orden.numero_orden,
-        tipoServicio: 'Mantenimiento',
-        clienteNombre: dto.emailDestino.split('@')[0],
+        tipoServicio: tipoServicioNombre,
+        tipoServicioDetallado: tipoServicioCompleto,
+        clienteNombre: clienteNombreCompleto,
+        clienteDireccion: clienteDireccion,
+        clienteCiudad: 'Cartagena de Indias',
+        equipoNombre: marcaEquipo,
+        equipoMarca: marcaEquipo,
+        equipoSerie: serieEquipo,
+        equipoUbicacion: clienteDireccion,
         fechaServicio,
         tecnicoNombre,
+        tecnicoCargo: 'Técnico Especializado',
+        estadoServicio: 'COMPLETADO',
         mensajePersonalizado: mensaje,
       });
 
