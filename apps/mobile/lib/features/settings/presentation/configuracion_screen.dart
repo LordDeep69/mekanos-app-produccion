@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/sync/sync_service.dart';
+import '../../auth/data/auth_provider.dart';
 import 'storage_settings_screen.dart';
 
 /// ============================================================================
@@ -63,11 +65,86 @@ class ModoFinalizacionNotifier extends StateNotifier<String> {
   }
 }
 
-class ConfiguracionScreen extends ConsumerWidget {
+class ConfiguracionScreen extends ConsumerStatefulWidget {
   const ConfiguracionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ConfiguracionScreen> createState() =>
+      _ConfiguracionScreenState();
+}
+
+class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
+  bool _sincronizando = false;
+
+  /// ✅ FIX 26-ENE-2026: Ejecutar sincronización forzada de catálogos
+  Future<void> _ejecutarSincronizacionForzada() async {
+    final authState = ref.read(authStateProvider);
+    final tecnicoId = authState.user?.idEmpleado;
+
+    if (tecnicoId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: No se encontró el ID del técnico'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _sincronizando = true);
+
+    try {
+      final syncService = ref.read(syncServiceProvider);
+
+      // Sincronización forzada con fullCatalogs = true
+      final result = await syncService.downloadData(
+        tecnicoId,
+        fullCatalogs: true, // Forzar descarga completa de catálogos
+      );
+
+      if (mounted) {
+        if (result.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '✅ Sincronización completada:\n'
+                '• ${result.actividadesCatalogoGuardadas} actividades\n'
+                '• ${result.parametrosGuardados} parámetros\n'
+                '• ${result.ordenesDescargadas} órdenes',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Error: ${result.error ?? result.message}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error de sincronización: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sincronizando = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final modoActual = ref.watch(modoFinalizacionProvider);
 
@@ -273,6 +350,86 @@ class ConfiguracionScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ================================================================
+          // SECCIÓN: AJUSTES AVANZADOS
+          // ================================================================
+          _buildSectionHeader(
+            context,
+            icon: Icons.settings_applications,
+            title: 'Ajustes Avanzados',
+            color: Colors.deepPurple,
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: _sincronizando
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation(
+                                Colors.deepPurple,
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.sync, color: Colors.deepPurple),
+                  ),
+                  title: const Text(
+                    'Sincronización Forzada',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Recargar catálogos y parámetros desde el servidor',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  trailing: _sincronizando
+                      ? null
+                      : const Icon(Icons.chevron_right),
+                  onTap: _sincronizando ? null : _ejecutarSincronizacionForzada,
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.blue.shade700,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Usa esto si los rangos de mediciones o actividades fueron actualizados en el portal y no se reflejan en la app.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
             ),
           ),
 

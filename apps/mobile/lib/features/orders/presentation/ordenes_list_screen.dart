@@ -95,8 +95,8 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
   void initState() {
     super.initState();
     // v3: Aplicar filtro inicial desde Dashboard
+    // ✅ FIX 26-ENE-2026: No desplegar menú automáticamente, solo aplicar filtro
     if (widget.filtroInicial != null) {
-      _mostrarFiltros = true; // Mostrar barra de filtros
       switch (widget.filtroInicial) {
         case 'pendientes':
           // v3.1: Dashboard "Pendientes" = órdenes EN_PROCESO (estandarizado)
@@ -112,8 +112,8 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
     }
 
     // ✅ NUEVO: Aplicar filtro inicial por estado desde Home
+    // ✅ FIX 26-ENE-2026: No desplegar menú automáticamente
     if (widget.initialFilterEstado != null) {
-      _mostrarFiltros = true;
       switch (widget.initialFilterEstado) {
         case 'PENDIENTE':
         case 'ASIGNADA':
@@ -129,8 +129,8 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
     }
 
     // ✅ NUEVO: Aplicar filtro de hoy
+    // ✅ FIX 26-ENE-2026: No desplegar menú automáticamente
     if (widget.initialFilterHoy) {
-      _mostrarFiltros = true;
       _filtroFecha = FiltroFecha.hoy;
     }
   }

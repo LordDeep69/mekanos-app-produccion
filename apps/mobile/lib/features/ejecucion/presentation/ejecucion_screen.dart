@@ -1236,12 +1236,15 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       return 'HOROMETRO';
     }
 
-    // 5. Estado de batería - SOLO para actividades específicas de CARGA/ELECTROLITOS
-    // "CARGA DE BATERIA" o "ELECTROLITOS" → selector porcentaje
+    // 5. Electrolitos de batería - Selector tipo nivel (Full/OK/Bajo/Crítico)
+    if (desc.contains('ELECTROLITOS DE BATERIA') ||
+        desc.contains('ELECTROLITOS BATERIA')) {
+      return 'ELECTROLITOS';
+    }
+
+    // 6. Estado de batería - SOLO para "CARGA DE BATERIA" → selector porcentaje
     // "CARGADOR DE BATERIA" o "SISTEMA DE CARGA" → B/M/C/NA (revisar estado)
-    if ((desc.contains('CARGA DE BATERIA') ||
-            desc.contains('ELECTROLITOS DE BATERIA') ||
-            desc.contains('ELECTROLITOS BATERIA')) &&
+    if (desc.contains('CARGA DE BATERIA') &&
         !desc.contains('CARGADOR') &&
         !desc.contains('SISTEMA DE CARGA')) {
       return 'BATERIA';
@@ -1266,6 +1269,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         return _buildNivelCombustibleSelector(actividad);
       case 'NIVEL_ACEITE':
         return _buildNivelAceiteSelector(actividad);
+      case 'ELECTROLITOS':
+        return _buildElectrolitosSelector(actividad);
       case 'HOROMETRO':
         return _buildHorometroInput(actividad);
       case 'BATERIA':
@@ -1513,6 +1518,78 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () => _marcarNivelAceite(actividad.idLocal, codigo),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 18,
+                        color: isSelected ? Colors.white : color,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          color: isSelected ? Colors.white : color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// ✅ FIX 26-ENE-2026: Widget selector de electrolitos de batería (tipo nivel)
+  Widget _buildElectrolitosSelector(ActividadesEjecutada actividad) {
+    final observacion = actividad.observacion ?? '';
+    final valorActual = observacion.startsWith('ELECTROLITOS: ')
+        ? observacion.substring(14)
+        : '';
+
+    final opciones = [
+      ('LLENO', 'Full', Colors.green, Icons.battery_charging_full),
+      ('OK', 'OK', Colors.lightGreen, Icons.battery_5_bar),
+      ('BAJO', 'Bajo', Colors.orange, Icons.battery_3_bar),
+      ('CRITICO', 'Crítico', Colors.red, Icons.battery_alert),
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: opciones.map((opcion) {
+        final codigo = opcion.$1;
+        final label = opcion.$2;
+        final color = opcion.$3;
+        final icon = opcion.$4;
+        final isSelected = valorActual == codigo;
+
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Material(
+              color: isSelected ? color : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  // CRITICO = M, BAJO = C, resto = B
+                  final simb = codigo == 'CRITICO'
+                      ? 'M'
+                      : (codigo == 'BAJO' ? 'C' : 'B');
+                  _marcarActividadEspecial(
+                    actividad.idLocal,
+                    'ELECTROLITOS: $codigo',
+                    simb,
+                  );
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(
