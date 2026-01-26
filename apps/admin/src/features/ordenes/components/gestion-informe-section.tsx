@@ -87,18 +87,12 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         return new Blob([byteArray], { type: contentType });
     }
 
-    // Regenerar PDF sin enviar
+    // ✅ FIX 26-ENE-2026: Siempre regenerar PDF y actualizar URL en BD
+    // Los botones "Previsualizar" y "Descargar" ya sirven para ver el PDF existente
     const handleRegenerarPdf = async () => {
         await regenerarMutation.mutateAsync({
             enviarEmail: false,
-        });
-    };
-
-    // ✅ FIX 24-ENE-2026: Forzar regeneración del PDF (actualiza URL en BD)
-    const handleForzarRegeneracion = async () => {
-        await regenerarMutation.mutateAsync({
-            enviarEmail: false,
-            forzarRegeneracion: true,
+            forzarRegeneracion: true, // SIEMPRE regenerar y actualizar URL
         });
     };
 
@@ -115,6 +109,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             emailDestino: email,
             asuntoEmail: asuntoEmail || undefined,
             mensajeEmail: mensajeEmail || undefined,
+            forzarRegeneracion: true, // SIEMPRE regenerar al enviar
         });
 
         setShowEmailModal(false);
@@ -234,22 +229,12 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                     Enviar Informe por Email
                 </button>
 
-                {/* ✅ FIX 24-ENE-2026: Indicador de PDF existente con opción de forzar regeneración */}
+                {/* Indicador de PDF existente (solo informativo) */}
                 {urlPdfExistente && !regenerarMutation.isSuccess && (
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs text-amber-700 flex items-center gap-1.5">
-                            <Check className="h-3.5 w-3.5" />
-                            PDF existente disponible
-                        </p>
-                        <button
-                            onClick={handleForzarRegeneracion}
-                            disabled={regenerarMutation.isPending}
-                            className="text-xs font-medium text-amber-700 hover:text-amber-900 hover:underline disabled:opacity-50 flex items-center gap-1"
-                        >
-                            <RefreshCw className="h-3 w-3" />
-                            Actualizar URL
-                        </button>
-                    </div>
+                    <p className="text-xs text-green-600 flex items-center gap-1.5">
+                        <Check className="h-3.5 w-3.5" />
+                        PDF disponible en R2
+                    </p>
                 )}
 
                 {/* Mensaje de éxito */}
