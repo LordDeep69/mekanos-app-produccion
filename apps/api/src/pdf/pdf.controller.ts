@@ -1309,8 +1309,11 @@ export class PdfController {
 
     // Enviar por email si se solicita
     let emailEnviado = false;
+    this.logger.log(`📧 Verificando envío de email: enviarEmail=${dto.enviarEmail}, clienteEmail=${clienteEmail}`);
+
     if (dto.enviarEmail && clienteEmail) {
       try {
+        this.logger.log(`📧 Preparando envío de email a ${clienteEmail}...`);
         const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
         const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
@@ -1349,10 +1352,15 @@ export class PdfController {
         });
 
         emailEnviado = true;
-        this.logger.log(`📧 Email enviado a ${clienteEmail}`);
+        this.logger.log(`✅ Email enviado exitosamente a ${clienteEmail}`);
       } catch (error) {
         this.logger.error(`❌ Error enviando email: ${error}`);
+        this.logger.error(`   Stack: ${error instanceof Error ? error.stack : 'N/A'}`);
       }
+    } else if (dto.enviarEmail && !clienteEmail) {
+      this.logger.warn(`⚠️ No se puede enviar email: clienteEmail no disponible`);
+      this.logger.warn(`   dto.emailDestino: ${dto.emailDestino || 'NO PROPORCIONADO'}`);
+      this.logger.warn(`   clientePersona?.email_principal: ${clientePersona?.email_principal || 'NO DISPONIBLE'}`);
     }
 
     return {
