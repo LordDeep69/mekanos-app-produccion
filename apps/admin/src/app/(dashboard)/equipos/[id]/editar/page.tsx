@@ -225,10 +225,18 @@ export default function EditarEquipoPage() {
                             <input
                                 type="text"
                                 value={formData.codigo_equipo}
-                                disabled
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+                                onChange={(e) => {
+                                    // ✅ FIX 27-ENE-2026: Auto-normalizar código (mayúsculas, sin espacios)
+                                    const normalized = e.target.value
+                                        .toUpperCase()
+                                        .replace(/\s+/g, '-')
+                                        .replace(/[^A-Z0-9\-]/g, '');
+                                    handleInputChange('codigo_equipo', normalized);
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase font-mono"
+                                placeholder="Ej: GEN-NAVAS-JD-001"
                             />
-                            <p className="text-xs text-gray-400 mt-1">El código no se puede modificar</p>
+                            <p className="text-xs text-blue-600 mt-1">Solo mayúsculas, números y guiones. Los espacios se convertirán automáticamente.</p>
                         </FormField>
 
                         <FormField label="Número de Serie">
