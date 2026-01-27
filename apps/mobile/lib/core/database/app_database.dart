@@ -737,6 +737,27 @@ class AppDatabase extends _$AppDatabase {
     await into(parametrosCatalogo).insertOnConflictUpdate(param);
   }
 
+  /// ✅ FIX 26-ENE-2026: Actualizar rangos de mediciones existentes cuando cambia un parámetro
+  /// Esto permite que la sincronización forzada actualice los rangos en mediciones ya creadas
+  Future<int> actualizarRangosMedicionesDeParametro({
+    required int idParametro,
+    required double? minNormal,
+    required double? maxNormal,
+    required double? minCritico,
+    required double? maxCritico,
+  }) async {
+    return await (update(
+      mediciones,
+    )..where((m) => m.idParametro.equals(idParametro))).write(
+      MedicionesCompanion(
+        rangoMinimoNormal: Value(minNormal),
+        rangoMaximoNormal: Value(maxNormal),
+        rangoMinimoCritico: Value(minCritico),
+        rangoMaximoCritico: Value(maxCritico),
+      ),
+    );
+  }
+
   /// Obtener todos los parámetros
   Future<List<ParametrosCatalogoData>> getAllParametros() {
     return select(parametrosCatalogo).get();

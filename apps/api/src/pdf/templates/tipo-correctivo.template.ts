@@ -378,7 +378,7 @@ const generarSeccionGeneral = (trabajos: TrabajoEjecutadoPDF[]): string => `
                     <td style="text-align: center;">
                         <span class="resultado-badge resultado-${mapResultado(t.resultado)}">${mapResultado(t.resultado)}</span>
                     </td>
-                    <td>${t.sistema || ''}</td>
+                    <td><span class="observacion-actividad">${t.sistema || ''}</span></td>
                 </tr>
                 `,
     )
@@ -410,6 +410,8 @@ const mapResultado = (resultado: string): string => {
     'F',
     'RN',
     'NF',
+    'SI',
+    'NO',
   ];
   if (codigosValidos.includes(resultado.toUpperCase())) {
     return resultado.toUpperCase();
@@ -460,6 +462,8 @@ const generarSimbologia = (): string => `
             <div class="simbologia-item"><span class="simbologia-code">F:</span> Lleno</div>
             <div class="simbologia-item"><span class="simbologia-code">RN:</span> Rellenar Nivel</div>
             <div class="simbologia-item"><span class="simbologia-code">NF:</span> No Funciona</div>
+            <div class="simbologia-item"><span class="simbologia-code">SI:</span> Sí</div>
+            <div class="simbologia-item"><span class="simbologia-code">NO:</span> No</div>
         </div>
     </div>
 `;

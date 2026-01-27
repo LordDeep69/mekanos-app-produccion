@@ -193,7 +193,7 @@ const generarSeccionActividades = (titulo: string, actividades: any[]): string =
             <td style="text-align: center;">
               <span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span>
             </td>
-            <td>${act.observaciones || ''}</td>
+            <td><span class="observacion-actividad">${act.observaciones || ''}</span></td>
           </tr>
         `,
       )
@@ -279,7 +279,7 @@ const generarSeccionGeneral = (actividades: any[]): string => `
             <td style="text-align: center;">
               <span class="resultado-badge resultado-${act.resultado || 'default'}">${act.resultado || '-'}</span>
             </td>
-            <td>${act.observaciones || ''}</td>
+            <td><span class="observacion-actividad">${act.observaciones || ''}</span></td>
           </tr>
         `,
     )
@@ -309,6 +309,8 @@ const generarSimbologia = (): string => `
       <div class="simbologia-item"><span class="simbologia-code">F:</span> Lleno</div>
       <div class="simbologia-item"><span class="simbologia-code">RN:</span> Rellenar Nivel</div>
       <div class="simbologia-item"><span class="simbologia-code">NF:</span> No Funciona</div>
+      <div class="simbologia-item"><span class="simbologia-code">SI:</span> Sí</div>
+      <div class="simbologia-item"><span class="simbologia-code">NO:</span> No</div>
     </div>
   </div>
 `;

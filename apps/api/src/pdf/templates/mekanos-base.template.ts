@@ -485,7 +485,28 @@ export const baseStyles = `
   .resultado-NF { background: ${MEKANOS_COLORS.danger}; color: white; }
   .resultado-NA { background: ${MEKANOS_COLORS.border}; color: ${MEKANOS_COLORS.text}; }
   .resultado-C { background: ${MEKANOS_COLORS.warning}; color: white; }
+  .resultado-SI { background: ${MEKANOS_COLORS.success}; color: white; }
+  .resultado-NO { background: ${MEKANOS_COLORS.danger}; color: white; }
   .resultado-default { background: ${MEKANOS_COLORS.secondary}; color: white; }
+  
+  /* ✅ FIX 27-ENE-2026: Estilo mejorado para observaciones de actividades */
+  .observacion-actividad {
+    font-size: 8px;
+    color: ${MEKANOS_COLORS.secondary};
+    font-style: italic;
+    background: ${MEKANOS_COLORS.background};
+    padding: 2px 6px;
+    border-radius: 3px;
+    border-left: 2px solid ${MEKANOS_COLORS.primary};
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .observacion-actividad:empty {
+    display: none;
+  }
   
   .alerta-OK { color: ${MEKANOS_COLORS.success}; }
   .alerta-ADVERTENCIA { color: ${MEKANOS_COLORS.warning}; }

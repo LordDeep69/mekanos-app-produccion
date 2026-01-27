@@ -259,14 +259,22 @@ class SyncService {
 
   /// Procesar parámetros de medición
   /// ✅ FIX RENDIMIENTO: Usar transacción batch
+  /// ✅ FIX 26-ENE-2026: También actualizar rangos en mediciones existentes
   Future<int> _processParametros(List parametros) async {
     if (parametros.isEmpty) return 0;
 
     int count = 0;
+    int medicionesActualizadas = 0;
+
     await _db.transaction(() async {
       for (final param in parametros) {
         final id = param['idParametroMedicion'] ?? param['id'];
         if (id == null) continue; // Skip si no tiene ID
+
+        final minNormal = (param['valorMinimoNormal'] as num?)?.toDouble();
+        final maxNormal = (param['valorMaximoNormal'] as num?)?.toDouble();
+        final minCritico = (param['valorMinimoCritico'] as num?)?.toDouble();
+        final maxCritico = (param['valorMaximoCritico'] as num?)?.toDouble();
 
         await _db.upsertParametroCatalogo(
           ParametrosCatalogoCompanion(
@@ -284,31 +292,41 @@ class SyncService {
             unidad: Value(
               param['unidadMedida'] as String? ?? param['unidad'] as String?,
             ),
-            valorMinimoNormal: Value(
-              (param['valorMinimoNormal'] as num?)?.toDouble(),
-            ),
-            valorMaximoNormal: Value(
-              (param['valorMaximoNormal'] as num?)?.toDouble(),
-            ),
+            valorMinimoNormal: Value(minNormal),
+            valorMaximoNormal: Value(maxNormal),
             valorMinimoAdvertencia: Value(
               (param['valorMinimoAdvertencia'] as num?)?.toDouble(),
             ),
             valorMaximoAdvertencia: Value(
               (param['valorMaximoAdvertencia'] as num?)?.toDouble(),
             ),
-            valorMinimoCritico: Value(
-              (param['valorMinimoCritico'] as num?)?.toDouble(),
-            ),
-            valorMaximoCritico: Value(
-              (param['valorMaximoCritico'] as num?)?.toDouble(),
-            ),
+            valorMinimoCritico: Value(minCritico),
+            valorMaximoCritico: Value(maxCritico),
             tipoEquipoAplica: Value(param['tipoEquipoAplica'] as String?),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );
+
+        // ✅ FIX 26-ENE-2026: Actualizar rangos en mediciones existentes
+        // Esto permite que cambios en el portal se reflejen en órdenes ya iniciadas
+        final updated = await _db.actualizarRangosMedicionesDeParametro(
+          idParametro: id,
+          minNormal: minNormal,
+          maxNormal: maxNormal,
+          minCritico: minCritico,
+          maxCritico: maxCritico,
+        );
+        medicionesActualizadas += updated;
+
         count++;
       }
     });
+
+    if (medicionesActualizadas > 0) {
+      debugPrint(
+        '🔄 [SYNC] Rangos actualizados en $medicionesActualizadas mediciones existentes',
+      );
+    }
 
     return count;
   }
