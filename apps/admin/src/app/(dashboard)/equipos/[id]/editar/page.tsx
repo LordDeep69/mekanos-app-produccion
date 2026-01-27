@@ -126,6 +126,7 @@ export default function EditarEquipoPage() {
 
         const payload: UpdateEquipoPayload = {
             nombre_equipo: formData.nombre_equipo,
+            codigo_equipo: formData.codigo_equipo, // ✅ FIX 27-ENE-2026: Incluir código de equipo en payload
             ubicacion_texto: formData.ubicacion_texto,
             estado_equipo: formData.estado_equipo,
             criticidad: formData.criticidad,
