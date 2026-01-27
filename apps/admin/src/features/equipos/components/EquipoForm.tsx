@@ -2574,7 +2574,14 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const axiosError = error as any;
         const status = axiosError?.response?.status;
-        const backendMessage = axiosError?.response?.data?.message;
+        const backendMessageRaw = axiosError?.response?.data?.message;
+
+        // ✅ FIX 27-ENE-2026: Normalizar mensaje del backend (puede ser string, array, u objeto)
+        const backendMessage = typeof backendMessageRaw === 'string'
+          ? backendMessageRaw
+          : Array.isArray(backendMessageRaw)
+            ? backendMessageRaw.join(', ')
+            : JSON.stringify(backendMessageRaw);
 
         const isConflict = status === 409;
         const isDuplicateCode = backendMessage?.toLowerCase().includes('código');

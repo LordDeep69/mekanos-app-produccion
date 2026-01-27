@@ -120,7 +120,8 @@ function Modal({ isOpen, onClose, title, children }: ModalProps) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        {/* ✅ FIX 27-ENE-2026: Remover onClick para evitar cierre accidental */}
+        <div className="fixed inset-0 bg-black/50" />
         <div className="relative w-full max-w-4xl bg-white rounded-xl shadow-2xl">
           <div className="flex items-center justify-between px-6 py-4 border-b">
             <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
