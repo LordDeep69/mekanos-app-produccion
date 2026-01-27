@@ -1048,13 +1048,26 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
                   Código de Inventario <span className="text-red-500">*</span>
                 </label>
                 <input
-                  {...register('datosEquipo.codigo_equipo' as const)}
-                  placeholder="Ej: MEK-GEN-001"
+                  {...register('datosEquipo.codigo_equipo' as const, {
+                    onChange: (e) => {
+                      // ✅ FIX 27-ENE-2026: Auto-normalizar a formato válido (mayúsculas, sin espacios)
+                      const normalized = e.target.value
+                        .toUpperCase()
+                        .replace(/\s+/g, '-')  // Espacios → guiones
+                        .replace(/[^A-Z0-9\-]/g, '');  // Remover caracteres inválidos
+                      e.target.value = normalized;
+                    }
+                  })}
+                  placeholder="Ej: GEN-NAVAS-JD-001"
                   className={cn(
                     "w-full p-4 rounded-2xl border focus:ring-4 focus:ring-blue-50 outline-none transition-all bg-gray-50/50 uppercase font-mono",
                     errors.datosEquipo?.codigo_equipo ? "border-red-500 bg-red-50/30" : "border-gray-200"
                   )}
                 />
+                <p className="text-[10px] text-blue-600 ml-1 italic flex items-center gap-1">
+                  <AlertCircle className="w-2.5 h-2.5" />
+                  Solo mayúsculas, números y guiones. Los espacios se convertirán automáticamente.
+                </p>
                 {errors.datosEquipo?.codigo_equipo && (
                   <p className="text-red-600 text-xs font-bold ml-1 flex items-center gap-1 animate-in fade-in slide-in-from-left-1">
                     <AlertCircle className="w-3 h-3" /> {errors.datosEquipo.codigo_equipo.message}
