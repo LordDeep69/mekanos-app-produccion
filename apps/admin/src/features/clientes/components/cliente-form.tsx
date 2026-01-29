@@ -275,7 +275,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         // En editar, solo actualizamos datos del cliente (no persona)
         const updateData = {
           tipo_cliente: values.tipo_cliente,
-          periodicidad_mantenimiento: values.periodicidad_mantenimiento,
+          periodicidad_mantenimiento: values.periodicidad_mantenimiento ?? undefined,
           descuento_autorizado: values.descuento_autorizado,
           tiene_credito: values.tiene_credito,
           limite_credito: values.limite_credito,
@@ -284,8 +284,11 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           tiene_acceso_portal: values.tiene_acceso_portal,
           observaciones_servicio: values.observaciones_servicio,
           requisitos_especiales: values.requisitos_especiales,
-          id_firma_administrativa: values.id_firma_administrativa || undefined,
+          id_firma_administrativa: values.id_firma_administrativa ?? undefined,
         };
+
+        console.log('[FRONTEND DEBUG] Datos a enviar:', updateData);
+
         await updateMutation.mutateAsync({ id: clienteId, data: updateData });
         toast({
           title: '¡Cliente actualizado!',
