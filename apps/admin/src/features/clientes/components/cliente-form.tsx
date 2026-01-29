@@ -294,13 +294,26 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         });
       }
       router.push('/clientes');
-    } catch (error) {
-      const message = (error as Error)?.message || 'No se pudo guardar el cliente';
+    } catch (error: unknown) {
+      // Extraer mensaje de error del backend (Axios error)
+      let errorMessage = 'No se pudo guardar el cliente';
+
+      if (error && typeof error === 'object') {
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string };
+        errorMessage = axiosError.response?.data?.message || axiosError.message || errorMessage;
+      }
+
+      // Mensajes amigables para errores conocidos
+      let friendlyMessage = errorMessage;
+      if (errorMessage.includes('Ya existe un cliente con el documento')) {
+        friendlyMessage = `Este número de documento ya está registrado. Por favor, busque el cliente existente o use un documento diferente.`;
+      } else if (errorMessage.includes('documento')) {
+        friendlyMessage = 'Ya existe un cliente con este número de documento.';
+      }
+
       toast({
-        title: 'Error',
-        description: message.includes('documento')
-          ? 'Ya existe un cliente con este número de documento.'
-          : message,
+        title: 'Error al guardar cliente',
+        description: friendlyMessage,
         variant: 'destructive',
       });
     }
