@@ -362,6 +362,9 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             </CardContent>
           </Card>
         )}
+
+        {/* Tabla de Equipos del Cliente */}
+        <EquiposClienteTable clienteId={clienteId} />
       </div>
     </div>
   );
