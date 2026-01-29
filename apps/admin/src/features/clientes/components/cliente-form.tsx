@@ -98,10 +98,10 @@ const clienteFormSchema = z.object({
   periodicidad_mantenimiento: z.nativeEnum(PeriodicidadMantenimientoEnum).optional(),
 
   // Configuración comercial
-  descuento_autorizado: z.number().min(0).max(100).optional(),
+  descuento_autorizado: z.coerce.number().min(0).max(100).optional(),
   tiene_credito: z.boolean().optional(),
-  limite_credito: z.number().min(0).optional(),
-  dias_credito: z.number().min(0).optional(),
+  limite_credito: z.coerce.number().min(0).optional(),
+  dias_credito: z.coerce.number().min(0).optional(),
 
   // Estado
   cliente_activo: z.boolean().optional(),
@@ -748,7 +748,11 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Periodicidad Mantenimiento</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value ?? undefined}
+                      defaultValue={field.value ?? undefined}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar" />
@@ -778,6 +782,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <Select
                     onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
                     value={field.value?.toString() ?? 'none'}
+                    defaultValue={field.value?.toString() ?? 'none'}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -791,10 +796,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           key={firma.id_firma_administrativa}
                           value={firma.id_firma_administrativa.toString()}
                         >
-                          {firma.persona?.razon_social ||
-                            firma.persona?.nombre_comercial ||
-                            firma.persona?.nombre_completo ||
-                            `Firma #${firma.id_firma_administrativa}`}
+                          {firma.nombre_de_firma || `Firma #${firma.id_firma_administrativa}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -832,8 +834,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                         min={0}
                         max={100}
                         step={0.01}
-                        {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        value={field.value ?? 0}
+                        onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
                       />
                     </FormControl>
                     <FormMessage />
@@ -852,8 +854,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <Input
                         type="number"
                         min={0}
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        value={field.value ?? 0}
+                        onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseInt(e.target.value))}
                       />
                     </FormControl>
                     <FormMessage />
@@ -896,8 +898,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <Input
                         type="number"
                         min={0}
-                        {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        value={field.value ?? 0}
+                        onChange={(e) => field.onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
                       />
                     </FormControl>
                     <FormMessage />
