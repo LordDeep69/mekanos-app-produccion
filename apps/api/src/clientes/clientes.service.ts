@@ -260,6 +260,10 @@ export class ClientesService {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { persona, id_persona, ...clienteData } = updateDto;
 
+    // DEBUG: Log para verificar qué datos llegan
+    console.log('[DEBUG] updateDto recibido:', JSON.stringify(updateDto, null, 2));
+    console.log('[DEBUG] clienteData después de destructuring:', JSON.stringify(clienteData, null, 2));
+
     return this.prisma.clientes.update({
       where: { id_cliente: id },
       data: {
@@ -269,6 +273,7 @@ export class ClientesService {
       },
       include: {
         persona: true,
+        firma_administrativa: true,
       },
     });
   }
