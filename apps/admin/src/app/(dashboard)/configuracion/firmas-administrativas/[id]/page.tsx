@@ -1,6 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Página: Detalle de Firma Administrativa
+ * Entidad aislada con datos de representante legal internos
  */
 
 'use client';
@@ -15,7 +16,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { useFirmaAdministrativa } from '@/features/firmas-administrativas';
-import { ArrowLeft, Building2, Edit, Loader2, Users } from 'lucide-react';
+import { ArrowLeft, Building2, Edit, Loader2, Mail, Phone, User, Users } from 'lucide-react';
 import Link from 'next/link';
 import { use } from 'react';
 
@@ -45,11 +46,7 @@ export default function FirmaAdministrativaDetallePage({ params }: PageProps) {
         );
     }
 
-    const nombreFirma =
-        firma.persona?.razon_social ||
-        firma.persona?.nombre_comercial ||
-        firma.persona?.nombre_completo ||
-        'Sin nombre';
+    const nombreFirma = firma.nombre_de_firma || 'Sin nombre';
 
     return (
         <div className="space-y-6">
@@ -98,12 +95,6 @@ export default function FirmaAdministrativaDetallePage({ params }: PageProps) {
                             </Badge>
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">NIT / Identificación</p>
-                            <p className="font-medium">
-                                {firma.persona?.numero_identificacion || '-'}
-                            </p>
-                        </div>
-                        <div>
                             <p className="text-sm text-muted-foreground">Fecha de creación</p>
                             <p className="font-medium">
                                 {new Date(firma.fecha_creacion).toLocaleDateString('es-CO')}
@@ -126,8 +117,41 @@ export default function FirmaAdministrativaDetallePage({ params }: PageProps) {
                     </CardContent>
                 </Card>
 
-                {/* Clientes Asociados */}
+                {/* Representante Legal */}
                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <User className="h-5 w-5" />
+                            Representante Legal
+                        </CardTitle>
+                        <CardDescription>
+                            Información de contacto del representante
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <p className="text-sm text-muted-foreground">Nombre</p>
+                            <p className="font-medium">
+                                {firma.representante_legal || '-'}
+                            </p>
+                        </div>
+                        {firma.contacto_de_representante_legal && (
+                            <div className="flex items-center gap-2">
+                                <Phone className="h-4 w-4 text-muted-foreground" />
+                                <p className="font-medium">{firma.contacto_de_representante_legal}</p>
+                            </div>
+                        )}
+                        {firma.email_representante_legal && (
+                            <div className="flex items-center gap-2">
+                                <Mail className="h-4 w-4 text-muted-foreground" />
+                                <p className="font-medium">{firma.email_representante_legal}</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Clientes Asociados */}
+                <Card className="md:col-span-2">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Users className="h-5 w-5" />

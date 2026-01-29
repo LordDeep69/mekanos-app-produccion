@@ -1,6 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Tabla de Firmas Administrativas
+ * Entidad aislada con datos de representante legal internos
  */
 
 'use client';
@@ -29,7 +30,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import type { FirmaAdministrativaConPersona } from '@/types/firmas-administrativas';
+import type { FirmaAdministrativa } from '@/types/firmas-administrativas';
 import {
     Building2,
     Edit,
@@ -63,12 +64,12 @@ export function FirmasAdministrativasTable() {
     const filteredFirmas = firmas.filter((firma) => {
         if (!search) return true;
         const searchLower = search.toLowerCase();
-        const nombre =
-            firma.persona?.razon_social ||
-            firma.persona?.nombre_comercial ||
-            firma.persona?.nombre_completo ||
-            '';
-        return nombre.toLowerCase().includes(searchLower);
+        const nombre = firma.nombre_de_firma || '';
+        const representante = firma.representante_legal || '';
+        return (
+            nombre.toLowerCase().includes(searchLower) ||
+            representante.toLowerCase().includes(searchLower)
+        );
     });
 
     const handleDelete = async (id: number) => {
@@ -77,13 +78,8 @@ export function FirmasAdministrativasTable() {
         }
     };
 
-    const getNombreFirma = (firma: FirmaAdministrativaConPersona) => {
-        return (
-            firma.persona?.razon_social ||
-            firma.persona?.nombre_comercial ||
-            firma.persona?.nombre_completo ||
-            'Sin nombre'
-        );
+    const getNombreFirma = (firma: FirmaAdministrativa) => {
+        return firma.nombre_de_firma || 'Sin nombre';
     };
 
     if (error) {
@@ -140,10 +136,10 @@ export function FirmasAdministrativasTable() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>ID</TableHead>
-                                <TableHead>Nombre / Razón Social</TableHead>
-                                <TableHead>NIT / Cédula</TableHead>
+                                <TableHead>Nombre de la Firma</TableHead>
+                                <TableHead>Representante Legal</TableHead>
+                                <TableHead>Contacto</TableHead>
                                 <TableHead>Estado</TableHead>
-                                <TableHead>Observaciones</TableHead>
                                 <TableHead className="w-[80px]">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -178,7 +174,17 @@ export function FirmasAdministrativasTable() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            {firma.persona?.numero_identificacion || '-'}
+                                            {firma.representante_legal || '-'}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="text-sm">
+                                                {firma.contacto_de_representante_legal || '-'}
+                                                {firma.email_representante_legal && (
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {firma.email_representante_legal}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             <Badge
@@ -186,9 +192,6 @@ export function FirmasAdministrativasTable() {
                                             >
                                                 {firma.firma_activa ? 'Activa' : 'Inactiva'}
                                             </Badge>
-                                        </TableCell>
-                                        <TableCell className="max-w-[200px] truncate">
-                                            {firma.observaciones || '-'}
                                         </TableCell>
                                         <TableCell>
                                             <DropdownMenu>

@@ -1061,7 +1061,10 @@ model evidencias_fotograficas {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model firmas_administrativas {
   id_firma_administrativa                                  Int       @id @default(autoincrement())
-  id_persona                                               Int       @unique
+  nombre_de_firma                                          String?
+  representante_legal                                      String?
+  contacto_de_representante_legal                          Decimal?  @db.Decimal
+  email_representante_legal                                String?
   firma_activa                                             Boolean?  @default(true)
   observaciones                                            String?
   requisitos_operativos                                    String?
@@ -1071,8 +1074,9 @@ model firmas_administrativas {
   fecha_modificacion                                       DateTime? @db.Timestamp(6)
   usuarios_firmas_administrativas_creado_porTousuarios     usuarios  @relation("firmas_administrativas_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onDelete: SetNull, onUpdate: NoAction, map: "fk_firma_creado_por")
   usuarios_firmas_administrativas_modificado_porTousuarios usuarios? @relation("firmas_administrativas_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onUpdate: NoAction, map: "fk_firma_modificado_por")
-  persona                                                  personas  @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_firma_persona")
   clientes                                                 clientes[]
+
+  @@index([firma_activa], map: "idx_firmas_activas")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1752,7 +1756,6 @@ model personas {
   clientes               clientes?
   contactos_adicionales  contactos_adicionales[]
   empleados              empleados?
-  firmas_administrativas firmas_administrativas?
   firmas_digitales       firmas_digitales[]
   proveedores            proveedores?
   usuarios               usuarios?

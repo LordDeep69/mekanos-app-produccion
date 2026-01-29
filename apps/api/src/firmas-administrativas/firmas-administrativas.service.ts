@@ -11,36 +11,17 @@ export class FirmasAdministrativasService {
     createDto: CreateFirmasAdministrativasDto,
     userId: number,
   ) {
-    // Validar que persona existe
-    const persona = await this.prisma.personas.findUnique({
-      where: { id_persona: createDto.id_persona },
-    });
-
-    if (!persona) {
-      throw new Error(
-        `Persona con ID ${createDto.id_persona} no existe`,
-      );
-    }
-
-    // Validar unique constraint: id_persona
-    const existing = await this.prisma.firmas_administrativas.findUnique({
-      where: { id_persona: createDto.id_persona },
-    });
-
-    if (existing) {
-      throw new Error(
-        `Persona con ID ${createDto.id_persona} ya tiene firma administrativa`,
-      );
-    }
-
     return this.prisma.firmas_administrativas.create({
       data: {
-        ...createDto,
+        nombre_de_firma: createDto.nombre_de_firma,
+        representante_legal: createDto.representante_legal,
+        contacto_de_representante_legal: createDto.contacto_de_representante_legal,
+        email_representante_legal: createDto.email_representante_legal,
+        firma_activa: createDto.firma_activa ?? true,
+        observaciones: createDto.observaciones,
+        requisitos_operativos: createDto.requisitos_operativos,
         creado_por: userId,
         fecha_creacion: new Date(),
-      },
-      include: {
-        persona: true,
       },
     });
   }
@@ -58,7 +39,6 @@ export class FirmasAdministrativasService {
         ...(firma_activa !== undefined && { firma_activa }),
       },
       include: {
-        persona: true,
         ...(includeClientes && {
           clientes: {
             include: {
@@ -77,7 +57,6 @@ export class FirmasAdministrativasService {
     const firma = await this.prisma.firmas_administrativas.findUnique({
       where: { id_firma_administrativa: id },
       include: {
-        persona: true,
         clientes: {
           include: {
             persona: true,
@@ -106,9 +85,6 @@ export class FirmasAdministrativasService {
         ...updateDto,
         modificado_por: userId,
         fecha_modificacion: new Date(),
-      },
-      include: {
-        persona: true,
       },
     });
   }

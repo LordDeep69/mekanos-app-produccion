@@ -1,16 +1,20 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Tipos para Firmas Administrativas
+ * Entidad aislada con datos de representante legal internos
  */
 
 import type { Persona } from './clientes';
 
 /**
- * Firma Administrativa base
+ * Firma Administrativa - Entidad aislada
  */
 export interface FirmaAdministrativa {
     id_firma_administrativa: number;
-    id_persona: number;
+    nombre_de_firma: string | null;
+    representante_legal: string | null;
+    contacto_de_representante_legal: string | null;
+    email_representante_legal: string | null;
     firma_activa: boolean;
     observaciones?: string | null;
     requisitos_operativos?: string | null;
@@ -21,16 +25,9 @@ export interface FirmaAdministrativa {
 }
 
 /**
- * Firma Administrativa con datos de persona
- */
-export interface FirmaAdministrativaConPersona extends FirmaAdministrativa {
-    persona: Persona;
-}
-
-/**
  * Firma Administrativa con clientes asociados
  */
-export interface FirmaAdministrativaCompleta extends FirmaAdministrativaConPersona {
+export interface FirmaAdministrativaConClientes extends FirmaAdministrativa {
     clientes?: Array<{
         id_cliente: number;
         codigo_cliente: string;
@@ -52,7 +49,7 @@ export interface FirmasAdministrativasQueryParams {
  * Respuesta paginada de firmas
  */
 export interface FirmasAdministrativasResponse {
-    data: FirmaAdministrativaConPersona[];
+    data: FirmaAdministrativa[];
     total: number;
 }
 
@@ -60,7 +57,10 @@ export interface FirmasAdministrativasResponse {
  * DTO para crear firma administrativa
  */
 export interface CreateFirmaAdministrativaDto {
-    id_persona: number;
+    nombre_de_firma: string;
+    representante_legal?: string;
+    contacto_de_representante_legal?: string;
+    email_representante_legal?: string;
     firma_activa?: boolean;
     observaciones?: string;
     requisitos_operativos?: string;
@@ -70,6 +70,10 @@ export interface CreateFirmaAdministrativaDto {
  * DTO para actualizar firma administrativa
  */
 export interface UpdateFirmaAdministrativaDto {
+    nombre_de_firma?: string;
+    representante_legal?: string;
+    contacto_de_representante_legal?: string;
+    email_representante_legal?: string;
     firma_activa?: boolean;
     observaciones?: string;
     requisitos_operativos?: string;

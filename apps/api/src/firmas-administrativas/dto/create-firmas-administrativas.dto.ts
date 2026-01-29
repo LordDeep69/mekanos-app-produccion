@@ -1,22 +1,32 @@
 import {
-    IsBoolean,
-    IsInt,
-    IsOptional,
-    IsString,
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 
 /**
  * DTO para crear firmas administrativas
- * ✅ FASE 2: Firmas Administrativas Module
- * 📋 Schema: schema.prisma lines 1968-2000
- * 🔑 Unique: id_persona
+ * Entidad aislada con datos de representante legal internos
  */
 export class CreateFirmasAdministrativasDto {
-  // 🔴 CAMPOS OBLIGATORIOS
-  @IsInt({ message: 'id_persona debe ser entero' })
-  id_persona!: number;
+  // 🔴 CAMPO OBLIGATORIO - Nombre de la firma
+  @IsString({ message: 'nombre_de_firma debe ser texto' })
+  nombre_de_firma!: string;
 
-  // 🟠 CAMPOS OPCIONALES
+  // 🟠 CAMPOS OPCIONALES - Datos del representante
+  @IsOptional()
+  @IsString({ message: 'representante_legal debe ser texto' })
+  representante_legal?: string;
+
+  @IsOptional()
+  @IsString({ message: 'contacto_de_representante_legal debe ser texto' })
+  contacto_de_representante_legal?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'email_representante_legal debe ser email válido' })
+  email_representante_legal?: string;
+
   @IsOptional()
   @IsBoolean({ message: 'firma_activa debe ser booleano' })
   firma_activa?: boolean = true;

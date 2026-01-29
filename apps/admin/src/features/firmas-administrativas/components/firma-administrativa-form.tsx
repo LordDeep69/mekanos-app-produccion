@@ -1,6 +1,7 @@
 /**
  * MEKANOS S.A.S - Portal Admin
  * Formulario de Firma Administrativa
+ * Entidad aislada con datos de representante legal internos
  */
 
 'use client';
@@ -27,7 +28,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type {
     CreateFirmaAdministrativaDto,
-    FirmaAdministrativaConPersona,
+    FirmaAdministrativa,
     UpdateFirmaAdministrativaDto,
 } from '@/types/firmas-administrativas';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -42,7 +43,10 @@ import {
 } from '../hooks/use-firmas-administrativas';
 
 const formSchema = z.object({
-    id_persona: z.number().min(1, 'Debe seleccionar una persona'),
+    nombre_de_firma: z.string().min(1, 'El nombre de la firma es obligatorio'),
+    representante_legal: z.string().optional(),
+    contacto_de_representante_legal: z.string().optional(),
+    email_representante_legal: z.string().email('Email inválido').optional().or(z.literal('')),
     firma_activa: z.boolean(),
     observaciones: z.string().optional(),
     requisitos_operativos: z.string().optional(),
@@ -51,7 +55,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 interface FirmaAdministrativaFormProps {
-    firma?: FirmaAdministrativaConPersona;
+    firma?: FirmaAdministrativa;
     isEditing?: boolean;
 }
 
@@ -66,7 +70,10 @@ export function FirmaAdministrativaForm({
     const form = useForm<FormData>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            id_persona: firma?.id_persona ?? 0,
+            nombre_de_firma: firma?.nombre_de_firma ?? '',
+            representante_legal: firma?.representante_legal ?? '',
+            contacto_de_representante_legal: firma?.contacto_de_representante_legal ?? '',
+            email_representante_legal: firma?.email_representante_legal ?? '',
             firma_activa: firma?.firma_activa ?? true,
             observaciones: firma?.observaciones ?? '',
             requisitos_operativos: firma?.requisitos_operativos ?? '',
@@ -79,9 +86,13 @@ export function FirmaAdministrativaForm({
         try {
             if (isEditing && firma) {
                 const updateData: UpdateFirmaAdministrativaDto = {
+                    nombre_de_firma: data.nombre_de_firma,
+                    representante_legal: data.representante_legal || undefined,
+                    contacto_de_representante_legal: data.contacto_de_representante_legal || undefined,
+                    email_representante_legal: data.email_representante_legal || undefined,
                     firma_activa: data.firma_activa,
-                    observaciones: data.observaciones,
-                    requisitos_operativos: data.requisitos_operativos,
+                    observaciones: data.observaciones || undefined,
+                    requisitos_operativos: data.requisitos_operativos || undefined,
                 };
                 await updateMutation.mutateAsync({
                     id: firma.id_firma_administrativa,
@@ -89,10 +100,13 @@ export function FirmaAdministrativaForm({
                 });
             } else {
                 const createData: CreateFirmaAdministrativaDto = {
-                    id_persona: data.id_persona,
+                    nombre_de_firma: data.nombre_de_firma,
+                    representante_legal: data.representante_legal || undefined,
+                    contacto_de_representante_legal: data.contacto_de_representante_legal || undefined,
+                    email_representante_legal: data.email_representante_legal || undefined,
                     firma_activa: data.firma_activa,
-                    observaciones: data.observaciones,
-                    requisitos_operativos: data.requisitos_operativos,
+                    observaciones: data.observaciones || undefined,
+                    requisitos_operativos: data.requisitos_operativos || undefined,
                 };
                 await createMutation.mutateAsync(createData);
             }
@@ -125,6 +139,7 @@ export function FirmaAdministrativaForm({
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    {/* Datos de la Firma */}
                     <Card>
                         <CardHeader>
                             <CardTitle>Datos de la Firma</CardTitle>
@@ -133,45 +148,25 @@ export function FirmaAdministrativaForm({
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {!isEditing && (
-                                <FormField
-                                    control={form.control}
-                                    name="id_persona"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>ID Persona *</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    type="number"
-                                                    placeholder="ID de la persona jurídica"
-                                                    {...field}
-                                                    onChange={(e) =>
-                                                        field.onChange(parseInt(e.target.value) || 0)
-                                                    }
-                                                />
-                                            </FormControl>
-                                            <FormDescription>
-                                                ID de la persona (jurídica) que representa la firma
-                                            </FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            )}
-
-                            {isEditing && firma?.persona && (
-                                <div className="p-4 bg-muted rounded-lg">
-                                    <p className="text-sm text-muted-foreground">Persona asociada:</p>
-                                    <p className="font-medium">
-                                        {firma.persona.razon_social ||
-                                            firma.persona.nombre_comercial ||
-                                            firma.persona.nombre_completo}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        NIT: {firma.persona.numero_identificacion}
-                                    </p>
-                                </div>
-                            )}
+                            <FormField
+                                control={form.control}
+                                name="nombre_de_firma"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Nombre de la Firma *</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                placeholder="Ej: Grupo Empresarial XYZ S.A.S"
+                                                {...field}
+                                            />
+                                        </FormControl>
+                                        <FormDescription>
+                                            Nombre oficial de la firma administrativa
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
 
                             <FormField
                                 control={form.control}
@@ -193,7 +188,83 @@ export function FirmaAdministrativaForm({
                                     </FormItem>
                                 )}
                             />
+                        </CardContent>
+                    </Card>
 
+                    {/* Datos del Representante Legal */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Representante Legal</CardTitle>
+                            <CardDescription>
+                                Información del representante legal de la firma (opcional)
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="representante_legal"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Nombre del Representante</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="Nombre completo"
+                                                    {...field}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="contacto_de_representante_legal"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Teléfono de Contacto</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="Ej: 3001234567"
+                                                    {...field}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+
+                            <FormField
+                                control={form.control}
+                                name="email_representante_legal"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Email del Representante</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                type="email"
+                                                placeholder="email@ejemplo.com"
+                                                {...field}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </CardContent>
+                    </Card>
+
+                    {/* Observaciones */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Información Adicional</CardTitle>
+                            <CardDescription>
+                                Observaciones y requisitos operativos
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
                             <FormField
                                 control={form.control}
                                 name="observaciones"
