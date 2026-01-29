@@ -301,13 +301,20 @@ class DataLifecycleManager {
       return 0;
     }
 
-    // Obtener órdenes candidatas a purga
-    final ordenesCandidatas =
+    // ✅ FIX 29-ENE-2026: Obtener TODAS las órdenes en estado final y filtrar manualmente
+    // Antes solo filtraba por fechaFin, pero órdenes sincronizadas pueden tener fechaFin=null
+    final todasOrdenesFinales =
         await (_db.select(_db.ordenes)
               ..where((o) => o.idEstado.isIn(estadosFinalesIds))
-              ..where((o) => o.isDirty.equals(false)) // NUNCA dirty
-              ..where((o) => o.fechaFin.isSmallerOrEqualValue(fechaLimite)))
+              ..where((o) => o.isDirty.equals(false))) // NUNCA dirty
             .get();
+
+    // Filtrar manualmente usando fechaFin, lastSyncedAt, o updatedAt como fallback
+    final ordenesCandidatas = todasOrdenesFinales.where((orden) {
+      // Usar fechaFin si existe, sino lastSyncedAt, sino updatedAt
+      final fechaReferencia = orden.fechaFin ?? orden.lastSyncedAt ?? orden.updatedAt;
+      return fechaReferencia.isBefore(fechaLimite) || fechaReferencia.isAtSameMomentAs(fechaLimite);
+    }).toList();
 
     debugPrint(
       '🔍 [LIFECYCLE] Encontradas ${ordenesCandidatas.length} órdenes candidatas a purga',
@@ -430,13 +437,13 @@ class DataLifecycleManager {
   // LIMPIEZA FORZADA DE FOTOS SINCRONIZADAS
   // ============================================================================
 
-  /// Elimina TODAS las fotos y firmas que ya fueron sincronizadas a la nube.
+  /// Elimina TODAS las fotos, firmas y órdenes completadas sincronizadas.
   /// NO espera el período de retención - elimina inmediatamente.
   ///
+  /// ✅ FIX 29-ENE-2026: Ahora también elimina las órdenes completadas
   /// Esto es lo que el técnico espera cuando presiona "Limpiar Ahora".
-  /// Las fotos ya están en Cloudinary, no necesitan estar en el dispositivo.
   Future<PurgeResult> limpiarFotosSincronizadasAhora() async {
-    debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA de fotos sincronizadas...');
+    debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA completa...');
 
     final resultado = PurgeResult();
     final stopwatch = Stopwatch()..start();
@@ -490,6 +497,33 @@ class DataLifecycleManager {
         }
       }
 
+      // ✅ FIX 29-ENE-2026: 3. Eliminar órdenes completadas (sin esperar días)
+      // Esto es lo que el técnico realmente quiere: limpiar TODO
+      final estadosFinalesIds = await _getEstadosFinalesIds();
+      if (estadosFinalesIds.isNotEmpty) {
+        final ordenesCompletadas =
+            await (_db.select(_db.ordenes)
+                  ..where((o) => o.idEstado.isIn(estadosFinalesIds))
+                  ..where((o) => o.isDirty.equals(false)))
+                .get();
+
+        int ordenesPurgadas = 0;
+        for (final orden in ordenesCompletadas) {
+          // Verificar que es seguro purgar
+          final enCola = await _db.existeOrdenEnColaPendiente(orden.idLocal);
+          if (enCola) continue;
+
+          final esSeguro = await esSeguroPurgar(orden.idLocal);
+          if (!esSeguro) continue;
+
+          // Purgar orden completa
+          await _purgarOrdenCompleta(orden.idLocal);
+          ordenesPurgadas++;
+          debugPrint('🗑️ [LIFECYCLE] Orden purgada: ${orden.numeroOrden}');
+        }
+        resultado.ordenesPurgadas = ordenesPurgadas;
+      }
+
       resultado.evidenciasPurgadas = evidenciasEliminadas;
       resultado.firmasPurgadas = firmasEliminadas;
       _espacioLiberadoBytes = bytesLiberados;
@@ -501,6 +535,7 @@ class DataLifecycleManager {
       debugPrint('✅ [LIFECYCLE] Limpieza forzada completada:');
       debugPrint('   📸 Fotos eliminadas: $evidenciasEliminadas');
       debugPrint('   ✍️ Firmas eliminadas: $firmasEliminadas');
+      debugPrint('   📋 Órdenes purgadas: ${resultado.ordenesPurgadas}');
       debugPrint(
         '   💾 Espacio liberado: ${(bytesLiberados / 1024 / 1024).toStringAsFixed(2)} MB',
       );

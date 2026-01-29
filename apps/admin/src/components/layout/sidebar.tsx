@@ -83,6 +83,7 @@ const navSections: NavSection[] = [
           { title: 'Parámetros', href: '/configuracion/catalogos/parametros', icon: Gauge },
         ],
       },
+      { title: 'Firmas Administrativas', href: '/configuracion/firmas-administrativas', icon: Building2 },
       { title: 'Sistema', href: '/configuracion', icon: Settings2 },
     ],
   },

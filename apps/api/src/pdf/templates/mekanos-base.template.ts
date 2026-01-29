@@ -433,6 +433,7 @@ export const baseStyles = `
     width: 100%;
     border-collapse: collapse;
     font-size: 10px;
+    table-layout: fixed;
   }
   
   .checklist-table th {
@@ -454,13 +455,18 @@ export const baseStyles = `
     background: ${MEKANOS_COLORS.background};
   }
   
-  /* ✅ FIX: Estilos mejorados para columna de Observaciones */
+  /* ✅ FIX 29-ENE-2026: Estilos mejorados para columna de Observaciones - WRAP correcto */
   .checklist-table td:last-child {
     font-size: 9px;
     color: ${MEKANOS_COLORS.secondary};
     font-style: italic;
-    max-width: 150px;
+    max-width: 120px;
+    width: 15%;
     word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    vertical-align: top;
   }
   
   /* Columna de resultado (centrada con badge) */
@@ -489,8 +495,9 @@ export const baseStyles = `
   .resultado-NO { background: ${MEKANOS_COLORS.danger}; color: white; }
   .resultado-default { background: ${MEKANOS_COLORS.secondary}; color: white; }
   
-  /* ✅ FIX 27-ENE-2026: Estilo mejorado para observaciones de actividades */
+  /* ✅ FIX 29-ENE-2026: Estilo mejorado para observaciones de actividades - WRAP correcto */
   .observacion-actividad {
+    display: block;
     font-size: 8px;
     color: ${MEKANOS_COLORS.secondary};
     font-style: italic;
@@ -498,10 +505,12 @@ export const baseStyles = `
     padding: 2px 6px;
     border-radius: 3px;
     border-left: 2px solid ${MEKANOS_COLORS.primary};
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: 100%;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    line-height: 1.3;
   }
   
   .observacion-actividad:empty {

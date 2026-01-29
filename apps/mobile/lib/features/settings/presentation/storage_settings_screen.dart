@@ -117,12 +117,14 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
       });
 
       if (mounted) {
+        // ✅ FIX 29-ENE-2026: Incluir órdenes purgadas en el mensaje
         final mensaje = result.tuvoCambios
             ? 'Limpieza completada:\n'
-                  '• ${result.evidenciasPurgadas} fotos eliminadas del dispositivo\n'
+                  '• ${result.evidenciasPurgadas} fotos eliminadas\n'
                   '• ${result.firmasPurgadas} firmas eliminadas\n'
-                  '(Las fotos siguen disponibles en la nube)'
-            : 'No hay fotos sincronizadas para limpiar.';
+                  '• ${result.ordenesPurgadas} órdenes completadas eliminadas\n'
+                  '(Los datos siguen disponibles en la nube)'
+            : 'No hay datos sincronizados para limpiar.';
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

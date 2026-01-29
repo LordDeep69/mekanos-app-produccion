@@ -5,7 +5,7 @@ import { UpdateFirmasAdministrativasDto } from './dto/update-firmas-administrati
 
 @Injectable()
 export class FirmasAdministrativasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(
     createDto: CreateFirmasAdministrativasDto,
@@ -40,7 +40,7 @@ export class FirmasAdministrativasService {
         fecha_creacion: new Date(),
       },
       include: {
-        personas: true,
+        persona: true,
       },
     });
   }
@@ -49,15 +49,23 @@ export class FirmasAdministrativasService {
     firma_activa?: boolean;
     skip?: number;
     take?: number;
+    includeClientes?: boolean;
   }) {
-    const { firma_activa, skip = 0, take = 50 } = params || {};
+    const { firma_activa, skip = 0, take = 50, includeClientes = false } = params || {};
 
     return this.prisma.firmas_administrativas.findMany({
       where: {
         ...(firma_activa !== undefined && { firma_activa }),
       },
       include: {
-        personas: true,
+        persona: true,
+        ...(includeClientes && {
+          clientes: {
+            include: {
+              persona: true,
+            },
+          },
+        }),
       },
       skip,
       take,
@@ -69,7 +77,12 @@ export class FirmasAdministrativasService {
     const firma = await this.prisma.firmas_administrativas.findUnique({
       where: { id_firma_administrativa: id },
       include: {
-        personas: true,
+        persona: true,
+        clientes: {
+          include: {
+            persona: true,
+          },
+        },
       },
     });
 
@@ -95,7 +108,7 @@ export class FirmasAdministrativasService {
         fecha_modificacion: new Date(),
       },
       include: {
-        personas: true,
+        persona: true,
       },
     });
   }

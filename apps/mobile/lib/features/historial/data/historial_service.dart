@@ -1,17 +1,16 @@
-import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/config/environment.dart';
+import '../../../core/api/api_client.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 
 /// Provider para el servicio de historial
 final historialServiceProvider = Provider<HistorialService>((ref) {
   final db = ref.watch(databaseProvider);
-  return HistorialService(db);
+  final apiClient = ref.watch(apiClientProvider);
+  return HistorialService(db, apiClient);
 });
 
 /// Servicio para gestionar el historial de órdenes finalizadas
@@ -22,8 +21,9 @@ final historialServiceProvider = Provider<HistorialService>((ref) {
 /// - Estadísticas de resumen
 class HistorialService {
   final AppDatabase _db;
+  final ApiClient _apiClient;
 
-  HistorialService(this._db);
+  HistorialService(this._db, this._apiClient);
 
   /// Obtiene todas las órdenes finalizadas
   ///
@@ -507,6 +507,7 @@ class HistorialService {
 
   /// Consulta la URL del PDF desde el backend y la guarda localmente
   ///
+  /// ✅ FIX 29-ENE-2026: Usar ApiClient autenticado y endpoint específico
   /// Útil cuando la orden fue sincronizada pero la URL del PDF no se guardó
   /// correctamente en la base de datos local.
   Future<String?> consultarYGuardarUrlPdf(int idOrdenLocal) async {
@@ -517,88 +518,47 @@ class HistorialService {
       )..where((o) => o.idLocal.equals(idOrdenLocal))).getSingleOrNull();
 
       if (orden == null || orden.idBackend == null) {
+        debugPrint('⚠️ [PDF] Orden no encontrada o sin idBackend');
         return null;
       }
 
-      // Importar Dio para hacer la consulta HTTP
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: Environment.apiBaseUrl,
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
-        ),
+      debugPrint(
+        '🔍 [PDF] Consultando PDF para orden backend: ${orden.idBackend}',
       );
 
-      // Obtener token de autenticación
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
+      // ✅ FIX 29-ENE-2026: Usar ApiClient que ya tiene el token JWT configurado
+      // Este endpoint busca directamente en documentos_generados por tipo_documento=PDF
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/ordenes/${orden.idBackend}/pdf-url',
+      );
 
-      if (token != null) {
-        dio.options.headers['Authorization'] = 'Bearer $token';
-      }
-
-      // Consultar la orden en el backend
-      final response = await dio.get('/ordenes/${orden.idBackend}');
-
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        final data = response.data['data'];
+      if (response.statusCode == 200 && response.data?['success'] == true) {
+        final data = response.data!['data'];
         String? urlPdf;
 
-        // ✅ 03-ENE-2026: Buscar URL del PDF en múltiples estructuras posibles
-        // 1. informes[0].documentos_generados.ruta_archivo (estructura Prisma)
-        // 2. url_pdf / urlPdf (estructura plana)
-        // 3. documento.url (estructura del servicio de finalización)
-
-        // Primero: buscar en informes (estructura Prisma con relación)
-        if (data['informes'] != null && data['informes'] is List) {
-          final informes = data['informes'] as List;
-          if (informes.isNotEmpty) {
-            final ultimoInforme = informes.first;
-            if (ultimoInforme['documentos_generados'] != null) {
-              urlPdf = ultimoInforme['documentos_generados']['ruta_archivo'];
-            }
-          }
-        }
-
-        // Fallback: campos directos
-        urlPdf ??= data['url_pdf'];
-        urlPdf ??= data['urlPdf'];
-
-        // Fallback: estructura documento
-        if (urlPdf == null && data['documento'] != null) {
-          urlPdf = data['documento']['url'];
-        }
-
-        // Fallback: array de documentos
-        if (urlPdf == null &&
-            data['documentos'] != null &&
-            data['documentos'] is List) {
-          final docs = data['documentos'] as List;
-          final pdfDoc = docs.firstWhere(
-            (d) => d['tipo_documento'] == 'PDF' || d['tipoDocumento'] == 'PDF',
-            orElse: () => null,
-          );
-          if (pdfDoc != null) {
-            urlPdf =
-                pdfDoc['url'] ??
-                pdfDoc['url_documento'] ??
-                pdfDoc['ruta_archivo'];
-          }
-        }
+        // El endpoint devuelve directamente { success, data: { url, ... } }
+        urlPdf = data['url'];
 
         if (urlPdf != null && urlPdf.isNotEmpty) {
+          debugPrint('✅ [PDF] URL encontrada: $urlPdf');
+
           // Guardar la URL en la base de datos local
           await (_db.update(_db.ordenes)
                 ..where((o) => o.idLocal.equals(idOrdenLocal)))
               .write(OrdenesCompanion(urlPdf: Value(urlPdf)));
 
+          debugPrint('✅ [PDF] URL guardada exitosamente en BD local');
           return urlPdf;
+        } else {
+          debugPrint('⚠️ [PDF] El endpoint no devolvió URL');
         }
+      } else {
+        debugPrint('❌ [PDF] Respuesta inválida: ${response.statusCode}');
       }
 
       return null;
     } catch (e) {
-      debugPrint('❌ Error consultando URL PDF: $e');
+      debugPrint('❌ [PDF] Error consultando URL PDF: $e');
       return null;
     }
   }

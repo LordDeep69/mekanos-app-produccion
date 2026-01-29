@@ -9,41 +9,42 @@
 
 import { Button } from '@/components/ui/button';
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card';
 import {
-    Form,
-    FormControl,
-    FormDescription,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useFirmasAdministrativas } from '@/features/firmas-administrativas';
 import { useToast } from '@/hooks/use-toast';
 import {
-    CreateClienteDto,
-    PERIODICIDAD_LABELS,
-    PeriodicidadMantenimientoEnum,
-    TIPO_CLIENTE_LABELS,
-    TipoClienteEnum,
-    TipoIdentificacionEnum,
-    TipoPersonaEnum,
+  CreateClienteDto,
+  PERIODICIDAD_LABELS,
+  PeriodicidadMantenimientoEnum,
+  TIPO_CLIENTE_LABELS,
+  TipoClienteEnum,
+  TipoIdentificacionEnum,
+  TipoPersonaEnum,
 } from '@/types/clientes';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Building2, Loader2, Save, User } from 'lucide-react';
@@ -91,24 +92,27 @@ const clienteFormSchema = z.object({
   direccion_principal: z.string().optional(),
   ciudad: z.string().optional(),
   departamento: z.string().optional(),
-  
+
   // ===== DATOS DE CLIENTE =====
   tipo_cliente: z.nativeEnum(TipoClienteEnum),
   periodicidad_mantenimiento: z.nativeEnum(PeriodicidadMantenimientoEnum).optional(),
-  
+
   // Configuración comercial
   descuento_autorizado: z.number().min(0).max(100).optional(),
   tiene_credito: z.boolean().optional(),
   limite_credito: z.number().min(0).optional(),
   dias_credito: z.number().min(0).optional(),
-  
+
   // Estado
   cliente_activo: z.boolean().optional(),
   tiene_acceso_portal: z.boolean().optional(),
-  
+
   // Observaciones
   observaciones_servicio: z.string().optional(),
   requisitos_especiales: z.string().optional(),
+
+  // Firma Administrativa (opcional)
+  id_firma_administrativa: z.number().nullable().optional(),
 }).refine((data) => {
   // Validar que persona jurídica tenga razón social
   if (data.tipo_persona === TipoPersonaEnum.JURIDICA) {
@@ -175,8 +179,13 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
       tiene_acceso_portal: false,
       observaciones_servicio: '',
       requisitos_especiales: '',
+      id_firma_administrativa: null,
     },
   });
+
+  // Query para firmas administrativas
+  const { data: firmasData } = useFirmasAdministrativas({ firma_activa: true });
+  const firmasAdministrativas = firmasData?.data ?? [];
 
   const tipoPersona = form.watch('tipo_persona');
 
@@ -214,6 +223,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         tiene_acceso_portal: cliente.tiene_acceso_portal ?? false,
         observaciones_servicio: cliente.observaciones_servicio ?? '',
         requisitos_especiales: cliente.requisitos_especiales ?? '',
+        id_firma_administrativa: cliente.id_firma_administrativa ?? null,
       });
     }
   }, [cliente, mode, form]);
@@ -253,6 +263,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           tiene_acceso_portal: values.tiene_acceso_portal,
           observaciones_servicio: values.observaciones_servicio,
           requisitos_especiales: values.requisitos_especiales,
+          id_firma_administrativa: values.id_firma_administrativa || undefined,
         };
 
         await createMutation.mutateAsync(payload as CreateClienteDto);
@@ -273,6 +284,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           tiene_acceso_portal: values.tiene_acceso_portal,
           observaciones_servicio: values.observaciones_servicio,
           requisitos_especiales: values.requisitos_especiales,
+          id_firma_administrativa: values.id_firma_administrativa || undefined,
         };
         await updateMutation.mutateAsync({ id: clienteId, data: updateData });
         toast({
@@ -285,8 +297,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
       const message = (error as Error)?.message || 'No se pudo guardar el cliente';
       toast({
         title: 'Error',
-        description: message.includes('documento') 
-          ? 'Ya existe un cliente con este número de documento.' 
+        description: message.includes('documento')
+          ? 'Ya existe un cliente con este número de documento.'
           : message,
         variant: 'destructive',
       });
@@ -305,7 +317,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        
+
         {/* ===== SECCIÓN 1: INFORMACIÓN DE PERSONA ===== */}
         <Card>
           <CardHeader>
@@ -318,13 +330,13 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               Información del {tipoPersona === TipoPersonaEnum.JURIDICA ? 'Representante / Empresa' : 'Cliente'}
             </CardTitle>
             <CardDescription>
-              {mode === 'crear' 
-                ? 'Ingresa los datos de identificación y contacto' 
+              {mode === 'crear'
+                ? 'Ingresa los datos de identificación y contacto'
                 : 'Datos de la persona asociada al cliente'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            
+
             {/* Tipo de persona y Tipo de documento */}
             <div className="grid md:grid-cols-2 gap-4">
               <FormField
@@ -333,8 +345,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo de Persona *</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
+                    <Select
+                      onValueChange={field.onChange}
                       value={field.value}
                       disabled={mode === 'editar'}
                     >
@@ -362,8 +374,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo de Documento *</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
+                    <Select
+                      onValueChange={field.onChange}
                       value={field.value}
                       disabled={mode === 'editar'}
                     >
@@ -401,8 +413,8 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     />
                   </FormControl>
                   <FormDescription>
-                    {tipoPersona === TipoPersonaEnum.JURIDICA 
-                      ? 'NIT con dígito de verificación' 
+                    {tipoPersona === TipoPersonaEnum.JURIDICA
+                      ? 'NIT con dígito de verificación'
                       : 'Documento de identidad'}
                   </FormDescription>
                   <FormMessage />
@@ -755,6 +767,45 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 )}
               />
             </div>
+
+            {/* Firma Administrativa (opcional) */}
+            <FormField
+              control={form.control}
+              name="id_firma_administrativa"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Firma Administrativa (Opcional)</FormLabel>
+                  <Select
+                    onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
+                    value={field.value?.toString() ?? 'none'}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar firma administrativa..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Sin firma administrativa</SelectItem>
+                      {firmasAdministrativas.map((firma) => (
+                        <SelectItem
+                          key={firma.id_firma_administrativa}
+                          value={firma.id_firma_administrativa.toString()}
+                        >
+                          {firma.persona?.razon_social ||
+                            firma.persona?.nombre_comercial ||
+                            firma.persona?.nombre_completo ||
+                            `Firma #${firma.id_firma_administrativa}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Agrupa este cliente bajo una firma administrativa existente
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </CardContent>
         </Card>
 

@@ -356,6 +356,7 @@ model clientes {
   usuarios_clientes_creado_porTousuarios     usuarios?                        @relation("clientes_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onUpdate: NoAction, map: "fk_clientes_creado_por")
   usuarios_clientes_modificado_porTousuarios usuarios?                        @relation("clientes_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onUpdate: NoAction, map: "fk_clientes_modificado_por")
   persona                                    personas                         @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_clientes_persona")
+  firma_administrativa                       firmas_administrativas?          @relation(fields: [id_firma_administrativa], references: [id_firma_administrativa], onUpdate: NoAction, map: "fk_clientes_firma_administrativa")
   contratos_mantenimiento                    contratos_mantenimiento[]
   cotizaciones                               cotizaciones[]
   equipos                                    equipos[]
@@ -1071,6 +1072,7 @@ model firmas_administrativas {
   usuarios_firmas_administrativas_creado_porTousuarios     usuarios  @relation("firmas_administrativas_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onDelete: SetNull, onUpdate: NoAction, map: "fk_firma_creado_por")
   usuarios_firmas_administrativas_modificado_porTousuarios usuarios? @relation("firmas_administrativas_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onUpdate: NoAction, map: "fk_firma_modificado_por")
   persona                                                  personas  @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_firma_persona")
+  clientes                                                 clientes[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

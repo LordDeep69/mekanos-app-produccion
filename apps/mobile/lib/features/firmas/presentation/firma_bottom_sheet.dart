@@ -101,10 +101,12 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
 
       if (idFirma != null && mounted) {
         Navigator.of(context).pop(true); // Retornar true indica éxito
+        // ✅ FIX 29-ENE-2026: Reducir duración de 4s (default) a 1s
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ Firma ${widget.tipoFirma.toLowerCase()} guardada'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 1),
           ),
         );
       } else {
