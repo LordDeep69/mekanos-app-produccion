@@ -182,6 +182,11 @@ apiClient.interceptors.response.use(
         default:
           console.error(`[API] Error HTTP ${status}`);
       }
+
+      // Log detallado del error para debugging
+      if (error.response?.data) {
+        console.error('[API] Detalle del error:', error.response.data);
+      }
     } else if (error.request) {
       console.error('[API] Error de red - Sin respuesta del servidor');
     }
