@@ -286,9 +286,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           requisitos_especiales: values.requisitos_especiales,
           id_firma_administrativa: values.id_firma_administrativa ?? undefined,
         };
-
-        console.log('[FRONTEND DEBUG] Datos a enviar:', updateData);
-
         await updateMutation.mutateAsync({ id: clienteId, data: updateData });
         toast({
           title: '¡Cliente actualizado!',
@@ -752,9 +749,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   <FormItem>
                     <FormLabel>Periodicidad Mantenimiento</FormLabel>
                     <Select
+                      key={`periodicidad-${field.value}`}
                       onValueChange={field.onChange}
-                      value={field.value ?? undefined}
-                      defaultValue={field.value ?? undefined}
+                      value={field.value || undefined}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -783,9 +780,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 <FormItem>
                   <FormLabel>Firma Administrativa (Opcional)</FormLabel>
                   <Select
+                    key={`firma-${field.value}`}
                     onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
-                    value={field.value?.toString() ?? 'none'}
-                    defaultValue={field.value?.toString() ?? 'none'}
+                    value={field.value?.toString() || 'none'}
                   >
                     <FormControl>
                       <SelectTrigger>

@@ -8,32 +8,32 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-    PERIODICIDAD_LABELS,
-    TIPO_CLIENTE_LABELS,
-    type PeriodicidadMantenimientoEnum,
-    type TipoClienteEnum,
+  PERIODICIDAD_LABELS,
+  TIPO_CLIENTE_LABELS,
+  type PeriodicidadMantenimientoEnum,
+  type TipoClienteEnum,
 } from '@/types/clientes';
 import {
-    ArrowLeft,
-    Building2,
-    Calendar,
-    Clock,
-    CreditCard,
-    Globe,
-    Mail,
-    MapPin,
-    Pencil,
-    Percent,
-    Phone,
-    User,
+  ArrowLeft,
+  Building2,
+  Calendar,
+  Clock,
+  CreditCard,
+  Globe,
+  Mail,
+  MapPin,
+  Pencil,
+  Percent,
+  Phone,
+  User,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCliente } from '../hooks/use-clientes';
@@ -249,6 +249,18 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                 </p>
               </div>
             </div>
+
+            {cliente.firma_administrativa && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-sm text-muted-foreground">Firma Administrativa</p>
+                  <p className="font-medium">
+                    {cliente.firma_administrativa.nombre_de_firma || `Firma #${cliente.firma_administrativa.id_firma_administrativa}`}
+                  </p>
+                </div>
+              </>
+            )}
 
             <Separator />
 

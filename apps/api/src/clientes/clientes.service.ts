@@ -235,6 +235,7 @@ export class ClientesService {
       where: { id_cliente: id },
       include: {
         persona: true,
+        firma_administrativa: true,
         sedes_cliente: {
           where: { activo: true },
         },
@@ -259,10 +260,6 @@ export class ClientesService {
     // Separar persona para evitar error de Prisma en update plano
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { persona, id_persona, ...clienteData } = updateDto;
-
-    // DEBUG: Log para verificar qué datos llegan
-    console.log('[DEBUG] updateDto recibido:', JSON.stringify(updateDto, null, 2));
-    console.log('[DEBUG] clienteData después de destructuring:', JSON.stringify(clienteData, null, 2));
 
     return this.prisma.clientes.update({
       where: { id_cliente: id },

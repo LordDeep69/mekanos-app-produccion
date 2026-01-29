@@ -109,6 +109,14 @@ export interface Cliente {
  */
 export interface ClienteConPersona extends Cliente {
   persona: Persona;
+  firma_administrativa?: {
+    id_firma_administrativa: number;
+    nombre_de_firma: string | null;
+    representante_legal: string | null;
+    contacto_de_representante_legal: string | null;
+    email_representante_legal: string | null;
+    firma_activa: boolean;
+  };
 }
 
 // ===== DTOs =====
