@@ -246,7 +246,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
             nombre_comercial: values.nombre_comercial || undefined,
             representante_legal: values.representante_legal || undefined,
             cedula_representante: values.cedula_representante || undefined,
-            email_principal: values.email_principal || undefined,
+            email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
             telefono_principal: values.telefono_principal || undefined,
             celular: values.celular || undefined,
             direccion_principal: values.direccion_principal || undefined,
@@ -255,17 +255,18 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           },
           tipo_cliente: values.tipo_cliente,
           periodicidad_mantenimiento: values.periodicidad_mantenimiento,
-          descuento_autorizado: values.descuento_autorizado,
-          tiene_credito: values.tiene_credito,
-          limite_credito: values.limite_credito,
-          dias_credito: values.dias_credito,
-          cliente_activo: values.cliente_activo,
-          tiene_acceso_portal: values.tiene_acceso_portal,
-          observaciones_servicio: values.observaciones_servicio,
-          requisitos_especiales: values.requisitos_especiales,
+          descuento_autorizado: values.descuento_autorizado ?? 0,
+          tiene_credito: values.tiene_credito ?? false,
+          limite_credito: values.limite_credito ?? 0,
+          dias_credito: values.dias_credito ?? 0,
+          cliente_activo: values.cliente_activo ?? true,
+          tiene_acceso_portal: values.tiene_acceso_portal ?? false,
+          observaciones_servicio: values.observaciones_servicio || undefined,
+          requisitos_especiales: values.requisitos_especiales || undefined,
           id_firma_administrativa: values.id_firma_administrativa || undefined,
         };
 
+        console.log('[DEBUG] Payload a enviar:', JSON.stringify(payload, null, 2));
         await createMutation.mutateAsync(payload as CreateClienteDto);
         toast({
           title: '¡Cliente creado!',
