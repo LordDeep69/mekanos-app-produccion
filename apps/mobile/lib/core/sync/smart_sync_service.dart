@@ -488,6 +488,15 @@ class SmartSyncService {
       // Insertar nueva
       await _db.insertOrdenFromSync(ordenCompanion);
     }
+
+    // ✅ FIX 28-ENE-2026: Guardar equipos de la orden (multi-equipos)
+    // CRÍTICO: Este paso faltaba, causando que órdenes multiequipo
+    // no se renderizaran correctamente cuando se sincronizaban via Smart Sync
+    final equiposData = ordenData['ordenesEquipos'] as List?;
+    debugPrint(
+      '🔧 [SMART SYNC] Orden ${ordenData['numeroOrden']} (ID $idBackend) - ordenesEquipos: ${equiposData?.length ?? 0}',
+    );
+    await _guardarOrdenesEquipos(idBackend, equiposData);
   }
 
   /// Parsea DateTime de string ISO o null
@@ -498,6 +507,63 @@ class SmartSyncService {
       return DateTime.tryParse(value);
     }
     return null;
+  }
+
+  /// ✅ FIX 28-ENE-2026: Guardar equipos de una orden (multi-equipos)
+  /// Copiado de sync_service.dart para mantener paridad
+  Future<void> _guardarOrdenesEquipos(
+    int idOrdenServicio,
+    List? equiposData,
+  ) async {
+    // Debug detallado
+    debugPrint(
+      '🔍 [SMART SYNC-MULTIEQUIPO] _guardarOrdenesEquipos(idOrdenServicio=$idOrdenServicio)',
+    );
+    debugPrint('   📦 equiposData: ${equiposData?.length ?? "null"} items');
+    if (equiposData != null && equiposData.isNotEmpty) {
+      for (int i = 0; i < equiposData.length; i++) {
+        final item = equiposData[i];
+        debugPrint(
+          '   [$i] idOrdenEquipo=${item['idOrdenEquipo']}, idEquipo=${item['idEquipo']}, codigo=${item['codigoEquipo']}',
+        );
+      }
+    }
+
+    // Si no hay equipos, limpiar cualquier dato anterior y salir
+    if (equiposData == null || equiposData.isEmpty) {
+      await _db.clearEquiposDeOrden(idOrdenServicio);
+      return;
+    }
+
+    // Limpiar equipos anteriores de esta orden
+    await _db.clearEquiposDeOrden(idOrdenServicio);
+
+    // Insertar nuevos equipos
+    for (final item in equiposData) {
+      final idOrdenEquipo = item['idOrdenEquipo'] as int?;
+      final idEquipo = item['idEquipo'] as int?;
+      if (idOrdenEquipo == null || idEquipo == null) continue;
+
+      await _db.upsertOrdenEquipo(
+        OrdenesEquiposCompanion(
+          idOrdenEquipo: Value(idOrdenEquipo),
+          idOrdenServicio: Value(idOrdenServicio),
+          idEquipo: Value(idEquipo),
+          ordenSecuencia: Value(item['ordenSecuencia'] as int? ?? 1),
+          nombreSistema: Value(item['nombreSistema'] as String?),
+          codigoEquipo: Value(item['codigoEquipo'] as String?),
+          nombreEquipo: Value(item['nombreEquipo'] as String?),
+          estado: Value(item['estado'] as String? ?? 'PENDIENTE'),
+          fechaInicio: Value(_parseDateTime(item['fechaInicio'])),
+          fechaFin: Value(_parseDateTime(item['fechaFin'])),
+          lastSyncedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+
+    debugPrint(
+      '🔧 [SMART SYNC] Guardados ${equiposData.length} equipos para orden $idOrdenServicio (multi-equipos)',
+    );
   }
 
   /// Crea una orden básica desde el resumen (para órdenes nuevas)

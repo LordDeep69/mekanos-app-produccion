@@ -1147,6 +1147,15 @@ export class SyncService {
         sedes_cliente: true,
         equipos: true,
         tipos_servicio: true,
+        // ✅ FIX 28-ENE-2026: Incluir ordenes_equipos para multi-equipos
+        ordenes_equipos: {
+          include: {
+            equipos: true,
+          },
+          orderBy: {
+            orden_secuencia: 'asc',
+          },
+        },
         // PDF se busca directamente en documentos_generados por id_referencia
       },
     });
@@ -1306,6 +1315,22 @@ export class SyncService {
       medicionesCriticas: medicionesCriticas,
       fechaCreacion: orden.fecha_creacion?.toISOString() || new Date().toISOString(),
       fechaModificacion: orden.fecha_modificacion?.toISOString(),
+      // ✅ FIX 28-ENE-2026: Incluir ordenesEquipos para multi-equipos
+      ordenesEquipos: orden.ordenes_equipos?.map((oe) => ({
+        idOrdenEquipo: oe.id_orden_equipo,
+        idOrdenServicio: oe.id_orden_servicio,
+        idEquipo: oe.id_equipo,
+        ordenSecuencia: oe.orden_secuencia,
+        nombreSistema: oe.nombre_sistema || undefined,
+        estado: oe.estado || 'PENDIENTE',
+        fechaInicio: oe.fecha_inicio?.toISOString(),
+        fechaFin: oe.fecha_fin?.toISOString(),
+        observaciones: oe.observaciones || undefined,
+        codigoEquipo: oe.equipos?.codigo_equipo || '',
+        nombreEquipo: oe.equipos?.nombre_equipo || '',
+        ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
+        configParametros: oe.equipos?.config_parametros || undefined,
+      })) || [],
     };
   }
 }

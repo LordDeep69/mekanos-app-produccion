@@ -147,7 +147,17 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         SliverToBoxAdapter(child: _buildOrderHeader()),
 
         // ✅ NUEVO: Widget de equipos (solo se muestra si hay múltiples equipos)
-        if (_detalle?.idBackend != null)
+        if (_detalle?.idBackend != null) ...[
+          SliverToBoxAdapter(
+            child: Builder(
+              builder: (context) {
+                debugPrint(
+                  '🔍 [DETALLE-SCREEN] Orden ${_detalle!.numeroOrden} - idBackend=${_detalle!.idBackend}, idLocal=${_detalle!.orden.idLocal}',
+                );
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
           SliverToBoxAdapter(
             child: EquiposOrdenWidget(
               idOrdenServicio: _detalle!.idBackend!,
@@ -164,6 +174,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
               },
             ),
           ),
+        ],
 
         // Estadísticas
         SliverToBoxAdapter(child: _buildStatsCard()),

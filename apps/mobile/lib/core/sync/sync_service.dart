@@ -629,8 +629,14 @@ class SyncService {
             await _guardarOrdenesEquipos(idOrden, equiposDataNueva);
           }
           ordenesCount++;
-        } catch (e) {
-          // Error silencioso - continuar con siguiente orden
+        } catch (e, stackTrace) {
+          // ⚠️ Log de error para diagnóstico (no silencioso)
+          debugPrint(
+            '❌ [SYNC] Error procesando orden ${orden['numeroOrden']}: $e',
+          );
+          debugPrint(
+            '   Stack: ${stackTrace.toString().split('\n').take(3).join('\n')}',
+          );
         }
       }
     });
@@ -684,10 +690,19 @@ class SyncService {
     int idOrdenServicio,
     List? equiposData,
   ) async {
-    // Debug: Ver qué llega del backend
+    // Debug detallado: Ver exactamente qué llega del backend
     debugPrint(
-      '🔍 [SYNC-DEBUG] _guardarOrdenesEquipos($idOrdenServicio) - equiposData: ${equiposData?.length ?? "null"}',
+      '🔍 [SYNC-MULTIEQUIPO] _guardarOrdenesEquipos(idOrdenServicio=$idOrdenServicio)',
     );
+    debugPrint('   📦 equiposData: ${equiposData?.length ?? "null"} items');
+    if (equiposData != null && equiposData.isNotEmpty) {
+      for (int i = 0; i < equiposData.length; i++) {
+        final item = equiposData[i];
+        debugPrint(
+          '   [$i] idOrdenEquipo=${item['idOrdenEquipo']}, idEquipo=${item['idEquipo']}, codigo=${item['codigoEquipo']}',
+        );
+      }
+    }
 
     // Si no hay equipos, limpiar cualquier dato anterior y salir
     if (equiposData == null || equiposData.isEmpty) {

@@ -5,10 +5,24 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/database/database_service.dart';
 
 /// Provider para obtener los equipos de una orden
-final equiposOrdenProvider =
-    FutureProvider.family<List<OrdenesEquipo>, int>((ref, idOrdenServicio) async {
+final equiposOrdenProvider = FutureProvider.family<List<OrdenesEquipo>, int>((
+  ref,
+  idOrdenServicio,
+) async {
   final db = ref.watch(databaseProvider);
-  return db.getEquiposByOrdenServicio(idOrdenServicio);
+  final equipos = await db.getEquiposByOrdenServicio(idOrdenServicio);
+  // Debug: Log para diagnosticar problema multiequipo
+  debugPrint(
+    '🔍 [MULTIEQUIPO-WIDGET] getEquiposByOrdenServicio($idOrdenServicio) → ${equipos.length} equipos',
+  );
+  if (equipos.isNotEmpty) {
+    for (final e in equipos) {
+      debugPrint(
+        '   📦 idOrdenEquipo=${e.idOrdenEquipo}, idEquipo=${e.idEquipo}, codigo=${e.codigoEquipo}',
+      );
+    }
+  }
+  return equipos;
 });
 
 /// Widget que muestra la lista de equipos de una orden multi-equipo.
@@ -126,7 +140,9 @@ class EquiposOrdenWidget extends ConsumerWidget {
     return Material(
       color: isSelected ? Colors.blue.shade100 : Colors.transparent,
       child: InkWell(
-        onTap: onEquipoSelected != null ? () => onEquipoSelected!(equipo) : null,
+        onTap: onEquipoSelected != null
+            ? () => onEquipoSelected!(equipo)
+            : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
@@ -156,7 +172,9 @@ class EquiposOrdenWidget extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      equipo.nombreSistema ?? equipo.nombreEquipo ?? 'Equipo ${equipo.ordenSecuencia}',
+                      equipo.nombreSistema ??
+                          equipo.nombreEquipo ??
+                          'Equipo ${equipo.ordenSecuencia}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
@@ -192,10 +210,7 @@ class EquiposOrdenWidget extends ConsumerWidget {
               // Flecha si es seleccionable
               if (onEquipoSelected != null) ...[
                 const SizedBox(width: 8),
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.grey.shade400,
-                ),
+                Icon(Icons.chevron_right, color: Colors.grey.shade400),
               ],
             ],
           ),
