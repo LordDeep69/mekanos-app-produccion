@@ -20,7 +20,7 @@ import {
   generarChecklistMultiEquipo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
-  MEKANOS_COLORS,
+  MEKANOS_COLORS
 } from './mekanos-base.template';
 
 export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
@@ -637,7 +637,7 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
           .map(
             (ev, idx) => `
             <div class="evidencia-item-compacto">
-              <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+              <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
           `,
@@ -738,7 +738,7 @@ const generarSeccionInsumos = (evidencias: any[]): string => {
   <div class="insumos-section">
     <div class="insumos-title">📦 VERIFICACIÓN DE INSUMOS UTILIZADOS</div>
     <div class="insumos-photo">
-      <img src="${evidenciaInsumos.url}" alt="Insumos" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+      <img src="${optimizarUrlCloudinary(evidenciaInsumos.url)}" alt="Insumos" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
     </div>
     <div style="text-align: center; margin-top: 10px;">
       <span class="insumos-caption">
@@ -789,7 +789,7 @@ const generarSeccionInsumosMultiEquipo = (
       </div>
       <div style="padding: 12px; background: ${color.bg};">
         <div class="insumos-photo">
-          <img src="${evidenciaInsumos.url}" alt="Insumos ${nombreEquipo}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+          <img src="${optimizarUrlCloudinary(evidenciaInsumos.url)}" alt="Insumos ${nombreEquipo}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
         </div>
         <div style="text-align: center; margin-top: 10px;">
           <span class="insumos-caption">
@@ -872,7 +872,7 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
               .map(
                 (ev: any, idx: number) => `
               <div class="evidencia-item">
-                <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
                 <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
               </div>
             `,

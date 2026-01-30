@@ -343,10 +343,15 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               )}
               Información del {tipoPersona === TipoPersonaEnum.JURIDICA ? 'Representante / Empresa' : 'Cliente'}
             </CardTitle>
-            <CardDescription>
-              {mode === 'crear'
-                ? 'Ingresa los datos de identificación y contacto'
-                : 'Datos de la persona asociada al cliente'}
+            <CardDescription className="flex items-center justify-between">
+              <span>
+                {mode === 'crear'
+                  ? 'Ingresa los datos de identificación y contacto'
+                  : 'Datos de la persona asociada al cliente'}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                <span className="text-red-500 font-bold">*</span> = Obligatorio
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

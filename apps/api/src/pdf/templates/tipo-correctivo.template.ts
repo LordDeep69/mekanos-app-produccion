@@ -26,7 +26,7 @@ import {
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
   MedicionesPorEquipoPDF,
-  MEKANOS_COLORS,
+  MEKANOS_COLORS
 } from './mekanos-base.template';
 
 export interface DatosCorrectivoOrdenPDF {
@@ -590,7 +590,7 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
           .map(
             (ev, idx) => `
                     <div class="evidencia-item-compacto">
-                        <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                        <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
                         <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
                     </div>
                     `,
@@ -734,7 +734,7 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
               .map(
                 (ev: any, idx: number) => `
                             <div class="evidencia-item">
-                                <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                                <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
                                 <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
                             </div>
                         `,

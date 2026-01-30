@@ -7,6 +7,7 @@
 
 'use client';
 
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -21,6 +22,7 @@ import {
   Paintbrush,
   Settings,
   ShieldCheck,
+  Sparkles,
   Zap
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -69,13 +71,13 @@ const requiredNumber = (msg: string) => z.preprocess(
 );
 
 const datosEquipoBaseSchema = z.object({
-  codigo_equipo: z.string().min(1, 'Código requerido').max(50),
+  codigo_equipo: z.string().min(1, 'Código de inventario requerido').max(50),
   id_cliente: requiredNumber('Seleccione un cliente'),
-  id_tipo_equipo: requiredNumber('Seleccione categoría'),
+  id_tipo_equipo: requiredNumber('Seleccione una categoría técnica'),
   id_sede: optionalNumber,
-  nombre_equipo: z.string().max(200).optional(),
-  numero_serie_equipo: z.string().max(100).optional(),
-  ubicacion_texto: z.string().min(5, 'Ubicación requerida').max(1000),
+  nombre_equipo: z.string().max(200).optional().or(z.literal('')),
+  numero_serie_equipo: z.string().max(100).optional().or(z.literal('')),
+  ubicacion_texto: z.string().min(5, 'Ubicación física requerida (mín. 5 caracteres)').max(1000),
   estado_equipo: z.enum(['OPERATIVO', 'STANDBY', 'INACTIVO', 'EN_REPARACION', 'FUERA_SERVICIO', 'BAJA']),
   criticidad: z.enum(['BAJA', 'MEDIA', 'ALTA', 'CRITICA']),
   criticidad_justificacion: z.string().optional(),
@@ -344,12 +346,49 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoEquipo | null>(null);
   // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Estado para config personalizada
   const [configParametros, setConfigParametros] = useState<ConfigParametros>({});
+  const { toast } = useToast();
 
   const crearEquipoMutation = useCrearEquipo();
 
   // Hooks de Selectores
   const { data: clientesOptions } = useClientesSelector();
   const { data: tiposEquipoOptions, isLoading: loadingTipos } = useTiposEquipoSelector();
+
+  /**
+   * ✅ GENERADOR AUTOMÁTICO DE CÓDIGO DE INVENTARIO (29-ENE-2026)
+   * Formato: {TIPO}-{CLIENTE_PREFIJO}-{TIMESTAMP}
+   * Ejemplo: GEN-NAVAS-A1B2C3
+   */
+  const generarCodigoAutomatico = () => {
+    const tipo = tipoSeleccionado || 'EQP';
+    const prefijo = tipo === 'GENERADOR' ? 'GEN' : tipo === 'BOMBA' ? 'BOM' : 'MOT';
+
+    // Obtener prefijo del cliente seleccionado
+    const clienteId = form.getValues('datosEquipo.id_cliente');
+    let clientePrefijo = 'CLI';
+    if (clienteId && clientesOptions) {
+      const clienteSeleccionado = clientesOptions.find(c => c.value === String(clienteId));
+      if (clienteSeleccionado) {
+        // Extraer primeras 4 letras del nombre del cliente
+        clientePrefijo = clienteSeleccionado.label
+          .replace(/[^A-Za-z]/g, '')
+          .substring(0, 4)
+          .toUpperCase() || 'CLI';
+      }
+    }
+
+    // Generar sufijo único basado en timestamp
+    const timestamp = Date.now().toString(36).toUpperCase().slice(-4);
+    const random = Math.random().toString(36).substring(2, 4).toUpperCase();
+
+    const codigoGenerado = `${prefijo}-${clientePrefijo}-${timestamp}${random}`;
+    form.setValue('datosEquipo.codigo_equipo', codigoGenerado);
+
+    toast({
+      title: '✨ Código generado',
+      description: `Se ha generado el código: ${codigoGenerado}`,
+    });
+  };
 
   const form = useForm<z.infer<typeof equipoFormSchema>>({
     // @ts-expect-error - Resolver complex types
@@ -866,11 +905,19 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
       const result = await crearEquipoMutation.mutateAsync(payloadConConfig as CreateEquipoPayload);
       console.log('Resultado registro:', result);
       if (result.success && onSuccess) {
+        toast({
+          title: '✅ Equipo registrado',
+          description: `El equipo ${result.data?.codigo_equipo || ''} se ha creado exitosamente.`,
+        });
         onSuccess(result.data);
       } else if (!result.success) {
         // Si el backend devuelve un error estructurado
         const errorMsg = result.error || 'Error desconocido al registrar el equipo';
-        alert(`ERROR DEL SERVIDOR: ${errorMsg}`);
+        toast({
+          title: '❌ Error del servidor',
+          description: errorMsg,
+          variant: 'destructive',
+        });
       }
     } catch (error: unknown) {
       console.error('Error en mutación:', error);
@@ -878,7 +925,18 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
       const err = error as any;
       const apiError = err?.response?.data?.message;
       const detailedError = Array.isArray(apiError) ? apiError.join('\n') : apiError;
-      alert(`ERROR DE RED/SERVIDOR:\n${detailedError || err.message || 'Error inesperado'}`);
+
+      // Mensajes amigables para errores comunes
+      let friendlyMessage = detailedError || err.message || 'Error inesperado';
+      if (friendlyMessage.includes('Ya existe un equipo con el código')) {
+        friendlyMessage = 'Este código de inventario ya está en uso. Use el botón "Generar" para crear uno nuevo automáticamente.';
+      }
+
+      toast({
+        title: '❌ Error al registrar equipo',
+        description: friendlyMessage,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -989,9 +1047,15 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
               <div className="p-3 bg-blue-50 rounded-xl">
                 <Building2 className="w-6 h-6 text-blue-600" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h2 className="text-2xl font-black text-gray-900">Información de Identificación</h2>
                 <p className="text-gray-500 text-sm">Datos básicos y ubicación del equipo en las instalaciones.</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500 flex items-center gap-1 justify-end">
+                  <span className="text-red-500 font-bold">*</span> = Campo obligatorio
+                </p>
+                <p className="text-xs text-gray-400 italic">Los campos opcionales se indican expresamente</p>
               </div>
             </div>
 
@@ -1047,26 +1111,37 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
                 <label className="text-sm font-bold text-gray-700 ml-1 flex items-center gap-1">
                   Código de Inventario <span className="text-red-500">*</span>
                 </label>
-                <input
-                  {...register('datosEquipo.codigo_equipo' as const, {
-                    onChange: (e) => {
-                      // ✅ FIX 27-ENE-2026: Auto-normalizar a formato válido (mayúsculas, sin espacios)
-                      const normalized = e.target.value
-                        .toUpperCase()
-                        .replace(/\s+/g, '-')  // Espacios → guiones
-                        .replace(/[^A-Z0-9\-]/g, '');  // Remover caracteres inválidos
-                      e.target.value = normalized;
-                    }
-                  })}
-                  placeholder="Ej: GEN-NAVAS-JD-001"
-                  className={cn(
-                    "w-full p-4 rounded-2xl border focus:ring-4 focus:ring-blue-50 outline-none transition-all bg-gray-50/50 uppercase font-mono",
-                    errors.datosEquipo?.codigo_equipo ? "border-red-500 bg-red-50/30" : "border-gray-200"
-                  )}
-                />
+                <div className="flex gap-2">
+                  <input
+                    {...register('datosEquipo.codigo_equipo' as const, {
+                      onChange: (e) => {
+                        // ✅ FIX 27-ENE-2026: Auto-normalizar a formato válido (mayúsculas, sin espacios)
+                        const normalized = e.target.value
+                          .toUpperCase()
+                          .replace(/\s+/g, '-')  // Espacios → guiones
+                          .replace(/[^A-Z0-9\-]/g, '');  // Remover caracteres inválidos
+                        e.target.value = normalized;
+                      }
+                    })}
+                    placeholder="Ej: GEN-NAVAS-JD-001"
+                    className={cn(
+                      "flex-1 p-4 rounded-2xl border focus:ring-4 focus:ring-blue-50 outline-none transition-all bg-gray-50/50 uppercase font-mono",
+                      errors.datosEquipo?.codigo_equipo ? "border-red-500 bg-red-50/30" : "border-gray-200"
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={generarCodigoAutomatico}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold flex items-center gap-2 hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl active:scale-95"
+                    title="Generar código automáticamente"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span className="hidden sm:inline">Generar</span>
+                  </button>
+                </div>
                 <p className="text-[10px] text-blue-600 ml-1 italic flex items-center gap-1">
-                  <AlertCircle className="w-2.5 h-2.5" />
-                  Solo mayúsculas, números y guiones. Los espacios se convertirán automáticamente.
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Use el botón &quot;Generar&quot; para crear un código único automáticamente, o escriba uno manualmente.
                 </p>
                 {errors.datosEquipo?.codigo_equipo && (
                   <p className="text-red-600 text-xs font-bold ml-1 flex items-center gap-1 animate-in fade-in slide-in-from-left-1">
@@ -1104,11 +1179,11 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700 ml-1 flex items-center gap-1">
-                  Nombre / Alias <span className="text-red-500">*</span>
+                  Nombre / Alias <span className="text-gray-400 text-xs font-normal">(opcional)</span>
                 </label>
                 <input
                   {...register('datosEquipo.nombre_equipo' as const)}
-                  placeholder="Ej: Planta de Emergencia Principal"
+                  placeholder="Ej: Planta de Emergencia Principal (se genera automáticamente si se deja vacío)"
                   className={cn(
                     "w-full p-4 rounded-2xl border focus:ring-4 focus:ring-blue-50 outline-none transition-all bg-gray-50/50",
                     errors.datosEquipo?.nombre_equipo ? "border-red-500 bg-red-50/30" : "border-gray-200"
@@ -1123,11 +1198,11 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700 ml-1 flex items-center gap-1">
-                  Número de Serie (Chasis) <span className="text-red-500">*</span>
+                  Número de Serie (Chasis) <span className="text-gray-400 text-xs font-normal">(opcional)</span>
                 </label>
                 <input
                   {...register('datosEquipo.numero_serie_equipo' as const)}
-                  placeholder="S/N del equipo completo"
+                  placeholder="S/N del equipo completo (si está disponible)"
                   className={cn(
                     "w-full p-4 rounded-2xl border focus:ring-4 focus:ring-blue-50 outline-none transition-all bg-gray-50/50",
                     errors.datosEquipo?.numero_serie_equipo ? "border-red-500 bg-red-50/30" : "border-gray-200"
@@ -1586,13 +1661,18 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
               {tipoMotor === 'COMBUSTION' ? (
                 <>
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider">Combustible</label>
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      Combustible <span className="text-red-500">*</span>
+                    </label>
                     <select {...register('datosMotor.tipo_combustible' as const)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50/30">
                       <option value="DIESEL">Diesel</option>
                       <option value="GASOLINA">Gasolina</option>
                       <option value="GAS_NATURAL">Gas Natural</option>
                       <option value="GLP">GLP</option>
                     </select>
+                    <p className="text-[10px] text-blue-600 italic flex items-center gap-1">
+                      <AlertCircle className="w-2 h-2" /> Obligatorio para motores a combustión
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-black text-gray-400 uppercase tracking-wider">Cilindros</label>
@@ -1629,7 +1709,9 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider">Capacidad Aceite (L)</label>
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      Capacidad Aceite (L) <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="number"
                       step="0.1"
@@ -1639,6 +1721,9 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
                         errors.datosMotor?.capacidad_aceite_litros ? "border-red-500 bg-red-50/30" : "border-gray-200"
                       )}
                     />
+                    <p className="text-[10px] text-blue-600 italic flex items-center gap-1">
+                      <AlertCircle className="w-2 h-2" /> Obligatorio para motores a combustión
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-black text-gray-400 uppercase tracking-wider">Capacidad Refrig. (L)</label>
@@ -1790,16 +1875,26 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
               ) : (
                 <>
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider">Voltaje Operación (VAC)</label>
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      Voltaje Operación (VAC) <span className="text-red-500">*</span>
+                    </label>
                     <input {...register('datosMotor.voltaje_operacion_vac' as const)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50/30" placeholder="Ej: 220/440" />
+                    <p className="text-[10px] text-blue-600 italic flex items-center gap-1">
+                      <AlertCircle className="w-2 h-2" /> Obligatorio para motores eléctricos
+                    </p>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider">Fases</label>
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      Fases <span className="text-red-500">*</span>
+                    </label>
                     <select {...register('datosMotor.numero_fases' as const)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50/30">
                       <option value="">Seleccione fases...</option>
                       <option value="MONOFASICO">Monofásico</option>
                       <option value="TRIFASICO">Trifásico</option>
                     </select>
+                    <p className="text-[10px] text-blue-600 italic flex items-center gap-1">
+                      <AlertCircle className="w-2 h-2" /> Obligatorio para motores eléctricos
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-black text-gray-400 uppercase tracking-wider">Frecuencia (Hz)</label>

@@ -1113,3 +1113,58 @@ export const generarLeyendaEquipos = (
     </div>
   `;
 };
+
+/**
+ * ✅ FIX 30-ENE-2026: Optimizar URLs de Cloudinary para reducir tamaño del PDF
+ * 
+ * Cloudinary permite transformaciones en la URL para comprimir imágenes:
+ * - q_auto:low = Calidad automática baja (reduce ~70% del tamaño)
+ * - w_600 = Ancho máximo 600px (suficiente para PDF)
+ * - f_auto = Formato automático (WebP si es soportado)
+ * 
+ * URL original: https://res.cloudinary.com/xxx/image/upload/v123/folder/image.jpg
+ * URL optimizada: https://res.cloudinary.com/xxx/image/upload/q_auto:low,w_600,f_jpg/v123/folder/image.jpg
+ * 
+ * Esto reduce imágenes de 2-5MB a 50-150KB cada una
+ */
+export const optimizarUrlCloudinary = (url: string): string => {
+  if (!url) return url;
+
+  // Solo optimizar URLs de Cloudinary
+  if (!url.includes('res.cloudinary.com')) {
+    return url;
+  }
+
+  // Evitar doble optimización
+  if (url.includes('q_auto') || url.includes('w_600')) {
+    return url;
+  }
+
+  // Patrón: .../upload/v123/... -> .../upload/q_auto:low,w_600,f_jpg/v123/...
+  // También manejar: .../upload/folder/... sin versión
+  const uploadMatch = url.match(/(.+\/upload\/)(.+)/);
+  if (uploadMatch) {
+    const [, base, rest] = uploadMatch;
+    // Transformaciones para PDF: calidad baja, ancho max 600px, formato JPG (más compatible que WebP)
+    return `${base}q_auto:low,w_600,f_jpg/${rest}`;
+  }
+
+  return url;
+};
+
+/**
+ * Optimizar array de evidencias
+ */
+export const optimizarEvidencias = (evidencias: (string | EvidenciaPDF)[]): (string | EvidenciaPDF)[] => {
+  if (!evidencias || evidencias.length === 0) return evidencias;
+
+  return evidencias.map(ev => {
+    if (typeof ev === 'string') {
+      return optimizarUrlCloudinary(ev);
+    }
+    return {
+      ...ev,
+      url: optimizarUrlCloudinary(ev.url),
+    };
+  });
+};
