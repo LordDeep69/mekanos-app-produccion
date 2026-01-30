@@ -59,8 +59,8 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
     const router = useRouter();
     const [page, setPage] = useState(1);
     const [search, setSearch] = useState('');
-    const [estadoFilter, setEstadoFilter] = useState<string>('');
-    const [tipoFilter, setTipoFilter] = useState<string>('');
+    const [estadoFilter, setEstadoFilter] = useState<string>('TODOS');
+    const [tipoFilter, setTipoFilter] = useState<string>('TODOS');
     const limit = 10;
 
     // Query para tipos de equipo
@@ -75,8 +75,8 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
         page,
         limit,
         search: search || undefined,
-        estado_equipo: estadoFilter || undefined,
-        tipo: tipoFilter || undefined,
+        estado_equipo: estadoFilter !== 'TODOS' ? estadoFilter : undefined,
+        tipo: tipoFilter !== 'TODOS' ? tipoFilter : undefined,
     });
 
     const equipos = equiposData?.data || [];
@@ -89,8 +89,8 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
 
     const handleResetFilters = () => {
         setSearch('');
-        setEstadoFilter('');
-        setTipoFilter('');
+        setEstadoFilter('TODOS');
+        setTipoFilter('TODOS');
         setPage(1);
     };
 
@@ -129,7 +129,7 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
                             <SelectValue placeholder="Estado" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">Todos los estados</SelectItem>
+                            <SelectItem value="TODOS">Todos los estados</SelectItem>
                             {Object.entries(ESTADO_EQUIPO_LABELS).map(([key, label]) => (
                                 <SelectItem key={key} value={key}>
                                     {label}
@@ -146,7 +146,7 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
                             <SelectValue placeholder="Tipo de equipo" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">Todos los tipos</SelectItem>
+                            <SelectItem value="TODOS">Todos los tipos</SelectItem>
                             {tiposEquipo?.map((tipo) => (
                                 <SelectItem key={tipo.id_tipo_equipo} value={tipo.id_tipo_equipo.toString()}>
                                     {tipo.nombre_tipo}
