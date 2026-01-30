@@ -130,11 +130,22 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
         });
 
-        const buffer = Buffer.from(pdfBuffer);
+        let buffer = Buffer.from(pdfBuffer);
         const filename = this.generarFilename(options.tipoInforme, options.datos.numeroOrden);
 
+        const originalSizeKB = (buffer.length / 1024).toFixed(2);
+        this.logger.log(`📄 PDF generado - Tamaño original: ${originalSizeKB} KB`);
+
+        // ✅ FIX 30-ENE-2026: Comprimir PDF con Ghostscript si está disponible
+        // Esto reduce PDFs de 48MB a ~300KB (similar a SmallPDF)
+        if (buffer.length > 1024 * 1024) { // Solo comprimir si > 1MB
+          buffer = await this.comprimirPDFConGhostscript(buffer);
+        }
+
         const elapsed = Date.now() - startTime;
-        this.logger.log(`✅ PDF generado en ${elapsed}ms - Tamaño: ${(buffer.length / 1024).toFixed(2)} KB`);
+        const finalSizeKB = (buffer.length / 1024).toFixed(2);
+        const compression = ((1 - buffer.length / pdfBuffer.length) * 100).toFixed(1);
+        this.logger.log(`✅ PDF listo en ${elapsed}ms - Tamaño final: ${finalSizeKB} KB (${compression}% compresión)`);
 
         return {
           buffer,
@@ -276,6 +287,68 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     const tipoNombre = tipoNombreMap[tipo] || 'Informe';
 
     return `MEKANOS_${tipoNombre}_${numeroOrden}_${fecha}.pdf`;
+  }
+
+  /**
+   * ✅ FIX 30-ENE-2026: Comprimir PDF con Ghostscript para reducir tamaño drásticamente
+   * Similar a SmallPDF - reduce PDFs de 48MB a ~300KB
+   * 
+   * Usa nivel de compresión 'screen' (72 dpi) optimizado para pantalla/email
+   * Alternativas: 'ebook' (150 dpi), 'printer' (300 dpi), 'prepress' (300 dpi alta calidad)
+   */
+  private async comprimirPDFConGhostscript(inputBuffer: Buffer): Promise<Buffer> {
+    const startTime = Date.now();
+    const inputSizeMB = (inputBuffer.length / (1024 * 1024)).toFixed(2);
+
+    try {
+      // Verificar si Ghostscript está disponible
+      try {
+        execSync('gs --version', { stdio: 'pipe' });
+      } catch {
+        this.logger.warn('⚠️ Ghostscript no disponible - retornando PDF sin comprimir');
+        return inputBuffer;
+      }
+
+      // Crear archivos temporales
+      const tempDir = '/tmp';
+      const inputPath = `${tempDir}/input_${Date.now()}.pdf`;
+      const outputPath = `${tempDir}/output_${Date.now()}.pdf`;
+
+      // Escribir PDF de entrada
+      fs.writeFileSync(inputPath, inputBuffer);
+
+      // Comando Ghostscript para compresión agresiva
+      // -dPDFSETTINGS=/screen = 72 dpi, máxima compresión
+      // -dCompatibilityLevel=1.4 = Compatibilidad amplia
+      // -dNOPAUSE -dBATCH = Modo no interactivo
+      const gsCommand = `gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/screen -dNOPAUSE -dQUIET -dBATCH -sOutputFile=${outputPath} ${inputPath}`;
+
+      this.logger.log(`🗜️ Comprimiendo PDF (${inputSizeMB} MB) con Ghostscript...`);
+      execSync(gsCommand, { stdio: 'pipe', timeout: 120000 }); // 2 min timeout
+
+      // Leer PDF comprimido
+      const compressedBuffer = fs.readFileSync(outputPath);
+
+      // Limpiar archivos temporales
+      try {
+        fs.unlinkSync(inputPath);
+        fs.unlinkSync(outputPath);
+      } catch {
+        // Ignorar errores de limpieza
+      }
+
+      const outputSizeKB = (compressedBuffer.length / 1024).toFixed(2);
+      const compressionRatio = ((1 - compressedBuffer.length / inputBuffer.length) * 100).toFixed(1);
+      const elapsed = Date.now() - startTime;
+
+      this.logger.log(`✅ Ghostscript: ${inputSizeMB} MB → ${outputSizeKB} KB (${compressionRatio}% reducción) en ${elapsed}ms`);
+
+      return compressedBuffer;
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.warn(`⚠️ Error en compresión Ghostscript: ${err.message} - retornando PDF sin comprimir`);
+      return inputBuffer;
+    }
   }
 
   /**

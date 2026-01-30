@@ -2,7 +2,8 @@
 # Mekanos API - NestJS Backend
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "pnpm"]
+# ✅ FIX 30-ENE-2026: Agregar ghostscript para compresión de PDFs
+nixPkgs = ["nodejs_20", "pnpm", "ghostscript"]
 
 [phases.install]
 cmds = [
