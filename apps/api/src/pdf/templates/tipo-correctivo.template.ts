@@ -26,8 +26,19 @@ import {
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
   MedicionesPorEquipoPDF,
-  MEKANOS_COLORS
+  MEKANOS_COLORS,
 } from './mekanos-base.template';
+
+/**
+ * ✅ FIX 30-ENE-2026: Optimizar URLs de Cloudinary para reducir tamaño del PDF
+ */
+const optimizarUrlCloudinary = (url: string): string => {
+  if (!url || !url.includes('res.cloudinary.com')) return url;
+  if (url.includes('q_auto') || url.includes('w_600')) return url;
+  const match = url.match(/(.+\/upload\/)(.+)/);
+  if (match) return `${match[1]}q_auto:low,w_600,f_jpg/${match[2]}`;
+  return url;
+};
 
 export interface DatosCorrectivoOrdenPDF {
   // Datos generales
