@@ -940,14 +940,14 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onInvalid = (errs: any) => {
-    console.error('ERRORES DE VALIDACIÓN DETECTADOS:', errs);
+  const onInvalid = (errors: Record<string, unknown>) => {
+    console.error('ERRORES DE VALIDACIÓN DETECTADOS:', errors);
+    console.error('Form state:', form.formState.errors);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit as never, onInvalid as never)} className="space-y-8 max-w-5xl mx-auto p-4">
+    <form onSubmit={handleSubmit(handleFormSubmit as never, onInvalid)} className="space-y-8 max-w-5xl mx-auto p-4">
       {/* Debug info - Solo visible en desarrollo si se desea */}
       {Object.keys(errors).length > 0 && (
         <div className="p-6 bg-red-50 border-2 border-red-200 rounded-3xl text-red-800 shadow-lg animate-in fade-in slide-in-from-top-4">
