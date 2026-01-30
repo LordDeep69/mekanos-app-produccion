@@ -23,6 +23,19 @@ import {
   MEKANOS_COLORS,
 } from './mekanos-base.template';
 
+/**
+ * ✅ FIX 30-ENE-2026: Optimizar URLs de Cloudinary para reducir tamaño del PDF
+ * Transforma URLs para aplicar compresión: q_auto:low,w_600,f_jpg
+ * Reduce imágenes de 2-5MB a 50-150KB cada una
+ */
+const optimizarUrlCloudinary = (url: string): string => {
+  if (!url || !url.includes('res.cloudinary.com')) return url;
+  if (url.includes('q_auto') || url.includes('w_600')) return url;
+  const match = url.match(/(.+\/upload\/)(.+)/);
+  if (match) return `${match[1]}q_auto:low,w_600,f_jpg/${match[2]}`;
+  return url;
+};
+
 export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
   // ✅ MULTI-EQUIPOS: Determinar si usar tablas multi-equipo
   const esMultiEquipo =
@@ -514,7 +527,7 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
           .map(
             (ev: any, idx: number) => `
             <div class="evidencia-item">
-              <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+              <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
               <div class="evidencia-caption" style="${esGeneral ? 'background: #0d9488;' : ''}">${ev.caption || `Foto ${idx + 1}`}</div>
             </div>
           `,
@@ -631,7 +644,7 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
               .map(
                 (ev: any, idx: number) => `
               <div class="evidencia-item">
-                <img src="${ev.url}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
                 <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
               </div>
             `,

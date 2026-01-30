@@ -198,7 +198,7 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
                                                 {equipo.nombre_equipo || '-'}
                                             </TableCell>
                                             <TableCell>
-                                                {equipo.tipo_equipo?.nombre_tipo || '-'}
+                                                {equipo.tipo === 'GENERADOR' ? 'Generador' : equipo.tipo === 'BOMBA' ? 'Bomba' : equipo.tipo === 'MOTOR' ? 'Motor' : '-'}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge variant={ESTADO_EQUIPO_COLORS[equipo.estado_equipo as EstadoEquipo]}>
