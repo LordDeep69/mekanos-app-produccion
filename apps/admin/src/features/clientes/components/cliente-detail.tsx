@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCliente } from '../hooks/use-clientes';
+import { EquiposClienteTable } from './equipos-cliente-table';
 
 interface ClienteDetailProps {
   clienteId: number;

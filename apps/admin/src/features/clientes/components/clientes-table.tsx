@@ -53,7 +53,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useClientes, useDeleteCliente, useRefreshClientes } from '../hooks/use-clientes';
 
 const PAGE_SIZE = 10;
@@ -61,12 +61,23 @@ const PAGE_SIZE = 10;
 export function ClientesTable() {
   const router = useRouter();
   const [page, setPage] = useState(0);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoClienteEnum | 'TODOS'>('TODOS');
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const refreshClientes = useRefreshClientes();
   const deleteMutation = useDeleteCliente();
+
+  // ✅ FIX 30-ENE-2026: Debounce para búsqueda (evita refresh en cada letra)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(0);
+    }, 500); // 500ms de delay
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Query con filtros
   const { data, isLoading, isError, error } = useClientes({
@@ -82,8 +93,7 @@ export function ClientesTable() {
 
   // Handlers
   const handleSearch = (value: string) => {
-    setSearch(value);
-    setPage(0); // Reset a primera página
+    setSearchInput(value);
   };
 
   const handleTipoChange = (value: string) => {
@@ -181,7 +191,7 @@ export function ClientesTable() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar por nombre, NIT..."
-              value={search}
+              value={searchInput}
               onChange={(e) => handleSearch(e.target.value)}
               className="pl-10"
             />
