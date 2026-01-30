@@ -15,4 +15,5 @@ export * from './hooks/use-clientes';
 export { ClienteDetail } from './components/cliente-detail';
 export { ClienteForm } from './components/cliente-form';
 export { ClientesTable } from './components/clientes-table';
+export { EquiposClienteTable } from './components/equipos-cliente-table';
 
