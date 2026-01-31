@@ -12,6 +12,7 @@ import {
     getCatalogoSistema,
     getCatalogoSistemas,
     getCatalogoSistemasActivos,
+    getCatalogoSistemasConUso,
     updateCatalogoSistema,
     type CatalogoSistemasQueryParams,
     type CreateCatalogoSistemaDto,

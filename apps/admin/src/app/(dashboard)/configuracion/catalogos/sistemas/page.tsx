@@ -2,12 +2,15 @@
 
 import {
     APLICA_A_OPTIONS,
+    useCatalogoSistemasConUso,
     useCreateCatalogoSistema,
     useDeleteCatalogoSistema,
     useUpdateCatalogoSistema,
     type NivelUso
 } from '@/features/catalogos';
+import { cn } from '@/lib/utils';
 import {
+    Activity,
     AlertCircle,
     Check,
     Edit,
@@ -52,12 +55,12 @@ export default function SistemasPage() {
         }
     };
 
-    const filteredSistemas = sistemas.filter(s => {
+    const filteredSistemas = sistemas.filter((s: any) => {
         const nombre = s.nombre_sistema || '';
         const codigo = s.codigo_sistema || '';
         const term = busqueda.toLowerCase();
         return nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
-    }).sort((a, b) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
+    }).sort((a: any, b: any) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
 
     return (
         <div className="space-y-6">
@@ -128,7 +131,7 @@ export default function SistemasPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredSistemas.map((sistema, idx) => (
+                                {filteredSistemas.map((sistema: any, idx: number) => (
                                     <tr key={sistema.id_sistema ?? `sistema-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-6 py-4 text-center">
                                             <span className="text-sm font-bold text-gray-400">#{sistema.orden_visualizacion}</span>
@@ -157,14 +160,20 @@ export default function SistemasPage() {
                                                         {(sistema as any).total_actividades ?? 0}
                                                     </span>
                                                 </div>
-                                                {(sistema as any).nivel_uso && (
-                                                    <span className={cn(
-                                                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                                                        NIVEL_USO_CONFIG[(sistema as any).nivel_uso]?.bgColor || 'bg-gray-100',
-                                                        NIVEL_USO_CONFIG[(sistema as any).nivel_uso]?.color || 'text-gray-500'
-                                                    )}>
-                                                        {NIVEL_USO_CONFIG[(sistema as any).nivel_uso]?.label || 'N/A'}
-                                                    </span>
+                                                {sistema.nivel_uso && (
+                                                    (() => {
+                                                        const nivel = sistema.nivel_uso as NivelUso;
+                                                        const config = NIVEL_USO_CONFIG[nivel];
+                                                        return (
+                                                            <span className={cn(
+                                                                "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                                                                config?.bgColor || 'bg-gray-100',
+                                                                config?.color || 'text-gray-500'
+                                                            )}>
+                                                                {config?.label || 'N/A'}
+                                                            </span>
+                                                        );
+                                                    })()
                                                 )}
                                             </div>
                                         </td>
