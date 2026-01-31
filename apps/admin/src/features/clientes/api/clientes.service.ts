@@ -7,15 +7,29 @@
 
 import { apiClient } from '@/lib/api/client';
 import type {
-    Cliente,
-    ClienteConPersona,
-    ClientesQueryParams,
-    ClientesResponse,
-    CreateClienteDto,
-    UpdateClienteDto,
+  Cliente,
+  ClienteConPersona,
+  ClientesQueryParams,
+  ClientesResponse,
+  CreateClienteDto,
+  UpdateClienteDto,
 } from '@/types/clientes';
 
 const CLIENTES_BASE = '/clientes';
+
+/**
+ * Respuesta real del backend con paginación
+ */
+interface BackendClientesResponse {
+  success: boolean;
+  data: ClienteConPersona[];
+  pagination: {
+    total: number;
+    skip: number;
+    take: number;
+    totalPages: number;
+  };
+}
 
 /**
  * Obtener lista de clientes con filtros y paginación
@@ -45,17 +59,36 @@ export async function getClientes(
     ? `${CLIENTES_BASE}?${queryParams.toString()}`
     : CLIENTES_BASE;
 
-  const response = await apiClient.get<ClientesResponse | ClienteConPersona[]>(url);
-  
-  // Normalizar respuesta (puede venir array o objeto paginado)
+  const response = await apiClient.get<BackendClientesResponse | ClienteConPersona[]>(url);
+
+  // Normalizar respuesta del backend
+  // Caso 1: Respuesta paginada { success, data, pagination }
+  if (response.data && typeof response.data === 'object' && 'pagination' in response.data) {
+    const backendResponse = response.data as BackendClientesResponse;
+    return {
+      data: backendResponse.data,
+      total: backendResponse.pagination.total,
+    };
+  }
+
+  // Caso 2: Respuesta con data y total directos { data, total }
+  if (response.data && typeof response.data === 'object' && 'data' in response.data && 'total' in response.data) {
+    return response.data as ClientesResponse;
+  }
+
+  // Caso 3: Array directo (fallback)
   if (Array.isArray(response.data)) {
     return {
       data: response.data,
       total: response.data.length,
     };
   }
-  
-  return response.data;
+
+  // Fallback seguro
+  return {
+    data: [],
+    total: 0,
+  };
 }
 
 /**

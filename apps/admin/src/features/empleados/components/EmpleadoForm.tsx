@@ -59,10 +59,15 @@ const CARGOS = [
     { value: 'SUPERVISOR_TECNICO', label: 'Supervisor Técnico' },
     { value: 'TECNICO_SENIOR', label: 'Técnico Senior' },
     { value: 'TECNICO_JUNIOR', label: 'Técnico Junior' },
+    { value: 'ASISTENTE_MANTENIMIENTO', label: 'Asistente de Mantenimiento' },
     { value: 'AUXILIAR_ADMINISTRATIVO', label: 'Auxiliar Administrativo' },
     { value: 'AUXILIAR_TECNICO', label: 'Auxiliar Técnico' },
     { value: 'ASESOR_COMERCIAL', label: 'Asesor Comercial' },
+    { value: 'ASESOR_TECNICO', label: 'Asesor Técnico' },
     { value: 'COORDINADOR_LOGISTICA', label: 'Coordinador Logística' },
+    { value: 'CONDUCTOR', label: 'Conductor' },
+    { value: 'PRACTICANTE', label: 'Practicante' },
+    { value: 'OTRO', label: 'Otro' },
 ];
 
 const TIPOS_CONTRATO = [

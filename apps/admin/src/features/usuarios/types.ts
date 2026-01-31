@@ -11,7 +11,7 @@
 export type TipoIdentificacion = 'CC' | 'NIT' | 'CE' | 'PA' | 'TI' | 'RC' | 'DNI';
 export type TipoPersona = 'NATURAL' | 'JURIDICA';
 export type EstadoUsuario = 'ACTIVO' | 'INACTIVO' | 'SUSPENDIDO' | 'BLOQUEADO' | 'PENDIENTE_ACTIVACION';
-export type CargoEmpleado = 
+export type CargoEmpleado =
   | 'GERENTE_GENERAL' | 'GERENTE_OPERACIONES' | 'GERENTE_COMERCIAL'
   | 'ADMINISTRADOR' | 'SUPERVISOR_TECNICO' | 'ASESOR_COMERCIAL' | 'ASESOR_TECNICO'
   | 'COORDINADOR_LOGISTICA' | 'TECNICO_SENIOR' | 'TECNICO_JUNIOR'
@@ -172,11 +172,16 @@ export const CARGO_OPTIONS = [
   { value: 'ADMINISTRADOR', label: 'Administrador' },
   { value: 'SUPERVISOR_TECNICO', label: 'Supervisor Técnico' },
   { value: 'ASESOR_COMERCIAL', label: 'Asesor Comercial' },
+  { value: 'ASESOR_TECNICO', label: 'Asesor Técnico' },
+  { value: 'COORDINADOR_LOGISTICA', label: 'Coordinador Logística' },
   { value: 'TECNICO_SENIOR', label: 'Técnico Senior' },
   { value: 'TECNICO_JUNIOR', label: 'Técnico Junior' },
+  { value: 'ASISTENTE_MANTENIMIENTO', label: 'Asistente de Mantenimiento' },
   { value: 'AUXILIAR_ADMINISTRATIVO', label: 'Auxiliar Administrativo' },
+  { value: 'AUXILIAR_TECNICO', label: 'Auxiliar Técnico' },
   { value: 'PRACTICANTE', label: 'Practicante' },
   { value: 'CONDUCTOR', label: 'Conductor' },
+  { value: 'OTRO', label: 'Otro' },
 ];
 
 export const ESTADO_USUARIO_OPTIONS = [

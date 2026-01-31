@@ -80,6 +80,7 @@ const CARGOS = [
     { value: 'SUPERVISOR_TECNICO', label: 'Supervisor Técnico', esTecnico: true },
     { value: 'TECNICO_SENIOR', label: 'Técnico Senior', esTecnico: true },
     { value: 'TECNICO_JUNIOR', label: 'Técnico Junior', esTecnico: true },
+    { value: 'ASISTENTE_MANTENIMIENTO', label: 'Asistente de Mantenimiento', esTecnico: true },
     { value: 'AUXILIAR_ADMINISTRATIVO', label: 'Auxiliar Administrativo', esTecnico: false },
     { value: 'AUXILIAR_TECNICO', label: 'Auxiliar Técnico', esTecnico: true },
     { value: 'ASESOR_COMERCIAL', label: 'Asesor Comercial', esTecnico: false },

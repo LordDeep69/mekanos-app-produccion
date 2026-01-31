@@ -49,6 +49,7 @@ export enum CargoEmpleadoEnum {
   COORDINADOR_LOGISTICA = 'COORDINADOR_LOGISTICA',
   TECNICO_SENIOR = 'TECNICO_SENIOR',
   TECNICO_JUNIOR = 'TECNICO_JUNIOR',
+  ASISTENTE_MANTENIMIENTO = 'ASISTENTE_MANTENIMIENTO',
   AUXILIAR_ADMINISTRATIVO = 'AUXILIAR_ADMINISTRATIVO',
   AUXILIAR_TECNICO = 'AUXILIAR_TECNICO',
   PRACTICANTE = 'PRACTICANTE',
@@ -90,32 +91,32 @@ export interface DatosPersona {
   tipo_identificacion: TipoIdentificacionEnum;
   numero_identificacion: string;
   tipo_persona: TipoPersonaEnum;
-  
+
   // Nombre (persona natural)
   primer_nombre?: string;
   segundo_nombre?: string;
   primer_apellido?: string;
   segundo_apellido?: string;
-  
+
   // Razón social (persona jurídica)
   razon_social?: string;
   nombre_comercial?: string;
   representante_legal?: string;
   cedula_representante?: string;
-  
+
   // Contacto
   email_principal?: string;
   telefono_principal?: string;
   telefono_secundario?: string;
   celular?: string;
-  
+
   // Ubicación
   direccion_principal?: string;
   barrio_zona?: string;
   ciudad?: string;
   departamento?: string;
   pais?: string;
-  
+
   // Adicionales
   fecha_nacimiento?: string;
   observaciones?: string;
@@ -143,25 +144,25 @@ export interface DatosEmpleado {
   tipo_contrato?: TipoContratoEmpleadoEnum;
   departamento?: string;
   jefe_inmediato?: number;
-  
+
   // Emergencia
   contacto_emergencia: string;
   telefono_emergencia: string;
-  
+
   // Formación
   nivel_academico?: NivelAcademicoEnum;
   titulo_obtenido?: string;
   institucion_educativa?: string;
-  
+
   // Roles operativos
   es_tecnico?: boolean;
   es_asesor?: boolean;
-  
+
   // Licencia
   puede_conducir?: boolean;
   licencia_conduccion?: string;
   fecha_vencimiento_licencia?: string;
-  
+
   observaciones?: string;
   habilidades_especiales?: string;
 }
@@ -335,6 +336,7 @@ export const CARGO_EMPLEADO_OPTIONS = [
   { value: CargoEmpleadoEnum.COORDINADOR_LOGISTICA, label: 'Coordinador Logística' },
   { value: CargoEmpleadoEnum.TECNICO_SENIOR, label: 'Técnico Senior' },
   { value: CargoEmpleadoEnum.TECNICO_JUNIOR, label: 'Técnico Junior' },
+  { value: CargoEmpleadoEnum.ASISTENTE_MANTENIMIENTO, label: 'Asistente de Mantenimiento' },
   { value: CargoEmpleadoEnum.AUXILIAR_ADMINISTRATIVO, label: 'Auxiliar Administrativo' },
   { value: CargoEmpleadoEnum.AUXILIAR_TECNICO, label: 'Auxiliar Técnico' },
   { value: CargoEmpleadoEnum.PRACTICANTE, label: 'Practicante' },
