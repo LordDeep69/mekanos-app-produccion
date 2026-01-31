@@ -51,6 +51,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  UserCheck,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -234,6 +235,7 @@ export function ClientesTable() {
               <TableHead>Nombre / Razón Social</TableHead>
               <TableHead>NIT/CC</TableHead>
               <TableHead>Tipo</TableHead>
+              <TableHead>Asesor</TableHead>
               <TableHead>Contacto</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="w-[120px] text-right">Acciones</TableHead>
@@ -242,7 +244,7 @@ export function ClientesTable() {
           <TableBody>
             {clientes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   No se encontraron clientes
                 </TableCell>
               </TableRow>
@@ -269,6 +271,16 @@ export function ClientesTable() {
                     <Badge variant="secondary">
                       {TIPO_CLIENTE_LABELS[cliente.tipo_cliente] || cliente.tipo_cliente}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {cliente.asesor_asignado?.persona?.nombre_completo ? (
+                      <div className="flex items-center gap-1 text-sm">
+                        <UserCheck className="h-3 w-3 text-green-600" />
+                        <span>{cliente.asesor_asignado.persona.nombre_completo}</span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">Sin asignar</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1 text-sm text-muted-foreground">

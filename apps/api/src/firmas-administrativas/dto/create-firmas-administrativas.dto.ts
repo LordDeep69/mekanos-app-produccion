@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEmail,
+  IsInt,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -26,6 +27,10 @@ export class CreateFirmasAdministrativasDto {
   @IsOptional()
   @IsEmail({}, { message: 'email_representante_legal debe ser email válido' })
   email_representante_legal?: string;
+
+  @IsOptional()
+  @IsInt({ message: 'id_empleado_asignado debe ser un número entero' })
+  id_empleado_asignado?: number;
 
   @IsOptional()
   @IsBoolean({ message: 'firma_activa debe ser booleano' })

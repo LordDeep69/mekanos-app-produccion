@@ -166,3 +166,33 @@ export async function crearEmpleadoCompleto(
     );
     return response.data;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✅ MULTI-ASESOR: Selector de Asesores
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tipo para el selector de asesores (datos mínimos)
+ */
+export interface AsesorSelectorItem {
+    id_empleado: number;
+    nombre_completo: string;
+    cargo: string;
+}
+
+export interface AsesoresSelectorResponse {
+    success: boolean;
+    data: AsesorSelectorItem[];
+    total: number;
+}
+
+/**
+ * Obtener lista de asesores para selectores (datos mínimos)
+ * Backend: GET /empleados/selector/asesores
+ */
+export async function getAsesoresSelector(): Promise<AsesoresSelectorResponse> {
+    const response = await apiClient.get<AsesoresSelectorResponse>(
+        `${EMPLEADOS_BASE}/selector/asesores`
+    );
+    return response.data;
+}

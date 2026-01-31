@@ -717,6 +717,7 @@ model empleados {
   ordenes_servicio_ordenes_servicio_id_supervisorToempleados       ordenes_servicio[]           @relation("ordenes_servicio_id_supervisorToempleados")
   ordenes_servicio_ordenes_servicio_id_tecnico_asignadoToempleados ordenes_servicio[]           @relation("ordenes_servicio_id_tecnico_asignadoToempleados")
   propuestas_correctivo                                            propuestas_correctivo[]
+  firmas_administrativas                                           firmas_administrativas[]     @relation("firmas_administrativas_empleado_asignado")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1060,23 +1061,26 @@ model evidencias_fotograficas {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model firmas_administrativas {
-  id_firma_administrativa                                  Int       @id @default(autoincrement())
+  id_firma_administrativa                                  Int        @id @default(autoincrement())
   nombre_de_firma                                          String?
   representante_legal                                      String?
-  contacto_de_representante_legal                          Decimal?  @db.Decimal
+  contacto_de_representante_legal                          Decimal?   @db.Decimal
   email_representante_legal                                String?
-  firma_activa                                             Boolean?  @default(true)
+  id_empleado_asignado                                     Int?
+  firma_activa                                             Boolean?   @default(true)
   observaciones                                            String?
   requisitos_operativos                                    String?
   creado_por                                               Int
-  fecha_creacion                                           DateTime? @default(now()) @db.Timestamp(6)
+  fecha_creacion                                           DateTime?  @default(now()) @db.Timestamp(6)
   modificado_por                                           Int?
-  fecha_modificacion                                       DateTime? @db.Timestamp(6)
-  usuarios_firmas_administrativas_creado_porTousuarios     usuarios  @relation("firmas_administrativas_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onDelete: SetNull, onUpdate: NoAction, map: "fk_firma_creado_por")
-  usuarios_firmas_administrativas_modificado_porTousuarios usuarios? @relation("firmas_administrativas_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onUpdate: NoAction, map: "fk_firma_modificado_por")
+  fecha_modificacion                                       DateTime?  @db.Timestamp(6)
+  usuarios_firmas_administrativas_creado_porTousuarios     usuarios   @relation("firmas_administrativas_creado_porTousuarios", fields: [creado_por], references: [id_usuario], onDelete: SetNull, onUpdate: NoAction, map: "fk_firma_creado_por")
+  usuarios_firmas_administrativas_modificado_porTousuarios usuarios?  @relation("firmas_administrativas_modificado_porTousuarios", fields: [modificado_por], references: [id_usuario], onUpdate: NoAction, map: "fk_firma_modificado_por")
+  empleado_asignado                                        empleados? @relation("firmas_administrativas_empleado_asignado", fields: [id_empleado_asignado], references: [id_empleado], onDelete: SetNull, onUpdate: NoAction, map: "fk_firma_empleado_asignado")
   clientes                                                 clientes[]
 
   @@index([firma_activa], map: "idx_firmas_activas")
+  @@index([id_empleado_asignado], map: "idx_firmas_empleado_asignado")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -2408,6 +2412,7 @@ enum cargo_empleado_enum {
   COORDINADOR_LOGISTICA
   TECNICO_SENIOR
   TECNICO_JUNIOR
+  ASISTENTE_MANTENIMIENTO
   AUXILIAR_ADMINISTRATIVO
   AUXILIAR_TECNICO
   PRACTICANTE

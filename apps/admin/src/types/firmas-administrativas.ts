@@ -15,6 +15,7 @@ export interface FirmaAdministrativa {
     representante_legal: string | null;
     contacto_de_representante_legal: string | null;
     email_representante_legal: string | null;
+    id_empleado_asignado?: number | null;
     firma_activa: boolean;
     observaciones?: string | null;
     requisitos_operativos?: string | null;
@@ -61,6 +62,7 @@ export interface CreateFirmaAdministrativaDto {
     representante_legal?: string;
     contacto_de_representante_legal?: string;
     email_representante_legal?: string;
+    id_empleado_asignado?: number;
     firma_activa?: boolean;
     observaciones?: string;
     requisitos_operativos?: string;
@@ -74,6 +76,7 @@ export interface UpdateFirmaAdministrativaDto {
     representante_legal?: string;
     contacto_de_representante_legal?: string;
     email_representante_legal?: string;
+    id_empleado_asignado?: number;
     firma_activa?: boolean;
     observaciones?: string;
     requisitos_operativos?: string;

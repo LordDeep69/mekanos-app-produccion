@@ -35,17 +35,23 @@ export class ClientesController {
   /**
    * ✅ OPTIMIZACIÓN 05-ENE-2026: Endpoint LIGERO para selectores
    * Retorna solo id, nombre y NIT - ideal para dropdowns/autocomplete
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtra por asesor si NO es admin
    * 
    * @param q Término de búsqueda (nombre comercial, razón social, NIT)
    * @param limit Máximo de resultados (default 20)
    */
   @Get('selector')
   async getSelector(
+    @CurrentUser() user: any,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
   ) {
     const limitNum = Math.min(parseInt(limit || '20'), 50); // Max 50
-    const items = await this.clientesService.findForSelector(q, limitNum);
+
+    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
+    const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
+
+    const items = await this.clientesService.findForSelector(q, limitNum, idAsesorFiltro);
 
     return {
       success: true,
@@ -53,8 +59,14 @@ export class ClientesController {
     };
   }
 
+  /**
+   * ✅ MULTI-ASESOR: Filtra clientes por asesor asignado si el usuario no es admin
+   * Admin/Gerente/Supervisor ve todos los clientes
+   * Asesor solo ve sus clientes asignados
+   */
   @Get()
   async findAll(
+    @CurrentUser() user: any,
     @Query('tipo_cliente') tipo_cliente?: string,
     @Query('cliente_activo') cliente_activo?: string,
     @Query('search') search?: string,
@@ -63,6 +75,9 @@ export class ClientesController {
   ) {
     const skipNum = skip ? parseInt(skip) : 0;
     const takeNum = take ? parseInt(take) : 50;
+
+    // Filtrar por asesor si NO es admin
+    const idAsesorFiltro = user.esAdmin ? undefined : user.idEmpleado;
 
     const { items, total } = await this.clientesService.findAll({
       tipo_cliente,
@@ -73,6 +88,7 @@ export class ClientesController {
       search,
       skip: skipNum,
       take: takeNum,
+      idAsesorAsignado: idAsesorFiltro,
     });
 
     return {

@@ -1,7 +1,7 @@
-import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
-import { GetEquiposQuery } from './get-equipos.query';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { PrismaEquipoRepository } from '../infrastructure/prisma-equipo.repository';
+import { GetEquiposQuery } from './get-equipos.query';
 
 /**
  * Resultado paginado de equipos
@@ -17,13 +17,14 @@ export interface GetEquiposResult {
 /**
  * Handler para la query GetEquipos
  * ✅ FASE 2: Usa PrismaEquipoRepository con campos snake_case
+ * ✅ 31-ENE-2026: MULTI-ASESOR - Propaga filtro de asesor al repository
  */
 @QueryHandler(GetEquiposQuery)
 export class GetEquiposHandler implements IQueryHandler<GetEquiposQuery> {
   constructor(
     @Inject('IEquipoRepository')
     private readonly equipoRepository: PrismaEquipoRepository
-  ) {}
+  ) { }
 
   async execute(query: GetEquiposQuery): Promise<GetEquiposResult> {
     const page = query.page || 1;
@@ -37,7 +38,8 @@ export class GetEquiposHandler implements IQueryHandler<GetEquiposQuery> {
       id_tipo_equipo: query.id_tipo_equipo,
       activo: query.activo !== undefined ? query.activo : true, // Por defecto solo activos
       skip,
-      take: limit
+      take: limit,
+      idAsesorAsignado: query.idAsesorAsignado, // ✅ MULTI-ASESOR
     };
 
     // findAll retorna { items, total }

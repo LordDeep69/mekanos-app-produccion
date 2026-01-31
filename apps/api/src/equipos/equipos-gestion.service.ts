@@ -411,6 +411,7 @@ export class EquiposGestionService {
   /**
    * Listar equipos con datos polimórficos
    * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
   async listarEquiposCompletos(params: {
     id_cliente?: number;
@@ -422,6 +423,7 @@ export class EquiposGestionService {
     sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
+    idAsesorAsignado?: number; // ✅ MULTI-ASESOR
   }) {
     try {
       const {
@@ -433,7 +435,8 @@ export class EquiposGestionService {
         sortBy = 'codigo',
         sortOrder = 'asc',
         page = 1,
-        limit = 20
+        limit = 20,
+        idAsesorAsignado,
       } = params;
       const skip = (page - 1) * limit;
 
@@ -441,6 +444,13 @@ export class EquiposGestionService {
       if (id_cliente) where.id_cliente = id_cliente;
       if (id_sede) where.id_sede = id_sede;
       if (estado_equipo) where.estado_equipo = estado_equipo;
+
+      // ✅ MULTI-ASESOR: Filtrar equipos por clientes asignados al asesor
+      if (idAsesorAsignado) {
+        where.clientes = {
+          id_asesor_asignado: idAsesorAsignado,
+        };
+      }
 
       // Filtro por tipo (GENERADOR, BOMBA)
       if (tipo === 'GENERADOR') {
@@ -683,19 +693,25 @@ export class EquiposGestionService {
    * ✅ OPTIMIZACIÓN 05-ENE-2026: Query ULTRA-LIGERA para selectores
    * Solo retorna: id, código, nombre, cliente
    * Impacto: De ~2s a ~100ms en selectores de equipos
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Ahora soporta filtrado por asesor
    */
   async findForSelector(params: {
     search?: string;
     clienteId?: number;
     sedeId?: number;
     limit?: number;
+    idAsesorAsignado?: number; // ✅ MULTI-ASESOR
   }) {
-    const { search, clienteId, sedeId, limit = 20 } = params;
+    const { search, clienteId, sedeId, limit = 20, idAsesorAsignado } = params;
 
     const where: any = {
       activo: true,
       ...(clienteId && { id_cliente: clienteId }),
       ...(sedeId && { id_sede: sedeId }),
+      // ✅ MULTI-ASESOR: Filtrar equipos por clientes asignados al asesor
+      ...(idAsesorAsignado && {
+        clientes: { id_asesor_asignado: idAsesorAsignado },
+      }),
       ...(search && {
         OR: [
           { codigo_equipo: { contains: search, mode: 'insensitive' } },

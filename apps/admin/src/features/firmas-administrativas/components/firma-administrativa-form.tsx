@@ -24,8 +24,16 @@ import {
     FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useAsesoresSelector } from '@/features/empleados/hooks/use-empleados';
 import type {
     CreateFirmaAdministrativaDto,
     FirmaAdministrativa,
@@ -47,6 +55,7 @@ const formSchema = z.object({
     representante_legal: z.string().optional(),
     contacto_de_representante_legal: z.string().optional(),
     email_representante_legal: z.string().email('Email inválido').optional().or(z.literal('')),
+    id_empleado_asignado: z.number().nullable().optional(),
     firma_activa: z.boolean(),
     observaciones: z.string().optional(),
     requisitos_operativos: z.string().optional(),
@@ -66,6 +75,7 @@ export function FirmaAdministrativaForm({
     const router = useRouter();
     const createMutation = useCreateFirmaAdministrativa();
     const updateMutation = useUpdateFirmaAdministrativa();
+    const { data: asesores, isLoading: loadingAsesores } = useAsesoresSelector();
 
     const form = useForm<FormData>({
         resolver: zodResolver(formSchema),
@@ -74,6 +84,7 @@ export function FirmaAdministrativaForm({
             representante_legal: firma?.representante_legal ?? '',
             contacto_de_representante_legal: firma?.contacto_de_representante_legal ?? '',
             email_representante_legal: firma?.email_representante_legal ?? '',
+            id_empleado_asignado: firma?.id_empleado_asignado ?? null,
             firma_activa: firma?.firma_activa ?? true,
             observaciones: firma?.observaciones ?? '',
             requisitos_operativos: firma?.requisitos_operativos ?? '',
@@ -90,6 +101,7 @@ export function FirmaAdministrativaForm({
                     representante_legal: data.representante_legal || undefined,
                     contacto_de_representante_legal: data.contacto_de_representante_legal || undefined,
                     email_representante_legal: data.email_representante_legal || undefined,
+                    id_empleado_asignado: data.id_empleado_asignado || undefined,
                     firma_activa: data.firma_activa,
                     observaciones: data.observaciones || undefined,
                     requisitos_operativos: data.requisitos_operativos || undefined,
@@ -104,6 +116,7 @@ export function FirmaAdministrativaForm({
                     representante_legal: data.representante_legal || undefined,
                     contacto_de_representante_legal: data.contacto_de_representante_legal || undefined,
                     email_representante_legal: data.email_representante_legal || undefined,
+                    id_empleado_asignado: data.id_empleado_asignado || undefined,
                     firma_activa: data.firma_activa,
                     observaciones: data.observaciones || undefined,
                     requisitos_operativos: data.requisitos_operativos || undefined,
@@ -162,6 +175,42 @@ export function FirmaAdministrativaForm({
                                         </FormControl>
                                         <FormDescription>
                                             Nombre oficial de la firma administrativa
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="id_empleado_asignado"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Empleado Asignado (Asesor/Asistente)</FormLabel>
+                                        <Select
+                                            value={field.value?.toString() ?? ''}
+                                            onValueChange={(value) => field.onChange(value ? parseInt(value) : null)}
+                                            disabled={loadingAsesores}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Seleccionar empleado..." />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="">Sin asignar</SelectItem>
+                                                {asesores?.map((asesor) => (
+                                                    <SelectItem
+                                                        key={asesor.id_empleado}
+                                                        value={asesor.id_empleado.toString()}
+                                                    >
+                                                        {asesor.persona?.primer_nombre} {asesor.persona?.primer_apellido} - {asesor.cargo}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormDescription>
+                                            ✅ <strong>Propagación automática:</strong> Todos los clientes de esta firma heredarán automáticamente este empleado como asesor asignado
                                         </FormDescription>
                                         <FormMessage />
                                     </FormItem>

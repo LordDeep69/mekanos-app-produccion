@@ -21,6 +21,19 @@ import { EmpleadosService } from './empleados.service';
 export class EmpleadosController {
   constructor(private readonly empleadosService: EmpleadosService) { }
 
+  /**
+   * ✅ MULTI-ASESOR: Endpoint ligero para selector de asesores
+   * Retorna solo id, nombre - ideal para dropdowns
+   */
+  @Get('selector/asesores')
+  async getAsesoresSelector() {
+    const asesores = await this.empleadosService.findAsesoresForSelector();
+    return {
+      success: true,
+      data: asesores,
+    };
+  }
+
   @Post()
   create(
     @Body() createDto: CreateEmpleadosDto,

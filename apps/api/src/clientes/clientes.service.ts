@@ -146,10 +146,13 @@ export class ClientesService {
    * ✅ OPTIMIZACIÓN 05-ENE-2026: Query ULTRA-LIGERA para selectores
    * Solo retorna: id, nombre (con prioridad), NIT
    * Impacto: De ~2s a ~100ms en selectores de cliente
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Ahora soporta filtrado por asesor
    */
-  async findForSelector(search?: string, limit: number = 20) {
+  async findForSelector(search?: string, limit: number = 20, idAsesorAsignado?: number) {
     const where: any = {
       cliente_activo: true,
+      // ✅ MULTI-ASESOR: Filtrar por asesor si se especifica
+      ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
       ...(search && {
         OR: [
           { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
@@ -188,18 +191,26 @@ export class ClientesService {
     }));
   }
 
+  /**
+   * ✅ MULTI-ASESOR: Ahora soporta filtrado por id_asesor_asignado
+   * Si idAsesorAsignado es undefined, muestra todos (para admin)
+   * Si tiene valor, filtra solo los clientes asignados a ese asesor
+   */
   async findAll(params?: {
     tipo_cliente?: string;
     cliente_activo?: boolean;
     search?: string;
     skip?: number;
     take?: number;
+    idAsesorAsignado?: number;
   }) {
-    const { tipo_cliente, cliente_activo, search, skip = 0, take = 50 } = params || {};
+    const { tipo_cliente, cliente_activo, search, skip = 0, take = 50, idAsesorAsignado } = params || {};
 
     const where: any = {
       ...(tipo_cliente && { tipo_cliente: tipo_cliente as any }),
       ...(cliente_activo !== undefined && { cliente_activo }),
+      // ✅ MULTI-ASESOR: Filtrar por asesor asignado
+      ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
       ...(search && {
         OR: [
           { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
@@ -227,7 +238,35 @@ export class ClientesService {
       this.prisma.clientes.count({ where }),
     ]);
 
-    return { items, total };
+    // ✅ MULTI-ASESOR: Enriquecer con datos del asesor asignado
+    const asesoresIds = items
+      .map(c => c.id_asesor_asignado)
+      .filter((id): id is number => id !== null);
+
+    let asesoresMap = new Map<number, { id_empleado: number; cargo: string | null; persona: { nombre_completo: string | null } | null }>();
+
+    if (asesoresIds.length > 0) {
+      const asesores = await this.prisma.empleados.findMany({
+        where: { id_empleado: { in: asesoresIds } },
+        select: {
+          id_empleado: true,
+          cargo: true,
+          persona: {
+            select: { nombre_completo: true },
+          },
+        },
+      });
+      asesoresMap = new Map(asesores.map(a => [a.id_empleado, a]));
+    }
+
+    const itemsConAsesor = items.map(cliente => ({
+      ...cliente,
+      asesor_asignado: cliente.id_asesor_asignado
+        ? asesoresMap.get(cliente.id_asesor_asignado) || null
+        : null,
+    }));
+
+    return { items: itemsConAsesor, total };
   }
 
   async findOne(id: number) {

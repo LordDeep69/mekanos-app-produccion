@@ -20,6 +20,7 @@ import {
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 // Commands
@@ -648,9 +649,11 @@ export class OrdenesController {
    * Lista órdenes con paginación, filtros y ordenamiento
    * 
    * ENTERPRISE: Soporta sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
   @Get()
   async findAll(
+    @CurrentUser() user: any,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('idCliente') idCliente?: string,
@@ -664,6 +667,9 @@ export class OrdenesController {
     @Query('fechaDesde') fechaDesde?: string,
     @Query('fechaHasta') fechaHasta?: string,
   ) {
+    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
+    const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
+
     const query = new GetOrdenesQuery(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
@@ -677,6 +683,7 @@ export class OrdenesController {
       tipoServicioId ? parseInt(tipoServicioId, 10) : undefined,
       fechaDesde,
       fechaHasta,
+      idAsesorFiltro, // ✅ MULTI-ASESOR
     );
 
     const result = await this.queryBus.execute(query);

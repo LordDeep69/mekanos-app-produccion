@@ -128,12 +128,18 @@ export class AuthService {
 
   /**
    * Valida un usuario desde el JWT payload (usado por JwtStrategy)
+   * ✅ MEJORADO: Incluye roles reales e idEmpleado para sistema multi-asesor
    */
   async validateUser(userId: number) {
     const usuario = await this.prisma.usuarios.findUnique({
       where: { id_usuario: userId },
       include: {
-        persona: true, // ✅ CORREGIDO: Relación 'persona' → tabla 'personas'
+        persona: true,
+        usuarios_roles_usuarios_roles_id_usuarioTousuarios: {
+          include: {
+            roles: true,
+          },
+        },
       },
     });
 
@@ -141,12 +147,35 @@ export class AuthService {
       throw new UnauthorizedException('Usuario no encontrado o inactivo');
     }
 
+    // Buscar empleado asociado (por id_persona)
+    const empleado = await this.prisma.empleados.findFirst({
+      where: { id_persona: usuario.id_persona },
+    });
+
+    // Extraer roles del usuario
+    const roles = usuario.usuarios_roles_usuarios_roles_id_usuarioTousuarios?.map(
+      ur => ({
+        id: ur.roles.id_rol,
+        codigo: ur.roles.codigo_rol,
+        nombre: ur.roles.nombre_rol,
+      })
+    ) || [];
+
+    // Determinar si es admin (tiene rol ADMIN o GERENTE)
+    const esAdmin = roles.some(r => ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes(r.codigo));
+
+    // Determinar si es asesor
+    const esAsesor = empleado?.es_asesor || roles.some(r => r.codigo === 'ASESOR');
+
     return {
       id: usuario.id_usuario,
       email: usuario.email,
       nombre: usuario.persona?.nombre_completo || 'Usuario',
-      rol: 'USER', // TODO: Implementar sistema de roles
       personaId: usuario.id_persona,
+      idEmpleado: empleado?.id_empleado || null,
+      roles,
+      esAdmin,
+      esAsesor,
     };
   }
 

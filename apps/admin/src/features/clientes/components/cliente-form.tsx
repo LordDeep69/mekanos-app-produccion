@@ -35,6 +35,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useAsesoresSelector } from '@/features/empleados/hooks/use-empleados';
 import { useFirmasAdministrativas } from '@/features/firmas-administrativas';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -113,6 +114,9 @@ const clienteFormSchema = z.object({
 
   // Firma Administrativa (opcional)
   id_firma_administrativa: z.number().nullable().optional(),
+
+  // ✅ MULTI-ASESOR: Asesor asignado
+  id_asesor_asignado: z.number().nullable().optional(),
 }).refine((data) => {
   // Validar que persona jurídica tenga razón social
   if (data.tipo_persona === TipoPersonaEnum.JURIDICA) {
@@ -180,12 +184,17 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
       observaciones_servicio: '',
       requisitos_especiales: '',
       id_firma_administrativa: null,
+      id_asesor_asignado: null,
     },
   });
 
   // Query para firmas administrativas
   const { data: firmasData } = useFirmasAdministrativas({ firma_activa: true });
   const firmasAdministrativas = firmasData?.data ?? [];
+
+  // ✅ MULTI-ASESOR: Query para asesores
+  const { data: asesoresData } = useAsesoresSelector();
+  const asesores = asesoresData?.data ?? [];
 
   const tipoPersona = form.watch('tipo_persona');
 
@@ -224,6 +233,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         observaciones_servicio: cliente.observaciones_servicio ?? '',
         requisitos_especiales: cliente.requisitos_especiales ?? '',
         id_firma_administrativa: cliente.id_firma_administrativa ?? null,
+        id_asesor_asignado: cliente.id_asesor_asignado ?? null,
       });
     }
   }, [cliente, mode, form]);
@@ -264,6 +274,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           observaciones_servicio: values.observaciones_servicio || undefined,
           requisitos_especiales: values.requisitos_especiales || undefined,
           id_firma_administrativa: values.id_firma_administrativa || undefined,
+          id_asesor_asignado: values.id_asesor_asignado || undefined,
         };
 
         console.log('[DEBUG] Payload a enviar:', JSON.stringify(payload, null, 2));
@@ -286,6 +297,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           observaciones_servicio: values.observaciones_servicio,
           requisitos_especiales: values.requisitos_especiales,
           id_firma_administrativa: values.id_firma_administrativa ?? undefined,
+          id_asesor_asignado: values.id_asesor_asignado ?? undefined,
         };
         await updateMutation.mutateAsync({ id: clienteId, data: updateData });
         toast({
@@ -822,6 +834,43 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   </Select>
                   <FormDescription>
                     Agrupa este cliente bajo una firma administrativa existente
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* ✅ MULTI-ASESOR: Selector de Asesor Asignado */}
+            <FormField
+              control={form.control}
+              name="id_asesor_asignado"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Asesor Asignado</FormLabel>
+                  <Select
+                    key={`asesor-${field.value}`}
+                    onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
+                    value={field.value?.toString() || 'none'}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar asesor responsable..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asesor asignado</SelectItem>
+                      {asesores.map((asesor) => (
+                        <SelectItem
+                          key={asesor.id_empleado}
+                          value={asesor.id_empleado.toString()}
+                        >
+                          {asesor.nombre_completo} ({asesor.cargo})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    El asesor asignado será responsable de este cliente y sus equipos
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

@@ -15,7 +15,7 @@ import {
     deleteEmpleado,
     getEmpleado,
     getEmpleados,
-    updateEmpleado,
+    updateEmpleado
 } from '../api/empleados.service';
 
 // Query keys
@@ -115,4 +115,22 @@ export function useRefreshEmpleados() {
     return {
         refresh: () => queryClient.invalidateQueries({ queryKey: EMPLEADOS_KEY }),
     };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✅ MULTI-ASESOR: Hook para selector de asesores
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const ASESORES_SELECTOR_KEY = ['empleados', 'selector', 'asesores'];
+
+/**
+ * Hook para obtener lista de asesores para selectores
+ * Usado en el formulario de clientes para asignar asesor
+ */
+export function useAsesoresSelector() {
+    return useQuery({
+        queryKey: ASESORES_SELECTOR_KEY,
+        queryFn: getAsesoresSelector,
+        staleTime: 5 * 60 * 1000, // 5 minutos - datos relativamente estables
+    });
 }

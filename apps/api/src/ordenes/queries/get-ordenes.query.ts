@@ -3,6 +3,7 @@
  * Obtiene lista paginada de órdenes con filtros y ordenamiento
  * 
  * ENTERPRISE: Soporta sortBy y sortOrder para ordenamiento flexible
+ * ✅ 31-ENE-2026: MULTI-ASESOR - Agregado idAsesorAsignado para filtrar por clientes del asesor
  */
 export class GetOrdenesQuery {
   constructor(
@@ -18,5 +19,6 @@ export class GetOrdenesQuery {
     public readonly tipoServicioId?: number, // Filtro por tipo de servicio
     public readonly fechaDesde?: string, // Filtro fecha desde (ISO string)
     public readonly fechaHasta?: string, // Filtro fecha hasta (ISO string)
+    public readonly idAsesorAsignado?: number, // ✅ MULTI-ASESOR: Filtro por clientes del asesor
   ) { }
 }

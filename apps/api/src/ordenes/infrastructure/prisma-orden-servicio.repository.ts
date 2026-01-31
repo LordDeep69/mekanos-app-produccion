@@ -396,6 +396,7 @@ export class PrismaOrdenServicioRepository {
    * Listar órdenes con filtros y paginación
    * @param filters Filtros opcionales (cliente, sede, equipo, técnico, estado, fechas, prioridad, origen)
    * @returns { items: Orden[], total: number }
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
   async findAll(filters?: {
     id_cliente?: number;
@@ -415,6 +416,7 @@ export class PrismaOrdenServicioRepository {
     sortOrder?: 'asc' | 'desc';
     skip?: number;
     take?: number;
+    idAsesorAsignado?: number; // ✅ MULTI-ASESOR
   }): Promise<{ items: any[]; total: number }> {
     const where: any = {};
 
@@ -430,6 +432,13 @@ export class PrismaOrdenServicioRepository {
 
     // ENTERPRISE: Filtro por tipo de servicio
     if (filters?.id_tipo_servicio) where.id_tipo_servicio = filters.id_tipo_servicio;
+
+    // ✅ MULTI-ASESOR: Filtrar órdenes por clientes asignados al asesor
+    if (filters?.idAsesorAsignado) {
+      where.clientes = {
+        id_asesor_asignado: filters.idAsesorAsignado,
+      };
+    }
 
     // Filtro por rango de fechas (usa fechaDesde/fechaHasta o fecha_desde/fecha_hasta)
     const fechaDesde = filters?.fechaDesde || filters?.fecha_desde;

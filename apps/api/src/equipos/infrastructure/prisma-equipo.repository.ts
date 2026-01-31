@@ -124,6 +124,7 @@ export class PrismaEquipoRepository {
 
   /**
    * Buscar equipos con filtros
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
   async findAll(filters?: {
     id_cliente?: number;
@@ -133,6 +134,7 @@ export class PrismaEquipoRepository {
     activo?: boolean;
     skip?: number;
     take?: number;
+    idAsesorAsignado?: number; // ✅ MULTI-ASESOR
   }) {
     const where: any = {};
 
@@ -141,6 +143,13 @@ export class PrismaEquipoRepository {
     if (filters?.id_tipo_equipo) where.id_tipo_equipo = filters.id_tipo_equipo;
     if (filters?.estado_equipo) where.estado_equipo = filters.estado_equipo;
     if (filters?.activo !== undefined) where.activo = filters.activo;
+
+    // ✅ MULTI-ASESOR: Filtrar equipos por clientes asignados al asesor
+    if (filters?.idAsesorAsignado) {
+      where.clientes = {
+        id_asesor_asignado: filters.idAsesorAsignado,
+      };
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.equipos.findMany({

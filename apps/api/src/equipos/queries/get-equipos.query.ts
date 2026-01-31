@@ -61,6 +61,7 @@ export class GetEquiposQueryDto {
 /**
  * Query para obtener lista de equipos con filtros
  * ✅ FASE 2: Campos snake_case
+ * ✅ 31-ENE-2026: MULTI-ASESOR - Agregado idAsesorAsignado para filtrar por clientes del asesor
  */
 export class GetEquiposQuery {
   constructor(
@@ -70,6 +71,7 @@ export class GetEquiposQuery {
     public readonly id_tipo_equipo?: number,
     public readonly activo?: boolean,
     public readonly page?: number,
-    public readonly limit?: number
+    public readonly limit?: number,
+    public readonly idAsesorAsignado?: number, // ✅ MULTI-ASESOR
   ) { }
 }

@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateEquipoCommand } from './commands/create-equipo.command';
@@ -64,6 +65,7 @@ export class EquiposController {
   /**
    * ✅ OPTIMIZACIÓN 05-ENE-2026: Endpoint LIGERO para selectores
    * Retorna solo id, código, nombre - ideal para dropdowns/autocomplete
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtra por asesor si NO es admin
    * 
    * @param q Término de búsqueda (código, nombre, serie)
    * @param clienteId Filtrar por cliente
@@ -73,16 +75,21 @@ export class EquiposController {
   @Get('selector')
   @ApiOperation({ summary: 'Obtener equipos en formato ligero para selectores' })
   async getSelector(
+    @CurrentUser() user: any,
     @Query('q') q?: string,
     @Query('clienteId') clienteId?: string,
     @Query('sedeId') sedeId?: string,
     @Query('limit') limit?: string,
   ) {
+    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
+    const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
+
     const items = await this.equiposGestionService.findForSelector({
       search: q,
       clienteId: clienteId ? parseInt(clienteId) : undefined,
       sedeId: sedeId ? parseInt(sedeId) : undefined,
       limit: Math.min(parseInt(limit || '20'), 50),
+      idAsesorAsignado: idAsesorFiltro,
     });
 
     return {
@@ -94,9 +101,16 @@ export class EquiposController {
   /**
    * GET /api/equipos
    * Listar equipos con filtrado jerárquico enterprise (Cliente -> Sede)
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
   @Get()
-  async findAll(@Query() queryDto: GetEquiposQueryDto) {
+  async findAll(
+    @CurrentUser() user: any,
+    @Query() queryDto: GetEquiposQueryDto,
+  ) {
+    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
+    const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
+
     const query = new GetEquiposQuery(
       queryDto.id_cliente,
       queryDto.id_sede,
@@ -104,7 +118,8 @@ export class EquiposController {
       queryDto.id_tipo_equipo,
       queryDto.activo,
       queryDto.page,
-      queryDto.limit
+      queryDto.limit,
+      idAsesorFiltro, // ✅ MULTI-ASESOR
     );
 
     const result = await this.queryBus.execute(query);
@@ -145,10 +160,17 @@ export class EquiposController {
    * GET /api/equipos/listado-completo
    * Listar equipos con datos polimórficos incluidos
    * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
+   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
   @Get('listado-completo')
   @ApiOperation({ summary: 'Listar equipos con datos específicos según tipo' })
-  async listarEquiposCompletos(@Query() queryDto: GetEquiposQueryDto) {
+  async listarEquiposCompletos(
+    @CurrentUser() user: any,
+    @Query() queryDto: GetEquiposQueryDto,
+  ) {
+    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
+    const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
+
     return this.equiposGestionService.listarEquiposCompletos({
       id_cliente: queryDto.id_cliente,
       id_sede: queryDto.id_sede,
@@ -159,6 +181,7 @@ export class EquiposController {
       sortOrder: queryDto.sortOrder,
       page: queryDto.page,
       limit: queryDto.limit,
+      idAsesorAsignado: idAsesorFiltro,
     });
   }
 

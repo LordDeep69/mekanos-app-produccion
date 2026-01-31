@@ -117,6 +117,14 @@ export interface ClienteConPersona extends Cliente {
     email_representante_legal: string | null;
     firma_activa: boolean;
   };
+  // ✅ MULTI-ASESOR: Asesor asignado expandido
+  asesor_asignado?: {
+    id_empleado: number;
+    cargo: string | null;
+    persona?: {
+      nombre_completo: string | null;
+    };
+  };
 }
 
 // ===== DTOs =====

@@ -7,6 +7,39 @@ import { UpdateEmpleadosDto } from './dto/update-empleados.dto';
 export class EmpleadosService {
   constructor(private readonly prisma: PrismaService) { }
 
+  /**
+   * ✅ MULTI-ASESOR: Query ligera para selector de asesores
+   * Retorna solo id y nombre - ideal para dropdowns
+   */
+  async findAsesoresForSelector() {
+    const asesores = await this.prisma.empleados.findMany({
+      where: {
+        es_asesor: true,
+        empleado_activo: true,
+      },
+      select: {
+        id_empleado: true,
+        codigo_empleado: true,
+        persona: {
+          select: {
+            primer_nombre: true,
+            primer_apellido: true,
+            nombre_completo: true,
+          },
+        },
+      },
+      orderBy: { persona: { primer_nombre: 'asc' } },
+    });
+
+    return asesores.map(a => ({
+      id_empleado: a.id_empleado,
+      codigo_empleado: a.codigo_empleado,
+      nombre: a.persona?.nombre_completo ||
+        `${a.persona?.primer_nombre || ''} ${a.persona?.primer_apellido || ''}`.trim() ||
+        `Asesor #${a.id_empleado}`,
+    }));
+  }
+
   async create(createDto: CreateEmpleadosDto, userId: number) {
     // Validar que id_persona existe
     const persona = await this.prisma.personas.findUnique({
