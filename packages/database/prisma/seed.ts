@@ -14,7 +14,7 @@ async function main() {
   console.log('📝 Creando persona admin...');
   const personaAdmin = await prisma.personas.upsert({
     where: {
-      uk_identificacion: {
+      tipo_identificacion_numero_identificacion: {
         tipo_identificacion: 'CC',
         numero_identificacion: '12345678',
       },
@@ -129,7 +129,7 @@ async function main() {
   console.log('🏢 Creando cliente test...');
   const personaCliente = await prisma.personas.upsert({
     where: {
-      uk_identificacion: {
+      tipo_identificacion_numero_identificacion: {
         tipo_identificacion: 'NIT',
         numero_identificacion: '900123456',
       },
