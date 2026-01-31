@@ -199,12 +199,12 @@ export function FirmaAdministrativaForm({
                                             </FormControl>
                                             <SelectContent>
                                                 <SelectItem value="">Sin asignar</SelectItem>
-                                                {asesores?.map((asesor) => (
+                                                {asesores?.data?.map((asesor) => (
                                                     <SelectItem
                                                         key={asesor.id_empleado}
                                                         value={asesor.id_empleado.toString()}
                                                     >
-                                                        {asesor.persona?.primer_nombre} {asesor.persona?.primer_apellido} - {asesor.cargo}
+                                                        {asesor.nombre_completo} - {asesor.cargo}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>

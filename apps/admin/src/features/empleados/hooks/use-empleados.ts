@@ -13,9 +13,11 @@ import { toast } from 'sonner';
 import {
     createEmpleado,
     deleteEmpleado,
+    getAsesoresSelector,
     getEmpleado,
     getEmpleados,
-    updateEmpleado
+    updateEmpleado,
+    type AsesoresSelectorResponse,
 } from '../api/empleados.service';
 
 // Query keys
@@ -128,7 +130,7 @@ const ASESORES_SELECTOR_KEY = ['empleados', 'selector', 'asesores'];
  * Usado en el formulario de clientes para asignar asesor
  */
 export function useAsesoresSelector() {
-    return useQuery({
+    return useQuery<AsesoresSelectorResponse>({
         queryKey: ASESORES_SELECTOR_KEY,
         queryFn: getAsesoresSelector,
         staleTime: 5 * 60 * 1000, // 5 minutos - datos relativamente estables
