@@ -65,6 +65,10 @@
   --color-mekanos-green: #56A672;
   --color-mekanos-green-light: #9EC23D;
 
+  /* Alias semánticos */
+  --color-mekanos-primary: #244673;
+  --color-mekanos-accent: #3290A6;
+
   /* Estados */
   --color-mekanos-error: #DC2626;
   --color-mekanos-warning: #F59E0B;
