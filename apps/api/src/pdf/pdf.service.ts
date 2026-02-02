@@ -191,10 +191,31 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Adapta los datos genéricos de orden al formato específico de correctivo
+   * ✅ FIX 02-FEB-2026: Parsear campos estructurados desde observaciones de actividades
    */
   private adaptarDatosParaCorrectivo(datos: DatosOrdenPDF): DatosCorrectivoOrdenPDF {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ✅ FIX 02-FEB-2026: Extraer datos estructurados de las observaciones
+    // Los widgets de correctivo guardan datos con prefijos como:
+    // ESTADO_INICIAL: OPERATIVO, PROBLEMA: texto, SISTEMAS: MOTOR,ELECTRICO, etc.
+    // ═══════════════════════════════════════════════════════════════════════════
+    const datosEstructurados = this.extraerDatosEstructuradosCorrectivo(datos.actividades || []);
+
     // ✅ FIX: Convertir actividades a trabajos ejecutados preservando resultado real
-    const trabajosEjecutados = (datos.actividades || []).map((a, index) => ({
+    // Excluir actividades que son solo contenedores de datos estructurados
+    const actividadesParaTabla = (datos.actividades || []).filter(a => {
+      const obs = a.observaciones || '';
+      // Excluir actividades con datos estructurados que se muestran en secciones especiales
+      const prefijosEstructurados = [
+        'ESTADO_INICIAL:', 'ESTADO_FINAL:', 'SISTEMAS:',
+        'PROBLEMA:', 'SINTOMAS:', 'DIAGNOSTICO:',
+        'TRABAJOS:', 'PENDIENTES:', 'RECOMENDACIONES:',
+        'REPUESTOS:', 'MATERIALES:'
+      ];
+      return !prefijosEstructurados.some(p => obs.startsWith(p));
+    });
+
+    const trabajosEjecutados = actividadesParaTabla.map((a, index) => ({
       orden: index + 1,
       descripcion: a.descripcion,
       // ✅ FIX: Usar observaciones para la columna 'Obs.' (antes usaba sistema)
@@ -216,6 +237,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         m.nivelAlerta === 'WARNING' ? 'ADVERTENCIA' : 'OK') as 'OK' | 'ADVERTENCIA' | 'CRITICO',
     }));
 
+    // ✅ FIX 02-FEB-2026: Construir observaciones estructuradas para el PDF
+    const observacionesEstructuradas = this.construirObservacionesCorrectivo(datosEstructurados, datos.observaciones);
+
     return {
       numeroOrden: datos.numeroOrden,
       fecha: datos.fecha,
@@ -229,22 +253,31 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       modeloEquipo: '',
       serieEquipo: datos.serieEquipo,
       tecnico: datos.tecnico,
-      // ✅ FIX 14-DIC-2025: Separar correctamente cada campo sin usar observaciones como fallback universal
-      // IMPORTANTE: problemaReportado y diagnostico deben mostrarse SOLO si tienen valor real
-      problemaReportado: datos.problemaReportado?.descripcion ? {
-        descripcion: datos.problemaReportado.descripcion,
-        fechaReporte: datos.problemaReportado.fechaReporte || datos.fecha,
-      } : undefined,
-      diagnostico: datos.diagnostico ? {
-        descripcion: datos.diagnostico.descripcion || 'Diagnóstico realizado en sitio',
-        causaRaiz: datos.diagnostico.causaRaiz || 'Pendiente de análisis',
-        sistemasAfectados: datos.diagnostico.sistemasAfectados || [...new Set(trabajosEjecutados.map(t => t.sistema))],
-      } : undefined,
+      // ✅ FIX 02-FEB-2026: Usar datos estructurados parseados
+      problemaReportado: {
+        descripcion: datosEstructurados.problema || datos.problemaReportado?.descripcion || '',
+        fechaReporte: datos.problemaReportado?.fechaReporte || datos.fecha,
+      },
+      diagnostico: {
+        descripcion: datosEstructurados.diagnostico || datosEstructurados.sintomas || datos.diagnostico?.descripcion || '',
+        causaRaiz: datosEstructurados.diagnostico || datos.diagnostico?.causaRaiz || '',
+        sistemasAfectados: datosEstructurados.sistemasAfectados.length > 0
+          ? datosEstructurados.sistemasAfectados
+          : (datos.diagnostico?.sistemasAfectados || [...new Set(trabajosEjecutados.map(t => t.sistema).filter(s => s))]),
+      },
       trabajosEjecutados,
-      repuestosUtilizados: [],
+      repuestosUtilizados: datosEstructurados.repuestos.map((r, i) => ({
+        codigo: `REP-${i + 1}`,
+        descripcion: r,
+        cantidad: 1,
+        unidad: 'UND',
+        estado: 'NUEVO' as const,
+      })),
       mediciones: medicionesConValor.length > 0 ? medicionesConValor : undefined,
-      recomendaciones: ['Seguir plan de mantenimiento preventivo programado'],
-      observaciones: datos.observaciones,
+      recomendaciones: datosEstructurados.recomendaciones
+        ? [datosEstructurados.recomendaciones]
+        : ['Seguir plan de mantenimiento preventivo programado'],
+      observaciones: observacionesEstructuradas,
       // ✅ FIX 17-DIC-2025: MULTI-EQUIPOS - Pasar datos agrupados por equipo
       esMultiEquipo: datos.esMultiEquipo,
       actividadesPorEquipo: datos.actividadesPorEquipo,
@@ -267,6 +300,180 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       firmaTecnico: datos.firmaTecnico,
       firmaCliente: datos.firmaCliente,
     };
+  }
+
+  /**
+   * ✅ FIX 02-FEB-2026: Extrae datos estructurados de las observaciones de actividades correctivas
+   * Los widgets móviles guardan datos con prefijos como ESTADO_INICIAL:, PROBLEMA:, etc.
+   */
+  private extraerDatosEstructuradosCorrectivo(actividades: Array<{ observaciones?: string }>): {
+    estadoInicial: string;
+    estadoFinal: string;
+    sistemasAfectados: string[];
+    problema: string;
+    sintomas: string;
+    diagnostico: string;
+    trabajos: string;
+    pendientes: string;
+    recomendaciones: string;
+    repuestos: string[];
+    materiales: string[];
+  } {
+    const resultado = {
+      estadoInicial: '',
+      estadoFinal: '',
+      sistemasAfectados: [] as string[],
+      problema: '',
+      sintomas: '',
+      diagnostico: '',
+      trabajos: '',
+      pendientes: '',
+      recomendaciones: '',
+      repuestos: [] as string[],
+      materiales: [] as string[],
+    };
+
+    for (const actividad of actividades) {
+      const obs = actividad.observaciones || '';
+
+      if (obs.startsWith('ESTADO_INICIAL: ')) {
+        resultado.estadoInicial = this.mapearEstadoInicial(obs.substring(16).trim());
+      } else if (obs.startsWith('ESTADO_FINAL: ')) {
+        resultado.estadoFinal = this.mapearEstadoFinal(obs.substring(14).trim());
+      } else if (obs.startsWith('SISTEMAS: ')) {
+        const sistemas = obs.substring(10).split(',').map(s => s.trim()).filter(s => s);
+        resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
+      } else if (obs.startsWith('PROBLEMA: ')) {
+        resultado.problema = obs.substring(10).trim();
+      } else if (obs.startsWith('SINTOMAS: ')) {
+        resultado.sintomas = obs.substring(10).trim();
+      } else if (obs.startsWith('DIAGNOSTICO: ')) {
+        resultado.diagnostico = obs.substring(13).trim();
+      } else if (obs.startsWith('TRABAJOS: ')) {
+        resultado.trabajos = obs.substring(10).trim();
+      } else if (obs.startsWith('PENDIENTES: ')) {
+        resultado.pendientes = obs.substring(12).trim();
+      } else if (obs.startsWith('RECOMENDACIONES: ')) {
+        resultado.recomendaciones = obs.substring(17).trim();
+      } else if (obs.startsWith('REPUESTOS: ')) {
+        const items = obs.substring(11).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
+        resultado.repuestos = items;
+      } else if (obs.startsWith('MATERIALES: ')) {
+        const items = obs.substring(12).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
+        resultado.materiales = items;
+      }
+    }
+
+    return resultado;
+  }
+
+  /** Mapea códigos de estado inicial a texto legible */
+  private mapearEstadoInicial(codigo: string): string {
+    const mapa: Record<string, string> = {
+      'OPERATIVO': '✅ Equipo Operativo',
+      'PARADO': '🛑 Equipo Parado',
+      'FALLA_INTERMITENTE': '⚠️ Falla Intermitente',
+      'INACCESIBLE': '🚫 Inaccesible para Inspección',
+    };
+    return mapa[codigo] || codigo;
+  }
+
+  /** Mapea códigos de estado final a texto legible */
+  private mapearEstadoFinal(codigo: string): string {
+    const mapa: Record<string, string> = {
+      'OPERATIVO': '✅ Equipo Operativo',
+      'REPARACION_PARCIAL': '⚠️ Reparación Parcial',
+      'REQUIERE_REPUESTOS': '🔧 Requiere Repuestos',
+      'FUERA_SERVICIO': '🛑 Fuera de Servicio',
+    };
+    return mapa[codigo] || codigo;
+  }
+
+  /** Mapea códigos de sistema a texto legible */
+  private mapearSistema(codigo: string): string {
+    const mapa: Record<string, string> = {
+      'MOTOR': 'Motor Diesel/Gas',
+      'ELECTRICO': 'Sistema Eléctrico',
+      'CONTROL': 'Módulo de Control',
+      'REFRIGERACION': 'Sistema de Refrigeración',
+      'COMBUSTIBLE': 'Sistema de Combustible',
+      'LUBRICACION': 'Sistema de Lubricación',
+      'ESCAPE': 'Sistema de Escape',
+      'ARRANQUE': 'Sistema de Arranque',
+      'ALTERNADOR': 'Alternador/Generador',
+      'TRANSFERENCIA': 'Transferencia Automática',
+    };
+    return mapa[codigo] || codigo;
+  }
+
+  /**
+   * ✅ FIX 02-FEB-2026: Construye texto de observaciones estructurado para el PDF
+   */
+  private construirObservacionesCorrectivo(
+    datos: ReturnType<typeof this.extraerDatosEstructuradosCorrectivo>,
+    observacionesGenerales?: string,
+  ): string {
+    const secciones: string[] = [];
+
+    // Estado inicial y final
+    if (datos.estadoInicial || datos.estadoFinal) {
+      const estados = [];
+      if (datos.estadoInicial) estados.push(`<strong>Estado Inicial:</strong> ${datos.estadoInicial}`);
+      if (datos.estadoFinal) estados.push(`<strong>Estado Final:</strong> ${datos.estadoFinal}`);
+      secciones.push(estados.join(' → '));
+    }
+
+    // Sistemas afectados
+    if (datos.sistemasAfectados.length > 0) {
+      secciones.push(`<strong>Sistemas Afectados:</strong> ${datos.sistemasAfectados.join(', ')}`);
+    }
+
+    // Problema reportado
+    if (datos.problema && datos.problema !== '(Sin información)') {
+      secciones.push(`<strong>Problema Reportado:</strong> ${datos.problema}`);
+    }
+
+    // Síntomas observados
+    if (datos.sintomas && datos.sintomas !== '(Sin información)') {
+      secciones.push(`<strong>Síntomas Observados:</strong> ${datos.sintomas}`);
+    }
+
+    // Diagnóstico
+    if (datos.diagnostico && datos.diagnostico !== '(Sin información)') {
+      secciones.push(`<strong>Diagnóstico y Causa Raíz:</strong> ${datos.diagnostico}`);
+    }
+
+    // Trabajos realizados
+    if (datos.trabajos && datos.trabajos !== '(Sin información)') {
+      secciones.push(`<strong>Trabajos Realizados:</strong> ${datos.trabajos}`);
+    }
+
+    // Repuestos utilizados
+    if (datos.repuestos.length > 0) {
+      secciones.push(`<strong>Repuestos Utilizados:</strong><br/>• ${datos.repuestos.join('<br/>• ')}`);
+    }
+
+    // Materiales utilizados
+    if (datos.materiales.length > 0) {
+      secciones.push(`<strong>Materiales e Insumos:</strong><br/>• ${datos.materiales.join('<br/>• ')}`);
+    }
+
+    // Trabajos pendientes
+    if (datos.pendientes && datos.pendientes !== '(Sin información)') {
+      secciones.push(`<strong>⚠️ Trabajos Pendientes:</strong> ${datos.pendientes}`);
+    }
+
+    // Recomendaciones
+    if (datos.recomendaciones && datos.recomendaciones !== '(Sin información)') {
+      secciones.push(`<strong>📋 Recomendaciones:</strong> ${datos.recomendaciones}`);
+    }
+
+    // Observaciones generales adicionales
+    if (observacionesGenerales) {
+      secciones.push(`<strong>Observaciones Adicionales:</strong> ${observacionesGenerales}`);
+    }
+
+    return secciones.length > 0 ? secciones.join('<br/><br/>') : 'Sin observaciones adicionales.';
   }
 
   /**

@@ -1205,8 +1205,63 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
   /// Detecta el tipo de actividad especial
   /// ✅ FIX 26-ENE-2026: Lógica refinada para detectar correctamente cada tipo
+  /// ✅ FIX 02-FEB-2026: Soporte para actividades de CORRECTIVO (GEN_CORR)
   String? _getTipoActividadEspecial(String descripcion) {
     final desc = descripcion.toUpperCase();
+
+    // =========================================================================
+    // CORRECTIVO: Actividades especiales para servicio correctivo (GEN_CORR)
+    // =========================================================================
+
+    // ESTADO INICIAL DEL EQUIPO → Selector: OPERATIVO, PARADO, FALLA, INACCESIBLE
+    if (desc.contains('ESTADO INICIAL DEL EQUIPO')) {
+      return 'CORR_ESTADO_INICIAL';
+    }
+
+    // ESTADO FINAL DEL EQUIPO → Selector: OPERATIVO, REPARACIÓN PARCIAL, etc.
+    if (desc.contains('ESTADO FINAL DEL EQUIPO')) {
+      return 'CORR_ESTADO_FINAL';
+    }
+
+    // SISTEMAS AFECTADOS → Selector múltiple de sistemas
+    if (desc.contains('SISTEMAS AFECTADOS')) {
+      return 'CORR_SISTEMAS_AFECTADOS';
+    }
+
+    // Actividades de TEXTO LIBRE para correctivo
+    if (desc.contains('DESCRIPCIÓN DEL PROBLEMA') ||
+        desc.contains('DESCRIPCION DEL PROBLEMA')) {
+      return 'CORR_TEXTO_PROBLEMA';
+    }
+    if (desc.contains('SÍNTOMAS OBSERVADOS') ||
+        desc.contains('SINTOMAS OBSERVADOS')) {
+      return 'CORR_TEXTO_SINTOMAS';
+    }
+    if (desc.contains('DIAGNÓSTICO Y CAUSA') ||
+        desc.contains('DIAGNOSTICO Y CAUSA')) {
+      return 'CORR_TEXTO_DIAGNOSTICO';
+    }
+    if (desc.contains('TRABAJOS REALIZADOS')) {
+      return 'CORR_TEXTO_TRABAJOS';
+    }
+    if (desc.contains('TRABAJOS PENDIENTES')) {
+      return 'CORR_TEXTO_PENDIENTES';
+    }
+    if (desc.contains('RECOMENDACIONES')) {
+      return 'CORR_TEXTO_RECOMENDACIONES';
+    }
+
+    // REPUESTOS y MATERIALES → Lista editable
+    if (desc.contains('REPUESTOS UTILIZADOS')) {
+      return 'CORR_LISTA_REPUESTOS';
+    }
+    if (desc.contains('MATERIALES E INSUMOS')) {
+      return 'CORR_LISTA_MATERIALES';
+    }
+
+    // =========================================================================
+    // PREVENTIVO: Actividades especiales existentes
+    // =========================================================================
 
     // 1. PRIMERO: Detectar actividades SI/NO (terminan con "(SI/NO)")
     if (desc.contains('(SI/NO)') || desc.contains('(S/N)')) {
@@ -1263,10 +1318,34 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Construye el widget apropiado según el tipo de actividad
+  /// ✅ FIX 02-FEB-2026: Soporte para widgets de CORRECTIVO
   Widget _buildActividadInputWidget(ActividadesEjecutada actividad) {
     final tipo = _getTipoActividadEspecial(actividad.descripcion);
 
     switch (tipo) {
+      // =====================================================================
+      // CORRECTIVO: Widgets personalizados para servicio correctivo
+      // =====================================================================
+      case 'CORR_ESTADO_INICIAL':
+        return _buildCorrEstadoInicialSelector(actividad);
+      case 'CORR_ESTADO_FINAL':
+        return _buildCorrEstadoFinalSelector(actividad);
+      case 'CORR_SISTEMAS_AFECTADOS':
+        return _buildCorrSistemasAfectadosSelector(actividad);
+      case 'CORR_TEXTO_PROBLEMA':
+      case 'CORR_TEXTO_SINTOMAS':
+      case 'CORR_TEXTO_DIAGNOSTICO':
+      case 'CORR_TEXTO_TRABAJOS':
+      case 'CORR_TEXTO_PENDIENTES':
+      case 'CORR_TEXTO_RECOMENDACIONES':
+        return _buildCorrTextoLibreInput(actividad, tipo!);
+      case 'CORR_LISTA_REPUESTOS':
+      case 'CORR_LISTA_MATERIALES':
+        return _buildCorrListaItemsInput(actividad, tipo!);
+
+      // =====================================================================
+      // PREVENTIVO: Widgets existentes
+      // =====================================================================
       case 'SI_NO':
         return _buildSiNoSelector(actividad);
       case 'NIVEL_COMBUSTIBLE':
@@ -2223,6 +2302,814 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         actividad.idLocal,
         'TEMP: $resultado',
         simbologia,
+      );
+    }
+  }
+
+  // ==========================================================================
+  // ✅ CORRECTIVO: WIDGETS PERSONALIZADOS PARA SERVICIO CORRECTIVO (GEN_CORR)
+  // ==========================================================================
+
+  /// Widget selector de ESTADO INICIAL del equipo para correctivo
+  /// Opciones: OPERATIVO, PARADO, FALLA INTERMITENTE, INACCESIBLE
+  Widget _buildCorrEstadoInicialSelector(ActividadesEjecutada actividad) {
+    final observacion = actividad.observacion ?? '';
+    final valorActual = observacion.startsWith('ESTADO_INICIAL: ')
+        ? observacion.substring(16)
+        : '';
+
+    final opciones = [
+      ('OPERATIVO', 'Operativo', Colors.green, Icons.check_circle),
+      ('PARADO', 'Parado', Colors.red, Icons.cancel),
+      (
+        'FALLA_INTERMITENTE',
+        'Falla\nIntermitente',
+        Colors.orange,
+        Icons.warning_amber,
+      ),
+      ('INACCESIBLE', 'Inaccesible', Colors.grey, Icons.block),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: opciones.map((opcion) {
+        final codigo = opcion.$1;
+        final label = opcion.$2;
+        final color = opcion.$3;
+        final icon = opcion.$4;
+        final isSelected = valorActual == codigo;
+
+        return GestureDetector(
+          onTap: () {
+            // Simbología: OPERATIVO=B, PARADO/FALLA=M, INACCESIBLE=NA
+            final simb = codigo == 'OPERATIVO'
+                ? 'B'
+                : (codigo == 'INACCESIBLE' ? 'NA' : 'M');
+            _marcarActividadEspecial(
+              actividad.idLocal,
+              'ESTADO_INICIAL: $codigo',
+              simb,
+            );
+          },
+          child: Container(
+            width: 80,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+            decoration: BoxDecoration(
+              color: isSelected ? color : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? color : Colors.grey.shade300,
+                width: isSelected ? 2 : 1,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: color.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 28, color: isSelected ? Colors.white : color),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    color: isSelected ? Colors.white : color,
+                    height: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Widget selector de ESTADO FINAL del equipo para correctivo
+  /// Opciones: OPERATIVO, REPARACIÓN PARCIAL, REQUIERE REPUESTOS, FUERA DE SERVICIO
+  Widget _buildCorrEstadoFinalSelector(ActividadesEjecutada actividad) {
+    final observacion = actividad.observacion ?? '';
+    final valorActual = observacion.startsWith('ESTADO_FINAL: ')
+        ? observacion.substring(14)
+        : '';
+
+    final opciones = [
+      ('OPERATIVO', 'Operativo', Colors.green, Icons.check_circle),
+      (
+        'REPARACION_PARCIAL',
+        'Reparación\nParcial',
+        Colors.orange,
+        Icons.build_circle,
+      ),
+      (
+        'REQUIERE_REPUESTOS',
+        'Requiere\nRepuestos',
+        Colors.blue,
+        Icons.inventory_2,
+      ),
+      ('FUERA_SERVICIO', 'Fuera de\nServicio', Colors.red, Icons.cancel),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: opciones.map((opcion) {
+        final codigo = opcion.$1;
+        final label = opcion.$2;
+        final color = opcion.$3;
+        final icon = opcion.$4;
+        final isSelected = valorActual == codigo;
+
+        return GestureDetector(
+          onTap: () {
+            // Simbología según resultado: OPERATIVO=B, PARCIAL/REQUIERE=C, FUERA=M
+            final simb = codigo == 'OPERATIVO'
+                ? 'B'
+                : (codigo == 'FUERA_SERVICIO' ? 'M' : 'C');
+            _marcarActividadEspecial(
+              actividad.idLocal,
+              'ESTADO_FINAL: $codigo',
+              simb,
+            );
+          },
+          child: Container(
+            width: 80,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+            decoration: BoxDecoration(
+              color: isSelected ? color : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? color : Colors.grey.shade300,
+                width: isSelected ? 2 : 1,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: color.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 28, color: isSelected ? Colors.white : color),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    color: isSelected ? Colors.white : color,
+                    height: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Widget selector múltiple de SISTEMAS AFECTADOS para correctivo
+  Widget _buildCorrSistemasAfectadosSelector(ActividadesEjecutada actividad) {
+    final observacion = actividad.observacion ?? '';
+    // Parsear sistemas seleccionados de "SISTEMAS: MOTOR,ELECTRICO,CONTROL"
+    final sistemasStr = observacion.startsWith('SISTEMAS: ')
+        ? observacion.substring(10)
+        : '';
+    final sistemasSeleccionados = sistemasStr.isNotEmpty
+        ? sistemasStr.split(',').toSet()
+        : <String>{};
+
+    final sistemas = [
+      ('MOTOR', 'Motor', Icons.settings),
+      ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
+      ('CONTROL', 'Control', Icons.settings_remote),
+      ('ENFRIAMIENTO', 'Enfriamiento', Icons.ac_unit),
+      ('COMBUSTIBLE', 'Combustible', Icons.local_gas_station),
+      ('LUBRICACION', 'Lubricación', Icons.oil_barrel),
+      ('ESCAPE', 'Escape', Icons.air),
+      ('ASPIRACION', 'Aspiración', Icons.filter_alt),
+      ('OTRO', 'Otro', Icons.more_horiz),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: sistemas.map((sistema) {
+        final codigo = sistema.$1;
+        final label = sistema.$2;
+        final icon = sistema.$3;
+        final isSelected = sistemasSeleccionados.contains(codigo);
+
+        return GestureDetector(
+          onTap: () {
+            final nuevoSet = Set<String>.from(sistemasSeleccionados);
+            if (isSelected) {
+              nuevoSet.remove(codigo);
+            } else {
+              nuevoSet.add(codigo);
+            }
+
+            final nuevaObs = nuevoSet.isEmpty
+                ? ''
+                : 'SISTEMAS: ${nuevoSet.join(',')}';
+            final simb = nuevoSet.isEmpty ? 'NA' : 'B';
+
+            _marcarActividadEspecial(
+              actividad.idLocal,
+              nuevaObs.isEmpty ? 'SISTEMAS: NINGUNO' : nuevaObs,
+              simb,
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.blue : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected ? Colors.blue : Colors.grey.shade300,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isSelected ? Colors.white : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: isSelected ? Colors.white : Colors.grey.shade700,
+                  ),
+                ),
+                if (isSelected) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.check, size: 14, color: Colors.white),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Widget de TEXTO LIBRE para correctivo (problema, síntomas, diagnóstico, etc.)
+  Widget _buildCorrTextoLibreInput(
+    ActividadesEjecutada actividad,
+    String tipo,
+  ) {
+    final observacion = actividad.observacion ?? '';
+
+    // Extraer el prefijo según el tipo
+    String prefijo;
+    String placeholder;
+    IconData icon;
+    Color color;
+
+    switch (tipo) {
+      case 'CORR_TEXTO_PROBLEMA':
+        prefijo = 'PROBLEMA: ';
+        placeholder = 'Describa el problema reportado por el cliente...';
+        icon = Icons.report_problem;
+        color = Colors.red;
+        break;
+      case 'CORR_TEXTO_SINTOMAS':
+        prefijo = 'SINTOMAS: ';
+        placeholder =
+            'Describa los síntomas observados durante la inspección...';
+        icon = Icons.search;
+        color = Colors.orange;
+        break;
+      case 'CORR_TEXTO_DIAGNOSTICO':
+        prefijo = 'DIAGNOSTICO: ';
+        placeholder = 'Describa el diagnóstico y la causa raíz del problema...';
+        icon = Icons.psychology;
+        color = Colors.purple;
+        break;
+      case 'CORR_TEXTO_TRABAJOS':
+        prefijo = 'TRABAJOS: ';
+        placeholder =
+            'Describa los trabajos realizados para corregir el problema...';
+        icon = Icons.construction;
+        color = Colors.blue;
+        break;
+      case 'CORR_TEXTO_PENDIENTES':
+        prefijo = 'PENDIENTES: ';
+        placeholder =
+            'Describa los trabajos pendientes (o "Sin pendientes")...';
+        icon = Icons.pending_actions;
+        color = Colors.amber;
+        break;
+      case 'CORR_TEXTO_RECOMENDACIONES':
+        prefijo = 'RECOMENDACIONES: ';
+        placeholder = 'Escriba las recomendaciones para el cliente...';
+        icon = Icons.recommend;
+        color = Colors.teal;
+        break;
+      default:
+        prefijo = 'TEXTO: ';
+        placeholder = 'Ingrese información...';
+        icon = Icons.edit_note;
+        color = Colors.grey;
+    }
+
+    final valorActual = observacion.startsWith(prefijo)
+        ? observacion.substring(prefijo.length)
+        : '';
+    final tieneContenido = valorActual.isNotEmpty;
+
+    return InkWell(
+      onTap: () => _mostrarDialogoTextoLibre(
+        actividad,
+        tipo,
+        prefijo,
+        placeholder,
+        icon,
+        color,
+      ),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: tieneContenido ? color.withOpacity(0.1) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: tieneContenido ? color : Colors.grey.shade300,
+            width: tieneContenido ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: tieneContenido ? color : Colors.grey.shade200,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: tieneContenido ? Colors.white : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tieneContenido
+                        ? 'Información registrada'
+                        : 'Toque para ingresar',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: tieneContenido ? color : Colors.grey.shade500,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tieneContenido
+                        ? (valorActual.length > 50
+                              ? '${valorActual.substring(0, 50)}...'
+                              : valorActual)
+                        : placeholder,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: tieneContenido
+                          ? Colors.black87
+                          : Colors.grey.shade400,
+                      fontStyle: tieneContenido
+                          ? FontStyle.normal
+                          : FontStyle.italic,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              tieneContenido ? Icons.edit : Icons.arrow_forward_ios,
+              size: 18,
+              color: tieneContenido ? color : Colors.grey.shade400,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Diálogo para ingresar texto libre en correctivo
+  Future<void> _mostrarDialogoTextoLibre(
+    ActividadesEjecutada actividad,
+    String tipo,
+    String prefijo,
+    String placeholder,
+    IconData icon,
+    Color color,
+  ) async {
+    final controller = TextEditingController();
+    final observacion = actividad.observacion ?? '';
+
+    if (observacion.startsWith(prefijo)) {
+      controller.text = observacion.substring(prefijo.length);
+    }
+
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _getTituloDialogoTexto(tipo),
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            controller: controller,
+            maxLines: 6,
+            decoration: InputDecoration(
+              hintText: placeholder,
+              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+            autofocus: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            icon: const Icon(Icons.save, size: 18),
+            label: const Text('Guardar'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado != null) {
+      final textoFinal = resultado.trim();
+      await _marcarActividadEspecial(
+        actividad.idLocal,
+        textoFinal.isEmpty
+            ? '$prefijo(Sin información)'
+            : '$prefijo$textoFinal',
+        textoFinal.isEmpty ? 'NA' : 'B',
+      );
+    }
+  }
+
+  String _getTituloDialogoTexto(String tipo) {
+    switch (tipo) {
+      case 'CORR_TEXTO_PROBLEMA':
+        return 'Problema Reportado';
+      case 'CORR_TEXTO_SINTOMAS':
+        return 'Síntomas Observados';
+      case 'CORR_TEXTO_DIAGNOSTICO':
+        return 'Diagnóstico y Causa Raíz';
+      case 'CORR_TEXTO_TRABAJOS':
+        return 'Trabajos Realizados';
+      case 'CORR_TEXTO_PENDIENTES':
+        return 'Trabajos Pendientes';
+      case 'CORR_TEXTO_RECOMENDACIONES':
+        return 'Recomendaciones';
+      default:
+        return 'Información';
+    }
+  }
+
+  /// Widget de LISTA DE ITEMS para correctivo (repuestos, materiales)
+  Widget _buildCorrListaItemsInput(
+    ActividadesEjecutada actividad,
+    String tipo,
+  ) {
+    final observacion = actividad.observacion ?? '';
+
+    final esRepuestos = tipo == 'CORR_LISTA_REPUESTOS';
+    final prefijo = esRepuestos ? 'REPUESTOS: ' : 'MATERIALES: ';
+    final icon = esRepuestos ? Icons.build : Icons.inventory;
+    final color = esRepuestos ? Colors.deepOrange : Colors.indigo;
+    final placeholder = esRepuestos
+        ? 'Agregue los repuestos utilizados...'
+        : 'Agregue los materiales e insumos...';
+
+    final valorActual = observacion.startsWith(prefijo)
+        ? observacion.substring(prefijo.length)
+        : '';
+
+    // Parsear items de "item1; item2; item3"
+    final items = valorActual.isNotEmpty
+        ? valorActual.split('; ').where((s) => s.isNotEmpty).toList()
+        : <String>[];
+    final tieneItems = items.isNotEmpty;
+
+    return InkWell(
+      onTap: () => _mostrarDialogoListaItems(
+        actividad,
+        tipo,
+        prefijo,
+        icon,
+        color,
+        placeholder,
+      ),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: tieneItems ? color.withOpacity(0.1) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: tieneItems ? color : Colors.grey.shade300,
+            width: tieneItems ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: tieneItems ? color : Colors.grey.shade200,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: tieneItems ? Colors.white : Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    tieneItems
+                        ? '${items.length} ${esRepuestos ? 'repuesto(s)' : 'material(es)'}'
+                        : placeholder,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: tieneItems ? Colors.black87 : Colors.grey.shade400,
+                      fontStyle: tieneItems
+                          ? FontStyle.normal
+                          : FontStyle.italic,
+                    ),
+                  ),
+                ),
+                Icon(
+                  tieneItems ? Icons.edit : Icons.add_circle_outline,
+                  size: 20,
+                  color: tieneItems ? color : Colors.grey.shade400,
+                ),
+              ],
+            ),
+            if (tieneItems) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: items
+                    .take(5)
+                    .map(
+                      (item) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          item,
+                          style: TextStyle(fontSize: 11, color: color),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              if (items.length > 5)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '+${items.length - 5} más...',
+                    style: TextStyle(fontSize: 10, color: color),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Diálogo para gestionar lista de items (repuestos/materiales)
+  Future<void> _mostrarDialogoListaItems(
+    ActividadesEjecutada actividad,
+    String tipo,
+    String prefijo,
+    IconData icon,
+    Color color,
+    String placeholder,
+  ) async {
+    final observacion = actividad.observacion ?? '';
+    final valorActual = observacion.startsWith(prefijo)
+        ? observacion.substring(prefijo.length)
+        : '';
+
+    // Parsear items existentes
+    final items = valorActual.isNotEmpty
+        ? valorActual.split('; ').where((s) => s.isNotEmpty).toList()
+        : <String>[];
+
+    final itemsEditables = List<String>.from(items);
+    final controllerNuevo = TextEditingController();
+    final esRepuestos = tipo == 'CORR_LISTA_REPUESTOS';
+
+    final resultado = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Text(
+                esRepuestos ? 'Repuestos Utilizados' : 'Materiales e Insumos',
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 350,
+            child: Column(
+              children: [
+                // Input para nuevo item
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: controllerNuevo,
+                        decoration: InputDecoration(
+                          hintText: esRepuestos
+                              ? 'Ej: Filtro de aceite'
+                              : 'Ej: Aceite 15W40 (5L)',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                        ),
+                        onSubmitted: (value) {
+                          if (value.trim().isNotEmpty) {
+                            setDialogState(() {
+                              itemsEditables.add(value.trim());
+                              controllerNuevo.clear();
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {
+                        if (controllerNuevo.text.trim().isNotEmpty) {
+                          setDialogState(() {
+                            itemsEditables.add(controllerNuevo.text.trim());
+                            controllerNuevo.clear();
+                          });
+                        }
+                      },
+                      icon: Icon(Icons.add_circle, color: color, size: 32),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Lista de items
+                Expanded(
+                  child: itemsEditables.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(icon, size: 48, color: Colors.grey.shade300),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Sin ${esRepuestos ? 'repuestos' : 'materiales'} agregados',
+                                style: TextStyle(color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: itemsEditables.length,
+                          itemBuilder: (ctx, index) => Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              dense: true,
+                              leading: CircleAvatar(
+                                backgroundColor: color.withOpacity(0.2),
+                                radius: 14,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: color,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                itemsEditables[index],
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setDialogState(() {
+                                    itemsEditables.removeAt(index);
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx, itemsEditables),
+              icon: const Icon(Icons.save, size: 18),
+              label: Text('Guardar (${itemsEditables.length})'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (resultado != null) {
+      final textoFinal = resultado.isEmpty ? '(Ninguno)' : resultado.join('; ');
+      await _marcarActividadEspecial(
+        actividad.idLocal,
+        '$prefijo$textoFinal',
+        resultado.isEmpty ? 'NA' : 'C', // C = Cambiado (hubo trabajo)
       );
     }
   }
