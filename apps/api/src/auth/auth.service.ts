@@ -161,8 +161,10 @@ export class AuthService {
       })
     ) || [];
 
-    // Determinar si es admin (tiene rol ADMIN o GERENTE)
-    const esAdmin = roles.some(r => ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes(r.codigo));
+    // Determinar si es admin (tiene rol ADMIN, GERENTE, SUPERVISOR)
+    // ✅ FIX 02-FEB-2026: admin@mekanos.com siempre es superadmin
+    const esSuperadminPorEmail = usuario.email === 'admin@mekanos.com';
+    const esAdmin = esSuperadminPorEmail || roles.some(r => ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes(r.codigo));
 
     // Determinar si es asesor
     const esAsesor = empleado?.es_asesor || roles.some(r => r.codigo === 'ASESOR');
