@@ -1162,13 +1162,14 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       ),
     );
 
-    // Actualizar UI localmente
+    // ✅ FIX 03-FEB-2026: Actualizar UI con nuevaObservacion (valor especial + observación)
+    // NO con solo observacion (perdería el valor especial)
     for (final sistema in _actividadesPorSistema.keys) {
       final actividades = _actividadesPorSistema[sistema]!;
       for (var i = 0; i < actividades.length; i++) {
         if (actividades[i].idLocal == idLocal) {
           actividades[i] = actividades[i].copyWith(
-            observacion: Value(observacion.isEmpty ? null : observacion),
+            observacion: Value(nuevaObservacion),
           );
           break;
         }
