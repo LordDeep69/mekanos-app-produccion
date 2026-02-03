@@ -450,8 +450,9 @@ export class FinalizacionOrdenService {
                     id_firma_tecnico: firmaTecnico?.id || null,
                     // Firma del cliente
                     id_firma_cliente: firmaCliente?.id || null,
-                    nombre_quien_recibe: dto.firmas.cliente?.nombre || 'Cliente',
-                    cargo_quien_recibe: dto.firmas.cliente?.cargo || null,
+                    // ✅ FIX 02-FEB-2026: Usar nuevos campos nombreFirmante/cargoFirmante
+                    nombre_quien_recibe: dto.firmas.cliente?.nombreFirmante || 'Cliente',
+                    cargo_quien_recibe: dto.firmas.cliente?.cargoFirmante || null,
                 },
             });
             this.logger.log(`   ✓ Firmas vinculadas a orden (técnico: ${firmaTecnico?.id}, cliente: ${firmaCliente?.id})`);

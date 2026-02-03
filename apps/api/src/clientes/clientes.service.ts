@@ -294,11 +294,26 @@ export class ClientesService {
 
   async update(id: number, updateDto: UpdateClientesDto, userId: number) {
     // Validar que cliente existe
-    await this.findOne(id);
+    const clienteExistente = await this.findOne(id);
 
     // Separar persona para evitar error de Prisma en update plano
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { persona, id_persona, ...clienteData } = updateDto;
+
+    // ✅ FIX 02-FEB-2026: Actualizar datos de persona si se proporcionan
+    if (persona && clienteExistente.id_persona) {
+      await this.prisma.personas.update({
+        where: { id_persona: clienteExistente.id_persona },
+        data: {
+          ...(persona.email_principal !== undefined && { email_principal: persona.email_principal }),
+          ...(persona.telefono_principal !== undefined && { telefono_principal: persona.telefono_principal }),
+          ...(persona.celular !== undefined && { celular: persona.celular }),
+          ...(persona.direccion_principal !== undefined && { direccion_principal: persona.direccion_principal }),
+          ...(persona.ciudad !== undefined && { ciudad: persona.ciudad }),
+          ...(persona.departamento !== undefined && { departamento: persona.departamento }),
+        },
+      });
+    }
 
     return this.prisma.clientes.update({
       where: { id_cliente: id },

@@ -284,7 +284,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           description: 'El cliente y su información personal se han registrado correctamente.',
         });
       } else if (clienteId) {
-        // En editar, solo actualizamos datos del cliente (no persona)
+        // ✅ FIX 02-FEB-2026: Incluir datos de persona editables (contacto)
         const updateData = {
           tipo_cliente: values.tipo_cliente,
           periodicidad_mantenimiento: values.periodicidad_mantenimiento ?? undefined,
@@ -298,6 +298,15 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           requisitos_especiales: values.requisitos_especiales,
           id_firma_administrativa: values.id_firma_administrativa ?? undefined,
           id_asesor_asignado: values.id_asesor_asignado ?? undefined,
+          // ✅ Datos de persona editables (contacto)
+          persona: {
+            email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
+            telefono_principal: values.telefono_principal || undefined,
+            celular: values.celular || undefined,
+            direccion_principal: values.direccion_principal || undefined,
+            ciudad: values.ciudad || undefined,
+            departamento: values.departamento || undefined,
+          },
         };
         await updateMutation.mutateAsync({ id: clienteId, data: updateData });
         toast({
@@ -631,7 +640,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                         type="email"
                         placeholder="correo@empresa.com"
                         {...field}
-                        disabled={mode === 'editar'}
                       />
                     </FormControl>
                     <FormMessage />
@@ -649,7 +657,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <Input
                         placeholder="601 123 4567"
                         {...field}
-                        disabled={mode === 'editar'}
                       />
                     </FormControl>
                     <FormMessage />
@@ -669,7 +676,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <Input
                         placeholder="300 123 4567"
                         {...field}
-                        disabled={mode === 'editar'}
                       />
                     </FormControl>
                     <FormMessage />
@@ -687,7 +693,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <Input
                         placeholder="Calle/Carrera #00-00"
                         {...field}
-                        disabled={mode === 'editar'}
                       />
                     </FormControl>
                     <FormMessage />
@@ -707,7 +712,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <Input
                         placeholder="Bogotá"
                         {...field}
-                        disabled={mode === 'editar'}
                       />
                     </FormControl>
                     <FormMessage />
@@ -725,7 +729,6 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                       <Input
                         placeholder="Cundinamarca"
                         {...field}
-                        disabled={mode === 'editar'}
                       />
                     </FormControl>
                     <FormMessage />

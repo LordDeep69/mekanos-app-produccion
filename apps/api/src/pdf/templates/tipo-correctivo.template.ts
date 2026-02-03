@@ -622,33 +622,81 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
 };
 
 const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
-  // Combinar problema reportado, diagnóstico y observaciones en una sola sección
-  const partes: string[] = [];
+  // ✅ FIX 02-FEB-2026: Rediseño profesional con tarjetas estructuradas
+  const secciones: string[] = [];
 
+  // Tarjeta: Problema Reportado
   if (datos.problemaReportado?.descripcion) {
-    partes.push(`<strong>Problema Reportado:</strong> ${datos.problemaReportado.descripcion}`);
+    secciones.push(`
+      <div class="obs-card obs-problema">
+        <div class="obs-card-header">
+          <span class="obs-icon">⚠️</span>
+          <span class="obs-card-title">PROBLEMA REPORTADO</span>
+        </div>
+        <div class="obs-card-content">${datos.problemaReportado.descripcion}</div>
+      </div>
+    `);
   }
 
-  if (datos.diagnostico?.descripcion) {
-    partes.push(`<strong>Diagnóstico:</strong> ${datos.diagnostico.descripcion}`);
+  // Tarjeta: Diagnóstico y Causa Raíz
+  if (datos.diagnostico?.descripcion || datos.diagnostico?.causaRaiz) {
+    const diagnosticoItems: string[] = [];
+    if (datos.diagnostico.descripcion) {
+      diagnosticoItems.push(`<div class="obs-item"><strong>Análisis:</strong> ${datos.diagnostico.descripcion}</div>`);
+    }
+    if (datos.diagnostico.causaRaiz) {
+      diagnosticoItems.push(`<div class="obs-item"><strong>Causa Raíz:</strong> ${datos.diagnostico.causaRaiz}</div>`);
+    }
+    if (datos.diagnostico.sistemasAfectados?.length) {
+      diagnosticoItems.push(`<div class="obs-item"><strong>Sistemas Afectados:</strong> ${datos.diagnostico.sistemasAfectados.join(', ')}</div>`);
+    }
+    secciones.push(`
+      <div class="obs-card obs-diagnostico">
+        <div class="obs-card-header">
+          <span class="obs-icon">🔍</span>
+          <span class="obs-card-title">DIAGNÓSTICO TÉCNICO</span>
+        </div>
+        <div class="obs-card-content">${diagnosticoItems.join('')}</div>
+      </div>
+    `);
   }
 
-  if (datos.diagnostico?.causaRaiz) {
-    partes.push(`<strong>Causa Raíz:</strong> ${datos.diagnostico.causaRaiz}`);
+  // Tarjeta: Observaciones adicionales (ya viene formateado con HTML del servicio)
+  if (datos.observaciones && datos.observaciones !== 'Sin observaciones adicionales.') {
+    secciones.push(`
+      <div class="obs-card obs-general">
+        <div class="obs-card-header">
+          <span class="obs-icon">📋</span>
+          <span class="obs-card-title">DETALLE DEL SERVICIO</span>
+        </div>
+        <div class="obs-card-content obs-detalle">${datos.observaciones}</div>
+      </div>
+    `);
   }
 
-  if (datos.observaciones) {
-    partes.push(`<strong>Observaciones:</strong> ${datos.observaciones}`);
+  // Tarjeta: Recomendaciones
+  if (datos.recomendaciones?.length && datos.recomendaciones[0] !== 'Seguir plan de mantenimiento preventivo programado') {
+    secciones.push(`
+      <div class="obs-card obs-recomendaciones">
+        <div class="obs-card-header">
+          <span class="obs-icon">💡</span>
+          <span class="obs-card-title">RECOMENDACIONES</span>
+        </div>
+        <div class="obs-card-content">
+          <ul class="obs-list">${datos.recomendaciones.map(r => `<li>${r}</li>`).join('')}</ul>
+        </div>
+      </div>
+    `);
   }
 
-  const contenido = partes.length > 0 ? partes.join('<br><br>') : 'Sin observaciones adicionales.';
+  const contenido = secciones.length > 0
+    ? `<div class="obs-grid">${secciones.join('')}</div>`
+    : '<div class="obs-empty">Sin observaciones adicionales.</div>';
 
   return `
     <div class="section">
-        <div class="section-title">OBSERVACIONES</div>
-        <div class="observaciones-box">
-            ${contenido}
-        </div>
+        <div class="section-title">OBSERVACIONES Y DIAGNÓSTICO</div>
+        ${contenido}
     </div>
     `;
 };

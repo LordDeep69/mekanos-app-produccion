@@ -127,6 +127,17 @@ export class FirmaDto {
     @IsOptional()
     @IsString()
     formato?: 'png' | 'jpg' | 'jpeg';
+
+    // ✅ FIX 02-FEB-2026: Campos para nombre y cargo del firmante
+    @ApiPropertyOptional({ description: 'Nombre del firmante' })
+    @IsOptional()
+    @IsString()
+    nombreFirmante?: string;
+
+    @ApiPropertyOptional({ description: 'Cargo del firmante' })
+    @IsOptional()
+    @IsString()
+    cargoFirmante?: string;
 }
 
 /**

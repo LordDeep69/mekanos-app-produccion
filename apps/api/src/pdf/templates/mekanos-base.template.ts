@@ -841,6 +841,111 @@ export const baseStyles = `
   .medicion-valor-ok { color: ${MEKANOS_COLORS.success}; }
   .medicion-valor-warning { color: ${MEKANOS_COLORS.warning}; }
   .medicion-valor-critico { color: ${MEKANOS_COLORS.danger}; font-weight: bold; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     OBSERVACIONES PROFESIONALES: Tarjetas estructuradas (02-FEB-2026)
+     ═══════════════════════════════════════════════════════════════ */
+  
+  .obs-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .obs-card {
+    border: 1px solid ${MEKANOS_COLORS.border};
+    border-radius: 8px;
+    overflow: hidden;
+    background: ${MEKANOS_COLORS.white};
+    page-break-inside: avoid;
+  }
+  
+  .obs-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-weight: bold;
+    font-size: 10px;
+  }
+  
+  .obs-icon {
+    font-size: 14px;
+  }
+  
+  .obs-card-title {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .obs-card-content {
+    padding: 10px 12px;
+    font-size: 10px;
+    line-height: 1.5;
+    background: ${MEKANOS_COLORS.background};
+  }
+  
+  .obs-item {
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed ${MEKANOS_COLORS.border};
+  }
+  
+  .obs-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+  
+  /* Tarjeta Problema - Rojo/Naranja */
+  .obs-problema .obs-card-header {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    color: #991b1b;
+    border-bottom: 2px solid #fca5a5;
+  }
+  
+  /* Tarjeta Diagnóstico - Azul */
+  .obs-diagnostico .obs-card-header {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1e40af;
+    border-bottom: 2px solid #93c5fd;
+  }
+  
+  /* Tarjeta General/Detalle - Verde */
+  .obs-general .obs-card-header {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    color: #166534;
+    border-bottom: 2px solid #86efac;
+  }
+  
+  .obs-detalle {
+    white-space: pre-wrap;
+  }
+  
+  /* Tarjeta Recomendaciones - Amarillo */
+  .obs-recomendaciones .obs-card-header {
+    background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+    color: #854d0e;
+    border-bottom: 2px solid #fde047;
+  }
+  
+  .obs-list {
+    margin: 0;
+    padding-left: 20px;
+  }
+  
+  .obs-list li {
+    margin-bottom: 4px;
+  }
+  
+  .obs-empty {
+    padding: 20px;
+    text-align: center;
+    color: ${MEKANOS_COLORS.text};
+    font-style: italic;
+    background: ${MEKANOS_COLORS.background};
+    border-radius: 8px;
+  }
 `;
 
 // ═══════════════════════════════════════════════════════════════════════════

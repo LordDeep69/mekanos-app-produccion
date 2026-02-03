@@ -446,24 +446,57 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
     if (!mounted) return;
 
-    final idSeleccionado = await showDialog<int>(
+    // ✅ FIX 02-FEB-2026: Mejorar panel con altura limitada y estilo profesional
+    final actividadSeleccionada = await showDialog<ActividadesCatalogoData>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Actividad'),
+        title: Row(
+          children: [
+            Icon(Icons.playlist_add, color: Colors.green.shade700),
+            const SizedBox(width: 8),
+            const Text('Añadir Actividad'),
+          ],
+        ),
         content: SizedBox(
           width: double.maxFinite,
+          // ✅ FIX: Limitar altura para evitar "Too many elements"
+          height: MediaQuery.of(ctx).size.height * 0.5,
           child: actividadesDisponibles.isEmpty
-              ? const Text('No hay mas actividades disponibles.')
-              : ListView.builder(
-                  shrinkWrap: true,
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle, size: 48, color: Colors.green),
+                      SizedBox(height: 16),
+                      Text(
+                        'No hay más actividades disponibles.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.separated(
                   itemCount: actividadesDisponibles.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final act = actividadesDisponibles[index];
                     return ListTile(
-                      title: Text(act.descripcion),
-                      subtitle: Text(act.sistema ?? 'General'),
-                      leading: const Icon(Icons.add_circle_outline),
-                      onTap: () => Navigator.pop(ctx, act.id),
+                      title: Text(
+                        act.descripcion,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      subtitle: Text(
+                        act.sistema ?? 'General',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.green.shade100,
+                        child: Icon(
+                          Icons.add_circle_outline,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                      onTap: () => Navigator.pop(ctx, act),
                     );
                   },
                 ),
@@ -477,8 +510,34 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       ),
     );
 
-    if (idSeleccionado != null) {
-      await _addActividadPlan(idSeleccionado);
+    // ✅ FIX 02-FEB-2026: Añadir diálogo de confirmación antes de agregar
+    if (actividadSeleccionada != null && mounted) {
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Confirmar'),
+          content: Text(
+            '¿Desea añadir la actividad "${actividadSeleccionada.descripcion}" al plan de trabajo?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+              ),
+              child: const Text('Añadir'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmar == true) {
+        await _addActividadPlan(actividadSeleccionada.id);
+      }
     }
   }
 
@@ -2320,7 +2379,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
     final opciones = [
       ('OPERATIVO', 'Operativo', Colors.green, Icons.check_circle),
-      ('PARADO', 'Parado', Colors.red, Icons.cancel),
+      // ✅ FIX 02-FEB-2026: Cambiar "Parado" por "Fuera de Servicio"
+      ('PARADO', 'Fuera de\nServicio', Colors.red, Icons.cancel),
       (
         'FALLA_INTERMITENTE',
         'Falla\nIntermitente',
@@ -2496,8 +2556,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         ? sistemasStr.split(',').toSet()
         : <String>{};
 
+    // ✅ FIX 02-FEB-2026: Agregar "Generador" y "Electrónico" después de "Motor"
     final sistemas = [
       ('MOTOR', 'Motor', Icons.settings),
+      ('GENERADOR', 'Generador', Icons.power),
+      ('ELECTRONICO', 'Electrónico', Icons.memory),
       ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
       ('CONTROL', 'Control', Icons.settings_remote),
       ('ENFRIAMIENTO', 'Enfriamiento', Icons.ac_unit),
@@ -2598,15 +2661,16 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         color = Colors.red;
         break;
       case 'CORR_TEXTO_SINTOMAS':
-        prefijo = 'SINTOMAS: ';
-        placeholder =
-            'Describa los síntomas observados durante la inspección...';
+        // ✅ FIX 02-FEB-2026: Cambiar "Síntomas" por "Fallas"
+        prefijo = 'FALLAS: ';
+        placeholder = 'Describa las fallas observadas durante la inspección...';
         icon = Icons.search;
         color = Colors.orange;
         break;
       case 'CORR_TEXTO_DIAGNOSTICO':
+        // ✅ FIX 02-FEB-2026: Cambiar texto
         prefijo = 'DIAGNOSTICO: ';
-        placeholder = 'Describa el diagnóstico y la causa raíz del problema...';
+        placeholder = 'Describa el diagnóstico identificado...';
         icon = Icons.psychology;
         color = Colors.purple;
         break;
@@ -2805,9 +2869,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       case 'CORR_TEXTO_PROBLEMA':
         return 'Problema Reportado';
       case 'CORR_TEXTO_SINTOMAS':
-        return 'Síntomas Observados';
+        // ✅ FIX 02-FEB-2026: Cambiar texto
+        return 'Fallas Observadas';
       case 'CORR_TEXTO_DIAGNOSTICO':
-        return 'Diagnóstico y Causa Raíz';
+        // ✅ FIX 02-FEB-2026: Cambiar texto
+        return 'Diagnóstico Identificado';
       case 'CORR_TEXTO_TRABAJOS':
         return 'Trabajos Realizados';
       case 'CORR_TEXTO_PENDIENTES':
@@ -3210,7 +3276,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     final progresoCompleto = porcentaje == 100;
 
     // ✅ RUTA 8: Condición completa para finalizar (items + firmas)
-    final puedeFinalizarItems = progresoCompleto;
+    // ✅ FIX 02-FEB-2026: En correctivo, actividades NO son obligatorias
+    final puedeFinalizarItems = _esCorrectivo ? true : progresoCompleto;
     final puedeFinalizarFirmas = _tieneFirmaTecnico && _tieneFirmaCliente;
     final puedeFinalizar = puedeFinalizarItems && puedeFinalizarFirmas;
 
@@ -4184,15 +4251,16 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
   late FocusNode _focusNode;
   String _estadoActual = 'PENDIENTE'; // NORMAL, ADVERTENCIA, CRITICO, PENDIENTE
   bool _guardando = false;
+  bool _tieneCAmbiosPendientes = false; // ✅ FIX: Rastrear cambios sin guardar
+  String _valorOriginal = ''; // ✅ FIX: Para detectar cambios reales
 
   @override
   void initState() {
     super.initState();
     // Inicializar con valor existente de BD (si existe)
     final valorInicial = widget.medicion.valor;
-    _controller = TextEditingController(
-      text: valorInicial != null ? valorInicial.toString() : '',
-    );
+    _valorOriginal = valorInicial != null ? valorInicial.toString() : '';
+    _controller = TextEditingController(text: _valorOriginal);
     _focusNode = FocusNode();
 
     // Escuchar pérdida de foco para guardar
@@ -4206,6 +4274,25 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
 
   @override
   void dispose() {
+    // ✅ FIX: Guardar SINCRÓNICAMENTE si hay cambios pendientes (último item de lista)
+    if (_tieneCAmbiosPendientes && _controller.text.trim() != _valorOriginal) {
+      final texto = _controller.text.trim();
+      final valor = double.tryParse(texto);
+      if (valor != null) {
+        // Guardar de forma fire-and-forget (el widget ya se está desmontando)
+        final service = ref.read(ejecucionServiceProvider);
+        service
+            .actualizarMedicion(
+              idMedicion: widget.medicion.idLocal,
+              valor: valor,
+              estadoValor: _calcularEstado(valor),
+            )
+            .then((_) {
+              // Notificar al padre si es posible
+              widget.onValorGuardado(widget.medicion.idLocal, valor);
+            });
+      }
+    }
     _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
     _controller.dispose();
@@ -4322,6 +4409,9 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
     if (!mounted) return; // Widget puede haberse desmontado durante await
 
     if (exito) {
+      // ✅ FIX: Resetear flag y actualizar valor original
+      _tieneCAmbiosPendientes = false;
+      _valorOriginal = valor.toString();
       setState(() {
         _estadoActual = nuevoEstado;
         _guardando = false;
@@ -4536,6 +4626,8 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
                 ),
               ),
               onChanged: (text) {
+                // ✅ FIX: Marcar que hay cambios pendientes
+                _tieneCAmbiosPendientes = text.trim() != _valorOriginal;
                 // Actualizar semáforo en tiempo real
                 final valor = double.tryParse(text);
                 if (valor != null) {
@@ -4543,6 +4635,11 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
                     _estadoActual = _calcularEstado(valor);
                   });
                 }
+              },
+              onEditingComplete: () {
+                // ✅ FIX: Guardar al presionar Done/Enter del teclado
+                _guardarValor();
+                _focusNode.unfocus();
               },
               onSubmitted: (_) => _guardarValor(),
             ),

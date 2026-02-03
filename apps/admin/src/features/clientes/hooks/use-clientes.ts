@@ -6,17 +6,17 @@
 'use client';
 
 import type {
-    ClientesQueryParams,
-    CreateClienteDto,
-    UpdateClienteDto,
+  ClientesQueryParams,
+  CreateClienteDto,
+  UpdateClienteDto,
 } from '@/types/clientes';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    createCliente,
-    deleteCliente,
-    getCliente,
-    getClientes,
-    updateCliente,
+  createCliente,
+  deleteCliente,
+  getCliente,
+  getClientes,
+  updateCliente,
 } from '../api/clientes.service';
 
 // Query Keys
@@ -30,12 +30,15 @@ export const clientesKeys = {
 
 /**
  * Hook para obtener lista de clientes
+ * ✅ FIX 03-FEB-2026: placeholderData mantiene datos anteriores mientras carga nuevos
+ * Esto evita que la tabla se "recargue" visualmente al buscar
  */
 export function useClientes(params?: ClientesQueryParams) {
   return useQuery({
     queryKey: clientesKeys.list(params),
     queryFn: () => getClientes(params),
     staleTime: 5 * 60 * 1000, // 5 minutos
+    placeholderData: keepPreviousData, // ✅ Mantiene datos anteriores durante refetch
   });
 }
 

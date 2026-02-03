@@ -81,7 +81,8 @@ export function ClientesTable() {
   }, [searchInput]);
 
   // Query con filtros
-  const { data, isLoading, isError, error } = useClientes({
+  // ✅ FIX 03-FEB-2026: Usar isFetching solo para indicador sutil, no para skeleton completo
+  const { data, isLoading, isFetching, isError, error } = useClientes({
     skip: page * PAGE_SIZE,
     take: PAGE_SIZE,
     tipo_cliente: tipoFilter !== 'TODOS' ? tipoFilter : undefined,
@@ -148,8 +149,9 @@ export function ClientesTable() {
     return cliente.persona?.numero_identificacion || '-';
   };
 
-  // Loading skeleton
-  if (isLoading) {
+  // Loading skeleton - Solo para carga inicial, no para refetch
+  // ✅ FIX 03-FEB-2026: isLoading solo es true en primera carga, no en refetch
+  if (isLoading && !data) {
     return (
       <div className="space-y-4">
         <div className="flex justify-between">
@@ -213,9 +215,9 @@ export function ClientesTable() {
             </SelectContent>
           </Select>
 
-          {/* Refrescar */}
-          <Button variant="outline" size="icon" onClick={refreshClientes}>
-            <RefreshCw className="h-4 w-4" />
+          {/* Refrescar - con indicador de loading sutil */}
+          <Button variant="outline" size="icon" onClick={refreshClientes} disabled={isFetching}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           </Button>
         </div>
 

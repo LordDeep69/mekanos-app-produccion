@@ -347,6 +347,10 @@ class SyncUploadService {
               'tipo': 'TECNICO',
               'base64': base64Tecnico,
               'idPersona': usuarioId, // Usar ID del técnico
+              // ✅ FIX 02-FEB-2026: Incluir nombre y cargo del firmante
+              'nombreFirmante': firmaTecnico.nombreFirmante ?? '',
+              'cargoFirmante':
+                  firmaTecnico.cargoFirmante ?? 'Técnico de Servicio',
             },
           };
 
@@ -355,6 +359,9 @@ class SyncUploadService {
               'tipo': 'CLIENTE',
               'base64': base64Cliente,
               'idPersona': 0, // Cliente sin ID específico
+              // ✅ FIX 02-FEB-2026: Incluir nombre y cargo del cliente
+              'nombreFirmante': firmaCliente.nombreFirmante ?? '',
+              'cargoFirmante': firmaCliente.cargoFirmante ?? '',
             };
           }
         }

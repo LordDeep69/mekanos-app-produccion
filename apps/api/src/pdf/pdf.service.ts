@@ -237,6 +237,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         m.nivelAlerta === 'WARNING' ? 'ADVERTENCIA' : 'OK') as 'OK' | 'ADVERTENCIA' | 'CRITICO',
     }));
 
+    // ✅ FIX 02-FEB-2026: Extraer datos del módulo de control desde mediciones
+    const datosModulo = this.extraerDatosModuloDesdelMediciones(datos.mediciones || []);
+
     // ✅ FIX 02-FEB-2026: Construir observaciones estructuradas para el PDF
     const observacionesEstructuradas = this.construirObservacionesCorrectivo(datosEstructurados, datos.observaciones);
 
@@ -274,6 +277,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         estado: 'NUEVO' as const,
       })),
       mediciones: medicionesConValor.length > 0 ? medicionesConValor : undefined,
+      datosModulo, // ✅ FIX 02-FEB-2026: Pasar datos del módulo de control
       recomendaciones: datosEstructurados.recomendaciones
         ? [datosEstructurados.recomendaciones]
         : ['Seguir plan de mantenimiento preventivo programado'],
@@ -474,6 +478,49 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     }
 
     return secciones.length > 0 ? secciones.join('<br/><br/>') : 'Sin observaciones adicionales.';
+  }
+
+  /**
+   * ✅ FIX 02-FEB-2026: Extrae datos del módulo de control desde las mediciones
+   * Mapea nombres de parámetros a campos del módulo
+   */
+  private extraerDatosModuloDesdelMediciones(mediciones: Array<{ parametro: string; valor?: number | null }>): {
+    rpm?: number;
+    presionAceite?: number;
+    temperaturaRefrigerante?: number;
+    cargaBateria?: number;
+    horasTrabajo?: number;
+    voltaje?: number;
+    frecuencia?: number;
+    corriente?: number;
+  } {
+    const modulo: Record<string, number | undefined> = {};
+
+    for (const m of mediciones) {
+      if (m.valor == null) continue;
+      const param = m.parametro.toLowerCase();
+
+      // Mapeo flexible de nombres de parámetros
+      if (param.includes('velocidad') || param.includes('rpm')) {
+        modulo.rpm = m.valor;
+      } else if (param.includes('presion') && param.includes('aceite')) {
+        modulo.presionAceite = m.valor;
+      } else if (param.includes('temp') && (param.includes('refrig') || param.includes('agua'))) {
+        modulo.temperaturaRefrigerante = m.valor;
+      } else if (param.includes('bateria') || param.includes('carga')) {
+        modulo.cargaBateria = m.valor;
+      } else if (param.includes('hora') && param.includes('trabajo')) {
+        modulo.horasTrabajo = m.valor;
+      } else if (param.includes('voltaje') || param.includes('tension')) {
+        modulo.voltaje = m.valor;
+      } else if (param.includes('frecuencia') || param.includes('hz')) {
+        modulo.frecuencia = m.valor;
+      } else if (param.includes('corriente') || param.includes('amper')) {
+        modulo.corriente = m.valor;
+      }
+    }
+
+    return modulo;
   }
 
   /**

@@ -256,7 +256,8 @@ class _ResumenFinalizacionScreenState
     final progresoCompleto = _todosEquiposCompletos();
 
     // Condición completa para finalizar
-    final puedeFinalizarItems = progresoCompleto;
+    // ✅ FIX 02-FEB-2026: En correctivo, actividades NO son obligatorias
+    final puedeFinalizarItems = _esCorrectivo ? true : progresoCompleto;
     final puedeFinalizarFirmas = _tieneFirmaTecnico && _tieneFirmaCliente;
     final puedeFinalizar = puedeFinalizarItems && puedeFinalizarFirmas;
 
