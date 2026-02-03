@@ -13,9 +13,9 @@ import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 class Environment {
   Environment._();
 
-  /// ✅ Backend en producción (Railway)
+  /// ✅ Backend en producción (Ngrok - contingencia mientras Railway se configura)
   static const String _productionApiUrl =
-      'https://mekanosapi-production-b170.up.railway.app/api';
+      'https://hereditarily-unmutualized-joey.ngrok-free.dev/api';
 
   /// ✅ IP del servidor en red local (tu PC) - Solo para desarrollo
   static const String _localNetworkIp = '192.168.1.76';
