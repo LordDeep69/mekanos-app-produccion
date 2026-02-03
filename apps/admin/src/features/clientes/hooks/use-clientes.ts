@@ -32,13 +32,14 @@ export const clientesKeys = {
  * Hook para obtener lista de clientes
  * ✅ FIX 03-FEB-2026: placeholderData mantiene datos anteriores mientras carga nuevos
  * Esto evita que la tabla se "recargue" visualmente al buscar
+ * TanStack Query v5: placeholderData recibe función que retorna datos anteriores
  */
 export function useClientes(params?: ClientesQueryParams) {
   return useQuery({
     queryKey: clientesKeys.list(params),
     queryFn: () => getClientes(params),
     staleTime: 5 * 60 * 1000, // 5 minutos
-    placeholderData: keepPreviousData, // ✅ Mantiene datos anteriores durante refetch
+    placeholderData: (previousData) => previousData, // ✅ Mantiene datos anteriores durante refetch
   });
 }
 
