@@ -266,6 +266,63 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     return await evidenciaService.contarEvidenciasBatch(todasActividades);
   }
 
+  // ==========================================================================
+  // ✅ FIX 03-FEB-2026: HELPERS PARA SEPARAR VALOR DE OBSERVACIÓN
+  // Formato: "VALOR_ESPECIAL|||Observación del técnico"
+  // ==========================================================================
+  static const String _separadorValorObs = '|||';
+
+  /// Extrae el valor especial (antes de |||) de una observación
+  String _extraerValorEspecial(String? observacion) {
+    if (observacion == null || observacion.isEmpty) return '';
+    final partes = observacion.split(_separadorValorObs);
+    return partes[0].trim();
+  }
+
+  /// Extrae la observación real del técnico (después de |||)
+  String _extraerObservacionReal(String? observacion) {
+    if (observacion == null || observacion.isEmpty) return '';
+    final partes = observacion.split(_separadorValorObs);
+    return partes.length > 1 ? partes[1].trim() : '';
+  }
+
+  /// Combina valor especial con observación del técnico
+  String _combinarValorObservacion(
+    String valorEspecial,
+    String observacionTecnico,
+  ) {
+    if (observacionTecnico.isEmpty) return valorEspecial;
+    return '$valorEspecial$_separadorValorObs$observacionTecnico';
+  }
+
+  /// Verifica si una observación tiene un valor especial (prefijo estructurado)
+  bool _tieneValorEspecial(String? observacion) {
+    if (observacion == null || observacion.isEmpty) return false;
+    final prefijos = [
+      'ESTADO_INICIAL:',
+      'ESTADO_FINAL:',
+      'SISTEMAS:',
+      'PROBLEMA:',
+      'FALLAS:',
+      'SINTOMAS:',
+      'DIAGNOSTICO:',
+      'TRABAJOS:',
+      'PENDIENTES:',
+      'RECOMENDACIONES:',
+      'BATERIA:',
+      'NIVEL:',
+      'TEMP:',
+      'HORAS:',
+      'ACEITE:',
+      'ELECTROLITOS:',
+      'RESPUESTA:',
+      'REPUESTOS:',
+      'MATERIALES:',
+    ];
+    final valorEspecial = _extraerValorEspecial(observacion).toUpperCase();
+    return prefijos.any((p) => valorEspecial.startsWith(p));
+  }
+
   Color _getColorForSimbologia(String simbologia) {
     switch (simbologia) {
       case 'B':
@@ -1016,10 +1073,13 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Muestra diálogo para agregar/editar observación
+  /// ✅ FIX 03-FEB-2026: Separar valor especial de observación del técnico
   Future<void> _mostrarDialogoObservacion(
     ActividadesEjecutada actividad,
   ) async {
-    final controller = TextEditingController(text: actividad.observacion ?? '');
+    // ✅ Extraer solo la observación del técnico (no el valor especial)
+    final observacionActual = _extraerObservacionReal(actividad.observacion);
+    final controller = TextEditingController(text: observacionActual);
 
     final resultado = await showDialog<String>(
       context: context,
@@ -1050,8 +1110,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancelar'),
           ),
-          if (actividad.observacion != null &&
-              actividad.observacion!.isNotEmpty)
+          if (observacionActual.isNotEmpty)
             TextButton(
               onPressed: () => Navigator.pop(ctx, ''),
               child: const Text('Borrar', style: TextStyle(color: Colors.red)),
@@ -1070,17 +1129,35 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Guarda la observación de una actividad
+  /// ✅ FIX 03-FEB-2026: Preservar valor especial al guardar observación del técnico
   Future<void> _guardarObservacionActividad(
     int idLocal,
     String observacion,
   ) async {
     final db = ref.read(databaseProvider);
 
+    // ✅ Buscar la actividad para obtener el valor especial actual
+    final actividadActual = await (db.select(
+      db.actividadesEjecutadas,
+    )..where((a) => a.idLocal.equals(idLocal))).getSingleOrNull();
+
+    // ✅ Preservar el valor especial (si existe) y combinar con nueva observación
+    String? nuevaObservacion;
+    if (actividadActual != null &&
+        _tieneValorEspecial(actividadActual.observacion)) {
+      final valorEspecial = _extraerValorEspecial(actividadActual.observacion);
+      nuevaObservacion = observacion.isEmpty
+          ? valorEspecial // Solo valor especial
+          : _combinarValorObservacion(valorEspecial, observacion);
+    } else {
+      nuevaObservacion = observacion.isEmpty ? null : observacion;
+    }
+
     await (db.update(
       db.actividadesEjecutadas,
     )..where((a) => a.idLocal.equals(idLocal))).write(
       ActividadesEjecutadasCompanion(
-        observacion: Value(observacion.isEmpty ? null : observacion),
+        observacion: Value(nuevaObservacion),
         isDirty: const Value(true),
       ),
     );
@@ -1292,12 +1369,17 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         desc.contains('DESCRIPCION DEL PROBLEMA')) {
       return 'CORR_TEXTO_PROBLEMA';
     }
+    // ✅ FIX 03-FEB-2026: Soportar tanto el label viejo como el nuevo
     if (desc.contains('SÍNTOMAS OBSERVADOS') ||
-        desc.contains('SINTOMAS OBSERVADOS')) {
+        desc.contains('SINTOMAS OBSERVADOS') ||
+        desc.contains('FALLAS OBSERVADAS')) {
       return 'CORR_TEXTO_SINTOMAS';
     }
+    // ✅ FIX 03-FEB-2026: Soportar tanto el label viejo como el nuevo
     if (desc.contains('DIAGNÓSTICO Y CAUSA') ||
-        desc.contains('DIAGNOSTICO Y CAUSA')) {
+        desc.contains('DIAGNOSTICO Y CAUSA') ||
+        desc.contains('DIAGNÓSTICO') ||
+        desc.contains('DIAGNOSTICO')) {
       return 'CORR_TEXTO_DIAGNOSTICO';
     }
     if (desc.contains('TRABAJOS REALIZADOS')) {
@@ -1944,6 +2026,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Método genérico para marcar actividades especiales
+  /// ✅ FIX 03-FEB-2026: Preservar observación del técnico al cambiar valor especial
   Future<void> _marcarActividadEspecial(
     int idActividadLocal,
     String observacionNueva,
@@ -1951,13 +2034,32 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   ) async {
     final db = ref.read(databaseProvider);
 
+    // ✅ Buscar actividad actual para preservar observación del técnico
+    final actividadActual = await (db.select(
+      db.actividadesEjecutadas,
+    )..where((a) => a.idLocal.equals(idActividadLocal))).getSingleOrNull();
+
+    // ✅ Preservar la observación del técnico (después de |||)
+    String observacionFinal = observacionNueva;
+    if (actividadActual != null) {
+      final observacionTecnico = _extraerObservacionReal(
+        actividadActual.observacion,
+      );
+      if (observacionTecnico.isNotEmpty) {
+        observacionFinal = _combinarValorObservacion(
+          observacionNueva,
+          observacionTecnico,
+        );
+      }
+    }
+
     await (db.update(
       db.actividadesEjecutadas,
     )..where((a) => a.idLocal.equals(idActividadLocal))).write(
       ActividadesEjecutadasCompanion(
         simbologia: Value(simbologia),
         completada: const Value(true),
-        observacion: Value(observacionNueva),
+        observacion: Value(observacionFinal),
         fechaEjecucion: Value(DateTime.now()),
         isDirty: const Value(true),
       ),
@@ -1977,7 +2079,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             actividad.copyWith(
               simbologia: Value(simbologia),
               completada: true,
-              observacion: Value(observacionNueva),
+              observacion: Value(observacionFinal),
             ),
           );
         } else {

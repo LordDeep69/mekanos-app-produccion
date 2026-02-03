@@ -433,6 +433,8 @@ class EjecucionService {
       if (actCatalogo == null) throw Exception('Activity not found in catalog');
 
       // Get last sequence
+      // ✅ FIX 03-FEB-2026: Usar get() + firstOrNull en vez de getSingleOrNull()
+      // para evitar "Bad State: Too Many Elements" cuando hay múltiples actividades
       final queryUltima = _db.select(_db.actividadesEjecutadas)
         ..where((a) => a.idOrden.equals(idOrdenLocal));
       if (idOrdenEquipo != null) {
@@ -440,7 +442,10 @@ class EjecucionService {
       }
       queryUltima.orderBy([(a) => OrderingTerm.desc(a.ordenEjecucion)]);
 
-      final ultimaAct = await queryUltima.getSingleOrNull();
+      final listaActividades = await queryUltima.get();
+      final ultimaAct = listaActividades.isNotEmpty
+          ? listaActividades.first
+          : null;
       final nuevaSecuencia = (ultimaAct?.ordenEjecucion ?? 0) + 1;
 
       final idActividadEjecutada = await _db.insertActividadEjecutada(

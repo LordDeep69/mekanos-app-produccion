@@ -338,7 +338,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     };
 
     for (const actividad of actividades) {
-      const obs = actividad.observaciones || '';
+      // ✅ FIX 03-FEB-2026: Extraer solo el valor especial (antes de |||)
+      // Formato: "VALOR_ESPECIAL|||Observación del técnico"
+      const obsRaw = actividad.observaciones || '';
+      const obs = obsRaw.includes('|||') ? obsRaw.split('|||')[0].trim() : obsRaw;
 
       if (obs.startsWith('ESTADO_INICIAL: ')) {
         resultado.estadoInicial = this.mapearEstadoInicial(obs.substring(16).trim());
@@ -349,8 +352,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
       } else if (obs.startsWith('PROBLEMA: ')) {
         resultado.problema = obs.substring(10).trim();
-      } else if (obs.startsWith('SINTOMAS: ')) {
-        resultado.sintomas = obs.substring(10).trim();
+      } else if (obs.startsWith('SINTOMAS: ') || obs.startsWith('FALLAS: ')) {
+        // ✅ FIX 03-FEB-2026: Soportar ambos prefijos (SINTOMAS y FALLAS)
+        const prefijo = obs.startsWith('FALLAS: ') ? 'FALLAS: ' : 'SINTOMAS: ';
+        resultado.sintomas = obs.substring(prefijo.length).trim();
       } else if (obs.startsWith('DIAGNOSTICO: ')) {
         resultado.diagnostico = obs.substring(13).trim();
       } else if (obs.startsWith('TRABAJOS: ')) {
@@ -437,14 +442,15 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       secciones.push(`<strong>Problema Reportado:</strong> ${datos.problema}`);
     }
 
-    // Síntomas observados
+    // ✅ FIX 03-FEB-2026: Cambiar labels según solicitud
+    // Fallas observadas (antes: Síntomas Observados)
     if (datos.sintomas && datos.sintomas !== '(Sin información)') {
-      secciones.push(`<strong>Síntomas Observados:</strong> ${datos.sintomas}`);
+      secciones.push(`<strong>Fallas Observadas:</strong> ${datos.sintomas}`);
     }
 
-    // Diagnóstico
+    // Diagnóstico (antes: Diagnóstico y Causa Raíz)
     if (datos.diagnostico && datos.diagnostico !== '(Sin información)') {
-      secciones.push(`<strong>Diagnóstico y Causa Raíz:</strong> ${datos.diagnostico}`);
+      secciones.push(`<strong>Diagnóstico:</strong> ${datos.diagnostico}`);
     }
 
     // Trabajos realizados

@@ -638,7 +638,8 @@ const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
     `);
   }
 
-  // Tarjeta: Diagnóstico y Causa Raíz
+  // ✅ FIX 03-FEB-2026: Cambiar label a solo "Diagnóstico"
+  // Tarjeta: Diagnóstico
   if (datos.diagnostico?.descripcion || datos.diagnostico?.causaRaiz) {
     const diagnosticoItems: string[] = [];
     if (datos.diagnostico.descripcion) {
