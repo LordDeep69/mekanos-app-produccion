@@ -18,6 +18,7 @@ import {
   DatosOrdenPDF,
   EvidenciasPorEquipoPDF,
   generarChecklistMultiEquipo,
+  generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
   MEKANOS_COLORS

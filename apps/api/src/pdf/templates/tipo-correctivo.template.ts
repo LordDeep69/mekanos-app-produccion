@@ -23,6 +23,7 @@ import {
   EquipoOrdenPDF,
   EvidenciasPorEquipoPDF,
   generarChecklistMultiEquipo,
+  generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
   MedicionesPorEquipoPDF,
