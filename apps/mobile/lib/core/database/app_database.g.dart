@@ -6861,6 +6861,17 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _observacionTecnicoMeta =
+      const VerificationMeta('observacionTecnico');
+  @override
+  late final GeneratedColumn<String> observacionTecnico =
+      GeneratedColumn<String>(
+        'observacion_tecnico',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _fechaEjecucionMeta = const VerificationMeta(
     'fechaEjecucion',
   );
@@ -6926,6 +6937,7 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
     simbologia,
     completada,
     observacion,
+    observacionTecnico,
     fechaEjecucion,
     isDirty,
     lastSyncedAt,
@@ -7050,6 +7062,15 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         ),
       );
     }
+    if (data.containsKey('observacion_tecnico')) {
+      context.handle(
+        _observacionTecnicoMeta,
+        observacionTecnico.isAcceptableOrUnknown(
+          data['observacion_tecnico']!,
+          _observacionTecnicoMeta,
+        ),
+      );
+    }
     if (data.containsKey('fecha_ejecucion')) {
       context.handle(
         _fechaEjecucionMeta,
@@ -7141,6 +7162,10 @@ class $ActividadesEjecutadasTable extends ActividadesEjecutadas
         DriftSqlType.string,
         data['${effectivePrefix}observacion'],
       ),
+      observacionTecnico: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}observacion_tecnico'],
+      ),
       fechaEjecucion: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}fecha_ejecucion'],
@@ -7181,6 +7206,7 @@ class ActividadesEjecutada extends DataClass
   final String? simbologia;
   final bool completada;
   final String? observacion;
+  final String? observacionTecnico;
   final DateTime? fechaEjecucion;
   final bool isDirty;
   final DateTime? lastSyncedAt;
@@ -7199,6 +7225,7 @@ class ActividadesEjecutada extends DataClass
     this.simbologia,
     required this.completada,
     this.observacion,
+    this.observacionTecnico,
     this.fechaEjecucion,
     required this.isDirty,
     this.lastSyncedAt,
@@ -7231,6 +7258,9 @@ class ActividadesEjecutada extends DataClass
     map['completada'] = Variable<bool>(completada);
     if (!nullToAbsent || observacion != null) {
       map['observacion'] = Variable<String>(observacion);
+    }
+    if (!nullToAbsent || observacionTecnico != null) {
+      map['observacion_tecnico'] = Variable<String>(observacionTecnico);
     }
     if (!nullToAbsent || fechaEjecucion != null) {
       map['fecha_ejecucion'] = Variable<DateTime>(fechaEjecucion);
@@ -7270,6 +7300,9 @@ class ActividadesEjecutada extends DataClass
       observacion: observacion == null && nullToAbsent
           ? const Value.absent()
           : Value(observacion),
+      observacionTecnico: observacionTecnico == null && nullToAbsent
+          ? const Value.absent()
+          : Value(observacionTecnico),
       fechaEjecucion: fechaEjecucion == null && nullToAbsent
           ? const Value.absent()
           : Value(fechaEjecucion),
@@ -7304,6 +7337,9 @@ class ActividadesEjecutada extends DataClass
       simbologia: serializer.fromJson<String?>(json['simbologia']),
       completada: serializer.fromJson<bool>(json['completada']),
       observacion: serializer.fromJson<String?>(json['observacion']),
+      observacionTecnico: serializer.fromJson<String?>(
+        json['observacionTecnico'],
+      ),
       fechaEjecucion: serializer.fromJson<DateTime?>(json['fechaEjecucion']),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
@@ -7327,6 +7363,7 @@ class ActividadesEjecutada extends DataClass
       'simbologia': serializer.toJson<String?>(simbologia),
       'completada': serializer.toJson<bool>(completada),
       'observacion': serializer.toJson<String?>(observacion),
+      'observacionTecnico': serializer.toJson<String?>(observacionTecnico),
       'fechaEjecucion': serializer.toJson<DateTime?>(fechaEjecucion),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
@@ -7348,6 +7385,7 @@ class ActividadesEjecutada extends DataClass
     Value<String?> simbologia = const Value.absent(),
     bool? completada,
     Value<String?> observacion = const Value.absent(),
+    Value<String?> observacionTecnico = const Value.absent(),
     Value<DateTime?> fechaEjecucion = const Value.absent(),
     bool? isDirty,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -7370,6 +7408,9 @@ class ActividadesEjecutada extends DataClass
     simbologia: simbologia.present ? simbologia.value : this.simbologia,
     completada: completada ?? this.completada,
     observacion: observacion.present ? observacion.value : this.observacion,
+    observacionTecnico: observacionTecnico.present
+        ? observacionTecnico.value
+        : this.observacionTecnico,
     fechaEjecucion: fechaEjecucion.present
         ? fechaEjecucion.value
         : this.fechaEjecucion,
@@ -7410,6 +7451,9 @@ class ActividadesEjecutada extends DataClass
       observacion: data.observacion.present
           ? data.observacion.value
           : this.observacion,
+      observacionTecnico: data.observacionTecnico.present
+          ? data.observacionTecnico.value
+          : this.observacionTecnico,
       fechaEjecucion: data.fechaEjecucion.present
           ? data.fechaEjecucion.value
           : this.fechaEjecucion,
@@ -7437,6 +7481,7 @@ class ActividadesEjecutada extends DataClass
           ..write('simbologia: $simbologia, ')
           ..write('completada: $completada, ')
           ..write('observacion: $observacion, ')
+          ..write('observacionTecnico: $observacionTecnico, ')
           ..write('fechaEjecucion: $fechaEjecucion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
@@ -7460,6 +7505,7 @@ class ActividadesEjecutada extends DataClass
     simbologia,
     completada,
     observacion,
+    observacionTecnico,
     fechaEjecucion,
     isDirty,
     lastSyncedAt,
@@ -7482,6 +7528,7 @@ class ActividadesEjecutada extends DataClass
           other.simbologia == this.simbologia &&
           other.completada == this.completada &&
           other.observacion == this.observacion &&
+          other.observacionTecnico == this.observacionTecnico &&
           other.fechaEjecucion == this.fechaEjecucion &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt &&
@@ -7503,6 +7550,7 @@ class ActividadesEjecutadasCompanion
   final Value<String?> simbologia;
   final Value<bool> completada;
   final Value<String?> observacion;
+  final Value<String?> observacionTecnico;
   final Value<DateTime?> fechaEjecucion;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
@@ -7521,6 +7569,7 @@ class ActividadesEjecutadasCompanion
     this.simbologia = const Value.absent(),
     this.completada = const Value.absent(),
     this.observacion = const Value.absent(),
+    this.observacionTecnico = const Value.absent(),
     this.fechaEjecucion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -7540,6 +7589,7 @@ class ActividadesEjecutadasCompanion
     this.simbologia = const Value.absent(),
     this.completada = const Value.absent(),
     this.observacion = const Value.absent(),
+    this.observacionTecnico = const Value.absent(),
     this.fechaEjecucion = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
@@ -7562,6 +7612,7 @@ class ActividadesEjecutadasCompanion
     Expression<String>? simbologia,
     Expression<bool>? completada,
     Expression<String>? observacion,
+    Expression<String>? observacionTecnico,
     Expression<DateTime>? fechaEjecucion,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
@@ -7583,6 +7634,7 @@ class ActividadesEjecutadasCompanion
       if (simbologia != null) 'simbologia': simbologia,
       if (completada != null) 'completada': completada,
       if (observacion != null) 'observacion': observacion,
+      if (observacionTecnico != null) 'observacion_tecnico': observacionTecnico,
       if (fechaEjecucion != null) 'fecha_ejecucion': fechaEjecucion,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
@@ -7604,6 +7656,7 @@ class ActividadesEjecutadasCompanion
     Value<String?>? simbologia,
     Value<bool>? completada,
     Value<String?>? observacion,
+    Value<String?>? observacionTecnico,
     Value<DateTime?>? fechaEjecucion,
     Value<bool>? isDirty,
     Value<DateTime?>? lastSyncedAt,
@@ -7623,6 +7676,7 @@ class ActividadesEjecutadasCompanion
       simbologia: simbologia ?? this.simbologia,
       completada: completada ?? this.completada,
       observacion: observacion ?? this.observacion,
+      observacionTecnico: observacionTecnico ?? this.observacionTecnico,
       fechaEjecucion: fechaEjecucion ?? this.fechaEjecucion,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
@@ -7672,6 +7726,9 @@ class ActividadesEjecutadasCompanion
     if (observacion.present) {
       map['observacion'] = Variable<String>(observacion.value);
     }
+    if (observacionTecnico.present) {
+      map['observacion_tecnico'] = Variable<String>(observacionTecnico.value);
+    }
     if (fechaEjecucion.present) {
       map['fecha_ejecucion'] = Variable<DateTime>(fechaEjecucion.value);
     }
@@ -7703,6 +7760,7 @@ class ActividadesEjecutadasCompanion
           ..write('simbologia: $simbologia, ')
           ..write('completada: $completada, ')
           ..write('observacion: $observacion, ')
+          ..write('observacionTecnico: $observacionTecnico, ')
           ..write('fechaEjecucion: $fechaEjecucion, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
@@ -17381,6 +17439,7 @@ typedef $$ActividadesEjecutadasTableCreateCompanionBuilder =
       Value<String?> simbologia,
       Value<bool> completada,
       Value<String?> observacion,
+      Value<String?> observacionTecnico,
       Value<DateTime?> fechaEjecucion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
@@ -17401,6 +17460,7 @@ typedef $$ActividadesEjecutadasTableUpdateCompanionBuilder =
       Value<String?> simbologia,
       Value<bool> completada,
       Value<String?> observacion,
+      Value<String?> observacionTecnico,
       Value<DateTime?> fechaEjecucion,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
@@ -17588,6 +17648,11 @@ class $$ActividadesEjecutadasTableFilterComposer
 
   ColumnFilters<String> get observacion => $composableBuilder(
     column: $table.observacion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get observacionTecnico => $composableBuilder(
+    column: $table.observacionTecnico,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17790,6 +17855,11 @@ class $$ActividadesEjecutadasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get observacionTecnico => $composableBuilder(
+    column: $table.observacionTecnico,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get fechaEjecucion => $composableBuilder(
     column: $table.fechaEjecucion,
     builder: (column) => ColumnOrderings(column),
@@ -17931,6 +18001,11 @@ class $$ActividadesEjecutadasTableAnnotationComposer
 
   GeneratedColumn<String> get observacion => $composableBuilder(
     column: $table.observacion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get observacionTecnico => $composableBuilder(
+    column: $table.observacionTecnico,
     builder: (column) => column,
   );
 
@@ -18129,6 +18204,7 @@ class $$ActividadesEjecutadasTableTableManager
                 Value<String?> simbologia = const Value.absent(),
                 Value<bool> completada = const Value.absent(),
                 Value<String?> observacion = const Value.absent(),
+                Value<String?> observacionTecnico = const Value.absent(),
                 Value<DateTime?> fechaEjecucion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -18147,6 +18223,7 @@ class $$ActividadesEjecutadasTableTableManager
                 simbologia: simbologia,
                 completada: completada,
                 observacion: observacion,
+                observacionTecnico: observacionTecnico,
                 fechaEjecucion: fechaEjecucion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
@@ -18167,6 +18244,7 @@ class $$ActividadesEjecutadasTableTableManager
                 Value<String?> simbologia = const Value.absent(),
                 Value<bool> completada = const Value.absent(),
                 Value<String?> observacion = const Value.absent(),
+                Value<String?> observacionTecnico = const Value.absent(),
                 Value<DateTime?> fechaEjecucion = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
@@ -18185,6 +18263,7 @@ class $$ActividadesEjecutadasTableTableManager
                 simbologia: simbologia,
                 completada: completada,
                 observacion: observacion,
+                observacionTecnico: observacionTecnico,
                 fechaEjecucion: fechaEjecucion,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,

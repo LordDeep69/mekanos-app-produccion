@@ -20,7 +20,7 @@ import {
   generarChecklistMultiEquipo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
-  MEKANOS_COLORS,
+  MEKANOS_COLORS
 } from './mekanos-base.template';
 
 /**
@@ -194,23 +194,12 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
 `;
 };
 
-const generarHeader = (datos: DatosOrdenPDF): string => `
-  <div class="header">
-    <div class="logo-container">
-      <svg class="logo" viewBox="0 0 100 40">
-        <rect width="100" height="40" fill="${MEKANOS_COLORS.primary}"/>
-        <text x="50" y="25" fill="white" font-size="14" font-weight="bold" text-anchor="middle">MEKANOS</text>
-      </svg>
-    </div>
-    <div class="header-title">
-      <h1>MANTENIMIENTO PREVENTIVO TIPO B</h1>
-      <h2>GENERADORES ELÉCTRICOS - CAMBIO DE FILTROS Y FLUIDOS</h2>
-    </div>
-    <div class="header-order">
-      <div class="order-number">${datos.numeroOrden}</div>
-    </div>
-  </div>
-`;
+const generarHeader = (datos: DatosOrdenPDF): string =>
+  generarHeaderConLogo(
+    'MANTENIMIENTO PREVENTIVO TIPO B',
+    'GENERADORES ELÉCTRICOS - CAMBIO DE FILTROS Y FLUIDOS',
+    datos.numeroOrden,
+  );
 
 const generarDatosCliente = (datos: DatosOrdenPDF): string => `
   <div class="section">

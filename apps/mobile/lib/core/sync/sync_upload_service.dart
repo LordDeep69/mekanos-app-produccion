@@ -14,6 +14,20 @@ import 'offline_sync_service.dart';
 import 'sync_notification_service.dart';
 import 'sync_progress.dart';
 
+/// ✅ FIX 03-FEB-2026: Helper para combinar valor principal + observación técnico
+/// Mantiene compatibilidad con backend que espera formato: "VALOR|||ObsTecnico"
+String _combinarObservacionesParaBackend(
+  String? valorPrincipal,
+  String? obsTecnico,
+) {
+  final vp = valorPrincipal?.trim() ?? '';
+  final ot = obsTecnico?.trim() ?? '';
+  if (vp.isEmpty && ot.isEmpty) return '';
+  if (ot.isEmpty) return vp;
+  if (vp.isEmpty) return ot;
+  return '$vp|||$ot';
+}
+
 /// Provider para el servicio de sync upload
 final syncUploadServiceProvider = Provider<SyncUploadService>((ref) {
   final db = ref.watch(databaseProvider);
@@ -137,7 +151,11 @@ class SyncUploadService {
             'sistema': a.sistema ?? 'Sin sistema',
             'descripcion': a.descripcion,
             'resultado': a.simbologia ?? 'N/A',
-            'observaciones': a.observacion,
+            // ✅ FIX 03-FEB-2026: Combinar valor principal + observación técnico
+            'observaciones': _combinarObservacionesParaBackend(
+              a.observacion,
+              a.observacionTecnico,
+            ),
           });
         }
 
@@ -168,7 +186,11 @@ class SyncUploadService {
                 'sistema': a.sistema ?? 'Sin sistema',
                 'descripcion': a.descripcion,
                 'resultado': a.simbologia ?? 'N/A',
-                'observaciones': a.observacion,
+                // ✅ FIX 03-FEB-2026: Combinar valor principal + observación técnico
+                'observaciones': _combinarObservacionesParaBackend(
+                  a.observacion,
+                  a.observacionTecnico,
+                ),
                 'idOrdenEquipo': a.idOrdenEquipo,
               },
             )
@@ -182,7 +204,11 @@ class SyncUploadService {
                 'sistema': a.sistema ?? 'Sin sistema',
                 'descripcion': a.descripcion,
                 'resultado': a.simbologia ?? 'N/A',
-                'observaciones': a.observacion,
+                // ✅ FIX 03-FEB-2026: Combinar valor principal + observación técnico
+                'observaciones': _combinarObservacionesParaBackend(
+                  a.observacion,
+                  a.observacionTecnico,
+                ),
               },
             )
             .toList();

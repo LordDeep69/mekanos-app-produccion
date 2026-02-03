@@ -345,7 +345,13 @@ class ActividadesEjecutadas extends Table {
   TextColumn get simbologia =>
       text().withLength(max: 10).nullable()(); // B, M, C, NA
   BoolColumn get completada => boolean().withDefault(const Constant(false))();
+
+  // ✅ FIX 03-FEB-2026: Separar valor principal de observación del técnico
+  // observacion = Valor principal de la actividad (ej: "SE APAGA CUANDO LA PRENDEN")
+  // observacionTecnico = Observación adicional del técnico (campo independiente)
   TextColumn get observacion => text().nullable()();
+  TextColumn get observacionTecnico => text().nullable()();
+
   DateTimeColumn get fechaEjecucion => dateTime().nullable()();
 
   // Sync control
@@ -540,7 +546,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 14; // v14: Flexibilización parámetros - configParametros en equipos
+  int get schemaVersion => 15; // v15: Separar observacion de observacionTecnico en actividades
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -657,6 +663,23 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'ALTER TABLE equipos ADD COLUMN config_parametros TEXT',
         );
+      }
+      if (from < 15) {
+        // v15: FIX 03-FEB-2026 - Separar valor principal de observación del técnico
+        // Agregar columna observacion_tecnico independiente
+        await customStatement(
+          'ALTER TABLE actividades_ejecutadas ADD COLUMN observacion_tecnico TEXT',
+        );
+
+        // Migrar datos existentes: extraer observación del técnico del formato |||
+        // Los datos actuales tienen formato: "VALOR_PRINCIPAL|||Observación del técnico"
+        // Movemos la parte después de ||| al nuevo campo observacion_tecnico
+        await customStatement('''
+          UPDATE actividades_ejecutadas 
+          SET observacion_tecnico = SUBSTR(observacion, INSTR(observacion, '|||') + 3),
+              observacion = SUBSTR(observacion, 1, INSTR(observacion, '|||') - 1)
+          WHERE observacion LIKE '%|||%'
+        ''');
       }
     },
     beforeOpen: (details) async {

@@ -424,12 +424,25 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   ): string {
     const secciones: string[] = [];
 
-    // Estado inicial y final
+    // ✅ FIX 03-FEB-2026: Estado inicial y final con badges visuales enterprise
     if (datos.estadoInicial || datos.estadoFinal) {
-      const estados = [];
-      if (datos.estadoInicial) estados.push(`<strong>Estado Inicial:</strong> ${datos.estadoInicial}`);
-      if (datos.estadoFinal) estados.push(`<strong>Estado Final:</strong> ${datos.estadoFinal}`);
-      secciones.push(estados.join(' → '));
+      const estadoInicialBadge = datos.estadoInicial
+        ? `<span class="estado-badge estado-inicial">${datos.estadoInicial}</span>`
+        : '';
+      const estadoFinalBadge = datos.estadoFinal
+        ? `<span class="estado-badge estado-final">${datos.estadoFinal}</span>`
+        : '';
+      const flecha = (datos.estadoInicial && datos.estadoFinal)
+        ? '<span class="estado-arrow">→</span>'
+        : '';
+      secciones.push(`
+        <div class="estado-transicion">
+          <div class="estado-label">TRANSICIÓN DE ESTADO</div>
+          <div class="estado-badges">
+            ${estadoInicialBadge}${flecha}${estadoFinalBadge}
+          </div>
+        </div>
+      `);
     }
 
     // Sistemas afectados

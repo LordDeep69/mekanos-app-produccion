@@ -21,6 +21,34 @@ export const MEKANOS_COLORS = {
   danger: '#DC2626',
 };
 
+/**
+ * ✅ LOGO MEKANOS - URL pública de Cloudinary
+ * Se usa en todos los headers de PDF para branding profesional
+ */
+export const MEKANOS_LOGO_URL = 'https://res.cloudinary.com/dibw7aluj/image/upload/v1738611600/mekanos-logo.png';
+
+/**
+ * ✅ Genera header profesional con logo MEKANOS para todos los PDFs
+ */
+export const generarHeaderConLogo = (
+  titulo: string,
+  subtitulo: string,
+  numeroOrden: string,
+): string => `
+  <div class="header">
+    <div class="logo-container">
+      <img src="${MEKANOS_LOGO_URL}" alt="MEKANOS S.A.S" class="logo" style="max-width: 120px; height: auto;" />
+    </div>
+    <div class="header-title">
+      <h1>${titulo}</h1>
+      <h2>${subtitulo}</h2>
+    </div>
+    <div class="header-order">
+      <div class="order-number">${numeroOrden}</div>
+    </div>
+  </div>
+`;
+
 export interface DatosOrdenPDF {
   // Datos del cliente
   cliente: string;
@@ -700,6 +728,62 @@ export const baseStyles = `
   }
   
   .simbologia-code {
+    font-weight: bold;
+    color: ${MEKANOS_COLORS.primary};
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     ✅ FIX 03-FEB-2026: BADGES DE ESTADO ENTERPRISE (Correctivo)
+     ═══════════════════════════════════════════════════════════════ */
+  
+  .estado-transicion {
+    background: linear-gradient(135deg, ${MEKANOS_COLORS.background} 0%, #e8f4f8 100%);
+    border: 2px solid ${MEKANOS_COLORS.secondary};
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+  }
+  
+  .estado-label {
+    font-size: 9px;
+    font-weight: bold;
+    color: ${MEKANOS_COLORS.secondary};
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  
+  .estado-badges {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .estado-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .estado-inicial {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffc107 100%);
+    color: #856404;
+    border: 1px solid #ffc107;
+  }
+  
+  .estado-final {
+    background: linear-gradient(135deg, #d4edda 0%, ${MEKANOS_COLORS.success} 100%);
+    color: #155724;
+    border: 1px solid ${MEKANOS_COLORS.success};
+  }
+  
+  .estado-arrow {
+    font-size: 18px;
     font-weight: bold;
     color: ${MEKANOS_COLORS.primary};
   }

@@ -267,61 +267,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   // ==========================================================================
-  // ✅ FIX 03-FEB-2026: HELPERS PARA SEPARAR VALOR DE OBSERVACIÓN
-  // Formato: "VALOR_ESPECIAL|||Observación del técnico"
+  // ✅ FIX 03-FEB-2026: Ya no se necesitan helpers de separación
+  // Ahora usamos campos separados: observacion (valor principal) + observacionTecnico
   // ==========================================================================
-  static const String _separadorValorObs = '|||';
-
-  /// Extrae el valor especial (antes de |||) de una observación
-  String _extraerValorEspecial(String? observacion) {
-    if (observacion == null || observacion.isEmpty) return '';
-    final partes = observacion.split(_separadorValorObs);
-    return partes[0].trim();
-  }
-
-  /// Extrae la observación real del técnico (después de |||)
-  String _extraerObservacionReal(String? observacion) {
-    if (observacion == null || observacion.isEmpty) return '';
-    final partes = observacion.split(_separadorValorObs);
-    return partes.length > 1 ? partes[1].trim() : '';
-  }
-
-  /// Combina valor especial con observación del técnico
-  String _combinarValorObservacion(
-    String valorEspecial,
-    String observacionTecnico,
-  ) {
-    if (observacionTecnico.isEmpty) return valorEspecial;
-    return '$valorEspecial$_separadorValorObs$observacionTecnico';
-  }
-
-  /// Verifica si una observación tiene un valor especial (prefijo estructurado)
-  bool _tieneValorEspecial(String? observacion) {
-    if (observacion == null || observacion.isEmpty) return false;
-    final prefijos = [
-      'ESTADO_INICIAL:',
-      'ESTADO_FINAL:',
-      'SISTEMAS:',
-      'PROBLEMA:',
-      'FALLAS:',
-      'SINTOMAS:',
-      'DIAGNOSTICO:',
-      'TRABAJOS:',
-      'PENDIENTES:',
-      'RECOMENDACIONES:',
-      'BATERIA:',
-      'NIVEL:',
-      'TEMP:',
-      'HORAS:',
-      'ACEITE:',
-      'ELECTROLITOS:',
-      'RESPUESTA:',
-      'REPUESTOS:',
-      'MATERIALES:',
-    ];
-    final valorEspecial = _extraerValorEspecial(observacion).toUpperCase();
-    return prefijos.any((p) => valorEspecial.startsWith(p));
-  }
 
   Color _getColorForSimbologia(String simbologia) {
     switch (simbologia) {
@@ -899,19 +847,19 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                           _buildActionCircleButton(
                             icon: Icons.notes_rounded,
                             onTap: () => _mostrarDialogoObservacion(actividad),
+                            // ✅ FIX 03-FEB-2026: Usar campo separado observacionTecnico
                             isActive:
-                                actividad.observacion != null &&
-                                actividad.observacion!.isNotEmpty,
+                                actividad.observacionTecnico != null &&
+                                actividad.observacionTecnico!.isNotEmpty,
                             color: Colors.amber.shade700,
                           ),
                           const SizedBox(width: 8),
                           _buildBotonCamaraEnterprise(actividad),
                         ],
                       ),
-                      // Vista previa de observación si existe
-                      if (actividad.observacion != null &&
-                          actividad.observacion!.isNotEmpty &&
-                          !_esActividadEspecial(actividad.descripcion))
+                      // ✅ FIX 03-FEB-2026: Vista previa de observación del técnico (campo separado)
+                      if (actividad.observacionTecnico != null &&
+                          actividad.observacionTecnico!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
                           child: Container(
@@ -934,7 +882,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    actividad.observacion!,
+                                    actividad.observacionTecnico!,
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.amber.shade900,
@@ -1066,19 +1014,13 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     return Icons.build_circle_rounded;
   }
 
-  /// Determina si una actividad es "especial" (usa la observación para datos)
-  bool _esActividadEspecial(String descripcion) {
-    final tipo = _getTipoActividadEspecial(descripcion);
-    return tipo != null; // null significa que no es actividad especial
-  }
-
   /// Muestra diálogo para agregar/editar observación
-  /// ✅ FIX 03-FEB-2026: Separar valor especial de observación del técnico
+  /// ✅ FIX 03-FEB-2026: Usar campo separado observacionTecnico (independiente de observacion)
   Future<void> _mostrarDialogoObservacion(
     ActividadesEjecutada actividad,
   ) async {
-    // ✅ Extraer solo la observación del técnico (no el valor especial)
-    final observacionActual = _extraerObservacionReal(actividad.observacion);
+    // ✅ Leer directamente del campo observacionTecnico (ya no hay mezcla con |||)
+    final observacionActual = actividad.observacionTecnico ?? '';
     final controller = TextEditingController(text: observacionActual);
 
     final resultado = await showDialog<String>(
@@ -1132,44 +1074,33 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   /// ✅ FIX 03-FEB-2026: Preservar valor especial al guardar observación del técnico
   Future<void> _guardarObservacionActividad(
     int idLocal,
-    String observacion,
+    String observacionTecnicoTexto,
   ) async {
     final db = ref.read(databaseProvider);
 
-    // ✅ Buscar la actividad para obtener el valor especial actual
-    final actividadActual = await (db.select(
-      db.actividadesEjecutadas,
-    )..where((a) => a.idLocal.equals(idLocal))).getSingleOrNull();
-
-    // ✅ Preservar el valor especial (si existe) y combinar con nueva observación
-    String? nuevaObservacion;
-    if (actividadActual != null &&
-        _tieneValorEspecial(actividadActual.observacion)) {
-      final valorEspecial = _extraerValorEspecial(actividadActual.observacion);
-      nuevaObservacion = observacion.isEmpty
-          ? valorEspecial // Solo valor especial
-          : _combinarValorObservacion(valorEspecial, observacion);
-    } else {
-      nuevaObservacion = observacion.isEmpty ? null : observacion;
-    }
+    // ✅ FIX 03-FEB-2026: Usar campo SEPARADO observacionTecnico (no mezclar con observacion)
+    // observacion = valor principal de la actividad (ESTADO_INICIAL:, PROBLEMA:, etc.)
+    // observacionTecnico = observación adicional del técnico (INDEPENDIENTE)
+    final valorObsTecnico = observacionTecnicoTexto.isEmpty
+        ? null
+        : observacionTecnicoTexto;
 
     await (db.update(
       db.actividadesEjecutadas,
     )..where((a) => a.idLocal.equals(idLocal))).write(
       ActividadesEjecutadasCompanion(
-        observacion: Value(nuevaObservacion),
+        observacionTecnico: Value(valorObsTecnico),
         isDirty: const Value(true),
       ),
     );
 
-    // ✅ FIX 03-FEB-2026: Actualizar UI con nuevaObservacion (valor especial + observación)
-    // NO con solo observacion (perdería el valor especial)
+    // ✅ Actualizar UI local con el nuevo campo observacionTecnico
     for (final sistema in _actividadesPorSistema.keys) {
       final actividades = _actividadesPorSistema[sistema]!;
       for (var i = 0; i < actividades.length; i++) {
         if (actividades[i].idLocal == idLocal) {
           actividades[i] = actividades[i].copyWith(
-            observacion: Value(nuevaObservacion),
+            observacionTecnico: Value(valorObsTecnico),
           );
           break;
         }
@@ -1181,7 +1112,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            observacion.isEmpty
+            observacionTecnicoTexto.isEmpty
                 ? 'Observación eliminada'
                 : 'Observación guardada',
           ),
@@ -2027,40 +1958,23 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Método genérico para marcar actividades especiales
-  /// ✅ FIX 03-FEB-2026: Preservar observación del técnico al cambiar valor especial
+  /// ✅ FIX 03-FEB-2026: Usar campo observacion para valor principal (NO mezclar con observacionTecnico)
   Future<void> _marcarActividadEspecial(
     int idActividadLocal,
-    String observacionNueva,
+    String valorPrincipal,
     String simbologia,
   ) async {
     final db = ref.read(databaseProvider);
 
-    // ✅ Buscar actividad actual para preservar observación del técnico
-    final actividadActual = await (db.select(
-      db.actividadesEjecutadas,
-    )..where((a) => a.idLocal.equals(idActividadLocal))).getSingleOrNull();
-
-    // ✅ Preservar la observación del técnico (después de |||)
-    String observacionFinal = observacionNueva;
-    if (actividadActual != null) {
-      final observacionTecnico = _extraerObservacionReal(
-        actividadActual.observacion,
-      );
-      if (observacionTecnico.isNotEmpty) {
-        observacionFinal = _combinarValorObservacion(
-          observacionNueva,
-          observacionTecnico,
-        );
-      }
-    }
-
+    // ✅ Solo actualizamos el valor principal (observacion) y simbología
+    // El campo observacionTecnico es INDEPENDIENTE y no se toca aquí
     await (db.update(
       db.actividadesEjecutadas,
     )..where((a) => a.idLocal.equals(idActividadLocal))).write(
       ActividadesEjecutadasCompanion(
         simbologia: Value(simbologia),
         completada: const Value(true),
-        observacion: Value(observacionFinal),
+        observacion: Value(valorPrincipal),
         fechaEjecucion: Value(DateTime.now()),
         isDirty: const Value(true),
       ),
@@ -2076,11 +1990,12 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       for (final actividad in actividadesOriginales) {
         if (actividad.idLocal == idActividadLocal) {
           // Crear nueva instancia con datos actualizados
+          // ✅ Preservar observacionTecnico existente
           nuevasActividades.add(
             actividad.copyWith(
               simbologia: Value(simbologia),
               completada: true,
-              observacion: Value(observacionFinal),
+              observacion: Value(valorPrincipal),
             ),
           );
         } else {
@@ -2098,7 +2013,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
     if (mounted) {
       setState(() {
-        _actividadesPorSistema = nuevoMapa; // ✅ Asignar nuevo mapa
+        _actividadesPorSistema = nuevoMapa;
         _completadas = nuevasCompletadas;
       });
     }
