@@ -42,23 +42,35 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     const [showPreview, setShowPreview] = useState(false);
 
     // ✅ FIX 04-FEB-2026: Obtener URL del PDF existente (generado por mobile o regenerado)
-    const { data: pdfExistenteData } = useQuery({
+    const { data: pdfExistenteData, isLoading: isLoadingPdf, error: errorPdf } = useQuery({
         queryKey: ['orden-pdf-url', orden.id_orden_servicio],
         queryFn: async () => {
+            console.log('[PDF-URL] Fetching PDF URL for orden:', orden.id_orden_servicio);
             const session = await getSession();
             const token = (session as any)?.accessToken;
             const res = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/ordenes/${orden.id_orden_servicio}/pdf-url`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            if (!res.ok) return null;
-            return res.json();
+            console.log('[PDF-URL] Response status:', res.status);
+            if (!res.ok) {
+                console.log('[PDF-URL] Response not OK');
+                return null;
+            }
+            const data = await res.json();
+            console.log('[PDF-URL] Response data:', data);
+            return data;
         },
         // ✅ Habilitar para cualquier estado (el backend ya valida si existe PDF)
         enabled: true,
         staleTime: 0, // Siempre refrescar para obtener la URL más reciente
     });
     const urlPdfExistente = pdfExistenteData?.data?.url || null;
+
+    console.log('[PDF-URL] pdfExistenteData:', pdfExistenteData);
+    console.log('[PDF-URL] urlPdfExistente:', urlPdfExistente);
+    console.log('[PDF-URL] isLoadingPdf:', isLoadingPdf);
+    console.log('[PDF-URL] errorPdf:', errorPdf);
 
     // Obtener email del cliente (cast para acceder a campos adicionales)
     const clientePersona = orden.clientes?.persona as any;
