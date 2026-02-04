@@ -8,6 +8,9 @@
  * #9EC23D - Verde Claro (destacados)
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 export const MEKANOS_COLORS = {
   background: '#F2F2F2',
   primary: '#244673', // Azul oscuro - encabezados
@@ -22,36 +25,35 @@ export const MEKANOS_COLORS = {
 };
 
 /**
- * ✅ LOGO MEKANOS - SVG inline profesional (no depende de URLs externas)
- * Garantiza que el logo siempre se renderice en el PDF
+ * ✅ LOGO MEKANOS OFICIAL - PNG embebido en base64
+ * Logo original de MEKANOS S.A.S embebido directamente en el PDF
+ * No depende de URLs externas - garantiza renderizado perfecto
  */
-export const MEKANOS_LOGO_SVG = `
-<svg viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
-  <!-- Icono de engranaje/documento -->
-  <rect x="2" y="8" width="28" height="34" rx="2" fill="#3290A6" opacity="0.2"/>
-  <rect x="6" y="12" width="20" height="2" fill="#244673"/>
-  <rect x="6" y="18" width="16" height="2" fill="#244673"/>
-  <rect x="6" y="24" width="18" height="2" fill="#244673"/>
-  <rect x="6" y="30" width="14" height="2" fill="#3290A6"/>
-  <rect x="6" y="36" width="12" height="2" fill="#3290A6"/>
-  <!-- Texto MEKANOS -->
-  <text x="38" y="32" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" fill="#244673">MEKANOS</text>
-  <!-- Texto S.A.S -->
-  <text x="158" y="32" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="normal" fill="#3290A6">S.A.S</text>
-</svg>
-`;
+
+const getLogoBase64 = (): string => {
+  try {
+    const logoPath = path.join(__dirname, '../assets/logo-mekanos.png');
+    const logoBuffer = fs.readFileSync(logoPath);
+    return logoBuffer.toString('base64');
+  } catch (error) {
+    console.error('[PDF] Error cargando logo:', error);
+    return '';
+  }
+};
 
 /**
- * ✅ Genera header profesional con logo MEKANOS para todos los PDFs
+ * ✅ Genera header profesional con logo MEKANOS OFICIAL para todos los PDFs
  */
 export const generarHeaderConLogo = (
   titulo: string,
   subtitulo: string,
   numeroOrden: string,
-): string => `
+): string => {
+  const logoBase64 = getLogoBase64();
+  return `
   <div class="header">
     <div class="logo-container">
-      ${MEKANOS_LOGO_SVG}
+      <img src="data:image/png;base64,${logoBase64}" alt="MEKANOS S.A.S" style="height: 50px; width: auto;" />
     </div>
     <div class="header-title">
       <h1>${titulo}</h1>
@@ -62,6 +64,7 @@ export const generarHeaderConLogo = (
     </div>
   </div>
 `;
+};
 
 export interface DatosOrdenPDF {
   // Datos del cliente
