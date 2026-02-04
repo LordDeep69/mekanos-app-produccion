@@ -699,51 +699,58 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         this.logger.log('✅ Chrome encontrado en el path esperado');
       }
 
-      // ✅ FIX 23-ENE-2026: Configuración ultra-low-memory para Render Free Tier (512MB)
+      // ✅ FIX 03-FEB-2026: Detectar Windows vs Linux para configuración apropiada
+      const isWindows = process.platform === 'win32';
+      const isProduction = process.env.NODE_ENV === 'production';
+
+      // Args base que funcionan en ambas plataformas
+      const baseArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--no-first-run',
+        '--disable-popup-blocking',
+      ];
+
+      // Args adicionales solo para Linux/producción (causan ECONNRESET en Windows)
+      const linuxOnlyArgs = isWindows ? [] : [
+        '--single-process',
+        '--no-zygote',
+        '--disable-accelerated-2d-canvas',
+        '--disable-accelerated-jpeg-decoding',
+        '--disable-accelerated-mjpeg-decode',
+        '--disable-accelerated-video-decode',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-component-update',
+        '--disable-features=TranslateUI',
+        '--disable-hang-monitor',
+        '--disable-ipc-flooding-protection',
+        '--disable-prompt-on-repost',
+        '--disable-renderer-backgrounding',
+        '--enable-features=NetworkService,NetworkServiceInProcess',
+        '--force-color-profile=srgb',
+        '--metrics-recording-only',
+        '--safebrowsing-disable-auto-update',
+        '--js-flags=--max-old-space-size=256',
+        '--memory-pressure-off',
+      ];
+
+      this.logger.log(`📍 Plataforma: ${process.platform}, Entorno: ${process.env.NODE_ENV}`);
+
       this.browser = await puppeteer.launch({
         headless: true,
         executablePath,
         protocolTimeout: 120000,
-        args: [
-          // === CRÍTICOS PARA RENDER ===
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--single-process',
-          '--no-zygote',
-
-          // === REDUCCIÓN DE MEMORIA ===
-          '--disable-gpu',
-          '--disable-software-rasterizer',
-          '--disable-accelerated-2d-canvas',
-          '--disable-accelerated-jpeg-decoding',
-          '--disable-accelerated-mjpeg-decode',
-          '--disable-accelerated-video-decode',
-          '--disable-background-networking',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-breakpad',
-          '--disable-component-extensions-with-background-pages',
-          '--disable-component-update',
-          '--disable-default-apps',
-          '--disable-extensions',
-          '--disable-features=TranslateUI',
-          '--disable-hang-monitor',
-          '--disable-ipc-flooding-protection',
-          '--disable-popup-blocking',
-          '--disable-prompt-on-repost',
-          '--disable-renderer-backgrounding',
-          '--disable-sync',
-          '--enable-features=NetworkService,NetworkServiceInProcess',
-          '--force-color-profile=srgb',
-          '--metrics-recording-only',
-          '--no-first-run',
-          '--safebrowsing-disable-auto-update',
-
-          // === LÍMITES DE MEMORIA EXPLÍCITOS ===
-          '--js-flags=--max-old-space-size=256',
-          '--memory-pressure-off',
-        ],
+        args: [...baseArgs, ...linuxOnlyArgs],
       });
 
       this.logger.log('✅ Browser inicializado correctamente');

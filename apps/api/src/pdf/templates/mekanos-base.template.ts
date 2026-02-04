@@ -22,10 +22,24 @@ export const MEKANOS_COLORS = {
 };
 
 /**
- * ✅ LOGO MEKANOS - URL pública de Cloudinary
- * Se usa en todos los headers de PDF para branding profesional
+ * ✅ LOGO MEKANOS - SVG inline profesional (no depende de URLs externas)
+ * Garantiza que el logo siempre se renderice en el PDF
  */
-export const MEKANOS_LOGO_URL = 'https://res.cloudinary.com/dibw7aluj/image/upload/v1738611600/mekanos-logo.png';
+export const MEKANOS_LOGO_SVG = `
+<svg viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icono de engranaje/documento -->
+  <rect x="2" y="8" width="28" height="34" rx="2" fill="#3290A6" opacity="0.2"/>
+  <rect x="6" y="12" width="20" height="2" fill="#244673"/>
+  <rect x="6" y="18" width="16" height="2" fill="#244673"/>
+  <rect x="6" y="24" width="18" height="2" fill="#244673"/>
+  <rect x="6" y="30" width="14" height="2" fill="#3290A6"/>
+  <rect x="6" y="36" width="12" height="2" fill="#3290A6"/>
+  <!-- Texto MEKANOS -->
+  <text x="38" y="32" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="bold" fill="#244673">MEKANOS</text>
+  <!-- Texto S.A.S -->
+  <text x="158" y="32" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="normal" fill="#3290A6">S.A.S</text>
+</svg>
+`;
 
 /**
  * ✅ Genera header profesional con logo MEKANOS para todos los PDFs
@@ -37,7 +51,7 @@ export const generarHeaderConLogo = (
 ): string => `
   <div class="header">
     <div class="logo-container">
-      <img src="${MEKANOS_LOGO_URL}" alt="MEKANOS S.A.S" class="logo" style="max-width: 120px; height: auto;" />
+      ${MEKANOS_LOGO_SVG}
     </div>
     <div class="header-title">
       <h1>${titulo}</h1>

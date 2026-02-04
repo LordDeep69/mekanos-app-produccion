@@ -118,18 +118,37 @@ async function bootstrap(): Promise<void> {
     console.log('✅ [DEBUG 5.2] Swagger configurado en /api/docs');
 
     console.log('🔧 [DEBUG 6/10] Configurando CORS...');
+    // ✅ FIX 04-FEB-2026: Lista de dominios permitidos por defecto
+    const defaultOrigins = [
+      'https://mekanos-admin-portal.vercel.app',
+      'https://mekanos-admin-portal-git-main-lorddeep69s-projects.vercel.app',
+      'https://mekanos-admin-portal-ll0loftrq-lorddeep69s-projects.vercel.app',
+      'http://localhost:3001',
+      'http://localhost:3000',
+    ];
+
     // Convertir CORS_ORIGIN en array si contiene múltiples orígenes
     const corsOrigin = process.env.CORS_ORIGIN;
-    let origins: string | string[] = '*';
-    if (corsOrigin) {
-      origins = corsOrigin.includes(',')
+    let origins: string | string[] | boolean;
+
+    if (corsOrigin === '*') {
+      origins = true; // Permitir todos
+    } else if (corsOrigin) {
+      // Combinar dominios de env con los por defecto
+      const envOrigins = corsOrigin.includes(',')
         ? corsOrigin.split(',').map(o => o.trim())
-        : corsOrigin;
+        : [corsOrigin];
+      origins = [...new Set([...defaultOrigins, ...envOrigins])];
+    } else {
+      origins = defaultOrigins;
     }
+
     console.log('📋 [DEBUG 6.1] CORS origins:', origins);
     app.enableCors({
       origin: origins,
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
     });
     console.log('✅ [DEBUG 7/10] CORS habilitado');
 
