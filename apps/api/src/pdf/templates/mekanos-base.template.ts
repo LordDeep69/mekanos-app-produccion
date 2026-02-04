@@ -32,7 +32,15 @@ export const MEKANOS_COLORS = {
 
 const getLogoBase64 = (): string => {
   try {
-    const logoPath = path.join(__dirname, '../assets/logo-mekanos.png');
+    // En producción (dist), __dirname apunta a dist/
+    // Intentar primero desde dist/assets (producción)
+    let logoPath = path.join(__dirname, '../../assets/logo-mekanos.png');
+
+    if (!fs.existsSync(logoPath)) {
+      // Fallback: intentar desde src (desarrollo)
+      logoPath = path.join(__dirname, '../assets/logo-mekanos.png');
+    }
+
     const logoBuffer = fs.readFileSync(logoPath);
     return logoBuffer.toString('base64');
   } catch (error) {
