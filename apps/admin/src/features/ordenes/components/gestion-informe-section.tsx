@@ -58,7 +58,8 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             const res = await fetch(fullUrl, {
                 headers: {
                     Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
                 }
             });
 
