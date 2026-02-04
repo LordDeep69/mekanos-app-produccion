@@ -23,7 +23,6 @@ import {
     Send,
     X
 } from 'lucide-react';
-import { getSession } from 'next-auth/react';
 import { useState } from 'react';
 import { enviarPdfExistente, regenerarPdf, type EnviarPdfExistenteDto, type RegenerarPdfDto } from '../api/ordenes.service';
 
@@ -41,51 +40,18 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
     const [showPreview, setShowPreview] = useState(false);
 
-    // ✅ FIX 04-FEB-2026: Obtener URL del PDF existente (generado por mobile o regenerado)
-    const { data: pdfExistenteData, isLoading: isLoadingPdf, error: errorPdf } = useQuery({
+    // ✅ FIX 04-FEB-2026: Obtener URL del PDF existente usando apiClient centralizado
+    // El apiClient ya tiene el header ngrok-skip-browser-warning y manejo de auth
+    const { data: pdfExistenteData } = useQuery({
         queryKey: ['orden-pdf-url', orden.id_orden_servicio],
         queryFn: async () => {
-            const session = await getSession();
-            const token = (session as any)?.accessToken;
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-            const fullUrl = `${apiUrl}/ordenes/${orden.id_orden_servicio}/pdf-url`;
-
-            console.log('[PDF-URL] 🔍 Fetching PDF URL for orden:', orden.id_orden_servicio);
-            console.log('[PDF-URL] 🌐 API_URL:', apiUrl);
-            console.log('[PDF-URL] 🔗 Full URL:', fullUrl);
-            console.log('[PDF-URL] 🔑 Token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
-
-            const res = await fetch(fullUrl, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                    'ngrok-skip-browser-warning': 'true'
-                }
-            });
-
-            console.log('[PDF-URL] 📊 Response status:', res.status);
-            console.log('[PDF-URL] 📊 Response headers:', Object.fromEntries(res.headers.entries()));
-
-            if (!res.ok) {
-                const text = await res.text();
-                console.log('[PDF-URL] ❌ Response not OK - Body:', text.substring(0, 200));
-                return null;
-            }
-
-            const data = await res.json();
-            console.log('[PDF-URL] ✅ Response data:', data);
-            return data;
+            const response = await apiClient.get(`/ordenes/${orden.id_orden_servicio}/pdf-url`);
+            return response.data;
         },
-        // ✅ Habilitar para cualquier estado (el backend ya valida si existe PDF)
         enabled: true,
-        staleTime: 0, // Siempre refrescar para obtener la URL más reciente
+        staleTime: 0,
     });
     const urlPdfExistente = pdfExistenteData?.data?.url || null;
-
-    console.log('[PDF-URL] 📦 pdfExistenteData:', pdfExistenteData);
-    console.log('[PDF-URL] 🔗 urlPdfExistente:', urlPdfExistente);
-    console.log('[PDF-URL] ⏳ isLoadingPdf:', isLoadingPdf);
-    console.log('[PDF-URL] ❌ errorPdf:', errorPdf);
 
     // Obtener email del cliente (cast para acceder a campos adicionales)
     const clientePersona = orden.clientes?.persona as any;
