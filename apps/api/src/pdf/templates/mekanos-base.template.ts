@@ -32,17 +32,26 @@ export const MEKANOS_COLORS = {
 
 const getLogoBase64 = (): string => {
   try {
-    // En producción (dist), __dirname apunta a dist/
-    // Intentar primero desde dist/assets (producción)
-    let logoPath = path.join(__dirname, '../../assets/logo-mekanos.png');
+    // En producción compilada, __dirname apunta a dist/
+    // El archivo compilado está en dist/main.js, necesitamos ir a dist/assets/
+    const possiblePaths = [
+      path.join(__dirname, 'assets/logo-mekanos.png'),           // dist/assets/
+      path.join(__dirname, '../assets/logo-mekanos.png'),        // desde dist/subfolder
+      path.join(__dirname, '../../assets/logo-mekanos.png'),     // desde dist/subfolder/subfolder
+      path.join(process.cwd(), 'apps/api/dist/assets/logo-mekanos.png'), // absoluto desde root
+      path.join(process.cwd(), 'dist/assets/logo-mekanos.png'),  // absoluto desde api
+    ];
 
-    if (!fs.existsSync(logoPath)) {
-      // Fallback: intentar desde src (desarrollo)
-      logoPath = path.join(__dirname, '../assets/logo-mekanos.png');
+    for (const logoPath of possiblePaths) {
+      if (fs.existsSync(logoPath)) {
+        console.log(`[PDF] ✅ Logo encontrado en: ${logoPath}`);
+        const logoBuffer = fs.readFileSync(logoPath);
+        return logoBuffer.toString('base64');
+      }
     }
 
-    const logoBuffer = fs.readFileSync(logoPath);
-    return logoBuffer.toString('base64');
+    console.error('[PDF] ❌ Logo no encontrado en ninguna ruta:', possiblePaths);
+    return '';
   } catch (error) {
     console.error('[PDF] Error cargando logo:', error);
     return '';
