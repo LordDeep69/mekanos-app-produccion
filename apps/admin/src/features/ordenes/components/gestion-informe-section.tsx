@@ -41,7 +41,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
     const [showPreview, setShowPreview] = useState(false);
 
-    // ✅ FIX 15-ENE-2026: Obtener URL del PDF existente (generado por mobile)
+    // ✅ FIX 04-FEB-2026: Obtener URL del PDF existente (generado por mobile o regenerado)
     const { data: pdfExistenteData } = useQuery({
         queryKey: ['orden-pdf-url', orden.id_orden_servicio],
         queryFn: async () => {
@@ -54,7 +54,9 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             if (!res.ok) return null;
             return res.json();
         },
-        enabled: orden.estados_orden?.codigo_estado === 'COMPLETADA' || orden.estados_orden?.codigo_estado === 'APROBADA',
+        // ✅ Habilitar para cualquier estado (el backend ya valida si existe PDF)
+        enabled: true,
+        staleTime: 0, // Siempre refrescar para obtener la URL más reciente
     });
     const urlPdfExistente = pdfExistenteData?.data?.url || null;
 
