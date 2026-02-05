@@ -24,6 +24,7 @@ import {
     X
 } from 'lucide-react';
 import { useState } from 'react';
+import { apiClient } from '@/lib/api/client';
 import { enviarPdfExistente, regenerarPdf, type EnviarPdfExistenteDto, type RegenerarPdfDto } from '../api/ordenes.service';
 
 interface GestionInformeSectionProps {
