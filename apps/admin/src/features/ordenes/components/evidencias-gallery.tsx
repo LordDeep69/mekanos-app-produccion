@@ -61,6 +61,24 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bgColor: strin
         color: 'text-green-700',
         bgColor: 'bg-green-50',
         borderColor: 'border-green-200'
+    },
+    GENERAL: {
+        label: '📷 Generales',
+        color: 'text-purple-700',
+        bgColor: 'bg-purple-50',
+        borderColor: 'border-purple-200'
+    },
+    INSUMOS: {
+        label: '📦 Insumos',
+        color: 'text-orange-700',
+        bgColor: 'bg-orange-50',
+        borderColor: 'border-orange-200'
+    },
+    MEDICION: {
+        label: '📏 Medición',
+        color: 'text-indigo-700',
+        bgColor: 'bg-indigo-50',
+        borderColor: 'border-indigo-200'
     }
 };
 
@@ -268,30 +286,33 @@ function Lightbox({
 export function EvidenciasGallery({ evidencias, isLoading }: EvidenciasGalleryProps) {
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-    const tiposEvidencia = ['ANTES', 'DURANTE', 'DESPUES'] as const;
+    // GENERAL photos are managed separately in GaleriaFotosGenerales (CRUD)
+    const evidenciasSinGeneral = evidencias.filter((ev) => ev.tipo_evidencia !== 'GENERAL');
+
+    const tiposEvidencia = ['ANTES', 'DURANTE', 'DESPUES', 'INSUMOS', 'MEDICION'] as const;
     const evidenciasPorTipo = tiposEvidencia.reduce((acc, tipo) => {
-        acc[tipo] = evidencias.filter((ev) => ev.tipo_evidencia === tipo);
+        acc[tipo] = evidenciasSinGeneral.filter((ev) => ev.tipo_evidencia === tipo);
         return acc;
     }, {} as Record<string, Evidencia[]>);
 
-    const otrasEvidencias = evidencias.filter(
+    const otrasEvidencias = evidenciasSinGeneral.filter(
         (ev) => !tiposEvidencia.includes(ev.tipo_evidencia as any)
     );
 
     const handleOpenLightbox = (evidencia: Evidencia) => {
-        const index = evidencias.findIndex((ev) => ev.id_evidencia === evidencia.id_evidencia);
+        const index = evidenciasSinGeneral.findIndex((ev) => ev.id_evidencia === evidencia.id_evidencia);
         setLightboxIndex(index);
     };
 
     const handlePrev = () => {
         if (lightboxIndex !== null) {
-            setLightboxIndex((lightboxIndex - 1 + evidencias.length) % evidencias.length);
+            setLightboxIndex((lightboxIndex - 1 + evidenciasSinGeneral.length) % evidenciasSinGeneral.length);
         }
     };
 
     const handleNext = () => {
         if (lightboxIndex !== null) {
-            setLightboxIndex((lightboxIndex + 1) % evidencias.length);
+            setLightboxIndex((lightboxIndex + 1) % evidenciasSinGeneral.length);
         }
     };
 
@@ -305,7 +326,7 @@ export function EvidenciasGallery({ evidencias, isLoading }: EvidenciasGalleryPr
                     </div>
                     <div>
                         <h4 className="font-bold text-gray-900">Evidencias Fotográficas</h4>
-                        <p className="text-xs text-gray-500">{evidencias.length} fotos capturadas</p>
+                        <p className="text-xs text-gray-500">{evidenciasSinGeneral.length} fotos de actividades</p>
                     </div>
                 </div>
 
@@ -337,7 +358,7 @@ export function EvidenciasGallery({ evidencias, isLoading }: EvidenciasGalleryPr
                     <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                     </div>
-                ) : evidencias.length === 0 ? (
+                ) : evidenciasSinGeneral.length === 0 ? (
                     <div className="text-center py-12 text-gray-400">
                         <Camera className="h-12 w-12 mx-auto mb-3 opacity-30" />
                         <p className="font-medium">Sin evidencias fotográficas</p>
@@ -407,7 +428,7 @@ export function EvidenciasGallery({ evidencias, isLoading }: EvidenciasGalleryPr
             {/* Lightbox */}
             {lightboxIndex !== null && (
                 <Lightbox
-                    evidencias={evidencias}
+                    evidencias={evidenciasSinGeneral}
                     currentIndex={lightboxIndex}
                     onClose={() => setLightboxIndex(null)}
                     onPrev={handlePrev}

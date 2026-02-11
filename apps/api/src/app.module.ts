@@ -91,6 +91,8 @@ import { InventarioModule } from './inventario/inventario.module';
 import { AgendaModule } from './agenda/agenda.module';
 // ✅ FLEXIBILIZACIÓN PARÁMETROS: Configuración personalizada por equipo (Sesión Ene 06)
 import { ConfigParametrosModule } from './config-parametros/config-parametros.module';
+// ✅ MULTI-EMAIL re-habilitado - tabla cuentas_email existe en BD con 3 cuentas configuradas
+import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
 
 @Module({
   imports: [
@@ -188,6 +190,7 @@ import { ConfigParametrosModule } from './config-parametros/config-parametros.mo
     AgendaModule, // ✅ GET /agenda/hoy, /semana, /mes, /metricas, /carga-tecnicos, /calendario
     // ✅ FLEXIBILIZACIÓN PARÁMETROS: Config personalizada por equipo (Sesión Ene 06)
     ConfigParametrosModule, // ✅ Servicio resolución cascada: equipo → plantilla → global
+    CuentasEmailModule, // ✅ MULTI-EMAIL re-habilitado (09-Feb-2026)
   ],
   controllers: [AppController],
   providers: [AppService],

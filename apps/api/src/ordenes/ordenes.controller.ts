@@ -666,6 +666,7 @@ export class OrdenesController {
     @Query('tipoServicioId') tipoServicioId?: string,
     @Query('fechaDesde') fechaDesde?: string,
     @Query('fechaHasta') fechaHasta?: string,
+    @Query('busqueda') busqueda?: string,
   ) {
     // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
@@ -684,6 +685,7 @@ export class OrdenesController {
       fechaDesde,
       fechaHasta,
       idAsesorFiltro, // ✅ MULTI-ASESOR
+      busqueda, // ✅ BÚSQUEDA
     );
 
     const result = await this.queryBus.execute(query);
@@ -833,6 +835,122 @@ export class OrdenesController {
       data: {
         id_orden_servicio: updated.id_orden_servicio,
         observaciones_cierre: updated.observaciones_cierre,
+      },
+    };
+  }
+
+  /**
+   * PATCH /api/ordenes/:id/horarios-servicio
+   * Endpoint ATÓMICO para actualizar hora de entrada y hora de salida del servicio
+   * Diseñado para Portal Admin - permite edición incluso en órdenes COMPLETADAS
+   * 
+   * Los campos se almacenan como:
+   * - fecha_inicio_real (DateTime) → hora de entrada del técnico al sitio
+   * - fecha_fin_real (DateTime) → hora de salida del técnico del sitio
+   * - duracion_minutos (Int) → se recalcula automáticamente
+   */
+  @Patch(':id/horarios-servicio')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Actualizar horarios de servicio (hora entrada/salida)',
+    description: 'Actualiza fecha_inicio_real y fecha_fin_real de una orden. Recalcula duracion_minutos automáticamente. Permite edición en estado COMPLETADA.',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
+  @ApiResponse({ status: 200, description: 'Horarios actualizados exitosamente' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o estado no permite edición' })
+  async updateHorariosServicio(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { fecha_inicio_real?: string; fecha_fin_real?: string },
+    @UserId() userId: number,
+  ) {
+    // 1. Verificar que la orden existe y obtener estado actual
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      include: { estados_orden: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden ${id} no encontrada`);
+    }
+
+    // 2. Validar que no sea estado final bloqueado (APROBADA/CANCELADA)
+    const estadoCodigo = orden.estados_orden?.codigo_estado;
+    if (estadoCodigo === 'APROBADA' || estadoCodigo === 'CANCELADA') {
+      throw new BadRequestException(
+        `No se puede modificar una orden en estado ${estadoCodigo}`,
+      );
+    }
+
+    // 3. Validar que al menos un campo venga
+    if (!body.fecha_inicio_real && !body.fecha_fin_real) {
+      throw new BadRequestException(
+        'Debe enviar al menos fecha_inicio_real o fecha_fin_real',
+      );
+    }
+
+    // 4. Parsear fechas
+    const updateData: any = {
+      fecha_modificacion: new Date(),
+      modificado_por: userId || 1,
+    };
+
+    let fechaInicio: Date | null = null;
+    let fechaFin: Date | null = null;
+
+    if (body.fecha_inicio_real) {
+      fechaInicio = new Date(body.fecha_inicio_real);
+      if (isNaN(fechaInicio.getTime())) {
+        throw new BadRequestException('fecha_inicio_real no es una fecha válida');
+      }
+      updateData.fecha_inicio_real = fechaInicio;
+    }
+
+    if (body.fecha_fin_real) {
+      fechaFin = new Date(body.fecha_fin_real);
+      if (isNaN(fechaFin.getTime())) {
+        throw new BadRequestException('fecha_fin_real no es una fecha válida');
+      }
+      updateData.fecha_fin_real = fechaFin;
+    }
+
+    // 5. Recalcular duración en minutos
+    const inicioFinal = fechaInicio || (orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real) : null);
+    const finFinal = fechaFin || (orden.fecha_fin_real ? new Date(orden.fecha_fin_real) : null);
+
+    if (inicioFinal && finFinal) {
+      if (finFinal <= inicioFinal) {
+        throw new BadRequestException(
+          'La hora de salida debe ser posterior a la hora de entrada',
+        );
+      }
+
+      const diffMs = finFinal.getTime() - inicioFinal.getTime();
+      const duracionMinutos = Math.round(diffMs / 60000);
+
+      if (duracionMinutos > 1440) {
+        throw new BadRequestException(
+          `Duración calculada (${duracionMinutos} min) excede las 24 horas. Verifique las fechas.`,
+        );
+      }
+
+      updateData.duracion_minutos = duracionMinutos;
+    }
+
+    // 6. Actualizar (operación atómica)
+    const updated = await this.prisma.ordenes_servicio.update({
+      where: { id_orden_servicio: id },
+      data: updateData,
+    });
+
+    return {
+      success: true,
+      message: 'Horarios de servicio actualizados exitosamente',
+      data: {
+        id_orden_servicio: updated.id_orden_servicio,
+        fecha_inicio_real: updated.fecha_inicio_real,
+        fecha_fin_real: updated.fecha_fin_real,
+        duracion_minutos: updated.duracion_minutos,
       },
     };
   }
@@ -1178,6 +1296,9 @@ export class OrdenesController {
           base64: dto.firmas.cliente.base64,
           idPersona: dto.firmas.cliente.idPersona,
           formato: dto.firmas.cliente.formato,
+          // ✅ FIX 06-FEB-2026: Pasar nombre y cargo del firmante cliente al servicio
+          nombreFirmante: dto.firmas.cliente.nombreFirmante,
+          cargoFirmante: dto.firmas.cliente.cargoFirmante,
         } : undefined,
       },
       actividades: dto.actividades.map(a => ({

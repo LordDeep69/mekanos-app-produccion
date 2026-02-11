@@ -17,15 +17,21 @@ async function bootstrap(): Promise<void> {
     console.log('🔧 [DEBUG 1/10] Iniciando bootstrap... ');
 
     console.log('🔧 [DEBUG 2/10] Creando NestApplication...');
+    // ✅ FIX 09-FEB-2026: Desactivar body-parser interno de NestJS
+    // para que nuestro parser custom con límite de 50MB sea el único activo.
+    // Sin esto, el parser interno (1MB default) rechaza payloads grandes ANTES
+    // de que nuestro middleware los procese → PayloadTooLargeError
     const app = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+      bodyParser: false,
     });
     console.log('✅ [DEBUG 3/10] NestApplication creada exitosamente');
 
-    // ✅ FIX: Aumentar límite de body para payloads con imágenes Base64 (10MB)
-    app.use(express.json({ limit: '10mb' }));
-    app.use(express.urlencoded({ limit: '10mb', extended: true }));
-    console.log('✅ [DEBUG 3.1] Body parser limit: 10MB');
+    // ✅ FIX 09-FEB-2026: Body parser con límite de 50MB
+    // Las órdenes con múltiples evidencias en Base64 pueden superar 10MB fácilmente
+    app.use(express.json({ limit: '50mb' }));
+    app.use(express.urlencoded({ limit: '50mb', extended: true }));
+    console.log('✅ [DEBUG 3.1] Body parser limit: 50MB (bodyParser interno desactivado)');
 
     // ✅ AUDITORÍA DE TRÁFICO: Middleware de Logging Global (Después de body-parser)
     app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {

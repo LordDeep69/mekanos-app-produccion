@@ -100,9 +100,7 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
         ? generarMediciones(datos.mediciones)
         : ''
     }
-  </div>
-  
-  <div class="page page-break">
+    
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
     <!-- ✅ MULTI-EQUIPOS (16-DIC-2025): Usar evidencias agrupadas por equipo si es multi-equipo -->
     ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0

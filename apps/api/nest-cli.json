@@ -4,6 +4,12 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "webpack": true,
+    "assets": [
+      {
+        "include": "pdf/assets/**/*",
+        "outDir": "dist"
+      }
+    ],
     "plugins": [
       {
         "name": "@nestjs/swagger",

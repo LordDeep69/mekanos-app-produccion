@@ -22,7 +22,7 @@ final modoFinalizacionProvider =
     });
 
 class ModoFinalizacionNotifier extends StateNotifier<String> {
-  ModoFinalizacionNotifier() : super('COMPLETO') {
+  ModoFinalizacionNotifier() : super('SOLO_DATOS') {
     _cargarModo();
   }
 
@@ -62,6 +62,39 @@ class ModoFinalizacionNotifier extends StateNotifier<String> {
   /// Forzar recarga desde SharedPreferences
   Future<void> recargar() async {
     await _cargarModo();
+  }
+}
+
+/// Provider para el formato de hora (true = 24H, false = 12H AM/PM)
+final formatoHora24Provider = StateNotifierProvider<FormatoHoraNotifier, bool>((
+  ref,
+) {
+  return FormatoHoraNotifier();
+});
+
+class FormatoHoraNotifier extends StateNotifier<bool> {
+  FormatoHoraNotifier() : super(false) {
+    _cargar();
+  }
+
+  static const _key = 'formato_hora_24h';
+
+  Future<void> _cargar() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final valor = prefs.getBool(_key);
+      if (valor != null) state = valor;
+    } catch (_) {}
+  }
+
+  Future<void> setFormato(bool es24h) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_key, es24h);
+      state = es24h;
+    } catch (_) {
+      state = es24h;
+    }
   }
 }
 
@@ -147,6 +180,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final modoActual = ref.watch(modoFinalizacionProvider);
+    final es24h = ref.watch(formatoHora24Provider);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -255,15 +289,20 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                   const Divider(height: 1),
                   const SizedBox(height: 8),
 
-                  // Opción COMPLETO
+                  // Opción COMPLETO (protegida con contraseña admin)
                   RadioListTile<String>(
                     value: 'COMPLETO',
                     groupValue: modoActual,
-                    onChanged: (v) =>
-                        ref.read(modoFinalizacionProvider.notifier).setModo(v!),
-                    title: const Text(
-                      'Completo',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    onChanged: (v) => _solicitarPasswordAdmin(context, ref),
+                    title: Row(
+                      children: [
+                        const Text(
+                          'Completo',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(Icons.lock, size: 14, color: Colors.grey.shade500),
+                      ],
                     ),
                     subtitle: const Text(
                       'Sube datos + genera PDF + envía email automáticamente',
@@ -287,12 +326,20 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
 
                   const Divider(height: 16),
 
-                  // Opción SOLO_DATOS
+                  // Opción SOLO_DATOS (default, sin restricciones)
                   RadioListTile<String>(
                     value: 'SOLO_DATOS',
                     groupValue: modoActual,
-                    onChanged: (v) =>
-                        ref.read(modoFinalizacionProvider.notifier).setModo(v!),
+                    onChanged: (v) {
+                      ref.read(modoFinalizacionProvider.notifier).setModo(v!);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Modo Solo Datos activado'),
+                          backgroundColor: Colors.blue,
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
                     title: const Text(
                       'Solo Datos',
                       style: TextStyle(fontWeight: FontWeight.w600),
@@ -337,8 +384,8 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Este modo se usará como predeterminado al finalizar órdenes. '
-                            'Puedes cambiarlo en cada finalización.',
+                            'Solo Datos es el modo predeterminado. '
+                            'El modo Completo requiere contraseña de administrador.',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.amber.shade900,
@@ -347,6 +394,141 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                         ),
                       ],
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ================================================================
+          // SECCIÓN: FORMATO DE HORA
+          // ================================================================
+          _buildSectionHeader(
+            context,
+            icon: Icons.access_time,
+            title: 'Formato de Hora',
+            color: Colors.teal,
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.schedule, color: Colors.teal),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Formato del Reloj',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Selecciona cómo se muestra la hora al finalizar',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+
+                  // Opción 12H AM/PM
+                  RadioListTile<bool>(
+                    value: false,
+                    groupValue: es24h,
+                    onChanged: (v) {
+                      ref
+                          .read(formatoHora24Provider.notifier)
+                          .setFormato(false);
+                    },
+                    title: const Text(
+                      '12 Horas (AM / PM)',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text(
+                      'Ej: 02:30 p.m. — Reloj simple con selector AM/PM',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    secondary: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'AM\nPM',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                  ),
+
+                  const Divider(height: 16),
+
+                  // Opción 24H
+                  RadioListTile<bool>(
+                    value: true,
+                    groupValue: es24h,
+                    onChanged: (v) {
+                      ref.read(formatoHora24Provider.notifier).setFormato(true);
+                    },
+                    title: const Text(
+                      '24 Horas',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text(
+                      'Ej: 14:30 — Reloj con doble anillo (0-23)',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    secondary: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '24H',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
                   ),
                 ],
               ),
@@ -471,6 +653,86 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         ],
       ),
     );
+  }
+
+  /// Solicita contraseña de administrador para desbloquear modo COMPLETO
+  Future<void> _solicitarPasswordAdmin(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final controller = TextEditingController();
+    final resultado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.lock, color: Colors.orange),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Acceso Administrador',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Ingrese la contraseña de administrador para habilitar el modo Completo.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Contraseña',
+                prefixIcon: Icon(Icons.key),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text == 'AdminMekano123') {
+                Navigator.of(ctx).pop(true);
+              } else {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('❌ Contraseña incorrecta'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: const Text('Desbloquear'),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado == true) {
+      ref.read(modoFinalizacionProvider.notifier).setModo('COMPLETO');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Modo Completo activado'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildSectionHeader(

@@ -35,9 +35,11 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { getCuentasEmail, type CuentaEmail } from '@/features/cuentas-email/api/cuentas-email.service';
 import { useAsesoresSelector } from '@/features/empleados/hooks/use-empleados';
 import { useFirmasAdministrativas } from '@/features/firmas-administrativas';
 import { useToast } from '@/hooks/use-toast';
+import type { ClientePrincipalSelector } from '@/types/clientes';
 import {
   CreateClienteDto,
   PERIODICIDAD_LABELS,
@@ -48,11 +50,13 @@ import {
   TipoPersonaEnum,
 } from '@/types/clientes';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Building2, Loader2, Save, User } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Building2, Link, Loader2, Mail, Save, Star, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { getClientesPrincipales } from '../api/clientes.service';
 import { useCliente, useCreateCliente, useUpdateCliente } from '../hooks/use-clientes';
 
 // Labels para tipo de identificación
@@ -117,6 +121,14 @@ const clienteFormSchema = z.object({
 
   // ✅ MULTI-ASESOR: Asesor asignado
   id_asesor_asignado: z.number().nullable().optional(),
+
+  // ✅ MULTI-EMAIL: Cuenta de email para envío de informes
+  id_cuenta_email_remitente: z.number().nullable().optional(),
+
+  // ✅ MULTI-SEDE (09-Feb-2026)
+  es_cliente_principal: z.boolean().optional(),
+  id_cliente_principal: z.number().nullable().optional(),
+  nombre_sede: z.string().optional(),
 }).refine((data) => {
   // Validar que persona jurídica tenga razón social
   if (data.tipo_persona === TipoPersonaEnum.JURIDICA) {
@@ -185,6 +197,11 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
       requisitos_especiales: '',
       id_firma_administrativa: null,
       id_asesor_asignado: null,
+      id_cuenta_email_remitente: null,
+      // ✅ MULTI-SEDE
+      es_cliente_principal: false,
+      id_cliente_principal: null,
+      nombre_sede: '',
     },
   });
 
@@ -192,11 +209,66 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
   const { data: firmasData } = useFirmasAdministrativas({ firma_activa: true });
   const firmasAdministrativas = firmasData?.data ?? [];
 
+  const queryClient = useQueryClient();
+
   // ✅ MULTI-ASESOR: Query para asesores
   const { data: asesoresData } = useAsesoresSelector();
   const asesores = asesoresData?.data ?? [];
 
+  // ✅ MULTI-EMAIL: Query para cuentas de email
+  const { data: cuentasEmail } = useQuery({
+    queryKey: ['cuentas-email'],
+    queryFn: getCuentasEmail,
+  });
+  const cuentasEmailActivas = (cuentasEmail ?? []).filter((c: CuentaEmail) => c.activa);
+
+  // ✅ MULTI-SEDE: Query para clientes principales
+  const { data: clientesPrincipales } = useQuery({
+    queryKey: ['clientes-principales'],
+    queryFn: () => getClientesPrincipales(),
+    enabled: mode === 'crear',
+    staleTime: 0,
+  });
+
   const tipoPersona = form.watch('tipo_persona');
+  const esSede = form.watch('id_cliente_principal');
+  const [sedeAutoFilled, setSedeAutoFilled] = useState(false);
+
+  // ✅ MULTI-SEDE: Auto-fill cuando se selecciona un cliente principal
+  const handleSelectPrincipal = useCallback((idPrincipal: number | null) => {
+    form.setValue('id_cliente_principal', idPrincipal);
+    if (!idPrincipal) {
+      setSedeAutoFilled(false);
+      return;
+    }
+    const principal = (clientesPrincipales ?? []).find((c: ClientePrincipalSelector) => c.id_cliente === idPrincipal);
+    if (!principal?.persona) return;
+    const p = principal.persona;
+    // Auto-fill persona data (read-only para sedes)
+    form.setValue('tipo_identificacion', (p.tipo_identificacion as TipoIdentificacionEnum) || TipoIdentificacionEnum.NIT);
+    form.setValue('numero_identificacion', p.numero_identificacion || '');
+    form.setValue('tipo_persona', (p.tipo_persona as TipoPersonaEnum) || TipoPersonaEnum.JURIDICA);
+    form.setValue('razon_social', p.razon_social || '');
+    form.setValue('nombre_comercial', p.nombre_comercial || '');
+    form.setValue('representante_legal', p.representante_legal || '');
+    form.setValue('cedula_representante', p.cedula_representante || '');
+    form.setValue('email_principal', p.email_principal || '');
+    form.setValue('telefono_principal', p.telefono_principal || '');
+    form.setValue('celular', p.celular || '');
+    form.setValue('direccion_principal', p.direccion_principal || '');
+    form.setValue('ciudad', p.ciudad || '');
+    form.setValue('departamento', p.departamento || '');
+    // Auto-fill client data
+    form.setValue('tipo_cliente', principal.tipo_cliente);
+    form.setValue('periodicidad_mantenimiento', principal.periodicidad_mantenimiento ?? undefined);
+    form.setValue('descuento_autorizado', Number(principal.descuento_autorizado) || 0);
+    form.setValue('tiene_credito', principal.tiene_credito ?? false);
+    form.setValue('limite_credito', Number(principal.limite_credito) || 0);
+    form.setValue('dias_credito', Number(principal.dias_credito) || 0);
+    form.setValue('id_cuenta_email_remitente', principal.id_cuenta_email_remitente ?? null);
+    form.setValue('es_cliente_principal', false);
+    setSedeAutoFilled(true);
+  }, [clientesPrincipales, form]);
 
   // Cargar datos del cliente en modo editar
   useEffect(() => {
@@ -234,6 +306,11 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         requisitos_especiales: cliente.requisitos_especiales ?? '',
         id_firma_administrativa: cliente.id_firma_administrativa ?? null,
         id_asesor_asignado: cliente.id_asesor_asignado ?? null,
+        id_cuenta_email_remitente: (cliente as any).id_cuenta_email_remitente ?? null,
+        // ✅ MULTI-SEDE: cargar campos de sede en edición
+        es_cliente_principal: cliente.es_cliente_principal ?? false,
+        id_cliente_principal: cliente.id_cliente_principal ?? null,
+        nombre_sede: cliente.nombre_sede ?? '',
       });
     }
   }, [cliente, mode, form]);
@@ -275,10 +352,22 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           requisitos_especiales: values.requisitos_especiales || undefined,
           id_firma_administrativa: values.id_firma_administrativa || undefined,
           id_asesor_asignado: values.id_asesor_asignado || undefined,
+          id_cuenta_email_remitente: values.id_cuenta_email_remitente || undefined,
         };
+
+        // ✅ MULTI-SEDE: incluir campos de sede
+        if (values.es_cliente_principal) {
+          (payload as any).es_cliente_principal = true;
+        }
+        if (values.id_cliente_principal) {
+          (payload as any).id_cliente_principal = values.id_cliente_principal;
+          (payload as any).nombre_sede = values.nombre_sede;
+        }
 
         console.log('[DEBUG] Payload a enviar:', JSON.stringify(payload, null, 2));
         await createMutation.mutateAsync(payload as CreateClienteDto);
+        // Invalidar cache de principales para que aparezcan en el selector
+        queryClient.invalidateQueries({ queryKey: ['clientes-principales'] });
         toast({
           title: '¡Cliente creado!',
           description: 'El cliente y su información personal se han registrado correctamente.',
@@ -298,6 +387,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           requisitos_especiales: values.requisitos_especiales,
           id_firma_administrativa: values.id_firma_administrativa ?? undefined,
           id_asesor_asignado: values.id_asesor_asignado ?? undefined,
+          id_cuenta_email_remitente: values.id_cuenta_email_remitente ?? undefined,
           // ✅ Datos de persona editables (contacto)
           persona: {
             email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
@@ -353,6 +443,154 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
+        {/* ===== BANNER: Info de sede en modo editar ===== */}
+        {mode === 'editar' && cliente?.nombre_sede && (
+          <Card className="border-blue-200 bg-blue-50/30">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Link className="h-5 w-5 text-blue-600" />
+                <div>
+                  <p className="font-semibold text-blue-800">
+                    Sede: {cliente.nombre_sede}
+                  </p>
+                  <p className="text-sm text-blue-600">
+                    Cliente principal: {cliente.cliente_principal?.persona?.nombre_comercial || cliente.cliente_principal?.persona?.razon_social || `#${cliente.id_cliente_principal}`}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== SECCIÓN 0: MULTI-SEDE (solo en modo crear) ===== */}
+        {mode === 'crear' && (
+          <Card className="border-blue-200 bg-blue-50/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-800">
+                <Link className="h-5 w-5" />
+                Tipo de Cliente
+              </CardTitle>
+              <CardDescription>
+                Define si este cliente es principal (corporativo con sedes) o es una sede de un cliente existente
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Es Cliente Principal */}
+              <FormField
+                control={form.control}
+                name="es_cliente_principal"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border border-blue-200 bg-white p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base flex items-center gap-2">
+                        <Star className="h-4 w-4 text-amber-500" />
+                        Es Cliente Principal (Corporativo)
+                      </FormLabel>
+                      <FormDescription>
+                        Marcar si este cliente tiene o tendrá múltiples sedes (ej: COMFENALCO)
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked);
+                          if (checked) {
+                            form.setValue('id_cliente_principal', null);
+                            setSedeAutoFilled(false);
+                          }
+                        }}
+                        disabled={!!esSede}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {/* Es Sede de (selector de principal) */}
+              {!form.watch('es_cliente_principal') && (
+                <div className="space-y-3">
+                  <FormField
+                    control={form.control}
+                    name="id_cliente_principal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-blue-600" />
+                          Es Sede de (Cliente Principal)
+                        </FormLabel>
+                        <Select
+                          key={`principal-${field.value}`}
+                          onValueChange={(value) => {
+                            const id = value === 'none' ? null : parseInt(value);
+                            handleSelectPrincipal(id);
+                          }}
+                          value={field.value?.toString() || 'none'}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleccionar cliente principal..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">No es sede (cliente independiente)</SelectItem>
+                            {(clientesPrincipales ?? []).map((cp: ClientePrincipalSelector) => (
+                              <SelectItem
+                                key={cp.id_cliente}
+                                value={cp.id_cliente.toString()}
+                              >
+                                {cp.nombre} — NIT: {cp.nit} ({cp.total_sedes} sedes)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Si seleccionas un principal, todos los datos se heredan automáticamente. Solo necesitas definir el nombre de la sede.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Nombre de Sede (solo visible cuando es sede) */}
+                  {esSede && (
+                    <FormField
+                      control={form.control}
+                      name="nombre_sede"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-base font-semibold text-blue-800">
+                            Nombre de la Sede *
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Ej: Takurika Cuarto Sur, Coliseo Principal..."
+                              className="border-blue-300 focus:border-blue-500 text-lg font-medium"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Este nombre identificará esta sede en el sistema
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Info banner cuando es sede */}
+              {sedeAutoFilled && esSede && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                  <strong>Datos heredados del cliente principal.</strong> Los campos de persona y configuración se han llenado automáticamente.
+                  Puedes ajustar la configuración comercial si esta sede tiene condiciones diferentes.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* ===== SECCIÓN 1: INFORMACIÓN DE PERSONA ===== */}
         <Card>
           <CardHeader>
@@ -388,7 +626,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={mode === 'editar'}
+                      disabled={mode === 'editar' || !!esSede}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -417,7 +655,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={mode === 'editar'}
+                      disabled={mode === 'editar' || !!esSede}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -449,7 +687,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <Input
                       placeholder="Ej: 900123456-7"
                       {...field}
-                      disabled={mode === 'editar'}
+                      disabled={mode === 'editar' || !!esSede}
                     />
                   </FormControl>
                   <FormDescription>
@@ -479,7 +717,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Ej: Empresa ABC S.A.S."
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -497,7 +735,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Nombre con el que opera"
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -517,7 +755,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Nombre completo"
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -535,7 +773,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Número de documento"
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -558,7 +796,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Nombre"
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -576,7 +814,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Segundo nombre"
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -596,7 +834,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Apellido"
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -614,7 +852,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Segundo apellido"
                             {...field}
-                            disabled={mode === 'editar'}
+                            disabled={mode === 'editar' || !!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -874,6 +1112,47 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   </Select>
                   <FormDescription>
                     El asesor asignado será responsable de este cliente y sus equipos
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* ✅ MULTI-EMAIL: Selector de Cuenta de Email Remitente */}
+            <FormField
+              control={form.control}
+              name="id_cuenta_email_remitente"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Cuenta de Email para Informes
+                  </FormLabel>
+                  <Select
+                    key={`email-${field.value}`}
+                    onValueChange={(value) => field.onChange(value === 'none' ? null : parseInt(value))}
+                    value={field.value?.toString() || 'none'}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar cuenta de email..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Usar cuenta principal por defecto</SelectItem>
+                      {cuentasEmailActivas.map((cuenta) => (
+                        <SelectItem
+                          key={cuenta.id_cuenta_email}
+                          value={cuenta.id_cuenta_email.toString()}
+                        >
+                          {cuenta.nombre} ({cuenta.email})
+                          {cuenta.es_principal && ' ⭐'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Cuenta desde la cual se enviarán los informes de servicio a este cliente
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

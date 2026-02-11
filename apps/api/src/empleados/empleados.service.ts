@@ -142,7 +142,7 @@ export class EmpleadosService {
           include: {
             usuarios: {
               include: {
-                usuarios_roles_usuarios_roles_id_usuarioTousuarios: {
+                usuarios_roles: {
                   include: {
                     roles: true,
                   },
@@ -171,7 +171,7 @@ export class EmpleadosService {
       ...empleado,
       usuario: usuario ? {
         ...usuario,
-        usuarios_roles: usuario.usuarios_roles_usuarios_roles_id_usuarioTousuarios,
+        usuarios_roles: usuario.usuarios_roles,
       } : null,
     };
 

@@ -29,15 +29,17 @@ export class ClientesService {
       throw new NotFoundException(`Persona con ID ${createDto.id_persona} no existe`);
     }
 
-    // Validar que persona no esté ya asociada a otro cliente
-    const clienteExistente = await this.prisma.clientes.findUnique({
-      where: { id_persona: createDto.id_persona },
-    });
+    // Validar que persona no esté ya asociada a otro cliente (excepto si es sede)
+    if (!createDto.id_cliente_principal) {
+      const clienteExistente = await this.prisma.clientes.findFirst({
+        where: { id_persona: createDto.id_persona },
+      });
 
-    if (clienteExistente) {
-      throw new BadRequestException(
-        `Persona con ID ${createDto.id_persona} ya está asociada a un cliente`,
-      );
+      if (clienteExistente) {
+        throw new BadRequestException(
+          `Persona con ID ${createDto.id_persona} ya está asociada a un cliente`,
+        );
+      }
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -58,8 +60,14 @@ export class ClientesService {
 
   /**
    * Crear cliente con persona nueva en una transacción atómica
+   * ✅ MULTI-SEDE: Si viene id_cliente_principal, reutiliza la persona del principal
    */
   private async createConPersonaNueva(createDto: CreateClientesDto, userId: number) {
+    // ✅ MULTI-SEDE: Si es sede, reutilizar persona del principal
+    if (createDto.id_cliente_principal) {
+      return this.createClienteSede(createDto, userId);
+    }
+
     const personaData = createDto.persona!;
 
     // Validar documento único antes de la transacción
@@ -69,7 +77,7 @@ export class ClientesService {
 
     if (personaExistente) {
       // Si ya existe, verificar si ya tiene cliente
-      const clienteExistente = await this.prisma.clientes.findUnique({
+      const clienteExistente = await this.prisma.clientes.findFirst({
         where: { id_persona: personaExistente.id_persona },
       });
 
@@ -143,6 +151,148 @@ export class ClientesService {
   }
 
   /**
+   * ✅ MULTI-SEDE: Crear cliente-sede reutilizando la persona del principal
+   */
+  private async createClienteSede(createDto: CreateClientesDto, userId: number) {
+    const { id_cliente_principal, nombre_sede } = createDto;
+
+    if (!nombre_sede || nombre_sede.trim().length < 2) {
+      throw new BadRequestException('El nombre de sede es obligatorio para clientes-sede');
+    }
+
+    // Validar que el principal existe y es principal
+    const principal = await this.prisma.clientes.findUnique({
+      where: { id_cliente: id_cliente_principal },
+      include: { persona: true },
+    });
+
+    if (!principal) {
+      throw new BadRequestException(`Cliente principal con ID ${id_cliente_principal} no encontrado`);
+    }
+
+    if (!principal.es_cliente_principal) {
+      throw new BadRequestException(`El cliente ${id_cliente_principal} no está marcado como cliente principal`);
+    }
+
+    // Crear el cliente-sede reutilizando la misma persona del principal
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { persona: _, id_persona: __, ...clienteFields } = createDto;
+
+    const nuevaSede = await this.prisma.clientes.create({
+      data: {
+        // Heredar datos del principal
+        id_persona: principal.id_persona,
+        tipo_cliente: clienteFields.tipo_cliente || principal.tipo_cliente,
+        periodicidad_mantenimiento: clienteFields.periodicidad_mantenimiento || principal.periodicidad_mantenimiento,
+        id_firma_administrativa: clienteFields.id_firma_administrativa ?? principal.id_firma_administrativa,
+        id_asesor_asignado: clienteFields.id_asesor_asignado ?? principal.id_asesor_asignado,
+        descuento_autorizado: clienteFields.descuento_autorizado ?? principal.descuento_autorizado,
+        tiene_credito: clienteFields.tiene_credito ?? principal.tiene_credito,
+        limite_credito: clienteFields.limite_credito ?? principal.limite_credito,
+        dias_credito: clienteFields.dias_credito ?? principal.dias_credito,
+        id_cuenta_email_remitente: clienteFields.id_cuenta_email_remitente ?? principal.id_cuenta_email_remitente,
+        observaciones_servicio: clienteFields.observaciones_servicio,
+        requisitos_especiales: clienteFields.requisitos_especiales,
+        // Campos propios de la sede
+        nombre_sede: nombre_sede.trim(),
+        id_cliente_principal: id_cliente_principal,
+        es_cliente_principal: false,
+        cliente_activo: true,
+        creado_por: userId,
+        fecha_creacion: new Date(),
+      },
+      include: {
+        persona: true,
+        cliente_principal: {
+          select: { id_cliente: true, nombre_sede: true, persona: { select: { razon_social: true, nombre_comercial: true } } },
+        },
+      },
+    });
+
+    return nuevaSede;
+  }
+
+  /**
+   * ✅ MULTI-SEDE: Listar clientes principales para selector de sedes
+   */
+  async findPrincipales(search?: string, limit: number = 20) {
+    const where: any = {
+      es_cliente_principal: true,
+      cliente_activo: true,
+      ...(search && {
+        OR: [
+          { persona: { razon_social: { contains: search, mode: 'insensitive' } } },
+          { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
+          { persona: { numero_identificacion: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const clientes = await this.prisma.clientes.findMany({
+      where,
+      select: {
+        id_cliente: true,
+        codigo_cliente: true,
+        nombre_sede: true,
+        persona: {
+          select: {
+            razon_social: true,
+            nombre_comercial: true,
+            nombre_completo: true,
+            numero_identificacion: true,
+            tipo_identificacion: true,
+            tipo_persona: true,
+            email_principal: true,
+            telefono_principal: true,
+            celular: true,
+            direccion_principal: true,
+            ciudad: true,
+            departamento: true,
+            representante_legal: true,
+            cedula_representante: true,
+          },
+        },
+        // Info extra para el selector
+        tipo_cliente: true,
+        periodicidad_mantenimiento: true,
+        id_firma_administrativa: true,
+        id_asesor_asignado: true,
+        descuento_autorizado: true,
+        tiene_credito: true,
+        limite_credito: true,
+        dias_credito: true,
+        id_cuenta_email_remitente: true,
+        observaciones_servicio: true,
+        requisitos_especiales: true,
+        _count: { select: { sedes: true } },
+      },
+      take: limit,
+      orderBy: { fecha_creacion: 'desc' },
+    });
+
+    return clientes.map(c => ({
+      id_cliente: c.id_cliente,
+      codigo_cliente: c.codigo_cliente,
+      nombre: c.persona?.nombre_comercial || c.persona?.razon_social || c.persona?.nombre_completo || 'Sin nombre',
+      nit: c.persona?.numero_identificacion,
+      total_sedes: c._count.sedes,
+      // Datos completos para auto-fill en el formulario
+      persona: c.persona,
+      tipo_cliente: c.tipo_cliente,
+      periodicidad_mantenimiento: c.periodicidad_mantenimiento,
+      id_firma_administrativa: c.id_firma_administrativa,
+      id_asesor_asignado: c.id_asesor_asignado,
+      descuento_autorizado: c.descuento_autorizado,
+      tiene_credito: c.tiene_credito,
+      limite_credito: c.limite_credito,
+      dias_credito: c.dias_credito,
+      id_cuenta_email_remitente: c.id_cuenta_email_remitente,
+      observaciones_servicio: c.observaciones_servicio,
+      requisitos_especiales: c.requisitos_especiales,
+    }));
+  }
+
+  /**
    * ✅ OPTIMIZACIÓN 05-ENE-2026: Query ULTRA-LIGERA para selectores
    * Solo retorna: id, nombre (con prioridad), NIT
    * Impacto: De ~2s a ~100ms en selectores de cliente
@@ -168,6 +318,7 @@ export class ClientesService {
       select: {
         id_cliente: true,
         codigo_cliente: true,
+        nombre_sede: true,
         persona: {
           select: {
             nombre_comercial: true,
@@ -185,8 +336,8 @@ export class ClientesService {
     return clientes.map(c => ({
       id_cliente: c.id_cliente,
       codigo_cliente: c.codigo_cliente,
-      // ✅ Prioridad: nombre_comercial > nombre_completo > razon_social
-      nombre: c.persona?.nombre_comercial || c.persona?.nombre_completo || c.persona?.razon_social || 'Sin nombre',
+      // ✅ MULTI-SEDE: nombre_sede tiene prioridad si existe
+      nombre: (c as any).nombre_sede || c.persona?.nombre_comercial || c.persona?.nombre_completo || c.persona?.razon_social || 'Sin nombre',
       nit: c.persona?.numero_identificacion,
     }));
   }
@@ -230,6 +381,11 @@ export class ClientesService {
             where: { activo: true },
             take: 5,
           },
+          // ✅ MULTI-SEDE: Incluir info de principal y conteo de sedes
+          cliente_principal: {
+            select: { id_cliente: true, nombre_sede: true, persona: { select: { razon_social: true } } },
+          },
+          _count: { select: { sedes: true } },
         },
         skip,
         take,
@@ -274,13 +430,20 @@ export class ClientesService {
       where: { id_cliente: id },
       include: {
         persona: true,
-        firma_administrativa: true,
         sedes_cliente: {
           where: { activo: true },
         },
         equipos: {
           where: { activo: true },
           take: 10,
+        },
+        // ✅ MULTI-SEDE
+        cliente_principal: {
+          select: { id_cliente: true, nombre_sede: true, persona: { select: { razon_social: true, nombre_comercial: true } } },
+        },
+        sedes: {
+          where: { cliente_activo: true },
+          select: { id_cliente: true, nombre_sede: true, codigo_cliente: true },
         },
       },
     });
@@ -298,7 +461,7 @@ export class ClientesService {
 
     // Separar persona para evitar error de Prisma en update plano
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { persona, id_persona, ...clienteData } = updateDto;
+    const { persona, ...clienteData } = updateDto as any;
 
     // ✅ FIX 02-FEB-2026: Actualizar datos de persona si se proporcionan
     if (persona && clienteExistente.id_persona) {
@@ -324,7 +487,6 @@ export class ClientesService {
       },
       include: {
         persona: true,
-        firma_administrativa: true,
       },
     });
   }

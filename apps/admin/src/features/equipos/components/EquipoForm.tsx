@@ -25,7 +25,7 @@ import {
   Sparkles,
   Zap
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, useWatch, type Path } from 'react-hook-form';
 import { z } from 'zod';
 import {
@@ -346,7 +346,22 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoEquipo | null>(null);
   // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Estado para config personalizada
   const [configParametros, setConfigParametros] = useState<ConfigParametros>({});
+  // ✅ SEARCHABLE CLIENT SELECTOR
+  const [clienteSearch, setClienteSearch] = useState('');
+  const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false);
+  const clienteComboRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Click-outside handler para cerrar dropdown de clientes
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (clienteComboRef.current && !clienteComboRef.current.contains(e.target as Node)) {
+        setClienteDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const crearEquipoMutation = useCrearEquipo();
 
@@ -1060,23 +1075,69 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Cliente Selector */}
+              {/* Cliente Selector - Searchable Combobox */}
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700 ml-1 flex items-center gap-1">
                   Cliente Propietario <span className="text-red-500">*</span>
                 </label>
-                <select
-                  {...register('datosEquipo.id_cliente' as const, { valueAsNumber: true })}
-                  className={cn(
-                    "w-full p-4 rounded-2xl border focus:ring-4 focus:ring-blue-50 outline-none transition-all bg-gray-50/50",
-                    errors.datosEquipo?.id_cliente ? "border-red-500 bg-red-50/30" : "border-gray-200"
+                <input type="hidden" {...register('datosEquipo.id_cliente' as const, { valueAsNumber: true })} />
+                <div ref={clienteComboRef} className="relative">
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre o NIT del cliente..."
+                    value={clienteDropdownOpen ? clienteSearch : (
+                      clientesOptions?.find(c => c.value === String(form.getValues('datosEquipo.id_cliente')))?.label || ''
+                    )}
+                    onChange={(e) => {
+                      setClienteSearch(e.target.value);
+                      if (!clienteDropdownOpen) setClienteDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      setClienteDropdownOpen(true);
+                      setClienteSearch('');
+                    }}
+                    className={cn(
+                      "w-full p-4 rounded-2xl border focus:ring-4 focus:ring-blue-50 outline-none transition-all bg-gray-50/50",
+                      errors.datosEquipo?.id_cliente ? "border-red-500 bg-red-50/30" : "border-gray-200"
+                    )}
+                  />
+                  {clienteDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto bg-white border border-gray-200 rounded-xl shadow-lg">
+                      {(() => {
+                        const q = clienteSearch.toLowerCase().trim();
+                        const filtered = clientesOptions?.filter(opt => {
+                          if (!q) return true;
+                          return opt.label.toLowerCase().includes(q) || (opt.nit && opt.nit.toLowerCase().includes(q));
+                        }) || [];
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="px-4 py-3 text-sm text-gray-500 italic">
+                              No se encontraron clientes
+                            </div>
+                          );
+                        }
+                        return filtered.map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              form.setValue('datosEquipo.id_cliente', Number(opt.value), { shouldValidate: true });
+                              setClienteSearch('');
+                              setClienteDropdownOpen(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors text-sm border-b border-gray-50 last:border-b-0",
+                              String(form.getValues('datosEquipo.id_cliente')) === opt.value && "bg-blue-50 font-semibold text-blue-700"
+                            )}
+                          >
+                            <div className="font-medium">{opt.label}</div>
+                            {opt.nit && <div className="text-xs text-gray-400">NIT: {opt.nit}</div>}
+                          </button>
+                        ));
+                      })()}
+                    </div>
                   )}
-                >
-                  <option value="">Seleccione un cliente...</option>
-                  {clientesOptions?.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                </div>
                 {errors.datosEquipo?.id_cliente && (
                   <p className="text-red-600 text-xs font-bold ml-1 flex items-center gap-1 animate-in fade-in slide-in-from-left-1">
                     <AlertCircle className="w-3 h-3" /> {errors.datosEquipo.id_cliente.message}

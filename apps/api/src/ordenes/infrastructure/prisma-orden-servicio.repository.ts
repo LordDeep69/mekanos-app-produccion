@@ -39,6 +39,10 @@ export class PrismaOrdenServicioRepository {
     clientes: {
       select: {
         id_cliente: true,
+        // ✅ FIX 09-FEB-2026: Incluir nombre_sede e id_cliente_principal
+        // para que órdenes de clientes-sede muestren el nombre correcto
+        nombre_sede: true,
+        id_cliente_principal: true,
         persona: {
           select: {
             nombre_comercial: true,
@@ -417,8 +421,23 @@ export class PrismaOrdenServicioRepository {
     skip?: number;
     take?: number;
     idAsesorAsignado?: number; // ✅ MULTI-ASESOR
+    busqueda?: string; // ✅ BÚSQUEDA: por numero_orden, cliente, técnico, equipo
   }): Promise<{ items: any[]; total: number }> {
     const where: any = {};
+
+    // ✅ BÚSQUEDA: Filtro por texto libre (numero_orden, cliente, equipo)
+    if (filters?.busqueda) {
+      const s = filters.busqueda.trim();
+      where.OR = [
+        { numero_orden: { contains: s, mode: 'insensitive' } },
+        { descripcion_inicial: { contains: s, mode: 'insensitive' } },
+        { clientes: { persona: { nombre_comercial: { contains: s, mode: 'insensitive' } } } },
+        { clientes: { persona: { razon_social: { contains: s, mode: 'insensitive' } } } },
+        { clientes: { persona: { numero_identificacion: { contains: s, mode: 'insensitive' } } } },
+        { equipos: { codigo_equipo: { contains: s, mode: 'insensitive' } } },
+        { equipos: { nombre_equipo: { contains: s, mode: 'insensitive' } } },
+      ];
+    }
 
     // Filtros opcionales
     if (filters?.id_cliente) where.id_cliente = filters.id_cliente;

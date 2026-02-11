@@ -32,14 +32,18 @@ export const MEKANOS_COLORS = {
 
 const getLogoBase64 = (): string => {
   try {
-    // En producción compilada, __dirname apunta a dist/
-    // El archivo compilado está en dist/main.js, necesitamos ir a dist/assets/
+    // En producción compilada con webpack, todo está en dist/main.js
+    // Los assets se copian a dist/pdf/assets/
     const possiblePaths = [
-      path.join(__dirname, 'assets/logo-mekanos.png'),           // dist/assets/
-      path.join(__dirname, '../assets/logo-mekanos.png'),        // desde dist/subfolder
-      path.join(__dirname, '../../assets/logo-mekanos.png'),     // desde dist/subfolder/subfolder
-      path.join(process.cwd(), 'apps/api/dist/assets/logo-mekanos.png'), // absoluto desde root
-      path.join(process.cwd(), 'dist/assets/logo-mekanos.png'),  // absoluto desde api
+      // ✅ Rutas correctas para nest build con webpack (assets copiados a dist/pdf/assets/)
+      path.join(process.cwd(), 'dist/pdf/assets/logo-mekanos.png'),           // desde api cwd
+      path.join(process.cwd(), 'apps/api/dist/pdf/assets/logo-mekanos.png'),  // desde monorepo root
+      // Fallback a rutas antiguas por compatibilidad
+      path.join(__dirname, 'assets/logo-mekanos.png'),
+      path.join(__dirname, '../assets/logo-mekanos.png'),
+      path.join(__dirname, '../../assets/logo-mekanos.png'),
+      path.join(process.cwd(), 'apps/api/dist/assets/logo-mekanos.png'),
+      path.join(process.cwd(), 'dist/assets/logo-mekanos.png'),
     ];
 
     for (const logoPath of possiblePaths) {
@@ -311,7 +315,6 @@ export const baseStyles = `
   
   .page {
     width: 210mm;
-    min-height: 297mm;
     padding: 15mm;
     margin: 0 auto;
     background: ${MEKANOS_COLORS.white};
@@ -331,6 +334,10 @@ export const baseStyles = `
     
     .page-break {
       page-break-before: always;
+    }
+    
+    .page-break-auto {
+      page-break-before: auto;
     }
   }
   
@@ -636,9 +643,10 @@ export const baseStyles = `
   
   .evidencia-item img {
     width: 100%;
-    height: 150px;
-    object-fit: cover;
+    height: 180px;
+    object-fit: contain;
     display: block;
+    background: #f0f4f8;
   }
   
   .evidencia-caption {
@@ -827,7 +835,8 @@ export const baseStyles = `
      ═══════════════════════════════════════════════════════════════ */
   
   .evidencias-section {
-    page-break-inside: avoid;
+    page-break-inside: auto;
+    break-inside: auto;
   }
   
   .evidencias-grupo {
@@ -835,7 +844,8 @@ export const baseStyles = `
     border: 1px solid ${MEKANOS_COLORS.border};
     border-radius: 8px;
     overflow: hidden;
-    page-break-inside: avoid;
+    page-break-inside: auto;
+    break-inside: auto;
   }
   
   .evidencias-grupo-titulo {
@@ -864,8 +874,8 @@ export const baseStyles = `
   
   .evidencias-grid-compacto {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
     padding: 10px;
     background: ${MEKANOS_COLORS.background};
   }
@@ -879,9 +889,10 @@ export const baseStyles = `
   
   .evidencia-item-compacto img {
     width: 100%;
-    height: 100px;
-    object-fit: cover;
+    height: 160px;
+    object-fit: contain;
     display: block;
+    background: #f0f4f8;
   }
   
   .evidencia-caption-compacto {
@@ -1079,7 +1090,7 @@ export const baseStyles = `
  */
 export const generarChecklistMultiEquipo = (
   actividadesPorEquipo: ActividadesPorEquipoPDF[],
-  observacionesPorActividad?: Map<string, string>,
+  _observacionesPorActividad?: Map<string, string>,
 ): string => {
   if (!actividadesPorEquipo || actividadesPorEquipo.length === 0) {
     return '<div class="section"><p>No hay actividades registradas.</p></div>';
@@ -1110,7 +1121,7 @@ export const generarChecklistMultiEquipo = (
             (a) => a.descripcion === actBase.descripcion,
           );
           const resultado = actividadEquipo?.resultado || '-';
-          const colorClass = getResultadoColorClass(resultado);
+          // _colorClass removed: color applied via CSS class resultado-${resultado}
 
           return `<td class="equipo-cell"><span class="resultado-mini resultado-${resultado}">${resultado}</span></td>`;
         })
@@ -1118,7 +1129,7 @@ export const generarChecklistMultiEquipo = (
 
       // Obtener observaciones combinadas - ✅ FIX: Formato legible con indicador de equipo
       const observacionesArr = actividadesPorEquipo
-        .map((g, idx) => {
+        .map((g, _idx) => {
           const obs = g.actividades.find(
             (a) => a.descripcion === actBase.descripcion,
           )?.observaciones;
@@ -1265,7 +1276,7 @@ export const generarMedicionesMultiEquipo = (
 /**
  * Obtiene la clase CSS para el color del resultado
  */
-const getResultadoColorClass = (resultado: string): string => {
+export const getResultadoColorClass = (resultado: string): string => {
   switch (resultado) {
     case 'B':
       return 'success';

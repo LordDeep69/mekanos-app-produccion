@@ -2,6 +2,7 @@
  * ============================================================================
  * FinalizacionOrdenService - MEKANOS S.A.S
  * ============================================================================
+ * Rebuild 07-FEB-2026: Prisma Client regenerado con GENERAL en tipo_evidencia_enum
  * 
  * SERVICIO ORQUESTADOR PRINCIPAL
  * 
@@ -48,8 +49,8 @@ import { R2StorageService } from '../../storage/r2-storage.service';
  * Evidencia fotográfica enviada desde el frontend
  */
 export interface EvidenciaInput {
-    /** Tipo de evidencia: ANTES, DURANTE, DESPUES, MEDICION */
-    tipo: 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION';
+    /** Tipo de evidencia: ANTES, DURANTE, DESPUES, MEDICION, GENERAL */
+    tipo: 'ANTES' | 'DURANTE' | 'DESPUES' | 'MEDICION' | 'GENERAL';
     /** Imagen en Base64 (sin prefijo data:image) */
     base64: string;
     /** Descripción de la evidencia */
@@ -74,6 +75,10 @@ export interface FirmaInput {
     nombre?: string;
     /** Cargo de quien firma (para cliente) */
     cargo?: string;
+    /** ✅ FIX 06-FEB-2026: Nombre del firmante (campo explícito del mobile) */
+    nombreFirmante?: string;
+    /** ✅ FIX 06-FEB-2026: Cargo del firmante (campo explícito del mobile) */
+    cargoFirmante?: string;
     /** Formato de imagen (default: png) */
     formato?: 'png' | 'jpg' | 'jpeg';
 }
@@ -220,6 +225,7 @@ export interface FinalizarOrdenDto {
 export type FinalizacionStep =
     | 'validando'           // Paso 0: Validando datos
     | 'obteniendo_orden'    // Paso 1: Obteniendo datos de la orden
+    | 'limpieza_residuales' // Paso 1.5: Limpieza de residuales de intentos fallidos
     | 'evidencias'          // Paso 2: Subiendo evidencias a Cloudinary
     | 'firmas'              // Paso 3: Registrando firmas digitales
     | 'actividades'         // Paso 3.5: Registrando actividades
@@ -410,6 +416,97 @@ export class FinalizacionOrdenService {
             }
 
             emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
+
+            // ========================================================================
+            // PASO 1.5: LIMPIEZA DE RESIDUALES - Eliminar evidencias/firmas de intentos fallidos
+            // ✅ FIX 10-FEB-2026: Cuando un técnico tiene intentos fallidos de subida,
+            // las evidencias quedan huérfanas en BD (el rollback no se ejecutó si la
+            // conexión se cortó). Antes de subir nuevas, limpiamos las residuales.
+            // Solo aplica si la orden NO está en estado COMPLETADA.
+            // ========================================================================
+            const estadoActual = orden.id_estado_actual;
+            const esYaCompletada = estadoActual === estadoCompletada.id_estado;
+
+            if (!esYaCompletada) {
+                emitProgress('limpieza_residuales', 'in_progress', 'Verificando evidencias residuales...', 16);
+                this.logger.log('🧹 Paso 1.5: Verificando evidencias residuales de intentos fallidos...');
+
+                try {
+                    // Contar evidencias existentes para esta orden
+                    const evidenciasExistentes = await this.prisma.evidencias_fotograficas.count({
+                        where: { id_orden_servicio: orden.id_orden_servicio },
+                    });
+
+                    if (evidenciasExistentes > 0) {
+                        this.logger.warn(`   ⚠️ Encontradas ${evidenciasExistentes} evidencias residuales de intentos anteriores`);
+
+                        // Eliminar TODAS las evidencias existentes para esta orden
+                        // (son residuales porque la orden aún no está COMPLETADA)
+                        const deleteResult = await this.prisma.evidencias_fotograficas.deleteMany({
+                            where: { id_orden_servicio: orden.id_orden_servicio },
+                        });
+                        this.logger.log(`   🗑️ Eliminadas ${deleteResult.count} evidencias residuales`);
+                    }
+
+                    // También limpiar firmas residuales vinculadas a la orden
+                    // (firmas huérfanas de intentos fallidos)
+                    const firmaResidualTecnico = orden.id_firma_tecnico;
+                    const firmaResidualCliente = orden.id_firma_cliente;
+
+                    if (firmaResidualTecnico || firmaResidualCliente) {
+                        this.logger.log(`   🧹 Desvinculando firmas residuales de la orden...`);
+                        await this.prisma.ordenes_servicio.update({
+                            where: { id_orden_servicio: orden.id_orden_servicio },
+                            data: {
+                                id_firma_tecnico: null,
+                                id_firma_cliente: null,
+                            },
+                        });
+
+                        for (const firmaId of [firmaResidualTecnico, firmaResidualCliente].filter(Boolean)) {
+                            await this.prisma.firmas_digitales.delete({
+                                where: { id_firma_digital: firmaId! },
+                            }).catch(() => {
+                                // Ignorar si ya fue eliminada
+                            });
+                        }
+                        this.logger.log(`   ✅ Firmas residuales limpiadas`);
+                    }
+
+                    // Limpiar actividades ejecutadas residuales
+                    const actividadesResExist = await this.prisma.actividades_ejecutadas.count({
+                        where: { id_orden_servicio: orden.id_orden_servicio },
+                    });
+                    if (actividadesResExist > 0) {
+                        // Primero eliminar componentes_usados y evidencias vinculadas a actividades
+                        await this.prisma.componentes_usados.deleteMany({
+                            where: { id_orden_servicio: orden.id_orden_servicio },
+                        });
+                        await this.prisma.actividades_ejecutadas.deleteMany({
+                            where: { id_orden_servicio: orden.id_orden_servicio },
+                        });
+                        this.logger.log(`   🗑️ Eliminadas ${actividadesResExist} actividades residuales`);
+                    }
+
+                    // Limpiar mediciones residuales
+                    const medicionesResExist = await this.prisma.mediciones_servicio.count({
+                        where: { id_orden_servicio: orden.id_orden_servicio },
+                    });
+                    if (medicionesResExist > 0) {
+                        await this.prisma.mediciones_servicio.deleteMany({
+                            where: { id_orden_servicio: orden.id_orden_servicio },
+                        });
+                        this.logger.log(`   🗑️ Eliminadas ${medicionesResExist} mediciones residuales`);
+                    }
+
+                    const totalResidual = evidenciasExistentes + actividadesResExist + medicionesResExist;
+                    emitProgress('limpieza_residuales', 'completed', `Limpieza completada (${totalResidual} registros residuales eliminados)`, 17);
+                } catch (cleanupError) {
+                    // La limpieza es best-effort, no debe bloquear la finalización
+                    this.logger.warn(`   ⚠️ Error en limpieza de residuales (continuando): ${cleanupError}`);
+                    emitProgress('limpieza_residuales', 'completed', 'Limpieza omitida (no crítico)', 17);
+                }
+            }
 
             // ========================================================================
             // PASO 2: Subir evidencias a Cloudinary y registrar en BD
@@ -670,8 +767,8 @@ export class FinalizacionOrdenService {
         if (!dto.evidencias || dto.evidencias.length === 0) {
             throw new BadRequestException('Debe incluir al menos una evidencia fotográfica');
         }
-        if (dto.evidencias.length > 100) {
-            throw new BadRequestException('Máximo 100 evidencias permitidas');
+        if (dto.evidencias.length > 150) {
+            throw new BadRequestException('Máximo 150 evidencias permitidas');
         }
 
         // Validar firma del técnico
@@ -694,7 +791,7 @@ export class FinalizacionOrdenService {
             if (!ev.base64) {
                 throw new BadRequestException(`Evidencia ${ev.tipo} sin imagen`);
             }
-            if (!['ANTES', 'DURANTE', 'DESPUES', 'MEDICION'].includes(ev.tipo)) {
+            if (!['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'].includes(ev.tipo)) {
                 throw new BadRequestException(`Tipo de evidencia inválido: ${ev.tipo}`);
             }
         }
@@ -810,12 +907,23 @@ export class FinalizacionOrdenService {
         }
 
         // PASO 3: Registrar en BD EN PARALELO (necesitamos IDs individuales)
-        const dbPromises = datosValidados.map(({ ev, buffer, url, hash, index }) =>
-            this.prisma.evidencias_fotograficas.create({
+        // ✅ DEFENSE-IN-DEPTH 07-FEB-2026: Detectar fotos generales no clasificadas
+        // Mobile sync_upload_service añade prefijo "ANTES: " / "DURANTE: " / "DESPUES: " a descripciones de fotos generales
+        // Si el mobile no fue reconstruido, el tipo llega como ANTES/DURANTE/DESPUES en vez de GENERAL
+        const GENERAL_PREFIX_RE = /^(ANTES|DURANTE|DESPUES):\s/i;
+        const RECLASSIFIABLE_TYPES = ['ANTES', 'DURANTE', 'DESPUES'];
+
+        const dbPromises = datosValidados.map(({ ev, buffer, url, hash, index }) => {
+            let tipoFinal = ev.tipo;
+            if (RECLASSIFIABLE_TYPES.includes(ev.tipo?.toUpperCase()) && GENERAL_PREFIX_RE.test(ev.descripcion || '')) {
+                this.logger.log(`   📸 Reclasificando evidencia ${ev.tipo} → GENERAL (prefijo detectado en descripción)`);
+                tipoFinal = 'GENERAL';
+            }
+            return this.prisma.evidencias_fotograficas.create({
                 data: {
                     id_orden_servicio: idOrden,
                     id_orden_equipo: ev.idOrdenEquipo || null, // Multi-equipos: opcional
-                    tipo_evidencia: ev.tipo,
+                    tipo_evidencia: tipoFinal,
                     descripcion: ev.descripcion || `Evidencia ${ev.tipo} del servicio`,
                     nombre_archivo: `${ev.tipo.toLowerCase()}_${ahora.getTime()}_${index}.${ev.formato || 'png'}`,
                     ruta_archivo: url,
@@ -830,8 +938,8 @@ export class FinalizacionOrdenService {
                 id: evidenciaDB.id_evidencia,
                 tipo: ev.tipo,
                 url,
-            }))
-        );
+            }));
+        });
 
         const resultados = await Promise.all(dbPromises);
         this.logger.log(`   ✅ ${resultados.length} evidencias procesadas`);
@@ -1283,10 +1391,10 @@ export class FinalizacionOrdenService {
 
                     const idEquipo = evOriginal.idOrdenEquipo || 0;
                     const momento = evSubida.tipo || 'DURANTE';
-                    // ✅ Preservar descripción de actividad
+                    // ✅ Preservar descripción de actividad (siempre con prefijo TIPO:)
                     const caption = evOriginal.descripcion
                         ? `${momento}: ${evOriginal.descripcion}`
-                        : momento;
+                        : `${momento}:`;
 
                     if (!evidenciasPorIdEquipo.has(idEquipo)) {
                         evidenciasPorIdEquipo.set(idEquipo, []);
@@ -1303,8 +1411,8 @@ export class FinalizacionOrdenService {
                     const idOrdenEquipo = oe.id_orden_equipo;
                     const evidenciasDelEquipo = evidenciasPorIdEquipo.get(idOrdenEquipo) || [];
 
-                    // Ordenar evidencias: ANTES primero, luego DURANTE, luego DESPUES
-                    const ordenMomento = { 'ANTES': 1, 'DURANTE': 2, 'DESPUES': 3 };
+                    // Ordenar evidencias: ANTES primero, luego DURANTE, DESPUES, MEDICION, GENERAL al final
+                    const ordenMomento = { 'ANTES': 1, 'DURANTE': 2, 'DESPUES': 3, 'MEDICION': 4, 'GENERAL': 5 };
                     evidenciasDelEquipo.sort((a, b) => {
                         const ordenA = ordenMomento[a.momento as keyof typeof ordenMomento] || 2;
                         const ordenB = ordenMomento[b.momento as keyof typeof ordenMomento] || 2;
@@ -1343,6 +1451,8 @@ export class FinalizacionOrdenService {
                     'ANTES': [],
                     'DURANTE': [],
                     'DESPUES': [],
+                    'MEDICION': [],
+                    'GENERAL': [],
                 };
 
                 for (let i = 0; i < evidencias.length; i++) {
@@ -1363,12 +1473,12 @@ export class FinalizacionOrdenService {
                 evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => {
                     const evidenciasEquipo: Array<{ url: string; caption?: string; momento?: string }> = [];
 
-                    for (const momento of ['ANTES', 'DURANTE', 'DESPUES']) {
+                    for (const momento of ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL']) {
                         const evidenciasMomento = evidenciasPorMomento[momento] || [];
                         const evidenciasParaEquipo = evidenciasMomento.filter((_, i) => i % numEquipos === equipoIndex);
                         evidenciasEquipo.push(...evidenciasParaEquipo.map(ev => ({
                             url: ev.url,
-                            caption: ev.descripcion ? `${momento}: ${ev.descripcion}` : momento,
+                            caption: ev.descripcion ? `${momento}: ${ev.descripcion}` : `${momento}:`,
                             momento: momento,
                         })));
                     }
@@ -1444,7 +1554,7 @@ export class FinalizacionOrdenService {
                 url: e.url,
                 caption: dto.evidencias[index]?.descripcion
                     ? `${e.tipo}: ${dto.evidencias[index].descripcion}`
-                    : `Evidencia ${e.tipo}`,
+                    : `${e.tipo}:`,
             })),
             observaciones: dto.observaciones,
             // ✅ NUEVO: Razón de falla para correctivos (opcional)
@@ -1468,8 +1578,18 @@ export class FinalizacionOrdenService {
             // ✅ FIX 05-ENE-2026: Datos del firmante para mostrar nombre/cargo en el PDF
             nombreTecnico: nombreTecnico,
             cargoTecnico: 'Técnico Responsable',
-            nombreCliente: dto.nombreQuienRecibe || 'Cliente',
-            cargoCliente: dto.cargoQuienRecibe || 'Cliente / Autorizador',
+            // ✅ FIX 06-FEB-2026: Cadena robusta de fallback para nombre/cargo del cliente
+            // 1. nombreFirmante explícito del mobile (si no es genérico)
+            // 2. Nombre de la persona del cliente vinculado a la orden
+            // 3. Fallback genérico
+            nombreCliente: (dto.firmas.cliente?.nombreFirmante && dto.firmas.cliente.nombreFirmante !== 'Cliente')
+                ? dto.firmas.cliente.nombreFirmante
+                : cliente?.persona?.nombre_comercial
+                || `${cliente?.persona?.primer_nombre || ''} ${cliente?.persona?.primer_apellido || ''}`.trim()
+                || cliente?.persona?.razon_social
+                || dto.firmas.cliente?.nombreFirmante
+                || undefined,
+            cargoCliente: dto.firmas.cliente?.cargoFirmante || 'Cliente / Autorizador',
         };
 
         return this.pdfService.generarPDF({
@@ -1581,10 +1701,14 @@ export class FinalizacionOrdenService {
                 tecnicoNombre: `${tecnicoEmpleado?.persona?.primer_nombre || ''} ${tecnicoEmpleado?.persona?.primer_apellido || ''}`.trim() || 'Técnico',
             };
 
+            // TODO: MULTI-EMAIL deshabilitado temporalmente - tabla cuentas_email pendiente de migración
+            const idCuentaEmailCliente = null;
+
             const result = await this.emailService.sendInformeTecnicoEmail(
                 emailData,
                 destinatarios[0],
                 pdfResult.buffer,
+                idCuentaEmailCliente, // ✅ Pasar cuenta específica del cliente
             );
 
             return {
@@ -1630,19 +1754,60 @@ export class FinalizacionOrdenService {
         let fechaInicioReal: Date | undefined;
         let fechaFinReal: Date = new Date();
 
+        // ✅ FIX 07-FEB-2026: Helper robusto para parsear hora en múltiples formatos
+        // Soporta: "HH:mm", "H:mm", "HH:mm a.m.", "HH:mm AM", "HH:mm p. m.", etc.
+        const parsearHora = (horaStr: string): { horas: number; minutos: number } | null => {
+            if (!horaStr) return null;
+            const limpio = horaStr.trim();
+
+            // Detectar AM/PM (español e inglés)
+            const esAM = /a\.?\s?m\.?$/i.test(limpio);
+            const esPM = /p\.?\s?m\.?$/i.test(limpio);
+            // Remover AM/PM para parsear solo los números
+            const soloNumeros = limpio.replace(/\s*(a\.?\s?m\.?|p\.?\s?m\.?)\s*$/i, '').trim();
+
+            const partes = soloNumeros.split(':');
+            if (partes.length < 2) return null;
+
+            let horas = parseInt(partes[0], 10);
+            const minutos = parseInt(partes[1], 10);
+
+            if (isNaN(horas) || isNaN(minutos) || horas < 0 || horas > 23 || minutos < 0 || minutos > 59) {
+                // Intentar formato más laxo (e.g., "1:37 p. m.")
+                if (isNaN(horas) || isNaN(minutos)) return null;
+            }
+
+            // Convertir 12h a 24h si hay AM/PM
+            if (esAM || esPM) {
+                if (horas === 12) horas = esAM ? 0 : 12;
+                else if (esPM) horas += 12;
+            }
+
+            if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) return null;
+            return { horas, minutos };
+        };
+
         if (horaEntrada) {
-            const [horasE, minutosE] = horaEntrada.split(':').map(Number);
-            // Usar la fecha base (existente o actual) para construir fecha_inicio_real
-            fechaInicioReal = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), fechaBase.getDate(), horasE, minutosE, 0, 0);
+            const parsed = parsearHora(horaEntrada);
+            if (parsed) {
+                fechaInicioReal = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), fechaBase.getDate(), parsed.horas, parsed.minutos, 0, 0);
+            } else {
+                this.logger.warn(`   ⚠️ horaEntrada inválida: "${horaEntrada}", usando hora actual`);
+                fechaInicioReal = new Date();
+            }
         } else if (ordenExistente?.fecha_inicio_real) {
             // Si no viene horaEntrada, mantener la existente
             fechaInicioReal = new Date(ordenExistente.fecha_inicio_real);
         }
 
         if (horaSalida) {
-            const [horasS, minutosS] = horaSalida.split(':').map(Number);
-            // Para fecha_fin_real, usamos la fecha base pero debemos verificar cruce de medianoche
-            fechaFinReal = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), fechaBase.getDate(), horasS, minutosS, 0, 0);
+            const parsed = parsearHora(horaSalida);
+            if (parsed) {
+                fechaFinReal = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), fechaBase.getDate(), parsed.horas, parsed.minutos, 0, 0);
+            } else {
+                this.logger.warn(`   ⚠️ horaSalida inválida: "${horaSalida}", usando hora actual`);
+                fechaFinReal = new Date();
+            }
 
             // 🔧 FIX: Si hora de salida es menor que hora de entrada, es cruce de medianoche
             // Debemos agregar un día a la fecha de fin

@@ -32,11 +32,13 @@ import {
     getServiciosOrden,
     removeServicioOrden,
     updateActividad,
+    updateHorariosServicio,
     updateMedicion,
     updateObservacionesCierre,
     updateOrden,
     type AddServicioDetalleDto,
     type UpdateActividadDto,
+    type UpdateHorariosServicioDto,
     type UpdateMedicionDto,
     type UpdateOrdenDto
 } from '../api/ordenes.service';
@@ -374,6 +376,32 @@ export function useUpdateObservacionesCierre() {
             const message = err.response?.data?.message;
             const errorText = Array.isArray(message) ? message.join(', ') : message;
             toast.error(errorText || 'Error al actualizar observaciones de cierre');
+        },
+    });
+}
+
+/**
+ * Hook ATÓMICO para actualizar horarios de servicio (hora entrada/salida)
+ * Usa endpoint dedicado PATCH /ordenes/:id/horarios-servicio
+ * Permite edición incluso en órdenes COMPLETADAS
+ * Recalcula duracion_minutos automáticamente en backend
+ */
+export function useUpdateHorariosServicio() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: number; data: UpdateHorariosServicioDto }) =>
+            updateHorariosServicio(id, data),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
+            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            toast.success('Horarios de servicio actualizados exitosamente');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al actualizar horarios de servicio');
         },
     });
 }

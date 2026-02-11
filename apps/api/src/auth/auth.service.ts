@@ -135,7 +135,7 @@ export class AuthService {
       where: { id_usuario: userId },
       include: {
         persona: true,
-        usuarios_roles_usuarios_roles_id_usuarioTousuarios: {
+        usuarios_roles: {
           include: {
             roles: true,
           },
@@ -153,7 +153,7 @@ export class AuthService {
     });
 
     // Extraer roles del usuario
-    const roles = usuario.usuarios_roles_usuarios_roles_id_usuarioTousuarios?.map(
+    const roles = usuario.usuarios_roles?.map(
       ur => ({
         id: ur.roles.id_rol,
         codigo: ur.roles.codigo_rol,

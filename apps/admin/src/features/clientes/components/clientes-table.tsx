@@ -122,27 +122,24 @@ export function ClientesTable() {
     router.push('/clientes/nuevo');
   };
 
-  // Obtener nombre del cliente (Priorizar nombre_comercial > nombre_completo > razon_social)
+  // Obtener nombre del cliente (Priorizar nombre_sede para sedes, luego nombre_comercial > nombre_completo > razon_social)
   const getClienteName = (cliente: ClienteConPersona): string => {
     const persona = cliente.persona;
-    if (!persona) return `Cliente #${cliente.id_cliente}`;
+    const baseName = (() => {
+      if (!persona) return `Cliente #${cliente.id_cliente}`;
+      if (persona.nombre_comercial && persona.nombre_comercial.trim()) return persona.nombre_comercial;
+      if (persona.nombre_completo && persona.nombre_completo.trim()) return persona.nombre_completo;
+      const nombrePersona = `${persona.primer_nombre || ''} ${persona.primer_apellido || ''}`.trim();
+      if (nombrePersona) return nombrePersona;
+      return persona.razon_social || 'Sin nombre';
+    })();
 
-    // 1. Si tiene nombre_comercial, usarlo primero (ej: "EDIFICIO MILANO")
-    if (persona.nombre_comercial && persona.nombre_comercial.trim()) {
-      return persona.nombre_comercial;
+    // ✅ MULTI-SEDE: Si es sede, mostrar "NombreSede (NombrePrincipal)"
+    if ((cliente as any).nombre_sede) {
+      return `${(cliente as any).nombre_sede} (${baseName})`;
     }
 
-    // 2. Si tiene nombre_completo, usarlo
-    if (persona.nombre_completo && persona.nombre_completo.trim()) {
-      return persona.nombre_completo;
-    }
-
-    // 3. Construir nombre desde primer_nombre + primer_apellido
-    const nombrePersona = `${persona.primer_nombre || ''} ${persona.primer_apellido || ''}`.trim();
-    if (nombrePersona) return nombrePersona;
-
-    // 4. Fallback: razón social
-    return persona.razon_social || 'Sin nombre';
+    return baseName;
   };
 
   const getNit = (cliente: ClienteConPersona): string => {

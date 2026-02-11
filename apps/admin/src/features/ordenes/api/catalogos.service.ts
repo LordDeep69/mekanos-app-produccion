@@ -47,6 +47,7 @@ export interface EstadoOrden {
 export interface ClienteSelector {
     id_cliente: number;
     codigo_cliente?: string;
+    nombre_sede?: string;
     persona?: {
         nombre_comercial?: string;
         razon_social?: string;
@@ -554,10 +555,14 @@ export function getTipoActividadColor(tipo: string): string {
 }
 
 export function getClienteLabel(cliente: ClienteSelector): string {
-    if (!cliente.persona) return `Cliente ${cliente.id_cliente}`;
-    return cliente.persona.nombre_comercial ||
-        cliente.persona.razon_social ||
+    const baseName = cliente.persona?.nombre_comercial ||
+        cliente.persona?.razon_social ||
         `Cliente ${cliente.id_cliente}`;
+    // ✅ MULTI-SEDE: Si es sede, mostrar "NombreSede (NombrePrincipal)"
+    if (cliente.nombre_sede) {
+        return `${cliente.nombre_sede} (${baseName})`;
+    }
+    return baseName;
 }
 
 export function getEquipoLabel(equipo: EquipoSelector): string {

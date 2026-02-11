@@ -40,7 +40,8 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
   const esMultiEquipo =
     datos.esMultiEquipo || (datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1);
 
-  const actividadesPorSistema = agruparActividadesPorSistema(datos.actividades);
+  // actividadesPorSistema: reserved for future per-system rendering
+  void agruparActividadesPorSistema(datos.actividades);
 
   return `
 <!DOCTYPE html>
@@ -171,9 +172,7 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
         ? generarMediciones(datos.mediciones)
         : ''
     }
-  </div>
-  
-  <div class="page page-break">
+    
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
     <!-- ✅ MULTI-EQUIPOS: Usar evidencias agrupadas por equipo si es multi-equipo -->
     ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
@@ -405,7 +404,7 @@ const generarTodasLasActividades = (actividades: any[]): string => {
 /**
  * Genera sección de actividades por sistema (no usada actualmente)
  */
-const generarSeccionActividades = (
+export const _generarSeccionActividades = (
   titulo: string,
   actividades: any[],
   tieneCambios: boolean = false,

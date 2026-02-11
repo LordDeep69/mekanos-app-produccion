@@ -415,11 +415,12 @@ class SyncService {
         await _db.upsertCliente(
           ClientesCompanion(
             id: Value(entry.key),
+            // ✅ FIX 09-FEB-2026: Priorizar nombreCliente (ya resuelve nombre_sede en backend)
             nombre: Value(
-              entry.value['nombreComercial'] as String? ??
+              entry.value['nombreCliente'] as String? ??
+                  entry.value['nombreComercial'] as String? ??
                   entry.value['nombreCompleto'] as String? ??
                   entry.value['razonSocial'] as String? ??
-                  entry.value['nombreCliente'] as String? ??
                   'Sin nombre',
             ),
             lastSyncedAt: Value(DateTime.now()),

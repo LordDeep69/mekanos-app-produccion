@@ -91,9 +91,15 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   }
 
   const persona = cliente.persona;
-  const nombreCliente = persona?.tipo_persona === 'JURIDICA'
+  // ✅ FIX MULTI-SEDE: Priorizar nombre_sede para clientes-sede
+  const nombreBase = persona?.tipo_persona === 'JURIDICA'
     ? persona?.razon_social || persona?.nombre_comercial
     : persona?.nombre_completo;
+  const nombreCliente = cliente.nombre_sede
+    ? `${nombreBase} - ${cliente.nombre_sede}`
+    : nombreBase;
+  const esSede = !!cliente.nombre_sede && !!cliente.id_cliente_principal;
+  const esPrincipal = !!cliente.es_cliente_principal;
 
   const formatDate = (date: string | null | undefined) => {
     if (!date) return '-';
@@ -122,15 +128,35 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold tracking-tight">{nombreCliente}</h1>
               <Badge variant={cliente.cliente_activo ? 'default' : 'destructive'}>
                 {cliente.cliente_activo ? 'Activo' : 'Inactivo'}
               </Badge>
+              {esSede && (
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  Sede
+                </Badge>
+              )}
+              {esPrincipal && (
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                  Principal
+                </Badge>
+              )}
             </div>
             <p className="text-muted-foreground">
               {cliente.codigo_cliente || `Cliente #${cliente.id_cliente}`}
             </p>
+            {esSede && cliente.cliente_principal && (
+              <p className="text-sm text-blue-600">
+                Sede de: <button
+                  onClick={() => router.push(`/clientes/${cliente.id_cliente_principal}`)}
+                  className="underline hover:text-blue-800 font-medium"
+                >
+                  {cliente.cliente_principal.persona?.razon_social || cliente.cliente_principal.persona?.nombre_comercial || `Cliente #${cliente.id_cliente_principal}`}
+                </button>
+              </p>
+            )}
           </div>
         </div>
         <Button onClick={() => router.push(`/clientes/${clienteId}/editar`)}>
@@ -360,6 +386,35 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                   </p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ✅ MULTI-SEDE: Mostrar sedes si es cliente principal */}
+        {esPrincipal && cliente.sedes && cliente.sedes.length > 0 && (
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Sedes ({cliente.sedes.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2">
+                {cliente.sedes.map((sede: any) => (
+                  <button
+                    key={sede.id_cliente}
+                    onClick={() => router.push(`/clientes/${sede.id_cliente}`)}
+                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors text-left"
+                  >
+                    <div>
+                      <p className="font-medium">{sede.nombre_sede || 'Sin nombre'}</p>
+                      <p className="text-sm text-muted-foreground">{sede.codigo_cliente}</p>
+                    </div>
+                    <ArrowLeft className="h-4 w-4 rotate-180 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}

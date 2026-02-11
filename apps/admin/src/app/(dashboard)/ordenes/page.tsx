@@ -43,7 +43,7 @@ import {
     X
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -178,6 +178,7 @@ function OrdenCard({ orden }: { orden: Orden }) {
 export default function OrdenesPage() {
     const [page, setPage] = useState(1);
     const [busqueda, setBusqueda] = useState('');
+    const [busquedaDebounced, setBusquedaDebounced] = useState('');
     const [filtroEstado, setFiltroEstado] = useState<string>('');
     const [filtroPrioridad, setFiltroPrioridad] = useState<string>('');
     // ENTERPRISE: Nuevos filtros avanzados
@@ -186,11 +187,23 @@ export default function OrdenesPage() {
     const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>('');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
+    // ✅ DEBOUNCE: Esperar 400ms después de que el usuario deje de escribir
+    const debounceRef = useRef<NodeJS.Timeout | null>(null);
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            setBusquedaDebounced(busqueda.trim());
+            setPage(1);
+        }, 400);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, [busqueda]);
+
     const pageSize = 12;
 
     // Cargar tipos de servicio para el filtro
     const { data: tiposServicio } = useTiposServicio({ activo: true });
 
+    // ✅ BÚSQUEDA SERVER-SIDE: Enviar busqueda al backend
     const { data, isLoading, isError, refetch } = useOrdenes({
         page,
         limit: pageSize,
@@ -199,20 +212,15 @@ export default function OrdenesPage() {
         sortBy,
         sortOrder,
         tipoServicioId: filtroTipoServicio ? parseInt(filtroTipoServicio) : undefined,
+        busqueda: busquedaDebounced || undefined,
     });
 
     const ordenes = data?.data || [];
     const pagination = data?.pagination;
     const totalPages = pagination?.totalPages || 1;
 
-    // Filtro local por búsqueda (número de orden)
-    const ordenesFiltradas = busqueda
-        ? ordenes.filter((o) => {
-            const numero = (o.numero_orden || '').toLowerCase();
-            const query = busqueda.toLowerCase();
-            return numero.includes(query);
-        })
-        : ordenes;
+    // ✅ Server-side search: no need for local filtering
+    const ordenesFiltradas = ordenes;
 
     return (
         <div className="space-y-6">
@@ -251,11 +259,19 @@ export default function OrdenesPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="Buscar por número de orden..."
+                            placeholder="Buscar por orden, cliente, NIT, técnico, equipo..."
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
+                        {busqueda && (
+                            <button
+                                onClick={() => setBusqueda('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
                     </div>
 
                     {/* Filtros principales */}
@@ -374,10 +390,15 @@ export default function OrdenesPage() {
                 )}
 
                 {/* Indicadores de filtros activos */}
-                {(filtroEstado || filtroPrioridad || filtroTipoServicio) && (
-                    <div className="flex items-center gap-2 text-sm">
+                {(filtroEstado || filtroPrioridad || filtroTipoServicio || busquedaDebounced) && (
+                    <div className="flex items-center gap-2 text-sm flex-wrap">
                         <Filter className="h-4 w-4 text-gray-400" />
                         <span className="text-gray-500">Filtros activos:</span>
+                        {busquedaDebounced && (
+                            <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs">
+                                Búsqueda: &quot;{busquedaDebounced}&quot;
+                            </span>
+                        )}
                         {filtroEstado && (
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
                                 Estado: {filtroEstado}

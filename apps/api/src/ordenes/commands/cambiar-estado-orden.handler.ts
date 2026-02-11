@@ -46,11 +46,11 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     private readonly pdfService: PdfService,
     private readonly r2StorageService: R2StorageService,
     private readonly emailService: EmailService,
-  ) {}
+  ) { }
 
   async execute(command: CambiarEstadoOrdenCommand): Promise<CambiarEstadoResult> {
     const { ordenId, nuevoEstado, usuarioId, motivo, observaciones, datosAdicionales } = command;
-    
+
     this.logger.log(`[CambiarEstado] Orden ${ordenId}: solicitando cambio a ${nuevoEstado}`);
 
     // 1. Obtener orden actual con su estado
@@ -67,7 +67,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
 
     // Obtener código del estado actual
     const estadoActual = orden.estado?.codigo_estado || 'PROGRAMADA';
-    
+
     this.logger.log(`[CambiarEstado] Estado actual: ${estadoActual} → ${nuevoEstado}`);
 
     // 2. Validar que no sea estado final
@@ -204,6 +204,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
             },
           },
           evidencias_fotograficas: true,
+          sedes_cliente: true,
         },
       });
 
@@ -226,9 +227,14 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
 
       // 3. Preparar datos para PDF (igual que PdfController)
       const clientePersona = orden.cliente?.persona;
-      const clienteNombre = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
-      const clienteDireccion = clientePersona?.direccion_principal || orden.direccion_servicio || 'N/A';
-      
+      // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
+      const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
+      const clienteNombre = (orden.cliente as any)?.nombre_sede
+        ? `${clienteNombreBase} - ${(orden.cliente as any).nombre_sede}`
+        : clienteNombreBase;
+      // ✅ FIX MULTI-SEDE: Priorizar dirección de sede sobre persona
+      const clienteDireccion = (orden as any).sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || orden.direccion_servicio || 'N/A';
+
       let marcaEquipo = 'N/A';
       let serieEquipo = 'N/A';
       if (orden.equipo) {
@@ -256,10 +262,10 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
           marcaEquipo,
           serieEquipo,
           tipoEquipo: this.mapTipoEquipo(orden.equipo?.tipo_equipo?.nombre || ''),
-          fecha: orden.fecha_programada 
-            ? new Date(orden.fecha_programada).toLocaleDateString('es-CO') 
+          fecha: orden.fecha_programada
+            ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
             : new Date().toLocaleDateString('es-CO'),
-          tecnico: orden.tecnico?.persona 
+          tecnico: orden.tecnico?.persona
             ? `${orden.tecnico.persona.primer_nombre || ''} ${orden.tecnico.persona.primer_apellido || ''}`.trim() || 'N/A'
             : 'N/A',
           horaEntrada: orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real).toLocaleTimeString('es-CO') : 'N/A',

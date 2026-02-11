@@ -100,8 +100,19 @@ export interface Cliente {
   fecha_creacion?: string | null;
   modificado_por?: number | null;
   fecha_modificacion?: string | null;
+  // ✅ MULTI-SEDE (09-Feb-2026)
+  es_cliente_principal?: boolean | null;
+  id_cliente_principal?: number | null;
+  nombre_sede?: string | null;
   // Relación incluida del backend
   persona?: Persona;
+  // ✅ MULTI-SEDE: Relaciones
+  cliente_principal?: {
+    id_cliente: number;
+    nombre_sede?: string | null;
+    persona?: { razon_social?: string | null; nombre_comercial?: string | null };
+  } | null;
+  sedes?: Array<{ id_cliente: number; nombre_sede?: string | null; codigo_cliente?: string | null }>;
 }
 
 /**
@@ -192,6 +203,34 @@ export interface CreateClienteDto {
   tiene_acceso_portal?: boolean;
   observaciones_servicio?: string;
   requisitos_especiales?: string;
+  // ✅ MULTI-SEDE (09-Feb-2026)
+  es_cliente_principal?: boolean;
+  id_cliente_principal?: number;
+  nombre_sede?: string;
+  id_cuenta_email_remitente?: number;
+}
+
+/**
+ * ✅ MULTI-SEDE: Cliente principal para selector "Es Sede de"
+ */
+export interface ClientePrincipalSelector {
+  id_cliente: number;
+  codigo_cliente?: string | null;
+  nombre: string;
+  nit?: string | null;
+  total_sedes: number;
+  persona?: Partial<Persona> | null;
+  tipo_cliente: TipoClienteEnum;
+  periodicidad_mantenimiento?: PeriodicidadMantenimientoEnum | null;
+  id_firma_administrativa?: number | null;
+  id_asesor_asignado?: number | null;
+  descuento_autorizado?: number | null;
+  tiene_credito?: boolean | null;
+  limite_credito?: number | null;
+  dias_credito?: number | null;
+  id_cuenta_email_remitente?: number | null;
+  observaciones_servicio?: string | null;
+  requisitos_especiales?: string | null;
 }
 
 /**

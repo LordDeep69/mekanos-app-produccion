@@ -1,20 +1,20 @@
 export {
-  DatosCotizacionPDF, generarCotizacionHTML, ItemComponentePDF, ItemServicioPDF
+  DatosCotizacionPDF, ItemComponentePDF, ItemServicioPDF, generarCotizacionHTML
 } from './cotizacion.template';
 export * from './mekanos-base.template';
 export {
-  DatosOrdenCompraPDF, generarOrdenCompraHTML, ItemOrdenCompraPDF
+  DatosOrdenCompraPDF, ItemOrdenCompraPDF, generarOrdenCompraHTML
 } from './orden-compra.template';
 export {
-  DatosPropuestaCorrectivoPDF, generarPropuestaCorrectivoHTML, ItemManoObraPDF, ItemRepuestoPDF
+  DatosPropuestaCorrectivoPDF, ItemManoObraPDF, ItemRepuestoPDF, generarPropuestaCorrectivoHTML
 } from './propuesta-correctivo.template';
 export {
-  DatosRemisionPDF, generarRemisionHTML, ItemRemisionPDF
+  DatosRemisionPDF, ItemRemisionPDF, generarRemisionHTML
 } from './remision.template';
 export { generarTipoABombaHTML } from './tipo-a-bomba.template';
 export { generarTipoAGeneradorHTML } from './tipo-a-generador.template';
 export { generarTipoBGeneradorHTML } from './tipo-b-generador.template';
 export {
-  DatosCorrectivoOrdenPDF, EvidenciaCorrectivoPDF, generarCorrectivoOrdenHTML, MedicionCorrectivoPDF, RepuestoUtilizadoPDF, TrabajoEjecutadoPDF
+  DatosCorrectivoOrdenPDF, EvidenciaCorrectivoPDF, MedicionCorrectivoPDF, generarCorrectivoOrdenHTML
 } from './tipo-correctivo.template';
 

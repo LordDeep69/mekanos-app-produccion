@@ -7,6 +7,7 @@
 
 'use client';
 
+import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -21,7 +22,6 @@ import {
     User,
     XCircle
 } from 'lucide-react';
-import { getSession } from 'next-auth/react';
 
 interface HistorialEstado {
     id_historial: number;
@@ -184,16 +184,8 @@ export function HistorialEstados({ idOrden }: HistorialEstadosProps) {
     const { data, isLoading, error } = useQuery({
         queryKey: ['orden-historial', idOrden],
         queryFn: async () => {
-            const session = await getSession();
-            const token = (session as any)?.accessToken;
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/ordenes/${idOrden}/historial-estados`,
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (!res.ok) {
-                throw new Error('Error al obtener historial');
-            }
-            return res.json();
+            const res = await apiClient.get(`/historial-estados-orden/orden/${idOrden}`);
+            return res.data;
         },
         enabled: !!idOrden,
     });
@@ -234,7 +226,7 @@ export function HistorialEstados({ idOrden }: HistorialEstadosProps) {
                     <div className="space-y-0">
                         {historial.map((item, index) => (
                             <HistorialItem
-                                key={item.id_historial}
+                                key={item.id_historial ?? `hist-${index}`}
                                 item={item}
                                 isFirst={index === 0}
                                 isLast={index === historial.length - 1}

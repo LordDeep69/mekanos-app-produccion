@@ -8,24 +8,30 @@ export class GetOrdenByIdHandler implements IQueryHandler<GetOrdenByIdQuery> {
   constructor(private readonly repository: PrismaOrdenServicioRepository) { }
 
   async execute(query: GetOrdenByIdQuery): Promise<any> {
-    // ✅ OPTIMIZADO 05-ENE-2026: Usar findByIdOptimizado para carga rápida
-    // Las relaciones pesadas (actividades, mediciones, evidencias) se cargan bajo demanda
-    const orden = await this.repository.findByIdOptimizado(query.ordenId);
+    try {
+      // ✅ OPTIMIZADO 05-ENE-2026: Usar findByIdOptimizado para carga rápida
+      // Las relaciones pesadas (actividades, mediciones, evidencias) se cargan bajo demanda
+      const orden = await this.repository.findByIdOptimizado(query.ordenId);
 
-    if (!orden) {
-      throw new NotFoundException(`Orden de servicio ${query.ordenId} no encontrada`);
+      if (!orden) {
+        throw new NotFoundException(`Orden de servicio ${query.ordenId} no encontrada`);
+      }
+
+      // ✅ FIX 10-FEB-2026: Transformación segura de ordenes_equipos
+      // El frontend espera 'equipo' pero Prisma retorna 'equipos' según el nombre de la relación
+      if (orden.ordenes_equipos && Array.isArray(orden.ordenes_equipos)) {
+        orden.ordenes_equipos = orden.ordenes_equipos.map((oe: any) => ({
+          ...oe,
+          equipo: oe.equipos || null, // Renombrar equipos → equipo (con null-safety)
+          equipos: undefined, // Eliminar la propiedad original
+        }));
+      }
+
+      return orden;
+    } catch (error) {
+      // ✅ FIX 10-FEB-2026: Loguear error completo para debugging
+      console.error(`[GetOrdenByIdHandler] Error al obtener orden ${query.ordenId}:`, error);
+      throw error;
     }
-
-    // ✅ FIX: Transformar ordenes_equipos para que use 'equipo' (singular) en lugar de 'equipos' (plural)
-    // El frontend espera 'equipo' pero Prisma retorna 'equipos' según el nombre de la relación en el schema
-    if (orden.ordenes_equipos && Array.isArray(orden.ordenes_equipos)) {
-      orden.ordenes_equipos = orden.ordenes_equipos.map((oe: any) => ({
-        ...oe,
-        equipo: oe.equipos, // Renombrar equipos → equipo
-        equipos: undefined, // Eliminar la propiedad original
-      }));
-    }
-
-    return orden;
   }
 }

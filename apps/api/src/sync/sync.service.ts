@@ -789,7 +789,9 @@ export class SyncService {
       fechaProgramada: o.fecha_programada?.toISOString(),
       prioridad: o.prioridad as string,
       idCliente: o.id_cliente,
+      // ✅ FIX 09-FEB-2026: Priorizar nombre_sede del cliente-sede sobre persona
       nombreCliente:
+        (o.clientes as any)?.nombre_sede ||
         o.clientes?.persona?.nombre_comercial ||
         o.clientes?.persona?.nombre_completo ||
         o.clientes?.persona?.razon_social ||
@@ -1053,8 +1055,17 @@ export class SyncService {
           },
         },
         clientes: {
-          include: {
-            persona: true,
+          select: {
+            id_cliente: true,
+            // ✅ FIX 09-FEB-2026: Incluir nombre_sede para clientes-sede
+            nombre_sede: true,
+            persona: {
+              select: {
+                nombre_comercial: true,
+                nombre_completo: true,
+                razon_social: true,
+              },
+            },
           },
         },
       },
@@ -1100,7 +1111,9 @@ export class SyncService {
         estadoCodigo: o.estados_orden?.codigo_estado || 'DESCONOCIDO',
         idCliente: o.id_cliente || 1,
         id_cliente: o.id_cliente || 1, // Alias snake_case
+        // ✅ FIX 09-FEB-2026: Priorizar nombre_sede del cliente-sede
         nombreCliente:
+          (o.clientes as any)?.nombre_sede ||
           o.clientes?.persona?.nombre_comercial ||
           o.clientes?.persona?.nombre_completo ||
           o.clientes?.persona?.razon_social ||
@@ -1277,7 +1290,8 @@ export class SyncService {
       fechaProgramada: orden.fecha_programada?.toISOString(),
       prioridad: orden.prioridad || 'NORMAL',
       idCliente: orden.id_cliente,
-      nombreCliente: orden.clientes?.persona?.nombre_comercial || orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
+      // ✅ FIX 09-FEB-2026: Priorizar nombre_sede del cliente-sede
+      nombreCliente: (orden.clientes as any)?.nombre_sede || orden.clientes?.persona?.nombre_comercial || orden.clientes?.persona?.nombre_completo || orden.clientes?.persona?.razon_social || 'Cliente',
       nombreComercial: orden.clientes?.persona?.nombre_comercial || undefined,
       nombreCompleto: orden.clientes?.persona?.nombre_completo || undefined,
       razonSocial: orden.clientes?.persona?.razon_social || undefined,

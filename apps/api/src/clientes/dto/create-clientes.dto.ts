@@ -1,17 +1,17 @@
 import { Type } from 'class-transformer';
 import {
-    IsBoolean,
-    IsDateString,
-    IsEmail,
-    IsEnum,
-    IsInt,
-    IsNotEmpty,
-    IsNumber,
-    IsOptional,
-    IsString,
-    Max,
-    Min,
-    ValidateNested
+  IsBoolean,
+  IsDateString,
+  IsEmail,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  ValidateNested
 } from 'class-validator';
 
 // Enums para tipo de identificación y tipo de persona
@@ -203,4 +203,21 @@ export class CreateClientesDto {
   @IsOptional()
   @IsString()
   requisitos_especiales?: string;
+
+  // ✅ MULTI-SEDE (09-Feb-2026)
+  @IsOptional()
+  @IsBoolean()
+  es_cliente_principal?: boolean = false;
+
+  @IsOptional()
+  @IsInt()
+  id_cliente_principal?: number;
+
+  @IsOptional()
+  @IsString()
+  nombre_sede?: string;
+
+  @IsOptional()
+  @IsInt()
+  id_cuenta_email_remitente?: number;
 }

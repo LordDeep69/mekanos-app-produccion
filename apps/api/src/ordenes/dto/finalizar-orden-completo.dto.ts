@@ -38,6 +38,7 @@ export enum TipoEvidencia {
     DESPUES = 'DESPUES',
     DESPUÉS = 'DESPUÉS', // Con tilde
     MEDICION = 'MEDICION', // Para evidencias de mediciones
+    GENERAL = 'GENERAL', // ✅ FIX 06-FEB-2026: Fotos generales del servicio
 }
 
 export enum TipoFirma {
@@ -273,15 +274,15 @@ export class DatosModuloDto {
 export class FinalizarOrdenCompletoDto {
     @ApiProperty({
         type: [EvidenciaDto],
-        description: 'Evidencias fotográficas (mínimo 1, máximo 50)',
+        description: 'Evidencias fotográficas (mínimo 1, máximo 150)',
         minItems: 1,
-        maxItems: 50,
+        maxItems: 150,
     })
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => EvidenciaDto)
     @ArrayMinSize(1, { message: 'Debe incluir al menos una evidencia fotográfica' })
-    @ArrayMaxSize(50, { message: 'Máximo 50 evidencias permitidas' })
+    @ArrayMaxSize(150, { message: 'Máximo 150 evidencias permitidas' })
     evidencias: EvidenciaDto[];
 
     @ApiProperty({

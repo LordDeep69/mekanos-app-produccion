@@ -47,6 +47,7 @@ export class TareasProgramadasService {
       const pasadoManana = new Date(manana);
       pasadoManana.setDate(pasadoManana.getDate() + 1);
 
+      // ✅ FIX 11-FEB-2026: Corregidos nombres de relaciones según schema.prisma
       const cronogramas = await this.prisma.cronogramas_servicio.findMany({
         where: {
           fecha_prevista: {
@@ -56,12 +57,14 @@ export class TareasProgramadasService {
           estado_cronograma: { in: ['PENDIENTE', 'PROGRAMADA'] },
         },
         include: {
-          orden_generada: {
+          ordenes_servicio: {
             include: {
-              tecnico_asignado: true,
+              empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+                include: { persona: true },
+              },
             },
           },
-          equipo: true,
+          equipos: true,
           tipos_servicio: true,
         },
       });
@@ -69,12 +72,18 @@ export class TareasProgramadasService {
       let notificacionesEnviadas = 0;
 
       for (const cronograma of cronogramas) {
-        const tecnico = cronograma.orden_generada?.tecnico_asignado;
-        if (tecnico) {
-          const descripcion = `${cronograma.tipos_servicio?.nombre_servicio || 'Servicio'} - ${cronograma.equipo?.codigo_equipo || 'Equipo'}`;
+        const tecnicoEmpleado = cronograma.ordenes_servicio?.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
+        if (tecnicoEmpleado) {
+          // Resolver empleado -> usuario via id_persona
+          const usuario = await this.prisma.usuarios.findFirst({
+            where: { id_persona: tecnicoEmpleado.id_persona },
+          });
+          if (!usuario) continue;
+
+          const descripcion = `${cronograma.tipos_servicio?.nombre_servicio || 'Servicio'} - ${cronograma.equipos?.codigo_equipo || 'Equipo'}`;
 
           await this.notificacionesService.notificarServicioProgramado(
-            tecnico.id_usuario,
+            usuario.id_usuario,
             descripcion,
             cronograma.id_cronograma,
             cronograma.fecha_prevista,
@@ -285,13 +294,14 @@ export class TareasProgramadasService {
 
       if (!estadoProgramada) return;
 
+      // ✅ FIX 11-FEB-2026: Corregido nombre de relación según schema.prisma
       const ordenesVencidas = await this.prisma.ordenes_servicio.findMany({
         where: {
           id_estado_actual: estadoProgramada.id_estado,
           fecha_programada: { lt: ayer },
         },
         include: {
-          tecnico_asignado: true,
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: true,
         },
       });
 

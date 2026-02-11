@@ -25,6 +25,9 @@ export interface TipoServicio {
 // Cliente básico
 export interface ClienteOrden {
     id_cliente: number;
+    // ✅ FIX 09-FEB-2026: Soporte para clientes-sede
+    nombre_sede?: string;
+    id_cliente_principal?: number;
     persona?: {
         nombre_comercial?: string;
         razon_social?: string;
@@ -120,6 +123,7 @@ export interface OrdenesQueryParams {
     tipoServicioId?: number;
     fechaDesde?: string;  // ISO date string
     fechaHasta?: string;  // ISO date string
+    busqueda?: string;    // ✅ Búsqueda por texto libre (numero_orden, cliente, técnico, equipo)
 }
 
 // DTO para crear orden - MULTI-EQUIPOS
@@ -147,6 +151,8 @@ export interface CambiarEstadoDto {
 
 // Helpers
 export function getClienteNombre(orden: Orden): string {
+    // ✅ FIX 09-FEB-2026: Priorizar nombre_sede para clientes tipo sede
+    if (orden.clientes?.nombre_sede) return orden.clientes.nombre_sede;
     if (!orden.clientes?.persona) return 'Sin cliente';
     return orden.clientes.persona.nombre_comercial ||
         orden.clientes.persona.razon_social ||

@@ -7,6 +7,7 @@
 
 'use client';
 
+import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,7 +22,6 @@ import {
     X,
     ZoomIn
 } from 'lucide-react';
-import { getSession } from 'next-auth/react';
 import Image from 'next/image';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -216,67 +216,68 @@ export function GaleriaActividadFotos({
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // ✅ FIX 09-FEB-2026: Usar apiClient (con interceptor auth) en vez de fetch directo
     // Obtener evidencias de esta actividad/medición
-    // Estrategia: buscar por id_actividad_ejecutada, o por descripción si es medición
     const { data: evidenciasData, isLoading } = useQuery({
         queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada, nombreActividad, filtroDescripcion],
         queryFn: async () => {
-            const session = await getSession();
-            const token = (session as any)?.accessToken;
-
-            // 1. Si hay idActividadEjecutada, intentar endpoint específico
-            if (idActividadEjecutada) {
-                const res = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_URL}/evidencias-fotograficas/actividad/${idActividadEjecutada}`,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
-
-                if (res.ok) {
-                    const data = await res.json();
-                    const evidencias = Array.isArray(data) ? data : (data.data || []);
-                    if (evidencias.length > 0) {
-                        return { data: evidencias };
+            try {
+                // 1. Si hay idActividadEjecutada, intentar endpoint específico
+                if (idActividadEjecutada) {
+                    try {
+                        const res = await apiClient.get(
+                            `/evidencias-fotograficas/actividad/${idActividadEjecutada}`
+                        );
+                        const data = res.data;
+                        const evidencias = Array.isArray(data) ? data : (data.data || []);
+                        if (evidencias.length > 0) {
+                            return { data: evidencias };
+                        }
+                    } catch (err: any) {
+                        // 404 o error específico → fallback a buscar por orden
+                        if (err?.response?.status !== 404) {
+                            console.warn('[GaleriaFotos] Error endpoint actividad:', err?.response?.status);
+                        }
                     }
                 }
+
+                // 2. Fallback: buscar todas las evidencias de la orden y filtrar
+                const res2 = await apiClient.get(
+                    `/evidencias-fotograficas/orden/${idOrdenServicio}`
+                );
+                const allData = res2.data;
+                const todasEvidencias = Array.isArray(allData) ? allData : (allData.data || []);
+
+                // Filtrar por id_actividad_ejecutada o por descripción
+                const nombreNormalizado = nombreActividad.toLowerCase().trim();
+                const filtroNormalizado = (filtroDescripcion || '').toLowerCase().trim();
+
+                const filtered = todasEvidencias.filter((e: any) => {
+                    // Coincidencia por id
+                    if (idActividadEjecutada && (e.idActividadEjecutada === idActividadEjecutada ||
+                        e.id_actividad_ejecutada === idActividadEjecutada)) {
+                        return true;
+                    }
+                    // Coincidencia por descripción (nombre de actividad o filtro)
+                    const desc = (e.descripcion || e.description || '').toLowerCase();
+                    if (filtroNormalizado && desc.includes(filtroNormalizado)) {
+                        return true;
+                    }
+                    if (desc && nombreNormalizado && desc.includes(nombreNormalizado)) {
+                        return true;
+                    }
+                    // Coincidencia inversa
+                    if (desc && nombreNormalizado && nombreNormalizado.includes(desc) && desc.length > 5) {
+                        return true;
+                    }
+                    return false;
+                });
+
+                return { data: filtered };
+            } catch (err) {
+                console.error('[GaleriaFotos] Error cargando evidencias:', err);
+                return { data: [] };
             }
-
-            // 2. Fallback: buscar todas las evidencias de la orden y filtrar
-            const res2 = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/evidencias-fotograficas/orden/${idOrdenServicio}`,
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-
-            if (!res2.ok) return { data: [] };
-
-            const allData = await res2.json();
-            const todasEvidencias = Array.isArray(allData) ? allData : (allData.data || []);
-
-            // Filtrar por id_actividad_ejecutada o por descripción
-            const nombreNormalizado = nombreActividad.toLowerCase().trim();
-            const filtroNormalizado = (filtroDescripcion || '').toLowerCase().trim();
-
-            const filtered = todasEvidencias.filter((e: any) => {
-                // Coincidencia por id
-                if (idActividadEjecutada && (e.idActividadEjecutada === idActividadEjecutada ||
-                    e.id_actividad_ejecutada === idActividadEjecutada)) {
-                    return true;
-                }
-                // Coincidencia por descripción (nombre de actividad o filtro)
-                const desc = (e.descripcion || e.description || '').toLowerCase();
-                if (filtroNormalizado && desc.includes(filtroNormalizado)) {
-                    return true;
-                }
-                if (desc && nombreNormalizado && desc.includes(nombreNormalizado)) {
-                    return true;
-                }
-                // Coincidencia inversa
-                if (desc && nombreNormalizado && nombreNormalizado.includes(desc) && desc.length > 5) {
-                    return true;
-                }
-                return false;
-            });
-
-            return { data: filtered };
         },
         enabled: !!idOrdenServicio && (!!idActividadEjecutada || !!filtroDescripcion || !!nombreActividad),
     });
@@ -295,17 +296,8 @@ export function GaleriaActividadFotos({
     // Mutación para eliminar
     const deleteMutation = useMutation({
         mutationFn: async (idEvidencia: number) => {
-            const session = await getSession();
-            const token = (session as any)?.accessToken;
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/evidencias-fotograficas/${idEvidencia}`,
-                {
-                    method: 'DELETE',
-                    headers: { Authorization: `Bearer ${token}` }
-                }
-            );
-            if (!res.ok) throw new Error('Error al eliminar');
-            return res.json();
+            const res = await apiClient.delete(`/evidencias-fotograficas/${idEvidencia}`);
+            return res.data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['evidencias-actividad', idActividadEjecutada] });
@@ -352,9 +344,6 @@ export function GaleriaActividadFotos({
 
         setIsUploading(true);
         try {
-            const session = await getSession();
-            const token = (session as any)?.accessToken;
-
             // Convertir a base64
             const base64 = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
@@ -363,27 +352,15 @@ export function GaleriaActividadFotos({
                 reader.readAsDataURL(file);
             });
 
-            // Enviar al backend usando endpoint atómico que sube a Cloudinary
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/evidencias-fotograficas/upload-base64`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        idOrdenServicio,
-                        idActividadEjecutada,
-                        tipoEvidencia: tipoActivo,
-                        descripcion: nombreActividad,
-                        nombreArchivo: file.name,
-                        base64: base64,
-                    }),
-                }
-            );
-
-            if (!res.ok) throw new Error('Error al subir');
+            // ✅ FIX 09-FEB-2026: Usar apiClient con interceptor auth
+            await apiClient.post('/evidencias-fotograficas/upload-base64', {
+                idOrdenServicio,
+                idActividadEjecutada,
+                tipoEvidencia: tipoActivo,
+                descripcion: nombreActividad,
+                nombreArchivo: file.name,
+                base64: base64,
+            });
 
             queryClient.invalidateQueries({ queryKey: ['evidencias-actividad'] });
             queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });

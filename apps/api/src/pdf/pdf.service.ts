@@ -130,7 +130,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
         });
 
-        let buffer = Buffer.from(pdfBuffer);
+        let buffer: Buffer = Buffer.from(pdfBuffer);
         const filename = this.generarFilename(options.tipoInforme, options.datos.numeroOrden);
 
         const originalSizeKB = (buffer.length / 1024).toFixed(2);
@@ -139,7 +139,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         // ✅ FIX 30-ENE-2026: Comprimir PDF con Ghostscript si está disponible
         // Esto reduce PDFs de 48MB a ~300KB (similar a SmallPDF)
         if (buffer.length > 1024 * 1024) { // Solo comprimir si > 1MB
-          buffer = await this.comprimirPDFConGhostscript(buffer);
+          buffer = Buffer.from(await this.comprimirPDFConGhostscript(buffer));
         }
 
         const elapsed = Date.now() - startTime;
@@ -191,59 +191,41 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Adapta los datos genéricos de orden al formato específico de correctivo
-   * ✅ FIX 02-FEB-2026: Parsear campos estructurados desde observaciones de actividades
+   * ✅ REDISEÑO 06-FEB-2026: Cada campo estructurado va directo al template como campo dedicado
+   * Ya no se usa tabla checklist B/M/C/NA ni blob HTML de observaciones
    */
   private adaptarDatosParaCorrectivo(datos: DatosOrdenPDF): DatosCorrectivoOrdenPDF {
     // ═══════════════════════════════════════════════════════════════════════════
-    // ✅ FIX 02-FEB-2026: Extraer datos estructurados de las observaciones
-    // Los widgets de correctivo guardan datos con prefijos como:
-    // ESTADO_INICIAL: OPERATIVO, PROBLEMA: texto, SISTEMAS: MOTOR,ELECTRICO, etc.
+    // PASO 1: Extraer datos estructurados de observaciones de actividades
+    // Los widgets móviles guardan datos con prefijos: ESTADO_INICIAL:, PROBLEMA:, etc.
     // ═══════════════════════════════════════════════════════════════════════════
-    const datosEstructurados = this.extraerDatosEstructuradosCorrectivo(datos.actividades || []);
+    const ext = this.extraerDatosEstructuradosCorrectivo(datos.actividades || []);
 
-    // ✅ FIX: Convertir actividades a trabajos ejecutados preservando resultado real
-    // Excluir actividades que son solo contenedores de datos estructurados
-    const actividadesParaTabla = (datos.actividades || []).filter(a => {
-      const obs = a.observaciones || '';
-      // Excluir actividades con datos estructurados que se muestran en secciones especiales
-      const prefijosEstructurados = [
-        'ESTADO_INICIAL:', 'ESTADO_FINAL:', 'SISTEMAS:',
-        'PROBLEMA:', 'SINTOMAS:', 'DIAGNOSTICO:',
-        'TRABAJOS:', 'PENDIENTES:', 'RECOMENDACIONES:',
-        'REPUESTOS:', 'MATERIALES:'
-      ];
-      return !prefijosEstructurados.some(p => obs.startsWith(p));
-    });
-
-    const trabajosEjecutados = actividadesParaTabla.map((a, index) => ({
-      orden: index + 1,
-      descripcion: a.descripcion,
-      // ✅ FIX: Usar observaciones para la columna 'Obs.' (antes usaba sistema)
-      sistema: a.observaciones || '',
-      tiempoHoras: 1,
-      // ✅ FIX: Pasar resultado directamente (B, R, M, C, NA, etc.)
-      // El template mapResultado() ya maneja todos los códigos
-      resultado: a.resultado || 'NA',
-    }));
-
-    // Filtrar mediciones que tengan valor (para renderizado condicional)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PASO 2: Filtrar mediciones con valor para renderizado condicional
+    // ═══════════════════════════════════════════════════════════════════════════
     const medicionesConValor = (datos.mediciones || []).filter(m =>
       m.valor !== null && m.valor !== undefined && m.valor !== 0
     ).map(m => ({
       parametro: m.parametro,
       valorDespues: String(m.valor),
       unidad: m.unidad,
-      estado: (m.nivelAlerta === 'OK' ? 'OK' :
-        m.nivelAlerta === 'WARNING' ? 'ADVERTENCIA' : 'OK') as 'OK' | 'ADVERTENCIA' | 'CRITICO',
+      estado: m.nivelAlerta || 'OK',
     }));
 
-    // ✅ FIX 02-FEB-2026: Extraer datos del módulo de control desde mediciones
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PASO 3: Extraer datos del módulo de control desde mediciones
+    // ═══════════════════════════════════════════════════════════════════════════
     const datosModulo = this.extraerDatosModuloDesdelMediciones(datos.mediciones || []);
 
-    // ✅ FIX 02-FEB-2026: Construir observaciones estructuradas para el PDF
-    const observacionesEstructuradas = this.construirObservacionesCorrectivo(datosEstructurados, datos.observaciones);
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PASO 4: Construir objeto con campos dedicados (NO blob HTML)
+    // Cada campo se renderiza en su sección propia del template
+    // ═══════════════════════════════════════════════════════════════════════════
+    const sinInfo = (v: string) => !v || v === '(Sin información)' || v === '(Ninguno)';
 
     return {
+      // --- Datos generales ---
       numeroOrden: datos.numeroOrden,
       fecha: datos.fecha,
       horaEntrada: datos.horaEntrada,
@@ -256,53 +238,69 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       modeloEquipo: '',
       serieEquipo: datos.serieEquipo,
       tecnico: datos.tecnico,
-      // ✅ FIX 02-FEB-2026: Usar datos estructurados parseados
-      problemaReportado: {
-        descripcion: datosEstructurados.problema || datos.problemaReportado?.descripcion || '',
-        fechaReporte: datos.problemaReportado?.fechaReporte || datos.fecha,
-      },
-      diagnostico: {
-        descripcion: datosEstructurados.diagnostico || datosEstructurados.sintomas || datos.diagnostico?.descripcion || '',
-        causaRaiz: datosEstructurados.diagnostico || datos.diagnostico?.causaRaiz || '',
-        sistemasAfectados: datosEstructurados.sistemasAfectados.length > 0
-          ? datosEstructurados.sistemasAfectados
-          : (datos.diagnostico?.sistemasAfectados || [...new Set(trabajosEjecutados.map(t => t.sistema).filter(s => s))]),
-      },
-      trabajosEjecutados,
-      repuestosUtilizados: datosEstructurados.repuestos.map((r, i) => ({
-        codigo: `REP-${i + 1}`,
-        descripcion: r,
-        cantidad: 1,
-        unidad: 'UND',
-        estado: 'NUEVO' as const,
-      })),
+
+      // --- Campos dedicados por naturaleza de actividad ---
+      estadoInicial: ext.estadoInicial || undefined,
+      estadoFinal: ext.estadoFinal || undefined,
+      problemaReportado: sinInfo(ext.problema) ? undefined : ext.problema,
+      fallasObservadas: sinInfo(ext.sintomas) ? undefined : ext.sintomas,
+      diagnosticoTecnico: sinInfo(ext.diagnostico) ? undefined : ext.diagnostico,
+      trabajosRealizados: sinInfo(ext.trabajos) ? undefined : ext.trabajos,
+      trabajosPendientes: sinInfo(ext.pendientes) ? undefined : ext.pendientes,
+      recomendaciones: sinInfo(ext.recomendaciones) ? undefined : ext.recomendaciones,
+      sistemasAfectados: ext.sistemasAfectados.length > 0 ? ext.sistemasAfectados : undefined,
+      repuestosUtilizados: ext.repuestos.length > 0 ? ext.repuestos : undefined,
+      materialesUtilizados: ext.materiales.length > 0 ? ext.materiales : undefined,
+
+      // ✅ FIX 06-FEB-2026: Observaciones auxiliares del técnico por actividad
+      obsEstadoInicial: ext.obsEstadoInicial || undefined,
+      obsEstadoFinal: ext.obsEstadoFinal || undefined,
+      obsProblema: ext.obsProblema || undefined,
+      obsFallas: ext.obsFallas || undefined,
+      obsDiagnostico: ext.obsDiagnostico || undefined,
+      obsTrabajos: ext.obsTrabajos || undefined,
+      obsPendientes: ext.obsPendientes || undefined,
+      obsRecomendaciones: ext.obsRecomendaciones || undefined,
+      obsRepuestos: ext.obsRepuestos || undefined,
+      obsMateriales: ext.obsMateriales || undefined,
+      obsSistemas: ext.obsSistemas || undefined,
+
+      // --- Mediciones y módulo ---
       mediciones: medicionesConValor.length > 0 ? medicionesConValor : undefined,
-      datosModulo, // ✅ FIX 02-FEB-2026: Pasar datos del módulo de control
-      recomendaciones: datosEstructurados.recomendaciones
-        ? [datosEstructurados.recomendaciones]
-        : ['Seguir plan de mantenimiento preventivo programado'],
-      observaciones: observacionesEstructuradas,
-      // ✅ FIX 17-DIC-2025: MULTI-EQUIPOS - Pasar datos agrupados por equipo
+      datosModulo,
+
+      // --- Observaciones generales (solo textarea del técnico, sin duplicar campos) ---
+      observacionesGenerales: datos.observaciones || undefined,
+
+      // --- Multi-equipos ---
       esMultiEquipo: datos.esMultiEquipo,
       actividadesPorEquipo: datos.actividadesPorEquipo,
       medicionesPorEquipo: datos.medicionesPorEquipo,
       evidenciasPorEquipo: datos.evidenciasPorEquipo,
-      // ✅ FIX: Preservar caption con formato ANTES:/DURANTE:/DESPUÉS: para que el template agrupe correctamente
+
+      // --- Evidencias con tipo para agrupación ---
+      // ✅ FIX 06-FEB-2026: Reconocer GENERAL y MEDICION además de ANTES/DURANTE/DESPUES
       evidencias: (datos.evidencias || []).map(e => {
         const caption = typeof e === 'string' ? undefined : e.caption;
-        // Extraer tipo del caption si existe (formato "ANTES: descripción" o "DURANTE: descripción")
-        const tipoMatch = caption?.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS):/i);
-        const tipo = tipoMatch
-          ? (tipoMatch[1].toUpperCase() === 'DESPUÉS' ? 'DESPUES' : tipoMatch[1].toUpperCase()) as 'ANTES' | 'DURANTE' | 'DESPUES'
-          : 'DURANTE';
-        return {
-          tipo,
-          url: typeof e === 'string' ? e : e.url,
-          descripcion: caption,
-        };
+        const tipoMatch = caption?.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i);
+        type TipoEvidencia = 'ANTES' | 'DURANTE' | 'DESPUES' | 'GENERAL' | 'MEDICION';
+        let tipo: TipoEvidencia = 'DURANTE';
+        if (tipoMatch) {
+          const raw = tipoMatch[1].toUpperCase();
+          if (raw === 'DESPUÉS') tipo = 'DESPUES';
+          else if (raw === 'MEDICIÓN') tipo = 'MEDICION';
+          else tipo = raw as TipoEvidencia;
+        }
+        return { tipo, url: typeof e === 'string' ? e : e.url, descripcion: caption };
       }),
+
+      // --- Firmas ---
       firmaTecnico: datos.firmaTecnico,
       firmaCliente: datos.firmaCliente,
+      nombreTecnico: datos.nombreTecnico,
+      cargoTecnico: datos.cargoTecnico,
+      nombreCliente: datos.nombreCliente,
+      cargoCliente: datos.cargoCliente,
     };
   }
 
@@ -322,6 +320,18 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     recomendaciones: string;
     repuestos: string[];
     materiales: string[];
+    // ✅ FIX 06-FEB-2026: Observaciones del técnico por actividad (parte después de |||)
+    obsEstadoInicial: string;
+    obsEstadoFinal: string;
+    obsSistemas: string;
+    obsProblema: string;
+    obsFallas: string;
+    obsDiagnostico: string;
+    obsTrabajos: string;
+    obsPendientes: string;
+    obsRecomendaciones: string;
+    obsRepuestos: string;
+    obsMateriales: string;
   } {
     const resultado = {
       estadoInicial: '',
@@ -335,41 +345,66 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       recomendaciones: '',
       repuestos: [] as string[],
       materiales: [] as string[],
+      // Observaciones auxiliares por actividad
+      obsEstadoInicial: '',
+      obsEstadoFinal: '',
+      obsSistemas: '',
+      obsProblema: '',
+      obsFallas: '',
+      obsDiagnostico: '',
+      obsTrabajos: '',
+      obsPendientes: '',
+      obsRecomendaciones: '',
+      obsRepuestos: '',
+      obsMateriales: '',
     };
 
     for (const actividad of actividades) {
-      // ✅ FIX 03-FEB-2026: Extraer solo el valor especial (antes de |||)
+      // ✅ FIX 03-FEB-2026: Extraer valor especial (antes de |||) y observación (después de |||)
       // Formato: "VALOR_ESPECIAL|||Observación del técnico"
       const obsRaw = actividad.observaciones || '';
-      const obs = obsRaw.includes('|||') ? obsRaw.split('|||')[0].trim() : obsRaw;
+      const partes = obsRaw.split('|||');
+      const obs = partes[0].trim();
+      const obsAux = partes.length > 1 ? partes.slice(1).join(' ').trim() : '';
 
       if (obs.startsWith('ESTADO_INICIAL: ')) {
         resultado.estadoInicial = this.mapearEstadoInicial(obs.substring(16).trim());
+        if (obsAux) resultado.obsEstadoInicial = obsAux;
       } else if (obs.startsWith('ESTADO_FINAL: ')) {
         resultado.estadoFinal = this.mapearEstadoFinal(obs.substring(14).trim());
+        if (obsAux) resultado.obsEstadoFinal = obsAux;
       } else if (obs.startsWith('SISTEMAS: ')) {
         const sistemas = obs.substring(10).split(',').map(s => s.trim()).filter(s => s);
         resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
+        if (obsAux) resultado.obsSistemas = obsAux;
       } else if (obs.startsWith('PROBLEMA: ')) {
         resultado.problema = obs.substring(10).trim();
+        if (obsAux) resultado.obsProblema = obsAux;
       } else if (obs.startsWith('SINTOMAS: ') || obs.startsWith('FALLAS: ')) {
         // ✅ FIX 03-FEB-2026: Soportar ambos prefijos (SINTOMAS y FALLAS)
         const prefijo = obs.startsWith('FALLAS: ') ? 'FALLAS: ' : 'SINTOMAS: ';
         resultado.sintomas = obs.substring(prefijo.length).trim();
+        if (obsAux) resultado.obsFallas = obsAux;
       } else if (obs.startsWith('DIAGNOSTICO: ')) {
         resultado.diagnostico = obs.substring(13).trim();
+        if (obsAux) resultado.obsDiagnostico = obsAux;
       } else if (obs.startsWith('TRABAJOS: ')) {
         resultado.trabajos = obs.substring(10).trim();
+        if (obsAux) resultado.obsTrabajos = obsAux;
       } else if (obs.startsWith('PENDIENTES: ')) {
         resultado.pendientes = obs.substring(12).trim();
+        if (obsAux) resultado.obsPendientes = obsAux;
       } else if (obs.startsWith('RECOMENDACIONES: ')) {
         resultado.recomendaciones = obs.substring(17).trim();
+        if (obsAux) resultado.obsRecomendaciones = obsAux;
       } else if (obs.startsWith('REPUESTOS: ')) {
         const items = obs.substring(11).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
         resultado.repuestos = items;
+        if (obsAux) resultado.obsRepuestos = obsAux;
       } else if (obs.startsWith('MATERIALES: ')) {
         const items = obs.substring(12).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
         resultado.materiales = items;
+        if (obsAux) resultado.obsMateriales = obsAux;
       }
     }
 
@@ -401,102 +436,33 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   /** Mapea códigos de sistema a texto legible */
   private mapearSistema(codigo: string): string {
     const mapa: Record<string, string> = {
+      // Sistemas de Generador
       'MOTOR': 'Motor Diesel/Gas',
+      'GENERADOR': 'Generador Eléctrico',
+      'ELECTRONICO': 'Sistema Electrónico',
       'ELECTRICO': 'Sistema Eléctrico',
       'CONTROL': 'Módulo de Control',
+      'ENFRIAMIENTO': 'Sistema de Enfriamiento',
       'REFRIGERACION': 'Sistema de Refrigeración',
       'COMBUSTIBLE': 'Sistema de Combustible',
       'LUBRICACION': 'Sistema de Lubricación',
       'ESCAPE': 'Sistema de Escape',
+      'ASPIRACION': 'Sistema de Aspiración',
       'ARRANQUE': 'Sistema de Arranque',
       'ALTERNADOR': 'Alternador/Generador',
       'TRANSFERENCIA': 'Transferencia Automática',
+      // ✅ 09-FEB-2026: Sistemas de Bomba (BOM_CORR)
+      'HIDRAULICO': 'Sistema Hidráulico',
+      'MECANICO': 'Sistema Mecánico',
+      'PRESOSTATO': 'Presostato / Control de Presión',
+      'SELLO': 'Sellos Mecánicos / Empaquetadura',
+      'TANQUE': 'Tanques Hidroneumáticos',
+      'TABLERO': 'Tablero de Control',
+      'VALVULAS': 'Válvulas de Operación',
+      'TUBERIA': 'Tubería y Accesorios',
+      'OTRO': 'Otro',
     };
     return mapa[codigo] || codigo;
-  }
-
-  /**
-   * ✅ FIX 02-FEB-2026: Construye texto de observaciones estructurado para el PDF
-   */
-  private construirObservacionesCorrectivo(
-    datos: ReturnType<typeof this.extraerDatosEstructuradosCorrectivo>,
-    observacionesGenerales?: string,
-  ): string {
-    const secciones: string[] = [];
-
-    // ✅ FIX 03-FEB-2026: Estado inicial y final con badges visuales enterprise
-    if (datos.estadoInicial || datos.estadoFinal) {
-      const estadoInicialBadge = datos.estadoInicial
-        ? `<span class="estado-badge estado-inicial">${datos.estadoInicial}</span>`
-        : '';
-      const estadoFinalBadge = datos.estadoFinal
-        ? `<span class="estado-badge estado-final">${datos.estadoFinal}</span>`
-        : '';
-      const flecha = (datos.estadoInicial && datos.estadoFinal)
-        ? '<span class="estado-arrow">→</span>'
-        : '';
-      secciones.push(`
-        <div class="estado-transicion">
-          <div class="estado-label">TRANSICIÓN DE ESTADO</div>
-          <div class="estado-badges">
-            ${estadoInicialBadge}${flecha}${estadoFinalBadge}
-          </div>
-        </div>
-      `);
-    }
-
-    // Sistemas afectados
-    if (datos.sistemasAfectados.length > 0) {
-      secciones.push(`<strong>Sistemas Afectados:</strong> ${datos.sistemasAfectados.join(', ')}`);
-    }
-
-    // Problema reportado
-    if (datos.problema && datos.problema !== '(Sin información)') {
-      secciones.push(`<strong>Problema Reportado:</strong> ${datos.problema}`);
-    }
-
-    // ✅ FIX 03-FEB-2026: Cambiar labels según solicitud
-    // Fallas observadas (antes: Síntomas Observados)
-    if (datos.sintomas && datos.sintomas !== '(Sin información)') {
-      secciones.push(`<strong>Fallas Observadas:</strong> ${datos.sintomas}`);
-    }
-
-    // Diagnóstico (antes: Diagnóstico y Causa Raíz)
-    if (datos.diagnostico && datos.diagnostico !== '(Sin información)') {
-      secciones.push(`<strong>Diagnóstico:</strong> ${datos.diagnostico}`);
-    }
-
-    // Trabajos realizados
-    if (datos.trabajos && datos.trabajos !== '(Sin información)') {
-      secciones.push(`<strong>Trabajos Realizados:</strong> ${datos.trabajos}`);
-    }
-
-    // Repuestos utilizados
-    if (datos.repuestos.length > 0) {
-      secciones.push(`<strong>Repuestos Utilizados:</strong><br/>• ${datos.repuestos.join('<br/>• ')}`);
-    }
-
-    // Materiales utilizados
-    if (datos.materiales.length > 0) {
-      secciones.push(`<strong>Materiales e Insumos:</strong><br/>• ${datos.materiales.join('<br/>• ')}`);
-    }
-
-    // Trabajos pendientes
-    if (datos.pendientes && datos.pendientes !== '(Sin información)') {
-      secciones.push(`<strong>⚠️ Trabajos Pendientes:</strong> ${datos.pendientes}`);
-    }
-
-    // Recomendaciones
-    if (datos.recomendaciones && datos.recomendaciones !== '(Sin información)') {
-      secciones.push(`<strong>📋 Recomendaciones:</strong> ${datos.recomendaciones}`);
-    }
-
-    // Observaciones generales adicionales
-    if (observacionesGenerales) {
-      secciones.push(`<strong>Observaciones Adicionales:</strong> ${observacionesGenerales}`);
-    }
-
-    return secciones.length > 0 ? secciones.join('<br/><br/>') : 'Sin observaciones adicionales.';
   }
 
   /**
@@ -627,7 +593,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   /**
    * ✅ OPTIMIZACIÓN 07-ENE-2026: Asegura browser conectado con soporte para pre-init
    */
-  private async ensureBrowserConnected(): Promise<void> {
+  // @ts-ignore TS6133 - Reserved for future use
+  private async _ensureBrowserConnected(): Promise<void> {
     try {
       // Esperar pre-inicialización si está en curso
       if (this.browserInitPromise) {
@@ -701,7 +668,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
       // ✅ FIX 03-FEB-2026: Detectar Windows vs Linux para configuración apropiada
       const isWindows = process.platform === 'win32';
-      const isProduction = process.env.NODE_ENV === 'production';
+      // const _isProduction = process.env.NODE_ENV === 'production';
 
       // Args base que funcionan en ambas plataformas
       const baseArgs = [
@@ -783,6 +750,11 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR',
     tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO'
   ): TipoInforme {
+    // ✅ FIX 06-FEB-2026: CORRECTIVO tiene su propio template independiente del equipo
+    if (tipoServicio === 'CORRECTIVO') {
+      return 'CORRECTIVO';
+    }
+
     if (tipoEquipo === 'BOMBA') {
       return 'BOMBA_A';
     }
@@ -947,13 +919,15 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         return {
           buffer: Buffer.from(pdfBuffer),
           filename,
-          contentType: 'application/pdf',
+          size: pdfBuffer.length,
+          tipoInforme: 'COTIZACION' as TipoInforme,
         };
       } finally {
         await page.close();
       }
-    } catch (error) {
-      this.logger.error(`❌ Error generando PDF de cotización: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.error(`❌ Error generando PDF de cotización: ${err.message}`, err.stack);
       throw new InternalServerErrorException('Error al generar el PDF de cotización');
     }
   }
@@ -971,12 +945,12 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    */
   async generarPDFCotizacionPrueba(): Promise<PDFResult> {
     const datosPrueba: DatosCotizacionPDF = {
-      // Datos básicos
       numeroCotizacion: 'COT-2025-00001',
-      fecha: new Date().toLocaleDateString('es-CO'),
-      validezDias: 30,
+      fechaCotizacion: new Date().toLocaleDateString('es-CO'),
+      fechaVencimiento: new Date(Date.now() + 30 * 86400000).toLocaleDateString('es-CO'),
+      diasValidez: 30,
+      version: 1,
 
-      // Cliente
       cliente: {
         nombre: 'HOTEL CARIBE S.A.S',
         nit: '900.123.456-7',
@@ -986,99 +960,42 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         contacto: 'María García - Gerente de Compras',
       },
 
-      // Vendedor
-      vendedor: {
-        nombre: 'Carlos Martínez',
-        cargo: 'Asesor Comercial',
-        telefono: '+57 301 234 5678',
-        email: 'carlos.martinez@mekanosrep.com',
-      },
+      asunto: 'Mantenimiento Preventivo Generador 250 KVA',
+      descripcionGeneral: 'Servicio de mantenimiento preventivo completo',
 
-      // Items de servicio
-      servicios: [
-        {
-          descripcion: 'Mantenimiento Preventivo Tipo A - Generador 250 KVA',
-          cantidad: 1,
-          precioUnitario: 1500000,
-          descuento: 0,
-          subtotal: 1500000,
-        },
-        {
-          descripcion: 'Mantenimiento Preventivo Tipo B - Generador 250 KVA',
-          cantidad: 1,
-          precioUnitario: 2800000,
-          descuento: 280000,
-          subtotal: 2520000,
-        },
-        {
-          descripcion: 'Servicio de Diagnóstico y Pruebas de Carga',
-          cantidad: 2,
-          precioUnitario: 450000,
-          descuento: 0,
-          subtotal: 900000,
-        },
+      itemsServicios: [
+        { orden: 1, descripcion: 'Mantenimiento Preventivo Tipo A - Generador 250 KVA', cantidad: 1, unidad: 'UND', precioUnitario: 1500000, descuentoPorcentaje: 0, subtotal: 1500000 },
+        { orden: 2, descripcion: 'Mantenimiento Preventivo Tipo B - Generador 250 KVA', cantidad: 1, unidad: 'UND', precioUnitario: 2800000, descuentoPorcentaje: 10, subtotal: 2520000 },
+        { orden: 3, descripcion: 'Servicio de Diagnóstico y Pruebas de Carga', cantidad: 2, unidad: 'UND', precioUnitario: 450000, descuentoPorcentaje: 0, subtotal: 900000 },
       ],
 
-      // Items de componentes/repuestos
-      componentes: [
-        {
-          codigo: 'FLT-001',
-          descripcion: 'Filtro de Aceite CATERPILLAR Original',
-          cantidad: 3,
-          precioUnitario: 185000,
-          descuento: 0,
-          subtotal: 555000,
-        },
-        {
-          codigo: 'FLT-002',
-          descripcion: 'Filtro de Combustible Primario',
-          cantidad: 3,
-          precioUnitario: 145000,
-          descuento: 14500,
-          subtotal: 420500,
-        },
-        {
-          codigo: 'FLT-003',
-          descripcion: 'Filtro de Aire Principal',
-          cantidad: 2,
-          precioUnitario: 350000,
-          descuento: 0,
-          subtotal: 700000,
-        },
-        {
-          codigo: 'ACE-001',
-          descripcion: 'Aceite Lubricante 15W40 (Galón)',
-          cantidad: 8,
-          precioUnitario: 125000,
-          descuento: 50000,
-          subtotal: 950000,
-        },
+      itemsComponentes: [
+        { orden: 1, descripcion: 'Filtro de Aceite CATERPILLAR Original', referencia: 'FLT-001', cantidad: 3, unidad: 'UND', precioUnitario: 185000, descuentoPorcentaje: 0, subtotal: 555000 },
+        { orden: 2, descripcion: 'Filtro de Combustible Primario', referencia: 'FLT-002', cantidad: 3, unidad: 'UND', precioUnitario: 145000, descuentoPorcentaje: 10, subtotal: 420500 },
+        { orden: 3, descripcion: 'Filtro de Aire Principal', referencia: 'FLT-003', cantidad: 2, unidad: 'UND', precioUnitario: 350000, descuentoPorcentaje: 0, subtotal: 700000 },
+        { orden: 4, descripcion: 'Aceite Lubricante 15W40 (Galón)', referencia: 'ACE-001', cantidad: 8, unidad: 'GAL', precioUnitario: 125000, descuentoPorcentaje: 5, subtotal: 950000 },
       ],
 
-      // Totales
-      subtotalServicios: 4920000,
-      subtotalComponentes: 2625500,
-      subtotalGeneral: 7545500,
-      descuentoGlobal: {
-        tipo: 'porcentaje',
-        valor: 5,
-        monto: 377275,
+      totales: {
+        subtotalServicios: 4920000,
+        subtotalComponentes: 2625500,
+        subtotalGeneral: 7545500,
+        descuentoPorcentaje: 5,
+        descuentoValor: 377275,
+        subtotalConDescuento: 7168225,
+        ivaPorcentaje: 19,
+        ivaValor: 1361962,
+        totalCotizacion: 8530187,
       },
-      baseImponible: 7168225,
-      iva: {
-        porcentaje: 19,
-        monto: 1361962,
-      },
-      total: 8530187,
 
-      // Términos
       formaPago: 'Crédito 30 días',
-      tiempoEntrega: '5-7 días hábiles después de aprobación',
-      garantia: '6 meses sobre repuestos instalados y mano de obra',
-      notas: 'Esta cotización incluye transporte e instalación. Los precios pueden variar según condiciones de mercado.',
+      tiempoEstimadoDias: 7,
+      mesesGarantia: 6,
+      observacionesGarantia: '6 meses sobre repuestos instalados y mano de obra',
+      terminosCondiciones: 'Esta cotización incluye transporte e instalación. Los precios pueden variar según condiciones de mercado.',
 
-      // Estado
-      estado: 'BORRADOR',
+      elaboradoPor: 'Carlos Martínez',
+      cargoElaborador: 'Asesor Comercial',
     };
 
     return this.generarPDFCotizacion(datosPrueba);

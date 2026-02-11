@@ -33,6 +33,20 @@ export class ClientesController {
   }
 
   /**
+   * ✅ MULTI-SEDE: Listar clientes principales para selector "Es Sede de"
+   * Retorna datos completos para auto-fill del formulario
+   */
+  @Get('principales')
+  async getPrincipales(
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const limitNum = Math.min(parseInt(limit || '20'), 50);
+    const items = await this.clientesService.findPrincipales(q, limitNum);
+    return { success: true, data: items };
+  }
+
+  /**
    * ✅ OPTIMIZACIÓN 05-ENE-2026: Endpoint LIGERO para selectores
    * Retorna solo id, nombre y NIT - ideal para dropdowns/autocomplete
    * ✅ 31-ENE-2026: MULTI-ASESOR - Filtra por asesor si NO es admin

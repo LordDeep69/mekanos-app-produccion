@@ -16,10 +16,15 @@ export function useClientesSelector() {
     queryKey: ['clientes', 'selector'],
     queryFn: async () => {
       const response = await getClientes({ take: 1000 });
-      return response.data.map(c => ({
-        value: c.id_cliente.toString(),
-        label: c.persona?.nombre_comercial || c.persona?.razon_social || `Cliente ${c.id_cliente}`,
-      }));
+      return response.data.map(c => {
+        const baseName = c.persona?.nombre_comercial || c.persona?.razon_social || `Cliente ${c.id_cliente}`;
+        // ✅ MULTI-SEDE: Si es sede, mostrar "NombreSede (NombrePrincipal)"
+        const label = (c as any).nombre_sede
+          ? `${(c as any).nombre_sede} (${baseName})`
+          : baseName;
+        const nit = (c.persona as any)?.numero_documento || '';
+        return { value: c.id_cliente.toString(), label, nit };
+      });
     },
     staleTime: 1000 * 60 * 5, // 5 minutos
   });

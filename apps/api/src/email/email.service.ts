@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { google } from 'googleapis';
 import * as nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
+import { PrismaService } from '../database/prisma.service';
 
 /**
  * ============================================================================
@@ -57,6 +58,7 @@ export interface SendEmailOptions {
   attachments?: EmailAttachment[];
   cc?: string | string[];
   bcc?: string | string[];
+  idCuentaEmail?: number; // ✅ MULTI-EMAIL: ID de cuenta específica
 }
 
 export interface OrdenEmailData {
@@ -78,7 +80,7 @@ export class EmailService implements OnModuleInit {
   private isConfigured = false;
   private provider: 'gmail-api' | 'smtp' | 'mock' = 'mock';
 
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     this.fromEmail = process.env.EMAIL_FROM || 'mekanossas4@gmail.com';
   }
 
@@ -190,6 +192,118 @@ export class EmailService implements OnModuleInit {
       this.transporter = null;
       this.isConfigured = false;
       this.provider = 'mock';
+    }
+  }
+
+  /**
+   * =========================================================================
+   * ENVÍO DE EMAILS DESDE CUENTA ESPECÍFICA (MULTI-EMAIL)
+   * =========================================================================
+   * Si se proporciona idCuentaEmail, usa las credenciales de esa cuenta.
+   * Si no, usa la cuenta por defecto configurada en variables de entorno.
+   */
+  async sendEmailFromAccount(
+    options: SendEmailOptions,
+    idCuentaEmail?: number,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    // ✅ MULTI-EMAIL HABILITADO: Buscar credenciales de la cuenta específica
+    if (idCuentaEmail) {
+      try {
+        const cuenta = await this.prisma.cuentas_email.findUnique({
+          where: { id_cuenta_email: idCuentaEmail },
+        });
+
+        if (cuenta && cuenta.activa && cuenta.gmail_client_id && cuenta.gmail_client_secret && cuenta.gmail_refresh_token) {
+          this.logger.log(`📧 [MULTI-EMAIL] Usando cuenta: ${cuenta.email} (ID: ${idCuentaEmail})`);
+          return this.sendEmailWithCredentials(options, {
+            email: cuenta.email,
+            clientId: cuenta.gmail_client_id,
+            clientSecret: cuenta.gmail_client_secret,
+            refreshToken: cuenta.gmail_refresh_token,
+          });
+        } else if (cuenta && !cuenta.activa) {
+          this.logger.warn(`⚠️ [MULTI-EMAIL] Cuenta ${cuenta.email} (ID: ${idCuentaEmail}) está INACTIVA, usando cuenta por defecto`);
+        } else if (cuenta) {
+          this.logger.warn(`⚠️ [MULTI-EMAIL] Cuenta ${cuenta.email} (ID: ${idCuentaEmail}) sin credenciales Gmail API completas, usando cuenta por defecto`);
+        } else {
+          this.logger.warn(`⚠️ [MULTI-EMAIL] Cuenta ID: ${idCuentaEmail} NO encontrada en BD, usando cuenta por defecto`);
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`❌ [MULTI-EMAIL] Error consultando cuenta ${idCuentaEmail}: ${errorMsg}`);
+        this.logger.warn(`   Fallback a cuenta por defecto`);
+      }
+    }
+
+    // Fallback a la cuenta por defecto
+    return this.sendEmail(options);
+  }
+
+  /**
+   * Envía email usando credenciales específicas (Gmail API)
+   */
+  private async sendEmailWithCredentials(
+    options: SendEmailOptions,
+    credentials: { email: string; clientId: string; clientSecret: string; refreshToken: string },
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const OAuth2 = google.auth.OAuth2;
+      const oauth2Client = new OAuth2(
+        credentials.clientId,
+        credentials.clientSecret,
+        'https://developers.google.com/oauthplayground',
+      );
+      oauth2Client.setCredentials({ refresh_token: credentials.refreshToken });
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+      const toAddresses = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+      const boundary = `boundary_${Date.now()}`;
+
+      let emailContent = [
+        `From: MEKANOS S.A.S <${credentials.email}>`,
+        `To: ${toAddresses}`,
+        options.cc ? `Cc: ${Array.isArray(options.cc) ? options.cc.join(', ') : options.cc}` : '',
+        options.bcc ? `Bcc: ${Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc}` : '',
+        `Subject: =?UTF-8?B?${Buffer.from(options.subject).toString('base64')}?=`,
+        'MIME-Version: 1.0',
+      ].filter(Boolean);
+
+      if (options.attachments && options.attachments.length > 0) {
+        emailContent.push(`Content-Type: multipart/mixed; boundary="${boundary}"`, '', `--${boundary}`);
+        emailContent.push('Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '');
+        emailContent.push(Buffer.from(options.html).toString('base64'));
+
+        for (const att of options.attachments) {
+          emailContent.push(`--${boundary}`);
+          emailContent.push(`Content-Type: ${att.contentType || 'application/pdf'}; name="${att.filename}"`);
+          emailContent.push('Content-Transfer-Encoding: base64');
+          emailContent.push(`Content-Disposition: attachment; filename="${att.filename}"`, '');
+          emailContent.push(att.content.toString('base64'));
+        }
+        emailContent.push(`--${boundary}--`);
+      } else {
+        emailContent.push('Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '');
+        emailContent.push(Buffer.from(options.html).toString('base64'));
+      }
+
+      const rawEmail = Buffer.from(emailContent.join('\r\n'))
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const response = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: { raw: rawEmail },
+      });
+
+      this.logger.log(`✅ [Gmail API - ${credentials.email}] Email enviado - ID: ${response.data.id}`);
+      return { success: true, messageId: response.data.id || undefined };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ [Gmail API - Multi] Error: ${errorMessage}`);
+      return { success: false, error: errorMessage };
     }
   }
 
@@ -351,12 +465,13 @@ export class EmailService implements OnModuleInit {
   async sendInformeTecnicoEmail(
     data: OrdenEmailData,
     clienteEmail: string,
-    pdfBuffer: Buffer
+    pdfBuffer: Buffer,
+    idCuentaEmail?: number, // ✅ MULTI-EMAIL: Cuenta específica del cliente
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
 
     const htmlContent = this.buildInformeTecnicoTemplate(data);
 
-    return this.sendEmail({
+    const emailOptions: SendEmailOptions = {
       to: clienteEmail,
       subject: `📋 Informe Técnico ${data.ordenNumero} - ${data.tipoMantenimiento} | MEKANOS S.A.S`,
       html: htmlContent,
@@ -365,7 +480,15 @@ export class EmailService implements OnModuleInit {
         content: pdfBuffer,
         contentType: 'application/pdf'
       }]
-    });
+    };
+
+    // ✅ MULTI-EMAIL: Si hay cuenta específica, usarla
+    if (idCuentaEmail) {
+      this.logger.log(`📧 [MULTI-EMAIL] Enviando informe desde cuenta ID: ${idCuentaEmail}`);
+      return this.sendEmailFromAccount(emailOptions, idCuentaEmail);
+    }
+
+    return this.sendEmail(emailOptions);
   }
 
   /**

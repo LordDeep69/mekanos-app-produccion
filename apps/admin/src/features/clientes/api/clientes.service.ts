@@ -12,7 +12,7 @@ import type {
   ClientesQueryParams,
   ClientesResponse,
   CreateClienteDto,
-  UpdateClienteDto,
+  UpdateClienteDto
 } from '@/types/clientes';
 
 const CLIENTES_BASE = '/clientes';
@@ -123,4 +123,18 @@ export async function updateCliente(
  */
 export async function deleteCliente(id: number): Promise<void> {
   await apiClient.delete(`${CLIENTES_BASE}/${id}`);
+}
+
+/**
+ * ✅ MULTI-SEDE: Obtener clientes principales para selector "Es Sede de"
+ * Retorna datos completos para auto-fill del formulario
+ */
+export async function getClientesPrincipales(
+  search?: string
+): Promise<ClientePrincipalSelector[]> {
+  const params = search ? `?q=${encodeURIComponent(search)}` : '';
+  const response = await apiClient.get<{ success: boolean; data: ClientePrincipalSelector[] }>(
+    `${CLIENTES_BASE}/principales${params}`
+  );
+  return response.data?.data ?? response.data as any;
 }

@@ -309,16 +309,28 @@ class SyncUploadService {
         final base64 = base64Results[i];
         // ✅ FIX: Validar que base64 no esté vacío (archivo corrupto/0 KB)
         if (base64 != null && base64.isNotEmpty) {
-          // ✅ FIX: Mapear tipo de evidencia - GENERAL no es válido en backend
-          // Backend acepta solo: ANTES, DURANTE, DESPUES, MEDICION
+          // ✅ FIX 07-FEB-2026: Clasificar fotos generales vs actividad
+          // Fotos de la galería general (FOTOS GENERALES) tienen idActividadEjecutada=null
+          // Fotos de actividades tienen idActividadEjecutada=<ID>
+          // El backend y portal admin distinguen por tipo_evidencia='GENERAL'
           String tipoEvidencia = ev.tipoEvidencia.toUpperCase();
-          if (tipoEvidencia == 'GENERAL') {
-            tipoEvidencia = 'DURANTE'; // Mapear GENERAL a DURANTE como fallback
+          String? descripcion = ev.descripcion;
+          if (ev.idActividadEjecutada == null) {
+            // Foto general: guardar sub-tipo original como prefijo en descripción
+            // Formato: "ANTES: descripción del usuario" o "DURANTE: Foto general del servicio"
+            // Esto permite ordenar/agrupar generales por sub-tipo en el portal admin
+            final subTipo = tipoEvidencia; // ANTES, DURANTE, DESPUES, etc.
+            tipoEvidencia = 'GENERAL';
+            if (descripcion != null && descripcion.isNotEmpty) {
+              descripcion = '$subTipo: $descripcion';
+            } else {
+              descripcion = '$subTipo: Foto general del servicio';
+            }
           }
           evidenciasPayload.add({
             'tipo': tipoEvidencia,
             'base64': base64,
-            'descripcion': ev.descripcion,
+            'descripcion': descripcion,
             // ✅ FIX 16-DIC-2025: Incluir idOrdenEquipo para multi-equipos
             if (ev.idOrdenEquipo != null) 'idOrdenEquipo': ev.idOrdenEquipo,
           });
@@ -645,11 +657,36 @@ class SyncUploadService {
         );
       }
     } catch (e) {
-      return SyncUploadResult(
-        success: false,
-        mensaje: 'Error inesperado: $e',
-        error: e.toString(),
-      );
+      // ✅ FIX 09-FEB-2026: Intentar guardar en cola como último recurso
+      // Si el payload ya se construyó, no perder el trabajo del técnico
+      debugPrint('❌ [SYNC] Error inesperado: $e - intentando guardar en cola');
+      try {
+        await _offlineSync.guardarEnCola(
+          idOrdenLocal: idOrdenLocal,
+          idOrdenBackend: idOrdenBackend,
+          payload: {
+            'idOrden': idOrdenBackend,
+            'observaciones': observaciones,
+            'horaEntrada': horaEntrada,
+            'horaSalida': horaSalida,
+            'usuarioId': usuarioId,
+            if (razonFalla != null) 'razonFalla': razonFalla,
+            'modo': modo,
+          },
+        );
+        return SyncUploadResult(
+          success: false,
+          mensaje: 'Error al subir. Se reintentará desde "Órdenes por Subir".',
+          error: e.toString(),
+          guardadoOffline: true,
+        );
+      } catch (_) {
+        return SyncUploadResult(
+          success: false,
+          mensaje: 'Error inesperado: $e',
+          error: e.toString(),
+        );
+      }
     }
   }
 

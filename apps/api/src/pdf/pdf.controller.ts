@@ -232,6 +232,18 @@ export class PdfController {
             orden_secuencia: 'asc',
           },
         },
+        // ✅ FIX 06-FEB-2026: Incluir firmas digitales para renderizar en PDF
+        firmas_digitales_ordenes_servicio_id_firma_tecnicoTofirmas_digitales: {
+          include: {
+            persona: true,
+          },
+        },
+        firmas_digitales: {
+          include: {
+            persona: true,
+          },
+        },
+        sedes_cliente: true,
       },
     }) as any; // Cast as any para Prisma includes complejos
 
@@ -245,8 +257,13 @@ export class PdfController {
 
     // Construir datos para el PDF
     const clientePersona = orden.clientes?.persona;
-    const clienteNombre = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
-    const clienteDireccion = clientePersona?.direccion_principal || orden.direccion_servicio || 'N/A';
+    // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
+    const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
+    const clienteNombre = orden.clientes?.nombre_sede
+      ? `${clienteNombreBase} - ${orden.clientes.nombre_sede}`
+      : clienteNombreBase;
+    // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
+    const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
 
     // Obtener marca y serie según tipo de equipo (usando 'equipos' que es la relación correcta)
     let marcaEquipo = 'N/A';
@@ -470,8 +487,8 @@ export class PdfController {
             },
             evidencias: evidenciasEquipo.map((ev: any) => ({
               url: ev.ruta_archivo,
-              caption: ev.descripcion || undefined,
-              momento: ev.momento_captura || 'DURANTE',
+              caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+              momento: ev.tipo_evidencia || ev.momento_captura || 'DURANTE',
               idOrdenEquipo: oe.id_orden_equipo, // Asignar el ID del equipo distribuido
             })),
           };
@@ -491,13 +508,43 @@ export class PdfController {
             ?.filter((ev: any) => ev.id_orden_equipo === oe.id_orden_equipo)
             .map((ev: any) => ({
               url: ev.ruta_archivo,
-              caption: ev.descripcion || undefined,
-              momento: ev.momento_captura || 'DURANTE',
+              caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+              momento: ev.tipo_evidencia || ev.momento_captura || 'DURANTE',
               idOrdenEquipo: ev.id_orden_equipo || undefined,
             })) || [],
         }));
       }
+
+      // ✅ FIX: Agregar fotos GENERALES huérfanas (sin id_orden_equipo) como pseudo-equipo
+      if (evidenciasPorEquipo) {
+        const fotosGeneralesHuerfanas = (orden.evidencias_fotograficas || [])
+          .filter((ev: any) => !ev.id_orden_equipo && (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia))
+          .map((ev: any) => ({
+            url: ev.ruta_archivo,
+            caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
+            momento: ev.tipo_evidencia || 'GENERAL',
+          }));
+
+        if (fotosGeneralesHuerfanas.length > 0) {
+          evidenciasPorEquipo.push({
+            equipo: {
+              idOrdenEquipo: 0,
+              ordenSecuencia: 999,
+              nombreSistema: 'FOTOGRAFÍAS GENERALES',
+              codigoEquipo: undefined,
+              nombreEquipo: 'FOTOGRAFÍAS GENERALES',
+              estado: undefined,
+            },
+            evidencias: fotosGeneralesHuerfanas,
+          });
+          this.logger.log(`📷 Fotos generales huérfanas agregadas: ${fotosGeneralesHuerfanas.length}`);
+        }
+      }
     }
+
+    // ✅ FIX 06-FEB-2026: Extraer firmas digitales para renderizar en PDF
+    const firmaTecnico = orden.firmas_digitales_ordenes_servicio_id_firma_tecnicoTofirmas_digitales;
+    const firmaCliente = orden.firmas_digitales;
 
     const datosOrden: DatosOrdenPDF = {
       cliente: clienteNombre,
@@ -505,14 +552,19 @@ export class PdfController {
       marcaEquipo: marcaEquipo,
       serieEquipo: serieEquipo,
       tipoEquipo: this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre || ''),
-      fecha: orden.fecha_programada
-        ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
-        : new Date().toLocaleDateString('es-CO'),
+      // ✅ FIX 07-FEB-2026: Usar fecha_inicio_real (fecha real del servicio) cuando existe,
+      // fallback a fecha_programada. Antes siempre usaba fecha_programada causando desfase.
+      fecha: orden.fecha_inicio_real
+        ? new Date(orden.fecha_inicio_real).toLocaleDateString('es-CO')
+        : orden.fecha_programada
+          ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
+          : new Date().toLocaleDateString('es-CO'),
       tecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
         ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() || 'N/A'
         : 'N/A',
-      horaEntrada: orden.hora_inicio || orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real).toLocaleTimeString('es-CO') : 'N/A',
-      horaSalida: orden.hora_fin || orden.fecha_fin_real ? new Date(orden.fecha_fin_real).toLocaleTimeString('es-CO') : 'N/A',
+      // ✅ FIX 07-FEB-2026: Usar formatearHora consistente y corregir precedencia de operadores
+      horaEntrada: this.formatearHora(orden.fecha_inicio_real),
+      horaSalida: this.formatearHora(orden.fecha_fin_real),
       tipoServicio: orden.tipos_servicio?.nombre_tipo || 'PREVENTIVO_A',
       numeroOrden: orden.numero_orden || `ORD-${id.substring(0, 8)}`,
       datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
@@ -528,14 +580,40 @@ export class PdfController {
         unidad: med.parametros_medicion?.unidad_medida || '',
         nivelAlerta: (med.nivel_alerta as any) || 'OK',
       })) || [],
-      evidencias: orden.evidencias_fotograficas?.map((ev: any) => ev.ruta_archivo) || [],
-      observaciones: orden.observaciones || '',
+      // ✅ FIX 06-FEB-2026: Mapear evidencias como objetos con caption/tipo (no solo URL)
+      // Esto permite al template separar fotos GENERALES de fotos de actividad
+      evidencias: orden.evidencias_fotograficas?.map((ev: any) => ({
+        url: ev.ruta_archivo,
+        caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+      })) || [],
+      observaciones: orden.observaciones_cierre || orden.observaciones || '',
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
       equiposOrden,
       actividadesPorEquipo,
       medicionesPorEquipo,
       evidenciasPorEquipo,
+      // ✅ FIX 06-FEB-2026: Firmas digitales con imagen base64 y prefijo data URL
+      firmaTecnico: firmaTecnico?.firma_base64
+        ? (firmaTecnico.firma_base64.startsWith('data:') ? firmaTecnico.firma_base64 : `data:image/png;base64,${firmaTecnico.firma_base64}`)
+        : undefined,
+      firmaCliente: firmaCliente?.firma_base64
+        ? (firmaCliente.firma_base64.startsWith('data:') ? firmaCliente.firma_base64 : `data:image/png;base64,${firmaCliente.firma_base64}`)
+        : undefined,
+      // ✅ FIX 06-FEB-2026: Nombre y cargo del técnico
+      nombreTecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
+        ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim()
+        : undefined,
+      cargoTecnico: 'Técnico de Servicio',
+      // ✅ FIX 06-FEB-2026: Cadena robusta de fallback para nombre/cargo del cliente
+      nombreCliente: (orden.nombre_quien_recibe && orden.nombre_quien_recibe !== 'Cliente')
+        ? orden.nombre_quien_recibe
+        : firmaCliente?.persona
+          ? `${firmaCliente.persona.primer_nombre || ''} ${firmaCliente.persona.primer_apellido || ''}`.trim() || orden.nombre_quien_recibe || undefined
+          : clientePersona
+            ? (clientePersona.nombre_comercial || `${clientePersona.primer_nombre || ''} ${clientePersona.primer_apellido || ''}`.trim() || clientePersona.razon_social || undefined)
+            : orden.nombre_quien_recibe || undefined,
+      cargoCliente: orden.cargo_quien_recibe || 'Cliente / Autorizador',
     };
 
     // 🔍 DEBUG: Log de datos antes de enviar al template
@@ -595,16 +673,28 @@ export class PdfController {
         }
       }
 
+      // ✅ FIX 06-FEB-2026: Detectar tipo de servicio REAL desde la orden (CORRECTIVO, PREVENTIVO_A, PREVENTIVO_B)
+      const codigoServicio = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
+      const categoriaServicio = (orden.tipos_servicio?.categoria || '').toUpperCase();
+      const tipoServicioReal: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' =
+        (codigoServicio.includes('CORR') || categoriaServicio.includes('CORRECTIVO'))
+          ? 'CORRECTIVO'
+          : codigoServicio.includes('PREV_B') || codigoServicio.includes('_B')
+            ? 'PREVENTIVO_B'
+            : 'PREVENTIVO_A';
+
+      this.logger.log(`📊 DEBUG PDF - tipoServicioReal: ${tipoServicioReal} (codigo=${codigoServicio}, categoria=${categoriaServicio})`);
+
       // Determinar tipo de informe final
       if (tipoEquipoNombre) {
         tipo = this.pdfService.determinarTipoInforme(
           this.mapTipoEquipo(tipoEquipoNombre),
-          'PREVENTIVO_A',
+          tipoServicioReal,
         );
       } else {
-        // ✅ FALLBACK: GENERADOR_A por defecto
-        tipo = 'GENERADOR_A';
-        this.logger.log(`📊 DEBUG PDF - Usando tipo por defecto: GENERADOR_A`);
+        // ✅ FALLBACK: Si es correctivo, usar CORRECTIVO; sino GENERADOR_A
+        tipo = tipoServicioReal === 'CORRECTIVO' ? 'CORRECTIVO' : 'GENERADOR_A';
+        this.logger.log(`📊 DEBUG PDF - Usando tipo por defecto: ${tipo}`);
       }
 
       this.logger.log(`📊 DEBUG PDF - tipoInforme determinado: ${tipo}`);
@@ -727,7 +817,10 @@ export class PdfController {
       validezDias: cotizacion.dias_validez || 30,
 
       cliente: {
-        nombre: clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A',
+        // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede en cotizaciones
+        nombre: (cotizacion as any).clientes?.nombre_sede
+          ? `${clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A'} - ${(cotizacion as any).clientes.nombre_sede}`
+          : (clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A'),
         nit: clientePersona?.numero_identificacion || 'N/A',
         direccion: clientePersona?.direccion_principal || 'N/A',
         telefono: clientePersona?.telefono_principal || clientePersona?.celular || 'N/A',
@@ -1059,6 +1152,7 @@ export class PdfController {
             persona: true,
           },
         },
+        sedes_cliente: true,
       },
     }) as any;
 
@@ -1072,9 +1166,13 @@ export class PdfController {
 
     // Construir datos para PDF (reutilizar lógica existente)
     const clientePersona = orden.clientes?.persona;
-    // ✅ FIX 19-ENE-2026: Priorizar nombre_comercial sobre razon_social (igual que mobile)
-    const clienteNombre = clientePersona?.nombre_comercial || clientePersona?.razon_social || clientePersona?.nombre_completo || 'N/A';
-    const clienteDireccion = clientePersona?.direccion_principal || orden.direccion_servicio || 'N/A';
+    // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
+    const clienteNombreBase2 = clientePersona?.nombre_comercial || clientePersona?.razon_social || clientePersona?.nombre_completo || 'N/A';
+    const clienteNombre = orden.clientes?.nombre_sede
+      ? `${clienteNombreBase2} - ${orden.clientes.nombre_sede}`
+      : clienteNombreBase2;
+    // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
+    const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
     const clienteEmail = dto.emailDestino || clientePersona?.email_principal;
 
     // ✅ FIX 19-ENE-2026: Usar nombre_equipo y numero_serie_equipo directamente (igual que mobile)
@@ -1155,6 +1253,30 @@ export class PdfController {
         };
       });
 
+      // ✅ FIX: Agregar fotos GENERALES huérfanas (sin id_orden_equipo) como pseudo-equipo
+      const fotosGeneralesHuerfanas = (orden.evidencias_fotograficas || [])
+        .filter((ev: any) => !ev.id_orden_equipo && (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia))
+        .map((ev: any) => ({
+          url: ev.ruta_archivo,
+          caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
+          momento: ev.tipo_evidencia || 'GENERAL',
+        }));
+
+      if (fotosGeneralesHuerfanas.length > 0 && evidenciasPorEquipo) {
+        evidenciasPorEquipo.push({
+          equipo: {
+            idOrdenEquipo: 0,
+            ordenSecuencia: 999,
+            nombreSistema: 'FOTOGRAFÍAS GENERALES',
+            codigoEquipo: undefined,
+            nombreEquipo: 'FOTOGRAFÍAS GENERALES',
+            estado: undefined,
+          },
+          evidencias: fotosGeneralesHuerfanas,
+        });
+        this.logger.log(`📷 Fotos generales huérfanas agregadas: ${fotosGeneralesHuerfanas.length}`);
+      }
+
       if (actividadesPorEquipo) {
         this.logger.log(`📋 Actividades agrupadas: ${actividadesPorEquipo.map(g => `${g.equipo.nombreSistema}:${g.actividades.length}`).join(', ')}`);
       }
@@ -1172,9 +1294,13 @@ export class PdfController {
       marcaEquipo,
       serieEquipo,
       tipoEquipo: this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre || ''),
-      fecha: orden.fecha_programada
-        ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
-        : new Date().toLocaleDateString('es-CO'),
+      // ✅ FIX 07-FEB-2026: Usar fecha_inicio_real (fecha real del servicio) cuando existe,
+      // fallback a fecha_programada. Antes siempre usaba fecha_programada causando desfase.
+      fecha: orden.fecha_inicio_real
+        ? new Date(orden.fecha_inicio_real).toLocaleDateString('es-CO')
+        : orden.fecha_programada
+          ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
+          : new Date().toLocaleDateString('es-CO'),
       tecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
         ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() || 'N/A'
         : 'N/A',
@@ -1222,8 +1348,18 @@ export class PdfController {
         ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim()
         : undefined,
       cargoTecnico: 'Técnico de Servicio',
-      nombreCliente: orden.nombre_quien_recibe || undefined,
-      cargoCliente: orden.cargo_quien_recibe || undefined,
+      // ✅ FIX 06-FEB-2026: Cadena robusta de fallback para nombre/cargo del cliente
+      // 1. nombre_quien_recibe explícito (del mobile) si no es genérico
+      // 2. Nombre de la persona vinculada a la firma del cliente
+      // 3. Nombre de la persona del cliente de la orden
+      nombreCliente: (orden.nombre_quien_recibe && orden.nombre_quien_recibe !== 'Cliente')
+        ? orden.nombre_quien_recibe
+        : firmaCliente?.persona
+          ? `${firmaCliente.persona.primer_nombre || ''} ${firmaCliente.persona.primer_apellido || ''}`.trim() || orden.nombre_quien_recibe || undefined
+          : clientePersona
+            ? (clientePersona.nombre_comercial || `${clientePersona.primer_nombre || ''} ${clientePersona.primer_apellido || ''}`.trim() || clientePersona.razon_social || undefined)
+            : orden.nombre_quien_recibe || undefined,
+      cargoCliente: orden.cargo_quien_recibe || 'Cliente / Autorizador',
     };
 
     // ✅ FIX 15-ENE-2026: Determinar tipo de informe basado en tipos_servicio.codigo_tipo
@@ -1348,7 +1484,11 @@ export class PdfController {
           mensajePersonalizado: mensaje,
         });
 
-        await this.emailService.sendEmail({
+        // ✅ MULTI-EMAIL: Usar cuenta específica del cliente si está configurada
+        const idCuentaEmailRegen = orden.clientes?.id_cuenta_email_remitente || undefined;
+        this.logger.log(`📧 [MULTI-EMAIL REGEN] Cliente id_cuenta_email_remitente: ${idCuentaEmailRegen ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`);
+
+        await this.emailService.sendEmailFromAccount({
           to: clienteEmail,
           subject: asunto,
           html: htmlTemplate,
@@ -1357,7 +1497,7 @@ export class PdfController {
             content: resultado.buffer,
             contentType: 'application/pdf',
           }],
-        });
+        }, idCuentaEmailRegen);
 
         emailEnviado = true;
         this.logger.log(`✅ Email enviado exitosamente a ${clienteEmail}`);
@@ -1449,7 +1589,6 @@ export class PdfController {
     // 2. Buscar PDF existente en documentos_generados
     let pdfBuffer: Buffer | null = null;
     let urlPdf: string | null = null;
-    let usoPdfExistente = false;
     let filename = `Informe_${orden.numero_orden}.pdf`;
 
     if (!dto.forzarRegeneracion) {
@@ -1471,7 +1610,6 @@ export class PdfController {
           if (response.ok) {
             const arrayBuffer = await response.arrayBuffer();
             pdfBuffer = Buffer.from(arrayBuffer);
-            usoPdfExistente = true;
             filename = urlPdf.split('/').pop() || filename;
             this.logger.log(`✅ PDF descargado: ${pdfBuffer.length} bytes`);
           } else {
@@ -1509,9 +1647,12 @@ export class PdfController {
     const tecnicoNombre = tecnico
       ? `${tecnico.primer_nombre || ''} ${tecnico.primer_apellido || ''}`.trim()
       : 'Técnico';
-    const fechaServicio = orden.fecha_programada
-      ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
-      : new Date().toLocaleDateString('es-CO');
+    // ✅ FIX 07-FEB-2026: Usar fecha real del servicio cuando existe
+    const fechaServicio = orden.fecha_inicio_real
+      ? new Date(orden.fecha_inicio_real).toLocaleDateString('es-CO')
+      : orden.fecha_programada
+        ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
+        : new Date().toLocaleDateString('es-CO');
 
     const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
     const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
@@ -1523,14 +1664,25 @@ export class PdfController {
           clientes: { include: { persona: true } },
           tipos_servicio: true,
           equipos: true,
+          sedes_cliente: true,
         },
       });
 
+      // ✅ MULTI-EMAIL HABILITADO: Leer cuenta email del cliente
+      const idCuentaEmailCliente = clienteOrden?.clientes?.id_cuenta_email_remitente || null;
+      this.logger.log(`📧 [MULTI-EMAIL] Cliente id_cuenta_email_remitente: ${idCuentaEmailCliente ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`);
+
+
       const clientePersona = clienteOrden?.clientes?.persona;
-      const clienteNombreCompleto = clientePersona?.nombre_comercial || clientePersona?.razon_social || dto.emailDestino.split('@')[0];
-      const clienteDireccion = clientePersona?.direccion_principal || clienteOrden?.direccion_servicio;
-      const marcaEquipo = clienteOrden?.equipos?.nombre_equipo;
-      const serieEquipo = clienteOrden?.equipos?.numero_serie_equipo;
+      // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
+      const clienteNombreBase3 = clientePersona?.nombre_comercial || clientePersona?.razon_social || dto.emailDestino.split('@')[0];
+      const clienteNombreCompleto = clienteOrden?.clientes?.nombre_sede
+        ? `${clienteNombreBase3} - ${clienteOrden.clientes.nombre_sede}`
+        : clienteNombreBase3;
+      // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
+      const clienteDireccion = clienteOrden?.sedes_cliente?.direccion_sede ?? clientePersona?.direccion_principal ?? undefined;
+      const marcaEquipo = clienteOrden?.equipos?.nombre_equipo ?? undefined;
+      const serieEquipo = clienteOrden?.equipos?.numero_serie_equipo ?? undefined;
       const tipoServicioNombre = clienteOrden?.tipos_servicio?.nombre_tipo || 'Mantenimiento';
       const codigoTipo = clienteOrden?.tipos_servicio?.codigo_tipo || '';
 
@@ -1561,7 +1713,8 @@ export class PdfController {
         mensajePersonalizado: mensaje,
       });
 
-      const emailResult = await this.emailService.sendEmail({
+      // ✅ MULTI-EMAIL: Usar cuenta específica del cliente si está configurada
+      const emailResult = await this.emailService.sendEmailFromAccount({
         to: dto.emailDestino,
         subject: asunto,
         html: htmlTemplate,
@@ -1570,7 +1723,7 @@ export class PdfController {
           content: pdfBuffer,
           contentType: 'application/pdf',
         }],
-      });
+      }, idCuentaEmailCliente ?? undefined);
 
       if (emailResult.success) {
         this.logger.log(`✅ Email enviado exitosamente a ${dto.emailDestino}`);

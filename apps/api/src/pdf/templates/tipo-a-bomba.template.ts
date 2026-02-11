@@ -124,9 +124,7 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- SIMBOLOGÍA -->
     ${generarSimbologia()}
-  </div>
-  
-  <div class="page page-break">
+    
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
     ${datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
       ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)

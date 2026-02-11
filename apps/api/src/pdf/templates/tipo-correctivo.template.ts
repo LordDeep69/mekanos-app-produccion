@@ -1,16 +1,17 @@
 /**
  * Template MEKANOS - Informe de Mantenimiento Correctivo
+ * ✅ REDISEÑO COMPLETO 06-FEB-2026: Secciones dedicadas por naturaleza de actividad
  *
- * ESTRUCTURA ESTÁNDAR (igual que Tipo A/B):
+ * NUEVA ESTRUCTURA ENTERPRISE:
  * 1. CABECERA
- * 2. DATOS DEL CLIENTE Y SERVICIO
+ * 2. DATOS DEL CLIENTE Y SERVICIO + ESTADO INICIAL DEL EQUIPO
  * 3. REGISTRO DE DATOS DEL MÓDULO DE CONTROL [solo si aplica]
- * 4. GENERAL (trabajos ejecutados)
- * 5. SIMBOLOGÍA
- * 6. MEDICIONES TÉCNICAS [solo si aplica]
- * 7. REGISTRO FOTOGRÁFICO DEL SERVICIO
- * 8. FOTOS GENERALES [si hay]
- * 9. OBSERVACIONES
+ * 4. PROBLEMA Y DIAGNÓSTICO (Problema Reportado + Fallas + Sistemas + Diagnóstico)
+ * 5. TRABAJOS REALIZADOS (narrativo, NO checklist B/M/C/NA)
+ * 6. REPUESTOS Y MATERIALES (tabla dedicada si hay items)
+ * 7. RESULTADO DEL SERVICIO (Estado Final + Pendientes + Recomendaciones)
+ * 8. REGISTRO FOTOGRÁFICO DEL SERVICIO
+ * 9. OBSERVACIONES ADICIONALES (solo notas generales)
  * 10. FIRMAS
  * 11. FOOTER
  *
@@ -22,7 +23,6 @@ import {
   baseStyles,
   EquipoOrdenPDF,
   EvidenciasPorEquipoPDF,
-  generarChecklistMultiEquipo,
   generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
@@ -66,34 +66,44 @@ export interface DatosCorrectivoOrdenPDF {
   tecnico: string;
   cargoTecnico?: string;
 
-  // Problema reportado (se incluirá en observaciones)
-  problemaReportado: {
-    descripcion: string;
-    fechaReporte: string;
-    reportadoPor?: string;
-  };
+  // ✅ REDISEÑO 06-FEB-2026: Campos dedicados por naturaleza de actividad
+  // Estado del equipo (selectores enum)
+  estadoInicial?: string;          // Texto legible mapeado: "✅ Equipo Operativo"
+  estadoFinal?: string;            // Texto legible mapeado: "⚠️ Reparación Parcial"
 
-  // Diagnóstico (se incluirá en observaciones)
-  diagnostico: {
-    descripcion: string;
-    causaRaiz: string;
-    sistemasAfectados: string[];
-  };
+  // Texto narrativo (campos de texto libre)
+  problemaReportado?: string;      // Texto libre del técnico
+  fallasObservadas?: string;       // Texto libre del técnico
+  diagnosticoTecnico?: string;     // Texto libre del técnico
+  trabajosRealizados?: string;     // Texto libre del técnico
+  trabajosPendientes?: string;     // Texto libre del técnico
+  recomendaciones?: string;        // Texto libre del técnico
 
-  // Trabajos ejecutados (se muestran en GENERAL)
-  trabajosEjecutados: TrabajoEjecutadoPDF[];
+  // Sistemas afectados (multi-selector → chips)
+  sistemasAfectados?: string[];    // Array de nombres legibles
 
-  // Repuestos utilizados (no se usa - mantener compatibilidad)
-  repuestosUtilizados: RepuestoUtilizadoPDF[];
+  // Listas de items (listas dinámicas)
+  repuestosUtilizados?: string[];  // Array de strings
+  materialesUtilizados?: string[]; // Array de strings
+
+  // ✅ FIX 06-FEB-2026: Observaciones auxiliares del técnico por actividad (parte después de |||)
+  obsEstadoInicial?: string;
+  obsEstadoFinal?: string;
+  obsSistemas?: string;
+  obsProblema?: string;
+  obsFallas?: string;
+  obsDiagnostico?: string;
+  obsTrabajos?: string;
+  obsPendientes?: string;
+  obsRecomendaciones?: string;
+  obsRepuestos?: string;
+  obsMateriales?: string;
 
   // Mediciones (si aplica)
   mediciones?: MedicionCorrectivoPDF[];
 
-  // Recomendaciones (no se usa - mantener compatibilidad)
-  recomendaciones: string[];
-
-  // Observaciones
-  observaciones?: string;
+  // Observaciones generales del técnico (textarea separado)
+  observacionesGenerales?: string;
 
   // Datos del módulo de control (opcional, solo si hay valores)
   datosModulo?: {
@@ -114,9 +124,8 @@ export interface DatosCorrectivoOrdenPDF {
   firmaTecnico?: string;
   firmaCliente?: string;
 
-  // ✅ FIX 05-ENE-2026: Datos del firmante para mostrar nombre/cargo
+  // Datos del firmante
   nombreTecnico?: string;
-  // cargoTecnico ya existe arriba en línea 55
   nombreCliente?: string;
   cargoCliente?: string;
 
@@ -128,43 +137,6 @@ export interface DatosCorrectivoOrdenPDF {
   equiposOrden?: EquipoOrdenPDF[];
 }
 
-export interface TrabajoEjecutadoPDF {
-  orden: number;
-  descripcion: string;
-  sistema: string;
-  tiempoHoras: number;
-  // ✅ FIX: Aceptar todos los códigos de simbología válidos
-  resultado:
-  | 'COMPLETADO'
-  | 'PARCIAL'
-  | 'PENDIENTE'
-  | 'B'
-  | 'R'
-  | 'M'
-  | 'C'
-  | 'NA'
-  | 'I'
-  | 'LI'
-  | 'A'
-  | 'L'
-  | 'LA'
-  | 'S'
-  | 'NT'
-  | 'BA'
-  | 'F'
-  | 'RN'
-  | 'NF'
-  | string;
-}
-
-export interface RepuestoUtilizadoPDF {
-  codigo: string;
-  descripcion: string;
-  cantidad: number;
-  unidad: string;
-  estado: 'NUEVO' | 'REPARADO' | 'USADO';
-}
-
 export interface MedicionCorrectivoPDF {
   parametro: string;
   valorAntes?: string;
@@ -174,23 +146,163 @@ export interface MedicionCorrectivoPDF {
 }
 
 export interface EvidenciaCorrectivoPDF {
-  tipo: 'ANTES' | 'DURANTE' | 'DESPUES';
+  // ✅ FIX 06-FEB-2026: Incluir GENERAL y MEDICION para separación de fotos
+  tipo: 'ANTES' | 'DURANTE' | 'DESPUES' | 'GENERAL' | 'MEDICION';
   url: string;
   descripcion?: string;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CSS ESPECÍFICO PARA CORRECTIVO - Secciones dedicadas enterprise
+// ═══════════════════════════════════════════════════════════════════════════
+const correctivoStyles = `
+  /* --- Contenedor de campos estructurados --- */
+  .corr-fields-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* --- Campo individual (label + valor) --- */
+  .corr-field {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 10px 14px;
+    border-left: 4px solid ${MEKANOS_COLORS.primary};
+  }
+  .corr-field-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: ${MEKANOS_COLORS.primary};
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+  .corr-field-value {
+    font-size: 10px;
+    color: #2c3e50;
+    line-height: 1.5;
+  }
+
+  /* --- Caja narrativa (trabajos realizados, observaciones) --- */
+  .corr-narrative-box {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-size: 10px;
+    color: #2c3e50;
+    line-height: 1.6;
+    white-space: pre-line;
+  }
+
+  /* --- Badges de estado (inicial / final) --- */
+  .corr-estado-inicial-bar,
+  .corr-resultado-estado {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 8px 14px;
+    background: #f0f4f8;
+    border-radius: 6px;
+    border: 1px solid #d0d7de;
+  }
+  .corr-estado-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #495057;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .corr-estado-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .corr-estado-inicial {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffc107;
+  }
+  .corr-estado-final {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #28a745;
+  }
+
+  /* --- Chips de sistemas afectados --- */
+  .corr-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .corr-chip {
+    display: inline-block;
+    padding: 2px 10px;
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #90caf9;
+    border-radius: 10px;
+    font-size: 8px;
+    font-weight: 600;
+  }
+
+  /* --- Pendientes (highlight warning) --- */
+  .corr-pendientes {
+    background: #fff8e1;
+    border: 1px solid #ffca28;
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: #e65100;
+    font-weight: 600;
+  }
+
+  /* --- ✅ FIX 06-FEB-2026: Observación auxiliar del técnico (después de |||) --- */
+  .corr-obs-aux {
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: #fefefe;
+    border-left: 3px solid #adb5bd;
+    border-radius: 0 4px 4px 0;
+    font-size: 9px;
+    font-style: italic;
+    color: #6c757d;
+    line-height: 1.4;
+  }
+  .corr-obs-aux::before {
+    content: '📝 Obs. Técnico: ';
+    font-weight: 600;
+    font-style: normal;
+    color: #495057;
+  }
+`;
+
 /**
  * Genera el HTML del informe de correctivo
- * ESTRUCTURA IDÉNTICA A TIPO A/B
+ * ✅ REDISEÑO 06-FEB-2026: Secciones dedicadas por naturaleza de actividad
  */
 export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): string {
   const tieneMediciones = Array.isArray(datos.mediciones) && datos.mediciones.length > 0;
   const tieneDatosModulo =
     datos.datosModulo && Object.values(datos.datosModulo).some((v) => v != null && v !== 0);
 
-  // ✅ MULTI-EQUIPOS: Determinar si usar tablas multi-equipo
+  // MULTI-EQUIPOS: Determinar si usar tablas multi-equipo
   const esMultiEquipo =
     datos.esMultiEquipo || (datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1);
+
+  // Determinar si hay contenido en secciones condicionales
+  const tieneProblemaODiagnostico = datos.problemaReportado || datos.fallasObservadas ||
+    datos.diagnosticoTecnico || (datos.sistemasAfectados && datos.sistemasAfectados.length > 0);
+  const tieneRepuestosOMateriales =
+    (datos.repuestosUtilizados && datos.repuestosUtilizados.length > 0) ||
+    (datos.materialesUtilizados && datos.materialesUtilizados.length > 0);
+  const tieneResultado = datos.estadoFinal || datos.trabajosPendientes || datos.recomendaciones;
 
   return `
 <!DOCTYPE html>
@@ -201,6 +313,7 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
     <title>Informe Mantenimiento Correctivo - ${datos.numeroOrden}</title>
     <style>
         ${baseStyles}
+        ${correctivoStyles}
     </style>
 </head>
 <body>
@@ -208,53 +321,51 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         <!-- 1. HEADER -->
         ${generarHeader(datos)}
         
-        <!-- ✅ MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
+        <!-- MULTI-EQUIPOS: Leyenda de equipos si hay más de uno -->
         ${generarLeyendaEquipos(
     datos.actividadesPorEquipo?.map((a) => a.equipo),
     esMultiEquipo,
   )}
         
-        <!-- 2. DATOS DEL CLIENTE Y SERVICIO -->
+        <!-- 2. DATOS DEL CLIENTE Y SERVICIO + ESTADO INICIAL -->
         ${generarDatosCliente(datos)}
         
         <!-- 3. REGISTRO DE DATOS DEL MÓDULO DE CONTROL (solo si aplica) -->
         ${tieneDatosModulo ? generarDatosModulo(datos) : ''}
         
-        <!-- 4. GENERAL (Trabajos ejecutados) -->
-        <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
-        ${esMultiEquipo && datos.actividadesPorEquipo
-      ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
-      : generarSeccionGeneral(datos.trabajosEjecutados)
-    }
+        <!-- 4. PROBLEMA Y DIAGNÓSTICO -->
+        ${tieneProblemaODiagnostico ? generarProblemaYDiagnostico(datos) : ''}
         
-        <!-- 5. SIMBOLOGÍA -->
-        ${generarSimbologia()}
+        <!-- 5. TRABAJOS REALIZADOS (narrativo) -->
+        ${datos.trabajosRealizados ? generarTrabajosRealizados(datos) : ''}
         
-        <!-- 6. MEDICIONES TÉCNICAS (solo si aplica) -->
-        <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
+        <!-- 6. REPUESTOS Y MATERIALES -->
+        ${tieneRepuestosOMateriales ? generarRepuestosYMateriales(datos) : ''}
+        
+        <!-- 7. RESULTADO DEL SERVICIO -->
+        ${tieneResultado ? generarResultadoServicio(datos) : ''}
+        
+        <!-- 8. MEDICIONES TÉCNICAS (solo si aplica) -->
         ${esMultiEquipo && datos.medicionesPorEquipo
       ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
       : tieneMediciones
         ? generarMediciones(datos.mediciones!)
         : ''
     }
-    </div>
-    
-    <div class="page page-break">
-        <!-- 7 y 8. REGISTRO FOTOGRÁFICO DEL SERVICIO + FOTOS GENERALES -->
-        <!-- ✅ MULTI-EQUIPOS: Usar evidencias agrupadas por equipo si es multi-equipo -->
+        
+        <!-- 9. REGISTRO FOTOGRÁFICO DEL SERVICIO -->
         ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
       ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
       : generarEvidencias(datos.evidencias || [])
     }
         
-        <!-- 9. OBSERVACIONES -->
+        <!-- 10. OBSERVACIONES ADICIONALES -->
         ${generarObservaciones(datos)}
         
-        <!-- 10. FIRMAS -->
+        <!-- 11. FIRMAS -->
         ${generarFirmas(datos)}
         
-        <!-- 11. FOOTER -->
+        <!-- 12. FOOTER -->
         ${generarFooter()}
     </div>
 </body>
@@ -312,6 +423,13 @@ const generarDatosCliente = (datos: DatosCorrectivoOrdenPDF): string => `
                 <span class="info-value">${datos.horaSalida}</span>
             </div>
         </div>
+        ${datos.estadoInicial ? `
+        <div class="corr-estado-inicial-bar">
+            <span class="corr-estado-label">ESTADO INICIAL DEL EQUIPO:</span>
+            <span class="corr-estado-badge corr-estado-inicial">${datos.estadoInicial}</span>
+        </div>
+        ${renderObsAux(datos.obsEstadoInicial)}
+        ` : ''}
     </div>
 `;
 
@@ -359,115 +477,156 @@ const generarDatosModulo = (datos: DatosCorrectivoOrdenPDF): string => {
 `;
 };
 
-const generarSeccionGeneral = (trabajos: TrabajoEjecutadoPDF[]): string => `
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ FIX 06-FEB-2026: Helper para renderizar observación auxiliar del técnico
+// ═══════════════════════════════════════════════════════════════════════════
+const renderObsAux = (obs?: string): string =>
+  obs ? `<div class="corr-obs-aux">${obs}</div>` : '';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ REDISEÑO 06-FEB-2026: Secciones dedicadas por naturaleza de actividad
+// ═══════════════════════════════════════════════════════════════════════════
+
+const generarProblemaYDiagnostico = (datos: DatosCorrectivoOrdenPDF): string => {
+  const items: string[] = [];
+
+  if (datos.problemaReportado) {
+    items.push(`
+      <div class="corr-field">
+        <div class="corr-field-label">⚠️ Problema Reportado</div>
+        <div class="corr-field-value">${datos.problemaReportado}</div>
+        ${renderObsAux(datos.obsProblema)}
+      </div>
+    `);
+  }
+
+  if (datos.fallasObservadas) {
+    items.push(`
+      <div class="corr-field">
+        <div class="corr-field-label">🔍 Fallas Observadas</div>
+        <div class="corr-field-value">${datos.fallasObservadas}</div>
+        ${renderObsAux(datos.obsFallas)}
+      </div>
+    `);
+  }
+
+  if (datos.sistemasAfectados && datos.sistemasAfectados.length > 0) {
+    items.push(`
+      <div class="corr-field">
+        <div class="corr-field-label">⚙️ Sistemas Afectados</div>
+        <div class="corr-chips">
+          ${datos.sistemasAfectados.map(s => `<span class="corr-chip">${s}</span>`).join('')}
+        </div>
+        ${renderObsAux(datos.obsSistemas)}
+      </div>
+    `);
+  }
+
+  if (datos.diagnosticoTecnico) {
+    items.push(`
+      <div class="corr-field">
+        <div class="corr-field-label">🔧 Diagnóstico Técnico</div>
+        <div class="corr-field-value">${datos.diagnosticoTecnico}</div>
+        ${renderObsAux(datos.obsDiagnostico)}
+      </div>
+    `);
+  }
+
+  return `
     <div class="section">
-        <div class="section-subtitle">GENERAL</div>
+        <div class="section-title">PROBLEMA Y DIAGNÓSTICO</div>
+        <div class="corr-fields-container">
+            ${items.join('')}
+        </div>
+    </div>
+  `;
+};
+
+const generarTrabajosRealizados = (datos: DatosCorrectivoOrdenPDF): string => `
+    <div class="section">
+        <div class="section-title">TRABAJOS REALIZADOS</div>
+        <div class="corr-narrative-box">
+            ${datos.trabajosRealizados || 'Sin información de trabajos realizados.'}
+        </div>
+        ${renderObsAux(datos.obsTrabajos)}
+    </div>
+`;
+
+const generarRepuestosYMateriales = (datos: DatosCorrectivoOrdenPDF): string => {
+  const repuestos = datos.repuestosUtilizados || [];
+  const materiales = datos.materialesUtilizados || [];
+  const rows: string[] = [];
+
+  repuestos.forEach((r, i) => {
+    rows.push(`<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`);
+  });
+  materiales.forEach((m, i) => {
+    rows.push(`<tr><td style="text-align:center;">${repuestos.length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`);
+  });
+
+  return `
+    <div class="section">
+        <div class="section-title">REPUESTOS Y MATERIALES UTILIZADOS</div>
         <table class="checklist-table">
             <thead>
                 <tr>
-                    <th style="width: 70%;">Actividad / Trabajo Ejecutado</th>
-                    <th style="width: 15%;">Estado</th>
-                    <th style="width: 15%;">Obs.</th>
+                    <th style="width: 10%;">#</th>
+                    <th style="width: 70%;">Descripción</th>
+                    <th style="width: 20%;">Tipo</th>
                 </tr>
             </thead>
             <tbody>
-                ${trabajos
-    .map(
-      (t) => `
-                <tr>
-                    <td>${t.descripcion}</td>
-                    <td style="text-align: center;">
-                        <span class="resultado-badge resultado-${mapResultado(t.resultado)}">${mapResultado(t.resultado)}</span>
-                    </td>
-                    <td><span class="observacion-actividad">${t.sistema || ''}</span></td>
-                </tr>
-                `,
-    )
-    .join('')}
+                ${rows.join('')}
             </tbody>
         </table>
+        ${renderObsAux(datos.obsRepuestos)}
+        ${renderObsAux(datos.obsMateriales)}
     </div>
-`;
-
-// ✅ FIX: Mapea resultados preservando códigos reales (B, R, M, C, NA, etc.)
-const mapResultado = (resultado: string): string => {
-  if (!resultado) return 'NA';
-
-  // Si ya es un código válido, devolverlo directamente
-  const codigosValidos = [
-    'B',
-    'R',
-    'M',
-    'C',
-    'NA',
-    'I',
-    'LI',
-    'A',
-    'L',
-    'LA',
-    'S',
-    'NT',
-    'BA',
-    'F',
-    'RN',
-    'NF',
-    'SI',
-    'NO',
-  ];
-  if (codigosValidos.includes(resultado.toUpperCase())) {
-    return resultado.toUpperCase();
-  }
-
-  // Mapear nombres largos a códigos
-  switch (resultado.toUpperCase()) {
-    case 'COMPLETADO':
-      return 'B';
-    case 'BUENO':
-      return 'B';
-    case 'PARCIAL':
-      return 'R';
-    case 'REGULAR':
-      return 'R';
-    case 'PENDIENTE':
-      return 'M';
-    case 'MALO':
-      return 'M';
-    case 'CAMBIADO':
-      return 'C';
-    case 'NO_APLICA':
-      return 'NA';
-    case 'N/A':
-      return 'NA';
-    default:
-      return resultado; // Devolver tal cual, no asumir 'B'
-  }
+  `;
 };
 
-const generarSimbologia = (): string => `
+const generarResultadoServicio = (datos: DatosCorrectivoOrdenPDF): string => {
+  const items: string[] = [];
+
+  if (datos.estadoFinal) {
+    items.push(`
+      <div class="corr-resultado-estado">
+        <span class="corr-estado-label">ESTADO FINAL DEL EQUIPO:</span>
+        <span class="corr-estado-badge corr-estado-final">${datos.estadoFinal}</span>
+      </div>
+      ${renderObsAux(datos.obsEstadoFinal)}
+    `);
+  }
+
+  if (datos.trabajosPendientes) {
+    items.push(`
+      <div class="corr-field">
+        <div class="corr-field-label">⚠️ Trabajos Pendientes</div>
+        <div class="corr-field-value corr-pendientes">${datos.trabajosPendientes}</div>
+        ${renderObsAux(datos.obsPendientes)}
+      </div>
+    `);
+  }
+
+  if (datos.recomendaciones) {
+    items.push(`
+      <div class="corr-field">
+        <div class="corr-field-label">💡 Recomendaciones</div>
+        <div class="corr-field-value">${datos.recomendaciones}</div>
+        ${renderObsAux(datos.obsRecomendaciones)}
+      </div>
+    `);
+  }
+
+  return `
     <div class="section">
-        <div class="section-title">SIMBOLOGÍA</div>
-        <div class="simbologia-grid">
-            <div class="simbologia-item"><span class="simbologia-code">B:</span> Bueno</div>
-            <div class="simbologia-item"><span class="simbologia-code">R:</span> Regular</div>
-            <div class="simbologia-item"><span class="simbologia-code">M:</span> Malo</div>
-            <div class="simbologia-item"><span class="simbologia-code">I:</span> Inspeccionar</div>
-            <div class="simbologia-item"><span class="simbologia-code">C:</span> Cambiado</div>
-            <div class="simbologia-item"><span class="simbologia-code">LI:</span> Limpiar</div>
-            <div class="simbologia-item"><span class="simbologia-code">A:</span> Ajustar</div>
-            <div class="simbologia-item"><span class="simbologia-code">L:</span> Lubricar</div>
-            <div class="simbologia-item"><span class="simbologia-code">NA:</span> No Aplica</div>
-            <div class="simbologia-item"><span class="simbologia-code">LA:</span> Lavar</div>
-            <div class="simbologia-item"><span class="simbologia-code">S:</span> Sucio</div>
-            <div class="simbologia-item"><span class="simbologia-code">NT:</span> No Tiene</div>
-            <div class="simbologia-item"><span class="simbologia-code">BA:</span> Bajo</div>
-            <div class="simbologia-item"><span class="simbologia-code">F:</span> Lleno</div>
-            <div class="simbologia-item"><span class="simbologia-code">RN:</span> Rellenar Nivel</div>
-            <div class="simbologia-item"><span class="simbologia-code">NF:</span> No Funciona</div>
-            <div class="simbologia-item"><span class="simbologia-code">SI:</span> Sí</div>
-            <div class="simbologia-item"><span class="simbologia-code">NO:</span> No</div>
+        <div class="section-title">RESULTADO DEL SERVICIO</div>
+        <div class="corr-fields-container">
+            ${items.join('')}
         </div>
     </div>
-`;
+  `;
+};
 
 const generarMediciones = (mediciones: MedicionCorrectivoPDF[]): string => `
     <div class="section">
@@ -530,6 +689,8 @@ const getTituloSeccion = (tipo: string): { titulo: string; icono: string } => {
   }
 };
 
+// ✅ FIX 06-FEB-2026: Separar fotos de actividades (ANTES/DURANTE/DESPUÉS) de fotos GENERALES
+// Ahora retorna DOS secciones HTML independientes en el PDF
 const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
   if (!evidencias || evidencias.length === 0) {
     return `
@@ -551,7 +712,8 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
       return { url: ev, caption: `Evidencia ${idx + 1}` };
     }
     if ('tipo' in ev) {
-      return { url: ev.url, caption: `${ev.tipo}: ${ev.descripcion || `Foto ${idx + 1}`}` };
+      // descripcion ya contiene el prefijo "TIPO: ..." desde el service; usarlo directo evita doble-prefijo
+      return { url: ev.url, caption: ev.descripcion || `${ev.tipo}: Foto ${idx + 1}` };
     }
     return { url: ev.url, caption: ev.caption || `Evidencia ${idx + 1}` };
   };
@@ -560,7 +722,6 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
 
   // Agrupar evidencias por tipo
   const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
-  const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
 
   evidenciasNormalizadas.forEach((ev) => {
     const tipo = extraerTipoEvidencia(ev.caption);
@@ -572,124 +733,86 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
     grupos[tipo].push({ url: ev.url, caption: captionLimpio });
   });
 
-  // Generar HTML agrupado
-  const seccionesHTML = ordenTipos
+  // Helper: generar grid de fotos para un grupo
+  const generarGridFotos = (fotos: Array<{ url: string; caption: string }>): string =>
+    fotos.map((ev, idx) => `
+        <div class="evidencia-item-compacto">
+            <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+            <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
+        </div>
+    `).join('');
+
+  // ── SECCIÓN 1: Fotos de actividades (ANTES / DURANTE / DESPUÉS / MEDICION) ──
+  const tiposActividad = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION'];
+  const gruposActividad = tiposActividad
     .filter((tipo) => grupos[tipo] && grupos[tipo].length > 0)
     .map((tipo) => {
       const { titulo, icono } = getTituloSeccion(tipo);
       const evidenciasTipo = grupos[tipo];
-      const claseGrupo =
-        tipo === 'GENERAL' ? 'evidencias-grupo evidencias-grupo-general' : 'evidencias-grupo';
-      const tituloMostrar =
-        tipo === 'GENERAL' ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
-
       return `
-            <div class="${claseGrupo}">
-                <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
-                <div class="evidencias-grid-compacto">
-                    ${evidenciasTipo
-          .map(
-            (ev, idx) => `
-                    <div class="evidencia-item-compacto">
-                        <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
-                        <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
-                    </div>
-                    `,
-          )
-          .join('')}
-                </div>
+        <div class="evidencias-grupo">
+            <div class="evidencias-grupo-titulo">${icono} ${titulo} (${evidenciasTipo.length})</div>
+            <div class="evidencias-grid-compacto">
+                ${generarGridFotos(evidenciasTipo)}
             </div>
-            `;
+        </div>
+      `;
     })
     .join('');
 
-  return `
+  let htmlActividades = '';
+  if (gruposActividad) {
+    htmlActividades = `
     <div class="section evidencias-section">
         <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
-        ${seccionesHTML}
+        ${gruposActividad}
     </div>
     `;
+  }
+
+  // ── SECCIÓN 2: Fotos GENERALES (separadas visualmente) ──
+  const fotosGenerales = grupos['GENERAL'] || [];
+  let htmlGenerales = '';
+  if (fotosGenerales.length > 0) {
+    htmlGenerales = `
+    <div class="section evidencias-section evidencias-section-general" style="margin-top: 20px;">
+        <div class="section-title" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);">📷 FOTOS GENERALES DEL SERVICIO (${fotosGenerales.length})</div>
+        <div class="evidencias-grid-compacto">
+            ${generarGridFotos(fotosGenerales)}
+        </div>
+    </div>
+    `;
+  }
+
+  // Si no hay fotos de actividad pero sí generales, o viceversa
+  if (!htmlActividades && !htmlGenerales) {
+    return `
+        <div class="section">
+            <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
+            <div class="evidencias-empty">
+                <p>No se registraron evidencias fotográficas para este servicio.</p>
+            </div>
+        </div>
+        `;
+  }
+
+  return htmlActividades + htmlGenerales;
 };
 
 const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
-  // ✅ FIX 02-FEB-2026: Rediseño profesional con tarjetas estructuradas
-  const secciones: string[] = [];
-
-  // Tarjeta: Problema Reportado
-  if (datos.problemaReportado?.descripcion) {
-    secciones.push(`
-      <div class="obs-card obs-problema">
-        <div class="obs-card-header">
-          <span class="obs-icon">⚠️</span>
-          <span class="obs-card-title">PROBLEMA REPORTADO</span>
-        </div>
-        <div class="obs-card-content">${datos.problemaReportado.descripcion}</div>
-      </div>
-    `);
+  // ✅ REDISEÑO 06-FEB-2026: Solo observaciones generales (el resto tiene secciones dedicadas)
+  if (!datos.observacionesGenerales) {
+    return '';
   }
-
-  // ✅ FIX 03-FEB-2026: Cambiar label a solo "Diagnóstico"
-  // Tarjeta: Diagnóstico
-  if (datos.diagnostico?.descripcion || datos.diagnostico?.causaRaiz) {
-    const diagnosticoItems: string[] = [];
-    if (datos.diagnostico.descripcion) {
-      diagnosticoItems.push(`<div class="obs-item"><strong>Análisis:</strong> ${datos.diagnostico.descripcion}</div>`);
-    }
-    if (datos.diagnostico.causaRaiz) {
-      diagnosticoItems.push(`<div class="obs-item"><strong>Causa Raíz:</strong> ${datos.diagnostico.causaRaiz}</div>`);
-    }
-    if (datos.diagnostico.sistemasAfectados?.length) {
-      diagnosticoItems.push(`<div class="obs-item"><strong>Sistemas Afectados:</strong> ${datos.diagnostico.sistemasAfectados.join(', ')}</div>`);
-    }
-    secciones.push(`
-      <div class="obs-card obs-diagnostico">
-        <div class="obs-card-header">
-          <span class="obs-icon">🔍</span>
-          <span class="obs-card-title">DIAGNÓSTICO TÉCNICO</span>
-        </div>
-        <div class="obs-card-content">${diagnosticoItems.join('')}</div>
-      </div>
-    `);
-  }
-
-  // Tarjeta: Observaciones adicionales (ya viene formateado con HTML del servicio)
-  if (datos.observaciones && datos.observaciones !== 'Sin observaciones adicionales.') {
-    secciones.push(`
-      <div class="obs-card obs-general">
-        <div class="obs-card-header">
-          <span class="obs-icon">📋</span>
-          <span class="obs-card-title">DETALLE DEL SERVICIO</span>
-        </div>
-        <div class="obs-card-content obs-detalle">${datos.observaciones}</div>
-      </div>
-    `);
-  }
-
-  // Tarjeta: Recomendaciones
-  if (datos.recomendaciones?.length && datos.recomendaciones[0] !== 'Seguir plan de mantenimiento preventivo programado') {
-    secciones.push(`
-      <div class="obs-card obs-recomendaciones">
-        <div class="obs-card-header">
-          <span class="obs-icon">💡</span>
-          <span class="obs-card-title">RECOMENDACIONES</span>
-        </div>
-        <div class="obs-card-content">
-          <ul class="obs-list">${datos.recomendaciones.map(r => `<li>${r}</li>`).join('')}</ul>
-        </div>
-      </div>
-    `);
-  }
-
-  const contenido = secciones.length > 0
-    ? `<div class="obs-grid">${secciones.join('')}</div>`
-    : '<div class="obs-empty">Sin observaciones adicionales.</div>';
 
   return `
     <div class="section">
-        <div class="section-title">OBSERVACIONES Y DIAGNÓSTICO</div>
-        ${contenido}
+        <div class="section-title">OBSERVACIONES ADICIONALES</div>
+        <div class="corr-narrative-box">
+            ${datos.observacionesGenerales}
+        </div>
     </div>
-    `;
+  `;
 };
 
 // ✅ FIX 05-ENE-2026: Mostrar nombre y cargo del técnico/cliente bajo la firma

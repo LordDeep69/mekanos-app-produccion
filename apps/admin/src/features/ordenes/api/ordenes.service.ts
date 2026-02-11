@@ -61,6 +61,9 @@ export async function getOrdenes(
     if (params?.fechaHasta) {
         queryParams.append('fechaHasta', params.fechaHasta);
     }
+    if (params?.busqueda) {
+        queryParams.append('busqueda', params.busqueda);
+    }
 
     const url = queryParams.toString()
         ? `${ORDENES_BASE}?${queryParams.toString()}`
@@ -407,6 +410,42 @@ export async function enviarPdfExistente(
 ): Promise<EnviarPdfExistenteResponse> {
     const response = await apiClient.post<EnviarPdfExistenteResponse>(
         `${ORDENES_BASE}/${idOrden}/pdf/enviar`,
+        data
+    );
+    return response.data;
+}
+
+// ========================================================================
+// HORARIOS DE SERVICIO (Hora Entrada / Hora Salida)
+// ========================================================================
+
+export interface UpdateHorariosServicioDto {
+    fecha_inicio_real?: string;  // ISO 8601 DateTime string
+    fecha_fin_real?: string;     // ISO 8601 DateTime string
+}
+
+export interface UpdateHorariosServicioResponse {
+    success: boolean;
+    message: string;
+    data: {
+        id_orden_servicio: number;
+        fecha_inicio_real: string | null;
+        fecha_fin_real: string | null;
+        duracion_minutos: number | null;
+    };
+}
+
+/**
+ * Actualizar horarios de servicio (hora entrada/salida)
+ * Endpoint atómico - permite edición incluso en órdenes COMPLETADAS
+ * Recalcula duracion_minutos automáticamente
+ */
+export async function updateHorariosServicio(
+    id: number,
+    data: UpdateHorariosServicioDto
+): Promise<UpdateHorariosServicioResponse> {
+    const response = await apiClient.patch<UpdateHorariosServicioResponse>(
+        `${ORDENES_BASE}/${id}/horarios-servicio`,
         data
     );
     return response.data;

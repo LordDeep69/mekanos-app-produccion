@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart' show DateFormat;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
@@ -15,7 +14,7 @@ import '../../evidencias/presentation/evidencias_screen.dart';
 import '../../firmas/data/firma_service.dart';
 import '../../firmas/presentation/firmas_section.dart';
 import '../../settings/presentation/configuracion_screen.dart'
-    show modoFinalizacionProvider;
+    show modoFinalizacionProvider, formatoHora24Provider;
 import '../data/ejecucion_service.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
@@ -47,6 +46,8 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   bool _isLoading = true;
   String? _numeroOrden;
   bool _esCorrectivo = false;
+  bool _esBomba = false;
+  String _codigoTipoServicio = '';
   String? _razonFallaActual;
   late TextEditingController _observacionesController;
   final _observacionesFocusNode = FocusNode();
@@ -158,12 +159,20 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       if (orden != null) {
         final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
         final codigoTipo = tipoServicio?.codigo ?? '';
+        final nombreTipo = (tipoServicio?.nombre ?? '').toUpperCase();
         final numero = orden.numeroOrden.toUpperCase();
+        _codigoTipoServicio = codigoTipo.toUpperCase();
         _esCorrectivo =
-            codigoTipo.toUpperCase().contains('CORR') ||
-            numero.contains('CORR');
+            _codigoTipoServicio.contains('CORR') || numero.contains('CORR');
+        // ✅ FIX 09-FEB-2026: Detección robusta de bomba
+        // Verificar por codigo (BOM_CORR), nombre ("Bomba"), o numero orden ("BOM")
+        _esBomba =
+            _codigoTipoServicio.contains('BOM') ||
+            nombreTipo.contains('BOMBA') ||
+            numero.contains('BOM');
       } else {
         _esCorrectivo = false;
+        _esBomba = false;
       }
     } catch (e) {
       print('❌ Error cargando datos: $e');
@@ -2574,20 +2583,36 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         ? sistemasStr.split(',').toSet()
         : <String>{};
 
-    // ✅ FIX 02-FEB-2026: Agregar "Generador" y "Electrónico" después de "Motor"
-    final sistemas = [
-      ('MOTOR', 'Motor', Icons.settings),
-      ('GENERADOR', 'Generador', Icons.power),
-      ('ELECTRONICO', 'Electrónico', Icons.memory),
-      ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
-      ('CONTROL', 'Control', Icons.settings_remote),
-      ('ENFRIAMIENTO', 'Enfriamiento', Icons.ac_unit),
-      ('COMBUSTIBLE', 'Combustible', Icons.local_gas_station),
-      ('LUBRICACION', 'Lubricación', Icons.oil_barrel),
-      ('ESCAPE', 'Escape', Icons.air),
-      ('ASPIRACION', 'Aspiración', Icons.filter_alt),
-      ('OTRO', 'Otro', Icons.more_horiz),
-    ];
+    // ✅ FIX 09-FEB-2026: Sistemas dinámicos según tipo de equipo (GEN vs BOM)
+    final esBomba = _esBomba;
+    final sistemas = esBomba
+        ? [
+            // Sistemas de BOMBA
+            ('HIDRAULICO', 'Hidráulico', Icons.water_drop),
+            ('MECANICO', 'Mecánico', Icons.settings),
+            ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
+            ('TABLERO', 'Tablero Control', Icons.settings_remote),
+            ('PRESOSTATO', 'Presostato', Icons.speed),
+            ('SELLO', 'Sellos Mecánicos', Icons.donut_large),
+            ('TANQUE', 'Tanques Hidroneum.', Icons.propane_tank),
+            ('VALVULAS', 'Válvulas', Icons.toggle_on),
+            ('TUBERIA', 'Tubería', Icons.plumbing),
+            ('OTRO', 'Otro', Icons.more_horiz),
+          ]
+        : [
+            // Sistemas de GENERADOR
+            ('MOTOR', 'Motor', Icons.settings),
+            ('GENERADOR', 'Generador', Icons.power),
+            ('ELECTRONICO', 'Electrónico', Icons.memory),
+            ('ELECTRICO', 'Eléctrico', Icons.electrical_services),
+            ('CONTROL', 'Control', Icons.settings_remote),
+            ('ENFRIAMIENTO', 'Enfriamiento', Icons.ac_unit),
+            ('COMBUSTIBLE', 'Combustible', Icons.local_gas_station),
+            ('LUBRICACION', 'Lubricación', Icons.oil_barrel),
+            ('ESCAPE', 'Escape', Icons.air),
+            ('ASPIRACION', 'Aspiración', Icons.filter_alt),
+            ('OTRO', 'Otro', Icons.more_horiz),
+          ];
 
     return Wrap(
       spacing: 8,
@@ -3702,27 +3727,45 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   // ✅ RUTA 9: DIÁLOGO Y LÓGICA DE FINALIZACIÓN CON SYNC AL BACKEND
   // ============================================================================
 
-  /// Muestra diálogo para capturar datos finales y sincronizar
-  Future<void> _mostrarDialogoFinalizacion() async {
-    // 🔍 INVESTIGACIÓN FORENSE: Ver todos los valores de tiempo
-    final now = DateTime.now();
-    final nowUtc = DateTime.now().toUtc();
-    print('🔍 FORENSE TIEMPO:');
-    print('   DateTime.now() = $now');
-    print('   DateTime.now().toUtc() = $nowUtc');
-    print('   now.timeZoneOffset = ${now.timeZoneOffset}');
-    print('   now.timeZoneName = ${now.timeZoneName}');
-    print('   now.isUtc = ${now.isUtc}');
-    print('   nowUtc.isUtc = ${nowUtc.isUtc}');
+  /// Formatea TimeOfDay a HH:mm (24h) para enviar al backend
+  String _formatTimeOfDay24h(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-    // Usar la hora LOCAL del dispositivo directamente (sin ajustes)
-    // El técnico está en el sitio, su dispositivo tiene la hora correcta
-    final horaEntradaController = TextEditingController(
-      text: DateFormat('HH:mm').format(now.subtract(const Duration(hours: 1))),
+  /// Formatea TimeOfDay para mostrar al usuario (usa preferencia in-app)
+  String _formatTimeOfDayDisplay(BuildContext context, TimeOfDay t) {
+    final use24h = ref.read(formatoHora24Provider);
+    if (use24h) return _formatTimeOfDay24h(t);
+    final hour12 = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final period = t.period == DayPeriod.am ? 'a.m.' : 'p.m.';
+    return '${hour12.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} $period';
+  }
+
+  /// Muestra TimePicker profesional estilo drum/scroll (reemplaza reloj espiral)
+  Future<TimeOfDay?> _showTimePickerWithFormat(
+    BuildContext context,
+    TimeOfDay initialTime,
+    String helpText,
+  ) async {
+    return showModalBottomSheet<TimeOfDay>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) =>
+          _DrumTimePicker(initialTime: initialTime, title: helpText),
     );
-    final horaSalidaController = TextEditingController(
-      text: DateFormat('HH:mm').format(now),
+  }
+
+  /// Muestra diálogo para capturar datos finales y sincronizar
+  /// ✅ FIX 07-FEB-2026: Reemplazado TextField con TimePicker nativo
+  /// para evitar "Invalid time value" en backend por formatos como "1:37 p. m."
+  Future<void> _mostrarDialogoFinalizacion() async {
+    final now = DateTime.now();
+
+    // Valores iniciales: entrada = ahora - 1h, salida = ahora
+    TimeOfDay horaEntrada = TimeOfDay.fromDateTime(
+      now.subtract(const Duration(hours: 1)),
     );
+    TimeOfDay horaSalida = TimeOfDay.fromDateTime(now);
+
     final razonFallaController = TextEditingController(
       text: _razonFallaActual ?? '',
     );
@@ -3732,123 +3775,161 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
     // DEBUG: Log de valores iniciales
     print('🕐 Diálogo Finalización:');
-    print('   Hora entrada default: ${horaEntradaController.text}');
-    print('   Hora salida default: ${horaSalidaController.text}');
+    print('   Hora entrada default: ${_formatTimeOfDay24h(horaEntrada)}');
+    print('   Hora salida default: ${_formatTimeOfDay24h(horaSalida)}');
+    print('   Modo: $modoSeleccionado');
 
     final resultado = await showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 8),
-            Text('Finalizar Servicio'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Row(
             children: [
-              const Text(
-                'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: horaEntradaController,
-                decoration: const InputDecoration(
-                  labelText: 'Hora de Entrada',
-                  hintText: 'HH:mm',
-                  prefixIcon: Icon(Icons.login),
-                  border: OutlineInputBorder(),
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 8),
+              Text('Finalizar Servicio'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
+                  style: TextStyle(color: Colors.grey),
                 ),
-                keyboardType: TextInputType.datetime,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: horaSalidaController,
-                decoration: const InputDecoration(
-                  labelText: 'Hora de Salida',
-                  hintText: 'HH:mm',
-                  prefixIcon: Icon(Icons.logout),
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 16),
+
+                // ── Hora de Entrada (TimePicker) ──
+                InkWell(
+                  onTap: () async {
+                    final picked = await _showTimePickerWithFormat(
+                      ctx,
+                      horaEntrada,
+                      'HORA DE ENTRADA',
+                    );
+                    if (picked != null) {
+                      setDialogState(() => horaEntrada = picked);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Hora de Entrada',
+                      prefixIcon: Icon(Icons.login),
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.access_time, color: Colors.blue),
+                    ),
+                    child: Text(
+                      _formatTimeOfDayDisplay(ctx, horaEntrada),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ),
                 ),
-                keyboardType: TextInputType.datetime,
-              ),
-              if (_esCorrectivo) ...[
                 const SizedBox(height: 12),
-                TextField(
-                  controller: razonFallaController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Razón de la falla (opcional)',
-                    hintText: 'Describe la causa raíz o hallazgo principal',
-                    prefixIcon: Icon(Icons.bug_report),
-                    border: OutlineInputBorder(),
+
+                // ── Hora de Salida (TimePicker) ──
+                InkWell(
+                  onTap: () async {
+                    final picked = await _showTimePickerWithFormat(
+                      ctx,
+                      horaSalida,
+                      'HORA DE SALIDA',
+                    );
+                    if (picked != null) {
+                      setDialogState(() => horaSalida = picked);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Hora de Salida',
+                      prefixIcon: Icon(Icons.logout),
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.access_time, color: Colors.blue),
+                    ),
+                    child: Text(
+                      _formatTimeOfDayDisplay(ctx, horaSalida),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+
+                if (_esCorrectivo) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: razonFallaController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Razón de la falla (opcional)',
+                      hintText: 'Describe la causa raíz o hallazgo principal',
+                      prefixIcon: Icon(Icons.bug_report),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+                // ✅ MODO: Se usa el configurado en Configuración (sin selector aquí)
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Colors.blue.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          modoSeleccionado == 'COMPLETO'
+                              ? 'Modo: Completo (PDF + Email)'
+                              : 'Modo: Solo datos',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
-              // ✅ MODO: Se usa el configurado en Configuración (sin selector aquí)
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 16,
-                      color: Colors.blue.shade700,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        modoSeleccionado == 'COMPLETO'
-                            ? 'Modo: Completo (PDF + Email)'
-                            : 'Modo: Solo datos',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                // ✅ SIEMPRE enviar HH:mm 24h al backend (sin AM/PM)
+                final entradaStr = _formatTimeOfDay24h(horaEntrada);
+                final salidaStr = _formatTimeOfDay24h(horaSalida);
+                print('🕐 DEBUG FINALIZACIÓN:');
+                print('   horaEntrada: $entradaStr');
+                print('   horaSalida: $salidaStr');
+                print('   modo: $modoSeleccionado');
+                Navigator.of(ctx).pop({
+                  'horaEntrada': entradaStr,
+                  'horaSalida': salidaStr,
+                  'observaciones': _observacionesController.text.isEmpty
+                      ? 'Servicio completado satisfactoriamente.'
+                      : _observacionesController.text,
+                  if (_esCorrectivo) 'razonFalla': razonFallaController.text,
+                  'modo': modoSeleccionado,
+                });
+              },
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text('FINALIZAR Y SINCRONIZAR'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              // DEBUG: Ver valores que se envían
-              print('🕐 DEBUG FINALIZACIÓN:');
-              print('   horaEntrada: ${horaEntradaController.text}');
-              print('   horaSalida: ${horaSalidaController.text}');
-              print('   modo: $modoSeleccionado');
-              Navigator.of(ctx).pop({
-                'horaEntrada': horaEntradaController.text,
-                'horaSalida': horaSalidaController.text,
-                'observaciones': _observacionesController.text.isEmpty
-                    ? 'Servicio completado satisfactoriamente.'
-                    : _observacionesController.text,
-                if (_esCorrectivo) 'razonFalla': razonFallaController.text,
-                'modo': modoSeleccionado,
-              });
-            },
-            icon: const Icon(Icons.cloud_upload),
-            label: const Text('FINALIZAR Y SINCRONIZAR'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-          ),
-        ],
       ),
     );
 
@@ -3858,7 +3939,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         horaSalida: resultado['horaSalida']!,
         observaciones: resultado['observaciones']!,
         razonFalla: resultado['razonFalla'],
-        modo: resultado['modo'] ?? 'COMPLETO',
+        modo: resultado['modo'] ?? 'SOLO_DATOS',
       );
     }
   }
@@ -3922,6 +4003,10 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         } else {
           await _mostrarExitoOnline(resultado);
         }
+      } else if (resultado.guardadoOffline) {
+        // ✅ FIX 09-FEB-2026: Si falló pero se guardó en cola, NO mostrar error
+        // sino informar que se reintentará automáticamente
+        _mostrarExitoOffline(resultado);
       } else {
         _mostrarError(resultado.mensaje);
       }
@@ -4951,6 +5036,313 @@ class _SyncProgressDialog extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ✅ DRUM TIME PICKER - Reemplazo profesional del reloj espiral nativo
+// Estilo scroll/drum (similar a iOS) para seleccionar hora y minuto
+// =============================================================================
+class _DrumTimePicker extends StatefulWidget {
+  final TimeOfDay initialTime;
+  final String title;
+
+  const _DrumTimePicker({required this.initialTime, required this.title});
+
+  @override
+  State<_DrumTimePicker> createState() => _DrumTimePickerState();
+}
+
+class _DrumTimePickerState extends State<_DrumTimePicker> {
+  late FixedExtentScrollController _hourController;
+  late FixedExtentScrollController _minuteController;
+  late int _selectedHour;
+  late int _selectedMinute;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedHour = widget.initialTime.hour;
+    _selectedMinute = widget.initialTime.minute;
+    _hourController = FixedExtentScrollController(initialItem: _selectedHour);
+    _minuteController = FixedExtentScrollController(
+      initialItem: _selectedMinute,
+    );
+  }
+
+  @override
+  void dispose() {
+    _hourController.dispose();
+    _minuteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Handle bar ──
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // ── Title ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
+              child: Text(
+                widget.title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+
+            // ── Preview ──
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                '${_selectedHour.toString().padLeft(2, '0')}:${_selectedMinute.toString().padLeft(2, '0')}',
+                style: TextStyle(
+                  fontSize: 40,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+
+            // ── Drum Pickers ──
+            SizedBox(
+              height: 200,
+              child: Row(
+                children: [
+                  // Hora
+                  Expanded(
+                    child: _buildWheel(
+                      controller: _hourController,
+                      itemCount: 24,
+                      selectedValue: _selectedHour,
+                      onChanged: (val) => setState(() => _selectedHour = val),
+                      labelSuffix: 'h',
+                    ),
+                  ),
+
+                  // Separador
+                  Text(
+                    ':',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+
+                  // Minuto
+                  Expanded(
+                    child: _buildWheel(
+                      controller: _minuteController,
+                      itemCount: 60,
+                      selectedValue: _selectedMinute,
+                      onChanged: (val) => setState(() => _selectedMinute = val),
+                      labelSuffix: 'm',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // ── Botones rápidos ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _quickButton('Ahora', () {
+                    final now = TimeOfDay.now();
+                    setState(() {
+                      _selectedHour = now.hour;
+                      _selectedMinute = now.minute;
+                    });
+                    _hourController.animateToItem(
+                      now.hour,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                    _minuteController.animateToItem(
+                      now.minute,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  }),
+                  const SizedBox(width: 12),
+                  _quickButton('-1 hora', () {
+                    final now = TimeOfDay.now();
+                    final h = (now.hour - 1 + 24) % 24;
+                    setState(() {
+                      _selectedHour = h;
+                      _selectedMinute = now.minute;
+                    });
+                    _hourController.animateToItem(
+                      h,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                    _minuteController.animateToItem(
+                      now.minute,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  }),
+                  const SizedBox(width: 12),
+                  _quickButton('-2 horas', () {
+                    final now = TimeOfDay.now();
+                    final h = (now.hour - 2 + 24) % 24;
+                    setState(() {
+                      _selectedHour = h;
+                      _selectedMinute = now.minute;
+                    });
+                    _hourController.animateToItem(
+                      h,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                    _minuteController.animateToItem(
+                      now.minute,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  }),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── Action buttons ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(null),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('CANCELAR'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop(
+                          TimeOfDay(
+                            hour: _selectedHour,
+                            minute: _selectedMinute,
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'ACEPTAR',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWheel({
+    required FixedExtentScrollController controller,
+    required int itemCount,
+    required int selectedValue,
+    required ValueChanged<int> onChanged,
+    required String labelSuffix,
+  }) {
+    return ListWheelScrollView.useDelegate(
+      controller: controller,
+      itemExtent: 50,
+      perspective: 0.005,
+      diameterRatio: 1.5,
+      physics: const FixedExtentScrollPhysics(),
+      onSelectedItemChanged: onChanged,
+      childDelegate: ListWheelChildBuilderDelegate(
+        childCount: itemCount,
+        builder: (context, index) {
+          final isSelected = index == selectedValue;
+          return Center(
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: TextStyle(
+                fontSize: isSelected ? 28 : 18,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w400,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.grey.shade400,
+              ),
+              child: Text(index.toString().padLeft(2, '0')),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _quickButton(String label, VoidCallback onTap) {
+    return Material(
+      color: Colors.grey.shade100,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ),
       ),
     );
   }

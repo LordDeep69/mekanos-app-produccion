@@ -667,7 +667,7 @@ export class UsuariosGestionService {
               celular: true,
             },
           },
-          usuarios_roles_usuarios_roles_id_usuarioTousuarios: {
+          usuarios_roles: {
             include: {
               roles: {
                 select: {
@@ -700,7 +700,7 @@ export class UsuariosGestionService {
           email_principal: u.persona.email_principal,
           telefono: u.persona.telefono_principal || u.persona.celular,
         },
-        roles: u.usuarios_roles_usuarios_roles_id_usuarioTousuarios.map((ur) => ({
+        roles: u.usuarios_roles.map((ur) => ({
           id_rol: ur.roles.id_rol,
           codigo_rol: ur.roles.codigo_rol,
           nombre_rol: ur.roles.nombre_rol,

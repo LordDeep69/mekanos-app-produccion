@@ -142,6 +142,17 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
     }
 
     if (resultado.exito) {
+      // ✅ FIX 07-FEB-2026: Mostrar diálogo opcional para agregar descripción
+      if (mounted && resultado.idEvidencia != null) {
+        final descripcion = await _mostrarDialogoDescripcion();
+        if (descripcion != null && descripcion.isNotEmpty) {
+          await service.actualizarDescripcion(
+            resultado.idEvidencia!,
+            descripcion,
+          );
+        }
+      }
+
       await _cargarEvidencias();
 
       if (mounted) {
@@ -167,6 +178,37 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
         );
       }
     }
+  }
+
+  /// ✅ FIX 07-FEB-2026: Diálogo opcional para agregar descripción tras captura
+  Future<String?> _mostrarDialogoDescripcion() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Agregar descripción'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Descripción de la foto (opcional)',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Omitir'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _eliminarEvidencia(Evidencia evidencia) async {

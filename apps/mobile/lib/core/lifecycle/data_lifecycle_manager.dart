@@ -140,6 +140,9 @@ class DataLifecycleManager {
     // ✅ FIX 06-ENE-2026: Cargar preferencias del usuario antes de limpiar
     await _cargarPreferencias();
 
+    // Reset contador de bytes para esta ejecución
+    _espacioLiberadoBytes = 0;
+
     final resultado = PurgeResult();
     final stopwatch = Stopwatch()..start();
 
@@ -155,6 +158,9 @@ class DataLifecycleManager {
 
       // 4. Limpiar datos huérfanos (actividades/mediciones de órdenes eliminadas)
       resultado.datosHuerfanosPurgados = await purgarDatosHuerfanos();
+
+      // ✅ FIX 09-FEB-2026: Transferir bytes reales liberados al resultado
+      resultado.espacioLiberadoBytes = _espacioLiberadoBytes.toDouble();
 
       stopwatch.stop();
       resultado.duracionMs = stopwatch.elapsedMilliseconds;
@@ -312,8 +318,10 @@ class DataLifecycleManager {
     // Filtrar manualmente usando fechaFin, lastSyncedAt, o updatedAt como fallback
     final ordenesCandidatas = todasOrdenesFinales.where((orden) {
       // Usar fechaFin si existe, sino lastSyncedAt, sino updatedAt
-      final fechaReferencia = orden.fechaFin ?? orden.lastSyncedAt ?? orden.updatedAt;
-      return fechaReferencia.isBefore(fechaLimite) || fechaReferencia.isAtSameMomentAs(fechaLimite);
+      final fechaReferencia =
+          orden.fechaFin ?? orden.lastSyncedAt ?? orden.updatedAt;
+      return fechaReferencia.isBefore(fechaLimite) ||
+          fechaReferencia.isAtSameMomentAs(fechaLimite);
     }).toList();
 
     debugPrint(
@@ -430,6 +438,44 @@ class DataLifecycleManager {
       }
     }
 
+    // ✅ FIX 09-FEB-2026: Purgar actividadesPlan huérfanas
+    final planes = await _db.select(_db.actividadesPlan).get();
+    for (final plan in planes) {
+      if (!ordenesIds.contains(plan.idOrden)) {
+        await (_db.delete(
+          _db.actividadesPlan,
+        )..where((p) => p.idLocal.equals(plan.idLocal))).go();
+        eliminados++;
+      }
+    }
+
+    // ✅ FIX 09-FEB-2026: Purgar ordenesEquipos huérfanas
+    // ordenesEquipos usa idOrdenServicio (= idBackend), no idOrdenLocal
+    final ordenesBackendIds = ordenes
+        .where((o) => o.idBackend != null)
+        .map((o) => o.idBackend!)
+        .toSet();
+    final oeRecords = await _db.select(_db.ordenesEquipos).get();
+    for (final oe in oeRecords) {
+      if (!ordenesBackendIds.contains(oe.idOrdenServicio)) {
+        await (_db.delete(
+          _db.ordenesEquipos,
+        )..where((x) => x.idOrdenEquipo.equals(oe.idOrdenEquipo))).go();
+        eliminados++;
+      }
+    }
+
+    // ✅ FIX 09-FEB-2026: Purgar ordenesPendientesSync completadas/huérfanas
+    final syncRecords = await _db.select(_db.ordenesPendientesSync).get();
+    for (final sr in syncRecords) {
+      if (!ordenesIds.contains(sr.idOrdenLocal)) {
+        await (_db.delete(
+          _db.ordenesPendientesSync,
+        )..where((x) => x.idOrdenLocal.equals(sr.idOrdenLocal))).go();
+        eliminados++;
+      }
+    }
+
     return eliminados;
   }
 
@@ -444,6 +490,9 @@ class DataLifecycleManager {
   /// Esto es lo que el técnico espera cuando presiona "Limpiar Ahora".
   Future<PurgeResult> limpiarFotosSincronizadasAhora() async {
     debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA completa...');
+
+    // Reset contador de bytes para esta ejecución
+    _espacioLiberadoBytes = 0;
 
     final resultado = PurgeResult();
     final stopwatch = Stopwatch()..start();
@@ -497,6 +546,21 @@ class DataLifecycleManager {
         }
       }
 
+      // ✅ FIX 09-FEB-2026: También eliminar REGISTROS de BD de evidencias/firmas sincronizadas
+      // (antes solo se eliminaban los archivos, los registros quedaban huérfanos)
+      for (final ev in evidencias) {
+        if (ev.urlRemota == null || ev.urlRemota!.isEmpty) continue;
+        await (_db.delete(
+          _db.evidencias,
+        )..where((e) => e.idLocal.equals(ev.idLocal))).go();
+      }
+      for (final firma in firmas) {
+        if (firma.urlRemota == null || firma.urlRemota!.isEmpty) continue;
+        await (_db.delete(
+          _db.firmas,
+        )..where((f) => f.idLocal.equals(firma.idLocal))).go();
+      }
+
       // ✅ FIX 29-ENE-2026: 3. Eliminar órdenes completadas (sin esperar días)
       // Esto es lo que el técnico realmente quiere: limpiar TODO
       final estadosFinalesIds = await _getEstadosFinalesIds();
@@ -526,7 +590,9 @@ class DataLifecycleManager {
 
       resultado.evidenciasPurgadas = evidenciasEliminadas;
       resultado.firmasPurgadas = firmasEliminadas;
-      _espacioLiberadoBytes = bytesLiberados;
+      // ✅ FIX 09-FEB-2026: _purgarOrdenCompleta también acumula bytes en _espacioLiberadoBytes
+      resultado.espacioLiberadoBytes = (bytesLiberados + _espacioLiberadoBytes)
+          .toDouble();
 
       stopwatch.stop();
       resultado.duracionMs = stopwatch.elapsedMilliseconds;
@@ -537,7 +603,7 @@ class DataLifecycleManager {
       debugPrint('   ✍️ Firmas eliminadas: $firmasEliminadas');
       debugPrint('   📋 Órdenes purgadas: ${resultado.ordenesPurgadas}');
       debugPrint(
-        '   💾 Espacio liberado: ${(bytesLiberados / 1024 / 1024).toStringAsFixed(2)} MB',
+        '   💾 Espacio liberado: ${resultado.espacioLiberadoMB.toStringAsFixed(2)} MB',
       );
     } catch (e, stack) {
       resultado.success = false;
@@ -702,7 +768,12 @@ class DataLifecycleManager {
   }
 
   /// Purga una orden y todos sus datos relacionados
+  /// ✅ FIX 09-FEB-2026: También elimina ordenesEquipos y ordenesPendientesSync
   Future<void> _purgarOrdenCompleta(int idOrdenLocal) async {
+    // Obtener idBackend ANTES de la transacción (para limpiar ordenesEquipos)
+    final orden = await _db.getOrdenById(idOrdenLocal);
+    final idBackend = orden?.idBackend;
+
     await _db.transaction(() async {
       // 1. Eliminar archivos de evidencias
       final evidencias = await _db.getEvidenciasByOrden(idOrdenLocal);
@@ -751,6 +822,19 @@ class DataLifecycleManager {
         _db.actividadesPlan,
       )..where((p) => p.idOrden.equals(idOrdenLocal))).go();
 
+      // ✅ FIX 09-FEB-2026: Limpiar ordenesEquipos (vinculados por idOrdenServicio = idBackend)
+      if (idBackend != null) {
+        await (_db.delete(
+          _db.ordenesEquipos,
+        )..where((oe) => oe.idOrdenServicio.equals(idBackend))).go();
+      }
+
+      // ✅ FIX 09-FEB-2026: Limpiar cola de sync pendiente
+      await (_db.delete(
+        _db.ordenesPendientesSync,
+      )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).go();
+
+      // Finalmente eliminar la orden
       await (_db.delete(
         _db.ordenes,
       )..where((o) => o.idLocal.equals(idOrdenLocal))).go();
@@ -772,8 +856,9 @@ class PurgeResult {
   int datosHuerfanosPurgados = 0;
   int duracionMs = 0;
 
-  double get espacioLiberadoMB =>
-      (evidenciasPurgadas * 0.5) + (firmasPurgadas * 0.1); // Estimación
+  double espacioLiberadoBytes = 0;
+
+  double get espacioLiberadoMB => espacioLiberadoBytes / (1024 * 1024);
 
   int get totalPurgado =>
       evidenciasPurgadas +

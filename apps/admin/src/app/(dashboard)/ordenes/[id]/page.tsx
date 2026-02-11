@@ -36,8 +36,10 @@ import {
 import { ActividadCardAdvanced, ResumenEstados } from '@/features/ordenes/components/actividad-card-advanced';
 import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gallery';
 import { FirmasSection } from '@/features/ordenes/components/firmas-section';
+import { GaleriaFotosGenerales } from '@/features/ordenes/components/galeria-fotos-generales';
 import { GestionInformeSection } from '@/features/ordenes/components/gestion-informe-section';
 import { HistorialEstados } from '@/features/ordenes/components/historial-estados';
+import { HorariosServicioSection } from '@/features/ordenes/components/horarios-servicio-section';
 import { MedicionCardAdvanced, ResumenMediciones } from '@/features/ordenes/components/medicion-card-advanced';
 import { ObservacionesCierreSection } from '@/features/ordenes/components/observaciones-section';
 import { OrdenEditModal } from '@/features/ordenes/components/orden-edit-modal';
@@ -239,10 +241,6 @@ function TabGeneral({ orden }: { orden: Orden }) {
         ? new Date(orden.fecha_fin_real).toLocaleString('es-CO')
         : null;
 
-    const horaInicio = orden.fecha_inicio_real
-        ? new Date(orden.fecha_inicio_real).toLocaleString('es-CO')
-        : null;
-
     // ✅ FIX: Solo mostrar banner si tiene fecha_fin_real (servicio realmente finalizado)
     // No mostrar para órdenes recién creadas o estados administrativos
     const servicioFinalizado = !!orden.fecha_fin_real;
@@ -258,10 +256,9 @@ function TabGeneral({ orden }: { orden: Orden }) {
                         </div>
                         <div className="flex-1">
                             <h3 className="text-xl font-bold">Servicio Finalizado</h3>
-                            <div className="text-green-100 text-sm space-y-0.5">
-                                {horaInicio && <p>🕐 Inicio: {horaInicio}</p>}
-                                <p>✅ Fin: {fechaFinalizacion}</p>
-                            </div>
+                            <p className="text-green-100 text-sm">
+                                ✅ Fin: {fechaFinalizacion}
+                            </p>
                         </div>
                         {orden.informes?.[0]?.url_pdf && (
                             <a
@@ -277,6 +274,9 @@ function TabGeneral({ orden }: { orden: Orden }) {
                     </div>
                 </div>
             )}
+
+            {/* Horarios del Servicio - Editable (Hora Entrada / Hora Salida) */}
+            <HorariosServicioSection orden={orden} />
 
             {/* Grid de información */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -404,8 +404,8 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                     <button
                         onClick={() => setSubTab('checklist')}
                         className={`flex-1 py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${subTab === 'checklist'
-                                ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
-                                : 'text-gray-500 hover:bg-gray-50'
+                            ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
+                            : 'text-gray-500 hover:bg-gray-50'
                             }`}
                     >
                         <Play className="h-4 w-4" />
@@ -418,8 +418,8 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                     <button
                         onClick={() => setSubTab('mediciones')}
                         className={`flex-1 py-3 px-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${subTab === 'mediciones'
-                                ? 'text-purple-600 bg-purple-50 border-b-2 border-purple-600'
-                                : 'text-gray-500 hover:bg-gray-50'
+                            ? 'text-purple-600 bg-purple-50 border-b-2 border-purple-600'
+                            : 'text-gray-500 hover:bg-gray-50'
                             }`}
                     >
                         <Settings className="h-4 w-4" />
@@ -776,6 +776,9 @@ function TabDocumentos({ orden }: { orden: Orden }) {
 
             {/* Firmas Digitales - Componente Avanzado */}
             <FirmasSection firmas={firmas} isLoading={isLoadingFi} />
+
+            {/* Fotos Generales del Servicio - CRUD */}
+            <GaleriaFotosGenerales idOrdenServicio={orden.id_orden_servicio} />
 
             {/* Evidencias Fotográficas - Componente Avanzado con Lightbox */}
             <EvidenciasGallery evidencias={evidencias} isLoading={isLoadingEv} />
