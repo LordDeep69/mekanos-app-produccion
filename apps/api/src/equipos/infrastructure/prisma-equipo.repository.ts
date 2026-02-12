@@ -54,11 +54,6 @@ export class PrismaEquipoRepository {
           },
           sedes_cliente: true,
           tipos_equipo: true,
-          usuarios_equipos_creado_porTousuarios: {
-            include: {
-              persona: true,
-            },
-          },
         },
       });
     } else {
@@ -84,11 +79,6 @@ export class PrismaEquipoRepository {
           },
           sedes_cliente: true,
           tipos_equipo: true,
-          usuarios_equipos_creado_porTousuarios: {
-            include: {
-              persona: true,
-            },
-          },
         },
       });
     }
@@ -108,16 +98,6 @@ export class PrismaEquipoRepository {
         },
         sedes_cliente: true,
         tipos_equipo: true,
-        usuarios_equipos_creado_porTousuarios: {
-          include: {
-            persona: true,
-          },
-        },
-        usuarios_equipos_modificado_porTousuarios: {
-          include: {
-            persona: true,
-          },
-        },
       },
     });
   }
