@@ -2648,6 +2648,8 @@ enum tipo_bomba_enum {
   PERIFERICA
   TURBINA
   DESPLAZAMIENTO_POSITIVO
+  HIDRO
+  TANQUE_A_TANQUE
 }
 
 /// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

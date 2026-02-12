@@ -64,3 +64,4 @@ temp/
 
 # Session logs with credentials
 **/REGISTRO_SESIONES_AGENTE_IA/
+.vercel

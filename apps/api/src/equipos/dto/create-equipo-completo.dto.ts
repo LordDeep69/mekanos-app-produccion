@@ -97,6 +97,8 @@ export enum TipoBombaEnum {
   PERIFERICA = 'PERIFERICA',
   TURBINA = 'TURBINA',
   DESPLAZAMIENTO_POSITIVO = 'DESPLAZAMIENTO_POSITIVO',
+  HIDRO = 'HIDRO',
+  TANQUE_A_TANQUE = 'TANQUE_A_TANQUE',
 }
 
 export enum AplicacionBombaEnum {

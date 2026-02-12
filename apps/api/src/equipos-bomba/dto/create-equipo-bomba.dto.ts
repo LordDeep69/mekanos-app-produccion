@@ -1,16 +1,16 @@
 import {
-    IsBoolean,
-    IsEnum,
-    IsInt,
-    IsNotEmpty,
-    IsNumber,
-    IsObject,
-    IsOptional,
-    IsPositive,
-    IsString,
-    Max,
-    MaxLength,
-    Min,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
 } from 'class-validator';
 
 export enum TipoBombaEnum {
@@ -20,6 +20,8 @@ export enum TipoBombaEnum {
   PERIFERICA = 'PERIFERICA',
   TURBINA = 'TURBINA',
   DESPLAZAMIENTO_POSITIVO = 'DESPLAZAMIENTO_POSITIVO',
+  HIDRO = 'HIDRO',
+  TANQUE_A_TANQUE = 'TANQUE_A_TANQUE',
 }
 
 export enum AplicacionBombaEnum {

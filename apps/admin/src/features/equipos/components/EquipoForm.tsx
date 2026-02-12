@@ -256,7 +256,7 @@ const datosBombaSchema = z.object({
   marca_bomba: z.string().min(1, 'Marca bomba requerida').max(100),
   modelo_bomba: z.string().max(100).optional(),
   numero_serie_bomba: z.string().max(100).optional(),
-  tipo_bomba: z.enum(['CENTRIFUGA', 'TURBINA_VERTICAL_POZO', 'SUMERGIBLE', 'PERIFERICA', 'TURBINA', 'DESPLAZAMIENTO_POSITIVO']),
+  tipo_bomba: z.enum(['CENTRIFUGA', 'TURBINA_VERTICAL_POZO', 'SUMERGIBLE', 'PERIFERICA', 'TURBINA', 'DESPLAZAMIENTO_POSITIVO', 'HIDRO', 'TANQUE_A_TANQUE']),
   aplicacion_bomba: z.enum(['AGUA_POTABLE', 'AGUAS_RESIDUALES', 'AGUAS_LLUVIAS', 'CONTRAINCENDIOS', 'INDUSTRIAL', 'PISCINA', 'RIEGO']).optional(),
   caudal_maximo_m3h: optionalNumber,
   altura_manometrica_maxima_m: optionalNumber,
@@ -2401,9 +2401,12 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
                   <select {...register('datosBomba.tipo_bomba' as const)} className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50/30">
                     <option value="CENTRIFUGA">Centrífuga</option>
                     <option value="SUMERGIBLE">Sumergible</option>
-                    <option value="TURBINA_VERTICAL">Turbina Vertical</option>
-                    <option value="MULTIETAPAS">Multietapas</option>
-                    <option value="DIAFRAGMA">Diafragma</option>
+                    <option value="TURBINA_VERTICAL_POZO">Turbina Vertical / Pozo</option>
+                    <option value="PERIFERICA">Periférica</option>
+                    <option value="TURBINA">Turbina</option>
+                    <option value="DESPLAZAMIENTO_POSITIVO">Desplazamiento Positivo</option>
+                    <option value="HIDRO">Hidro</option>
+                    <option value="TANQUE_A_TANQUE">Tanque a Tanque</option>
                   </select>
                 </div>
                 <div className="space-y-2">
