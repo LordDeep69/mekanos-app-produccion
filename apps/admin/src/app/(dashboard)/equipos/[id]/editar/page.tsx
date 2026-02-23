@@ -616,7 +616,7 @@ export default function EditarEquipoPage() {
                         <Field label="N° Serie Bomba"><input type="text" value={especifico.numero_serie_bomba || ''} onChange={e => setE('numero_serie_bomba', e.target.value)} className={inputCls} /></Field>
                         <Field label="Tipo Bomba">
                             <select value={especifico.tipo_bomba || ''} onChange={e => setE('tipo_bomba', e.target.value)} className={selectCls}>
-                                {['CENTRIFUGA', 'TURBINA_VERTICAL_POZO', 'SUMERGIBLE', 'PERIFERICA', 'TURBINA', 'DESPLAZAMIENTO_POSITIVO'].map(v => <option key={v} value={v}>{v}</option>)}
+                                {['CENTRIFUGA', 'TURBINA_VERTICAL_POZO', 'SUMERGIBLE', 'PERIFERICA', 'TURBINA', 'DESPLAZAMIENTO_POSITIVO', 'TANQUE_A_TANQUE', 'HIDRO'].map(v => <option key={v} value={v}>{v}</option>)}
                             </select>
                         </Field>
                         <Field label="Aplicación">

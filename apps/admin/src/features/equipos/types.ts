@@ -57,7 +57,9 @@ export type TipoBomba =
   | 'SUMERGIBLE'
   | 'PERIFERICA'
   | 'TURBINA'
-  | 'DESPLAZAMIENTO_POSITIVO';
+  | 'DESPLAZAMIENTO_POSITIVO'
+  | 'TANQUE_A_TANQUE'
+  | 'HIDRO';
 
 export type AplicacionBomba =
   | 'AGUA_POTABLE'
