@@ -9,6 +9,7 @@ export { EquipoForm } from './components/EquipoForm';
 // Servicios y hooks
 export {
     equiposService,
+    useActualizarDatosEspecificos,
     useActualizarEquipo,
     useCambiarEstadoEquipo,
     useClientesParaSelect,
@@ -21,3 +22,4 @@ export {
 
 // Tipos
 export * from './types';
+

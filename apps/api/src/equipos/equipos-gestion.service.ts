@@ -915,4 +915,222 @@ export class EquiposGestionService {
       fecha_lectura: resultado.fecha_lectura,
     };
   }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ACTUALIZAR DATOS ESPECÍFICOS (Motor, Generador, Bomba)
+  // ✅ 23-FEB-2026: CRUD completo para datos polimórficos
+  // ════════════════════════════════════════════════════════════════════════════
+
+  async actualizarDatosEspecificos(
+    idEquipo: number,
+    dto: UpdateDatosEspecificosDto,
+    userId: number
+  ) {
+    // 1. Verificar que el equipo existe
+    const equipo = await this.prisma.equipos.findUnique({
+      where: { id_equipo: idEquipo },
+      select: {
+        id_equipo: true,
+        codigo_equipo: true,
+        tipos_equipo: { select: { codigo_tipo: true } },
+      },
+    });
+
+    if (!equipo) {
+      throw new NotFoundException(`No se encontró el equipo con ID ${idEquipo}`);
+    }
+
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      const updated: Record<string, any> = {};
+
+      // 2. Actualizar MOTOR si se proporcionan datos
+      if (dto.datosMotor) {
+        const motorExiste = await tx.equipos_motor.findUnique({
+          where: { id_equipo: idEquipo },
+        });
+
+        if (motorExiste) {
+          // Construir datos de actualización dinámicamente (solo campos enviados)
+          const motorData: any = { modificado_por: userId, fecha_modificacion: new Date() };
+
+          if (dto.datosMotor.tipo_motor !== undefined) motorData.tipo_motor = dto.datosMotor.tipo_motor as tipo_motor_enum;
+          if (dto.datosMotor.marca_motor !== undefined) motorData.marca_motor = dto.datosMotor.marca_motor;
+          if (dto.datosMotor.modelo_motor !== undefined) motorData.modelo_motor = dto.datosMotor.modelo_motor;
+          if (dto.datosMotor.numero_serie_motor !== undefined) motorData.numero_serie_motor = dto.datosMotor.numero_serie_motor;
+          if (dto.datosMotor.potencia_hp !== undefined) motorData.potencia_hp = dto.datosMotor.potencia_hp;
+          if (dto.datosMotor.potencia_kw !== undefined) motorData.potencia_kw = dto.datosMotor.potencia_kw;
+          if (dto.datosMotor.velocidad_nominal_rpm !== undefined) motorData.velocidad_nominal_rpm = dto.datosMotor.velocidad_nominal_rpm;
+          // Campos combustión
+          if (dto.datosMotor.tipo_combustible !== undefined) motorData.tipo_combustible = dto.datosMotor.tipo_combustible as tipo_combustible_enum;
+          if (dto.datosMotor.numero_cilindros !== undefined) motorData.numero_cilindros = dto.datosMotor.numero_cilindros;
+          if (dto.datosMotor.cilindrada_cc !== undefined) motorData.cilindrada_cc = dto.datosMotor.cilindrada_cc;
+          if (dto.datosMotor.tiene_turbocargador !== undefined) motorData.tiene_turbocargador = dto.datosMotor.tiene_turbocargador;
+          if (dto.datosMotor.tipo_arranque !== undefined) motorData.tipo_arranque = dto.datosMotor.tipo_arranque as tipo_arranque_enum;
+          if (dto.datosMotor.voltaje_arranque_vdc !== undefined) motorData.voltaje_arranque_vdc = dto.datosMotor.voltaje_arranque_vdc;
+          if (dto.datosMotor.amperaje_arranque !== undefined) motorData.amperaje_arranque = dto.datosMotor.amperaje_arranque;
+          if (dto.datosMotor.numero_baterias !== undefined) motorData.numero_baterias = dto.datosMotor.numero_baterias;
+          if (dto.datosMotor.referencia_bateria !== undefined) motorData.referencia_bateria = dto.datosMotor.referencia_bateria;
+          if (dto.datosMotor.capacidad_bateria_ah !== undefined) motorData.capacidad_bateria_ah = dto.datosMotor.capacidad_bateria_ah;
+          if (dto.datosMotor.tiene_radiador !== undefined) motorData.tiene_radiador = dto.datosMotor.tiene_radiador;
+          if (dto.datosMotor.radiador_alto_cm !== undefined) motorData.radiador_alto_cm = dto.datosMotor.radiador_alto_cm;
+          if (dto.datosMotor.radiador_ancho_cm !== undefined) motorData.radiador_ancho_cm = dto.datosMotor.radiador_ancho_cm;
+          if (dto.datosMotor.radiador_espesor_cm !== undefined) motorData.radiador_espesor_cm = dto.datosMotor.radiador_espesor_cm;
+          if (dto.datosMotor.tiene_cargador_bateria !== undefined) motorData.tiene_cargador_bateria = dto.datosMotor.tiene_cargador_bateria;
+          if (dto.datosMotor.marca_cargador !== undefined) motorData.marca_cargador = dto.datosMotor.marca_cargador;
+          if (dto.datosMotor.modelo_cargador !== undefined) motorData.modelo_cargador = dto.datosMotor.modelo_cargador;
+          if (dto.datosMotor.amperaje_cargador !== undefined) motorData.amperaje_cargador = dto.datosMotor.amperaje_cargador;
+          if (dto.datosMotor.capacidad_aceite_litros !== undefined) motorData.capacidad_aceite_litros = dto.datosMotor.capacidad_aceite_litros;
+          if (dto.datosMotor.tipo_aceite !== undefined) motorData.tipo_aceite = dto.datosMotor.tipo_aceite;
+          if (dto.datosMotor.capacidad_refrigerante_litros !== undefined) motorData.capacidad_refrigerante_litros = dto.datosMotor.capacidad_refrigerante_litros;
+          if (dto.datosMotor.tipo_refrigerante !== undefined) motorData.tipo_refrigerante = dto.datosMotor.tipo_refrigerante;
+          // Campos eléctricos
+          if (dto.datosMotor.voltaje_operacion_vac !== undefined) motorData.voltaje_operacion_vac = dto.datosMotor.voltaje_operacion_vac;
+          if (dto.datosMotor.numero_fases !== undefined) motorData.numero_fases = dto.datosMotor.numero_fases as any;
+          if (dto.datosMotor.frecuencia_hz !== undefined) motorData.frecuencia_hz = dto.datosMotor.frecuencia_hz;
+          if (dto.datosMotor.clase_aislamiento !== undefined) motorData.clase_aislamiento = dto.datosMotor.clase_aislamiento as any;
+          if (dto.datosMotor.grado_proteccion_ip !== undefined) motorData.grado_proteccion_ip = dto.datosMotor.grado_proteccion_ip;
+          if (dto.datosMotor.amperaje_nominal !== undefined) motorData.amperaje_nominal = dto.datosMotor.amperaje_nominal;
+          if (dto.datosMotor.factor_potencia !== undefined) motorData.factor_potencia = dto.datosMotor.factor_potencia;
+          if (dto.datosMotor.anio_fabricacion !== undefined) motorData.a_o_fabricacion = dto.datosMotor.anio_fabricacion;
+          if (dto.datosMotor.observaciones !== undefined) motorData.observaciones = dto.datosMotor.observaciones;
+
+          updated.motor = await tx.equipos_motor.update({
+            where: { id_equipo: idEquipo },
+            data: motorData,
+          });
+        } else {
+          throw new NotFoundException(`El equipo ${idEquipo} no tiene registro de motor. Créelo primero.`);
+        }
+      }
+
+      // 3. Actualizar GENERADOR si se proporcionan datos
+      if (dto.datosGenerador) {
+        const genExiste = await tx.equipos_generador.findUnique({
+          where: { id_equipo: idEquipo },
+        });
+
+        if (genExiste) {
+          const genData: any = { modificado_por: userId, fecha_modificacion: new Date() };
+
+          if (dto.datosGenerador.marca_generador !== undefined) genData.marca_generador = dto.datosGenerador.marca_generador;
+          if (dto.datosGenerador.modelo_generador !== undefined) genData.modelo_generador = dto.datosGenerador.modelo_generador;
+          if (dto.datosGenerador.numero_serie_generador !== undefined) genData.numero_serie_generador = dto.datosGenerador.numero_serie_generador;
+          if (dto.datosGenerador.marca_alternador !== undefined) genData.marca_alternador = dto.datosGenerador.marca_alternador;
+          if (dto.datosGenerador.modelo_alternador !== undefined) genData.modelo_alternador = dto.datosGenerador.modelo_alternador;
+          if (dto.datosGenerador.numero_serie_alternador !== undefined) genData.numero_serie_alternador = dto.datosGenerador.numero_serie_alternador;
+          if (dto.datosGenerador.potencia_kw !== undefined) genData.potencia_kw = dto.datosGenerador.potencia_kw;
+          if (dto.datosGenerador.potencia_kva !== undefined) genData.potencia_kva = dto.datosGenerador.potencia_kva;
+          if (dto.datosGenerador.factor_potencia !== undefined) genData.factor_potencia = dto.datosGenerador.factor_potencia;
+          if (dto.datosGenerador.voltaje_salida !== undefined) genData.voltaje_salida = dto.datosGenerador.voltaje_salida;
+          if (dto.datosGenerador.numero_fases !== undefined) genData.numero_fases = dto.datosGenerador.numero_fases;
+          if (dto.datosGenerador.frecuencia_hz !== undefined) genData.frecuencia_hz = dto.datosGenerador.frecuencia_hz;
+          if (dto.datosGenerador.amperaje_nominal_salida !== undefined) genData.amperaje_nominal_salida = dto.datosGenerador.amperaje_nominal_salida;
+          if (dto.datosGenerador.configuracion_salida !== undefined) genData.configuracion_salida = dto.datosGenerador.configuracion_salida;
+          if (dto.datosGenerador.tiene_avr !== undefined) genData.tiene_avr = dto.datosGenerador.tiene_avr;
+          if (dto.datosGenerador.marca_avr !== undefined) genData.marca_avr = dto.datosGenerador.marca_avr;
+          if (dto.datosGenerador.modelo_avr !== undefined) genData.modelo_avr = dto.datosGenerador.modelo_avr;
+          if (dto.datosGenerador.referencia_avr !== undefined) genData.referencia_avr = dto.datosGenerador.referencia_avr;
+          if (dto.datosGenerador.tiene_modulo_control !== undefined) genData.tiene_modulo_control = dto.datosGenerador.tiene_modulo_control;
+          if (dto.datosGenerador.marca_modulo_control !== undefined) genData.marca_modulo_control = dto.datosGenerador.marca_modulo_control;
+          if (dto.datosGenerador.modelo_modulo_control !== undefined) genData.modelo_modulo_control = dto.datosGenerador.modelo_modulo_control;
+          if (dto.datosGenerador.tiene_arranque_automatico !== undefined) genData.tiene_arranque_automatico = dto.datosGenerador.tiene_arranque_automatico;
+          if (dto.datosGenerador.capacidad_tanque_principal_litros !== undefined) genData.capacidad_tanque_principal_litros = dto.datosGenerador.capacidad_tanque_principal_litros;
+          if (dto.datosGenerador.tiene_tanque_auxiliar !== undefined) genData.tiene_tanque_auxiliar = dto.datosGenerador.tiene_tanque_auxiliar;
+          if (dto.datosGenerador.capacidad_tanque_auxiliar_litros !== undefined) genData.capacidad_tanque_auxiliar_litros = dto.datosGenerador.capacidad_tanque_auxiliar_litros;
+          if (dto.datosGenerador.clase_aislamiento !== undefined) genData.clase_aislamiento = dto.datosGenerador.clase_aislamiento;
+          if (dto.datosGenerador.grado_proteccion_ip !== undefined) genData.grado_proteccion_ip = dto.datosGenerador.grado_proteccion_ip;
+          if (dto.datosGenerador.anio_fabricacion !== undefined) genData.a_o_fabricacion = dto.datosGenerador.anio_fabricacion;
+          if (dto.datosGenerador.observaciones !== undefined) genData.observaciones = dto.datosGenerador.observaciones;
+
+          updated.generador = await tx.equipos_generador.update({
+            where: { id_equipo: idEquipo },
+            data: genData,
+          });
+        } else {
+          throw new NotFoundException(`El equipo ${idEquipo} no tiene registro de generador.`);
+        }
+      }
+
+      // 4. Actualizar BOMBA si se proporcionan datos
+      if (dto.datosBomba) {
+        const bombaExiste = await tx.equipos_bomba.findUnique({
+          where: { id_equipo: idEquipo },
+        });
+
+        if (bombaExiste) {
+          const bombaData: any = { modificado_por: userId, fecha_modificacion: new Date() };
+
+          if (dto.datosBomba.marca_bomba !== undefined) bombaData.marca_bomba = dto.datosBomba.marca_bomba;
+          if (dto.datosBomba.modelo_bomba !== undefined) bombaData.modelo_bomba = dto.datosBomba.modelo_bomba;
+          if (dto.datosBomba.numero_serie_bomba !== undefined) bombaData.numero_serie_bomba = dto.datosBomba.numero_serie_bomba;
+          if (dto.datosBomba.tipo_bomba !== undefined) bombaData.tipo_bomba = dto.datosBomba.tipo_bomba as any;
+          if (dto.datosBomba.aplicacion_bomba !== undefined) bombaData.aplicacion_bomba = dto.datosBomba.aplicacion_bomba as any;
+          if (dto.datosBomba.diametro_aspiracion !== undefined) bombaData.diametro_aspiracion = dto.datosBomba.diametro_aspiracion;
+          if (dto.datosBomba.diametro_descarga !== undefined) bombaData.diametro_descarga = dto.datosBomba.diametro_descarga;
+          if (dto.datosBomba.caudal_maximo_m3h !== undefined) bombaData.caudal_maximo_m3h = dto.datosBomba.caudal_maximo_m3h;
+          if (dto.datosBomba.altura_manometrica_maxima_m !== undefined) bombaData.altura_manometrica_maxima_m = dto.datosBomba.altura_manometrica_maxima_m;
+          if (dto.datosBomba.altura_presion_trabajo_m !== undefined) bombaData.altura_presion_trabajo_m = dto.datosBomba.altura_presion_trabajo_m;
+          if (dto.datosBomba.potencia_hidraulica_kw !== undefined) bombaData.potencia_hidraulica_kw = dto.datosBomba.potencia_hidraulica_kw;
+          if (dto.datosBomba.eficiencia_porcentaje !== undefined) bombaData.eficiencia_porcentaje = dto.datosBomba.eficiencia_porcentaje;
+          if (dto.datosBomba.numero_total_bombas_sistema !== undefined) bombaData.numero_total_bombas_sistema = dto.datosBomba.numero_total_bombas_sistema;
+          if (dto.datosBomba.numero_bomba_en_sistema !== undefined) bombaData.numero_bomba_en_sistema = dto.datosBomba.numero_bomba_en_sistema;
+          if (dto.datosBomba.tiene_panel_control !== undefined) bombaData.tiene_panel_control = dto.datosBomba.tiene_panel_control;
+          if (dto.datosBomba.marca_panel_control !== undefined) bombaData.marca_panel_control = dto.datosBomba.marca_panel_control;
+          if (dto.datosBomba.modelo_panel_control !== undefined) bombaData.modelo_panel_control = dto.datosBomba.modelo_panel_control;
+          if (dto.datosBomba.tiene_presostato !== undefined) bombaData.tiene_presostato = dto.datosBomba.tiene_presostato;
+          if (dto.datosBomba.marca_presostato !== undefined) bombaData.marca_presostato = dto.datosBomba.marca_presostato;
+          if (dto.datosBomba.modelo_presostato !== undefined) bombaData.modelo_presostato = dto.datosBomba.modelo_presostato;
+          if (dto.datosBomba.presion_encendido_psi !== undefined) bombaData.presion_encendido_psi = dto.datosBomba.presion_encendido_psi;
+          if (dto.datosBomba.presion_apagado_psi !== undefined) bombaData.presion_apagado_psi = dto.datosBomba.presion_apagado_psi;
+          if (dto.datosBomba.tiene_contactor_externo !== undefined) bombaData.tiene_contactor_externo = dto.datosBomba.tiene_contactor_externo;
+          if (dto.datosBomba.marca_contactor !== undefined) bombaData.marca_contactor = dto.datosBomba.marca_contactor;
+          if (dto.datosBomba.amperaje_contactor !== undefined) bombaData.amperaje_contactor = dto.datosBomba.amperaje_contactor;
+          if (dto.datosBomba.tiene_arrancador_suave !== undefined) bombaData.tiene_arrancador_suave = dto.datosBomba.tiene_arrancador_suave;
+          if (dto.datosBomba.tiene_variador_frecuencia !== undefined) bombaData.tiene_variador_frecuencia = dto.datosBomba.tiene_variador_frecuencia;
+          if (dto.datosBomba.marca_variador !== undefined) bombaData.marca_variador = dto.datosBomba.marca_variador;
+          if (dto.datosBomba.modelo_variador !== undefined) bombaData.modelo_variador = dto.datosBomba.modelo_variador;
+          if (dto.datosBomba.tiene_tanques_hidroneumaticos !== undefined) bombaData.tiene_tanques_hidroneumaticos = dto.datosBomba.tiene_tanques_hidroneumaticos;
+          if (dto.datosBomba.cantidad_tanques !== undefined) bombaData.cantidad_tanques = dto.datosBomba.cantidad_tanques;
+          if (dto.datosBomba.capacidad_tanques_litros !== undefined) bombaData.capacidad_tanques_litros = dto.datosBomba.capacidad_tanques_litros;
+          if (dto.datosBomba.presion_tanques_psi !== undefined) bombaData.presion_tanques_psi = dto.datosBomba.presion_tanques_psi;
+          if (dto.datosBomba.tiene_manometro !== undefined) bombaData.tiene_manometro = dto.datosBomba.tiene_manometro;
+          if (dto.datosBomba.rango_manometro_min_psi !== undefined) bombaData.rango_manometro_min_psi = dto.datosBomba.rango_manometro_min_psi;
+          if (dto.datosBomba.rango_manometro_max_psi !== undefined) bombaData.rango_manometro_max_psi = dto.datosBomba.rango_manometro_max_psi;
+          if (dto.datosBomba.tiene_proteccion_nivel !== undefined) bombaData.tiene_proteccion_nivel = dto.datosBomba.tiene_proteccion_nivel;
+          if (dto.datosBomba.tipo_proteccion_nivel !== undefined) bombaData.tipo_proteccion_nivel = dto.datosBomba.tipo_proteccion_nivel;
+          if (dto.datosBomba.tiene_valvula_purga !== undefined) bombaData.tiene_valvula_purga = dto.datosBomba.tiene_valvula_purga;
+          if (dto.datosBomba.tiene_valvula_cebado !== undefined) bombaData.tiene_valvula_cebado = dto.datosBomba.tiene_valvula_cebado;
+          if (dto.datosBomba.tiene_valvula_cheque !== undefined) bombaData.tiene_valvula_cheque = dto.datosBomba.tiene_valvula_cheque;
+          if (dto.datosBomba.tiene_valvula_pie !== undefined) bombaData.tiene_valvula_pie = dto.datosBomba.tiene_valvula_pie;
+          if (dto.datosBomba.referencia_sello_mecanico !== undefined) bombaData.referencia_sello_mecanico = dto.datosBomba.referencia_sello_mecanico;
+          if (dto.datosBomba.anio_fabricacion !== undefined) bombaData.a_o_fabricacion = dto.datosBomba.anio_fabricacion;
+          if (dto.datosBomba.observaciones !== undefined) bombaData.observaciones = dto.datosBomba.observaciones;
+
+          updated.bomba = await tx.equipos_bomba.update({
+            where: { id_equipo: idEquipo },
+            data: bombaData,
+          });
+        } else {
+          throw new NotFoundException(`El equipo ${idEquipo} no tiene registro de bomba.`);
+        }
+      }
+
+      // 5. Marcar equipo como modificado
+      await tx.equipos.update({
+        where: { id_equipo: idEquipo },
+        data: {
+          modificado_por: userId,
+          fecha_modificacion: new Date(),
+        },
+      });
+
+      return updated;
+    });
+
+    return {
+      success: true,
+      message: 'Datos específicos actualizados exitosamente',
+      data: resultado,
+    };
+  }
 }

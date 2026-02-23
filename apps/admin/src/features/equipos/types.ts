@@ -296,18 +296,143 @@ export interface CreateEquipoPayload {
 /**
  * Payload para actualizar un equipo existente
  * Basado en UpdateEquipoDto del backend NestJS
+ * ✅ 23-FEB-2026: Expandido con TODOS los campos de la tabla equipos
  */
 export interface UpdateEquipoPayload {
+  // Identificación
   codigo_equipo?: string;
   id_cliente?: number;
   id_tipo_equipo?: number;
-  ubicacion_texto?: string;
-  id_sede?: number;
+  id_sede?: number | null;
   nombre_equipo?: string;
   numero_serie_equipo?: string;
+  ubicacion_texto?: string;
+  // Estado
   estado_equipo?: EstadoEquipo;
   criticidad?: Criticidad;
+  criticidad_justificacion?: string;
+  // Fechas
+  fecha_instalacion?: string | null;
+  fecha_inicio_servicio_mekanos?: string | null;
+  // Garantía
+  en_garantia?: boolean;
+  fecha_inicio_garantia?: string | null;
+  fecha_fin_garantia?: string | null;
+  proveedor_garantia?: string;
+  // Pintura
+  estado_pintura?: EstadoPintura;
+  requiere_pintura?: boolean;
+  // Contrato
+  tipo_contrato?: TipoContrato;
+  // Intervalos override
+  intervalo_tipo_a_dias_override?: number | null;
+  intervalo_tipo_a_horas_override?: number | null;
+  intervalo_tipo_b_dias_override?: number | null;
+  intervalo_tipo_b_horas_override?: number | null;
+  criterio_intervalo_override?: CriterioIntervalo | null;
+  // Observaciones
+  observaciones_generales?: string;
+  configuracion_especial?: string;
+  // Parámetros
   config_parametros?: ConfigParametros;
+}
+
+/**
+ * ✅ 23-FEB-2026: Payload para actualizar datos específicos (Motor, Generador, Bomba)
+ */
+export interface UpdateDatosEspecificosPayload {
+  datosMotor?: Partial<DatosMotor> & {
+    cilindrada_cc?: number;
+    tiene_turbocargador?: boolean;
+    tipo_arranque?: string;
+    voltaje_arranque_vdc?: number;
+    amperaje_arranque?: number;
+    numero_baterias?: number;
+    referencia_bateria?: string;
+    capacidad_bateria_ah?: number;
+    tiene_radiador?: boolean;
+    radiador_alto_cm?: number;
+    radiador_ancho_cm?: number;
+    radiador_espesor_cm?: number;
+    tiene_cargador_bateria?: boolean;
+    marca_cargador?: string;
+    modelo_cargador?: string;
+    amperaje_cargador?: number;
+    tipo_aceite?: string;
+    tipo_refrigerante?: string;
+    clase_aislamiento?: string;
+    grado_proteccion_ip?: string;
+    amperaje_nominal?: number;
+    factor_potencia?: number;
+    anio_fabricacion?: number;
+    observaciones?: string;
+  };
+  datosGenerador?: Partial<DatosGenerador> & {
+    numero_serie_alternador?: string;
+    marca_alternador?: string;
+    modelo_alternador?: string;
+    potencia_kw?: number;
+    potencia_kva?: number;
+    factor_potencia?: number;
+    numero_fases?: number;
+    frecuencia_hz?: number;
+    amperaje_nominal_salida?: number;
+    configuracion_salida?: string;
+    tiene_avr?: boolean;
+    marca_avr?: string;
+    modelo_avr?: string;
+    referencia_avr?: string;
+    tiene_modulo_control?: boolean;
+    marca_modulo_control?: string;
+    modelo_modulo_control?: string;
+    tiene_arranque_automatico?: boolean;
+    capacidad_tanque_principal_litros?: number;
+    tiene_tanque_auxiliar?: boolean;
+    capacidad_tanque_auxiliar_litros?: number;
+    clase_aislamiento?: string;
+    grado_proteccion_ip?: string;
+    anio_fabricacion?: number;
+    observaciones?: string;
+  };
+  datosBomba?: Partial<DatosBomba> & {
+    aplicacion_bomba?: string;
+    diametro_aspiracion?: string;
+    diametro_descarga?: string;
+    altura_presion_trabajo_m?: number;
+    potencia_hidraulica_kw?: number;
+    eficiencia_porcentaje?: number;
+    numero_total_bombas_sistema?: number;
+    numero_bomba_en_sistema?: number;
+    tiene_panel_control?: boolean;
+    marca_panel_control?: string;
+    modelo_panel_control?: string;
+    tiene_presostato?: boolean;
+    marca_presostato?: string;
+    modelo_presostato?: string;
+    tiene_contactor_externo?: boolean;
+    marca_contactor?: string;
+    amperaje_contactor?: number;
+    tiene_arrancador_suave?: boolean;
+    tiene_variador_frecuencia?: boolean;
+    marca_variador?: string;
+    modelo_variador?: string;
+    tiene_tanques_hidroneumaticos?: boolean;
+    cantidad_tanques?: number;
+    capacidad_tanques_litros?: number;
+    presion_tanques_psi?: number;
+    tiene_manometro?: boolean;
+    rango_manometro_min_psi?: number;
+    rango_manometro_max_psi?: number;
+    tiene_proteccion_nivel?: boolean;
+    tipo_proteccion_nivel?: string;
+    tiene_valvula_purga?: boolean;
+    tiene_valvula_cebado?: boolean;
+    tiene_valvula_cheque?: boolean;
+    tiene_valvula_pie?: boolean;
+    referencia_sello_mecanico?: string;
+    anio_fabricacion?: number;
+    observaciones?: string;
+  };
 }
 
 // 

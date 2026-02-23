@@ -303,6 +303,21 @@ export class EquiposController {
   }
 
   /**
+   * PATCH /api/equipos/:id/datos-especificos
+   * Actualizar datos específicos del equipo (Motor, Generador, Bomba)
+   * ✅ 23-FEB-2026: CRUD completo para datos polimórficos
+   */
+  @Patch(':id/datos-especificos')
+  @ApiOperation({ summary: 'Actualizar datos específicos del equipo (Motor, Generador, Bomba)' })
+  async actualizarDatosEspecificos(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDatosEspecificosDto,
+    @UserId() userId: number
+  ) {
+    return this.equiposGestionService.actualizarDatosEspecificos(id, dto, userId);
+  }
+
+  /**
    * POST /api/equipos/:id/lectura-horometro
    * Registrar nueva lectura de horómetro
    */

@@ -12,6 +12,7 @@ export class PrismaEquipoRepository {
 
   /**
    * Guardar equipo (crear o actualizar)
+   * ✅ 23-FEB-2026: Expandido con TODOS los campos de la tabla equipos
    */
   async save(data: {
     id_equipo?: number;
@@ -24,6 +25,23 @@ export class PrismaEquipoRepository {
     numero_serie_equipo?: string | null;
     estado_equipo?: string;
     criticidad?: string;
+    criticidad_justificacion?: string | null;
+    fecha_instalacion?: Date | null;
+    fecha_inicio_servicio_mekanos?: Date | null;
+    en_garantia?: boolean;
+    fecha_inicio_garantia?: Date | null;
+    fecha_fin_garantia?: Date | null;
+    proveedor_garantia?: string | null;
+    estado_pintura?: string | null;
+    requiere_pintura?: boolean;
+    tipo_contrato?: string | null;
+    intervalo_tipo_a_dias_override?: number | null;
+    intervalo_tipo_a_horas_override?: number | null;
+    intervalo_tipo_b_dias_override?: number | null;
+    intervalo_tipo_b_horas_override?: number | null;
+    criterio_intervalo_override?: string | null;
+    observaciones_generales?: string | null;
+    configuracion_especial?: string | null;
     config_parametros?: Record<string, any>;
     creado_por: number;
     modificado_por?: number | null;
@@ -42,6 +60,23 @@ export class PrismaEquipoRepository {
           numero_serie_equipo: data.numero_serie_equipo,
           estado_equipo: data.estado_equipo as any,
           criticidad: data.criticidad as any,
+          criticidad_justificacion: data.criticidad_justificacion,
+          fecha_instalacion: data.fecha_instalacion,
+          fecha_inicio_servicio_mekanos: data.fecha_inicio_servicio_mekanos,
+          en_garantia: data.en_garantia,
+          fecha_inicio_garantia: data.fecha_inicio_garantia,
+          fecha_fin_garantia: data.fecha_fin_garantia,
+          proveedor_garantia: data.proveedor_garantia,
+          estado_pintura: data.estado_pintura as any,
+          requiere_pintura: data.requiere_pintura,
+          tipo_contrato: data.tipo_contrato as any,
+          intervalo_tipo_a_dias_override: data.intervalo_tipo_a_dias_override,
+          intervalo_tipo_a_horas_override: data.intervalo_tipo_a_horas_override,
+          intervalo_tipo_b_dias_override: data.intervalo_tipo_b_dias_override,
+          intervalo_tipo_b_horas_override: data.intervalo_tipo_b_horas_override,
+          criterio_intervalo_override: data.criterio_intervalo_override as any,
+          observaciones_generales: data.observaciones_generales,
+          configuracion_especial: data.configuracion_especial,
           config_parametros: data.config_parametros || undefined,
           modificado_por: data.modificado_por,
           fecha_modificacion: new Date(),
