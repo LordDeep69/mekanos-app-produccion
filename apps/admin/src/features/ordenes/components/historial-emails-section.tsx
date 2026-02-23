@@ -1,38 +1,17 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { Mail, AlertCircle, Loader2, Calendar, Send, CheckCircle2, XCircle, Clock } from 'lucide-react';
-
-// Interface para los emails enviados
-interface EmailEnviado {
-    id: number;
-    tipo_email: string;
-    destinatario: string;
-    asunto: string;
-    fecha_envio: string;
-    estado: 'ENVIADO' | 'ERROR' | 'PENDIENTE';
-    error?: string;
-    intentos: number;
-    fecha_creacion: string;
-}
+import { AlertCircle, Calendar, CheckCircle2, Loader2, Mail, Send, XCircle } from 'lucide-react';
+import type { HistorialEmailEnviado } from '../api/ordenes.service';
+import { useHistorialEmails } from '../hooks/use-ordenes';
 
 interface HistorialEmailsSectionProps {
     idOrden: number;
 }
 
 export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps) {
-    // Query para obtener el historial de emails
-    const { data: emailsData, isLoading, error } = useQuery({
-        queryKey: ['historial-emails', idOrden],
-        queryFn: async () => {
-            const response = await fetch(`/api/ordenes/${idOrden}/emails`);
-            if (!response.ok) throw new Error('Error al cargar historial de emails');
-            return response.json();
-        },
-        staleTime: 5 * 60 * 1000, // 5 minutos
-    });
+    const { data: emailsData, isLoading, error } = useHistorialEmails(idOrden);
 
-    const emails: EmailEnviado[] = emailsData?.data || [];
+    const emails: HistorialEmailEnviado[] = emailsData?.historial || [];
 
     if (isLoading) {
         return (
@@ -63,30 +42,16 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
         );
     }
 
-    const getEstadoIcon = (estado: string) => {
-        switch (estado) {
-            case 'ENVIADO':
-                return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-            case 'ERROR':
-                return <XCircle className="h-4 w-4 text-red-600" />;
-            case 'PENDIENTE':
-                return <Clock className="h-4 w-4 text-yellow-600" />;
-            default:
-                return <Clock className="h-4 w-4 text-gray-400" />;
-        }
+    const getEstadoIcon = (estadoEnvio: 'EXITOSO' | 'FALLIDO') => {
+        return estadoEnvio === 'EXITOSO'
+            ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+            : <XCircle className="h-4 w-4 text-red-600" />;
     };
 
-    const getEstadoColor = (estado: string) => {
-        switch (estado) {
-            case 'ENVIADO':
-                return 'bg-green-50 border-green-100 text-green-700';
-            case 'ERROR':
-                return 'bg-red-50 border-red-100 text-red-700';
-            case 'PENDIENTE':
-                return 'bg-yellow-50 border-yellow-100 text-yellow-700';
-            default:
-                return 'bg-gray-50 border-gray-100 text-gray-700';
-        }
+    const getEstadoColor = (estadoEnvio: 'EXITOSO' | 'FALLIDO') => {
+        return estadoEnvio === 'EXITOSO'
+            ? 'bg-green-50 border-green-100 text-green-700'
+            : 'bg-red-50 border-red-100 text-red-700';
     };
 
     const formatFecha = (fecha: string) => {
@@ -99,14 +64,14 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
         });
     };
 
-    const getTipoEmailLabel = (tipo: string) => {
-        const tipos: Record<string, string> = {
-            'INFORME_COMPLETADO': 'Informe de Servicio Completado',
-            'CONFIRMACION_ASIGNACION': 'Confirmación de Asignación',
-            'AVISO_VENCIMIENTO': 'Aviso de Vencimiento',
-            'RECORDATORIO': 'Recordatorio',
+    const getOrigenLabel = (origen: string) => {
+        const origenes: Record<string, string> = {
+            'FINALIZACION_ORDEN': 'Informe de Servicio Completado',
+            'MANUAL': 'Envío Manual',
+            'REENVIO': 'Reenvío',
+            'SISTEMA': 'Sistema Automático',
         };
-        return tipos[tipo] || tipo;
+        return origenes[origen] || origen;
     };
 
     return (
@@ -123,18 +88,18 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
                 <div className="text-center py-12 text-gray-500">
                     <Mail className="h-12 w-12 mx-auto mb-3 text-gray-200" />
                     <p className="font-medium">No hay emails enviados</p>
-                    <p className="text-sm">Los emails se envían automáticamente según el estado de la orden</p>
+                    <p className="text-sm">Los emails se envían automáticamente al completar la orden</p>
                 </div>
             ) : (
                 <div className="space-y-3">
                     {emails.map((email) => (
                         <div
-                            key={email.id}
+                            key={email.id_historial_email}
                             className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors"
                         >
                             {/* Icono de estado */}
                             <div className="flex-shrink-0 mt-1">
-                                {getEstadoIcon(email.estado)}
+                                {getEstadoIcon(email.estado_envio)}
                             </div>
 
                             {/* Contenido principal */}
@@ -142,15 +107,15 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
                                 <div className="flex items-start justify-between gap-4 mb-2">
                                     <div className="flex-1 min-w-0">
                                         <p className="font-medium text-gray-900 truncate">
-                                            {getTipoEmailLabel(email.tipo_email)}
+                                            {getOrigenLabel(email.origen_envio)}
                                         </p>
                                         <p className="text-sm text-gray-600 truncate">
                                             {email.asunto}
                                         </p>
                                     </div>
                                     <div className="flex-shrink-0">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getEstadoColor(email.estado)}`}>
-                                            {email.estado}
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getEstadoColor(email.estado_envio)}`}>
+                                            {email.estado_envio}
                                         </span>
                                     </div>
                                 </div>
@@ -158,24 +123,36 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
                                 <div className="flex items-center gap-4 text-xs text-gray-500 mb-2">
                                     <span className="flex items-center gap-1">
                                         <Send className="h-3 w-3" />
-                                        {email.destinatario}
+                                        {email.destinatario_to}
                                     </span>
+                                    {email.destinatarios_cc && (
+                                        <span className="flex items-center gap-1 text-gray-400">
+                                            CC: {email.destinatarios_cc}
+                                        </span>
+                                    )}
                                     <span className="flex items-center gap-1">
                                         <Calendar className="h-3 w-3" />
                                         {formatFecha(email.fecha_envio)}
                                     </span>
-                                    {email.intentos > 1 && (
-                                        <span className="text-yellow-600">
-                                            {email.intentos} intentos
-                                        </span>
-                                    )}
                                 </div>
 
                                 {/* Error si existe */}
-                                {email.error && (
+                                {email.mensaje_error && (
                                     <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-xs text-red-700">
-                                        <strong>Error:</strong> {email.error}
+                                        <strong>Error:</strong> {email.mensaje_error}
                                     </div>
+                                )}
+
+                                {/* Link al PDF si existe */}
+                                {email.url_pdf_enviado && (
+                                    <a
+                                        href={email.url_pdf_enviado}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                    >
+                                        Ver PDF adjunto
+                                    </a>
                                 )}
                             </div>
                         </div>
@@ -190,8 +167,8 @@ export function HistorialEmailsSection({ idOrden }: HistorialEmailsSectionProps)
                     <div>
                         <p className="text-sm font-medium text-blue-900">¿Qué emails se envían?</p>
                         <p className="text-xs text-blue-700 mt-1">
-                            Se envían automáticamente cuando se completa una orden, se asigna un técnico,
-                            o se requieren recordatorios. Los emails incluyen informes PDF y actualizaciones de estado.
+                            Se envían automáticamente cuando se completa una orden. Incluyen el informe PDF
+                            y se registran aquí para auditoría.
                         </p>
                     </div>
                 </div>
