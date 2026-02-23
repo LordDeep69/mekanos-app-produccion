@@ -406,13 +406,14 @@ export function useEliminarEstadoOrden() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Hook para selector de clientes con búsqueda
+ * Hook para selector de clientes (dataset base)
  */
-export function useClientesSelector(busqueda?: string, enabled = true) {
+export function useClientesSelector(enabled = true) {
     return useQuery({
-        queryKey: [...CATALOGOS_KEYS.clientes, busqueda],
-        queryFn: () => getClientesSelector({ busqueda, limit: 50 }),
+        queryKey: [...CATALOGOS_KEYS.clientes, 'all'],
+        queryFn: () => getClientesSelector({ limit: 500 }),
         enabled,
+        placeholderData: (previousData) => previousData,
         ...CacheStrategy.SEMI_STATIC, // Selector semi-estático - 15 min cache
     });
 }
@@ -493,7 +494,11 @@ export function useWizardCatalogos(params?: { tipoEquipoId?: number }) {
 /**
  * Hook para el flujo de selección en cascada: Cliente → Sede → Equipo
  */
-export function useCascadaClienteEquipo(clienteId?: number, sedeId?: number) {
+export function useCascadaClienteEquipo(
+    clienteId?: number,
+    sedeId?: number,
+    busquedaClientes?: string,
+) {
     const clientes = useClientesSelector();
     const sedes = useSedesCliente(clienteId);
     const equipos = useEquiposSelector(
@@ -501,11 +506,23 @@ export function useCascadaClienteEquipo(clienteId?: number, sedeId?: number) {
         !!clienteId
     );
 
+    const terminoBusqueda = (busquedaClientes || '').trim().toLowerCase();
+    const clientesBase = clientes.data || [];
+    const clientesFiltrados = terminoBusqueda
+        ? clientesBase.filter((c) => {
+            const nombre = (c.nombre_sede || c.persona?.nombre_comercial || c.persona?.razon_social || '').toLowerCase();
+            const nit = (c.persona?.numero_identificacion || '').toLowerCase();
+            const codigo = (c.codigo_cliente || '').toLowerCase();
+            return nombre.includes(terminoBusqueda) || nit.includes(terminoBusqueda) || codigo.includes(terminoBusqueda);
+        })
+        : clientesBase;
+
     return {
-        clientes: clientes.data || [],
+        clientes: clientesFiltrados,
         sedes: sedes.data || [],
         equipos: equipos.data || [],
         isLoadingClientes: clientes.isLoading,
+        isFetchingClientes: clientes.isFetching,
         isLoadingSedes: sedes.isLoading,
         isLoadingEquipos: equipos.isLoading,
     };

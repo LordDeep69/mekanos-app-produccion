@@ -12,7 +12,7 @@ import 'storage_settings_screen.dart';
 ///
 /// Módulo padre que agrupa todas las configuraciones de la app:
 /// - Almacenamiento (gestión de espacio y limpieza)
-/// - Modo de Finalización (COMPLETO vs SOLO_DATOS)
+/// - Modo de Finalización (siempre SOLO_DATOS - PDF/email desde Admin Portal)
 /// - Futuras configuraciones...
 
 /// Provider para el modo de finalización persistente
@@ -179,7 +179,6 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final modoActual = ref.watch(modoFinalizacionProvider);
     final es24h = ref.watch(formatoHora24Provider);
 
     return Scaffold(
@@ -232,7 +231,8 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
           const SizedBox(height: 24),
 
           // ================================================================
-          // SECCIÓN: MODO DE FINALIZACIÓN
+          // SECCIÓN: MODO DE FINALIZACIÓN (Solo informativo)
+          // ✅ FIX 19-FEB-2026: Modo fijo SOLO_DATOS - PDF/email desde Admin Portal
           // ================================================================
           _buildSectionHeader(
             context,
@@ -256,7 +256,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
-                          Icons.cloud_sync,
+                          Icons.cloud_upload,
                           color: Colors.indigo,
                         ),
                       ),
@@ -266,7 +266,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Modo por Defecto',
+                              'Modo: Solo Datos',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 16,
@@ -274,7 +274,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Define cómo se finalizan las órdenes',
+                              'La app sube datos al servidor. El PDF y email se generan desde el Portal Admin.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
@@ -285,110 +285,31 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 8),
-
-                  // Opción COMPLETO (protegida con contraseña admin)
-                  RadioListTile<String>(
-                    value: 'COMPLETO',
-                    groupValue: modoActual,
-                    onChanged: (v) => _solicitarPasswordAdmin(context, ref),
-                    title: Row(
-                      children: [
-                        const Text(
-                          'Completo',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(width: 6),
-                        Icon(Icons.lock, size: 14, color: Colors.grey.shade500),
-                      ],
-                    ),
-                    subtitle: const Text(
-                      'Sube datos + genera PDF + envía email automáticamente',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    secondary: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 24,
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
-
-                  const Divider(height: 16),
-
-                  // Opción SOLO_DATOS (default, sin restricciones)
-                  RadioListTile<String>(
-                    value: 'SOLO_DATOS',
-                    groupValue: modoActual,
-                    onChanged: (v) {
-                      ref.read(modoFinalizacionProvider.notifier).setModo(v!);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Modo Solo Datos activado'),
-                          backgroundColor: Colors.blue,
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    },
-                    title: const Text(
-                      'Solo Datos',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: const Text(
-                      'Solo sube datos. PDF y email se generan desde Admin Portal',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    secondary: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.cloud_upload,
-                        color: Colors.blue,
-                        size: 24,
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
-
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.1),
+                      color: Colors.blue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.3),
+                        color: Colors.blue.withValues(alpha: 0.2),
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           Icons.info_outline,
-                          color: Colors.amber.shade700,
+                          color: Colors.blue.shade700,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Solo Datos es el modo predeterminado. '
-                            'El modo Completo requiere contraseña de administrador.',
+                            'Al finalizar una orden, se sincronizan evidencias, firmas, actividades y mediciones. '
+                            'El informe PDF y el correo al cliente se gestionan desde el Portal Administrativo.',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.amber.shade900,
+                              color: Colors.blue.shade900,
                             ),
                           ),
                         ),
@@ -653,86 +574,6 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         ],
       ),
     );
-  }
-
-  /// Solicita contraseña de administrador para desbloquear modo COMPLETO
-  Future<void> _solicitarPasswordAdmin(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final controller = TextEditingController();
-    final resultado = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.lock, color: Colors.orange),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Acceso Administrador',
-                style: TextStyle(fontSize: 16),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Ingrese la contraseña de administrador para habilitar el modo Completo.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              obscureText: true,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Contraseña',
-                prefixIcon: Icon(Icons.key),
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text == 'AdminMekano123') {
-                Navigator.of(ctx).pop(true);
-              } else {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text('❌ Contraseña incorrecta'),
-                    backgroundColor: Colors.red,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            },
-            child: const Text('Desbloquear'),
-          ),
-        ],
-      ),
-    );
-
-    if (resultado == true) {
-      ref.read(modoFinalizacionProvider.notifier).setModo('COMPLETO');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Modo Completo activado'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 
   Widget _buildSectionHeader(

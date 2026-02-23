@@ -14,7 +14,7 @@ import '../../evidencias/presentation/evidencias_screen.dart';
 import '../../firmas/data/firma_service.dart';
 import '../../firmas/presentation/firmas_section.dart';
 import '../../settings/presentation/configuracion_screen.dart'
-    show modoFinalizacionProvider, formatoHora24Provider;
+    show formatoHora24Provider;
 import '../data/ejecucion_service.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
@@ -3770,14 +3770,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       text: _razonFallaActual ?? '',
     );
 
-    // ✅ MODO CONFIGURABLE: Usar modo guardado en Configuración como default
-    String modoSeleccionado = ref.read(modoFinalizacionProvider);
-
     // DEBUG: Log de valores iniciales
     print('🕐 Diálogo Finalización:');
     print('   Hora entrada default: ${_formatTimeOfDay24h(horaEntrada)}');
     print('   Hora salida default: ${_formatTimeOfDay24h(horaSalida)}');
-    print('   Modo: $modoSeleccionado');
+    print('   Modo: SOLO_DATOS (forzado)');
 
     final resultado = await showDialog<Map<String, String>>(
       context: context,
@@ -3867,7 +3864,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                     ),
                   ),
                 ],
-                // ✅ MODO: Se usa el configurado en Configuración (sin selector aquí)
+                // ✅ FIX 19-FEB-2026: Siempre SOLO_DATOS - PDF/email desde Admin Portal
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -3885,9 +3882,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          modoSeleccionado == 'COMPLETO'
-                              ? 'Modo: Completo (PDF + Email)'
-                              : 'Modo: Solo datos',
+                          'Los datos se sincronizarán al servidor. El PDF se genera desde Admin.',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.blue.shade700,
@@ -3913,7 +3908,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 print('🕐 DEBUG FINALIZACIÓN:');
                 print('   horaEntrada: $entradaStr');
                 print('   horaSalida: $salidaStr');
-                print('   modo: $modoSeleccionado');
+                print('   modo: SOLO_DATOS (forzado)');
                 Navigator.of(ctx).pop({
                   'horaEntrada': entradaStr,
                   'horaSalida': salidaStr,
@@ -3921,7 +3916,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                       ? 'Servicio completado satisfactoriamente.'
                       : _observacionesController.text,
                   if (_esCorrectivo) 'razonFalla': razonFallaController.text,
-                  'modo': modoSeleccionado,
+                  'modo': 'SOLO_DATOS',
                 });
               },
               icon: const Icon(Icons.cloud_upload),
@@ -3951,7 +3946,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     required String horaSalida,
     required String observaciones,
     String? razonFalla,
-    String modo = 'COMPLETO',
+    String modo = 'SOLO_DATOS',
   }) async {
     // ✅ 19-DIC-2025: Mostrar diálogo con progreso reactivo
     showDialog(
@@ -4764,7 +4759,7 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
 /// Muestra el progreso en tiempo real de la subida al servidor
 class _SyncProgressDialog extends ConsumerWidget {
   final String modo;
-  const _SyncProgressDialog({this.modo = 'COMPLETO'});
+  const _SyncProgressDialog({this.modo = 'SOLO_DATOS'});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

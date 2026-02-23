@@ -3,6 +3,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { PrismaModule } from '../database/prisma.module';
 import { CreateEquipoHandler } from './commands/create-equipo.handler';
 import { DeleteEquipoHandler } from './commands/delete-equipo.handler';
+import { HardDeleteEquipoHandler } from './commands/hard-delete-equipo.handler';
 import { UpdateEquipoHandler } from './commands/update-equipo.handler';
 import { EquiposGestionService } from './equipos-gestion.service';
 import { EquiposController } from './equipos.controller';
@@ -13,7 +14,8 @@ import { GetEquiposHandler } from './queries/get-equipos.handler';
 const CommandHandlers = [
   CreateEquipoHandler,
   UpdateEquipoHandler,
-  DeleteEquipoHandler
+  DeleteEquipoHandler,
+  HardDeleteEquipoHandler
 ];
 
 const QueryHandlers = [
@@ -44,4 +46,4 @@ const QueryHandlers = [
   ],
   exports: [EquiposGestionService, ...CommandHandlers, ...QueryHandlers]
 })
-export class EquiposModule {}
+export class EquiposModule { }

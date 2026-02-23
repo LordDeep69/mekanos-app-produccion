@@ -566,8 +566,9 @@ export function getClienteLabel(cliente: ClienteSelector): string {
 }
 
 export function getEquipoLabel(equipo: EquipoSelector): string {
-    const parts = [equipo.codigo_equipo];
+    const parts = [];
     if (equipo.nombre_equipo) parts.push(equipo.nombre_equipo);
+    parts.push(equipo.codigo_equipo);
     if (equipo.marca) parts.push(`(${equipo.marca})`);
     return parts.join(' - ');
 }

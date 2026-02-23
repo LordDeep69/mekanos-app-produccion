@@ -22,6 +22,20 @@ export interface TipoServicio {
     descripcion?: string;
 }
 
+// Sede de cliente
+export interface SedeCliente {
+    id_sede: number;
+    id_cliente: number;
+    nombre_sede: string;
+    direccion_sede: string;
+    barrio_zona?: string;
+    ciudad_sede?: string;
+    departamento_sede?: string;
+    contacto_sede?: string;
+    telefono_sede?: string;
+    email_sede?: string;
+}
+
 // Cliente básico
 export interface ClienteOrden {
     id_cliente: number;
@@ -32,6 +46,10 @@ export interface ClienteOrden {
         nombre_comercial?: string;
         razon_social?: string;
         numero_identificacion?: string;
+        direccion_principal?: string;
+        ciudad?: string;
+        departamento?: string;
+        email_principal?: string;
     };
 }
 
@@ -79,6 +97,9 @@ export interface Orden {
     tipos_servicio?: TipoServicio;
     clientes?: ClienteOrden;
     equipos?: EquipoOrden; // Equipo principal (legacy)
+    // ✅ FIX 18-FEB-2026: Sede del cliente para dirección correcta
+    sedes_cliente?: SedeCliente;
+    id_sede?: number;
 
     // MULTI-EQUIPOS
     ordenes_equipos?: Array<{

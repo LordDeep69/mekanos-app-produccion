@@ -613,7 +613,32 @@ class SyncService {
             );
             await _guardarOrdenesEquipos(idOrden, equiposData);
           } else {
+            // ✅ FIX 14-FEB-2026: NO re-crear órdenes completadas que fueron purgadas
+            // Si la orden ya no existe localmente y el servidor dice que está en estado final,
+            // significa que fue purgada intencionalmente. No re-insertarla.
+            final codigoEstadoUpper = (codigoEstado ?? '').toUpperCase();
+            final esEstadoFinal = [
+              'COMPLETADA',
+              'CERRADA',
+              'CANCELADA',
+              'FINALIZADA',
+            ].contains(codigoEstadoUpper);
+
+            if (esEstadoFinal) {
+              debugPrint(
+                '🛡️ [SYNC] Orden ${orden['numeroOrden']} ($codigoEstadoUpper) purgada previamente - NO re-crear',
+              );
+              continue;
+            }
+
             final idLocalNueva = await _db.insertOrdenFromSync(ordenCompanion);
+
+            // ✅ FIX 21-FEB-2026: Actualizar mapa en memoria para prevenir duplicados
+            // dentro del mismo batch de sincronización
+            final ordenInsertada = await _db.getOrdenById(idLocalNueva);
+            if (ordenInsertada != null) {
+              ordenesExistentesMap[idOrden] = ordenInsertada;
+            }
 
             // ✅ NUEVO: Guardar plan de actividades si existe
             final planDataNueva = orden['actividadesPlan'] as List?;

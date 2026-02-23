@@ -1,8 +1,10 @@
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/sync_upload_service.dart';
 import '../../ejecucion/data/ejecucion_service.dart';
 import '../../ejecucion/presentation/ejecucion_screen.dart';
 import '../../ejecucion/presentation/resumen_finalizacion_screen.dart';
@@ -99,9 +101,10 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         foregroundColor: Colors.white,
       ),
       body: _buildBody(),
-      // ✅ FIX: Ocultar botón para órdenes finalizadas (COMPLETADA, CERRADA, CANCELADA)
-      bottomNavigationBar: _detalle != null && !_detalle!.estaFinalizada
-          ? _buildBottomBar()
+      // ✅ FIX 21-FEB-2026: Mostrar botón RESUBIR para órdenes COMPLETADA con datos locales
+      // O botón normal de ejecución para órdenes no finalizadas
+      bottomNavigationBar: _detalle != null
+          ? (!_detalle!.estaFinalizada ? _buildBottomBar() : _buildResubirBar())
           : null,
     );
   }
@@ -757,6 +760,226 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         ),
       ),
     );
+  }
+
+  /// ✅ FIX 21-FEB-2026: Barra inferior para RESUBIR órdenes completadas
+  /// Permite al técnico forzar re-subida de datos al servidor
+  Widget _buildResubirBar() {
+    // Solo mostrar para COMPLETADA (no CERRADA ni CANCELADA)
+    final codigoEstado = _detalle?.codigoEstado.toUpperCase() ?? '';
+    if (codigoEstado != 'COMPLETADA') {
+      return const SizedBox.shrink();
+    }
+
+    // Verificar si hay datos locales (evidencias, firmas, actividades)
+    final tieneEvidencias = (_detalle?.orden.totalEvidencias ?? 0) > 0;
+    final tieneFirmas = (_detalle?.orden.totalFirmas ?? 0) > 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Info text
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.orange.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      tieneEvidencias || tieneFirmas
+                          ? 'Si hubo problemas con la sincronización, puede resubir los datos al servidor.'
+                          : 'Esta orden ya fue completada. No hay datos locales para resubir.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Botón RESUBIR
+            ElevatedButton.icon(
+              onPressed: _resubirOrden,
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text(
+                'RESUBIR ORDEN',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ✅ FIX 21-FEB-2026: Resubir orden completada al servidor
+  /// Hace rollback de datos existentes en backend y re-sube todo
+  Future<void> _resubirOrden() async {
+    if (_detalle == null) return;
+
+    // Confirmación del usuario
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 8),
+            Expanded(child: Text('Resubir Orden')),
+          ],
+        ),
+        content: Text(
+          '¿Está seguro de resubir la orden ${_detalle!.numeroOrden}?\n\n'
+          'Esto eliminará los datos actuales en el servidor y los reemplazará '
+          'con los datos locales del dispositivo.\n\n'
+          'Use esta opción solo si la sincronización original tuvo problemas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCELAR'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('RESUBIR'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true || !mounted) return;
+
+    // Mostrar loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(child: Text('Resubiendo orden al servidor...')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final db = ref.read(databaseProvider);
+      final syncUpload = ref.read(syncUploadServiceProvider);
+
+      // 1. Marcar orden como dirty para que el sync la procese
+      await db.updateOrden(
+        OrdenesCompanion(isDirty: const Value(true)),
+        widget.idOrdenLocal,
+      );
+
+      // 2. Obtener datos necesarios
+      final orden = await db.getOrdenById(widget.idOrdenLocal);
+      if (orden == null || orden.idBackend == null) {
+        if (mounted) Navigator.pop(context); // Cerrar loading
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Error: No se encontró la orden o no tiene ID de backend',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // 3. Re-finalizar usando el mismo endpoint (backend ahora acepta COMPLETADA)
+      final result = await syncUpload.finalizarOrden(
+        idOrdenLocal: widget.idOrdenLocal,
+        idOrdenBackend: orden.idBackend!,
+        observaciones: orden.observacionesTecnico ?? '',
+        horaEntrada: orden.horaEntradaTexto ?? '',
+        horaSalida: orden.horaSalidaTexto ?? '',
+        usuarioId: 1, // Se resolverá en el backend
+        razonFalla: orden.razonFalla,
+      );
+
+      if (mounted) Navigator.pop(context); // Cerrar loading
+
+      if (mounted) {
+        if (result.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                result.guardadoOffline
+                    ? '📴 Orden guardada para subir cuando haya conexión'
+                    : '✅ Orden resubida exitosamente',
+              ),
+              backgroundColor: result.guardadoOffline
+                  ? Colors.orange
+                  : Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          // Recargar detalle
+          _loadDetalleOrden();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Error: ${result.error ?? result.mensaje}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Cerrar loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error inesperado: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   /// Iniciar ejecución de la orden

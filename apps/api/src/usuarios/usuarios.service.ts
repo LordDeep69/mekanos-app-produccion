@@ -174,6 +174,45 @@ export class UsuariosService {
   }
 
   /**
+   * Obtiene una preview de la contraseña para administradores
+   * NOTA: Por seguridad, devuelve el hash, no la contraseña real
+   */
+  async getPasswordPreview(id: number) {
+    try {
+      const record = await this.prisma.usuarios.findUnique({
+        where: { id_usuario: id },
+        select: {
+          id_usuario: true,
+          username: true,
+          password_hash: true,
+          fecha_ultimo_cambio_password: true,
+          debe_cambiar_password: true,
+        },
+      });
+
+      if (!record) {
+        throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+      }
+
+      return {
+        id_usuario: record.id_usuario,
+        username: record.username,
+        password_hash_preview: record.password_hash ? `${record.password_hash.substring(0, 20)}...` : 'Sin contraseña',
+        fecha_ultimo_cambio: record.fecha_ultimo_cambio_password,
+        debe_cambiar_password: record.debe_cambiar_password,
+        mensaje: 'Por seguridad, solo se muestra una preview del hash. Use "Restablecer" para cambiar la contraseña.',
+      };
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error al obtener preview de contraseña: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
    * Actualiza el estado de un usuario
    * Estados válidos: ACTIVO, INACTIVO, PENDIENTE_ACTIVACION, SUSPENDIDO, ELIMINADO
    */

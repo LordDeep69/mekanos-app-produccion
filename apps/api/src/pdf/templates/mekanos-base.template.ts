@@ -916,53 +916,87 @@ export const baseStyles = `
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     MULTI-EQUIPOS: Estilos para tablas dinámicas (15-DIC-2025)
+     MULTI-EQUIPOS: Estilos para tablas dinámicas
+     ✅ FIX 14-FEB-2026: Responsive para 2-10+ equipos
      ═══════════════════════════════════════════════════════════════ */
-  
+
+  /* Landscape automático para muchos equipos */
+  .multiequipo-landscape {
+    /* Puppeteer usa @page para orientación, pero esta clase marca la intención */
+  }
+
+  .checklist-multiequipo {
+    table-layout: fixed;
+    width: 100%;
+    font-size: 8px;
+  }
+
   .checklist-multiequipo th.equipo-col {
     background: ${MEKANOS_COLORS.secondary};
     text-align: center;
-    min-width: 50px;
-    max-width: 80px;
-    font-size: 8px;
-    padding: 4px 2px;
+    font-size: 7px;
+    padding: 3px 1px;
+    word-wrap: break-word;
+    overflow: hidden;
+    line-height: 1.1;
   }
   
   .checklist-multiequipo td.equipo-cell {
     text-align: center;
-    padding: 3px 2px;
-    min-width: 50px;
-    max-width: 80px;
+    padding: 2px 1px;
   }
   
   .checklist-multiequipo .resultado-mini {
     display: inline-block;
-    padding: 2px 4px;
+    padding: 1px 3px;
     border-radius: 2px;
     font-weight: bold;
-    font-size: 8px;
-    min-width: 24px;
+    font-size: 7px;
+    min-width: 16px;
   }
-  
+
+  /* Columna de observaciones multi-equipo */
+  .obs-multiequipo {
+    font-size: 7px;
+    line-height: 1.2;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  .obs-multiequipo .obs-eq-tag {
+    font-weight: bold;
+    color: ${MEKANOS_COLORS.primary};
+    font-size: 6px;
+  }
+  .obs-multiequipo .obs-eq-line {
+    margin-bottom: 1px;
+  }
+
+  .mediciones-multiequipo {
+    table-layout: fixed;
+    width: 100%;
+  }
+
   .mediciones-multiequipo th.equipo-col {
     background: ${MEKANOS_COLORS.secondary};
     text-align: center;
-    min-width: 60px;
-    max-width: 90px;
-    font-size: 8px;
-    padding: 4px 2px;
+    font-size: 7px;
+    padding: 3px 1px;
+    word-wrap: break-word;
+    overflow: hidden;
+    line-height: 1.1;
   }
   
   .mediciones-multiequipo td.equipo-cell {
     text-align: center;
-    padding: 3px 4px;
+    padding: 2px 2px;
     font-weight: bold;
+    font-size: 8px;
   }
   
   .medicion-valor-multiequipo {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: bold;
-    padding: 2px 4px;
+    padding: 1px 3px;
     border-radius: 3px;
     background: ${MEKANOS_COLORS.background};
   }
@@ -1083,10 +1117,10 @@ export const baseStyles = `
 
 /**
  * ✅ MULTI-EQUIPOS: Genera tabla de checklist con columnas dinámicas por equipo
+ * ✅ FIX 14-FEB-2026: Responsive para 2-10+ equipos con sizing adaptativo
  *
  * Estructura:
- * | # | Sistema | Actividad | Equipo 1 | Equipo 2 | Equipo 3 | Obs. |
- * | 1 | ENFRIAMIENTO | Revisar tapa | B | B | R | Tensionar |
+ * | # | Sistema | Actividad | EQ1 | EQ2 | ... | EQn | Obs. |
  */
 export const generarChecklistMultiEquipo = (
   actividadesPorEquipo: ActividadesPorEquipoPDF[],
@@ -1096,80 +1130,110 @@ export const generarChecklistMultiEquipo = (
     return '<div class="section"><p>No hay actividades registradas.</p></div>';
   }
 
-  // Obtener lista única de actividades (por descripción)
-  const primerasActividades = actividadesPorEquipo[0]?.actividades || [];
   const equipos = actividadesPorEquipo.map((g) => g.equipo);
+  const numEquipos = equipos.length;
 
-  // Headers de equipos
+  // ✅ FIX REGRESIÓN 14-FEB-2026:
+  // Antes se tomaban actividades SOLO del primer equipo.
+  // Si ese equipo venía sin actividades, la tabla quedaba sin filas.
+  const actividadesBaseMap = new Map<string, ActividadPDF>();
+  actividadesPorEquipo.forEach((grupo) => {
+    (grupo.actividades || []).forEach((act) => {
+      const key = `${act.sistema || 'GENERAL'}|||${act.descripcion}`;
+      if (!actividadesBaseMap.has(key)) {
+        actividadesBaseMap.set(key, act);
+      }
+    });
+  });
+  const actividadesBase = Array.from(actividadesBaseMap.values());
+  if (actividadesBase.length === 0) {
+    return '<div class="section"><p>No hay actividades registradas.</p></div>';
+  }
+
+  // ✅ FIX 14-FEB-2026: Sizing adaptativo según cantidad de equipos
+  // Para 8 equipos en A4 portrait (~750px usable):
+  //   #=20px, Sistema=60px, Actividad=flex, 8*EQcol, Obs=flex
+  const esMuchos = numEquipos >= 5;
+  const esExtremo = numEquipos >= 7;
+  const colNum = esExtremo ? 18 : 22;
+  const colSistema = esExtremo ? 50 : 65;
+  const colEquipo = esExtremo ? 32 : (esMuchos ? 38 : 50);
+  const colObs = esExtremo ? 70 : (esMuchos ? 85 : 100);
+  const fontSize = esExtremo ? '7px' : (esMuchos ? '8px' : '9px');
+  const headerFontSize = esExtremo ? '6px' : '7px';
+  const labelMaxLen = esExtremo ? 6 : (esMuchos ? 8 : 12);
+
+  // Headers de equipos con label truncado
   const equipoHeaders = equipos
     .map(
-      (eq) =>
-        `<th class="equipo-col">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:7px;">${(eq.nombreSistema || eq.nombreEquipo || '').substring(0, 12)}</span></th>`,
+      (eq) => {
+        const label = (eq.nombreSistema || eq.nombreEquipo || '').substring(0, labelMaxLen);
+        return `<th class="equipo-col" style="width:${colEquipo}px;">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:${headerFontSize};">${label}</span></th>`;
+      },
     )
     .join('');
 
   // Filas de actividades
-  const filas = primerasActividades
+  const filas = actividadesBase
     .map((actBase, idx) => {
-      // Para cada equipo, buscar el resultado de esta actividad
+      const actividadKey = `${actBase.sistema || 'GENERAL'}|||${actBase.descripcion}`;
       const celdasEquipos = equipos
         .map((eq) => {
           const grupoEquipo = actividadesPorEquipo.find(
             (g) => g.equipo.idOrdenEquipo === eq.idOrdenEquipo,
           );
           const actividadEquipo = grupoEquipo?.actividades.find(
-            (a) => a.descripcion === actBase.descripcion,
+            (a) => `${a.sistema || 'GENERAL'}|||${a.descripcion}` === actividadKey,
           );
           const resultado = actividadEquipo?.resultado || '-';
-          // _colorClass removed: color applied via CSS class resultado-${resultado}
-
           return `<td class="equipo-cell"><span class="resultado-mini resultado-${resultado}">${resultado}</span></td>`;
         })
         .join('');
 
-      // Obtener observaciones combinadas - ✅ FIX: Formato legible con indicador de equipo
-      const observacionesArr = actividadesPorEquipo
-        .map((g, _idx) => {
-          const obs = g.actividades.find(
-            (a) => a.descripcion === actBase.descripcion,
-          )?.observaciones;
-          if (obs && obs.trim()) {
-            // Si solo hay 1 equipo, no agregar prefijo
-            return actividadesPorEquipo.length === 1
-              ? obs.trim()
-              : `[EQ${g.equipo.ordenSecuencia}] ${obs.trim()}`;
+      // ✅ FIX 14-FEB-2026: Observaciones con HTML estructurado para distinguir equipos
+      const observacionesArr: string[] = [];
+      actividadesPorEquipo.forEach((g) => {
+        const obs = g.actividades.find(
+          (a) => `${a.sistema || 'GENERAL'}|||${a.descripcion}` === actividadKey,
+        )?.observaciones;
+        if (obs && obs.trim()) {
+          if (numEquipos === 1) {
+            observacionesArr.push(obs.trim());
+          } else {
+            observacionesArr.push(
+              `<div class="obs-eq-line"><span class="obs-eq-tag">EQ${g.equipo.ordenSecuencia}:</span> ${obs.trim()}</div>`,
+            );
           }
-          return null;
-        })
-        .filter(Boolean);
+        }
+      });
 
-      // Formato: Si hay múltiples observaciones, usar salto de línea visual
-      const observaciones =
-        observacionesArr.length > 1 ? observacionesArr.join(' | ') : observacionesArr.join('');
+      const observacionesHtml = observacionesArr.length > 0
+        ? `<div class="obs-multiequipo">${observacionesArr.join('')}</div>`
+        : '';
 
       return `
       <tr>
-        <td style="text-align:center;width:25px;">${idx + 1}</td>
-        <td style="width:80px;font-size:9px;">${actBase.sistema || 'GENERAL'}</td>
-        <td style="font-size:9px;">${actBase.descripcion}</td>
+        <td style="text-align:center;width:${colNum}px;font-size:${fontSize};">${idx + 1}</td>
+        <td style="width:${colSistema}px;font-size:${fontSize};">${actBase.sistema || 'GENERAL'}</td>
+        <td style="font-size:${fontSize};">${actBase.descripcion}</td>
         ${celdasEquipos}
-        <td style="font-size:8px;max-width:100px;">${observaciones}</td>
+        <td style="width:${colObs}px;">${observacionesHtml}</td>
       </tr>
     `;
     })
     .join('');
 
   return `
-  <div class="section">
-    <div class="section-title">📋 CHECKLIST DE ACTIVIDADES - MULTI-EQUIPOS (${equipos.length} equipos)</div>
+  <div class="section${esMuchos ? ' multiequipo-landscape' : ''}">
+    <div class="section-title" style="font-size:${esMuchos ? '11px' : '13px'};">📋 CHECKLIST DE ACTIVIDADES - MULTI-EQUIPOS (${numEquipos} equipos)</div>
     <table class="checklist-table checklist-multiequipo">
       <thead>
         <tr>
-          <th style="width:25px;">#</th>
-          <th style="width:80px;">Sistema</th>
+          <th style="width:${colNum}px;">#</th>
+          <th style="width:${colSistema}px;">Sistema</th>
           <th>Actividad</th>
           ${equipoHeaders}
-          <th style="width:100px;">Obs.</th>
+          <th style="width:${colObs}px;">Obs.</th>
         </tr>
       </thead>
       <tbody>
@@ -1182,10 +1246,10 @@ export const generarChecklistMultiEquipo = (
 
 /**
  * ✅ MULTI-EQUIPOS: Genera tabla de mediciones con columnas dinámicas por equipo
+ * ✅ FIX 14-FEB-2026: Responsive para 2-10+ equipos
  *
  * Estructura:
- * | Parámetro | Unidad | Equipo 1 | Equipo 2 | Equipo 3 | Estado |
- * | Temperatura | °C | 82 | 85 | 79 | ✅ OK |
+ * | Parámetro | Unidad | EQ1 | EQ2 | ... | EQn | Estado |
  */
 export const generarMedicionesMultiEquipo = (
   medicionesPorEquipo: MedicionesPorEquipoPDF[],
@@ -1195,34 +1259,61 @@ export const generarMedicionesMultiEquipo = (
   }
 
   const equipos = medicionesPorEquipo.map((g) => g.equipo);
-  const primerasMediciones = medicionesPorEquipo[0]?.mediciones || [];
+  const numEquipos = equipos.length;
+
+  // ✅ FIX REGRESIÓN 14-FEB-2026:
+  // Antes se tomaban mediciones SOLO del primer equipo.
+  // Si ese equipo venía sin datos, la tabla quedaba vacía.
+  const medicionesBaseMap = new Map<string, MedicionPDF>();
+  medicionesPorEquipo.forEach((grupo) => {
+    (grupo.mediciones || []).forEach((med) => {
+      const key = `${med.parametro}|||${med.unidad || ''}`;
+      if (!medicionesBaseMap.has(key)) {
+        medicionesBaseMap.set(key, med);
+      }
+    });
+  });
+  const medicionesBase = Array.from(medicionesBaseMap.values());
+  if (medicionesBase.length === 0) {
+    return '<div class="section"><p>No hay mediciones registradas.</p></div>';
+  }
+
+  // ✅ FIX 14-FEB-2026: Sizing adaptativo
+  const esExtremo = numEquipos >= 7;
+  const esMuchos = numEquipos >= 5;
+  const colEquipo = esExtremo ? 32 : (esMuchos ? 40 : 55);
+  const fontSize = esExtremo ? '7px' : (esMuchos ? '8px' : '9px');
+  const headerFontSize = esExtremo ? '6px' : '7px';
+  const labelMaxLen = esExtremo ? 6 : (esMuchos ? 8 : 12);
 
   // Headers de equipos
   const equipoHeaders = equipos
     .map(
-      (eq) =>
-        `<th class="equipo-col">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:7px;">${(eq.nombreSistema || eq.nombreEquipo || '').substring(0, 12)}</span></th>`,
+      (eq) => {
+        const label = (eq.nombreSistema || eq.nombreEquipo || '').substring(0, labelMaxLen);
+        return `<th class="equipo-col" style="width:${colEquipo}px;">EQ${eq.ordenSecuencia}<br/><span style="font-weight:normal;font-size:${headerFontSize};">${label}</span></th>`;
+      },
     )
     .join('');
 
   // Filas de mediciones
-  const filas = primerasMediciones
+  const filas = medicionesBase
     .map((medBase) => {
-      // Para cada equipo, buscar el valor de este parámetro
+      const medicionKey = `${medBase.parametro}|||${medBase.unidad || ''}`;
       const celdasEquipos = equipos
         .map((eq) => {
           const grupoEquipo = medicionesPorEquipo.find(
             (g) => g.equipo.idOrdenEquipo === eq.idOrdenEquipo,
           );
           const medicionEquipo = grupoEquipo?.mediciones.find(
-            (m) => m.parametro === medBase.parametro,
+            (m) => `${m.parametro}|||${m.unidad || ''}` === medicionKey,
           );
           const valor = medicionEquipo?.valor ?? '-';
           const alerta = medicionEquipo?.nivelAlerta || 'OK';
           const colorClass =
             alerta === 'OK' ? 'ok' : alerta === 'ADVERTENCIA' ? 'warning' : 'critico';
 
-          return `<td class="equipo-cell"><span class="medicion-valor-multiequipo medicion-valor-${colorClass}">${valor}</span></td>`;
+          return `<td class="equipo-cell"><span class="medicion-valor-multiequipo medicion-valor-${colorClass}" style="font-size:${fontSize};">${valor}</span></td>`;
         })
         .join('');
 
@@ -1232,37 +1323,37 @@ export const generarMedicionesMultiEquipo = (
           (g) => g.equipo.idOrdenEquipo === eq.idOrdenEquipo,
         );
         return (
-          grupoEquipo?.mediciones.find((m) => m.parametro === medBase.parametro)?.nivelAlerta ||
+          grupoEquipo?.mediciones.find((m) => `${m.parametro}|||${m.unidad || ''}` === medicionKey)?.nivelAlerta ||
           'OK'
         );
       });
       const estadoGeneral = alertas.includes('CRITICO')
-        ? '🔴 CRITICO'
+        ? '🔴'
         : alertas.includes('ADVERTENCIA')
-          ? '🟡 ALERTA'
-          : '🟢 OK';
+          ? '🟡'
+          : '🟢';
 
       return `
       <tr>
-        <td style="font-size:9px;">${medBase.parametro}</td>
-        <td style="text-align:center;width:50px;">${medBase.unidad || '-'}</td>
+        <td style="font-size:${fontSize};">${medBase.parametro}</td>
+        <td style="text-align:center;width:${esExtremo ? '35px' : '45px'};font-size:${fontSize};">${medBase.unidad || '-'}</td>
         ${celdasEquipos}
-        <td style="text-align:center;font-size:9px;">${estadoGeneral}</td>
+        <td style="text-align:center;font-size:${fontSize};width:${esExtremo ? '30px' : '60px'};">${estadoGeneral}</td>
       </tr>
     `;
     })
     .join('');
 
   return `
-  <div class="section">
-    <div class="section-title">📊 MEDICIONES TÉCNICAS - MULTI-EQUIPOS (${equipos.length} equipos)</div>
+  <div class="section${esMuchos ? ' multiequipo-landscape' : ''}">
+    <div class="section-title" style="font-size:${esMuchos ? '11px' : '13px'};">📊 MEDICIONES TÉCNICAS - MULTI-EQUIPOS (${numEquipos} equipos)</div>
     <table class="checklist-table mediciones-multiequipo">
       <thead>
         <tr>
           <th>Parámetro</th>
-          <th style="width:50px;">Unidad</th>
+          <th style="width:${esExtremo ? '35px' : '45px'};">Ud.</th>
           ${equipoHeaders}
-          <th style="width:80px;">Estado</th>
+          <th style="width:${esExtremo ? '30px' : '60px'};">Est.</th>
         </tr>
       </thead>
       <tbody>
@@ -1309,20 +1400,75 @@ export const generarLeyendaEquipos = (
   // Ordenar por secuencia
   const equiposOrdenados = [...equipos].sort((a, b) => a.ordenSecuencia - b.ordenSecuencia);
 
+  // ✅ FIX 14-FEB-2026: Nombres COMPLETOS en leyenda (sin truncar)
+  // Para 5+ equipos usar layout de 2 columnas compacto; para menos, inline
+  const esMuchos = equiposOrdenados.length >= 5;
+
+  const bgColors = ['#dbeafe', '#dcfce7', '#fef3c7', '#fce7f3', '#e0e7ff'];
+  const borderColors = ['#2563eb', '#16a34a', '#ca8a04', '#db2777', '#4f46e5'];
+
+  if (esMuchos) {
+    // Layout en grilla de 2 columnas para 5+ equipos — nombres COMPLETOS
+    const equiposHtml = equiposOrdenados
+      .map((eq) => {
+        const nombre = eq.nombreSistema || eq.nombreEquipo || eq.codigoEquipo || 'Sin nombre';
+        const ci = ((eq.ordenSecuencia - 1) % 5);
+        return `
+          <div style="
+            background: ${bgColors[ci]};
+            border-left: 3px solid ${borderColors[ci]};
+            padding: 3px 8px;
+            font-size: 8px;
+            border-radius: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          ">
+            <strong>EQ${eq.ordenSecuencia}:</strong> ${nombre}
+          </div>
+        `;
+      })
+      .join('');
+
+    return `
+      <div class="leyenda-equipos" style="
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 12px;
+      ">
+        <div style="font-weight: bold; font-size: 9px; color: #475569; margin-bottom: 6px;">
+          📋 EQUIPOS EN ESTA ORDEN (${equiposOrdenados.length}):
+        </div>
+        <div style="
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 3px 10px;
+        ">
+          ${equiposHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  // Layout inline para pocos equipos — nombres COMPLETOS
   const equiposHtml = equiposOrdenados
     .map((eq) => {
       const nombre = eq.nombreSistema || eq.nombreEquipo || eq.codigoEquipo || 'Sin nombre';
-      const colorIndex = ((eq.ordenSecuencia - 1) % 5) + 1; // Colores 1-5
+      const ci = ((eq.ordenSecuencia - 1) % 5);
       return `
         <span class="equipo-leyenda-item" style="
-          background: ${colorIndex === 1 ? '#dbeafe' : colorIndex === 2 ? '#dcfce7' : colorIndex === 3 ? '#fef3c7' : colorIndex === 4 ? '#fce7f3' : '#e0e7ff'};
-          border-left: 4px solid ${colorIndex === 1 ? '#2563eb' : colorIndex === 2 ? '#16a34a' : colorIndex === 3 ? '#ca8a04' : colorIndex === 4 ? '#db2777' : '#4f46e5'};
+          background: ${bgColors[ci]};
+          border-left: 3px solid ${borderColors[ci]};
           padding: 4px 10px;
-          margin-right: 8px;
+          margin-right: 6px;
           font-size: 9px;
-          border-radius: 4px;
+          border-radius: 3px;
+          display: inline-block;
+          margin-bottom: 2px;
         ">
-          <strong>Equipo ${eq.ordenSecuencia}:</strong> ${nombre}
+          <strong>EQ${eq.ordenSecuencia}:</strong> ${nombre}
         </span>
       `;
     })
@@ -1337,7 +1483,7 @@ export const generarLeyendaEquipos = (
       margin-bottom: 15px;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
     ">
       <span style="font-weight: bold; font-size: 10px; color: #475569; margin-right: 10px;">

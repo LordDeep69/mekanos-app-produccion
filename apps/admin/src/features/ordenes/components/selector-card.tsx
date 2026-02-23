@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { Check, Loader2, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 
 interface SelectorCardProps<T> {
     items: T[];
@@ -13,8 +13,11 @@ interface SelectorCardProps<T> {
     renderIcon?: (item: T) => React.ReactNode;
     getId: (item: T) => number;
     isLoading?: boolean;
+    isFetching?: boolean;
     emptyMessage?: string;
     searchPlaceholder?: string;
+    onSearchChange?: (value: string) => void;
+    debounceMs?: number; // ✅ NUEVO: Tiempo de debounce para búsqueda
 }
 
 export function SelectorCard<T>({
@@ -26,42 +29,70 @@ export function SelectorCard<T>({
     renderIcon,
     getId,
     isLoading,
+    isFetching,
     emptyMessage,
     searchPlaceholder,
+    onSearchChange,
+    debounceMs = 300, // Default 300ms
 }: SelectorCardProps<T>) {
-    const [busqueda, setBusqueda] = useState('');
+    const [, startTransition] = useTransition();
+    // ✅ FIX: Input local NO controlado por el padre
+    const [inputValue, setInputValue] = useState('');
+    // Valor debounced que se enviará al padre
+    const [debouncedValue, setDebouncedValue] = useState('');
 
-    const itemsFiltrados = busqueda
+    const usaBusquedaRemota = typeof onSearchChange === 'function';
+    const busquedaNormalizada = debouncedValue.trim().toLowerCase();
+
+    // ✅ FIX: Debounce interno - solo notificar al padre después de que el usuario deje de escribir
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedValue(inputValue.trim());
+            if (onSearchChange) {
+                startTransition(() => {
+                    onSearchChange(inputValue.trim());
+                });
+            }
+        }, debounceMs);
+
+        return () => clearTimeout(timer);
+    }, [inputValue, debounceMs, onSearchChange]);
+
+    const itemsFiltrados = (!usaBusquedaRemota && busquedaNormalizada)
         ? items.filter((item) =>
-            getLabel(item).toLowerCase().includes(busqueda.toLowerCase())
+            getLabel(item).toLowerCase().includes(busquedaNormalizada)
         )
         : items;
 
-    if (isLoading) {
-        return (
-            <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-            </div>
-        );
-    }
+    const isInitialLoading = isLoading && items.length === 0;
 
     return (
         <div className="space-y-3">
-            {searchPlaceholder && items.length > 5 && (
+            {searchPlaceholder && (
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                         type="text"
                         placeholder={searchPlaceholder}
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm outline-none transition-all"
                     />
+                    {/* Indicador sutil de carga sin bloquear UI */}
+                    {isFetching && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                        </div>
+                    )}
                 </div>
             )}
 
             <div className="max-h-64 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                {itemsFiltrados.length === 0 ? (
+                {isInitialLoading ? (
+                    <div className="flex justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                    </div>
+                ) : itemsFiltrados.length === 0 ? (
                     <p className="text-center text-gray-500 py-4 border border-dashed rounded-lg bg-gray-50">
                         {emptyMessage || 'No hay elementos disponibles'}
                     </p>

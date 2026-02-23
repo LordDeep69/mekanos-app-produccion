@@ -12,7 +12,6 @@ import type {
   CreateEquipoResponse,
   EquipoDetalle,
   EquiposListadoResponse,
-  RegistrarLecturaResponse,
   UpdateEquipoPayload
 } from '../types';
 
@@ -102,30 +101,20 @@ export const equiposService = {
   },
 
   /**
-   * ✅ 08-ENE-2026: Registrar lectura de horómetro
+   * ⚠️ ELIMINACIÓN COMPLETA - Elimina permanentemente el equipo y TODOS sus datos relacionados
+   * Solo funciona con equipos marcados como inactivos (soft delete)
    */
-  async registrarLecturaHorometro(
+  async eliminarEquipoCompletamente(
     id: number,
-    payload: { horas_lectura: number; observaciones?: string }
-  ): Promise<RegistrarLecturaResponse> {
-    const response = await apiClient.post<RegistrarLecturaResponse>(
-      `/equipos/${id}/lectura-horometro`,
-      payload
+    confirmacion: string
+  ): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.delete<{ success: boolean; message: string }>(
+      `/equipos/${id}/hard-delete`,
+      { data: { confirmacion } }
     );
     return response.data;
   },
 };
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SERVICIO CLIENTES (para select de cliente en formulario)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-export interface ClienteOption {
-  id_cliente: number;
-  codigo_cliente: string;
-  nombre: string;
-  sedes: Array<{ id_sede: number; nombre_sede: string }>;
-}
 
 export const clientesService = {
   async listarClientesParaSelect(): Promise<ClienteOption[]> {
@@ -262,6 +251,21 @@ export function useActualizarEquipo() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
       queryClient.invalidateQueries({ queryKey: equiposKeys.detail(variables.id) });
+    },
+  });
+}
+
+/**
+ * ⚠️ Hook para eliminación completa de equipo
+ */
+export function useEliminarEquipoCompletamente() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, confirmacion }: { id: number; confirmacion: string }) =>
+      equiposService.eliminarEquipoCompletamente(id, confirmacion),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
     },
   });
 }

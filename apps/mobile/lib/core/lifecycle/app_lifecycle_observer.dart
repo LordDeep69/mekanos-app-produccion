@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../storage/storage_preferences.dart';
 import 'data_lifecycle_manager.dart';
 
 /// Provider para el observador de ciclo de vida de la app
@@ -81,7 +82,7 @@ class AppLifecycleObserver with WidgetsBindingObserver {
     debugPrint('📱 [LIFECYCLE] App resumed');
 
     // Verificar si debemos ejecutar limpieza
-    if (_debeLimpiar()) {
+    if (await _debeLimpiar()) {
       await ejecutarLimpiezaAutomatica();
     }
   }
@@ -92,8 +93,23 @@ class AppLifecycleObserver with WidgetsBindingObserver {
   }
 
   /// Verifica si es momento de ejecutar limpieza
-  bool _debeLimpiar() {
+  /// ✅ FIX 14-FEB-2026: También verificar preferencia de limpieza automática
+  Future<bool> _debeLimpiar() async {
     if (_limpiezaEnProgreso) return false;
+
+    // Verificar si la limpieza automática está activada en preferencias
+    try {
+      final prefs = _ref.read(storagePreferencesProvider);
+      final prefsData = await prefs.cargarPreferencias();
+      if (!prefsData.limpiezaAutomaticaActiva) {
+        debugPrint(
+          '🔄 [LIFECYCLE] Limpieza automática desactivada por usuario',
+        );
+        return false;
+      }
+    } catch (_) {
+      // Si falla la lectura de preferencias, no bloquear la limpieza
+    }
 
     if (_ultimaLimpieza == null) return true;
 

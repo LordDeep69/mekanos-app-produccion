@@ -1018,6 +1018,7 @@ class _ResumenFinalizacionScreenState
         razonFalla: (razonFalla?.trim().isNotEmpty ?? false)
             ? razonFalla!.trim()
             : null,
+        modo: 'SOLO_DATOS',
       );
 
       Navigator.of(context).pop(); // Cerrar loading

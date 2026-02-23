@@ -91,13 +91,15 @@ class DataLifecycleManager {
   bool get limpiezaAutomaticaActiva => _limpiezaAutomaticaActiva;
 
   /// Estados considerados "finales" (candidatos a purga)
-  static const List<String> estadosFinales = [
+  /// Incluye variantes históricas para compatibilidad retroactiva.
+  static const Set<String> estadosFinales = {
     'COMPLETADA',
+    'COMPLETADO',
     'CERRADA',
-    'CANCELADA',
+    'CERRADO',
     'FINALIZADA',
-    'APROBADA',
-  ];
+    'FINALIZADO',
+  };
 
   /// Estados que NUNCA se deben purgar
   static const List<String> estadosProtegidos = [
@@ -197,22 +199,46 @@ class DataLifecycleManager {
   /// - Solo elimina si han pasado [diasRetencionArchivosPostSync] días
   /// - Preserva la URL remota en la BD para referencia
   /// - Elimina solo el archivo local, no el registro en BD
+  ///
+  /// ✅ FIX 14-FEB-2026: Manejar NULL lastSyncedAt correctamente
+  /// Antes, evidencias con lastSyncedAt=NULL nunca se purgaban porque
+  /// NULL <= fechaLimite = FALSE en SQL. Ahora usamos filtro manual.
   Future<int> purgarEvidenciasSincronizadas() async {
     final fechaLimite = DateTime.now().subtract(
       Duration(days: diasRetencionArchivosPostSync),
     );
+    final estadosFinalesIds = (await _getEstadosFinalesIds()).toSet();
+    if (estadosFinalesIds.isEmpty) return 0;
 
-    // Obtener evidencias sincronizadas hace más de X días
-    final evidencias =
-        await (_db.select(_db.evidencias)
-              ..where((e) => e.subida.equals(true))
-              ..where((e) => e.lastSyncedAt.isSmallerOrEqualValue(fechaLimite)))
-            .get();
+    // Obtener TODAS las evidencias sincronizadas (subida=true)
+    final todasEvidencias = await (_db.select(
+      _db.evidencias,
+    )..where((e) => e.subida.equals(true))).get();
+
+    // Filtrar manualmente: lastSyncedAt <= fechaLimite, o si es NULL usar fechaCaptura
+    final evidencias = todasEvidencias.where((ev) {
+      final fechaRef = ev.lastSyncedAt ?? ev.fechaCaptura;
+      return fechaRef.isBefore(fechaLimite) ||
+          fechaRef.isAtSameMomentAs(fechaLimite);
+    }).toList();
 
     int eliminadas = 0;
     int bytesLiberados = 0;
+    final ordenElegibleCache = <int, bool>{};
 
     for (final ev in evidencias) {
+      final ordenElegible =
+          ordenElegibleCache[ev.idOrden] ??
+          await _esOrdenElegibleParaPurgarArchivos(
+            ev.idOrden,
+            estadosFinalesIds: estadosFinalesIds,
+          );
+      ordenElegibleCache[ev.idOrden] = ordenElegible;
+
+      if (!ordenElegible) {
+        continue;
+      }
+
       // Verificar que tiene URL remota (seguridad)
       if (ev.urlRemota == null || ev.urlRemota!.isEmpty) {
         debugPrint(
@@ -249,21 +275,44 @@ class DataLifecycleManager {
 
   /// Elimina archivos de firmas que ya fueron sincronizadas.
   /// Misma lógica que evidencias.
+  ///
+  /// ✅ FIX 14-FEB-2026: Manejar NULL lastSyncedAt con fallback a fechaFirma
   Future<int> purgarFirmasSincronizadas() async {
     final fechaLimite = DateTime.now().subtract(
       Duration(days: diasRetencionArchivosPostSync),
     );
+    final estadosFinalesIds = (await _getEstadosFinalesIds()).toSet();
+    if (estadosFinalesIds.isEmpty) return 0;
 
-    final firmas =
-        await (_db.select(_db.firmas)
-              ..where((f) => f.subida.equals(true))
-              ..where((f) => f.lastSyncedAt.isSmallerOrEqualValue(fechaLimite)))
-            .get();
+    // Obtener TODAS las firmas sincronizadas
+    final todasFirmas = await (_db.select(
+      _db.firmas,
+    )..where((f) => f.subida.equals(true))).get();
+
+    // Filtrar manualmente con fallback para NULL lastSyncedAt
+    final firmas = todasFirmas.where((f) {
+      final fechaRef = f.lastSyncedAt ?? f.fechaFirma;
+      return fechaRef.isBefore(fechaLimite) ||
+          fechaRef.isAtSameMomentAs(fechaLimite);
+    }).toList();
 
     int eliminadas = 0;
     int bytesLiberados = 0;
+    final ordenElegibleCache = <int, bool>{};
 
     for (final firma in firmas) {
+      final ordenElegible =
+          ordenElegibleCache[firma.idOrden] ??
+          await _esOrdenElegibleParaPurgarArchivos(
+            firma.idOrden,
+            estadosFinalesIds: estadosFinalesIds,
+          );
+      ordenElegibleCache[firma.idOrden] = ordenElegible;
+
+      if (!ordenElegible) {
+        continue;
+      }
+
       if (firma.urlRemota == null || firma.urlRemota!.isEmpty) {
         continue;
       }
@@ -294,6 +343,7 @@ class DataLifecycleManager {
   /// SEGURIDAD ZERO TRUST:
   /// - NUNCA purga órdenes con isDirty=true
   /// - NUNCA purga órdenes en cola de sync pendiente
+  /// - NUNCA purga órdenes sin evidencia de subida al servidor
   /// - Solo purga estados finales (COMPLETADA, CERRADA, etc.)
   Future<int> purgarOrdenesAntiguas() async {
     final fechaLimite = DateTime.now().subtract(
@@ -312,7 +362,10 @@ class DataLifecycleManager {
     final todasOrdenesFinales =
         await (_db.select(_db.ordenes)
               ..where((o) => o.idEstado.isIn(estadosFinalesIds))
-              ..where((o) => o.isDirty.equals(false))) // NUNCA dirty
+              ..where((o) => o.isDirty.equals(false)) // NUNCA dirty
+              ..where(
+                (o) => o.idBackend.isNotNull(),
+              )) // Debe existir en servidor
             .get();
 
     // Filtrar manualmente usando fechaFin, lastSyncedAt, o updatedAt como fallback
@@ -331,6 +384,18 @@ class DataLifecycleManager {
     int purgadas = 0;
 
     for (final orden in ordenesCandidatas) {
+      // Debe ser una orden final ya subida al servidor
+      final subidaServidor = await _fueSubidaAlServidor(
+        orden,
+        permitirDirtyConHuella: false,
+      );
+      if (!subidaServidor) {
+        debugPrint(
+          '🛡️ [LIFECYCLE] Orden ${orden.numeroOrden} no confirmada en servidor, protegida',
+        );
+        continue;
+      }
+
       // Verificación adicional: no debe estar en cola de sync
       final enColaPendiente = await _db.existeOrdenEnColaPendiente(
         orden.idLocal,
@@ -355,8 +420,11 @@ class DataLifecycleManager {
       await _purgarOrdenCompleta(orden.idLocal);
       purgadas++;
 
+      final fechaReferencia =
+          orden.fechaFin ?? orden.lastSyncedAt ?? orden.updatedAt;
+      final diasAntiguedad = DateTime.now().difference(fechaReferencia).inDays;
       debugPrint(
-        '🗑️ [LIFECYCLE] Purgada orden ${orden.numeroOrden} (completada hace ${DateTime.now().difference(orden.fechaFin!).inDays} días)',
+        '🗑️ [LIFECYCLE] Purgada orden ${orden.numeroOrden} (completada hace $diasAntiguedad días)',
       );
     }
 
@@ -483,13 +551,24 @@ class DataLifecycleManager {
   // LIMPIEZA FORZADA DE FOTOS SINCRONIZADAS
   // ============================================================================
 
-  /// Elimina TODAS las fotos, firmas y órdenes completadas sincronizadas.
+  /// Elimina TODAS las fotos, firmas y órdenes completadas.
   /// NO espera el período de retención - elimina inmediatamente.
   ///
-  /// ✅ FIX 29-ENE-2026: Ahora también elimina las órdenes completadas
-  /// Esto es lo que el técnico espera cuando presiona "Limpiar Ahora".
+  /// ✅ FIX 14-FEB-2026: REESCRITURA COMPLETA - Eliminación agresiva real
+  /// El técnico presiona "Limpiar Ahora" y espera que TODO lo completado desaparezca.
+  ///
+  /// Estrategia:
+  /// 1. Obtener TODAS las órdenes en estado final
+  /// 2. Para cada orden: eliminar TODOS sus archivos + registros (si ya subió a servidor)
+  /// 3. Limpiar entradas de cola de sync completadas/atascadas
+  /// 4. Purgar datos huérfanos restantes
+  ///
+  /// ÚNICAS protecciones:
+  /// - Solo purga órdenes finales con evidencia de subida al servidor
+  /// - isDirty=true sin huella de sync → NO purgar
+  /// - En cola con estado PENDIENTE → esperando conexión, NO purgar
   Future<PurgeResult> limpiarFotosSincronizadasAhora() async {
-    debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA completa...');
+    debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA AGRESIVA...');
 
     // Reset contador de bytes para esta ejecución
     _espacioLiberadoBytes = 0;
@@ -498,99 +577,113 @@ class DataLifecycleManager {
     final stopwatch = Stopwatch()..start();
 
     try {
-      // 1. Eliminar TODAS las evidencias sincronizadas (sin esperar días)
-      final evidencias = await (_db.select(
-        _db.evidencias,
-      )..where((e) => e.subida.equals(true))).get();
-
+      // =====================================================================
+      // PASO 1: Obtener órdenes en estado final (COMPLETADA, CERRADA, etc.)
+      // =====================================================================
+      final estadosFinalesIds = await _getEstadosFinalesIds();
+      int ordenesPurgadas = 0;
       int evidenciasEliminadas = 0;
+      int firmasEliminadas = 0;
       int bytesLiberados = 0;
 
-      for (final ev in evidencias) {
-        if (ev.urlRemota == null || ev.urlRemota!.isEmpty) continue;
-
-        final archivo = File(ev.rutaLocal);
-        if (await archivo.exists()) {
-          try {
-            final fileSize = await archivo.length();
-            await archivo.delete();
-            bytesLiberados += fileSize;
-            evidenciasEliminadas++;
-            debugPrint('🗑️ [LIFECYCLE] Foto eliminada: ${ev.rutaLocal}');
-          } catch (e) {
-            debugPrint('⚠️ [LIFECYCLE] Error eliminando foto: $e');
-          }
-        }
-      }
-
-      // 2. Eliminar TODAS las firmas sincronizadas
-      final firmas = await (_db.select(
-        _db.firmas,
-      )..where((f) => f.subida.equals(true))).get();
-
-      int firmasEliminadas = 0;
-
-      for (final firma in firmas) {
-        if (firma.urlRemota == null || firma.urlRemota!.isEmpty) continue;
-
-        final archivo = File(firma.rutaLocal);
-        if (await archivo.exists()) {
-          try {
-            final fileSize = await archivo.length();
-            await archivo.delete();
-            bytesLiberados += fileSize;
-            firmasEliminadas++;
-          } catch (e) {
-            debugPrint('⚠️ [LIFECYCLE] Error eliminando firma: $e');
-          }
-        }
-      }
-
-      // ✅ FIX 09-FEB-2026: También eliminar REGISTROS de BD de evidencias/firmas sincronizadas
-      // (antes solo se eliminaban los archivos, los registros quedaban huérfanos)
-      for (final ev in evidencias) {
-        if (ev.urlRemota == null || ev.urlRemota!.isEmpty) continue;
-        await (_db.delete(
-          _db.evidencias,
-        )..where((e) => e.idLocal.equals(ev.idLocal))).go();
-      }
-      for (final firma in firmas) {
-        if (firma.urlRemota == null || firma.urlRemota!.isEmpty) continue;
-        await (_db.delete(
-          _db.firmas,
-        )..where((f) => f.idLocal.equals(firma.idLocal))).go();
-      }
-
-      // ✅ FIX 29-ENE-2026: 3. Eliminar órdenes completadas (sin esperar días)
-      // Esto es lo que el técnico realmente quiere: limpiar TODO
-      final estadosFinalesIds = await _getEstadosFinalesIds();
       if (estadosFinalesIds.isNotEmpty) {
-        final ordenesCompletadas =
-            await (_db.select(_db.ordenes)
-                  ..where((o) => o.idEstado.isIn(estadosFinalesIds))
-                  ..where((o) => o.isDirty.equals(false)))
-                .get();
+        // Obtener TODAS las órdenes en estado final
+        // (incluye isDirty=true para corregir inconsistencias históricas).
+        final ordenesCompletadas = await (_db.select(
+          _db.ordenes,
+        )..where((o) => o.idEstado.isIn(estadosFinalesIds))).get();
 
-        int ordenesPurgadas = 0;
+        final ordenesDirty = ordenesCompletadas.where((o) => o.isDirty).length;
+
+        debugPrint(
+          '🔍 [LIFECYCLE] Órdenes en estado final: ${ordenesCompletadas.length} '
+          '(isDirty=true: $ordenesDirty, isDirty=false: ${ordenesCompletadas.length - ordenesDirty})',
+        );
+
         for (final orden in ordenesCompletadas) {
-          // Verificar que es seguro purgar
-          final enCola = await _db.existeOrdenEnColaPendiente(orden.idLocal);
-          if (enCola) continue;
+          // ÚNICA protección fuerte: solo órdenes finales YA subidas al servidor.
+          final subidaServidor = await _fueSubidaAlServidor(
+            orden,
+            permitirDirtyConHuella: true,
+          );
+          if (!subidaServidor) {
+            debugPrint(
+              '🛡️ [LIFECYCLE] Orden ${orden.numeroOrden} sin confirmación de subida, protegida',
+            );
+            continue;
+          }
 
-          final esSeguro = await esSeguroPurgar(orden.idLocal);
-          if (!esSeguro) continue;
+          // En limpieza forzada manual, una orden final con isDirty=true y sin
+          // cola pendiente se considera inconsistencia recuperable y se purga.
+          if (orden.isDirty) {
+            debugPrint(
+              '⚠️ [LIFECYCLE] Orden ${orden.numeroOrden} en estado final con isDirty=true: purgando por limpieza forzada manual',
+            );
+          }
 
-          // Purgar orden completa
+          // Eliminar TODOS los archivos de evidencias (sin importar subida)
+          final evidencias = await _db.getEvidenciasByOrden(orden.idLocal);
+          for (final ev in evidencias) {
+            final archivo = File(ev.rutaLocal);
+            if (await archivo.exists()) {
+              try {
+                final fileSize = await archivo.length();
+                await archivo.delete();
+                bytesLiberados += fileSize;
+                evidenciasEliminadas++;
+              } catch (_) {}
+            }
+          }
+
+          // Eliminar TODOS los archivos de firmas (sin importar subida)
+          final firmas = await _db.getFirmasByOrden(orden.idLocal);
+          for (final firma in firmas) {
+            final archivo = File(firma.rutaLocal);
+            if (await archivo.exists()) {
+              try {
+                final fileSize = await archivo.length();
+                await archivo.delete();
+                bytesLiberados += fileSize;
+                firmasEliminadas++;
+              } catch (_) {}
+            }
+          }
+
+          // Purgar toda la orden y sus registros de BD
           await _purgarOrdenCompleta(orden.idLocal);
           ordenesPurgadas++;
           debugPrint('🗑️ [LIFECYCLE] Orden purgada: ${orden.numeroOrden}');
         }
-        resultado.ordenesPurgadas = ordenesPurgadas;
       }
 
+      // =====================================================================
+      // PASO 2: Limpiar entradas de cola atascadas (EN_PROCESO viejo, ERROR agotado)
+      // =====================================================================
+      final colaAtascada =
+          await (_db.select(_db.ordenesPendientesSync)..where(
+                (o) =>
+                    o.estadoSync.equals('EN_PROCESO') |
+                    (o.estadoSync.equals('ERROR') &
+                        o.intentos.isBiggerOrEqualValue(5)),
+              ))
+              .get();
+      for (final entry in colaAtascada) {
+        await (_db.delete(
+          _db.ordenesPendientesSync,
+        )..where((o) => o.idOrdenLocal.equals(entry.idOrdenLocal))).go();
+        debugPrint(
+          '🗑️ [LIFECYCLE] Cola atascada limpiada: orden ${entry.idOrdenBackend} (${entry.estadoSync})',
+        );
+      }
+
+      // =====================================================================
+      // PASO 3: Purgar datos huérfanos restantes
+      // =====================================================================
+      resultado.datosHuerfanosPurgados = await purgarDatosHuerfanos();
+
+      resultado.ordenesPurgadas = ordenesPurgadas;
       resultado.evidenciasPurgadas = evidenciasEliminadas;
       resultado.firmasPurgadas = firmasEliminadas;
-      // ✅ FIX 09-FEB-2026: _purgarOrdenCompleta también acumula bytes en _espacioLiberadoBytes
       resultado.espacioLiberadoBytes = (bytesLiberados + _espacioLiberadoBytes)
           .toDouble();
 
@@ -598,10 +691,11 @@ class DataLifecycleManager {
       resultado.duracionMs = stopwatch.elapsedMilliseconds;
       resultado.success = true;
 
-      debugPrint('✅ [LIFECYCLE] Limpieza forzada completada:');
+      debugPrint('✅ [LIFECYCLE] Limpieza forzada AGRESIVA completada:');
       debugPrint('   📸 Fotos eliminadas: $evidenciasEliminadas');
       debugPrint('   ✍️ Firmas eliminadas: $firmasEliminadas');
-      debugPrint('   📋 Órdenes purgadas: ${resultado.ordenesPurgadas}');
+      debugPrint('   📋 Órdenes purgadas: $ordenesPurgadas');
+      debugPrint('   🗑️ Datos huérfanos: ${resultado.datosHuerfanosPurgados}');
       debugPrint(
         '   💾 Espacio liberado: ${resultado.espacioLiberadoMB.toStringAsFixed(2)} MB',
       );
@@ -624,27 +718,26 @@ class DataLifecycleManager {
   /// Retorna false si:
   /// - La orden tiene isDirty=true
   /// - La orden está en cola de sync pendiente
-  /// - La orden tiene evidencias no sincronizadas
-  /// - La orden tiene firmas no sincronizadas
+  /// - La orden tiene evidencias no sincronizadas (solo si isDirty=true)
+  ///
+  /// ✅ FIX 14-FEB-2026: Relajar verificación de evidencias/firmas
+  /// Cuando una orden es COMPLETADA con isDirty=false, el backend ya tiene
+  /// TODOS los datos (vía finalizar-completo). El flag `subida` en evidencias
+  /// individuales puede no haberse actualizado (ej: fallo parcial en
+  /// _marcarOrdenSincronizada). No debe bloquear la purga.
   Future<bool> esSeguroPurgar(int idOrdenLocal) async {
-    // 1. Verificar isDirty
+    // 1. Verificar isDirty - CRÍTICO: datos no enviados al servidor
     final orden = await _db.getOrdenById(idOrdenLocal);
     if (orden == null) return true; // Ya no existe
     if (orden.isDirty) return false;
 
-    // 2. Verificar cola de sync
+    // 2. Verificar cola de sync con estado PENDIENTE real
     final enCola = await _db.existeOrdenEnColaPendiente(idOrdenLocal);
     if (enCola) return false;
 
-    // 3. Verificar evidencias no sincronizadas
-    final evidencias = await _db.getEvidenciasByOrden(idOrdenLocal);
-    final evidenciasNoSync = evidencias.where((e) => !e.subida).toList();
-    if (evidenciasNoSync.isNotEmpty) return false;
-
-    // 4. Verificar firmas no sincronizadas
-    final firmas = await _db.getFirmasByOrden(idOrdenLocal);
-    final firmasNoSync = firmas.where((f) => !f.subida).toList();
-    if (firmasNoSync.isNotEmpty) return false;
+    // ✅ FIX 14-FEB-2026: Ya NO verificamos evidencias/firmas individuales
+    // Si isDirty=false y no está en cola pendiente, el backend ya tiene todo.
+    // El endpoint finalizar-completo sube evidencias+firmas atómicamente.
 
     return true;
   }
@@ -672,8 +765,7 @@ class DataLifecycleManager {
     for (final orden in todasOrdenes) {
       final codigoEstado = estadosMap[orden.idEstado] ?? '';
 
-      if (orden.prioridad == 'URGENTE' &&
-          !estadosFinales.contains(codigoEstado)) {
+      if (orden.prioridad == 'URGENTE' && !_esEstadoFinalCodigo(codigoEstado)) {
         urgentes.add(orden);
       } else if (codigoEstado == 'EN_PROCESO') {
         enProceso.add(orden);
@@ -681,7 +773,7 @@ class DataLifecycleManager {
         asignadas.add(orden);
       } else if (codigoEstado == 'POR_SUBIR') {
         porSubir.add(orden);
-      } else if (estadosFinales.contains(codigoEstado)) {
+      } else if (_esEstadoFinalCodigo(codigoEstado)) {
         completadas.add(orden);
       } else {
         otras.add(orden);
@@ -754,10 +846,74 @@ class DataLifecycleManager {
 
   int _espacioLiberadoBytes = 0;
 
+  String _normalizarEstadoCodigo(String codigo) {
+    return codigo
+        .trim()
+        .toUpperCase()
+        .replaceAll('Á', 'A')
+        .replaceAll('É', 'E')
+        .replaceAll('Í', 'I')
+        .replaceAll('Ó', 'O')
+        .replaceAll('Ú', 'U');
+  }
+
+  bool _esEstadoFinalCodigo(String? codigo) {
+    if (codigo == null || codigo.trim().isEmpty) return false;
+    return estadosFinales.contains(_normalizarEstadoCodigo(codigo));
+  }
+
+  Future<bool> _fueSubidaAlServidor(
+    Ordene orden, {
+    required bool permitirDirtyConHuella,
+  }) async {
+    // Sin id backend no existe garantía de persistencia en servidor.
+    final idBackend = orden.idBackend;
+    if (idBackend == null || idBackend <= 0) {
+      return false;
+    }
+
+    // Si está en cola activa de sync, aún no es seguro purgar.
+    final enColaPendiente = await _db.existeOrdenEnColaPendiente(orden.idLocal);
+    if (enColaPendiente) return false;
+
+    // Camino normal: orden limpia = subida confirmada.
+    if (!orden.isDirty) return true;
+
+    // ✅ FIX 21-FEB-2026: Para limpieza manual forzada, ser más permisivo.
+    // Si la orden tiene idBackend (el servidor la creó), está en estado final,
+    // y NO está en cola pendiente → el servidor ya tiene los datos.
+    // El flag isDirty=true puede ser residuo de inconsistencias históricas
+    // (ej: bug de duplicados, lastSyncedAt nunca seteado, etc.)
+    if (permitirDirtyConHuella) {
+      debugPrint(
+        '⚠️ [LIFECYCLE] Orden ${orden.numeroOrden} isDirty=true pero tiene '
+        'idBackend=$idBackend y no está en cola → permitiendo purga manual',
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  Future<bool> _esOrdenElegibleParaPurgarArchivos(
+    int idOrdenLocal, {
+    required Set<int> estadosFinalesIds,
+  }) async {
+    final orden = await _db.getOrdenById(idOrdenLocal);
+    if (orden == null) return false;
+    if (!estadosFinalesIds.contains(orden.idEstado)) return false;
+
+    return _fueSubidaAlServidor(orden, permitirDirtyConHuella: false);
+  }
+
   Future<List<int>> _getEstadosFinalesIds() async {
     final estados = await _db.getAllEstadosOrden();
     return estados
-        .where((e) => estadosFinales.contains(e.codigo.toUpperCase()))
+        .where((e) {
+          final codigoNormalizado = _normalizarEstadoCodigo(e.codigo);
+          if (estadosProtegidos.contains(codigoNormalizado)) return false;
+          return _esEstadoFinalCodigo(e.codigo);
+        })
         .map((e) => e.id)
         .toList();
   }

@@ -394,6 +394,7 @@ export interface EnviarPdfExistenteDto {
     emailDestino: string;
     asuntoEmail?: string;
     mensajeEmail?: string;
+    emailsCc?: string[];
 }
 
 export interface EnviarPdfExistenteResponse {
@@ -449,6 +450,50 @@ export async function updateHorariosServicio(
         data
     );
     return response.data;
+}
+
+// ========================================================================
+// HISTORIAL DE EMAILS ENVIADOS
+// ========================================================================
+
+export interface HistorialEmailEnviado {
+    id_historial_email: number;
+    id_orden_servicio: number;
+    destinatario_to: string;
+    destinatarios_cc: string | null;
+    asunto: string;
+    estado_envio: 'EXITOSO' | 'FALLIDO';
+    mensaje_error: string | null;
+    message_id: string | null;
+    url_pdf_enviado: string | null;
+    origen_envio: string;
+    fecha_envio: string;
+    enviado_por: number | null;
+}
+
+export interface HistorialEmailsResponse {
+    success: boolean;
+    historial: HistorialEmailEnviado[];
+    total: number;
+}
+
+/**
+ * Obtener historial de emails enviados de una orden
+ * FIX 18-FEB-2026
+ */
+export async function getHistorialEmails(
+    idOrden: number
+): Promise<HistorialEmailsResponse> {
+    const url = `${ORDENES_BASE}/${idOrden}/emails/historial`;
+    console.log(`📧 [API] Llamando a: ${url}`);
+    try {
+        const response = await apiClient.get<HistorialEmailsResponse>(url);
+        console.log(`✅ [API] Respuesta historial:`, response.data);
+        return response.data;
+    } catch (error: any) {
+        console.error(`❌ [API] Error en getHistorialEmails:`, error?.response?.status, error?.response?.data || error?.message);
+        throw error;
+    }
 }
 
 /**

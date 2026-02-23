@@ -90,6 +90,7 @@ export interface EquipoListItem {
   } | null;
   fecha_creacion: string;
   datos_especificos: Record<string, unknown> | null;
+  motor?: DatosMotor;
 }
 
 export interface EquipoDetalle extends EquipoListItem {

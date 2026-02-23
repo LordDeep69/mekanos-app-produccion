@@ -5,26 +5,34 @@
  * Permite al admin:
  * - Previsualizar el PDF actual
  * - Regenerar PDF con datos actualizados
- * - Enviar PDF por email (email del cliente o personalizado)
+ * - Enviar PDF por email a múltiples destinatarios
+ * - Feedback visual completo de envío (loading, éxito, error)
+ * 
+ * ✅ FIX 13-FEB-2026: Feedback de envío de email + múltiples destinatarios + prevención duplicados
  */
 
 'use client';
 
+import { apiClient } from '@/lib/api/client';
+import { cn } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+    AlertCircle,
     Check,
+    CheckCircle2,
     Download,
     Eye,
     FileText,
     Loader2,
     Mail,
+    Plus,
     RefreshCw,
     Send,
+    Trash2,
     X
 } from 'lucide-react';
 import { useState } from 'react';
-import { apiClient } from '@/lib/api/client';
 import { enviarPdfExistente, regenerarPdf, type EnviarPdfExistenteDto, type RegenerarPdfDto } from '../api/ordenes.service';
 
 interface GestionInformeSectionProps {
@@ -32,17 +40,22 @@ interface GestionInformeSectionProps {
     onUpdate?: () => void;
 }
 
+type EmailSendStatus = 'idle' | 'sending' | 'success' | 'error';
+
 export function GestionInformeSection({ orden, onUpdate }: GestionInformeSectionProps) {
+    const queryClient = useQueryClient();
     const [showEmailModal, setShowEmailModal] = useState(false);
-    const [emailDestino, setEmailDestino] = useState('');
+    const [emailsDestinatarios, setEmailsDestinatarios] = useState<string[]>([]);
+    const [nuevoEmail, setNuevoEmail] = useState('');
     const [asuntoEmail, setAsuntoEmail] = useState('');
     const [mensajeEmail, setMensajeEmail] = useState('');
-    const [useCustomEmail, setUseCustomEmail] = useState(false);
+    const [incluirClienteEmail, setIncluirClienteEmail] = useState(true);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
     const [showPreview, setShowPreview] = useState(false);
+    const [emailSendStatus, setEmailSendStatus] = useState<EmailSendStatus>('idle');
+    const [emailSendResult, setEmailSendResult] = useState<{ destinatarios: string[]; error?: string } | null>(null);
 
     // ✅ FIX 04-FEB-2026: Obtener URL del PDF existente usando apiClient centralizado
-    // El apiClient ya tiene el header ngrok-skip-browser-warning y manejo de auth
     const { data: pdfExistenteData } = useQuery({
         queryKey: ['orden-pdf-url', orden.id_orden_servicio],
         queryFn: async () => {
@@ -63,7 +76,6 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         mutationFn: (data: RegenerarPdfDto) => regenerarPdf(orden.id_orden_servicio, data),
         onSuccess: (response) => {
             if (response.pdfBase64) {
-                // Crear URL para previsualizar
                 const blob = base64ToBlob(response.pdfBase64, 'application/pdf');
                 const url = URL.createObjectURL(blob);
                 setPdfPreviewUrl(url);
@@ -75,12 +87,8 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     // Mutation para enviar PDF existente (sin regenerar)
     const enviarPdfMutation = useMutation({
         mutationFn: (data: EnviarPdfExistenteDto) => enviarPdfExistente(orden.id_orden_servicio, data),
-        onSuccess: () => {
-            onUpdate?.();
-        },
     });
 
-    // Convertir base64 a Blob
     function base64ToBlob(base64: string, contentType: string): Blob {
         const byteCharacters = atob(base64);
         const byteNumbers = new Array(byteCharacters.length);
@@ -91,39 +99,100 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         return new Blob([byteArray], { type: contentType });
     }
 
-    // ✅ FIX 26-ENE-2026: Siempre regenerar PDF y actualizar URL en BD
-    // Los botones "Previsualizar" y "Descargar" ya sirven para ver el PDF existente
     const handleRegenerarPdf = async () => {
         await regenerarMutation.mutateAsync({
             enviarEmail: false,
-            forzarRegeneracion: true, // SIEMPRE regenerar y actualizar URL
+            forzarRegeneracion: true,
         });
     };
 
-    // Regenerar y enviar por email
-    const handleEnviarPdf = async () => {
-        const email = useCustomEmail ? emailDestino : clienteEmail;
-        if (!email) {
-            alert('Por favor ingrese un email de destino');
-            return;
+    // ✅ FIX 13-FEB-2026: Validar formato de email
+    const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+    // Agregar email a la lista de destinatarios
+    const handleAgregarEmail = () => {
+        const emailTrimmed = nuevoEmail.trim();
+        if (!emailTrimmed) return;
+        if (!isValidEmail(emailTrimmed)) return;
+        if (emailsDestinatarios.includes(emailTrimmed)) return;
+        setEmailsDestinatarios(prev => [...prev, emailTrimmed]);
+        setNuevoEmail('');
+    };
+
+    // Eliminar email de la lista
+    const handleEliminarEmail = (email: string) => {
+        setEmailsDestinatarios(prev => prev.filter(e => e !== email));
+    };
+
+    // Obtener todos los emails destino
+    const getAllDestinatarios = (): string[] => {
+        const emails: string[] = [];
+        if (incluirClienteEmail && clienteEmail) {
+            emails.push(clienteEmail);
         }
+        for (const e of emailsDestinatarios) {
+            if (!emails.includes(e)) emails.push(e);
+        }
+        return emails;
+    };
 
-        // ✅ USAR PDF EXISTENTE - No regenerar
-        await enviarPdfMutation.mutateAsync({
-            emailDestino: email,
-            asuntoEmail: asuntoEmail || undefined,
-            mensajeEmail: mensajeEmail || undefined,
-        });
+    // ✅ FIX 13-FEB-2026: Enviar con feedback visual completo y prevención de duplicados
+    const handleEnviarPdf = async () => {
+        const destinatarios = getAllDestinatarios();
+        if (destinatarios.length === 0) return;
 
-        setShowEmailModal(false);
-        setEmailDestino('');
+        setEmailSendStatus('sending');
+        setEmailSendResult(null);
+
+        try {
+            // Enviar a cada destinatario secuencialmente
+            const emailPrincipal = destinatarios[0];
+            const emailsCc = destinatarios.slice(1);
+
+            await enviarPdfMutation.mutateAsync({
+                emailDestino: emailPrincipal,
+                asuntoEmail: asuntoEmail || undefined,
+                mensajeEmail: mensajeEmail || undefined,
+                ...(emailsCc.length > 0 ? { emailsCc } : {}),
+            });
+
+            setEmailSendStatus('success');
+            setEmailSendResult({ destinatarios });
+            onUpdate?.();
+            // ✅ FIX 18-FEB-2026: Refrescar historial de emails después de envío
+            queryClient.invalidateQueries({ queryKey: ['ordenes', 'historial-emails', orden.id_orden_servicio] });
+
+            // Auto-cerrar después de 4 segundos de éxito
+            setTimeout(() => {
+                setShowEmailModal(false);
+                setEmailSendStatus('idle');
+                setEmailSendResult(null);
+                setEmailsDestinatarios([]);
+                setAsuntoEmail('');
+                setMensajeEmail('');
+            }, 4000);
+        } catch (error: any) {
+            setEmailSendStatus('error');
+            setEmailSendResult({
+                destinatarios,
+                error: error?.response?.data?.message || error?.message || 'Error al enviar el email',
+            });
+        }
+    };
+
+    // Abrir modal de email con reset de estado
+    const handleOpenEmailModal = () => {
+        setEmailSendStatus('idle');
+        setEmailSendResult(null);
+        setEmailsDestinatarios([]);
+        setNuevoEmail('');
         setAsuntoEmail('');
         setMensajeEmail('');
+        setIncluirClienteEmail(!!clienteEmail);
+        setShowEmailModal(true);
     };
 
-    // Descargar PDF
     const handleDescargarPdf = () => {
-        // Prioridad: PDF regenerado > PDF existente
         const urlToUse = pdfPreviewUrl || urlPdfExistente;
         if (urlToUse) {
             const link = document.createElement('a');
@@ -136,9 +205,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         }
     };
 
-    // Previsualizar PDF existente (generado por mobile)
     const handlePrevisualizar = () => {
-        // Prioridad: PDF regenerado > PDF existente
         const urlToUse = pdfPreviewUrl || urlPdfExistente;
         if (urlToUse) {
             window.open(urlToUse, '_blank');
@@ -146,6 +213,9 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             alert('No hay PDF disponible. Regenere el informe primero.');
         }
     };
+
+    const destinatariosActuales = getAllDestinatarios();
+    const isSending = emailSendStatus === 'sending';
 
     return (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -157,10 +227,12 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                     </div>
                     Gestión de Informe PDF
                 </h4>
-                {regenerarMutation.isPending && (
+                {(regenerarMutation.isPending || isSending) && (
                     <div className="flex items-center gap-2 text-blue-600">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-xs font-medium">Procesando...</span>
+                        <span className="text-xs font-medium">
+                            {isSending ? 'Enviando email...' : 'Procesando...'}
+                        </span>
                     </div>
                 )}
             </div>
@@ -187,7 +259,6 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
 
                 {/* Acciones principales */}
                 <div className="grid grid-cols-2 gap-3">
-                    {/* Previsualizar */}
                     <button
                         onClick={handlePrevisualizar}
                         className="flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-all group"
@@ -196,8 +267,6 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                         <span className="text-sm font-bold text-gray-700 group-hover:text-blue-600">Previsualizar</span>
                         <span className="text-[10px] text-gray-400 mt-0.5">Ver PDF actual</span>
                     </button>
-
-                    {/* Descargar */}
                     <button
                         onClick={handleDescargarPdf}
                         className="flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-all group"
@@ -224,15 +293,15 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
 
                 {/* Enviar por Email */}
                 <button
-                    onClick={() => setShowEmailModal(true)}
-                    disabled={regenerarMutation.isPending}
+                    onClick={handleOpenEmailModal}
+                    disabled={regenerarMutation.isPending || isSending}
                     className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Mail className="h-5 w-5" />
                     Enviar Informe por Email
                 </button>
 
-                {/* Indicador de PDF existente (solo informativo) */}
+                {/* Indicador de PDF existente */}
                 {urlPdfExistente && !regenerarMutation.isSuccess && (
                     <p className="text-xs text-green-600 flex items-center gap-1.5">
                         <Check className="h-3.5 w-3.5" />
@@ -240,22 +309,17 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                     </p>
                 )}
 
-                {/* Mensaje de éxito */}
+                {/* Mensaje de éxito regeneración */}
                 {regenerarMutation.isSuccess && regenerarMutation.data && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                         <p className="text-sm text-green-700 font-medium flex items-center gap-2">
                             <Check className="h-4 w-4" />
                             {regenerarMutation.data.message}
                         </p>
-                        {regenerarMutation.data.emailEnviado && (
-                            <p className="text-xs text-green-600 mt-1">
-                                Email enviado exitosamente
-                            </p>
-                        )}
                     </div>
                 )}
 
-                {/* Error */}
+                {/* Error regeneración */}
                 {regenerarMutation.isError && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                         <p className="text-sm text-red-700 font-medium">
@@ -265,10 +329,10 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                 )}
             </div>
 
-            {/* Modal de Email */}
+            {/* ✅ FIX 13-FEB-2026: Modal de Email mejorado con múltiples destinatarios y feedback */}
             {showEmailModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                         {/* Header del modal */}
                         <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50 flex items-center justify-between">
                             <h3 className="font-bold text-gray-900 flex items-center gap-2">
@@ -276,112 +340,224 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                                 Enviar Informe por Email
                             </h3>
                             <button
-                                onClick={() => setShowEmailModal(false)}
-                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                                onClick={() => { setShowEmailModal(false); setEmailSendStatus('idle'); }}
+                                disabled={isSending}
+                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
                             >
                                 <X className="h-5 w-5 text-gray-500" />
                             </button>
                         </div>
 
-                        {/* Contenido del modal */}
-                        <div className="p-4 space-y-4">
-                            {/* Selector de email */}
-                            <div>
-                                <label className="text-sm font-bold text-gray-700 mb-2 block">
-                                    Destinatario
-                                </label>
-                                <div className="space-y-2">
-                                    <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                                        <input
-                                            type="radio"
-                                            name="emailType"
-                                            checked={!useCustomEmail}
-                                            onChange={() => setUseCustomEmail(false)}
-                                            className="w-4 h-4 text-green-600"
-                                        />
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-gray-700">Email del cliente</p>
-                                            <p className="text-xs text-gray-500">{clienteEmail || 'No disponible'}</p>
-                                        </div>
-                                    </label>
-                                    <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                                        <input
-                                            type="radio"
-                                            name="emailType"
-                                            checked={useCustomEmail}
-                                            onChange={() => setUseCustomEmail(true)}
-                                            className="w-4 h-4 text-green-600"
-                                        />
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-gray-700">Email personalizado</p>
-                                        </div>
-                                    </label>
+                        {/* Estado de envío: SENDING */}
+                        {emailSendStatus === 'sending' && (
+                            <div className="p-8 flex flex-col items-center justify-center gap-4">
+                                <div className="relative">
+                                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                                        <Mail className="h-8 w-8 text-green-600" />
+                                    </div>
+                                    <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md">
+                                        <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                                    </div>
+                                </div>
+                                <div className="text-center">
+                                    <p className="font-bold text-gray-900">Enviando correo...</p>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        Enviando a {destinatariosActuales.length} destinatario{destinatariosActuales.length !== 1 ? 's' : ''}
+                                    </p>
+                                </div>
+                                <div className="w-full max-w-xs">
+                                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                        <div className="h-full bg-green-500 rounded-full animate-pulse" style={{ width: '70%' }} />
+                                    </div>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Input de email personalizado */}
-                            {useCustomEmail && (
-                                <div>
-                                    <input
-                                        type="email"
-                                        value={emailDestino}
-                                        onChange={(e) => setEmailDestino(e.target.value)}
-                                        placeholder="correo@ejemplo.com"
-                                        className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                    />
+                        {/* Estado de envío: SUCCESS */}
+                        {emailSendStatus === 'success' && emailSendResult && (
+                            <div className="p-8 flex flex-col items-center justify-center gap-4">
+                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center animate-bounce">
+                                    <CheckCircle2 className="h-10 w-10 text-green-600" />
                                 </div>
-                            )}
-
-                            {/* Asunto personalizado */}
-                            <div>
-                                <label className="text-sm font-bold text-gray-700 mb-2 block">
-                                    Asunto (opcional)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={asuntoEmail}
-                                    onChange={(e) => setAsuntoEmail(e.target.value)}
-                                    placeholder={`Informe de Mantenimiento - ${orden.numero_orden}`}
-                                    className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                />
+                                <div className="text-center">
+                                    <p className="font-bold text-green-800 text-lg">Correo Enviado Exitosamente</p>
+                                    <p className="text-sm text-gray-500 mt-2">Enviado a:</p>
+                                    <div className="mt-2 space-y-1">
+                                        {emailSendResult.destinatarios.map((email, i) => (
+                                            <p key={i} className="text-sm font-medium text-green-700 flex items-center justify-center gap-1.5">
+                                                <Check className="h-3.5 w-3.5" />
+                                                {email}
+                                            </p>
+                                        ))}
+                                    </div>
+                                </div>
+                                <p className="text-xs text-gray-400">Este diálogo se cerrará automáticamente...</p>
                             </div>
+                        )}
 
-                            {/* Mensaje personalizado */}
-                            <div>
-                                <label className="text-sm font-bold text-gray-700 mb-2 block">
-                                    Mensaje (opcional)
-                                </label>
-                                <textarea
-                                    value={mensajeEmail}
-                                    onChange={(e) => setMensajeEmail(e.target.value)}
-                                    placeholder="Adjunto encontrará el informe de mantenimiento..."
-                                    rows={3}
-                                    className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
-                                />
+                        {/* Estado de envío: ERROR */}
+                        {emailSendStatus === 'error' && emailSendResult && (
+                            <div className="p-8 flex flex-col items-center justify-center gap-4">
+                                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                                    <AlertCircle className="h-10 w-10 text-red-600" />
+                                </div>
+                                <div className="text-center">
+                                    <p className="font-bold text-red-800 text-lg">Error al Enviar Correo</p>
+                                    <p className="text-sm text-red-600 mt-2">{emailSendResult.error}</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setEmailSendStatus('idle')}
+                                        className="px-4 py-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-all"
+                                    >
+                                        Volver
+                                    </button>
+                                    <button
+                                        onClick={handleEnviarPdf}
+                                        className="px-4 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl transition-all flex items-center gap-2"
+                                    >
+                                        <RefreshCw className="h-4 w-4" />
+                                        Reintentar
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
-                        {/* Footer del modal */}
-                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
-                            <button
-                                onClick={() => setShowEmailModal(false)}
-                                className="flex-1 py-2.5 px-4 text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-all"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleEnviarPdf}
-                                disabled={regenerarMutation.isPending || (!clienteEmail && !emailDestino)}
-                                className="flex-1 py-2.5 px-4 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                {regenerarMutation.isPending ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Send className="h-4 w-4" />
-                                )}
-                                Enviar
-                            </button>
-                        </div>
+                        {/* Formulario (solo visible en estado idle) */}
+                        {emailSendStatus === 'idle' && (
+                            <>
+                                <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                                    {/* Email del cliente */}
+                                    <div>
+                                        <label className="text-sm font-bold text-gray-700 mb-2 block">
+                                            Destinatarios
+                                        </label>
+
+                                        {/* Checkbox email del cliente */}
+                                        {clienteEmail && (
+                                            <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors mb-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={incluirClienteEmail}
+                                                    onChange={(e) => setIncluirClienteEmail(e.target.checked)}
+                                                    className="w-4 h-4 text-green-600 rounded"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-700">Email del cliente</p>
+                                                    <p className="text-xs text-gray-500 truncate">{clienteEmail}</p>
+                                                </div>
+                                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">
+                                                    CLIENTE
+                                                </span>
+                                            </label>
+                                        )}
+
+                                        {/* Lista de emails adicionales */}
+                                        {emailsDestinatarios.length > 0 && (
+                                            <div className="space-y-1.5 mb-2">
+                                                {emailsDestinatarios.map((email, index) => (
+                                                    <div
+                                                        key={index}
+                                                        className="flex items-center gap-2 p-2.5 bg-green-50 rounded-lg border border-green-100"
+                                                    >
+                                                        <Mail className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                                                        <span className="text-sm text-green-800 flex-1 truncate">{email}</span>
+                                                        <button
+                                                            onClick={() => handleEliminarEmail(email)}
+                                                            className="p-1 hover:bg-red-100 rounded transition-colors"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Input para agregar nuevo email */}
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="email"
+                                                value={nuevoEmail}
+                                                onChange={(e) => setNuevoEmail(e.target.value)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAgregarEmail(); } }}
+                                                placeholder="Agregar otro correo..."
+                                                className={cn(
+                                                    "flex-1 px-3 py-2.5 text-sm border-2 rounded-xl transition-colors",
+                                                    nuevoEmail && !isValidEmail(nuevoEmail)
+                                                        ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                                        : "border-gray-200 focus:ring-green-500 focus:border-green-500"
+                                                )}
+                                            />
+                                            <button
+                                                onClick={handleAgregarEmail}
+                                                disabled={!nuevoEmail || !isValidEmail(nuevoEmail)}
+                                                className="px-3 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                                <span className="text-sm font-bold">Agregar</span>
+                                            </button>
+                                        </div>
+                                        {nuevoEmail && !isValidEmail(nuevoEmail) && (
+                                            <p className="text-xs text-red-500 mt-1">Email no válido</p>
+                                        )}
+
+                                        {/* Resumen de destinatarios */}
+                                        <p className="text-xs text-gray-400 mt-2">
+                                            {destinatariosActuales.length === 0
+                                                ? 'Agregue al menos un destinatario'
+                                                : `${destinatariosActuales.length} destinatario${destinatariosActuales.length !== 1 ? 's' : ''} seleccionado${destinatariosActuales.length !== 1 ? 's' : ''}`
+                                            }
+                                        </p>
+                                    </div>
+
+                                    {/* Asunto personalizado */}
+                                    <div>
+                                        <label className="text-sm font-bold text-gray-700 mb-2 block">
+                                            Asunto (opcional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={asuntoEmail}
+                                            onChange={(e) => setAsuntoEmail(e.target.value)}
+                                            placeholder={`Informe de Mantenimiento - ${orden.numero_orden}`}
+                                            className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                        />
+                                    </div>
+
+                                    {/* Mensaje personalizado */}
+                                    <div>
+                                        <label className="text-sm font-bold text-gray-700 mb-2 block">
+                                            Mensaje (opcional)
+                                        </label>
+                                        <textarea
+                                            value={mensajeEmail}
+                                            onChange={(e) => setMensajeEmail(e.target.value)}
+                                            placeholder="Adjunto encontrará el informe de mantenimiento..."
+                                            rows={3}
+                                            className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Footer del modal */}
+                                <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+                                    <button
+                                        onClick={() => setShowEmailModal(false)}
+                                        className="flex-1 py-2.5 px-4 text-sm font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-all"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleEnviarPdf}
+                                        disabled={destinatariosActuales.length === 0}
+                                        className="flex-1 py-2.5 px-4 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        <Send className="h-4 w-4" />
+                                        Enviar ({destinatariosActuales.length})
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

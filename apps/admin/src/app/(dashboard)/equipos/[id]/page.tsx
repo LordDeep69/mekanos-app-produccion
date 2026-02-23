@@ -381,17 +381,28 @@ function FichaTecnicaGenerador({ datos, motor }: { datos: any; motor: any }) {
         <DataRow label="Serie" value={datos?.numero_serie_generador} />
         <DataRow label="Potencia kVA" value={datos?.potencia_kva ? `${datos.potencia_kva} kVA` : null} />
         <DataRow label="Potencia kW" value={datos?.potencia_kw ? `${datos.potencia_kw} kW` : null} />
+        <DataRow label="Factor Potencia" value={datos?.factor_potencia ? `${datos.factor_potencia} cos φ` : null} />
         <DataRow label="Voltaje Salida" value={datos?.voltaje_salida} />
-        <DataRow label="Fases" value={datos?.numero_fases} />
+        <DataRow label="Amperaje Nominal" value={datos?.amperaje_nominal_salida ? `${datos.amperaje_nominal_salida} A` : null} />
+        <DataRow label="Fases" value={datos?.numero_fases === 1 ? 'Monofásico' : datos?.numero_fases === 3 ? 'Trifásico' : datos?.numero_fases} />
         <DataRow label="Frecuencia" value={datos?.frecuencia_hz ? `${datos.frecuencia_hz} Hz` : null} />
+        <DataRow label="Tipo Conexión" value={datos?.tipo_conexion} />
+        <DataRow label="Año Fabricación" value={datos?.a_o_fabricacion} />
       </InfoCard>
       <InfoCard title="Alternador" icon={Gauge}>
         <DataRow label="Marca Alternador" value={datos?.marca_alternador} />
         <DataRow label="Modelo Alternador" value={datos?.modelo_alternador} />
         <DataRow label="Serie Alternador" value={datos?.numero_serie_alternador} />
         <DataRow label="Clase Aislamiento" value={datos?.clase_aislamiento} />
+        <DataRow label="Grado Protección IP" value={datos?.grado_proteccion_ip} />
         <DataRow label="Tiene AVR" value={datos?.tiene_avr ? 'Sí' : 'No'} />
-        <DataRow label="Marca AVR" value={datos?.marca_avr} />
+        {datos?.tiene_avr && (
+          <>
+            <DataRow label="Marca AVR" value={datos?.marca_avr} />
+            <DataRow label="Modelo AVR" value={datos?.modelo_avr} />
+            <DataRow label="Referencia AVR" value={datos?.referencia_avr} />
+          </>
+        )}
       </InfoCard>
       {motor && (
         <InfoCard title="Motor" icon={Fuel}>
@@ -400,17 +411,67 @@ function FichaTecnicaGenerador({ datos, motor }: { datos: any; motor: any }) {
           <DataRow label="Modelo" value={motor.modelo_motor} />
           <DataRow label="Serie" value={motor.numero_serie_motor} />
           <DataRow label="Potencia HP" value={motor.potencia_hp ? `${motor.potencia_hp} HP` : null} />
+          <DataRow label="Potencia kW" value={motor.potencia_kw ? `${motor.potencia_kw} kW` : null} />
           <DataRow label="RPM" value={motor.velocidad_nominal_rpm} />
           <DataRow label="Combustible" value={motor.tipo_combustible} />
           <DataRow label="Cilindros" value={motor.numero_cilindros} />
+          <DataRow label="Cilindrada (cc)" value={motor.cilindrada_cc} />
+          <DataRow label="Voltaje Arranque" value={motor.voltaje_arranque_vdc ? `${motor.voltaje_arranque_vdc} VDC` : null} />
+          <DataRow label="Amperaje Arranque" value={motor.amperaje_arranque ? `${motor.amperaje_arranque} CCA` : null} />
+          <DataRow label="Tipo Arranque" value={motor.tipo_arranque} />
+          <DataRow label="Turbocargador" value={motor.tiene_turbocargador ? 'Sí' : 'No'} />
+          <DataRow label="Capacidad Aceite" value={motor.capacidad_aceite_litros ? `${motor.capacidad_aceite_litros} L` : null} />
+          <DataRow label="Capacidad Refrigerante" value={motor.capacidad_refrigerante_litros ? `${motor.capacidad_refrigerante_litros} L` : null} />
+          <DataRow label="Tipo Aceite" value={motor.tipo_aceite} />
+          <DataRow label="Tipo Refrigerante" value={motor.tipo_refrigerante} />
+          <DataRow label="Presión Aceite Mínima" value={motor.presion_aceite_minima_psi ? `${motor.presion_aceite_minima_psi} PSI` : null} />
+          <DataRow label="Temp. Máx Operación" value={motor.temperatura_operacion_maxima_c ? `${motor.temperatura_operacion_maxima_c} °C` : null} />
+          <DataRow label="Aspiración" value={motor.aspiracion} />
+          <DataRow label="Sistema Enfriamiento" value={motor.sistema_enfriamiento} />
+          <DataRow label="Baterías" value={motor.numero_baterias} />
+          <DataRow label="Referencia Batería" value={motor.referencia_bateria} />
+          <DataRow label="Capacidad Batería" value={motor.capacidad_bateria_ah ? `${motor.capacidad_bateria_ah} Ah` : null} />
+          <DataRow label="Tiene Radiador" value={motor.tiene_radiador ? 'Sí' : 'No'} />
+          {motor.tiene_radiador && (
+            <>
+              <DataRow label="Radiador (Alto)" value={motor.radiador_alto_cm ? `${motor.radiador_alto_cm} cm` : null} />
+              <DataRow label="Radiador (Ancho)" value={motor.radiador_ancho_cm ? `${motor.radiador_ancho_cm} cm` : null} />
+              <DataRow label="Radiador (Espesor)" value={motor.radiador_espesor_cm ? `${motor.radiador_espesor_cm} cm` : null} />
+            </>
+          )}
+          <DataRow label="Cargador Batería" value={motor.tiene_cargador_bateria ? 'Sí' : 'No'} />
+          {motor.tiene_cargador_bateria && (
+            <>
+              <DataRow label="Marca Cargador" value={motor.marca_cargador} />
+              <DataRow label="Modelo Cargador" value={motor.modelo_cargador} />
+              <DataRow label="Amperaje Cargador" value={motor.amperaje_cargador ? `${motor.amperaje_cargador} A` : null} />
+            </>
+          )}
+          <DataRow label="Observaciones Motor" value={motor.observaciones} />
         </InfoCard>
       )}
       <InfoCard title="Control y Combustible" icon={Settings}>
         <DataRow label="Módulo Control" value={datos?.tiene_modulo_control ? 'Sí' : 'No'} />
-        <DataRow label="Marca Módulo" value={datos?.marca_modulo_control} />
+        {datos?.tiene_modulo_control && (
+          <>
+            <DataRow label="Marca Módulo" value={datos?.marca_modulo_control} />
+            <DataRow label="Modelo Módulo" value={datos?.modelo_modulo_control} />
+          </>
+        )}
         <DataRow label="Arranque Automático" value={datos?.tiene_arranque_automatico ? 'Sí' : 'No'} />
         <DataRow label="Tanque Principal" value={datos?.capacidad_tanque_principal_litros ? `${datos.capacidad_tanque_principal_litros} L` : null} />
         <DataRow label="Tanque Auxiliar" value={datos?.tiene_tanque_auxiliar ? `${datos.capacidad_tanque_auxiliar_litros || '—'} L` : 'No'} />
+        <DataRow label="Cabina Insonorizada" value={datos?.tiene_cabina_insonorizada ? 'Sí' : 'No'} />
+        <DataRow label="Transferencia Automática" value={datos?.tiene_transferencia_automatica ? 'Sí' : 'No'} />
+        {datos?.tiene_transferencia_automatica && (
+          <>
+            <DataRow label="Tipo Transferencia" value={datos?.tipo_transferencia} />
+            <DataRow label="Ubicación Transferencia" value={datos?.ubicacion_transferencia} />
+          </>
+        )}
+        <DataRow label="Calibre Cable Potencia" value={datos?.calibre_cable_potencia} />
+        <DataRow label="Longitud Cable" value={datos?.longitud_cable_potencia_m ? `${datos.longitud_cable_potencia_m} m` : null} />
+        <DataRow label="Observaciones Generador" value={datos?.observaciones} />
       </InfoCard>
     </div>
   );
@@ -425,33 +486,116 @@ function FichaTecnicaBomba({ datos, motor }: { datos: any; motor: any }) {
         <DataRow label="Serie" value={datos?.numero_serie_bomba} />
         <DataRow label="Tipo Bomba" value={datos?.tipo_bomba} />
         <DataRow label="Aplicación" value={datos?.aplicacion_bomba} />
+        <DataRow label="Año Fabricación" value={datos?.a_o_fabricacion} />
         <DataRow label="Caudal Máximo" value={datos?.caudal_maximo_m3h ? `${datos.caudal_maximo_m3h} m³/h` : null} />
-        <DataRow label="Altura Manométrica" value={datos?.altura_manometrica_maxima_m ? `${datos.altura_manometrica_maxima_m} m` : null} />
-      </InfoCard>
-      <InfoCard title="Presiones y Sistema" icon={Gauge}>
-        <DataRow label="Presión Encendido" value={datos?.presion_encendido_psi ? `${datos.presion_encendido_psi} PSI` : null} />
-        <DataRow label="Presión Apagado" value={datos?.presion_apagado_psi ? `${datos.presion_apagado_psi} PSI` : null} />
+        <DataRow label="Altura Manométrica Máx" value={datos?.altura_manometrica_maxima_m ? `${datos.altura_manometrica_maxima_m} m` : null} />
+        <DataRow label="Altura Presión Trabajo" value={datos?.altura_presion_trabajo_m ? `${datos.altura_presion_trabajo_m} m` : null} />
+        <DataRow label="Potencia Hidráulica" value={datos?.potencia_hidraulica_kw ? `${datos.potencia_hidraulica_kw} kW` : null} />
+        <DataRow label="Eficiencia" value={datos?.eficiencia_porcentaje ? `${datos.eficiencia_porcentaje}%` : null} />
         <DataRow label="Diámetro Succión" value={datos?.diametro_aspiracion} />
         <DataRow label="Diámetro Descarga" value={datos?.diametro_descarga} />
+        <DataRow label="Sello Mecánico" value={datos?.referencia_sello_mecanico} />
         <DataRow label="Bombas en Sistema" value={`${datos?.numero_bomba_en_sistema || 1} de ${datos?.numero_total_bombas_sistema || 1}`} />
+        <DataRow label="Observaciones Bomba" value={datos?.observaciones} />
+      </InfoCard>
+      <InfoCard title="Presiones y Control" icon={Gauge}>
+        <DataRow label="Panel de Control" value={datos?.tiene_panel_control ? 'Sí' : 'No'} />
+        {datos?.tiene_panel_control && (
+          <>
+            <DataRow label="Marca Panel" value={datos?.marca_panel_control} />
+            <DataRow label="Modelo Panel" value={datos?.modelo_panel_control} />
+          </>
+        )}
+        <DataRow label="Presostato" value={datos?.tiene_presostato ? 'Sí' : 'No'} />
+        {datos?.tiene_presostato && (
+          <>
+            <DataRow label="Marca Presostato" value={datos?.marca_presostato} />
+            <DataRow label="Modelo Presostato" value={datos?.modelo_presostato} />
+            <DataRow label="Presión Encendido" value={datos?.presion_encendido_psi ? `${datos.presion_encendido_psi} PSI` : null} />
+            <DataRow label="Presión Apagado" value={datos?.presion_apagado_psi ? `${datos.presion_apagado_psi} PSI` : null} />
+          </>
+        )}
+        <DataRow label="Variador de Frecuencia" value={datos?.tiene_variador_frecuencia ? 'Sí' : 'No'} />
+        {datos?.tiene_variador_frecuencia && (
+          <>
+            <DataRow label="Marca VFD" value={datos?.marca_variador} />
+            <DataRow label="Modelo VFD" value={datos?.modelo_variador} />
+          </>
+        )}
+        <DataRow label="Arrancador Suave" value={datos?.tiene_arrancador_suave ? 'Sí' : 'No'} />
+        <DataRow label="Contactor Externo" value={datos?.tiene_contactor_externo ? 'Sí' : 'No'} />
+        {datos?.tiene_contactor_externo && (
+          <>
+            <DataRow label="Marca Contactor" value={datos?.marca_contactor} />
+            <DataRow label="Amperaje Contactor" value={datos?.amperaje_contactor ? `${datos.amperaje_contactor} A` : null} />
+          </>
+        )}
+      </InfoCard>
+      <InfoCard title="Sistema Hidroneumático" icon={Settings}>
+        <DataRow label="Tanques Hidroneumáticos" value={datos?.tiene_tanques_hidroneumaticos ? 'Sí' : 'No'} />
+        {datos?.tiene_tanques_hidroneumaticos && (
+          <>
+            <DataRow label="Cantidad Tanques" value={datos?.cantidad_tanques} />
+            <DataRow label="Capacidad Tanques" value={datos?.capacidad_tanques_litros ? `${datos.capacidad_tanques_litros} L` : null} />
+            <DataRow label="Presión Tanques" value={datos?.presion_tanques_psi ? `${datos.presion_tanques_psi} PSI` : null} />
+          </>
+        )}
+        <DataRow label="Manómetro" value={datos?.tiene_manometro ? 'Sí' : 'No'} />
+        {datos?.tiene_manometro && (
+          <>
+            <DataRow label="Rango Mínimo" value={datos?.rango_manometro_min_psi ? `${datos.rango_manometro_min_psi} PSI` : null} />
+            <DataRow label="Rango Máximo" value={datos?.rango_manometro_max_psi ? `${datos.rango_manometro_max_psi} PSI` : null} />
+          </>
+        )}
+        <DataRow label="Protección de Nivel" value={datos?.tiene_proteccion_nivel ? 'Sí' : 'No'} />
+        {datos?.tiene_proteccion_nivel && (
+          <DataRow label="Tipo Protección" value={datos?.tipo_proteccion_nivel} />
+        )}
+        <DataRow label="Válvula de Purga" value={datos?.tiene_valvula_purga ? 'Sí' : 'No'} />
+        <DataRow label="Válvula de Cebado" value={datos?.tiene_valvula_cebado ? 'Sí' : 'No'} />
+        <DataRow label="Válvula de Cheque" value={datos?.tiene_valvula_cheque ? 'Sí' : 'No'} />
+        <DataRow label="Válvula de Pie" value={datos?.tiene_valvula_pie ? 'Sí' : 'No'} />
       </InfoCard>
       {motor && (
         <InfoCard title="Motor Eléctrico" icon={Zap}>
           <DataRow label="Tipo Motor" value={motor.tipo_motor} />
           <DataRow label="Marca" value={motor.marca_motor} />
           <DataRow label="Modelo" value={motor.modelo_motor} />
+          <DataRow label="Serie" value={motor.numero_serie_motor} />
+          <DataRow label="Potencia HP" value={motor.potencia_hp ? `${motor.potencia_hp} HP` : null} />
           <DataRow label="Potencia kW" value={motor.potencia_kw ? `${motor.potencia_kw} kW` : null} />
+          <DataRow label="RPM" value={motor.velocidad_nominal_rpm} />
           <DataRow label="Voltaje" value={motor.voltaje_operacion_vac} />
-          <DataRow label="Fases" value={motor.numero_fases} />
+          <DataRow label="Fases" value={motor.numero_fases === 'MONOFASICO' ? 'Monofásico' : motor.numero_fases === 'TRIFASICO' ? 'Trifásico' : motor.numero_fases} />
           <DataRow label="Frecuencia" value={motor.frecuencia_hz ? `${motor.frecuencia_hz} Hz` : null} />
+          <DataRow label="Amperaje Nominal" value={motor.amperaje_nominal ? `${motor.amperaje_nominal} A` : null} />
+          <DataRow label="Factor Potencia" value={motor.factor_potencia ? `${motor.factor_potencia} cos φ` : null} />
+          <DataRow label="Clase Aislamiento" value={motor.clase_aislamiento} />
+          <DataRow label="Grado Protección IP" value={motor.grado_proteccion_ip} />
+          <DataRow label="Año Fabricación" value={motor.a_o_fabricacion} />
+          <DataRow label="Capacidad Aceite" value={motor.capacidad_aceite_litros ? `${motor.capacidad_aceite_litros} L` : null} />
+          <DataRow label="Capacidad Refrigerante" value={motor.capacidad_refrigerante_litros ? `${motor.capacidad_refrigerante_litros} L` : null} />
+          <DataRow label="Tipo Aceite" value={motor.tipo_aceite} />
+          <DataRow label="Tipo Refrigerante" value={motor.tipo_refrigerante} />
+          <DataRow label="Tiene Radiador" value={motor.tiene_radiador ? 'Sí' : 'No'} />
+          {motor.tiene_radiador && (
+            <>
+              <DataRow label="Radiador (Alto)" value={motor.radiador_alto_cm ? `${motor.radiador_alto_cm} cm` : null} />
+              <DataRow label="Radiador (Ancho)" value={motor.radiador_ancho_cm ? `${motor.radiador_ancho_cm} cm` : null} />
+              <DataRow label="Radiador (Espesor)" value={motor.radiador_espesor_cm ? `${motor.radiador_espesor_cm} cm` : null} />
+            </>
+          )}
+          <DataRow label="Cargador Batería" value={motor.tiene_cargador_bateria ? 'Sí' : 'No'} />
+          {motor.tiene_cargador_bateria && (
+            <>
+              <DataRow label="Marca Cargador" value={motor.marca_cargador} />
+              <DataRow label="Modelo Cargador" value={motor.modelo_cargador} />
+              <DataRow label="Amperaje Cargador" value={motor.amperaje_cargador ? `${motor.amperaje_cargador} A` : null} />
+            </>
+          )}
+          <DataRow label="Observaciones Motor" value={motor.observaciones} />
         </InfoCard>
       )}
-      <InfoCard title="Control y Accesorios" icon={Settings}>
-        <DataRow label="Panel Control" value={datos?.tiene_panel_control ? 'Sí' : 'No'} />
-        <DataRow label="Presostato" value={datos?.tiene_presostato ? 'Sí' : 'No'} />
-        <DataRow label="Variador Frecuencia" value={datos?.tiene_variador_frecuencia ? 'Sí' : 'No'} />
-        <DataRow label="Tanques Hidroneumáticos" value={datos?.tiene_tanques_hidroneumaticos ? `${datos.cantidad_tanques || 1}` : 'No'} />
-      </InfoCard>
     </div>
   );
 }

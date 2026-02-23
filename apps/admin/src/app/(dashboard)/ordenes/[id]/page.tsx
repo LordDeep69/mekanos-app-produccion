@@ -38,6 +38,7 @@ import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gall
 import { FirmasSection } from '@/features/ordenes/components/firmas-section';
 import { GaleriaFotosGenerales } from '@/features/ordenes/components/galeria-fotos-generales';
 import { GestionInformeSection } from '@/features/ordenes/components/gestion-informe-section';
+import { HistorialEmailsSection } from '@/features/ordenes/components/historial-emails-section';
 import { HistorialEstados } from '@/features/ordenes/components/historial-estados';
 import { HorariosServicioSection } from '@/features/ordenes/components/horarios-servicio-section';
 import { MedicionCardAdvanced, ResumenMediciones } from '@/features/ordenes/components/medicion-card-advanced';
@@ -60,6 +61,7 @@ import {
     Edit,
     FileText,
     Loader2,
+    MapPin,
     Play,
     Plus,
     RefreshCw,
@@ -285,6 +287,21 @@ function TabGeneral({ orden }: { orden: Orden }) {
                     label="Cliente"
                     value={getClienteNombre(orden)}
                     subvalue={orden.clientes?.persona?.numero_identificacion}
+                />
+                {/* ✅ FIX 18-FEB-2026: Dirección - Priorizar sede sobre cliente padre */}
+                <InfoCard
+                    icon={MapPin}
+                    label={orden.sedes_cliente ? `Dirección (Sede: ${orden.sedes_cliente.nombre_sede})` : 'Dirección'}
+                    value={
+                        orden.sedes_cliente?.direccion_sede
+                        || (orden.clientes?.persona as any)?.direccion_principal
+                        || 'Sin dirección'
+                    }
+                    subvalue={
+                        orden.sedes_cliente
+                            ? `${orden.sedes_cliente.ciudad_sede || ''} ${orden.sedes_cliente.departamento_sede ? '- ' + orden.sedes_cliente.departamento_sede : ''}`.trim()
+                            : (orden.clientes?.persona as any)?.ciudad || undefined
+                    }
                 />
 
                 {/* MULTI-EQUIPOS: Mostrar lista o equipo principal */}
@@ -773,6 +790,9 @@ function TabDocumentos({ orden }: { orden: Orden }) {
         <div className="space-y-6">
             {/* Gestión de Informe PDF - NUEVO */}
             <GestionInformeSection orden={orden} />
+
+            {/* Historial de Emails Enviados - FIX 18-FEB-2026 */}
+            <HistorialEmailsSection idOrden={orden.id_orden_servicio} />
 
             {/* Firmas Digitales - Componente Avanzado */}
             <FirmasSection firmas={firmas} isLoading={isLoadingFi} />

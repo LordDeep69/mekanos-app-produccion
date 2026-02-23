@@ -191,6 +191,35 @@ export default function EditarEmpleadoPage() {
     const [nuevoUsername, setNuevoUsername] = useState('');
     const [nuevaPassword, setNuevaPassword] = useState('');
     const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+
+    // Función para cargar la contraseña actual (solo para admins)
+    const loadCurrentPassword = async () => {
+        if (!hasUsuario || !showCurrentPassword) return;
+
+        try {
+            const usuario = (empleado as any).usuario;
+            if (usuario) {
+                const response = await apiClient.get(`/usuarios/${usuario.id_usuario}/password-preview`);
+                setCurrentPassword(
+                    response.data.password_hash_preview || 'Sin contraseña'
+                );
+            }
+        } catch (error) {
+            console.error('Error loading password:', error);
+            setCurrentPassword('Error al cargar contraseña');
+        }
+    };
+
+    // Efecto para cargar contraseña cuando se activa el toggle
+    useEffect(() => {
+        if (showCurrentPassword && hasUsuario) {
+            loadCurrentPassword();
+        } else {
+            setCurrentPassword('');
+        }
+    }, [showCurrentPassword, hasUsuario]);
 
     // Cargar datos del empleado
     const { data: empleado, isLoading, isError } = useQuery({
@@ -942,7 +971,22 @@ export default function EditarEmpleadoPage() {
                                         </Label>
                                         {!editandoPassword ? (
                                             <div className="flex gap-2">
-                                                <Input value="••••••••••" disabled className="bg-gray-100 flex-1" />
+                                                <div className="relative flex-1">
+                                                    <Input
+                                                        type={showCurrentPassword ? 'text' : 'password'}
+                                                        value={showCurrentPassword ? currentPassword : '••••••••••'}
+                                                        disabled
+                                                        className="bg-gray-100 pr-10"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                                        title={showCurrentPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                                    >
+                                                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                    </button>
+                                                </div>
                                                 <Button
                                                     type="button"
                                                     variant="outline"

@@ -60,7 +60,7 @@ export class ClientesController {
     @Query('q') q?: string,
     @Query('limit') limit?: string,
   ) {
-    const limitNum = Math.min(parseInt(limit || '20'), 50); // Max 50
+    const limitNum = Math.min(Math.max(parseInt(limit || '100', 10), 1), 500); // Max 500
 
     // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;

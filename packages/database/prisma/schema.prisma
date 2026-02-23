@@ -1591,6 +1591,7 @@ model ordenes_servicio {
   propuestas_correctivo_propuestas_correctivo_id_orden_servicioToordenes_servicio          propuestas_correctivo[]    @relation("propuestas_correctivo_id_orden_servicioToordenes_servicio")
   propuestas_correctivo_propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio propuestas_correctivo[]    @relation("propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio")
   remisiones                                                                               remisiones[]
+  historial_emails_enviados                                                               historial_emails_enviados[]
 
   @@index([id_cliente, fecha_programada(sort: Desc)], map: "idx_os_cliente_fecha")
   @@index([id_equipo, fecha_programada(sort: Desc)], map: "idx_os_equipo_fecha")
@@ -1601,6 +1602,24 @@ model ordenes_servicio {
   @@index([fecha_creacion(sort: Desc)], map: "idx_ordenes_fecha_creacion")
   @@index([id_firma_tecnico], map: "idx_ordenes_firma_tecnico")
   @@index([prioridad, id_estado_actual], map: "idx_ordenes_prioridad_estado")
+}
+
+model historial_emails_enviados {
+  id_historial_email   Int                        @id @default(autoincrement())
+  id_orden_servicio    Int
+  destinatario_to      String                     @db.VarChar(300)
+  destinatarios_cc     String?                    @db.VarChar(500)
+  asunto               String                     @db.VarChar(500)
+  estado_envio         estado_envio_email_enum     @default(EXITOSO)
+  mensaje_error        String?
+  message_id           String?                    @db.VarChar(300)
+  url_pdf_enviado      String?                    @db.VarChar(500)
+  origen_envio         String                     @default("ADMIN_PORTAL") @db.VarChar(50)
+  fecha_envio          DateTime                   @default(now()) @db.Timestamp(6)
+  enviado_por          Int?
+  ordenes_servicio     ordenes_servicio            @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+
+  @@index([id_orden_servicio, fecha_envio(sort: Desc)], map: "idx_historial_emails_orden_fecha")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -2855,4 +2874,9 @@ enum zona_geografica_enum {
   OCCIDENTE
   METROPOLITANA
   OTRA
+}
+
+enum estado_envio_email_enum {
+  EXITOSO
+  FALLIDO
 }

@@ -46,15 +46,6 @@ export class PrismaEquipoRepository {
           modificado_por: data.modificado_por,
           fecha_modificacion: new Date(),
         },
-        include: {
-          clientes: {
-            include: {
-              persona: true,
-            },
-          },
-          sedes_cliente: true,
-          tipos_equipo: true,
-        },
       });
     } else {
       // Create

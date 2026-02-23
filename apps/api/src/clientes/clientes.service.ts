@@ -8,6 +8,12 @@ export class ClientesService {
   constructor(private readonly prisma: PrismaService) { }
 
   async create(createDto: CreateClientesDto, userId: number) {
+    // ✅ MULTI-SEDE: toda sede debe pasar por flujo especializado
+    // para garantizar persona/dirección independiente.
+    if (createDto.id_cliente_principal) {
+      return this.createClienteSede(createDto, userId);
+    }
+
     // CASO 1: Viene persona anidada -> crear persona + cliente en transacción
     if (createDto.persona) {
       return this.createConPersonaNueva(createDto, userId);
@@ -60,10 +66,10 @@ export class ClientesService {
 
   /**
    * Crear cliente con persona nueva en una transacción atómica
-   * ✅ MULTI-SEDE: Si viene id_cliente_principal, reutiliza la persona del principal
+   * ✅ MULTI-SEDE: Si viene id_cliente_principal, usa flujo de sede con persona independiente
    */
   private async createConPersonaNueva(createDto: CreateClientesDto, userId: number) {
-    // ✅ MULTI-SEDE: Si es sede, reutilizar persona del principal
+    // ✅ MULTI-SEDE: Si es sede, delegar flujo especializado
     if (createDto.id_cliente_principal) {
       return this.createClienteSede(createDto, userId);
     }
@@ -151,7 +157,8 @@ export class ClientesService {
   }
 
   /**
-   * ✅ MULTI-SEDE: Crear cliente-sede reutilizando la persona del principal
+   * ✅ MULTI-SEDE: Crear cliente-sede heredando datos del principal,
+   * pero con persona propia para permitir dirección/contacto independientes.
    */
   private async createClienteSede(createDto: CreateClientesDto, userId: number) {
     const { id_cliente_principal, nombre_sede } = createDto;
@@ -174,14 +181,41 @@ export class ClientesService {
       throw new BadRequestException(`El cliente ${id_cliente_principal} no está marcado como cliente principal`);
     }
 
-    // Crear el cliente-sede reutilizando la misma persona del principal
+    // Crear persona propia para la sede (base heredada + overrides opcionales)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { persona: _, id_persona: __, ...clienteFields } = createDto;
+
+    const principalPersona = principal.persona;
+    const personaOverride = createDto.persona || {};
+
+    const personaSede = await this.prisma.personas.create({
+      data: {
+        tipo_identificacion: (personaOverride.tipo_identificacion as any) || principalPersona.tipo_identificacion,
+        numero_identificacion: personaOverride.numero_identificacion || principalPersona.numero_identificacion,
+        tipo_persona: (personaOverride.tipo_persona as any) || principalPersona.tipo_persona,
+        primer_nombre: personaOverride.primer_nombre ?? principalPersona.primer_nombre,
+        segundo_nombre: personaOverride.segundo_nombre ?? principalPersona.segundo_nombre,
+        primer_apellido: personaOverride.primer_apellido ?? principalPersona.primer_apellido,
+        segundo_apellido: personaOverride.segundo_apellido ?? principalPersona.segundo_apellido,
+        razon_social: personaOverride.razon_social ?? principalPersona.razon_social,
+        nombre_comercial: personaOverride.nombre_comercial ?? principalPersona.nombre_comercial,
+        representante_legal: personaOverride.representante_legal ?? principalPersona.representante_legal,
+        cedula_representante: personaOverride.cedula_representante ?? principalPersona.cedula_representante,
+        email_principal: personaOverride.email_principal ?? principalPersona.email_principal,
+        telefono_principal: personaOverride.telefono_principal ?? principalPersona.telefono_principal,
+        celular: personaOverride.celular ?? principalPersona.celular,
+        direccion_principal: personaOverride.direccion_principal ?? principalPersona.direccion_principal,
+        ciudad: personaOverride.ciudad || principalPersona.ciudad || 'CARTAGENA',
+        departamento: personaOverride.departamento ?? principalPersona.departamento,
+        pais: principalPersona.pais,
+        activo: principalPersona.activo ?? true,
+      },
+    });
 
     const nuevaSede = await this.prisma.clientes.create({
       data: {
         // Heredar datos del principal
-        id_persona: principal.id_persona,
+        id_persona: personaSede.id_persona,
         tipo_cliente: clienteFields.tipo_cliente || principal.tipo_cliente,
         periodicidad_mantenimiento: clienteFields.periodicidad_mantenimiento || principal.periodicidad_mantenimiento,
         id_firma_administrativa: clienteFields.id_firma_administrativa ?? principal.id_firma_administrativa,
@@ -216,6 +250,8 @@ export class ClientesService {
    * ✅ MULTI-SEDE: Listar clientes principales para selector de sedes
    */
   async findPrincipales(search?: string, limit: number = 20) {
+    const safeLimit = Math.min(Math.max(limit || 20, 1), 500);
+
     const where: any = {
       es_cliente_principal: true,
       cliente_activo: true,
@@ -266,7 +302,7 @@ export class ClientesService {
         requisitos_especiales: true,
         _count: { select: { sedes: true } },
       },
-      take: limit,
+      take: safeLimit,
       orderBy: { fecha_creacion: 'desc' },
     });
 
@@ -298,13 +334,17 @@ export class ClientesService {
    * Impacto: De ~2s a ~100ms en selectores de cliente
    * ✅ 31-ENE-2026: MULTI-ASESOR - Ahora soporta filtrado por asesor
    */
-  async findForSelector(search?: string, limit: number = 20, idAsesorAsignado?: number) {
+  async findForSelector(search?: string, limit: number = 100, idAsesorAsignado?: number) {
+    const safeLimit = Math.min(Math.max(limit || 100, 1), 500);
+
     const where: any = {
       cliente_activo: true,
       // ✅ MULTI-ASESOR: Filtrar por asesor si se especifica
       ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
       ...(search && {
         OR: [
+          { nombre_sede: { contains: search, mode: 'insensitive' } },
+          { codigo_cliente: { contains: search, mode: 'insensitive' } },
           { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
           { persona: { razon_social: { contains: search, mode: 'insensitive' } } },
           { persona: { nombre_completo: { contains: search, mode: 'insensitive' } } },
@@ -328,7 +368,7 @@ export class ClientesService {
           },
         },
       },
-      take: limit,
+      take: safeLimit,
       orderBy: { fecha_creacion: 'desc' },
     });
 
@@ -364,6 +404,7 @@ export class ClientesService {
       ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
       ...(search && {
         OR: [
+          { nombre_sede: { contains: search, mode: 'insensitive' } },
           { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
           { persona: { razon_social: { contains: search, mode: 'insensitive' } } },
           { persona: { numero_identificacion: { contains: search, mode: 'insensitive' } } },
@@ -463,31 +504,92 @@ export class ClientesService {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { persona, ...clienteData } = updateDto as any;
 
-    // ✅ FIX 02-FEB-2026: Actualizar datos de persona si se proporcionan
-    if (persona && clienteExistente.id_persona) {
-      await this.prisma.personas.update({
-        where: { id_persona: clienteExistente.id_persona },
+    const personaPayload = persona as Record<string, any> | undefined;
+    const hayCambiosPersona = !!personaPayload && Object.values(personaPayload).some((v) => v !== undefined);
+
+    return this.prisma.$transaction(async (tx) => {
+      let idPersonaDestino = clienteExistente.id_persona;
+
+      // ✅ FIX DIRECCIONES: si el cliente comparte persona con otros clientes (legacy),
+      // se desacopla en el primer update de contacto para evitar efectos colaterales.
+      if (hayCambiosPersona && clienteExistente.id_persona) {
+        const totalClientesConMismaPersona = await tx.clientes.count({
+          where: { id_persona: clienteExistente.id_persona },
+        });
+
+        if (totalClientesConMismaPersona > 1) {
+          const personaActual = await tx.personas.findUnique({
+            where: { id_persona: clienteExistente.id_persona },
+          });
+
+          if (!personaActual) {
+            throw new NotFoundException(`Persona con ID ${clienteExistente.id_persona} no existe`);
+          }
+
+          const personaClonada = await tx.personas.create({
+            data: {
+              tipo_identificacion: personaActual.tipo_identificacion,
+              numero_identificacion: personaActual.numero_identificacion,
+              tipo_persona: personaActual.tipo_persona,
+              primer_nombre: personaActual.primer_nombre,
+              segundo_nombre: personaActual.segundo_nombre,
+              primer_apellido: personaActual.primer_apellido,
+              segundo_apellido: personaActual.segundo_apellido,
+              nombre_completo: personaActual.nombre_completo,
+              razon_social: personaActual.razon_social,
+              nombre_comercial: personaActual.nombre_comercial,
+              representante_legal: personaActual.representante_legal,
+              cedula_representante: personaActual.cedula_representante,
+              email_principal: personaActual.email_principal,
+              telefono_principal: personaActual.telefono_principal,
+              telefono_secundario: personaActual.telefono_secundario,
+              celular: personaActual.celular,
+              direccion_principal: personaActual.direccion_principal,
+              barrio_zona: personaActual.barrio_zona,
+              ciudad: personaActual.ciudad,
+              departamento: personaActual.departamento,
+              pais: personaActual.pais,
+              fecha_nacimiento: personaActual.fecha_nacimiento,
+              es_cliente: personaActual.es_cliente,
+              es_proveedor: personaActual.es_proveedor,
+              es_empleado: personaActual.es_empleado,
+              es_contratista: personaActual.es_contratista,
+              ruta_foto: personaActual.ruta_foto,
+              observaciones: personaActual.observaciones,
+              activo: personaActual.activo ?? true,
+            },
+          });
+
+          idPersonaDestino = personaClonada.id_persona;
+        }
+      }
+
+      if (hayCambiosPersona && idPersonaDestino) {
+        await tx.personas.update({
+          where: { id_persona: idPersonaDestino },
+          data: {
+            ...(personaPayload!.email_principal !== undefined && { email_principal: personaPayload!.email_principal }),
+            ...(personaPayload!.telefono_principal !== undefined && { telefono_principal: personaPayload!.telefono_principal }),
+            ...(personaPayload!.celular !== undefined && { celular: personaPayload!.celular }),
+            ...(personaPayload!.direccion_principal !== undefined && { direccion_principal: personaPayload!.direccion_principal }),
+            ...(personaPayload!.ciudad !== undefined && { ciudad: personaPayload!.ciudad }),
+            ...(personaPayload!.departamento !== undefined && { departamento: personaPayload!.departamento }),
+          },
+        });
+      }
+
+      return tx.clientes.update({
+        where: { id_cliente: id },
         data: {
-          ...(persona.email_principal !== undefined && { email_principal: persona.email_principal }),
-          ...(persona.telefono_principal !== undefined && { telefono_principal: persona.telefono_principal }),
-          ...(persona.celular !== undefined && { celular: persona.celular }),
-          ...(persona.direccion_principal !== undefined && { direccion_principal: persona.direccion_principal }),
-          ...(persona.ciudad !== undefined && { ciudad: persona.ciudad }),
-          ...(persona.departamento !== undefined && { departamento: persona.departamento }),
+          ...clienteData,
+          ...(idPersonaDestino && idPersonaDestino !== clienteExistente.id_persona && { id_persona: idPersonaDestino }),
+          modificado_por: userId,
+          fecha_modificacion: new Date(),
+        },
+        include: {
+          persona: true,
         },
       });
-    }
-
-    return this.prisma.clientes.update({
-      where: { id_cliente: id },
-      data: {
-        ...clienteData,
-        modificado_por: userId,
-        fecha_modificacion: new Date(),
-      },
-      include: {
-        persona: true,
-      },
     });
   }
 

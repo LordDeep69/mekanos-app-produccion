@@ -29,7 +29,7 @@ import {
   ApiResponse,
   ApiTags
 } from '@nestjs/swagger';
-import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
 import { createHash } from 'crypto';
 import { Response } from 'express';
 import { EmailTemplatesService } from '../email/email-templates.service';
@@ -95,6 +95,11 @@ class EnviarPdfExistenteDto {
   @IsOptional()
   @IsBoolean()
   forzarRegeneracion?: boolean;
+
+  @ApiProperty({ description: 'Emails adicionales en CC', required: false, type: [String] })
+  @IsOptional()
+  @IsArray()
+  emailsCc?: string[];
 }
 
 @ApiTags('PDF')
@@ -254,6 +259,19 @@ export class PdfController {
     // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
     const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
     this.logger.log(`📦 Orden ${id}: esMultiEquipo=${esMultiEquipo}, equipos=${orden.ordenes_equipos?.length || 0}`);
+
+    // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor (bug histórico)
+    // Antes, orden_secuencia no se seteaba al crear → todos recibían default=1 → "EQ1" para todos
+    if (esMultiEquipo && orden.ordenes_equipos) {
+      const secuencias = orden.ordenes_equipos.map((oe: any) => oe.orden_secuencia);
+      const todasIguales = secuencias.every((s: number) => s === secuencias[0]);
+      if (todasIguales) {
+        this.logger.warn(`⚠️ Todas las orden_secuencia son ${secuencias[0]} - normalizando a 1,2,3...`);
+        orden.ordenes_equipos.forEach((oe: any, idx: number) => {
+          oe.orden_secuencia = idx + 1;
+        });
+      }
+    }
 
     // Construir datos para el PDF
     const clientePersona = orden.clientes?.persona;
@@ -1183,6 +1201,18 @@ export class PdfController {
     const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
     this.logger.log(`📊 Es multi-equipo: ${esMultiEquipo} (${orden.ordenes_equipos?.length || 0} equipos)`);
 
+    // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor (bug histórico)
+    if (esMultiEquipo && orden.ordenes_equipos) {
+      const secuencias = orden.ordenes_equipos.map((oe: any) => oe.orden_secuencia);
+      const todasIguales = secuencias.every((s: number) => s === secuencias[0]);
+      if (todasIguales) {
+        this.logger.warn(`⚠️ [enviarPdf] Normalizando orden_secuencia: todas eran ${secuencias[0]}`);
+        orden.ordenes_equipos.forEach((oe: any, idx: number) => {
+          oe.orden_secuencia = idx + 1;
+        });
+      }
+    }
+
     // Construir actividadesPorEquipo si es multi-equipo
     let actividadesPorEquipo: any[] | undefined;
     let medicionesPorEquipo: any[] | undefined;
@@ -1190,17 +1220,45 @@ export class PdfController {
 
     if (esMultiEquipo && orden.ordenes_equipos?.length > 0) {
       // Agrupar actividades por equipo
-      actividadesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
-        const actividadesEquipo = (orden.actividades_ejecutadas || [])
-          .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
-          .map((act: any) => ({
-            sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
-            descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
-            resultado: (act.estado as any) || 'NA',
-            observaciones: act.observaciones || '',
-          }));
+      const actividadesConEquipo = (orden.actividades_ejecutadas || [])
+        .filter((act: any) => act.id_orden_equipo != null);
+      const actividadesSinEquipo = (orden.actividades_ejecutadas || [])
+        .filter((act: any) => act.id_orden_equipo == null);
 
-        return {
+      if (actividadesConEquipo.length > 0) {
+        actividadesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
+          const actividadesEquipo = actividadesConEquipo
+            .filter((act: any) => act.id_orden_equipo === oe.id_orden_equipo)
+            .map((act: any) => ({
+              sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+              descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
+              resultado: (act.estado as any) || 'NA',
+              observaciones: act.observaciones || '',
+            }));
+
+          return {
+            equipo: {
+              idOrdenEquipo: oe.id_orden_equipo,
+              ordenSecuencia: oe.orden_secuencia || 1,
+              nombreSistema: oe.nombre_sistema || oe.equipos?.nombre_equipo || 'Equipo',
+              codigoEquipo: oe.equipos?.codigo_equipo,
+              nombreEquipo: oe.equipos?.nombre_equipo,
+            },
+            actividades: actividadesEquipo,
+          };
+        });
+      } else if (actividadesSinEquipo.length > 0) {
+        // ✅ FIX 14-FEB-2026: fallback para órdenes históricas sin id_orden_equipo en actividades
+        const actividadesUnicas = new Map<string, any[]>();
+        for (const act of actividadesSinEquipo) {
+          const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A';
+          if (!actividadesUnicas.has(key)) {
+            actividadesUnicas.set(key, []);
+          }
+          actividadesUnicas.get(key)!.push(act);
+        }
+
+        actividadesPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => ({
           equipo: {
             idOrdenEquipo: oe.id_orden_equipo,
             ordenSecuencia: oe.orden_secuencia || 1,
@@ -1208,30 +1266,72 @@ export class PdfController {
             codigoEquipo: oe.equipos?.codigo_equipo,
             nombreEquipo: oe.equipos?.nombre_equipo,
           },
-          actividades: actividadesEquipo,
-        };
-      });
+          actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
+            const actEquipo = acts[equipoIndex] || acts[0];
+            return {
+              sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+              descripcion,
+              resultado: (actEquipo.estado as any) || 'NA',
+              observaciones: actEquipo.observaciones || '',
+            };
+          }),
+        }));
+      }
 
       // Agrupar mediciones por equipo
-      medicionesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
-        const medicionesEquipo = (orden.mediciones_servicio || [])
-          .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
-          .map((med: any) => ({
-            parametro: med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
-            valor: Number(med.valor_numerico) || 0,
-            unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
-            nivelAlerta: (med.nivel_alerta as any) || 'OK',
-          }));
+      const medicionesConEquipo = (orden.mediciones_servicio || [])
+        .filter((med: any) => med.id_orden_equipo != null);
+      const medicionesSinEquipo = (orden.mediciones_servicio || [])
+        .filter((med: any) => med.id_orden_equipo == null);
 
-        return {
+      if (medicionesConEquipo.length > 0) {
+        medicionesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
+          const medicionesEquipo = medicionesConEquipo
+            .filter((med: any) => med.id_orden_equipo === oe.id_orden_equipo)
+            .map((med: any) => ({
+              parametro: med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
+              valor: Number(med.valor_numerico) || 0,
+              unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
+              nivelAlerta: (med.nivel_alerta as any) || 'OK',
+            }));
+
+          return {
+            equipo: {
+              idOrdenEquipo: oe.id_orden_equipo,
+              ordenSecuencia: oe.orden_secuencia || 1,
+              nombreSistema: oe.nombre_sistema || oe.equipos?.nombre_equipo || 'Equipo',
+            },
+            mediciones: medicionesEquipo,
+          };
+        });
+      } else if (medicionesSinEquipo.length > 0) {
+        // ✅ FIX 14-FEB-2026: fallback para órdenes históricas sin id_orden_equipo en mediciones
+        const medicionesUnicas = new Map<string, any[]>();
+        for (const med of medicionesSinEquipo) {
+          const key = med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A';
+          if (!medicionesUnicas.has(key)) {
+            medicionesUnicas.set(key, []);
+          }
+          medicionesUnicas.get(key)!.push(med);
+        }
+
+        medicionesPorEquipo = orden.ordenes_equipos.map((oe: any, equipoIndex: number) => ({
           equipo: {
             idOrdenEquipo: oe.id_orden_equipo,
             ordenSecuencia: oe.orden_secuencia || 1,
             nombreSistema: oe.nombre_sistema || oe.equipos?.nombre_equipo || 'Equipo',
           },
-          mediciones: medicionesEquipo,
-        };
-      });
+          mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
+            const medEquipo = meds[equipoIndex] || meds[0];
+            return {
+              parametro,
+              valor: Number(medEquipo.valor_numerico) || 0,
+              unidad: medEquipo.parametros_medicion?.unidad_medida || medEquipo.unidad_medida_snapshot || '',
+              nivelAlerta: (medEquipo.nivel_alerta as any) || 'OK',
+            };
+          }),
+        }));
+      }
 
       // Agrupar evidencias por equipo
       evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any) => {
@@ -1488,7 +1588,7 @@ export class PdfController {
         const idCuentaEmailRegen = orden.clientes?.id_cuenta_email_remitente || undefined;
         this.logger.log(`📧 [MULTI-EMAIL REGEN] Cliente id_cuenta_email_remitente: ${idCuentaEmailRegen ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`);
 
-        await this.emailService.sendEmailFromAccount({
+        const regenEmailResult = await this.emailService.sendEmailFromAccount({
           to: clienteEmail,
           subject: asunto,
           html: htmlTemplate,
@@ -1499,11 +1599,46 @@ export class PdfController {
           }],
         }, idCuentaEmailRegen);
 
-        emailEnviado = true;
-        this.logger.log(`✅ Email enviado exitosamente a ${clienteEmail}`);
+        emailEnviado = regenEmailResult.success;
+        this.logger.log(`${emailEnviado ? '✅' : '❌'} Email ${emailEnviado ? 'enviado' : 'fallido'} a ${clienteEmail}`);
+
+        // ✅ FIX 18-FEB-2026: Registrar historial de envío
+        try {
+          await this.prisma.historial_emails_enviados.create({
+            data: {
+              id_orden_servicio: idNumerico,
+              destinatario_to: clienteEmail,
+              asunto,
+              estado_envio: emailEnviado ? 'EXITOSO' : 'FALLIDO',
+              message_id: regenEmailResult.messageId || null,
+              mensaje_error: emailEnviado ? null : (regenEmailResult.error || 'Error desconocido'),
+              url_pdf_enviado: urlPdf || null,
+              origen_envio: 'ADMIN_PORTAL_REGENERAR',
+            },
+          });
+          this.logger.log(`📝 Historial de envío registrado (regenerar) para orden ${id}`);
+        } catch (histErr) {
+          this.logger.warn(`⚠️ Error registrando historial de envío: ${histErr}`);
+        }
       } catch (error) {
         this.logger.error(`❌ Error enviando email: ${error}`);
         this.logger.error(`   Stack: ${error instanceof Error ? error.stack : 'N/A'}`);
+
+        // ✅ FIX 18-FEB-2026: Registrar historial de envío FALLIDO (excepción)
+        try {
+          await this.prisma.historial_emails_enviados.create({
+            data: {
+              id_orden_servicio: idNumerico,
+              destinatario_to: clienteEmail || dto.emailDestino || 'desconocido',
+              asunto: asunto || `Informe de Mantenimiento - ${orden.numero_orden}`,
+              estado_envio: 'FALLIDO',
+              mensaje_error: error instanceof Error ? error.message : String(error),
+              origen_envio: 'ADMIN_PORTAL_REGENERAR',
+            },
+          });
+        } catch (histErr) {
+          this.logger.warn(`⚠️ Error registrando historial: ${histErr}`);
+        }
       }
     } else if (dto.enviarEmail && !clienteEmail) {
       this.logger.warn(`⚠️ No se puede enviar email: clienteEmail no disponible`);
@@ -1713,6 +1848,12 @@ export class PdfController {
         mensajePersonalizado: mensaje,
       });
 
+      // ✅ FIX 13-FEB-2026: Soporte CC para múltiples destinatarios
+      const ccEmails = dto.emailsCc?.filter(e => e && e.includes('@')) || [];
+      if (ccEmails.length > 0) {
+        this.logger.log(`📧 [CC] Emails adicionales: ${ccEmails.join(', ')}`);
+      }
+
       // ✅ MULTI-EMAIL: Usar cuenta específica del cliente si está configurada
       const emailResult = await this.emailService.sendEmailFromAccount({
         to: dto.emailDestino,
@@ -1723,18 +1864,59 @@ export class PdfController {
           content: pdfBuffer,
           contentType: 'application/pdf',
         }],
+        ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
       }, idCuentaEmailCliente ?? undefined);
 
+      const allDestinatarios = [dto.emailDestino, ...ccEmails];
       if (emailResult.success) {
-        this.logger.log(`✅ Email enviado exitosamente a ${dto.emailDestino}`);
+        this.logger.log(`✅ Email enviado exitosamente a ${allDestinatarios.join(', ')}`);
+
+        // ✅ FIX 18-FEB-2026: Registrar historial de envío EXITOSO
+        try {
+          await this.prisma.historial_emails_enviados.create({
+            data: {
+              id_orden_servicio: idNumerico,
+              destinatario_to: dto.emailDestino,
+              destinatarios_cc: ccEmails.length > 0 ? ccEmails.join(', ') : null,
+              asunto,
+              estado_envio: 'EXITOSO',
+              message_id: emailResult.messageId || null,
+              url_pdf_enviado: urlPdf || null,
+              origen_envio: 'ADMIN_PORTAL',
+            },
+          });
+          this.logger.log(`📝 Historial de envío registrado para orden ${id}`);
+        } catch (histErr) {
+          this.logger.warn(`⚠️ Error registrando historial de envío: ${histErr}`);
+        }
+
         return {
           success: true,
-          message: `Email enviado a ${dto.emailDestino} (PDF existente, sin regenerar)`,
+          message: `Email enviado a ${allDestinatarios.join(', ')} (PDF existente, sin regenerar)`,
           usoPdfExistente: true,
           urlPdf: urlPdf || undefined,
         };
       } else {
         this.logger.error(`❌ Error enviando email: ${emailResult.error}`);
+
+        // ✅ FIX 18-FEB-2026: Registrar historial de envío FALLIDO
+        try {
+          await this.prisma.historial_emails_enviados.create({
+            data: {
+              id_orden_servicio: idNumerico,
+              destinatario_to: dto.emailDestino,
+              destinatarios_cc: ccEmails.length > 0 ? ccEmails.join(', ') : null,
+              asunto,
+              estado_envio: 'FALLIDO',
+              mensaje_error: emailResult.error || 'Error desconocido',
+              url_pdf_enviado: urlPdf || null,
+              origen_envio: 'ADMIN_PORTAL',
+            },
+          });
+        } catch (histErr) {
+          this.logger.warn(`⚠️ Error registrando historial de envío fallido: ${histErr}`);
+        }
+
         return {
           success: false,
           message: 'Error enviando email',
@@ -1745,6 +1927,23 @@ export class PdfController {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Error en envío: ${errorMsg}`);
+
+      // ✅ FIX 18-FEB-2026: Registrar historial de envío FALLIDO (excepción)
+      try {
+        await this.prisma.historial_emails_enviados.create({
+          data: {
+            id_orden_servicio: idNumerico,
+            destinatario_to: dto.emailDestino,
+            asunto: dto.asuntoEmail || `Informe de Mantenimiento`,
+            estado_envio: 'FALLIDO',
+            mensaje_error: errorMsg,
+            origen_envio: 'ADMIN_PORTAL',
+          },
+        });
+      } catch (histErr) {
+        this.logger.warn(`⚠️ Error registrando historial: ${histErr}`);
+      }
+
       return {
         success: false,
         message: 'Error enviando email',

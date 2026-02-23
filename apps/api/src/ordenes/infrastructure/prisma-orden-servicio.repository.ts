@@ -147,9 +147,12 @@ export class PrismaOrdenServicioRepository {
 
       // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
       if (equiposIds && equiposIds.length > 0) {
-        const vinculaciones = equiposIds.map((id_equipo) => ({
+        // ✅ FIX 14-FEB-2026: Setear orden_secuencia correctamente (1, 2, 3, ...)
+        // Antes NO se seteaba y todos recibían el default=1, causando EQ1 para todos
+        const vinculaciones = equiposIds.map((id_equipo, index) => ({
           id_orden_servicio: savedOrden.id_orden_servicio,
           id_equipo,
+          orden_secuencia: index + 1,
           creado_por: orden.creado_por,
         }));
 
@@ -200,9 +203,11 @@ export class PrismaOrdenServicioRepository {
 
       // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
       if (equiposIds && equiposIds.length > 0) {
-        const vinculaciones = equiposIds.map((id_equipo) => ({
+        // ✅ FIX 14-FEB-2026: Setear orden_secuencia correctamente (1, 2, 3, ...)
+        const vinculaciones = equiposIds.map((id_equipo, index) => ({
           id_orden_servicio: savedOrden.id_orden_servicio,
           id_equipo,
+          orden_secuencia: index + 1,
           creado_por: orden.creado_por,
         }));
 
@@ -425,15 +430,17 @@ export class PrismaOrdenServicioRepository {
   }): Promise<{ items: any[]; total: number }> {
     const where: any = {};
 
-    // ✅ BÚSQUEDA: Filtro por texto libre (numero_orden, cliente, equipo)
+    // ✅ BÚSQUEDA: Filtro por texto libre (numero_orden, cliente, sede, equipo)
     if (filters?.busqueda) {
       const s = filters.busqueda.trim();
       where.OR = [
         { numero_orden: { contains: s, mode: 'insensitive' } },
         { descripcion_inicial: { contains: s, mode: 'insensitive' } },
+        { clientes: { nombre_sede: { contains: s, mode: 'insensitive' } } },
         { clientes: { persona: { nombre_comercial: { contains: s, mode: 'insensitive' } } } },
         { clientes: { persona: { razon_social: { contains: s, mode: 'insensitive' } } } },
         { clientes: { persona: { numero_identificacion: { contains: s, mode: 'insensitive' } } } },
+        { sedes_cliente: { nombre_sede: { contains: s, mode: 'insensitive' } } },
         { equipos: { codigo_equipo: { contains: s, mode: 'insensitive' } } },
         { equipos: { nombre_equipo: { contains: s, mode: 'insensitive' } } },
       ];

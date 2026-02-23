@@ -18,6 +18,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateEquipoCommand } from './commands/create-equipo.command';
 import { DeleteEquipoCommand } from './commands/delete-equipo.command';
+import { HardDeleteEquipoCommand } from './commands/hard-delete-equipo.command';
 import { UpdateEquipoCommand } from './commands/update-equipo.command';
 import { UserId } from './decorators/user-id.decorator';
 import { CreateEquipoCompletoDto } from './dto/create-equipo-completo.dto';
@@ -236,7 +237,7 @@ export class EquiposController {
 
   /**
    * DELETE /api/equipos/:id
-   * Eliminar un equipo
+   * Eliminar un equipo (soft delete - marca como inactivo)
    */
   @Delete(':id')
   async remove(
@@ -249,6 +250,31 @@ export class EquiposController {
     return {
       success: true,
       message: 'Equipo eliminado exitosamente'
+    };
+  }
+
+  /**
+   * DELETE /api/equipos/:id/hard-delete
+   * ⚠️ ELIMINACIÓN COMPLETA - Elimina permanentemente el equipo y TODOS sus datos relacionados
+   * Requiere confirmación explícita
+   */
+  @Delete(':id/hard-delete')
+  @ApiOperation({
+    summary: 'Eliminar completamente un equipo del sistema',
+    description: '⚠️ HARD DELETE: Elimina permanentemente el equipo y todos sus datos relacionados. ' +
+      'Solo funciona con equipos marcados como inactivos. Requiere confirmación explícita.'
+  })
+  async hardDelete(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('confirmacion') confirmacion: string,
+    @UserId() userId: number
+  ) {
+    const command = new HardDeleteEquipoCommand(id, userId, confirmacion);
+    await this.commandBus.execute(command);
+
+    return {
+      success: true,
+      message: 'Equipo eliminado completamente del sistema'
     };
   }
 

@@ -103,7 +103,7 @@ class SyncUploadService {
   /// [usuarioId] - ID del usuario/técnico que finaliza
   /// [emailAdicional] - Email opcional para enviar copia
   /// [razonFalla] - Opcional: Razón de la falla (solo para correctivos)
-  /// [modo] - Modo de finalización: 'COMPLETO' (PDF+email) o 'SOLO_DATOS' (solo sube datos)
+  /// [modo] - DEPRECADO: Siempre SOLO_DATOS. PDF y email se generan desde Admin Portal.
   Future<SyncUploadResult> finalizarOrden({
     required int idOrdenLocal,
     required int idOrdenBackend,
@@ -113,7 +113,7 @@ class SyncUploadService {
     required int usuarioId,
     String? emailAdicional,
     String? razonFalla,
-    String modo = 'COMPLETO',
+    String modo = 'SOLO_DATOS',
   }) async {
     try {
       // ✅ 19-DIC-2025: Iniciar progreso
@@ -451,8 +451,8 @@ class SyncUploadService {
         if (esMultiEquipo && medicionesPorEquipoPayload != null)
           'medicionesPorEquipo': medicionesPorEquipoPayload,
         'esMultiEquipo': esMultiEquipo,
-        // ✅ MODO CONFIGURABLE: 'COMPLETO' (PDF+email) o 'SOLO_DATOS'
-        'modo': modo,
+        // ✅ FIX 19-FEB-2026: SIEMPRE SOLO_DATOS - PDF y email desde Admin Portal
+        'modo': 'SOLO_DATOS',
       };
 
       debugPrint(
@@ -671,7 +671,7 @@ class SyncUploadService {
             'horaSalida': horaSalida,
             'usuarioId': usuarioId,
             if (razonFalla != null) 'razonFalla': razonFalla,
-            'modo': modo,
+            'modo': 'SOLO_DATOS',
           },
         );
         return SyncUploadResult(
@@ -803,12 +803,15 @@ class SyncUploadService {
       )..where((e) => e.codigo.equals('COMPLETADA'))).getSingleOrNull();
 
       // 1. Actualizar estado de la orden
+      // ✅ FIX 14-FEB-2026: También setear lastSyncedAt para que purga automática funcione
+      final ahora = DateTime.now();
       await (_db.update(
         _db.ordenes,
       )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
         OrdenesCompanion(
           isDirty: const Value(false),
-          fechaFin: Value(DateTime.now()),
+          fechaFin: Value(ahora),
+          lastSyncedAt: Value(ahora),
           idEstado: estadoCompletada != null
               ? Value(estadoCompletada.id)
               : const Value.absent(),
@@ -817,17 +820,27 @@ class SyncUploadService {
       );
 
       // 2. Marcar evidencias como subidas
+      // ✅ FIX 14-FEB-2026: Setear lastSyncedAt para purga automática de archivos
       await (_db.update(
         _db.evidencias,
       )..where((e) => e.idOrden.equals(idOrdenLocal))).write(
-        const EvidenciasCompanion(subida: Value(true), isDirty: Value(false)),
+        EvidenciasCompanion(
+          subida: const Value(true),
+          isDirty: const Value(false),
+          lastSyncedAt: Value(ahora),
+        ),
       );
 
       // 3. Marcar firmas como subidas
+      // ✅ FIX 14-FEB-2026: Setear lastSyncedAt para purga automática de archivos
       await (_db.update(
         _db.firmas,
       )..where((f) => f.idOrden.equals(idOrdenLocal))).write(
-        const FirmasCompanion(subida: Value(true), isDirty: Value(false)),
+        FirmasCompanion(
+          subida: const Value(true),
+          isDirty: const Value(false),
+          lastSyncedAt: Value(ahora),
+        ),
       );
     });
   }

@@ -79,6 +79,46 @@ export class OrdenesController {
     private readonly finalizacionService: FinalizacionOrdenService,
   ) { }
 
+  /**
+   * GET /api/ordenes/:id/emails/historial
+   * Obtiene historial de emails enviados de una orden
+   * FIX 18-FEB-2026 - DEBE IR ANTES DE @Get(':id') para routing correcto
+   */
+  @Get(':id/emails/historial')
+  @ApiOperation({
+    summary: 'Obtener historial de emails enviados',
+    description: 'Retorna el listado de todos los emails enviados para una orden, ordenados del más reciente al más antiguo.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: String })
+  @ApiResponse({ status: 200, description: 'Historial de emails obtenido exitosamente' })
+  async getHistorialEmailsFirst(@Param('id') id: string) {
+    console.log(`📧 [HISTORIAL-EMAILS] Solicitud recibida para orden: ${id}`);
+
+    const idNumerico = parseInt(id, 10);
+    if (isNaN(idNumerico)) {
+      console.error(`❌ [HISTORIAL-EMAILS] ID inválido: ${id}`);
+      throw new NotFoundException(`ID de orden inválido: ${id}`);
+    }
+
+    try {
+      console.log(`📧 [HISTORIAL-EMAILS] Buscando historial para orden ${idNumerico}...`);
+      const historial = await this.prisma.historial_emails_enviados.findMany({
+        where: { id_orden_servicio: idNumerico },
+        orderBy: { fecha_envio: 'desc' },
+      });
+
+      console.log(`✅ [HISTORIAL-EMAILS] Encontrados ${historial.length} registros para orden ${idNumerico}`);
+      return {
+        success: true,
+        historial,
+        total: historial.length,
+      };
+    } catch (error) {
+      console.error(`❌ [HISTORIAL-EMAILS] Error al buscar historial:`, error);
+      throw error;
+    }
+  }
+
   @Get(':id/plan-actividades')
   @UseGuards(JwtAuthGuard)
   async getPlanActividades(@Param('id', ParseIntPipe) id: number) {
@@ -1319,11 +1359,11 @@ export class OrdenesController {
       horaSalida: dto.horaSalida,
       emailAdicional: dto.emailAdicional,
       usuarioId: userId || 1, // Fallback si JWT no disponible
-      // ✅ MODO CONFIGURABLE: Pasar modo de finalización al servicio
-      modo: (dto.modo || 'COMPLETO') as 'COMPLETO' | 'SOLO_DATOS',
+      // ✅ FIX 19-FEB-2026: SIEMPRE SOLO_DATOS - PDF y email desde Admin Portal
+      modo: 'SOLO_DATOS' as 'COMPLETO' | 'SOLO_DATOS',
     };
 
-    // Ejecutar flujo completo de finalización
+    // Ejecutar flujo de finalización (solo datos, sin PDF ni email)
     const result = await this.finalizacionService.finalizarOrden(finalizarDto);
 
     return {
@@ -1431,11 +1471,11 @@ export class OrdenesController {
         horaSalida: dto.horaSalida,
         emailAdicional: dto.emailAdicional,
         usuarioId: userId || 1,
-        // ✅ MODO CONFIGURABLE: Pasar modo de finalización al servicio
-        modo: (dto.modo || 'COMPLETO') as 'COMPLETO' | 'SOLO_DATOS',
+        // ✅ FIX 19-FEB-2026: SIEMPRE SOLO_DATOS - PDF y email desde Admin Portal
+        modo: 'SOLO_DATOS' as 'COMPLETO' | 'SOLO_DATOS',
       };
 
-      // Ejecutar flujo completo con callback de progreso
+      // Ejecutar flujo de finalización con callback de progreso (solo datos)
       const result = await this.finalizacionService.finalizarOrden(
         finalizarDto,
         (event) => sendEvent(event), // Callback para emitir eventos SSE

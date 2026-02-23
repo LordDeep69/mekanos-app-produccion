@@ -866,7 +866,7 @@ export class SyncService {
       medicionesCriticas: medicionesCriticasMap.get(o.id_orden_servicio) || 0,
       // ✅ Multi-Equipos: Mapear equipos asociados (vacío = orden tradicional 1 equipo)
       ordenesEquipos: (() => {
-        const mapped = o.ordenes_equipos?.map((oe) => ({
+        const mapped = o.ordenes_equipos?.map((oe, idx) => ({
           idOrdenEquipo: oe.id_orden_equipo,
           idOrdenServicio: oe.id_orden_servicio,
           idEquipo: oe.id_equipo,
@@ -882,8 +882,13 @@ export class SyncService {
           // ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
           configParametros: oe.equipos?.config_parametros || undefined,
         })) || [];
-        // Log para diagnóstico de multi-equipos
+        // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos tienen el mismo valor
         if (mapped.length > 1) {
+          const secuencias = mapped.map(m => m.ordenSecuencia);
+          const todasIguales = secuencias.every(s => s === secuencias[0]);
+          if (todasIguales) {
+            mapped.forEach((m, idx) => { m.ordenSecuencia = idx + 1; });
+          }
           this.logger.log(`[🔧 MULTI-EQUIPO] Orden ${o.numero_orden} (ID ${o.id_orden_servicio}) tiene ${mapped.length} equipos`);
         }
         return mapped;
@@ -1330,21 +1335,29 @@ export class SyncService {
       fechaCreacion: orden.fecha_creacion?.toISOString() || new Date().toISOString(),
       fechaModificacion: orden.fecha_modificacion?.toISOString(),
       // ✅ FIX 28-ENE-2026: Incluir ordenesEquipos para multi-equipos
-      ordenesEquipos: orden.ordenes_equipos?.map((oe) => ({
-        idOrdenEquipo: oe.id_orden_equipo,
-        idOrdenServicio: oe.id_orden_servicio,
-        idEquipo: oe.id_equipo,
-        ordenSecuencia: oe.orden_secuencia,
-        nombreSistema: oe.nombre_sistema || undefined,
-        estado: oe.estado || 'PENDIENTE',
-        fechaInicio: oe.fecha_inicio?.toISOString(),
-        fechaFin: oe.fecha_fin?.toISOString(),
-        observaciones: oe.observaciones || undefined,
-        codigoEquipo: oe.equipos?.codigo_equipo || '',
-        nombreEquipo: oe.equipos?.nombre_equipo || '',
-        ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-        configParametros: oe.equipos?.config_parametros || undefined,
-      })) || [],
+      ordenesEquipos: (() => {
+        const mapped = orden.ordenes_equipos?.map((oe) => ({
+          idOrdenEquipo: oe.id_orden_equipo,
+          idOrdenServicio: oe.id_orden_servicio,
+          idEquipo: oe.id_equipo,
+          ordenSecuencia: oe.orden_secuencia,
+          nombreSistema: oe.nombre_sistema || undefined,
+          estado: oe.estado || 'PENDIENTE',
+          fechaInicio: oe.fecha_inicio?.toISOString(),
+          fechaFin: oe.fecha_fin?.toISOString(),
+          observaciones: oe.observaciones || undefined,
+          codigoEquipo: oe.equipos?.codigo_equipo || '',
+          nombreEquipo: oe.equipos?.nombre_equipo || '',
+          ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
+          configParametros: oe.equipos?.config_parametros || undefined,
+        })) || [];
+        // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos iguales
+        if (mapped.length > 1) {
+          const allSame = mapped.every(m => m.ordenSecuencia === mapped[0].ordenSecuencia);
+          if (allSame) mapped.forEach((m, i) => { m.ordenSecuencia = i + 1; });
+        }
+        return mapped;
+      })(),
     };
   }
 }

@@ -13,6 +13,7 @@ export {
     useCambiarEstadoEquipo,
     useClientesParaSelect,
     useCrearEquipo,
+    useEliminarEquipoCompletamente,
     useEquipo,
     useEquipos,
     useRegistrarLecturaHorometro

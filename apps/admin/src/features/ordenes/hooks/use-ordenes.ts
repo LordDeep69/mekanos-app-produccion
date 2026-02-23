@@ -26,6 +26,7 @@ import {
     getActividadesOrden,
     getEvidenciasOrden,
     getFirmasOrden,
+    getHistorialEmails,
     getMedicionesOrden,
     getOrden,
     getOrdenes,
@@ -50,6 +51,7 @@ const ACTIVIDADES_ORDEN_KEY = ['ordenes', 'actividades'];
 const MEDICIONES_ORDEN_KEY = ['ordenes', 'mediciones'];
 const EVIDENCIAS_ORDEN_KEY = ['ordenes', 'evidencias'];
 const FIRMAS_ORDEN_KEY = ['ordenes', 'firmas'];
+const HISTORIAL_EMAILS_KEY = ['ordenes', 'historial-emails'];
 
 // ... (existing hooks) ...
 
@@ -403,5 +405,18 @@ export function useUpdateHorariosServicio() {
             const errorText = Array.isArray(message) ? message.join(', ') : message;
             toast.error(errorText || 'Error al actualizar horarios de servicio');
         },
+    });
+}
+
+/**
+ * Hook para obtener historial de emails enviados de una orden
+ * FIX 18-FEB-2026
+ */
+export function useHistorialEmails(idOrden: number) {
+    return useQuery({
+        queryKey: [...HISTORIAL_EMAILS_KEY, idOrden],
+        queryFn: () => getHistorialEmails(idOrden),
+        enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC,
     });
 }

@@ -551,7 +551,22 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
     }
   });
 
-  const { setValue, register, formState: { errors }, control, trigger, handleSubmit } = form;
+  // Get form methods
+  const { watch, setValue, getValues, register, formState: { errors }, control, trigger, handleSubmit } = form;
+
+  // Set default location based on equipment type
+  useEffect(() => {
+    const subscription = watch((value, { name }) => {
+      // Only update if the field is empty and we're changing the equipment type
+      if (name === 'tipo' && !getValues('datosEquipo.ubicacion_texto')) {
+        const defaultLocation = value.tipo === 'GENERADOR'
+          ? 'CUARTO DE MÁQUINAS'
+          : 'CUARTO DE BOMBAS';
+        setValue('datosEquipo.ubicacion_texto', defaultLocation);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, setValue, getValues]);
 
   const nextStep = async (step: number) => {
     // Validar campos del paso actual antes de avanzar

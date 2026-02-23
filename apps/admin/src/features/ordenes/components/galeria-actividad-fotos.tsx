@@ -216,13 +216,17 @@ export function GaleriaActividadFotos({
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // ✅ FIX 09-FEB-2026: Usar apiClient (con interceptor auth) en vez de fetch directo
-    // Obtener evidencias de esta actividad/medición
+    // ✅ FIX 13-FEB-2026: Merge ambas fuentes (endpoint actividad + orden) para no perder fotos
+    // Las fotos de mobile pueden no tener id_actividad_ejecutada (usan descripción),
+    // mientras que las fotos subidas desde admin SÍ lo tienen. Debemos combinar ambas.
     const { data: evidenciasData, isLoading } = useQuery({
         queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada, nombreActividad, filtroDescripcion],
         queryFn: async () => {
             try {
-                // 1. Si hay idActividadEjecutada, intentar endpoint específico
+                const seenIds = new Set<number>();
+                const merged: any[] = [];
+
+                // 1. Obtener evidencias por id_actividad_ejecutada (endpoint específico)
                 if (idActividadEjecutada) {
                     try {
                         const res = await apiClient.get(
@@ -230,50 +234,61 @@ export function GaleriaActividadFotos({
                         );
                         const data = res.data;
                         const evidencias = Array.isArray(data) ? data : (data.data || []);
-                        if (evidencias.length > 0) {
-                            return { data: evidencias };
+                        for (const ev of evidencias) {
+                            const evId = ev.id_evidencia ?? ev.idEvidencia ?? 0;
+                            if (evId && !seenIds.has(evId)) {
+                                seenIds.add(evId);
+                                merged.push(ev);
+                            }
                         }
                     } catch (err: any) {
-                        // 404 o error específico → fallback a buscar por orden
                         if (err?.response?.status !== 404) {
                             console.warn('[GaleriaFotos] Error endpoint actividad:', err?.response?.status);
                         }
                     }
                 }
 
-                // 2. Fallback: buscar todas las evidencias de la orden y filtrar
+                // 2. SIEMPRE buscar por orden y filtrar por descripción (para fotos mobile sin id_actividad)
                 const res2 = await apiClient.get(
                     `/evidencias-fotograficas/orden/${idOrdenServicio}`
                 );
                 const allData = res2.data;
                 const todasEvidencias = Array.isArray(allData) ? allData : (allData.data || []);
 
-                // Filtrar por id_actividad_ejecutada o por descripción
                 const nombreNormalizado = nombreActividad.toLowerCase().trim();
                 const filtroNormalizado = (filtroDescripcion || '').toLowerCase().trim();
 
-                const filtered = todasEvidencias.filter((e: any) => {
-                    // Coincidencia por id
+                for (const e of todasEvidencias) {
+                    const evId = e.id_evidencia ?? e.idEvidencia ?? 0;
+                    if (evId && seenIds.has(evId)) continue; // ya agregada
+
+                    // Coincidencia por id_actividad_ejecutada
                     if (idActividadEjecutada && (e.idActividadEjecutada === idActividadEjecutada ||
                         e.id_actividad_ejecutada === idActividadEjecutada)) {
-                        return true;
+                        seenIds.add(evId);
+                        merged.push(e);
+                        continue;
                     }
                     // Coincidencia por descripción (nombre de actividad o filtro)
                     const desc = (e.descripcion || e.description || '').toLowerCase();
                     if (filtroNormalizado && desc.includes(filtroNormalizado)) {
-                        return true;
+                        seenIds.add(evId);
+                        merged.push(e);
+                        continue;
                     }
                     if (desc && nombreNormalizado && desc.includes(nombreNormalizado)) {
-                        return true;
+                        seenIds.add(evId);
+                        merged.push(e);
+                        continue;
                     }
                     // Coincidencia inversa
                     if (desc && nombreNormalizado && nombreNormalizado.includes(desc) && desc.length > 5) {
-                        return true;
+                        seenIds.add(evId);
+                        merged.push(e);
                     }
-                    return false;
-                });
+                }
 
-                return { data: filtered };
+                return { data: merged };
             } catch (err) {
                 console.error('[GaleriaFotos] Error cargando evidencias:', err);
                 return { data: [] };
@@ -300,8 +315,9 @@ export function GaleriaActividadFotos({
             return res.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad', idActividadEjecutada] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada] });
             queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+            queryClient.invalidateQueries({ queryKey: ['ordenes', 'evidencias'] });
             toast.success('Evidencia eliminada');
         },
         onError: () => {

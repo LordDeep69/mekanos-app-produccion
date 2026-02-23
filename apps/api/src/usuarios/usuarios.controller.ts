@@ -107,6 +107,11 @@ export class UsuariosController {
     return this.usuariosService.findOne(id);
   }
 
+  @Get(':id/password-preview')
+  getPasswordPreview(@Param('id', ParseIntPipe) id: number) {
+    return this.usuariosService.getPasswordPreview(id);
+  }
+
   @Put(':id')
   update(
     @Param('id', ParseIntPipe) id: number,

@@ -850,12 +850,15 @@ class OfflineSyncService {
       )..where((e) => e.codigo.equals('COMPLETADA'))).getSingleOrNull();
 
       // 1. Actualizar estado de la orden
+      // ✅ FIX 14-FEB-2026: También setear lastSyncedAt para que purga automática funcione
+      final ahora = DateTime.now();
       await (_db.update(
         _db.ordenes,
       )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
         OrdenesCompanion(
           isDirty: const Value(false),
-          fechaFin: Value(DateTime.now()),
+          fechaFin: Value(ahora),
+          lastSyncedAt: Value(ahora),
           idEstado: estadoCompletada != null
               ? Value(estadoCompletada.id)
               : const Value.absent(),
@@ -864,17 +867,27 @@ class OfflineSyncService {
       );
 
       // 2. Marcar evidencias como subidas
+      // ✅ FIX 14-FEB-2026: Setear lastSyncedAt para purga automática de archivos
       await (_db.update(
         _db.evidencias,
       )..where((e) => e.idOrden.equals(idOrdenLocal))).write(
-        const EvidenciasCompanion(subida: Value(true), isDirty: Value(false)),
+        EvidenciasCompanion(
+          subida: const Value(true),
+          isDirty: const Value(false),
+          lastSyncedAt: Value(ahora),
+        ),
       );
 
       // 3. Marcar firmas como subidas
+      // ✅ FIX 14-FEB-2026: Setear lastSyncedAt para purga automática de archivos
       await (_db.update(
         _db.firmas,
       )..where((f) => f.idOrden.equals(idOrdenLocal))).write(
-        const FirmasCompanion(subida: Value(true), isDirty: Value(false)),
+        FirmasCompanion(
+          subida: const Value(true),
+          isDirty: const Value(false),
+          lastSyncedAt: Value(ahora),
+        ),
       );
     });
   }

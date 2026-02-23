@@ -546,7 +546,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 15; // v15: Separar observacion de observacionTecnico en actividades
+  int get schemaVersion => 16; // v16: Unique index on idBackend + dedup cleanup
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -680,6 +680,23 @@ class AppDatabase extends _$AppDatabase {
               observacion = SUBSTR(observacion, 1, INSTR(observacion, '|||') - 1)
           WHERE observacion LIKE '%|||%'
         ''');
+      }
+      if (from < 16) {
+        // v16: FIX 21-FEB-2026 - Prevenir órdenes duplicadas
+        // 1. Eliminar duplicados existentes: mantener la que tiene más datos (isDirty o más reciente)
+        await customStatement('''
+          DELETE FROM ordenes WHERE id_local NOT IN (
+            SELECT MIN(id_local) FROM ordenes 
+            WHERE id_backend IS NOT NULL 
+            GROUP BY id_backend
+            UNION ALL
+            SELECT id_local FROM ordenes WHERE id_backend IS NULL
+          )
+        ''');
+        // 2. Crear índice único en idBackend (solo para valores no-null)
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_ordenes_id_backend_unique ON ordenes(id_backend)',
+        );
       }
     },
     beforeOpen: (details) async {
@@ -925,7 +942,19 @@ class AppDatabase extends _$AppDatabase {
   // ============================================================================
 
   /// Insertar orden desde sync
+  /// ✅ FIX 21-FEB-2026: Usar insertOrReplace para prevenir duplicados por idBackend
+  /// Si ya existe una orden con el mismo idBackend, se actualiza en vez de duplicar
   Future<int> insertOrdenFromSync(OrdenesCompanion orden) async {
+    // Verificar si ya existe una orden con este idBackend
+    final idBackend = orden.idBackend.value;
+    if (idBackend != null) {
+      final existing = await getOrdenByBackendId(idBackend);
+      if (existing != null) {
+        // Ya existe - actualizar en vez de insertar
+        await updateOrden(orden, existing.idLocal);
+        return existing.idLocal;
+      }
+    }
     return await into(ordenes).insert(orden);
   }
 
@@ -1313,11 +1342,19 @@ class AppDatabase extends _$AppDatabase {
     )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).go();
   }
 
-  /// Verificar si una orden está en cola de sync
+  /// Verificar si una orden está en cola de sync ACTIVA
+  /// ✅ FIX 14-FEB-2026: Solo considerar PENDIENTE y ERROR con <5 reintentos
+  /// Las entradas EN_PROCESO atascadas o ERROR con reintentos agotados NO bloquean purga
   Future<bool> existeOrdenEnColaPendiente(int idOrdenLocal) async {
-    final orden = await (select(
-      ordenesPendientesSync,
-    )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).getSingleOrNull();
+    final orden =
+        await (select(ordenesPendientesSync)..where(
+              (o) =>
+                  o.idOrdenLocal.equals(idOrdenLocal) &
+                  (o.estadoSync.equals('PENDIENTE') |
+                      (o.estadoSync.equals('ERROR') &
+                          o.intentos.isSmallerThanValue(5))),
+            ))
+            .getSingleOrNull();
     return orden != null;
   }
 

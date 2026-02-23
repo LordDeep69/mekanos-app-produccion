@@ -38,6 +38,7 @@ import {
     Loader2,
     MapPin,
     Plus,
+    Search,
     Settings,
     User,
     Wrench,
@@ -137,12 +138,26 @@ function PasoContexto({
     data: WizardData;
     onChange: (updates: Partial<WizardData>) => void;
 }) {
-    const { clientes, sedes, equipos, isLoadingClientes, isLoadingSedes, isLoadingEquipos } =
-        useCascadaClienteEquipo(data.clienteId, data.sedeId);
+    const [busquedaCliente, setBusquedaCliente] = useState('');
+    const [busquedaEquipo, setBusquedaEquipo] = useState('');
 
-    const equiposDisponibles = equipos.filter(
-        (e) => !data.equiposSeleccionados.some((sel) => sel.id_equipo === e.id_equipo)
-    );
+    const { clientes, sedes, equipos, isLoadingClientes, isFetchingClientes, isLoadingSedes, isLoadingEquipos } =
+        useCascadaClienteEquipo(data.clienteId, data.sedeId, busquedaCliente);
+
+    const equiposDisponibles = equipos
+        .filter((e) => !data.equiposSeleccionados.some((sel) => sel.id_equipo === e.id_equipo))
+        .filter((e) => {
+            if (!busquedaEquipo.trim()) return true;
+            const searchTerm = busquedaEquipo.toLowerCase();
+            return (
+                e.nombre_equipo?.toLowerCase().includes(searchTerm) ||
+                e.codigo_equipo?.toLowerCase().includes(searchTerm) ||
+                e.tipos_equipo?.nombre_tipo?.toLowerCase().includes(searchTerm) ||
+                e.marca?.toLowerCase().includes(searchTerm) ||
+                e.modelo?.toLowerCase().includes(searchTerm) ||
+                e.serie?.toLowerCase().includes(searchTerm)
+            );
+        });
 
     const agregarEquipo = (equipo: EquipoSelector) => {
         onChange({
@@ -195,8 +210,11 @@ function PasoContexto({
                             renderIcon={() => <Building2 className="h-5 w-5" />}
                             getId={(c) => c.id_cliente}
                             isLoading={isLoadingClientes}
-                            emptyMessage="No hay clientes activos"
+                            isFetching={isFetchingClientes}
+                            emptyMessage={busquedaCliente ? 'No se encontraron clientes con ese criterio' : 'No hay clientes activos'}
                             searchPlaceholder="Buscar cliente..."
+                            debounceMs={0}
+                            onSearchChange={setBusquedaCliente}
                         />
                     </div>
 
@@ -236,6 +254,18 @@ function PasoContexto({
                         </div>
                     ) : (
                         <div className="space-y-4">
+                            {/* Search input for equipment */}
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar equipos por nombre, código, tipo o marca..."
+                                    value={busquedaEquipo}
+                                    onChange={(e) => setBusquedaEquipo(e.target.value)}
+                                    className="w-full pl-4 pr-10 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm"
+                                />
+                                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            </div>
+
                             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                                 {isLoadingEquipos ? (
                                     <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
@@ -244,8 +274,8 @@ function PasoContexto({
                                 ) : (
                                     equiposDisponibles.map((e) => (
                                         <button key={e.id_equipo} onClick={() => agregarEquipo(e)} className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-blue-200 transition-all text-left bg-white shadow-sm">
-                                            <div className="min-w-0">
-                                                <p className="font-bold text-slate-700 text-sm truncate">{getEquipoLabel(e)}</p>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-bold text-slate-700 text-sm break-words">{getEquipoLabel(e)}</p>
                                                 <p className="text-[10px] text-slate-400 uppercase font-bold">{e.tipos_equipo?.nombre_tipo}</p>
                                             </div>
                                             <Plus className="h-4 w-4 text-blue-500" />
@@ -258,8 +288,8 @@ function PasoContexto({
                                 <div className="space-y-2 pt-4 border-t">
                                     {data.equiposSeleccionados.map((e) => (
                                         <div key={e.id_equipo} className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-100">
-                                            <div className="min-w-0">
-                                                <p className="font-bold text-blue-900 text-sm truncate">{getEquipoLabel(e)}</p>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-bold text-blue-900 text-sm break-words">{getEquipoLabel(e)}</p>
                                                 <p className="text-[10px] text-blue-600 uppercase font-bold">{e.tipos_equipo?.nombre_tipo}</p>
                                             </div>
                                             <button onClick={() => quitarEquipo(e.id_equipo)} className="p-1 text-blue-400 hover:text-red-500"><X className="h-4 w-4" /></button>
