@@ -674,20 +674,51 @@ export class PdfController {
         }
       }
 
-      // ✅ PRIORIDAD 2: Si no se detectó, intentar desde ordenes_equipos (multi-equipo)
-      if (!tipoEquipoNombre && esMultiEquipo && orden.ordenes_equipos?.length > 0) {
+      // ✅ PRIORIDAD 2: Intentar desde ordenes_equipos (cualquier equipo vinculado)
+      if (!tipoEquipoNombre && orden.ordenes_equipos?.length > 0) {
         const primerEquipo = orden.ordenes_equipos[0]?.equipos;
         tipoEquipoNombre = primerEquipo?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (multi): ${tipoEquipoNombre}`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo (ordenes_equipos): ${tipoEquipoNombre}`);
         }
       }
 
-      // ✅ PRIORIDAD 3: Si aún no se detectó, intentar desde equipo principal
+      // ✅ PRIORIDAD 3: Intentar desde equipo principal (id_equipo directo)
       if (!tipoEquipoNombre) {
         tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
           this.logger.log(`📊 DEBUG PDF - Tipo equipo (principal): ${tipoEquipoNombre}`);
+        }
+      }
+
+      // ✅ PRIORIDAD 4: Intentar desde codigo_tipo del servicio (CORR_BOM, PREV_A_GEN, etc.)
+      if (!tipoEquipoNombre) {
+        const codTipo = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
+        const nomTipo = (orden.tipos_servicio?.nombre_tipo || '').toUpperCase();
+        if (codTipo.includes('BOM') || nomTipo.includes('BOMBA')) {
+          tipoEquipoNombre = 'BOMBA';
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo (servicio): BOMBA`);
+        } else if (codTipo.includes('MOT') || nomTipo.includes('MOTOR')) {
+          tipoEquipoNombre = 'MOTOR';
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo (servicio): MOTOR`);
+        } else if (codTipo.includes('GEN') || nomTipo.includes('GENERADOR')) {
+          tipoEquipoNombre = 'GENERADOR';
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo (servicio): GENERADOR`);
+        }
+      }
+
+      // ✅ PRIORIDAD 5: Intentar desde la marca/nombre del equipo (último recurso)
+      if (!tipoEquipoNombre && datosOrden.marcaEquipo) {
+        const marcaUpper = datosOrden.marcaEquipo.toUpperCase();
+        if (marcaUpper.includes('BOMBA')) {
+          tipoEquipoNombre = 'BOMBA';
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo (marca): BOMBA`);
+        } else if (marcaUpper.includes('MOTOR')) {
+          tipoEquipoNombre = 'MOTOR';
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo (marca): MOTOR`);
+        } else if (marcaUpper.includes('GENERADOR')) {
+          tipoEquipoNombre = 'GENERADOR';
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo (marca): GENERADOR`);
         }
       }
 
@@ -1484,21 +1515,39 @@ export class PdfController {
       cargoCliente: orden.cargo_quien_recibe || 'Cliente / Autorizador',
     };
 
-    // ✅ FIX 24-FEB-2026: Detectar tipoEquipo real y corregir datosOrden.tipoEquipo
+    // ✅ FIX 24-FEB-2026 (v2): Detectar tipoEquipo real y corregir datosOrden.tipoEquipo
     // para que el header del template correctivo muestre BOMBA/MOTOR en vez de GENERADOR
     {
       let tipoEquipoNombre: string | undefined = undefined;
+      // P1: Número de orden
       if (orden.numero_orden) {
         const numOrden = orden.numero_orden.toUpperCase();
         if (numOrden.includes('BOM')) tipoEquipoNombre = 'BOMBA';
         else if (numOrden.includes('GEN')) tipoEquipoNombre = 'GENERADOR';
         else if (numOrden.includes('MOT')) tipoEquipoNombre = 'MOTOR';
       }
-      if (!tipoEquipoNombre && esMultiEquipo && orden.ordenes_equipos?.length > 0) {
+      // P2: ordenes_equipos (cualquier equipo vinculado)
+      if (!tipoEquipoNombre && orden.ordenes_equipos?.length > 0) {
         tipoEquipoNombre = orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre;
       }
+      // P3: Equipo principal
       if (!tipoEquipoNombre) {
         tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre;
+      }
+      // P4: tipos_servicio codigo/nombre
+      if (!tipoEquipoNombre) {
+        const codTipo2 = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
+        const nomTipo2 = (orden.tipos_servicio?.nombre_tipo || '').toUpperCase();
+        if (codTipo2.includes('BOM') || nomTipo2.includes('BOMBA')) tipoEquipoNombre = 'BOMBA';
+        else if (codTipo2.includes('MOT') || nomTipo2.includes('MOTOR')) tipoEquipoNombre = 'MOTOR';
+        else if (codTipo2.includes('GEN') || nomTipo2.includes('GENERADOR')) tipoEquipoNombre = 'GENERADOR';
+      }
+      // P5: marcaEquipo (último recurso)
+      if (!tipoEquipoNombre && datosOrden.marcaEquipo) {
+        const marcaUpper = datosOrden.marcaEquipo.toUpperCase();
+        if (marcaUpper.includes('BOMBA')) tipoEquipoNombre = 'BOMBA';
+        else if (marcaUpper.includes('MOTOR')) tipoEquipoNombre = 'MOTOR';
+        else if (marcaUpper.includes('GENERADOR')) tipoEquipoNombre = 'GENERADOR';
       }
       if (tipoEquipoNombre) {
         datosOrden.tipoEquipo = this.mapTipoEquipo(tipoEquipoNombre);
