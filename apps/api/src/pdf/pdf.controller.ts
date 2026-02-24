@@ -703,6 +703,13 @@ export class PdfController {
 
       this.logger.log(`📊 DEBUG PDF - tipoServicioReal: ${tipoServicioReal} (codigo=${codigoServicio}, categoria=${categoriaServicio})`);
 
+      // ✅ FIX 24-FEB-2026: Sincronizar tipoEquipo en datosOrden para que el header
+      // del template correctivo muestre BOMBA/MOTOR en vez de GENERADOR por defecto
+      if (tipoEquipoNombre) {
+        datosOrden.tipoEquipo = this.mapTipoEquipo(tipoEquipoNombre);
+        this.logger.log(`📊 DEBUG PDF - tipoEquipo corregido a: ${datosOrden.tipoEquipo}`);
+      }
+
       // Determinar tipo de informe final
       if (tipoEquipoNombre) {
         tipo = this.pdfService.determinarTipoInforme(
@@ -1476,6 +1483,28 @@ export class PdfController {
             : orden.nombre_quien_recibe || undefined,
       cargoCliente: orden.cargo_quien_recibe || 'Cliente / Autorizador',
     };
+
+    // ✅ FIX 24-FEB-2026: Detectar tipoEquipo real y corregir datosOrden.tipoEquipo
+    // para que el header del template correctivo muestre BOMBA/MOTOR en vez de GENERADOR
+    {
+      let tipoEquipoNombre: string | undefined = undefined;
+      if (orden.numero_orden) {
+        const numOrden = orden.numero_orden.toUpperCase();
+        if (numOrden.includes('BOM')) tipoEquipoNombre = 'BOMBA';
+        else if (numOrden.includes('GEN')) tipoEquipoNombre = 'GENERADOR';
+        else if (numOrden.includes('MOT')) tipoEquipoNombre = 'MOTOR';
+      }
+      if (!tipoEquipoNombre && esMultiEquipo && orden.ordenes_equipos?.length > 0) {
+        tipoEquipoNombre = orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre;
+      }
+      if (!tipoEquipoNombre) {
+        tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre;
+      }
+      if (tipoEquipoNombre) {
+        datosOrden.tipoEquipo = this.mapTipoEquipo(tipoEquipoNombre);
+        this.logger.log(`📊 DEBUG PDF REGEN - tipoEquipo corregido a: ${datosOrden.tipoEquipo}`);
+      }
+    }
 
     // ✅ FIX 15-ENE-2026: Determinar tipo de informe basado en tipos_servicio.codigo_tipo
     let tipoInforme: TipoInforme = 'GENERADOR_A';
