@@ -51,7 +51,7 @@ import {
 } from '@/types/clientes';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, Link, Loader2, Mail, Save, Star, User } from 'lucide-react';
+import { ArrowLeft, Building2, Link, Loader2, Mail, Plus, Save, Star, Trash2, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
