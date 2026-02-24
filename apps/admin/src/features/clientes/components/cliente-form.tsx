@@ -125,6 +125,9 @@ const clienteFormSchema = z.object({
   // ✅ MULTI-EMAIL: Cuenta de email para envío de informes
   id_cuenta_email_remitente: z.number().nullable().optional(),
 
+  // ✅ 24-FEB-2026: Multi-email - Correos adicionales separados por ';;'
+  emails_notificacion: z.string().optional(),
+
   // ✅ MULTI-SEDE (09-Feb-2026)
   es_cliente_principal: z.boolean().optional(),
   id_cliente_principal: z.number().nullable().optional(),
@@ -195,6 +198,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
       tiene_acceso_portal: false,
       observaciones_servicio: '',
       requisitos_especiales: '',
+      emails_notificacion: '',
       id_firma_administrativa: null,
       id_asesor_asignado: null,
       id_cuenta_email_remitente: null,
@@ -304,6 +308,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         tiene_acceso_portal: cliente.tiene_acceso_portal ?? false,
         observaciones_servicio: cliente.observaciones_servicio ?? '',
         requisitos_especiales: cliente.requisitos_especiales ?? '',
+        emails_notificacion: (cliente as any).emails_notificacion ?? '',
         id_firma_administrativa: cliente.id_firma_administrativa ?? null,
         id_asesor_asignado: cliente.id_asesor_asignado ?? null,
         id_cuenta_email_remitente: (cliente as any).id_cuenta_email_remitente ?? null,
@@ -388,6 +393,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           id_firma_administrativa: values.id_firma_administrativa ?? undefined,
           id_asesor_asignado: values.id_asesor_asignado ?? undefined,
           id_cuenta_email_remitente: values.id_cuenta_email_remitente ?? undefined,
+          emails_notificacion: values.emails_notificacion || undefined,
           // ✅ Datos de persona editables (contacto)
           persona: {
             email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
@@ -902,6 +908,42 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 )}
               />
             </div>
+
+            {/* ✅ 24-FEB-2026: Correos adicionales de notificación */}
+            <FormField
+              control={form.control}
+              name="emails_notificacion"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-blue-500" />
+                    Correos Adicionales de Notificación
+                  </FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Ingrese correos adicionales separados por ;; &#10;Ej: contabilidad@empresa.com;;gerencia@empresa.com;;supervisor@empresa.com"
+                      rows={2}
+                      className="resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Correos separados por <code className="bg-gray-100 px-1 rounded text-xs font-bold">;;</code> — Al enviar informes, se enviarán al email principal + todos los correos adicionales aquí listados.
+                  </FormDescription>
+                  <FormMessage />
+                  {field.value && field.value.includes(';;') && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {field.value.split(';;').filter((e: string) => e.trim()).map((email: string, idx: number) => (
+                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                          <Mail className="h-3 w-3" />
+                          {email.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </FormItem>
+              )}
+            />
 
             <div className="grid md:grid-cols-2 gap-4">
               <FormField

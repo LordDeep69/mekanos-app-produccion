@@ -339,6 +339,7 @@ model clientes {
   es_cliente_principal       Boolean?                         @default(false)
   id_cliente_principal       Int?
   nombre_sede                String?                          @db.VarChar(200)
+  emails_notificacion        String?
   bitacoras                  bitacoras[]
   cuentas_email              cuentas_email?                   @relation(fields: [id_cuenta_email_remitente], references: [id_cuenta_email], onUpdate: NoAction)
   cliente_principal          clientes?                        @relation("ClienteSedes", fields: [id_cliente_principal], references: [id_cliente], onUpdate: NoAction, map: "fk_clientes_cliente_principal")
@@ -1521,50 +1522,50 @@ model ordenes_compra_detalle {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains an index with non-default null sort order and requires additional setup for migrations. Visit https://pris.ly/d/default-index-null-ordering for more info.
 model ordenes_servicio {
-  id_orden_servicio                                                                        Int                        @id @default(autoincrement())
-  numero_orden                                                                             String                     @db.VarChar(50)
+  id_orden_servicio                                                                        Int                         @id @default(autoincrement())
+  numero_orden                                                                             String                      @db.VarChar(50)
   id_cliente                                                                               Int
   id_sede                                                                                  Int?
   id_equipo                                                                                Int
   id_tipo_servicio                                                                         Int?
   id_cronograma                                                                            Int?
-  fecha_programada                                                                         DateTime?                  @db.Date
-  hora_programada                                                                          DateTime?                  @db.Time(6)
-  prioridad                                                                                prioridad_enum?            @default(NORMAL)
-  origen_solicitud                                                                         origen_solicitud_enum?     @default(PROGRAMADO)
+  fecha_programada                                                                         DateTime?                   @db.Date
+  hora_programada                                                                          DateTime?                   @db.Time(6)
+  prioridad                                                                                prioridad_enum?             @default(NORMAL)
+  origen_solicitud                                                                         origen_solicitud_enum?      @default(PROGRAMADO)
   id_tecnico_asignado                                                                      Int?
   id_supervisor                                                                            Int?
-  fecha_asignacion                                                                         DateTime?                  @db.Timestamp(6)
-  fecha_inicio_real                                                                        DateTime?                  @db.Timestamp(6)
-  fecha_fin_real                                                                           DateTime?                  @db.Timestamp(6)
+  fecha_asignacion                                                                         DateTime?                   @db.Timestamp(6)
+  fecha_inicio_real                                                                        DateTime?                   @db.Timestamp(6)
+  fecha_fin_real                                                                           DateTime?                   @db.Timestamp(6)
   duracion_minutos                                                                         Int?
   id_estado_actual                                                                         Int
-  fecha_cambio_estado                                                                      DateTime?                  @default(now()) @db.Timestamp(6)
-  requiere_firma_cliente                                                                   Boolean?                   @default(true)
+  fecha_cambio_estado                                                                      DateTime?                   @default(now()) @db.Timestamp(6)
+  requiere_firma_cliente                                                                   Boolean?                    @default(true)
   id_firma_cliente                                                                         Int?
-  nombre_quien_recibe                                                                      String?                    @db.VarChar(200)
-  cargo_quien_recibe                                                                       String?                    @db.VarChar(100)
+  nombre_quien_recibe                                                                      String?                     @db.VarChar(200)
+  cargo_quien_recibe                                                                       String?                     @db.VarChar(100)
   cliente_conforme                                                                         Boolean?
   calificacion_cliente                                                                     Int?
   descripcion_inicial                                                                      String?
   trabajo_realizado                                                                        String?
   observaciones_tecnico                                                                    String?
   observaciones_cierre                                                                     String?
-  tiene_garantia                                                                           Boolean?                   @default(false)
+  tiene_garantia                                                                           Boolean?                    @default(false)
   meses_garantia                                                                           Int?
-  fecha_vencimiento_garantia                                                               DateTime?                  @db.Date
+  fecha_vencimiento_garantia                                                               DateTime?                   @db.Date
   observaciones_garantia                                                                   String?
   aprobada_por                                                                             Int?
-  fecha_aprobacion                                                                         DateTime?                  @db.Timestamp(6)
-  total_servicios                                                                          Decimal?                   @default(0) @db.Decimal(12, 2)
-  total_gastos                                                                             Decimal?                   @default(0) @db.Decimal(12, 2)
-  total_componentes                                                                        Decimal?                   @default(0) @db.Decimal(12, 2)
-  total_general                                                                            Decimal?                   @default(0) @db.Decimal(12, 2)
+  fecha_aprobacion                                                                         DateTime?                   @db.Timestamp(6)
+  total_servicios                                                                          Decimal?                    @default(0) @db.Decimal(12, 2)
+  total_gastos                                                                             Decimal?                    @default(0) @db.Decimal(12, 2)
+  total_componentes                                                                        Decimal?                    @default(0) @db.Decimal(12, 2)
+  total_general                                                                            Decimal?                    @default(0) @db.Decimal(12, 2)
   metadata                                                                                 Json?
   creado_por                                                                               Int
-  fecha_creacion                                                                           DateTime?                  @default(now()) @db.Timestamp(6)
+  fecha_creacion                                                                           DateTime?                   @default(now()) @db.Timestamp(6)
   modificado_por                                                                           Int?
-  fecha_modificacion                                                                       DateTime?                  @db.Timestamp(6)
+  fecha_modificacion                                                                       DateTime?                   @db.Timestamp(6)
   id_firma_tecnico                                                                         Int?
   actividades_ejecutadas                                                                   actividades_ejecutadas[]
   componentes_usados                                                                       componentes_usados[]
@@ -1573,25 +1574,25 @@ model ordenes_servicio {
   detalle_servicios_orden                                                                  detalle_servicios_orden[]
   evidencias_fotograficas                                                                  evidencias_fotograficas[]
   gastos_orden                                                                             gastos_orden[]
+  historial_emails_enviados                                                                historial_emails_enviados[]
   historial_estados_orden                                                                  historial_estados_orden[]
   informes                                                                                 informes[]
   mediciones_servicio                                                                      mediciones_servicio[]
   movimientos_inventario                                                                   movimientos_inventario[]
   ordenes_actividades_plan                                                                 ordenes_actividades_plan[]
   ordenes_equipos                                                                          ordenes_equipos[]
-  firmas_digitales_ordenes_servicio_id_firma_tecnicoTofirmas_digitales                     firmas_digitales?          @relation("ordenes_servicio_id_firma_tecnicoTofirmas_digitales", fields: [id_firma_tecnico], references: [id_firma_digital], map: "fk_orden_firma_tecnico")
-  clientes                                                                                 clientes                   @relation(fields: [id_cliente], references: [id_cliente], onDelete: SetNull)
-  equipos                                                                                  equipos                    @relation(fields: [id_equipo], references: [id_equipo], onDelete: SetNull)
-  estados_orden                                                                            estados_orden              @relation(fields: [id_estado_actual], references: [id_estado], onDelete: SetNull)
-  firmas_digitales                                                                         firmas_digitales?          @relation(fields: [id_firma_cliente], references: [id_firma_digital])
-  sedes_cliente                                                                            sedes_cliente?             @relation(fields: [id_sede], references: [id_sede])
-  empleados_ordenes_servicio_id_supervisorToempleados                                      empleados?                 @relation("ordenes_servicio_id_supervisorToempleados", fields: [id_supervisor], references: [id_empleado])
-  empleados_ordenes_servicio_id_tecnico_asignadoToempleados                                empleados?                 @relation("ordenes_servicio_id_tecnico_asignadoToempleados", fields: [id_tecnico_asignado], references: [id_empleado])
-  tipos_servicio                                                                           tipos_servicio?            @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio])
-  propuestas_correctivo_propuestas_correctivo_id_orden_servicioToordenes_servicio          propuestas_correctivo[]    @relation("propuestas_correctivo_id_orden_servicioToordenes_servicio")
-  propuestas_correctivo_propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio propuestas_correctivo[]    @relation("propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio")
+  firmas_digitales_ordenes_servicio_id_firma_tecnicoTofirmas_digitales                     firmas_digitales?           @relation("ordenes_servicio_id_firma_tecnicoTofirmas_digitales", fields: [id_firma_tecnico], references: [id_firma_digital], map: "fk_orden_firma_tecnico")
+  clientes                                                                                 clientes                    @relation(fields: [id_cliente], references: [id_cliente], onDelete: SetNull)
+  equipos                                                                                  equipos                     @relation(fields: [id_equipo], references: [id_equipo], onDelete: SetNull)
+  estados_orden                                                                            estados_orden               @relation(fields: [id_estado_actual], references: [id_estado], onDelete: SetNull)
+  firmas_digitales                                                                         firmas_digitales?           @relation(fields: [id_firma_cliente], references: [id_firma_digital])
+  sedes_cliente                                                                            sedes_cliente?              @relation(fields: [id_sede], references: [id_sede])
+  empleados_ordenes_servicio_id_supervisorToempleados                                      empleados?                  @relation("ordenes_servicio_id_supervisorToempleados", fields: [id_supervisor], references: [id_empleado])
+  empleados_ordenes_servicio_id_tecnico_asignadoToempleados                                empleados?                  @relation("ordenes_servicio_id_tecnico_asignadoToempleados", fields: [id_tecnico_asignado], references: [id_empleado])
+  tipos_servicio                                                                           tipos_servicio?             @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio])
+  propuestas_correctivo_propuestas_correctivo_id_orden_servicioToordenes_servicio          propuestas_correctivo[]     @relation("propuestas_correctivo_id_orden_servicioToordenes_servicio")
+  propuestas_correctivo_propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio propuestas_correctivo[]     @relation("propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio")
   remisiones                                                                               remisiones[]
-  historial_emails_enviados                                                               historial_emails_enviados[]
 
   @@index([id_cliente, fecha_programada(sort: Desc)], map: "idx_os_cliente_fecha")
   @@index([id_equipo, fecha_programada(sort: Desc)], map: "idx_os_equipo_fecha")
@@ -1605,19 +1606,19 @@ model ordenes_servicio {
 }
 
 model historial_emails_enviados {
-  id_historial_email   Int                        @id @default(autoincrement())
-  id_orden_servicio    Int
-  destinatario_to      String                     @db.VarChar(300)
-  destinatarios_cc     String?                    @db.VarChar(500)
-  asunto               String                     @db.VarChar(500)
-  estado_envio         estado_envio_email_enum     @default(EXITOSO)
-  mensaje_error        String?
-  message_id           String?                    @db.VarChar(300)
-  url_pdf_enviado      String?                    @db.VarChar(500)
-  origen_envio         String                     @default("ADMIN_PORTAL") @db.VarChar(50)
-  fecha_envio          DateTime                   @default(now()) @db.Timestamp(6)
-  enviado_por          Int?
-  ordenes_servicio     ordenes_servicio            @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  id_historial_email Int                     @id @default(autoincrement())
+  id_orden_servicio  Int
+  destinatario_to    String                  @db.VarChar(300)
+  destinatarios_cc   String?                 @db.VarChar(500)
+  asunto             String                  @db.VarChar(500)
+  estado_envio       estado_envio_email_enum @default(EXITOSO)
+  mensaje_error      String?
+  message_id         String?                 @db.VarChar(300)
+  url_pdf_enviado    String?                 @db.VarChar(500)
+  origen_envio       String                  @default("ADMIN_PORTAL") @db.VarChar(50)
+  fecha_envio        DateTime                @default(now()) @db.Timestamp(6)
+  enviado_por        Int?
+  ordenes_servicio   ordenes_servicio        @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
 
   @@index([id_orden_servicio, fecha_envio(sort: Desc)], map: "idx_historial_emails_orden_fecha")
 }
@@ -2113,6 +2114,7 @@ model usuarios {
   fecha_creacion                                       DateTime?            @default(now()) @db.Timestamp(6)
   modificado_por                                       Int?
   fecha_modificacion                                   DateTime?            @db.Timestamp(6)
+  password_plain                                       String?              @db.VarChar(255)
   cuentas_email_cuentas_email_creado_porTousuarios     cuentas_email[]      @relation("cuentas_email_creado_porTousuarios")
   cuentas_email_cuentas_email_modificado_porTousuarios cuentas_email[]      @relation("cuentas_email_modificado_porTousuarios")
   persona                                              personas             @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuarios_persona")

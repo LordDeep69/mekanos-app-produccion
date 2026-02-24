@@ -22,11 +22,13 @@ import {
     asignarTecnico,
     cambiarEstadoOrden,
     cancelarOrden,
+    createMedicionOrden,
     createOrden,
     getActividadesOrden,
     getEvidenciasOrden,
     getFirmasOrden,
     getHistorialEmails,
+    getMedicionesCompletasOrden,
     getMedicionesOrden,
     getOrden,
     getOrdenes,
@@ -105,7 +107,33 @@ export function useMedicionesOrden(idOrden: number) {
     });
 }
 
-// ... (existing hooks) ...
+/**
+ * ✅ 24-FEB-2026: Hook para obtener mediciones completas (registradas + sin medir)
+ */
+export function useMedicionesCompletasOrden(idOrden: number) {
+    return useQuery({
+        queryKey: [...MEDICIONES_ORDEN_KEY, idOrden, 'completas'],
+        queryFn: () => getMedicionesCompletasOrden(idOrden),
+        enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC,
+    });
+}
+
+/**
+ * ✅ 24-FEB-2026: Hook para crear una nueva medición desde el portal admin
+ */
+export function useCreateMedicion() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ idOrden, data }: { idOrden: number; data: { id_parametro_medicion: number; valor_numerico?: number; valor_texto?: string; observaciones?: string } }) =>
+            createMedicionOrden(idOrden, data),
+        onSuccess: (_, { idOrden }) => {
+            queryClient.invalidateQueries({ queryKey: [...MEDICIONES_ORDEN_KEY, idOrden] });
+            toast.success('Medición registrada exitosamente');
+        },
+    });
+}
 
 /**
  * Hook para obtener servicios de una orden

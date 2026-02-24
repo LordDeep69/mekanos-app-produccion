@@ -96,6 +96,8 @@ export interface Cliente {
   fecha_activacion_portal?: string | null;
   observaciones_servicio?: string | null;
   requisitos_especiales?: string | null;
+  // ✅ 24-FEB-2026: Multi-email - Correos adicionales separados por ';;'
+  emails_notificacion?: string | null;
   creado_por?: number | null;
   fecha_creacion?: string | null;
   modificado_por?: number | null;
@@ -203,6 +205,8 @@ export interface CreateClienteDto {
   tiene_acceso_portal?: boolean;
   observaciones_servicio?: string;
   requisitos_especiales?: string;
+  // ✅ 24-FEB-2026: Multi-email
+  emails_notificacion?: string;
   // ✅ MULTI-SEDE (09-Feb-2026)
   es_cliente_principal?: boolean;
   id_cliente_principal?: number;

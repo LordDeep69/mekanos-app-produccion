@@ -260,6 +260,32 @@ export async function getMedicionesOrden(idOrden: number): Promise<{ success: bo
 }
 
 /**
+ * ✅ 24-FEB-2026: Obtener mediciones completas (registradas + parámetros sin medir)
+ */
+export async function getMedicionesCompletasOrden(idOrden: number): Promise<{ success: boolean; data: any[]; parametros_sin_medir: any[] }> {
+    const response = await apiClient.get<{ success: boolean; data: any[]; parametros_sin_medir: any[] }>(
+        `${ORDENES_BASE}/${idOrden}/mediciones-completas`
+    );
+    return response.data;
+}
+
+/**
+ * ✅ 24-FEB-2026: Crear una nueva medición desde el portal admin
+ */
+export async function createMedicionOrden(idOrden: number, data: {
+    id_parametro_medicion: number;
+    valor_numerico?: number;
+    valor_texto?: string;
+    observaciones?: string;
+}): Promise<{ success: boolean; data: any }> {
+    const response = await apiClient.post<{ success: boolean; data: any }>(
+        `${ORDENES_BASE}/${idOrden}/mediciones`,
+        data
+    );
+    return response.data;
+}
+
+/**
  * Obtener evidencias fotográficas de una orden
  */
 export async function getEvidenciasOrden(idOrden: number): Promise<{ success: boolean; data: any[] }> {

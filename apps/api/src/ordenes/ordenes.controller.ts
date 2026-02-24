@@ -462,6 +462,148 @@ export class OrdenesController {
   }
 
   /**
+   * GET /api/ordenes/:id/mediciones-completas
+   * ✅ 24-FEB-2026: Retorna mediciones registradas + parámetros disponibles sin medir
+   * Para que el admin pueda ver y registrar valores de parámetros que el técnico omitió
+   */
+  @Get(':id/mediciones-completas')
+  @UseGuards(JwtAuthGuard)
+  async getMedicionesCompletas(@Param('id', ParseIntPipe) id: number) {
+    // 1. Obtener la orden con su equipo para conocer el tipo de equipo
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: {
+        id_orden_servicio: true,
+        equipos: {
+          select: { id_tipo_equipo: true },
+        },
+      },
+    });
+
+    if (!orden) {
+      return { success: false, data: [], parametros_sin_medir: [] };
+    }
+
+    const idTipoEquipo = orden.equipos?.id_tipo_equipo;
+
+    // 2. Obtener mediciones ya registradas
+    const mediciones = await this.prisma.mediciones_servicio.findMany({
+      where: { id_orden_servicio: id },
+      include: { parametros_medicion: true },
+      orderBy: { fecha_medicion: 'desc' },
+    });
+
+    // 3. Obtener TODOS los parámetros disponibles para este tipo de equipo
+    const todosParametros = idTipoEquipo
+      ? await this.prisma.parametros_medicion.findMany({
+        where: {
+          id_tipo_equipo: idTipoEquipo,
+          activo: true,
+        },
+        orderBy: { nombre_parametro: 'asc' },
+      })
+      : [];
+
+    // 4. Identificar parámetros que NO fueron medidos
+    const idsMedidos = new Set(mediciones.map(m => m.id_parametro_medicion));
+    const parametrosSinMedir = todosParametros.filter(
+      p => !idsMedidos.has(p.id_parametro_medicion),
+    );
+
+    return {
+      success: true,
+      data: mediciones,
+      parametros_sin_medir: parametrosSinMedir,
+    };
+  }
+
+  /**
+   * POST /api/ordenes/:id/mediciones
+   * ✅ 24-FEB-2026: Crear una nueva medición desde el portal admin
+   * Permite al admin registrar valores de parámetros que el técnico omitió
+   */
+  @Post(':id/mediciones')
+  @UseGuards(JwtAuthGuard)
+  async createMedicion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: {
+      id_parametro_medicion: number;
+      valor_numerico?: number;
+      valor_texto?: string;
+      observaciones?: string;
+    },
+  ) {
+    // Validar que la orden existe
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+    });
+    if (!orden) {
+      return { success: false, message: 'Orden no encontrada' };
+    }
+
+    // Validar que el parámetro existe
+    const parametro = await this.prisma.parametros_medicion.findUnique({
+      where: { id_parametro_medicion: body.id_parametro_medicion },
+    });
+    if (!parametro) {
+      return { success: false, message: 'Parámetro de medición no encontrado' };
+    }
+
+    // Evaluar si está fuera de rango
+    let fueraDeRango = false;
+    let nivelAlerta: any = 'NORMAL';
+    let mensajeAlerta: string | null = null;
+
+    if (body.valor_numerico != null) {
+      const val = body.valor_numerico;
+      const minNormal = parametro.valor_minimo_normal ? Number(parametro.valor_minimo_normal) : null;
+      const maxNormal = parametro.valor_maximo_normal ? Number(parametro.valor_maximo_normal) : null;
+      const minCritico = parametro.valor_minimo_critico ? Number(parametro.valor_minimo_critico) : null;
+      const maxCritico = parametro.valor_maximo_critico ? Number(parametro.valor_maximo_critico) : null;
+
+      if (minCritico != null && val < minCritico) {
+        fueraDeRango = true;
+        nivelAlerta = 'CRITICO';
+        mensajeAlerta = `Valor ${val} por debajo del mínimo crítico (${minCritico})`;
+      } else if (maxCritico != null && val > maxCritico) {
+        fueraDeRango = true;
+        nivelAlerta = 'CRITICO';
+        mensajeAlerta = `Valor ${val} por encima del máximo crítico (${maxCritico})`;
+      } else if (minNormal != null && val < minNormal) {
+        fueraDeRango = true;
+        nivelAlerta = 'ADVERTENCIA';
+        mensajeAlerta = `Valor ${val} por debajo del mínimo normal (${minNormal})`;
+      } else if (maxNormal != null && val > maxNormal) {
+        fueraDeRango = true;
+        nivelAlerta = 'ADVERTENCIA';
+        mensajeAlerta = `Valor ${val} por encima del máximo normal (${maxNormal})`;
+      }
+    }
+
+    const nuevaMedicion = await this.prisma.mediciones_servicio.create({
+      data: {
+        id_orden_servicio: id,
+        id_parametro_medicion: body.id_parametro_medicion,
+        valor_numerico: body.valor_numerico,
+        valor_texto: body.valor_texto,
+        unidad_medida: parametro.unidad_medida,
+        fuera_de_rango: fueraDeRango,
+        nivel_alerta: nivelAlerta,
+        mensaje_alerta: mensajeAlerta,
+        observaciones: body.observaciones,
+        fecha_medicion: new Date(),
+        fecha_registro: new Date(),
+      },
+      include: { parametros_medicion: true },
+    });
+
+    return {
+      success: true,
+      data: nuevaMedicion,
+    };
+  }
+
+  /**
    * GET /api/ordenes/:id/servicios
    * Obtener detalles de servicios comerciales de una orden
    */

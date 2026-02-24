@@ -230,6 +230,20 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                       <span>{persona.email_principal}</span>
                     </div>
                   )}
+                  {/* ✅ 24-FEB-2026: Mostrar correos adicionales de notificación */}
+                  {(cliente as any).emails_notificacion && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Correos adicionales:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(cliente as any).emails_notificacion.split(';;').filter((e: string) => e.trim()).map((email: string, idx: number) => (
+                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                            <Mail className="h-3 w-3" />
+                            {email.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {persona.direccion_principal && (
                     <div className="flex items-center gap-2 text-sm">
                       <MapPin className="h-4 w-4 text-muted-foreground" />

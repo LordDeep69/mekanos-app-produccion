@@ -220,4 +220,9 @@ export class CreateClientesDto {
   @IsOptional()
   @IsInt()
   id_cuenta_email_remitente?: number;
+
+  // ✅ 24-FEB-2026: Multi-email - Correos adicionales separados por ';;'
+  @IsOptional()
+  @IsString()
+  emails_notificacion?: string;
 }

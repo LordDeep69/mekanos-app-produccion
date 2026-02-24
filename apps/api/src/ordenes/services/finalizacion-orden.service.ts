@@ -1673,13 +1673,28 @@ export class FinalizacionOrdenService {
         // Usar email real del cliente
         const emailCliente = cliente?.persona?.email_principal || EMAIL_FALLBACK;
 
+        // ✅ 24-FEB-2026: MULTI-EMAIL - Recopilar TODOS los correos del cliente
+        const destinatarios: string[] = [emailCliente];
+
+        // Agregar emails_notificacion del cliente (separados por ';;')
+        if (cliente?.emails_notificacion) {
+            const emailsExtra = cliente.emails_notificacion
+                .split(';;')
+                .map((e: string) => e.trim())
+                .filter((e: string) => e.length > 0 && e.includes('@'));
+            for (const extra of emailsExtra) {
+                if (!destinatarios.includes(extra)) {
+                    destinatarios.push(extra);
+                }
+            }
+        }
+
         // Incluir email adicional si se proporciona
-        const destinatarios = [emailCliente];
-        if (emailAdicional && emailAdicional !== emailCliente) {
+        if (emailAdicional && !destinatarios.includes(emailAdicional)) {
             destinatarios.push(emailAdicional);
         }
 
-        this.logger.log(`📧 Email destino: ${destinatarios.join(', ')}`);
+        this.logger.log(`📧 Email destino (${destinatarios.length} destinatarios): ${destinatarios.join(', ')}`);
 
         if (destinatarios.length === 0) {
             this.logger.warn('⚠️ No hay destinatarios de email configurados');
@@ -1704,23 +1719,23 @@ export class FinalizacionOrdenService {
             // TODO: MULTI-EMAIL deshabilitado temporalmente - tabla cuentas_email pendiente de migración
             const idCuentaEmailCliente = null;
 
+            // ✅ 24-FEB-2026: Enviar a TODOS los destinatarios
             const result = await this.emailService.sendInformeTecnicoEmail(
                 emailData,
-                destinatarios[0],
+                destinatarios,
                 pdfResult.buffer,
-                idCuentaEmailCliente, // ✅ Pasar cuenta específica del cliente
+                idCuentaEmailCliente,
             );
 
             return {
                 enviado: result.success,
-                destinatario: destinatarios[0],
+                destinatario: destinatarios.join(', '),
                 messageId: result.messageId,
             };
         } catch (error: unknown) {
             const err = error as Error;
             this.logger.error(`Error enviando email: ${err.message}`);
-            // No fallar todo el proceso por error de email
-            return { enviado: false, destinatario: destinatarios[0] };
+            return { enviado: false, destinatario: destinatarios.join(', ') };
         }
     }
 

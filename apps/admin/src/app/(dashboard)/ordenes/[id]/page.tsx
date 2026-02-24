@@ -26,12 +26,11 @@ import {
     useCancelarOrden,
     useEvidenciasOrden,
     useFirmasOrden,
-    useMedicionesOrden,
     useOrden,
     useRemoveServicioOrden,
     useServiciosComerciales,
     useServiciosOrden,
-    useTecnicosSelector,
+    useTecnicosSelector
 } from '@/features/ordenes';
 import { ActividadCardAdvanced, ResumenEstados } from '@/features/ordenes/components/actividad-card-advanced';
 import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gallery';
@@ -377,10 +376,13 @@ function TabGeneral({ orden }: { orden: Orden }) {
 function TabEjecucion({ orden }: { orden: Orden }) {
     const [subTab, setSubTab] = useState<'checklist' | 'mediciones'>('checklist');
     const { data: actividadesData, isLoading: isLoadingAct } = useActividadesOrden(orden.id_orden_servicio);
-    const { data: medicionesData, isLoading: isLoadingMed } = useMedicionesOrden(orden.id_orden_servicio);
+    // ✅ 24-FEB-2026: Usar mediciones-completas para obtener también parámetros sin medir
+    const { data: medicionesData, isLoading: isLoadingMed } = useMedicionesCompletasOrden(orden.id_orden_servicio);
+    const createMedicion = useCreateMedicion();
 
     const actividades = actividadesData?.data || [];
     const mediciones = medicionesData?.data || [];
+    const parametrosSinMedir = (medicionesData as any)?.parametros_sin_medir || [];
 
     const actividadesCompletadas = actividades.filter((a: any) => a.ejecutada).length;
     const porcentajeProgreso = actividades.length > 0
@@ -388,9 +390,31 @@ function TabEjecucion({ orden }: { orden: Orden }) {
         : 0;
 
     // Contadores para mediciones
-    const medicionesOk = mediciones.filter((m: any) => !m.fuera_de_rango && m.nivel_alerta !== 'CRITICO' && m.nivel_alerta !== 'ADVERTENCIA').length;
-    const medicionesAlerta = mediciones.filter((m: any) => m.nivel_alerta === 'ADVERTENCIA').length;
     const medicionesCritico = mediciones.filter((m: any) => m.fuera_de_rango || m.nivel_alerta === 'CRITICO').length;
+
+    // ✅ 24-FEB-2026: Estado para crear nueva medición desde parámetro sin medir
+    const [creandoParam, setCreandoParam] = useState<number | null>(null);
+    const [nuevoValor, setNuevoValor] = useState('');
+    const [nuevaObs, setNuevaObs] = useState('');
+
+    const handleCrearMedicion = async (idParametro: number) => {
+        if (!nuevoValor && !nuevaObs) return;
+        try {
+            await createMedicion.mutateAsync({
+                idOrden: orden.id_orden_servicio,
+                data: {
+                    id_parametro_medicion: idParametro,
+                    valor_numerico: nuevoValor ? parseFloat(nuevoValor) : undefined,
+                    observaciones: nuevaObs || undefined,
+                },
+            });
+            setCreandoParam(null);
+            setNuevoValor('');
+            setNuevaObs('');
+        } catch (err) {
+            console.error('Error creando medición:', err);
+        }
+    };
 
     return (
         <div className="space-y-4">
@@ -445,6 +469,11 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                             }`}>
                             {mediciones.length}
                         </span>
+                        {parametrosSinMedir.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-white font-bold">
+                                +{parametrosSinMedir.length}
+                            </span>
+                        )}
                         {medicionesCritico > 0 && (
                             <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white font-bold">
                                 {medicionesCritico} ⚠
@@ -490,23 +519,146 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                                 <div className="flex justify-center py-12">
                                     <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                                 </div>
-                            ) : mediciones.length === 0 ? (
+                            ) : mediciones.length === 0 && parametrosSinMedir.length === 0 ? (
                                 <div className="text-center py-12 text-gray-500">
                                     <Settings className="h-12 w-12 mx-auto mb-3 text-gray-200" />
                                     <p className="font-medium">Sin mediciones de campo</p>
                                 </div>
                             ) : (
                                 <>
-                                    <ResumenMediciones mediciones={mediciones} />
-                                    <div className="space-y-2">
-                                        {mediciones.map((med: any) => (
-                                            <MedicionCardAdvanced
-                                                key={med.id_medicion}
-                                                medicion={med}
-                                                idOrdenServicio={orden.id_orden_servicio}
-                                            />
-                                        ))}
-                                    </div>
+                                    {mediciones.length > 0 && (
+                                        <ResumenMediciones mediciones={mediciones} />
+                                    )}
+
+                                    {/* Mediciones registradas */}
+                                    {mediciones.length > 0 && (
+                                        <div className="space-y-2">
+                                            {mediciones.map((med: any) => (
+                                                <MedicionCardAdvanced
+                                                    key={med.id_medicion}
+                                                    medicion={med}
+                                                    idOrdenServicio={orden.id_orden_servicio}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* ✅ 24-FEB-2026: Parámetros sin medir (para que admin pueda registrarlos) */}
+                                    {parametrosSinMedir.length > 0 && (
+                                        <div className="mt-4 space-y-2">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <div className="h-px flex-1 bg-amber-200" />
+                                                <span className="text-xs font-bold text-amber-600 uppercase tracking-wider px-2">
+                                                    Parámetros Sin Registrar ({parametrosSinMedir.length})
+                                                </span>
+                                                <div className="h-px flex-1 bg-amber-200" />
+                                            </div>
+
+                                            {parametrosSinMedir.map((param: any) => (
+                                                <div
+                                                    key={param.id_parametro_medicion}
+                                                    className="rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50 transition-all duration-200"
+                                                >
+                                                    <div className="p-3">
+                                                        <div className="flex items-start gap-3">
+                                                            <div className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center shadow-sm bg-amber-100 border border-amber-200">
+                                                                <Settings className="h-6 w-6 text-amber-500" />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">
+                                                                    {param.nombre_parametro}
+                                                                </p>
+                                                                <p className="text-sm text-amber-600 font-medium mt-0.5">
+                                                                    Sin registrar — {param.unidad_medida}
+                                                                </p>
+                                                                {param.es_obligatorio && (
+                                                                    <span className="text-[10px] font-bold text-red-500">OBLIGATORIO</span>
+                                                                )}
+                                                            </div>
+
+                                                            {creandoParam !== param.id_parametro_medicion ? (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setCreandoParam(param.id_parametro_medicion);
+                                                                        setNuevoValor('');
+                                                                        setNuevaObs('');
+                                                                    }}
+                                                                    className="flex-shrink-0 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-all flex items-center gap-1"
+                                                                >
+                                                                    <Plus className="h-3.5 w-3.5" />
+                                                                    Registrar
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => setCreandoParam(null)}
+                                                                    className="flex-shrink-0 px-2 py-1 text-xs text-gray-400 hover:text-gray-600"
+                                                                >
+                                                                    <XCircle className="h-4 w-4" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Formulario inline para crear medición */}
+                                                        {creandoParam === param.id_parametro_medicion && (
+                                                            <div className="mt-3 space-y-2 bg-white/80 p-3 rounded-lg border border-amber-100">
+                                                                <div>
+                                                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                                                        Valor ({param.unidad_medida})
+                                                                    </label>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        value={nuevoValor}
+                                                                        onChange={(e) => setNuevoValor(e.target.value)}
+                                                                        placeholder={`Ingrese valor en ${param.unidad_medida}...`}
+                                                                        className="w-full mt-1 px-3 py-2 text-lg font-bold border-2 border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                                                                        autoFocus
+                                                                    />
+                                                                    {param.valor_minimo_normal != null && param.valor_maximo_normal != null && (
+                                                                        <p className="text-[10px] text-gray-400 mt-1">
+                                                                            Rango normal: {Number(param.valor_minimo_normal)} - {Number(param.valor_maximo_normal)} {param.unidad_medida}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                                <div>
+                                                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                                                        Observaciones (opcional)
+                                                                    </label>
+                                                                    <textarea
+                                                                        value={nuevaObs}
+                                                                        onChange={(e) => setNuevaObs(e.target.value)}
+                                                                        placeholder="Notas sobre esta medición..."
+                                                                        rows={2}
+                                                                        className="w-full mt-1 px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                                                                    />
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        onClick={() => setCreandoParam(null)}
+                                                                        className="flex-1 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all flex items-center justify-center gap-1"
+                                                                    >
+                                                                        Cancelar
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleCrearMedicion(param.id_parametro_medicion)}
+                                                                        disabled={createMedicion.isPending || (!nuevoValor && !nuevaObs)}
+                                                                        className="flex-1 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                                                                    >
+                                                                        {createMedicion.isPending ? (
+                                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                        ) : (
+                                                                            <Check className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                        Guardar Medición
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </>
                             )}
                         </div>

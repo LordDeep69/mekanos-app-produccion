@@ -104,6 +104,11 @@ export class UpdateClientesDto {
     @IsString()
     requisitos_especiales?: string;
 
+    // ✅ 24-FEB-2026: Multi-email - Correos adicionales separados por ';;'
+    @IsOptional()
+    @IsString()
+    emails_notificacion?: string;
+
     // ✅ Persona con solo campos de contacto editables
     @IsOptional()
     @ValidateNested()

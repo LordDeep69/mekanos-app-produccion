@@ -1191,7 +1191,22 @@ export class PdfController {
       : clienteNombreBase2;
     // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
     const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
-    const clienteEmail = dto.emailDestino || clientePersona?.email_principal;
+    // ✅ 24-FEB-2026: MULTI-EMAIL - Recopilar TODOS los correos del cliente
+    const emailPrincipal = dto.emailDestino || clientePersona?.email_principal;
+    const clienteEmailsArray: string[] = [];
+    if (emailPrincipal) clienteEmailsArray.push(emailPrincipal);
+    if (orden.clientes?.emails_notificacion) {
+      const extras = orden.clientes.emails_notificacion
+        .split(';;')
+        .map((e: string) => e.trim())
+        .filter((e: string) => e.length > 0 && e.includes('@'));
+      for (const extra of extras) {
+        if (!clienteEmailsArray.includes(extra)) {
+          clienteEmailsArray.push(extra);
+        }
+      }
+    }
+    const clienteEmail = clienteEmailsArray.length > 0 ? clienteEmailsArray.join(', ') : null;
 
     // ✅ FIX 19-ENE-2026: Usar nombre_equipo y numero_serie_equipo directamente (igual que mobile)
     const marcaEquipo = orden.equipos?.nombre_equipo || 'N/A';
@@ -1589,7 +1604,7 @@ export class PdfController {
         this.logger.log(`📧 [MULTI-EMAIL REGEN] Cliente id_cuenta_email_remitente: ${idCuentaEmailRegen ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`);
 
         const regenEmailResult = await this.emailService.sendEmailFromAccount({
-          to: clienteEmail,
+          to: clienteEmailsArray,
           subject: asunto,
           html: htmlTemplate,
           attachments: [{

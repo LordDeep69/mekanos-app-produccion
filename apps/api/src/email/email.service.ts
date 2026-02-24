@@ -464,7 +464,7 @@ export class EmailService implements OnModuleInit {
    */
   async sendInformeTecnicoEmail(
     data: OrdenEmailData,
-    clienteEmail: string,
+    clienteEmail: string | string[],
     pdfBuffer: Buffer,
     idCuentaEmail?: number, // ✅ MULTI-EMAIL: Cuenta específica del cliente
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
