@@ -655,7 +655,7 @@ export class OrdenesController {
 
     // Evaluar si está fuera de rango
     let fueraDeRango = false;
-    let nivelAlerta: any = 'NORMAL';
+    let nivelAlerta: any = 'OK';
     let mensajeAlerta: string | null = null;
 
     if (body.valor_numerico != null) {
