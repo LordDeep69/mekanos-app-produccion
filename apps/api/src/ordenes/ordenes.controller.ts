@@ -484,7 +484,7 @@ export class OrdenesController {
         },
         ordenes_equipos: {
           select: {
-            equipo: {
+            equipos: {
               select: { id_tipo_equipo: true },
             },
           },
@@ -533,8 +533,8 @@ export class OrdenesController {
 
     // 5. FUENTE 3: Parámetros de equipos múltiples (ordenes_equipos)
     for (const oe of orden.ordenes_equipos || []) {
-      if (oe.equipo?.id_tipo_equipo) {
-        tiposEquipoIds.add(oe.equipo.id_tipo_equipo);
+      if (oe.equipos?.id_tipo_equipo) {
+        tiposEquipoIds.add(oe.equipos.id_tipo_equipo);
       }
     }
 
