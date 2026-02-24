@@ -238,6 +238,36 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
   const esSede = form.watch('id_cliente_principal');
   const [sedeAutoFilled, setSedeAutoFilled] = useState(false);
 
+  // ✅ 24-FEB-2026: Estado local para correos adicionales (UI individual por correo)
+  const [emailsList, setEmailsList] = useState<string[]>([]);
+
+  // Sincronizar emailsList → campo oculto del formulario (join con ';;')
+  const syncEmailsToForm = useCallback((emails: string[]) => {
+    const cleaned = emails.filter(e => e.trim() !== '');
+    form.setValue('emails_notificacion', cleaned.join(';;'));
+  }, [form]);
+
+  const handleAddEmail = () => {
+    setEmailsList(prev => [...prev, '']);
+  };
+
+  const handleRemoveEmail = (index: number) => {
+    setEmailsList(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      syncEmailsToForm(next);
+      return next;
+    });
+  };
+
+  const handleEmailChange = (index: number, value: string) => {
+    setEmailsList(prev => {
+      const next = [...prev];
+      next[index] = value;
+      syncEmailsToForm(next);
+      return next;
+    });
+  };
+
   // ✅ MULTI-SEDE: Auto-fill cuando se selecciona un cliente principal
   const handleSelectPrincipal = useCallback((idPrincipal: number | null) => {
     form.setValue('id_cliente_principal', idPrincipal);
@@ -317,6 +347,14 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         id_cliente_principal: cliente.id_cliente_principal ?? null,
         nombre_sede: cliente.nombre_sede ?? '',
       });
+
+      // ✅ 24-FEB-2026: Sincronizar emailsList desde el campo ';;' separado
+      const rawEmails = (cliente as any).emails_notificacion ?? '';
+      if (rawEmails) {
+        setEmailsList(rawEmails.split(';;').filter((e: string) => e.trim() !== ''));
+      } else {
+        setEmailsList([]);
+      }
     }
   }, [cliente, mode, form]);
 
@@ -909,41 +947,58 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               />
             </div>
 
-            {/* ✅ 24-FEB-2026: Correos adicionales de notificación */}
-            <FormField
-              control={form.control}
-              name="emails_notificacion"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-blue-500" />
-                    Correos Adicionales de Notificación
-                  </FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Ingrese correos adicionales separados por ;; &#10;Ej: contabilidad@empresa.com;;gerencia@empresa.com;;supervisor@empresa.com"
-                      rows={2}
-                      className="resize-none"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Correos separados por <code className="bg-gray-100 px-1 rounded text-xs font-bold">;;</code> — Al enviar informes, se enviarán al email principal + todos los correos adicionales aquí listados.
-                  </FormDescription>
-                  <FormMessage />
-                  {field.value && field.value.includes(';;') && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {field.value.split(';;').filter((e: string) => e.trim()).map((email: string, idx: number) => (
-                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
-                          <Mail className="h-3 w-3" />
-                          {email.trim()}
-                        </span>
-                      ))}
+            {/* ✅ 24-FEB-2026: Correos adicionales de notificación — UI dinámica */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-blue-500" />
+                  Correos Adicionales de Notificación
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddEmail}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Agregar Correo
+                </button>
+              </div>
+
+              {emailsList.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  No hay correos adicionales configurados. Presione &quot;Agregar Correo&quot; para añadir destinatarios.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {emailsList.map((email, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center">
+                        <Mail className="h-3.5 w-3.5 text-blue-500" />
+                      </div>
+                      <Input
+                        type="email"
+                        placeholder={`correo${idx + 1}@empresa.com`}
+                        value={email}
+                        onChange={(e) => handleEmailChange(idx, e.target.value)}
+                        className="flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEmail(idx)}
+                        className="flex-shrink-0 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Eliminar correo"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                  )}
-                </FormItem>
+                  ))}
+                </div>
               )}
-            />
+
+              <p className="text-xs text-muted-foreground">
+                Al enviar informes, se enviarán al <strong>email principal</strong> + todos los correos adicionales aquí listados.
+              </p>
+            </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               <FormField

@@ -529,7 +529,7 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                             ) : (
                                 <>
                                     {mediciones.length > 0 && (
-                                        <ResumenMediciones mediciones={mediciones} />
+                                        <ResumenMediciones mediciones={mediciones} totalParametros={mediciones.length + parametrosSinMedir.length} />
                                     )}
 
                                     {/* Mediciones registradas */}

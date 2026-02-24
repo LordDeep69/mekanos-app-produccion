@@ -463,19 +463,42 @@ export class OrdenesController {
 
   /**
    * GET /api/ordenes/:id/mediciones-completas
-   * ✅ 24-FEB-2026: Retorna mediciones registradas + parámetros disponibles sin medir
-   * Para que el admin pueda ver y registrar valores de parámetros que el técnico omitió
+   * ✅ 24-FEB-2026 (v2): Retorna mediciones registradas + parámetros disponibles sin medir
+   * 
+   * ESTRATEGIA ROBUSTA (3 fuentes de parámetros):
+   * 1. Plan de actividades de la orden (ordenes_actividades_plan → catalogo_actividades MEDICION → parametros_medicion)
+   * 2. Parámetros del tipo de equipo (parametros_medicion → id_tipo_equipo)
+   * 3. Parámetros de equipos múltiples (ordenes_equipos → equipos → id_tipo_equipo → parametros_medicion)
+   * Se hace UNION de las 3 fuentes y se restan los ya medidos.
    */
   @Get(':id/mediciones-completas')
   @UseGuards(JwtAuthGuard)
   async getMedicionesCompletas(@Param('id', ParseIntPipe) id: number) {
-    // 1. Obtener la orden con su equipo para conocer el tipo de equipo
+    // 1. Obtener la orden con equipo directo + equipos múltiples + plan de actividades
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: id },
       select: {
         id_orden_servicio: true,
         equipos: {
           select: { id_tipo_equipo: true },
+        },
+        ordenes_equipos: {
+          select: {
+            equipo: {
+              select: { id_tipo_equipo: true },
+            },
+          },
+        },
+        ordenes_actividades_plan: {
+          select: {
+            catalogo_actividades: {
+              select: {
+                tipo_actividad: true,
+                id_parametro_medicion: true,
+                descripcion_actividad: true,
+              },
+            },
+          },
         },
       },
     });
@@ -484,8 +507,6 @@ export class OrdenesController {
       return { success: false, data: [], parametros_sin_medir: [] };
     }
 
-    const idTipoEquipo = orden.equipos?.id_tipo_equipo;
-
     // 2. Obtener mediciones ya registradas
     const mediciones = await this.prisma.mediciones_servicio.findMany({
       where: { id_orden_servicio: id },
@@ -493,27 +514,77 @@ export class OrdenesController {
       orderBy: { fecha_medicion: 'desc' },
     });
 
-    // 3. Obtener TODOS los parámetros disponibles para este tipo de equipo
-    const todosParametros = idTipoEquipo
+    const idsMedidos = new Set(mediciones.map(m => m.id_parametro_medicion));
+
+    // 3. FUENTE 1: Parámetros del plan de actividades (MEDICION)
+    const idsDesdelPlan = new Set<number>();
+    for (const planItem of orden.ordenes_actividades_plan || []) {
+      const act = planItem.catalogo_actividades;
+      if (act?.tipo_actividad === 'MEDICION' && act.id_parametro_medicion) {
+        idsDesdelPlan.add(act.id_parametro_medicion);
+      }
+    }
+
+    // 4. FUENTE 2: Parámetros del tipo de equipo directo
+    const tiposEquipoIds = new Set<number>();
+    if (orden.equipos?.id_tipo_equipo) {
+      tiposEquipoIds.add(orden.equipos.id_tipo_equipo);
+    }
+
+    // 5. FUENTE 3: Parámetros de equipos múltiples (ordenes_equipos)
+    for (const oe of orden.ordenes_equipos || []) {
+      if (oe.equipo?.id_tipo_equipo) {
+        tiposEquipoIds.add(oe.equipo.id_tipo_equipo);
+      }
+    }
+
+    // 6. Consultar parámetros por tipo de equipo
+    const parametrosPorTipo = tiposEquipoIds.size > 0
       ? await this.prisma.parametros_medicion.findMany({
         where: {
-          id_tipo_equipo: idTipoEquipo,
+          id_tipo_equipo: { in: Array.from(tiposEquipoIds) },
           activo: true,
         },
-        orderBy: { nombre_parametro: 'asc' },
       })
       : [];
 
-    // 4. Identificar parámetros que NO fueron medidos
-    const idsMedidos = new Set(mediciones.map(m => m.id_parametro_medicion));
-    const parametrosSinMedir = todosParametros.filter(
-      p => !idsMedidos.has(p.id_parametro_medicion),
-    );
+    // 7. Consultar parámetros del plan de actividades
+    const parametrosDelPlan = idsDesdelPlan.size > 0
+      ? await this.prisma.parametros_medicion.findMany({
+        where: {
+          id_parametro_medicion: { in: Array.from(idsDesdelPlan) },
+          activo: true,
+        },
+      })
+      : [];
+
+    // 8. UNION de ambas fuentes (deduplicar por ID)
+    const mapaParametros = new Map<number, any>();
+    for (const p of parametrosPorTipo) {
+      mapaParametros.set(p.id_parametro_medicion, p);
+    }
+    for (const p of parametrosDelPlan) {
+      mapaParametros.set(p.id_parametro_medicion, p);
+    }
+
+    // 9. Filtrar los que NO han sido medidos
+    const parametrosSinMedir = Array.from(mapaParametros.values())
+      .filter(p => !idsMedidos.has(p.id_parametro_medicion))
+      .sort((a, b) => (a.nombre_parametro || '').localeCompare(b.nombre_parametro || ''));
 
     return {
       success: true,
       data: mediciones,
       parametros_sin_medir: parametrosSinMedir,
+      _debug: {
+        total_parametros_disponibles: mapaParametros.size,
+        total_medidos: idsMedidos.size,
+        total_sin_medir: parametrosSinMedir.length,
+        fuentes: {
+          plan_actividades: idsDesdelPlan.size,
+          tipos_equipo: parametrosPorTipo.length,
+        },
+      },
     };
   }
 

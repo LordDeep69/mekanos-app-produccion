@@ -344,21 +344,23 @@ export function MedicionCardAdvanced({ medicion, idOrdenServicio, onUpdate }: Me
 /**
  * Resumen de mediciones
  */
-export function ResumenMediciones({ mediciones }: { mediciones: Medicion[] }) {
+export function ResumenMediciones({ mediciones, totalParametros }: { mediciones: Medicion[]; totalParametros?: number }) {
     const contadores = {
         ok: mediciones.filter(m => !m.fuera_de_rango && m.nivel_alerta !== 'CRITICO' && m.nivel_alerta !== 'ADVERTENCIA').length,
         advertencia: mediciones.filter(m => m.nivel_alerta === 'ADVERTENCIA').length,
         critico: mediciones.filter(m => m.fuera_de_rango || m.nivel_alerta === 'CRITICO').length,
     };
 
-    const total = mediciones.length;
     const completadas = mediciones.filter(m => m.valor_numerico !== null || m.valor_texto !== null).length;
+    const totalDisponibles = totalParametros ?? mediciones.length;
 
     return (
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
                 <h4 className="font-bold text-gray-900 text-sm">Resumen de Mediciones</h4>
-                <span className="text-sm font-bold text-purple-600">{completadas}/{total} registradas</span>
+                <span className={`text-sm font-bold ${completadas < totalDisponibles ? 'text-amber-600' : 'text-purple-600'}`}>
+                    {completadas}/{totalDisponibles} registradas
+                </span>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
