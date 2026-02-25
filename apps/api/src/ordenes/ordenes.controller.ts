@@ -847,6 +847,131 @@ export class OrdenesController {
   }
 
   /**
+   * PUT /api/ordenes/:id/firmas/:tipo
+   * ✅ 25-FEB-2026: Permite al admin editar/crear firma de una orden (dibujar o subir imagen)
+   * tipo = TECNICO | CLIENTE
+   */
+  @Put(':id/firmas/:tipo')
+  @UseGuards(JwtAuthGuard)
+  async updateFirmaOrden(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('tipo') tipo: string,
+    @CurrentUser('id') userId: number,
+    @Body() body: { firma_base64: string; nombre_firmante?: string; cargo_firmante?: string },
+  ) {
+    const tipoUpper = tipo.toUpperCase();
+    if (!['TECNICO', 'CLIENTE'].includes(tipoUpper)) {
+      throw new BadRequestException('Tipo de firma inválido. Use TECNICO o CLIENTE.');
+    }
+
+    if (!body.firma_base64) {
+      throw new BadRequestException('firma_base64 es requerido.');
+    }
+
+    // 1. Obtener la orden y sus FKs de firma actuales
+    const ordenData = await this.prisma.$queryRaw<any[]>`
+      SELECT id_orden_servicio, id_firma_cliente, id_firma_tecnico,
+             id_tecnico_asignado, id_cliente, nombre_quien_recibe, cargo_quien_recibe
+      FROM ordenes_servicio WHERE id_orden_servicio = ${id}
+    `;
+    if (!ordenData || ordenData.length === 0) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+    const orden = ordenData[0];
+
+    // 2. Determinar id_persona según tipo de firma
+    let idPersona: number;
+    if (tipoUpper === 'TECNICO') {
+      // Obtener id_persona del técnico asignado
+      if (!orden.id_tecnico_asignado) {
+        throw new BadRequestException('La orden no tiene técnico asignado.');
+      }
+      const empleado = await this.prisma.empleados.findUnique({
+        where: { id_empleado: orden.id_tecnico_asignado },
+        select: { id_persona: true },
+      });
+      if (!empleado) throw new BadRequestException('Técnico no encontrado.');
+      idPersona = empleado.id_persona;
+    } else {
+      // CLIENTE: buscar persona del cliente
+      const cliente = await this.prisma.clientes.findUnique({
+        where: { id_cliente: orden.id_cliente },
+        select: { id_persona: true },
+      });
+      if (!cliente) throw new BadRequestException('Cliente no encontrado.');
+      idPersona = cliente.id_persona;
+    }
+
+    // 3. Generar hash de la firma
+    const { createHash } = require('crypto');
+    const hashFirma = createHash('sha256').update(body.firma_base64).digest('hex').substring(0, 64);
+
+    // 4. Verificar si ya existe una firma vinculada a la orden para este tipo
+    const fkField = tipoUpper === 'TECNICO' ? 'id_firma_tecnico' : 'id_firma_cliente';
+    const existingFirmaId = orden[fkField];
+
+    let firmaId: number;
+
+    if (existingFirmaId) {
+      // Actualizar la firma existente
+      await this.prisma.firmas_digitales.update({
+        where: { id_firma_digital: existingFirmaId },
+        data: {
+          firma_base64: body.firma_base64,
+          hash_firma: hashFirma,
+          fecha_captura: new Date(),
+        },
+      });
+      firmaId = existingFirmaId;
+      console.log(`[FIRMAS] ✅ Firma ${tipoUpper} actualizada (id=${firmaId}) para orden ${id}`);
+    } else {
+      // Crear nueva firma
+      const nuevaFirma = await this.prisma.firmas_digitales.create({
+        data: {
+          id_persona: idPersona,
+          tipo_firma: tipoUpper as any,
+          firma_base64: body.firma_base64,
+          formato_firma: 'PNG',
+          hash_firma: hashFirma,
+          es_firma_principal: false,
+          activa: true,
+          registrada_por: userId,
+          fecha_captura: new Date(),
+          fecha_registro: new Date(),
+        },
+      });
+      firmaId = nuevaFirma.id_firma_digital;
+
+      // Vincular la firma a la orden
+      if (tipoUpper === 'TECNICO') {
+        await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_tecnico = ${firmaId} WHERE id_orden_servicio = ${id}`;
+      } else {
+        await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_cliente = ${firmaId} WHERE id_orden_servicio = ${id}`;
+      }
+      console.log(`[FIRMAS] ✅ Nueva firma ${tipoUpper} creada (id=${firmaId}) y vinculada a orden ${id}`);
+    }
+
+    // 5. Actualizar nombre/cargo en la orden si es firma de cliente
+    if (tipoUpper === 'CLIENTE') {
+      const updateData: any = {};
+      if (body.nombre_firmante) updateData.nombre_quien_recibe = body.nombre_firmante;
+      if (body.cargo_firmante) updateData.cargo_quien_recibe = body.cargo_firmante;
+      if (Object.keys(updateData).length > 0) {
+        await this.prisma.ordenes_servicio.update({
+          where: { id_orden_servicio: id },
+          data: updateData,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      message: `Firma de ${tipoUpper} ${existingFirmaId ? 'actualizada' : 'creada'} exitosamente`,
+      data: { id_firma: firmaId, tipo: tipoUpper },
+    };
+  }
+
+  /**
    * GET /api/ordenes/:id/pdf-url
    * Obtiene la URL del PDF del informe de servicio (sin generar)
    */

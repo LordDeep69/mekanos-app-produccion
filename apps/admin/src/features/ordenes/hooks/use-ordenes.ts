@@ -35,12 +35,14 @@ import {
     getServiciosOrden,
     removeServicioOrden,
     updateActividad,
+    updateFirmaOrden,
     updateHorariosServicio,
     updateMedicion,
     updateObservacionesCierre,
     updateOrden,
     type AddServicioDetalleDto,
     type UpdateActividadDto,
+    type UpdateFirmaOrdenDto,
     type UpdateHorariosServicioDto,
     type UpdateMedicionDto,
     type UpdateOrdenDto
@@ -81,7 +83,24 @@ export function useFirmasOrden(idOrden: number) {
     });
 }
 
-// ... (existing hooks) ...
+/**
+ * ✅ 25-FEB-2026: Hook para actualizar/crear firma de una orden
+ */
+export function useUpdateFirmaOrden() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ idOrden, tipo, data }: { idOrden: number; tipo: 'TECNICO' | 'CLIENTE'; data: UpdateFirmaOrdenDto }) =>
+            updateFirmaOrden(idOrden, tipo, data),
+        onSuccess: (_, { idOrden }) => {
+            queryClient.invalidateQueries({ queryKey: [...FIRMAS_ORDEN_KEY, idOrden] });
+            toast.success('Firma actualizada exitosamente');
+        },
+        onError: (error: any) => {
+            toast.error(error?.response?.data?.message || 'Error al actualizar la firma');
+        },
+    });
+}
 
 /**
  * Hook para obtener actividades de una orden

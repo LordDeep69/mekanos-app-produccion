@@ -305,6 +305,27 @@ export async function getFirmasOrden(idOrden: number): Promise<{ success: boolea
     return response.data;
 }
 
+/**
+ * ✅ 25-FEB-2026: Actualizar/crear firma de una orden
+ */
+export interface UpdateFirmaOrdenDto {
+    firma_base64: string;
+    nombre_firmante?: string;
+    cargo_firmante?: string;
+}
+
+export async function updateFirmaOrden(
+    idOrden: number,
+    tipo: 'TECNICO' | 'CLIENTE',
+    data: UpdateFirmaOrdenDto
+): Promise<{ success: boolean; message: string; data: any }> {
+    const response = await apiClient.put(
+        `${ORDENES_BASE}/${idOrden}/firmas/${tipo}`,
+        data
+    );
+    return response.data;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ACTIVIDADES EJECUTADAS - EDICIÓN AVANZADA
 // ═══════════════════════════════════════════════════════════════════════════════

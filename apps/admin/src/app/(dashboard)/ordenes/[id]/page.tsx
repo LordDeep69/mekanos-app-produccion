@@ -949,7 +949,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
             <HistorialEmailsSection idOrden={orden.id_orden_servicio} />
 
             {/* Firmas Digitales - Componente Avanzado */}
-            <FirmasSection firmas={firmas} isLoading={isLoadingFi} />
+            <FirmasSection firmas={firmas} isLoading={isLoadingFi} idOrdenServicio={orden.id_orden_servicio} />
 
             {/* Fotos Generales del Servicio - CRUD */}
             <GaleriaFotosGenerales idOrdenServicio={orden.id_orden_servicio} />
