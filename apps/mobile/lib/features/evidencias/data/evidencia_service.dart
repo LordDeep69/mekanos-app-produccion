@@ -174,11 +174,14 @@ class EvidenciaService {
 
   /// Selecciona una imagen de la galería con compresión automática
   /// ✅ MULTI-EQUIPOS (16-DIC-2025): Agregado idOrdenEquipo opcional
+  /// ✅ FIX 28-FEB-2026: Agregado idActividadEjecutada para vincular a actividad
   Future<CapturaEvidenciaResult> seleccionarDeGaleria({
     required int idOrden,
     required TipoEvidencia tipo,
     String? descripcion,
-    int? idOrdenEquipo, // ✅ MULTI-EQUIPOS: Para asociar evidencia a equipo específico
+    int? idActividadEjecutada,
+    int?
+    idOrdenEquipo, // ✅ MULTI-EQUIPOS: Para asociar evidencia a equipo específico
   }) async {
     try {
       // 1. Seleccionar imagen con compresión
@@ -211,6 +214,7 @@ class EvidenciaService {
       final idEvidencia = await _db.insertEvidencia(
         EvidenciasCompanion.insert(
           idOrden: idOrden,
+          idActividadEjecutada: Value(idActividadEjecutada),
           rutaLocal: rutaDestino,
           tipoEvidencia: tipo.name,
           descripcion: Value(descripcion),
@@ -229,6 +233,80 @@ class EvidenciaService {
       );
     } catch (e) {
       return CapturaEvidenciaResult(exito: false, error: e.toString());
+    }
+  }
+
+  /// ✅ FIX 28-FEB-2026: Selecciona MÚLTIPLES imágenes de la galería
+  /// Permite al técnico elegir varias fotos a la vez (mucho más eficiente)
+  Future<List<CapturaEvidenciaResult>> seleccionarMultiplesDeGaleria({
+    required int idOrden,
+    required TipoEvidencia tipo,
+    String? descripcion,
+    int? idActividadEjecutada,
+    int? idOrdenEquipo,
+  }) async {
+    try {
+      // 1. Seleccionar múltiples imágenes
+      final List<XFile> imagenes = await _picker.pickMultiImage(
+        maxWidth: _maxWidth.toDouble(),
+        maxHeight: _maxHeight.toDouble(),
+        imageQuality: _imageQuality,
+      );
+
+      if (imagenes.isEmpty) {
+        return [
+          CapturaEvidenciaResult(exito: false, error: 'Selección cancelada'),
+        ];
+      }
+
+      // 2. Procesar cada imagen
+      final evidenciasDir = await _getEvidenciasDirectory();
+      final resultados = <CapturaEvidenciaResult>[];
+
+      for (final imagen in imagenes) {
+        try {
+          final nombreArchivo = _generarNombreArchivo(idOrden, tipo);
+          final rutaDestino = path.join(evidenciasDir.path, nombreArchivo);
+
+          final archivoOriginal = File(imagen.path);
+          final archivoPermanente = await archivoOriginal.copy(rutaDestino);
+          final tamanoBytes = await archivoPermanente.length();
+
+          final idEvidencia = await _db.insertEvidencia(
+            EvidenciasCompanion.insert(
+              idOrden: idOrden,
+              idActividadEjecutada: Value(idActividadEjecutada),
+              rutaLocal: rutaDestino,
+              tipoEvidencia: tipo.name,
+              descripcion: Value(descripcion),
+              fechaCaptura: Value(DateTime.now()),
+              isDirty: const Value(true),
+              subida: const Value(false),
+              idOrdenEquipo: Value(idOrdenEquipo),
+            ),
+          );
+
+          resultados.add(
+            CapturaEvidenciaResult(
+              exito: true,
+              rutaArchivo: rutaDestino,
+              idEvidencia: idEvidencia,
+              tamanoBytes: tamanoBytes,
+            ),
+          );
+
+          // Pequeña pausa para evitar timestamps idénticos en nombres
+          await Future.delayed(const Duration(milliseconds: 2));
+        } catch (e) {
+          resultados.add(
+            CapturaEvidenciaResult(exito: false, error: e.toString()),
+          );
+        }
+      }
+
+      return resultados;
+    } catch (e) {
+      return [CapturaEvidenciaResult(exito: false, error: e.toString())];
     }
   }
 

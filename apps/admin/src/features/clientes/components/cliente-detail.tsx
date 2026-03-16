@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   PERIODICIDAD_LABELS,
   TIPO_CLIENTE_LABELS,
@@ -23,6 +24,7 @@ import {
 } from '@/types/clientes';
 import {
   ArrowLeft,
+  BookOpen,
   Building2,
   Calendar,
   Clock,
@@ -37,6 +39,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCliente } from '../hooks/use-clientes';
+import { BitacoraTab } from './bitacora-tab';
 import { EquiposClienteTable } from './equipos-cliente-table';
 
 interface ClienteDetailProps {
@@ -165,277 +168,301 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
         </Button>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Información de la Persona */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Información de Contacto
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {persona && (
-              <>
+      {/* Tabs: General + Bitácora (solo principal) */}
+      <Tabs defaultValue="general">
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          {esPrincipal && (
+            <TabsTrigger value="bitacora" className="flex items-center gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" />
+              Bitácora
+            </TabsTrigger>
+          )}
+        </TabsList>
+
+        <TabsContent value="general" className="mt-4">
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Información de la Persona */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Información de Contacto
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {persona && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Tipo Identificación</p>
+                        <p className="font-medium">{persona.tipo_identificacion}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Número</p>
+                        <p className="font-mono font-medium">{persona.numero_identificacion}</p>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {persona.tipo_persona === 'JURIDICA' && (
+                      <>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Razón Social</p>
+                          <p className="font-medium">{persona.razon_social || '-'}</p>
+                        </div>
+                        {persona.nombre_comercial && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Nombre Comercial</p>
+                            <p className="font-medium">{persona.nombre_comercial}</p>
+                          </div>
+                        )}
+                        {persona.representante_legal && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Representante Legal</p>
+                            <p className="font-medium">{persona.representante_legal}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div className="space-y-2">
+                      {persona.telefono_principal && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span>{persona.telefono_principal}</span>
+                        </div>
+                      )}
+                      {persona.celular && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span>{persona.celular} (Celular)</span>
+                        </div>
+                      )}
+                      {persona.email_principal && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <span>{persona.email_principal}</span>
+                        </div>
+                      )}
+                      {/* ✅ 24-FEB-2026: Mostrar correos adicionales de notificación */}
+                      {(cliente as any).emails_notificacion && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Correos adicionales:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(cliente as any).emails_notificacion.split(';;').filter((e: string) => e.trim()).map((email: string, idx: number) => (
+                              <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                                <Mail className="h-3 w-3" />
+                                {email.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {persona.direccion_principal && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-muted-foreground" />
+                          <span>
+                            {persona.direccion_principal}
+                            {persona.barrio_zona && `, ${persona.barrio_zona}`}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-sm">
+                        <Globe className="h-4 w-4 text-muted-foreground" />
+                        <span>
+                          {persona.ciudad}{persona.departamento && `, ${persona.departamento}`}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Información del Cliente */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Información del Cliente
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Tipo Identificación</p>
-                    <p className="font-medium">{persona.tipo_identificacion}</p>
+                    <p className="text-sm text-muted-foreground">Tipo de Cliente</p>
+                    <Badge variant="secondary">
+                      {TIPO_CLIENTE_LABELS[cliente.tipo_cliente as TipoClienteEnum] || cliente.tipo_cliente}
+                    </Badge>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Número</p>
-                    <p className="font-mono font-medium">{persona.numero_identificacion}</p>
+                    <p className="text-sm text-muted-foreground">Periodicidad</p>
+                    <p className="font-medium">
+                      {cliente.periodicidad_mantenimiento
+                        ? PERIODICIDAD_LABELS[cliente.periodicidad_mantenimiento as PeriodicidadMantenimientoEnum]
+                        : '-'}
+                    </p>
                   </div>
                 </div>
 
-                <Separator />
-
-                {persona.tipo_persona === 'JURIDICA' && (
+                {cliente.firma_administrativa && (
                   <>
+                    <Separator />
                     <div>
-                      <p className="text-sm text-muted-foreground">Razón Social</p>
-                      <p className="font-medium">{persona.razon_social || '-'}</p>
+                      <p className="text-sm text-muted-foreground">Firma Administrativa</p>
+                      <p className="font-medium">
+                        {cliente.firma_administrativa.nombre_de_firma || `Firma #${cliente.firma_administrativa.id_firma_administrativa}`}
+                      </p>
                     </div>
-                    {persona.nombre_comercial && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Nombre Comercial</p>
-                        <p className="font-medium">{persona.nombre_comercial}</p>
-                      </div>
-                    )}
-                    {persona.representante_legal && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Representante Legal</p>
-                        <p className="font-medium">{persona.representante_legal}</p>
-                      </div>
-                    )}
                   </>
                 )}
 
-                <div className="space-y-2">
-                  {persona.telefono_principal && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{persona.telefono_principal}</span>
-                    </div>
-                  )}
-                  {persona.celular && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{persona.celular} (Celular)</span>
-                    </div>
-                  )}
-                  {persona.email_principal && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span>{persona.email_principal}</span>
-                    </div>
-                  )}
-                  {/* ✅ 24-FEB-2026: Mostrar correos adicionales de notificación */}
-                  {(cliente as any).emails_notificacion && (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Correos adicionales:</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(cliente as any).emails_notificacion.split(';;').filter((e: string) => e.trim()).map((email: string, idx: number) => (
-                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
-                            <Mail className="h-3 w-3" />
-                            {email.trim()}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {persona.direccion_principal && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span>
-                        {persona.direccion_principal}
-                        {persona.barrio_zona && `, ${persona.barrio_zona}`}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-sm">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    <span>
-                      {persona.ciudad}{persona.departamento && `, ${persona.departamento}`}
+                <Separator />
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Inicio servicio:</span>
+                    <span className="text-sm font-medium">
+                      {formatDate(cliente.fecha_inicio_servicio)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Último servicio:</span>
+                    <span className="text-sm font-medium">
+                      {formatDate(cliente.fecha_ultimo_servicio)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Próximo servicio:</span>
+                    <span className="text-sm font-medium">
+                      {formatDate(cliente.fecha_proximo_servicio)}
                     </span>
                   </div>
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Información del Cliente */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              Información del Cliente
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Tipo de Cliente</p>
-                <Badge variant="secondary">
-                  {TIPO_CLIENTE_LABELS[cliente.tipo_cliente as TipoClienteEnum] || cliente.tipo_cliente}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Periodicidad</p>
-                <p className="font-medium">
-                  {cliente.periodicidad_mantenimiento
-                    ? PERIODICIDAD_LABELS[cliente.periodicidad_mantenimiento as PeriodicidadMantenimientoEnum]
-                    : '-'}
-                </p>
-              </div>
-            </div>
-
-            {cliente.firma_administrativa && (
-              <>
                 <Separator />
-                <div>
-                  <p className="text-sm text-muted-foreground">Firma Administrativa</p>
-                  <p className="font-medium">
-                    {cliente.firma_administrativa.nombre_de_firma || `Firma #${cliente.firma_administrativa.id_firma_administrativa}`}
-                  </p>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Percent className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Descuento autorizado</span>
+                    </div>
+                    <span className="font-medium">{cliente.descuento_autorizado ?? 0}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Tiene crédito</span>
+                    </div>
+                    <Badge variant={cliente.tiene_credito ? 'default' : 'secondary'}>
+                      {cliente.tiene_credito ? 'Sí' : 'No'}
+                    </Badge>
+                  </div>
+                  {cliente.tiene_credito && (
+                    <>
+                      <div className="flex items-center justify-between pl-6">
+                        <span className="text-sm text-muted-foreground">Límite</span>
+                        <span className="font-medium">{formatCurrency(cliente.limite_credito)}</span>
+                      </div>
+                      <div className="flex items-center justify-between pl-6">
+                        <span className="text-sm text-muted-foreground">Días</span>
+                        <span className="font-medium">{cliente.dias_credito ?? 0} días</span>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </>
+
+                <Separator />
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Acceso al portal</span>
+                  <Badge variant={cliente.tiene_acceso_portal ? 'default' : 'secondary'}>
+                    {cliente.tiene_acceso_portal ? 'Habilitado' : 'Deshabilitado'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Observaciones */}
+            {(cliente.observaciones_servicio || cliente.requisitos_especiales) && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle>Observaciones</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {cliente.observaciones_servicio && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">
+                        Observaciones del Servicio
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap">
+                        {cliente.observaciones_servicio}
+                      </p>
+                    </div>
+                  )}
+                  {cliente.requisitos_especiales && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">
+                        Requisitos Especiales
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap">
+                        {cliente.requisitos_especiales}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
-            <Separator />
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Inicio servicio:</span>
-                <span className="text-sm font-medium">
-                  {formatDate(cliente.fecha_inicio_servicio)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Último servicio:</span>
-                <span className="text-sm font-medium">
-                  {formatDate(cliente.fecha_ultimo_servicio)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Próximo servicio:</span>
-                <span className="text-sm font-medium">
-                  {formatDate(cliente.fecha_proximo_servicio)}
-                </span>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Descuento autorizado</span>
-                </div>
-                <span className="font-medium">{cliente.descuento_autorizado ?? 0}%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Tiene crédito</span>
-                </div>
-                <Badge variant={cliente.tiene_credito ? 'default' : 'secondary'}>
-                  {cliente.tiene_credito ? 'Sí' : 'No'}
-                </Badge>
-              </div>
-              {cliente.tiene_credito && (
-                <>
-                  <div className="flex items-center justify-between pl-6">
-                    <span className="text-sm text-muted-foreground">Límite</span>
-                    <span className="font-medium">{formatCurrency(cliente.limite_credito)}</span>
+            {/* ✅ MULTI-SEDE: Mostrar sedes si es cliente principal */}
+            {esPrincipal && cliente.sedes && cliente.sedes.length > 0 && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Sedes ({cliente.sedes.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-2">
+                    {cliente.sedes.map((sede: any) => (
+                      <button
+                        key={sede.id_cliente}
+                        onClick={() => router.push(`/clientes/${sede.id_cliente}`)}
+                        className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors text-left"
+                      >
+                        <div>
+                          <p className="font-medium">{sede.nombre_sede || 'Sin nombre'}</p>
+                          <p className="text-sm text-muted-foreground">{sede.codigo_cliente}</p>
+                        </div>
+                        <ArrowLeft className="h-4 w-4 rotate-180 text-muted-foreground" />
+                      </button>
+                    ))}
                   </div>
-                  <div className="flex items-center justify-between pl-6">
-                    <span className="text-sm text-muted-foreground">Días</span>
-                    <span className="font-medium">{cliente.dias_credito ?? 0} días</span>
-                  </div>
-                </>
-              )}
-            </div>
+                </CardContent>
+              </Card>
+            )}
 
-            <Separator />
+            {/* Tabla de Equipos del Cliente */}
+            <EquiposClienteTable clienteId={clienteId} />
+          </div>
+        </TabsContent>
 
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Acceso al portal</span>
-              <Badge variant={cliente.tiene_acceso_portal ? 'default' : 'secondary'}>
-                {cliente.tiene_acceso_portal ? 'Habilitado' : 'Deshabilitado'}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Observaciones */}
-        {(cliente.observaciones_servicio || cliente.requisitos_especiales) && (
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Observaciones</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {cliente.observaciones_servicio && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">
-                    Observaciones del Servicio
-                  </p>
-                  <p className="text-sm whitespace-pre-wrap">
-                    {cliente.observaciones_servicio}
-                  </p>
-                </div>
-              )}
-              {cliente.requisitos_especiales && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">
-                    Requisitos Especiales
-                  </p>
-                  <p className="text-sm whitespace-pre-wrap">
-                    {cliente.requisitos_especiales}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {esPrincipal && (
+          <TabsContent value="bitacora" className="mt-4">
+            <BitacoraTab
+              clienteId={clienteId}
+              clienteNombre={nombreCliente || 'Cliente'}
+            />
+          </TabsContent>
         )}
-
-        {/* ✅ MULTI-SEDE: Mostrar sedes si es cliente principal */}
-        {esPrincipal && cliente.sedes && cliente.sedes.length > 0 && (
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Sedes ({cliente.sedes.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2">
-                {cliente.sedes.map((sede: any) => (
-                  <button
-                    key={sede.id_cliente}
-                    onClick={() => router.push(`/clientes/${sede.id_cliente}`)}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors text-left"
-                  >
-                    <div>
-                      <p className="font-medium">{sede.nombre_sede || 'Sin nombre'}</p>
-                      <p className="text-sm text-muted-foreground">{sede.codigo_cliente}</p>
-                    </div>
-                    <ArrowLeft className="h-4 w-4 rotate-180 text-muted-foreground" />
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Tabla de Equipos del Cliente */}
-        <EquiposClienteTable clienteId={clienteId} />
-      </div>
+      </Tabs>
     </div>
   );
 }

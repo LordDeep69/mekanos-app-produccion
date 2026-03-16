@@ -12,15 +12,22 @@ import { cn } from '@/lib/utils';
 import {
     CheckCircle2,
     Clock,
+    Edit,
+    Eraser,
     ExternalLink,
+    Loader2,
     Pen,
+    Plus,
+    Save,
+    Upload,
     User,
     UserCheck,
     X,
     ZoomIn
 } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useUpdateFirmaOrden } from '../hooks/use-ordenes';
 
 interface Firma {
     id_firma: number;
@@ -501,7 +508,7 @@ function FirmaCard({ firma, onEdit }: { firma: Firma; onEdit?: () => void }) {
                                 className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
                                 title="Editar firma"
                             >
-                                <Edit3 className="h-4 w-4" />
+                                <Edit className="h-4 w-4" />
                             </button>
                         )}
                         <CheckCircle2 className="h-5 w-5 text-white/80" />

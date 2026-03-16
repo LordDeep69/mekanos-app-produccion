@@ -166,6 +166,7 @@ export interface UpdateOrdenDto {
     observaciones?: string;         // Observaciones generales
     observaciones_cierre?: string;  // Observaciones de cierre
     requiere_firma_cliente?: boolean;
+    id_tecnico_asignado?: number;   // ✅ 26-FEB-2026: Cambiar técnico sin cambiar estado
 }
 
 /**
@@ -435,13 +436,23 @@ export async function regenerarPdf(
 }
 
 /**
- * Enviar PDF existente por email sin regenerar
+ * Archivo adjunto adicional
+ */
+export interface ArchivoAdjunto {
+    filename: string;
+    contentBase64: string;
+    contentType?: string;
+}
+
+/**
+ * Enviar PDF existente por email
  */
 export interface EnviarPdfExistenteDto {
     emailDestino: string;
     asuntoEmail?: string;
     mensajeEmail?: string;
     emailsCc?: string[];
+    archivosAdicionales?: ArchivoAdjunto[];
 }
 
 export interface EnviarPdfExistenteResponse {
@@ -541,6 +552,48 @@ export async function getHistorialEmails(
         console.error(`❌ [API] Error en getHistorialEmails:`, error?.response?.status, error?.response?.data || error?.message);
         throw error;
     }
+}
+
+/**
+ * ✅ 26-FEB-2026: Eliminar orden de servicio (HARD DELETE)
+ * Elimina permanentemente la orden y TODOS sus datos asociados
+ */
+export async function deleteOrden(
+    id: number
+): Promise<{ success: boolean; message: string; data: { id_orden_servicio: number; numero_orden: string } }> {
+    const response = await apiClient.delete<{ success: boolean; message: string; data: { id_orden_servicio: number; numero_orden: string } }>(
+        `${ORDENES_BASE}/${id}`
+    );
+    return response.data;
+}
+
+/**
+ * ✅ FIX 13-MAR-2026: Transferir datos completos de una orden a otra
+ * Copia todos los datos (actividades, evidencias, mediciones, firmas, componentes, etc.)
+ */
+export async function transferirDatosOrden(
+    idOrdenDestino: number,
+    idOrdenOrigen: number
+): Promise<{
+    success: boolean;
+    message: string;
+    ordenOrigen: { id: number; numero: string };
+    ordenDestino: { id: number; numero: string };
+    estadisticas: {
+        camposDirectos: boolean;
+        ordenesEquipos: number;
+        actividadesEjecutadas: number;
+        evidenciasFotograficas: number;
+        medicionesServicio: number;
+        componentesUsados: number;
+        ordenesActividadesPlan: number;
+    };
+}> {
+    const response = await apiClient.post(
+        `${ORDENES_BASE}/${idOrdenDestino}/transferir-datos`,
+        { idOrdenOrigen }
+    );
+    return response.data;
 }
 
 /**

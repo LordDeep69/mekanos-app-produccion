@@ -17,10 +17,18 @@ import {
 } from './create-clientes.dto';
 
 /**
- * DTO para actualizar solo campos de contacto de persona
- * ✅ FIX 03-FEB-2026: Sin campos obligatorios (tipo_identificacion, numero_identificacion)
+ * DTO para actualizar campos de persona (nombres + contacto)
+ * ✅ FIX 04-MAR-2026: Agregados campos razon_social y nombre_comercial para edición de nombres de cliente
  */
 export class UpdatePersonaContactoDto {
+    @IsOptional()
+    @IsString()
+    razon_social?: string;
+
+    @IsOptional()
+    @IsString()
+    nombre_comercial?: string;
+
     @IsOptional()
     @IsEmail()
     email_principal?: string;
@@ -108,6 +116,24 @@ export class UpdateClientesDto {
     @IsOptional()
     @IsString()
     emails_notificacion?: string;
+
+    // ✅ 27-FEB-2026: Cuenta de email remitente para informes
+    @IsOptional()
+    @IsInt()
+    id_cuenta_email_remitente?: number | null;
+
+    // ✅ MULTI-SEDE: Campos para convertir cliente en sede o actualizar sede existente
+    @IsOptional()
+    @IsBoolean()
+    es_cliente_principal?: boolean;
+
+    @IsOptional()
+    @IsInt()
+    id_cliente_principal?: number | null;
+
+    @IsOptional()
+    @IsString()
+    nombre_sede?: string | null;
 
     // ✅ Persona con solo campos de contacto editables
     @IsOptional()

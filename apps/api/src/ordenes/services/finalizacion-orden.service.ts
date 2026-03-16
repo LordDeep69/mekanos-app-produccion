@@ -418,18 +418,20 @@ export class FinalizacionOrdenService {
             emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
 
             // ========================================================================
-            // PASO 1.5: LIMPIEZA DE RESIDUALES - Eliminar evidencias/firmas de intentos fallidos
-            // ✅ FIX 10-FEB-2026: Cuando un técnico tiene intentos fallidos de subida,
-            // las evidencias quedan huérfanas en BD (el rollback no se ejecutó si la
-            // conexión se cortó). Antes de subir nuevas, limpiamos las residuales.
-            // Solo aplica si la orden NO está en estado COMPLETADA.
+            // PASO 1.5: LIMPIEZA / ROLLBACK - Eliminar datos anteriores antes de re-insertar
+            // ✅ FIX 10-FEB-2026: Limpia evidencias huérfanas de intentos fallidos
+            // ✅ FIX 26-FEB-2026: También hace rollback completo para re-subida de COMPLETADA
             // ========================================================================
             const estadoActual = orden.id_estado_actual;
             const esYaCompletada = estadoActual === estadoCompletada.id_estado;
 
-            if (!esYaCompletada) {
-                emitProgress('limpieza_residuales', 'in_progress', 'Verificando evidencias residuales...', 16);
-                this.logger.log('🧹 Paso 1.5: Verificando evidencias residuales de intentos fallidos...');
+            // ✅ FIX 26-FEB-2026: SIEMPRE ejecutar limpieza
+            // - Para !esYaCompletada: limpia residuales de intentos fallidos
+            // - Para esYaCompletada: hace rollback de datos anteriores para re-subida
+            {
+                const motivo = esYaCompletada ? 'rollback para re-subida' : 'limpieza de residuales';
+                emitProgress('limpieza_residuales', 'in_progress', esYaCompletada ? 'Preparando re-subida (rollback)...' : 'Verificando evidencias residuales...', 16);
+                this.logger.log(`🧹 Paso 1.5: ${motivo}...`);
 
                 try {
                     // Contar evidencias existentes para esta orden
@@ -807,7 +809,16 @@ export class FinalizacionOrdenService {
             where: { id_orden_servicio: idOrden },
             include: {
                 clientes: {
-                    include: { persona: true },
+                    include: {
+                        persona: true,
+                        // ✅ FIX 28-FEB-2026: Incluir cliente_principal para heredar emails_notificacion
+                        cliente_principal: {
+                            select: {
+                                emails_notificacion: true,
+                                id_cuenta_email_remitente: true,
+                            },
+                        },
+                    },
                 },
                 equipos: {
                     include: { tipos_equipo: true },
@@ -842,7 +853,8 @@ export class FinalizacionOrdenService {
         }
 
         // Validar que la orden esté en estado que permita finalización
-        const estadosPermitidos = ['EN_PROCESO', 'EN_EJECUCION', 'PENDIENTE'];
+        // ✅ FIX 26-FEB-2026: Agregar COMPLETADA para permitir re-subida desde mobile
+        const estadosPermitidos = ['EN_PROCESO', 'EN_EJECUCION', 'PENDIENTE', 'COMPLETADA'];
         if (!estadosPermitidos.includes(orden.estados_orden?.codigo_estado || '')) {
             throw new BadRequestException(
                 `La orden está en estado ${orden.estados_orden?.nombre_estado}, no puede finalizarse`,
@@ -1689,6 +1701,19 @@ export class FinalizacionOrdenService {
             }
         }
 
+        // ✅ FIX 28-FEB-2026: Para sedes, también incluir emails_notificacion del cliente principal
+        if (cliente?.cliente_principal?.emails_notificacion) {
+            const emailsPrincipal = cliente.cliente_principal.emails_notificacion
+                .split(';;')
+                .map((e: string) => e.trim())
+                .filter((e: string) => e.length > 0 && e.includes('@'));
+            for (const extra of emailsPrincipal) {
+                if (!destinatarios.includes(extra)) {
+                    destinatarios.push(extra);
+                }
+            }
+        }
+
         // Incluir email adicional si se proporciona
         if (emailAdicional && !destinatarios.includes(emailAdicional)) {
             destinatarios.push(emailAdicional);
@@ -1716,8 +1741,10 @@ export class FinalizacionOrdenService {
                 tecnicoNombre: `${tecnicoEmpleado?.persona?.primer_nombre || ''} ${tecnicoEmpleado?.persona?.primer_apellido || ''}`.trim() || 'Técnico',
             };
 
-            // TODO: MULTI-EMAIL deshabilitado temporalmente - tabla cuentas_email pendiente de migración
-            const idCuentaEmailCliente = null;
+            // ✅ FIX 28-FEB-2026: Usar cuenta email del cliente con fallback al principal para sedes
+            const idCuentaEmailCliente = cliente?.id_cuenta_email_remitente
+                || cliente?.cliente_principal?.id_cuenta_email_remitente
+                || null;
 
             // ✅ 24-FEB-2026: Enviar a TODOS los destinatarios
             const result = await this.emailService.sendInformeTecnicoEmail(

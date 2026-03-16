@@ -152,6 +152,18 @@ class OfflineSyncService {
           continue; // Saltar al siguiente
         }
 
+        // ✅ FIX 26-FEB-2026: Si el servidor dice 404, la orden fue eliminada
+        if (verificacionInicial['eliminada'] == true) {
+          debugPrint(
+            '🗑️ [SYNC] Orden ${orden.idOrdenBackend} eliminada del servidor (404). '
+            'Eliminando de cola.',
+          );
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          fallidas++;
+          errores.add('Orden ${orden.idOrdenBackend}: Eliminada del servidor');
+          continue;
+        }
+
         // Decodificar payload
         final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
 
@@ -180,6 +192,19 @@ class OfflineSyncService {
         } on DioException catch (iniciarError) {
           // Si /iniciar falla con 400/409, la orden puede ya estar en proceso o completada
           final statusCode = iniciarError.response?.statusCode;
+          // ✅ FIX 26-FEB-2026: Detectar 404 en /iniciar
+          if (statusCode == 404) {
+            debugPrint(
+              '🗑️ [SYNC] Orden ${orden.idOrdenBackend} no existe (404 en /iniciar). '
+              'Eliminando de cola.',
+            );
+            await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+            fallidas++;
+            errores.add(
+              'Orden ${orden.idOrdenBackend}: Eliminada del servidor',
+            );
+            continue;
+          }
           if (statusCode == 400 || statusCode == 409) {
             // Verificar si ya está completada
             final verificacionIniciar = await _verificarOrdenYaCompletada(
@@ -265,6 +290,17 @@ class OfflineSyncService {
       } on DioException catch (e) {
         // CRÍTICO: Verificar si el error es 400/409 (orden ya completada)
         final statusCode = e.response?.statusCode;
+        // ✅ FIX 26-FEB-2026: Detectar 404 en respuesta del servidor
+        if (statusCode == 404) {
+          debugPrint(
+            '🗑️ [SYNC] Orden ${orden.idOrdenBackend} no existe (404 DioException). '
+            'Eliminando de cola.',
+          );
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          fallidas++;
+          errores.add('Orden ${orden.idOrdenBackend}: Eliminada del servidor');
+          continue;
+        }
         if (statusCode == 400 || statusCode == 409) {
           // Error 400/409 = probablemente orden ya completada
           final verificacion = await _verificarOrdenYaCompletada(
@@ -444,6 +480,21 @@ class OfflineSyncService {
       }
       debugPrint('❌ [VERIFICAR] Orden NO completada aún');
       return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
+    } on DioException catch (e) {
+      // ✅ FIX 26-FEB-2026: Detectar 404 como "orden eliminada del servidor"
+      if (e.response?.statusCode == 404) {
+        debugPrint(
+          '🗑️ [VERIFICAR] Orden $idOrdenBackend NO EXISTE en servidor (404)',
+        );
+        return {
+          'completada': false,
+          'eliminada': true,
+          'pdfUrl': null,
+          'datosOrden': null,
+        };
+      }
+      debugPrint('❌ [VERIFICAR] DioException verificando: $e');
+      return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
     } catch (e) {
       debugPrint('❌ [VERIFICAR] Error verificando: $e');
       return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
@@ -506,6 +557,18 @@ class OfflineSyncService {
         return true;
       }
 
+      // ✅ FIX 26-FEB-2026: Si el servidor dice 404, la orden fue eliminada
+      // Limpiar la cola y NO reintentar. El smart sync purgará la orden local.
+      if (verificacionInicial['eliminada'] == true) {
+        debugPrint(
+          '🗑️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} eliminada del servidor. '
+          'Eliminando de cola de retry.',
+        );
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        _progressNotifier.error('La orden fue eliminada del servidor');
+        return false;
+      }
+
       // Decodificar payload
       final payload = jsonDecode(orden.payloadJson) as Map<String, dynamic>;
 
@@ -527,6 +590,16 @@ class OfflineSyncService {
         await _apiClient.put('/ordenes/${orden.idOrdenBackend}/iniciar');
       } on DioException catch (iniciarError) {
         final statusCode = iniciarError.response?.statusCode;
+        // ✅ FIX 26-FEB-2026: Detectar 404 al intentar iniciar la orden
+        if (statusCode == 404) {
+          debugPrint(
+            '🗑️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} no existe en servidor (404 en /iniciar). '
+            'Eliminando de cola de retry.',
+          );
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          _progressNotifier.error('La orden fue eliminada del servidor');
+          return false;
+        }
         if (statusCode == 400 || statusCode == 409) {
           // Verificar si ya está completada
           final verificacion = await _verificarOrdenYaCompletada(
@@ -581,6 +654,15 @@ class OfflineSyncService {
           _progressNotifier.completar();
           return true;
         }
+        // ✅ FIX 26-FEB-2026: Si la verificación detectó 404, limpiar cola
+        if (verificacion['eliminada'] == true) {
+          debugPrint(
+            '🗑️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} eliminada (SSE error + 404 verify)',
+          );
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          _progressNotifier.error('La orden fue eliminada del servidor');
+          return false;
+        }
         // Error real - marcar como error
         final errorMsg = sseResult.error ?? 'Error desconocido';
         await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
@@ -591,6 +673,16 @@ class OfflineSyncService {
       debugPrint('❌ [SYNC-INDIVIDUAL] DioException: ${e.type} - ${e.message}');
 
       final statusCode = e.response?.statusCode;
+      // ✅ FIX 26-FEB-2026: Detectar 404 directamente en DioException
+      if (statusCode == 404) {
+        debugPrint(
+          '🗑️ [SYNC-INDIVIDUAL] Orden ${orden.idOrdenBackend} no existe (404 DioException). '
+          'Eliminando de cola.',
+        );
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        _progressNotifier.error('La orden fue eliminada del servidor');
+        return false;
+      }
       if (statusCode == 400 || statusCode == 409) {
         final verificacion = await _verificarOrdenYaCompletada(
           orden.idOrdenBackend,

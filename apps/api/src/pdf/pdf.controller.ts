@@ -74,6 +74,15 @@ class RegenerarPdfDto {
 }
 
 /**
+ * Archivo adjunto adicional en formato base64
+ */
+export interface ArchivoAdjuntoDto {
+  filename: string;
+  contentBase64: string;
+  contentType?: string;
+}
+
+/**
  * DTO para enviar email con PDF existente
  */
 class EnviarPdfExistenteDto {
@@ -100,6 +109,22 @@ class EnviarPdfExistenteDto {
   @IsOptional()
   @IsArray()
   emailsCc?: string[];
+
+  @ApiProperty({
+    description: 'Archivos adicionales adjuntos (base64)',
+    required: false,
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string' },
+        contentBase64: { type: 'string', description: 'Contenido del archivo en base64' },
+        contentType: { type: 'string', description: 'MIME type del archivo' }
+      }
+    }
+  })
+  @IsOptional()
+  archivosAdicionales?: ArchivoAdjuntoDto[];
 }
 
 @ApiTags('PDF')
@@ -1143,6 +1168,13 @@ export class PdfController {
         clientes: {
           include: {
             persona: true,
+            // ✅ FIX 28-FEB-2026: Incluir cliente_principal para heredar emails_notificacion en sedes
+            cliente_principal: {
+              select: {
+                emails_notificacion: true,
+                id_cuenta_email_remitente: true,
+              },
+            },
           },
         },
         estados_orden: true,
@@ -1239,6 +1271,18 @@ export class PdfController {
         .map((e: string) => e.trim())
         .filter((e: string) => e.length > 0 && e.includes('@'));
       for (const extra of extras) {
+        if (!clienteEmailsArray.includes(extra)) {
+          clienteEmailsArray.push(extra);
+        }
+      }
+    }
+    // ✅ FIX 28-FEB-2026: Para sedes, también incluir emails_notificacion del cliente principal
+    if (orden.clientes?.cliente_principal?.emails_notificacion) {
+      const extrasPrincipal = orden.clientes.cliente_principal.emails_notificacion
+        .split(';;')
+        .map((e: string) => e.trim())
+        .filter((e: string) => e.length > 0 && e.includes('@'));
+      for (const extra of extrasPrincipal) {
         if (!clienteEmailsArray.includes(extra)) {
           clienteEmailsArray.push(extra);
         }
@@ -1889,15 +1933,28 @@ export class PdfController {
       const clienteOrden = await this.prisma.ordenes_servicio.findUnique({
         where: { id_orden_servicio: idNumerico },
         include: {
-          clientes: { include: { persona: true } },
+          clientes: {
+            include: {
+              persona: true,
+              // ✅ FIX 28-FEB-2026: Incluir cliente_principal para heredar emails_notificacion en sedes
+              cliente_principal: {
+                select: {
+                  emails_notificacion: true,
+                  id_cuenta_email_remitente: true,
+                },
+              },
+            },
+          },
           tipos_servicio: true,
           equipos: true,
           sedes_cliente: true,
         },
       });
 
-      // ✅ MULTI-EMAIL HABILITADO: Leer cuenta email del cliente
-      const idCuentaEmailCliente = clienteOrden?.clientes?.id_cuenta_email_remitente || null;
+      // ✅ MULTI-EMAIL HABILITADO: Leer cuenta email del cliente (con fallback al principal para sedes)
+      const idCuentaEmailCliente = clienteOrden?.clientes?.id_cuenta_email_remitente
+        || clienteOrden?.clientes?.cliente_principal?.id_cuenta_email_remitente
+        || null;
       this.logger.log(`📧 [MULTI-EMAIL] Cliente id_cuenta_email_remitente: ${idCuentaEmailCliente ?? 'NO CONFIGURADA (usará cuenta por defecto)'}`);
 
 
@@ -1943,8 +2000,48 @@ export class PdfController {
 
       // ✅ FIX 13-FEB-2026: Soporte CC para múltiples destinatarios
       const ccEmails = dto.emailsCc?.filter(e => e && e.includes('@')) || [];
+
+      // ✅ FIX 28-FEB-2026: Auto-incluir emails_notificacion del cliente + principal como CC
+      const autoAddCc = (emailsStr: string | null | undefined) => {
+        if (!emailsStr) return;
+        const extras = emailsStr.split(';;').map(e => e.trim()).filter(e => e.length > 0 && e.includes('@'));
+        for (const extra of extras) {
+          if (extra !== dto.emailDestino && !ccEmails.includes(extra)) {
+            ccEmails.push(extra);
+          }
+        }
+      };
+      autoAddCc(clienteOrden?.clientes?.emails_notificacion);
+      autoAddCc(clienteOrden?.clientes?.cliente_principal?.emails_notificacion);
+
       if (ccEmails.length > 0) {
-        this.logger.log(`📧 [CC] Emails adicionales: ${ccEmails.join(', ')}`);
+        this.logger.log(`📧 [CC] Emails adicionales (dto + emails_notificacion + principal): ${ccEmails.join(', ')}`);
+      }
+
+      // ✅ FIX 11-MAR-2026: Procesar archivos adicionales del DTO
+      const attachments: { filename: string; content: Buffer; contentType: string }[] = [{
+        filename,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      }];
+
+      // Agregar archivos adicionales si existen
+      if (dto.archivosAdicionales && dto.archivosAdicionales.length > 0) {
+        this.logger.log(`📎 [ADJUNTOS] Procesando ${dto.archivosAdicionales.length} archivo(s) adicional(es)`);
+
+        for (const archivo of dto.archivosAdicionales) {
+          try {
+            const contentBuffer = Buffer.from(archivo.contentBase64, 'base64');
+            attachments.push({
+              filename: archivo.filename,
+              content: contentBuffer,
+              contentType: archivo.contentType || 'application/octet-stream',
+            });
+            this.logger.log(`📎 [ADJUNTO] Agregado: ${archivo.filename} (${contentBuffer.length} bytes)`);
+          } catch (error) {
+            this.logger.warn(`⚠️ [ADJUNTO] Error procesando archivo ${archivo.filename}: ${error}`);
+          }
+        }
       }
 
       // ✅ MULTI-EMAIL: Usar cuenta específica del cliente si está configurada
@@ -1952,11 +2049,7 @@ export class PdfController {
         to: dto.emailDestino,
         subject: asunto,
         html: htmlTemplate,
-        attachments: [{
-          filename,
-          content: pdfBuffer,
-          contentType: 'application/pdf',
-        }],
+        attachments,
         ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
       }, idCuentaEmailCliente ?? undefined);
 

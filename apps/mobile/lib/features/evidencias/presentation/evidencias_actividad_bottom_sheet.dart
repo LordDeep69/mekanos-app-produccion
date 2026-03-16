@@ -82,16 +82,70 @@ class _EvidenciasActividadBottomSheetState
     }
   }
 
+  /// ✅ FIX 28-FEB-2026: Menú con 3 opciones: Cámara, Galería (1), Galería (múltiples)
   Future<void> _agregarFoto(TipoEvidencia tipo) async {
+    final opcion = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.blue),
+              title: const Text('Tomar foto con cámara'),
+              onTap: () => Navigator.pop(context, 'camara'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.green),
+              title: const Text('Seleccionar de galería'),
+              onTap: () => Navigator.pop(context, 'galeria'),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.photo_library_outlined,
+                color: Colors.orange,
+              ),
+              title: const Text('Seleccionar múltiples fotos'),
+              subtitle: const Text('Elige varias fotos a la vez'),
+              onTap: () => Navigator.pop(context, 'galeria_multi'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close, color: Colors.grey),
+              title: const Text('Cancelar'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (opcion == null) return;
+
+    if (opcion == 'galeria_multi') {
+      await _agregarFotosMultiples(tipo);
+    } else {
+      await _agregarFotoUnica(tipo, opcion);
+    }
+  }
+
+  Future<void> _agregarFotoUnica(TipoEvidencia tipo, String opcion) async {
     final service = ref.read(evidenciaServiceProvider);
 
-    final resultado = await service.capturarFotoCamara(
-      idOrden: widget.idOrden,
-      tipo: tipo,
-      descripcion: widget.nombreActividad,
-      idActividadEjecutada: widget.idActividad,
-      idOrdenEquipo: widget.idOrdenEquipo, // ✅ MULTI-EQUIPOS (16-DIC-2025)
-    );
+    final resultado = opcion == 'camara'
+        ? await service.capturarFotoCamara(
+            idOrden: widget.idOrden,
+            tipo: tipo,
+            descripcion: widget.nombreActividad,
+            idActividadEjecutada: widget.idActividad,
+            idOrdenEquipo: widget.idOrdenEquipo,
+          )
+        : await service.seleccionarDeGaleria(
+            idOrden: widget.idOrden,
+            tipo: tipo,
+            descripcion: widget.nombreActividad,
+            idActividadEjecutada: widget.idActividad,
+            idOrdenEquipo: widget.idOrdenEquipo,
+          );
 
     if (resultado.exito) {
       await _cargarEvidencias();
@@ -106,10 +160,79 @@ class _EvidenciasActividadBottomSheetState
           ),
         );
       }
-    } else if (resultado.error != 'Captura cancelada' && mounted) {
+    } else if (resultado.error != 'Captura cancelada' &&
+        resultado.error != 'Selección cancelada' &&
+        mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Error: ${resultado.error}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _agregarFotosMultiples(TipoEvidencia tipo) async {
+    final service = ref.read(evidenciaServiceProvider);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Procesando imágenes...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
+    }
+
+    final resultados = await service.seleccionarMultiplesDeGaleria(
+      idOrden: widget.idOrden,
+      tipo: tipo,
+      descripcion: widget.nombreActividad,
+      idActividadEjecutada: widget.idActividad,
+      idOrdenEquipo: widget.idOrdenEquipo,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
+
+    final exitosas = resultados.where((r) => r.exito).length;
+    final totalKB = resultados
+        .where((r) => r.exito)
+        .fold<double>(0, (sum, r) => sum + r.tamanoKB);
+
+    if (exitosas > 0) {
+      await _cargarEvidencias();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '📸 $exitosas foto${exitosas > 1 ? 's' : ''} guardada${exitosas > 1 ? 's' : ''} (${totalKB.toStringAsFixed(0)} KB)',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } else if (resultados.isNotEmpty &&
+        resultados.first.error != 'Selección cancelada' &&
+        mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error: ${resultados.first.error}'),
           backgroundColor: Colors.red,
         ),
       );

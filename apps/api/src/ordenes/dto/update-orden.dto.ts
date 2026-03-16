@@ -63,4 +63,9 @@ export class UpdateOrdenDto {
     @IsOptional()
     @IsBoolean()
     requiere_firma_cliente?: boolean;
+
+    @ApiPropertyOptional({ description: 'ID del técnico asignado (cambiar técnico sin cambiar estado)' })
+    @IsOptional()
+    @IsInt()
+    id_tecnico_asignado?: number;
 }

@@ -16,6 +16,7 @@ export class UpdateOrdenCommand {
       observaciones_tecnico?: string;
       observaciones_cierre?: string;
       requiere_firma_cliente?: boolean;
+      id_tecnico_asignado?: number;
     },
     public readonly userId: number,
   ) { }

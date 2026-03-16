@@ -233,6 +233,7 @@ export interface ClientePrincipalSelector {
   limite_credito?: number | null;
   dias_credito?: number | null;
   id_cuenta_email_remitente?: number | null;
+  emails_notificacion?: string | null;
   observaciones_servicio?: string | null;
   requisitos_especiales?: string | null;
 }

@@ -17,7 +17,7 @@
 
 'use client';
 
-import { useOrden, useTiposServicio, useUpdateOrden } from '@/features/ordenes';
+import { useOrden, useTecnicosSelector, useTiposServicio, useUpdateOrden } from '@/features/ordenes';
 import { cn } from '@/lib/utils';
 import {
     AlertCircle,
@@ -29,6 +29,7 @@ import {
     Save,
     Settings,
     Tag,
+    User,
     X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -46,6 +47,7 @@ interface FormData {
     observaciones_tecnico: string;
     id_tipo_servicio: number | null;
     origen_solicitud: string;
+    id_tecnico_asignado: number | null;
 }
 
 const PRIORIDADES = [
@@ -75,7 +77,10 @@ export default function EditarOrdenPage() {
     // Queries
     const { data: ordenData, isLoading, isError } = useOrden(ordenId);
     const { data: tiposServicio } = useTiposServicio();
+    const { data: tecnicosData } = useTecnicosSelector();
     const updateOrden = useUpdateOrden();
+
+    const tecnicos = Array.isArray(tecnicosData) ? tecnicosData : [];
 
     const orden = ordenData?.data;
 
@@ -87,6 +92,7 @@ export default function EditarOrdenPage() {
         observaciones_tecnico: '',
         id_tipo_servicio: null,
         origen_solicitud: 'PROGRAMADO',
+        id_tecnico_asignado: null,
     });
 
     const [hasChanges, setHasChanges] = useState(false);
@@ -104,7 +110,8 @@ export default function EditarOrdenPage() {
                 descripcion_inicial: orden.descripcion || '',
                 observaciones_tecnico: orden.observaciones || '',
                 id_tipo_servicio: orden.tipos_servicio?.id_tipo_servicio || null,
-                origen_solicitud: 'PROGRAMADO', // Default, ya que no viene en el tipo Orden
+                origen_solicitud: orden.origen_solicitud || 'PROGRAMADO',
+                id_tecnico_asignado: orden.id_tecnico_asignado || null,
             });
         }
     }, [orden]);
@@ -129,6 +136,7 @@ export default function EditarOrdenPage() {
                     observaciones_tecnico: formData.observaciones_tecnico || undefined,
                     id_tipo_servicio: formData.id_tipo_servicio || undefined,
                     origen_solicitud: formData.origen_solicitud as any,
+                    id_tecnico_asignado: formData.id_tecnico_asignado || undefined,
                 },
             });
 
@@ -309,6 +317,29 @@ export default function EditarOrdenPage() {
                                     </option>
                                 ))}
                             </select>
+                        </div>
+
+                        {/* Técnico Asignado */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <User className="h-4 w-4 inline mr-1" />
+                                Técnico Asignado
+                            </label>
+                            <select
+                                value={formData.id_tecnico_asignado || ''}
+                                onChange={(e) => handleChange('id_tecnico_asignado', e.target.value ? Number(e.target.value) : null)}
+                                className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option value="">Sin técnico asignado</option>
+                                {(Array.isArray(tecnicos) ? tecnicos : []).map((tec: any) => (
+                                    <option key={tec.id_empleado} value={tec.id_empleado}>
+                                        {tec.persona?.nombre_completo || tec.persona?.primer_nombre + ' ' + tec.persona?.primer_apellido || `Técnico #${tec.id_empleado}`}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1">
+                                Cambiar el técnico aquí NO cambia el estado de la orden
+                            </p>
                         </div>
                     </div>
                 </div>

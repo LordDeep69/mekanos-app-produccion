@@ -41,6 +41,7 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
       'trabajo_realizado',
       'observaciones_tecnico',
       'descripcion_inicial',
+      'id_tecnico_asignado',
     ];
 
     const soloDocumentacion = Object.keys(dto).every(
@@ -78,6 +79,7 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
       observaciones_tecnico: dto.observaciones_tecnico !== undefined ? dto.observaciones_tecnico : ordenExistente.observaciones_tecnico,
       observaciones_cierre: dto.observaciones_cierre !== undefined ? dto.observaciones_cierre : ordenExistente.observaciones_cierre,
       requiere_firma_cliente: dto.requiere_firma_cliente !== undefined ? dto.requiere_firma_cliente : ordenExistente.requiere_firma_cliente,
+      id_tecnico_asignado: dto.id_tecnico_asignado !== undefined ? dto.id_tecnico_asignado : ordenExistente.id_tecnico_asignado,
       modificado_por: userId,
     });
   }

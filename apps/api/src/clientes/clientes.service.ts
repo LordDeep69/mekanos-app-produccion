@@ -225,6 +225,8 @@ export class ClientesService {
         limite_credito: clienteFields.limite_credito ?? principal.limite_credito,
         dias_credito: clienteFields.dias_credito ?? principal.dias_credito,
         id_cuenta_email_remitente: clienteFields.id_cuenta_email_remitente ?? principal.id_cuenta_email_remitente,
+        // ✅ FIX 03-MAR-2026: Heredar emails_notificacion del principal (|| para que '' también herede)
+        emails_notificacion: clienteFields.emails_notificacion || principal.emails_notificacion,
         observaciones_servicio: clienteFields.observaciones_servicio,
         requisitos_especiales: clienteFields.requisitos_especiales,
         // Campos propios de la sede
@@ -298,6 +300,7 @@ export class ClientesService {
         limite_credito: true,
         dias_credito: true,
         id_cuenta_email_remitente: true,
+        emails_notificacion: true,
         observaciones_servicio: true,
         requisitos_especiales: true,
         _count: { select: { sedes: true } },
@@ -323,6 +326,7 @@ export class ClientesService {
       limite_credito: c.limite_credito,
       dias_credito: c.dias_credito,
       id_cuenta_email_remitente: c.id_cuenta_email_remitente,
+      emails_notificacion: c.emails_notificacion,
       observaciones_servicio: c.observaciones_servicio,
       requisitos_especiales: c.requisitos_especiales,
     }));
@@ -500,6 +504,59 @@ export class ClientesService {
     // Validar que cliente existe
     const clienteExistente = await this.findOne(id);
 
+    // ✅ MULTI-SEDE: Validación al convertir a sede o cambiar principal
+    if (updateDto.id_cliente_principal !== undefined) {
+      const nuevoIdPrincipal = updateDto.id_cliente_principal;
+
+      if (nuevoIdPrincipal !== null) {
+        // Caso: Asignar/cambiar cliente principal (convertir en sede)
+
+        // No puede asignarse a sí mismo como principal
+        if (nuevoIdPrincipal === id) {
+          throw new BadRequestException('Un cliente no puede ser sede de sí mismo');
+        }
+
+        // Validar que el principal existe y es efectivamente principal
+        const principal = await this.prisma.clientes.findUnique({
+          where: { id_cliente: nuevoIdPrincipal },
+          select: { id_cliente: true, es_cliente_principal: true, cliente_activo: true },
+        });
+
+        if (!principal) {
+          throw new BadRequestException(`Cliente principal con ID ${nuevoIdPrincipal} no encontrado`);
+        }
+        if (!principal.es_cliente_principal) {
+          throw new BadRequestException(`El cliente ${nuevoIdPrincipal} no está marcado como cliente principal`);
+        }
+        if (!principal.cliente_activo) {
+          throw new BadRequestException(`El cliente principal ${nuevoIdPrincipal} está inactivo`);
+        }
+
+        // Si este cliente es principal con sedes, no puede convertirse en sede
+        if (clienteExistente.es_cliente_principal) {
+          const totalSedes = await this.prisma.clientes.count({
+            where: { id_cliente_principal: id, cliente_activo: true },
+          });
+          if (totalSedes > 0) {
+            throw new BadRequestException(
+              `Este cliente es principal y tiene ${totalSedes} sede(s) activa(s). Primero reasigne o elimine las sedes antes de convertirlo en sede.`
+            );
+          }
+        }
+
+        // Validar que se proporcione nombre_sede
+        const nombreSede = updateDto.nombre_sede ?? clienteExistente.nombre_sede;
+        if (!nombreSede || nombreSede.trim().length < 2) {
+          throw new BadRequestException('Debe proporcionar un nombre de sede (mínimo 2 caracteres)');
+        }
+
+        // Forzar es_cliente_principal = false al convertir en sede
+        (updateDto as any).es_cliente_principal = false;
+      }
+      // Caso null: Desvinculando como sede → limpiar nombre_sede
+      // (permitir, solo se quitan los campos de sede)
+    }
+
     // Separar persona para evitar error de Prisma en update plano
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { persona, ...clienteData } = updateDto as any;
@@ -568,6 +625,8 @@ export class ClientesService {
         await tx.personas.update({
           where: { id_persona: idPersonaDestino },
           data: {
+            ...(personaPayload!.razon_social !== undefined && { razon_social: personaPayload!.razon_social }),
+            ...(personaPayload!.nombre_comercial !== undefined && { nombre_comercial: personaPayload!.nombre_comercial }),
             ...(personaPayload!.email_principal !== undefined && { email_principal: personaPayload!.email_principal }),
             ...(personaPayload!.telefono_principal !== undefined && { telefono_principal: personaPayload!.telefono_principal }),
             ...(personaPayload!.celular !== undefined && { celular: personaPayload!.celular }),

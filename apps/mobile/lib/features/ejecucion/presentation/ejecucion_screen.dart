@@ -25,11 +25,14 @@ class EjecucionScreen extends ConsumerStatefulWidget {
   final int idOrdenLocal;
   final int?
   idOrdenEquipo; // ✅ MULTI-EQUIPOS: ID del equipo específico (opcional)
+  final bool
+  esResubida; // ✅ FIX 26-FEB-2026: Modo re-subida para órdenes COMPLETADA
 
   const EjecucionScreen({
     super.key,
     required this.idOrdenLocal,
     this.idOrdenEquipo, // null = orden simple, valor = multi-equipo
+    this.esResubida = false,
   });
 
   @override
@@ -3652,7 +3655,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
               icon: Icon(puedeFinalizar ? Icons.check_circle : Icons.pending),
               label: Text(
                 puedeFinalizar
-                    ? 'FINALIZAR SERVICIO'
+                    ? (widget.esResubida
+                          ? 'RESUBIR ORDEN'
+                          : 'FINALIZAR SERVICIO')
                     : _getTextoBotonFinalizar(porcentaje),
               ),
               style: ElevatedButton.styleFrom(
@@ -3705,7 +3710,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     if (!_tieneFirmaCliente) {
       return 'FALTA FIRMA CLIENTE';
     }
-    return 'FINALIZAR SERVICIO';
+    return widget.esResubida ? 'RESUBIR ORDEN' : 'FINALIZAR SERVICIO';
   }
 
   int _contarPorSimbologia(String simbologia) {
@@ -3781,20 +3786,25 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green),
-              SizedBox(width: 8),
-              Text('Finalizar Servicio'),
+              Icon(
+                widget.esResubida ? Icons.cloud_upload : Icons.check_circle,
+                color: widget.esResubida ? Colors.orange : Colors.green,
+              ),
+              const SizedBox(width: 8),
+              Text(widget.esResubida ? 'Resubir Orden' : 'Finalizar Servicio'),
             ],
           ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
-                  style: TextStyle(color: Colors.grey),
+                Text(
+                  widget.esResubida
+                      ? 'Confirme los datos para resubir la orden al servidor. Los datos anteriores serán reemplazados.'
+                      : 'Complete los datos para finalizar el servicio y sincronizar con el servidor.',
+                  style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
 
@@ -3920,8 +3930,14 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 });
               },
               icon: const Icon(Icons.cloud_upload),
-              label: const Text('FINALIZAR Y SINCRONIZAR'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              label: Text(
+                widget.esResubida ? 'RESUBIR ORDEN' : 'FINALIZAR Y SINCRONIZAR',
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.esResubida
+                    ? Colors.orange
+                    : Colors.green,
+              ),
             ),
           ],
         ),
@@ -3952,7 +3968,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _SyncProgressDialog(modo: modo),
+      builder: (ctx) => const _SyncProgressDialog(),
     );
 
     try {
@@ -3993,15 +4009,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 : null;
           });
         }
-        if (resultado.guardadoOffline) {
-          _mostrarExitoOffline(resultado);
-        } else {
-          await _mostrarExitoOnline(resultado);
-        }
-      } else if (resultado.guardadoOffline) {
-        // ✅ FIX 09-FEB-2026: Si falló pero se guardó en cola, NO mostrar error
-        // sino informar que se reintentará automáticamente
-        _mostrarExitoOffline(resultado);
+        await _mostrarExitoOnline(resultado);
       } else {
         _mostrarError(resultado.mensaje);
       }
@@ -4012,86 +4020,39 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   }
 
   /// Muestra diálogo de éxito cuando se sincronizó online
-  /// ✅ 03-ENE-2026: FIX CRÍTICO - Obtener conteos de BD local como fallback
+  /// ✅ FIX 26-FEB-2026: Simplificado - solo evidencias y firmas (modo SOLO_DATOS)
   Future<void> _mostrarExitoOnline(SyncUploadResult resultado) async {
     final datosRes = resultado.datos;
-
-    debugPrint('🔍 [RESULTADO] datosRes: $datosRes');
-    debugPrint('🔍 [RESULTADO] datosRes.runtimeType: ${datosRes.runtimeType}');
-
     int evidenciasCount = 0;
     int firmasCount = 0;
-    bool pdfGenerado = false;
-    bool emailEnviado = false;
 
     // Intentar extraer de la respuesta del servidor
     if (datosRes != null) {
-      List? evidenciasList;
-      List? firmasList;
-      Map<String, dynamic>? documentoMap;
-      Map<String, dynamic>? emailMap;
-
-      // Buscar en estructura directa primero
-      if (datosRes['evidencias'] is List) {
-        evidenciasList = datosRes['evidencias'] as List;
-      }
-      if (datosRes['firmas'] is List) {
-        firmasList = datosRes['firmas'] as List;
-      }
-      if (datosRes['documento'] is Map) {
-        documentoMap = datosRes['documento'] as Map<String, dynamic>;
-      }
-      if (datosRes['email'] is Map) {
-        emailMap = datosRes['email'] as Map<String, dynamic>;
-      }
-
-      // Si no encontró, buscar en estructura anidada 'datos'
-      if (evidenciasList == null && datosRes['datos'] is Map<String, dynamic>) {
-        final datosAnidados = datosRes['datos'] as Map<String, dynamic>;
-        evidenciasList ??= datosAnidados['evidencias'] as List?;
-        firmasList ??= datosAnidados['firmas'] as List?;
-        documentoMap ??= datosAnidados['documento'] as Map<String, dynamic>?;
-        emailMap ??= datosAnidados['email'] as Map<String, dynamic>?;
-      }
-
-      evidenciasCount = evidenciasList?.length ?? 0;
-      firmasCount = firmasList?.length ?? 0;
-      pdfGenerado = documentoMap != null;
-      emailEnviado = emailMap?['enviado'] == true;
+      // Buscar en estructura directa o anidada 'datos'
+      final datos = datosRes['datos'] is Map<String, dynamic>
+          ? datosRes['datos'] as Map<String, dynamic>
+          : datosRes;
+      evidenciasCount = (datos['evidencias'] as List?)?.length ?? 0;
+      firmasCount = (datos['firmas'] as List?)?.length ?? 0;
     }
 
-    // ✅ FALLBACK CRÍTICO: Si no hay datos del servidor, obtener de BD local
+    // Fallback: obtener conteos de BD local
     if (evidenciasCount == 0 && firmasCount == 0) {
-      debugPrint(
-        '⚠️ [RESULTADO] Datos del servidor vacíos, obteniendo de BD local...',
-      );
       try {
         final db = ref.read(databaseProvider);
         final evidenciasLocal = await (db.select(
           db.evidencias,
         )..where((e) => e.idOrden.equals(widget.idOrdenLocal))).get();
         final firmasLocal = await db.getFirmasByOrden(widget.idOrdenLocal);
-        final ordenLocal =
-            await (db.select(db.ordenes)
-                  ..where((o) => o.idLocal.equals(widget.idOrdenLocal)))
-                .getSingleOrNull();
-
         evidenciasCount = evidenciasLocal.length;
         firmasCount = firmasLocal.length;
-        pdfGenerado =
-            ordenLocal?.urlPdf != null && ordenLocal!.urlPdf!.isNotEmpty;
-        emailEnviado = true; // Si llegó aquí, el backend procesó exitosamente
-
-        debugPrint(
-          '✅ [RESULTADO FALLBACK] evidencias=$evidenciasCount, firmas=$firmasCount',
-        );
       } catch (e) {
         debugPrint('❌ [RESULTADO FALLBACK] Error: $e');
       }
     }
 
     debugPrint(
-      '🔍 [RESULTADO FINAL] evidencias=$evidenciasCount, firmas=$firmasCount, pdf=$pdfGenerado, email=$emailEnviado',
+      '🔍 [RESULTADO] evidencias=$evidenciasCount, firmas=$firmasCount',
     );
 
     showDialog(
@@ -4116,20 +4077,25 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'El servicio ha sido finalizado y sincronizado correctamente.',
+                'El servicio ha sido finalizado y sincronizado correctamente con el servidor.',
                 style: TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 16),
               _buildResultadoItem(
                 Icons.photo,
                 'Evidencias',
-                '$evidenciasCount',
+                '$evidenciasCount subidas',
               ),
-              _buildResultadoItem(Icons.gesture, 'Firmas', '$firmasCount'),
-              if (pdfGenerado)
-                _buildResultadoItem(Icons.picture_as_pdf, 'PDF Generado', '✅'),
-              if (emailEnviado)
-                _buildResultadoItem(Icons.email, 'Email Enviado', '✅'),
+              _buildResultadoItem(
+                Icons.gesture,
+                'Firmas',
+                '$firmasCount registradas',
+              ),
+              _buildResultadoItem(
+                Icons.cloud_done,
+                'Servidor',
+                'Sincronizado ✅',
+              ),
             ],
           ),
         ),
@@ -4146,113 +4112,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     );
   }
 
-  /// Muestra diálogo de éxito cuando se guardó offline (para sync posterior)
-  void _mostrarExitoOffline(SyncUploadResult resultado) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.cloud_sync, color: Colors.blue, size: 28),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                'Servicio Completado',
-                style: TextStyle(fontSize: 18),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ✅ MEJORA: Mensaje más claro sobre el estado real
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green.shade700),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        '¡Servicio finalizado correctamente!',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.blue.shade600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'El servidor está generando el PDF y enviando el email. Esto puede tardar hasta 30 segundos.',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Puedes continuar trabajando. La sincronización se completará en segundo plano.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 16),
-              _buildResultadoItem(Icons.save, 'Datos locales', 'Guardados ✅'),
-              _buildResultadoItem(
-                Icons.cloud_upload,
-                'Subida al servidor',
-                'En proceso 🔄',
-              ),
-              _buildResultadoItem(Icons.picture_as_pdf, 'PDF', 'Generando...'),
-            ],
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop(); // Volver a lista de órdenes
-            },
-            child: const Text('CONTINUAR'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildResultadoItem(IconData icon, String label, String valor) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -4263,23 +4122,6 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
           Text(label),
           const Spacer(),
           Text(valor, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  /// ✅ NUEVO: Widget para mostrar paso de loading
-  Widget _buildLoadingStep(IconData icon, String texto) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.blue.shade700),
-          const SizedBox(width: 8),
-          Text(
-            texto,
-            style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
-          ),
         ],
       ),
     );
@@ -4758,8 +4600,7 @@ class _MedicionInputCardState extends ConsumerState<_MedicionInputCard> {
 /// ✅ WIDGET DE DIÁLOGO DE PROGRESO DE SINCRONIZACIÓN
 /// Muestra el progreso en tiempo real de la subida al servidor
 class _SyncProgressDialog extends ConsumerWidget {
-  final String modo;
-  const _SyncProgressDialog({this.modo = 'SOLO_DATOS'});
+  const _SyncProgressDialog();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -4875,19 +4716,6 @@ class _SyncProgressDialog extends ConsumerWidget {
                 progress: progress,
                 icon: Icons.draw,
               ),
-              // ✅ Solo mostrar pasos de PDF/Email si el modo es COMPLETO
-              if (modo == 'COMPLETO') ...[
-                _buildStepItem(
-                  step: SyncStep.generando_pdf,
-                  progress: progress,
-                  icon: Icons.picture_as_pdf,
-                ),
-                _buildStepItem(
-                  step: SyncStep.enviando_email,
-                  progress: progress,
-                  icon: Icons.email,
-                ),
-              ],
 
               // Mensaje de error si hay
               if (progress.pasoActual == SyncStep.error &&
@@ -4938,7 +4766,7 @@ class _SyncProgressDialog extends ConsumerWidget {
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          '¡Orden sincronizada correctamente! PDF generado y email enviado.',
+                          '¡Orden sincronizada correctamente con el servidor!',
                           style: TextStyle(fontSize: 12),
                         ),
                       ),

@@ -226,11 +226,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
   });
   const cuentasEmailActivas = (cuentasEmail ?? []).filter((c: CuentaEmail) => c.activa);
 
-  // ✅ MULTI-SEDE: Query para clientes principales
+  // ✅ MULTI-SEDE: Query para clientes principales (crear Y editar)
   const { data: clientesPrincipales } = useQuery({
     queryKey: ['clientes-principales'],
     queryFn: () => getClientesPrincipales(),
-    enabled: mode === 'crear',
     staleTime: 0,
   });
 
@@ -300,6 +299,14 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
     form.setValue('limite_credito', Number(principal.limite_credito) || 0);
     form.setValue('dias_credito', Number(principal.dias_credito) || 0);
     form.setValue('id_cuenta_email_remitente', principal.id_cuenta_email_remitente ?? null);
+    // ✅ FIX 03-MAR-2026: Heredar emails_notificacion del principal al crear sede
+    const principalEmails = principal.emails_notificacion ?? '';
+    form.setValue('emails_notificacion', principalEmails);
+    if (principalEmails) {
+      setEmailsList(principalEmails.split(';;').filter((e: string) => e.trim() !== ''));
+    } else {
+      setEmailsList([]);
+    }
     form.setValue('es_cliente_principal', false);
     setSedeAutoFilled(true);
   }, [clientesPrincipales, form]);
@@ -395,7 +402,9 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           requisitos_especiales: values.requisitos_especiales || undefined,
           id_firma_administrativa: values.id_firma_administrativa || undefined,
           id_asesor_asignado: values.id_asesor_asignado || undefined,
-          id_cuenta_email_remitente: values.id_cuenta_email_remitente || undefined,
+          id_cuenta_email_remitente: values.id_cuenta_email_remitente,
+          // ✅ FIX 03-MAR-2026: Incluir emails_notificacion en creación (heredados del principal para sedes)
+          emails_notificacion: emailsList.length > 0 ? emailsList.join(';;') : undefined,
         };
 
         // ✅ MULTI-SEDE: incluir campos de sede
@@ -417,7 +426,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         });
       } else if (clienteId) {
         // ✅ FIX 02-FEB-2026: Incluir datos de persona editables (contacto)
-        const updateData = {
+        const updateData: Record<string, any> = {
           tipo_cliente: values.tipo_cliente,
           periodicidad_mantenimiento: values.periodicidad_mantenimiento ?? undefined,
           descuento_autorizado: values.descuento_autorizado,
@@ -430,10 +439,12 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           requisitos_especiales: values.requisitos_especiales,
           id_firma_administrativa: values.id_firma_administrativa ?? undefined,
           id_asesor_asignado: values.id_asesor_asignado ?? undefined,
-          id_cuenta_email_remitente: values.id_cuenta_email_remitente ?? undefined,
-          emails_notificacion: values.emails_notificacion || undefined,
-          // ✅ Datos de persona editables (contacto)
+          id_cuenta_email_remitente: values.id_cuenta_email_remitente,
+          emails_notificacion: emailsList.length > 0 ? emailsList.join(';;') : null,
+          // Datos de persona editables (contacto + nombres)
           persona: {
+            razon_social: values.razon_social || undefined,
+            nombre_comercial: values.nombre_comercial || undefined,
             email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
             telefono_principal: values.telefono_principal || undefined,
             celular: values.celular || undefined,
@@ -442,6 +453,27 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
             departamento: values.departamento || undefined,
           },
         };
+
+        // ✅ MULTI-SEDE: Incluir campos de sede si cambiaron
+        const idPrincipalOriginal = cliente?.id_cliente_principal ?? null;
+        const idPrincipalNuevo = values.id_cliente_principal ?? null;
+        const nombreSedeNuevo = values.nombre_sede?.trim() || null;
+
+        if (idPrincipalNuevo !== idPrincipalOriginal) {
+          updateData.id_cliente_principal = idPrincipalNuevo;
+          updateData.es_cliente_principal = idPrincipalNuevo ? false : values.es_cliente_principal ?? false;
+          updateData.nombre_sede = idPrincipalNuevo ? nombreSedeNuevo : null;
+        } else if (idPrincipalNuevo) {
+          // Principal no cambió pero nombre de sede pudo cambiar
+          if (nombreSedeNuevo !== (cliente?.nombre_sede ?? null)) {
+            updateData.nombre_sede = nombreSedeNuevo;
+          }
+        }
+
+        // Si se marcó/desmarcó como cliente principal (sin ser sede)
+        if (!idPrincipalNuevo && values.es_cliente_principal !== (cliente?.es_cliente_principal ?? false)) {
+          updateData.es_cliente_principal = values.es_cliente_principal;
+        }
         await updateMutation.mutateAsync({ id: clienteId, data: updateData });
         toast({
           title: '¡Cliente actualizado!',
@@ -487,21 +519,147 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-        {/* ===== BANNER: Info de sede en modo editar ===== */}
-        {mode === 'editar' && cliente?.nombre_sede && (
+        {/* ===== SECCIÓN SEDE: Configuración de sede en modo editar ===== */}
+        {mode === 'editar' && (
           <Card className="border-blue-200 bg-blue-50/30">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Link className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="font-semibold text-blue-800">
-                    Sede: {cliente.nombre_sede}
-                  </p>
-                  <p className="text-sm text-blue-600">
-                    Cliente principal: {cliente.cliente_principal?.persona?.nombre_comercial || cliente.cliente_principal?.persona?.razon_social || `#${cliente.id_cliente_principal}`}
-                  </p>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-800">
+                <Link className="h-5 w-5" />
+                Configuraci&oacute;n de Sede
+              </CardTitle>
+              <CardDescription>
+                {cliente?.id_cliente_principal
+                  ? 'Este cliente es sede de un cliente principal. Puedes cambiar el principal o desvincular.'
+                  : cliente?.es_cliente_principal
+                    ? 'Este cliente es un cliente principal (corporativo).'
+                    : 'Puedes convertir este cliente en sede de un cliente principal existente.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Es Cliente Principal toggle */}
+              <FormField
+                control={form.control}
+                name="es_cliente_principal"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border border-blue-200 bg-white p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base flex items-center gap-2">
+                        <Star className="h-4 w-4 text-amber-500" />
+                        Es Cliente Principal (Corporativo)
+                      </FormLabel>
+                      <FormDescription>
+                        Marcar si este cliente tiene o tendr&aacute; m&uacute;ltiples sedes
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked);
+                          if (checked) {
+                            form.setValue('id_cliente_principal', null);
+                            form.setValue('nombre_sede', '');
+                          }
+                        }}
+                        disabled={!!esSede}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {/* Selector: Es Sede de... */}
+              {!form.watch('es_cliente_principal') && (
+                <div className="space-y-3">
+                  <FormField
+                    control={form.control}
+                    name="id_cliente_principal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-blue-600" />
+                          Es Sede de (Cliente Principal)
+                        </FormLabel>
+                        <Select
+                          key={`edit-principal-${field.value}`}
+                          onValueChange={(value) => {
+                            const id = value === 'none' ? null : parseInt(value);
+                            form.setValue('id_cliente_principal', id);
+                            if (!id) {
+                              form.setValue('nombre_sede', '');
+                            }
+                          }}
+                          value={field.value?.toString() || 'none'}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleccionar cliente principal..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">No es sede (cliente independiente)</SelectItem>
+                            {(clientesPrincipales ?? [])
+                              .filter((cp: ClientePrincipalSelector) => cp.id_cliente !== clienteId)
+                              .map((cp: ClientePrincipalSelector) => (
+                                <SelectItem
+                                  key={cp.id_cliente}
+                                  value={cp.id_cliente.toString()}
+                                >
+                                  {cp.nombre} — NIT: {cp.nit} ({cp.total_sedes} sedes)
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Selecciona un cliente principal para convertir este cliente en una de sus sedes.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Nombre de Sede */}
+                  {esSede && (
+                    <FormField
+                      control={form.control}
+                      name="nombre_sede"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-base font-semibold text-blue-800">
+                            Nombre de la Sede *
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Ej: Sede Norte, Planta Industrial..."
+                              className="border-blue-300 focus:border-blue-500 text-lg font-medium"
+                              {...field}
+                              value={field.value || ''}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Este nombre identificar&aacute; esta sede en el sistema
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {/* Info: desvinculando */}
+                  {cliente?.id_cliente_principal && !esSede && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                      <strong>Atenci&oacute;n:</strong> Al guardar sin un cliente principal seleccionado, este cliente dejar&aacute; de ser sede y se convertir&aacute; en un cliente independiente.
+                    </div>
+                  )}
+
+                  {/* Info: convirtiendo */}
+                  {!cliente?.id_cliente_principal && esSede && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                      <strong>Conversi&oacute;n a sede:</strong> Al guardar, este cliente quedar&aacute; vinculado como sede del cliente principal seleccionado. Sus equipos, &oacute;rdenes e historial se mantienen intactos.
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -761,7 +919,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Ej: Empresa ABC S.A.S."
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -779,7 +937,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Nombre con el que opera"
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />

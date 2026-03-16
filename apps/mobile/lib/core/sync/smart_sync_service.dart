@@ -13,7 +13,9 @@
 // ============================================================================
 
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -228,8 +230,109 @@ class SmartSyncService {
         }
       }
 
+      // =====================================================================
+      // PASO 4B: DETECTAR ÓRDENES ELIMINADAS DEL SERVIDOR (HARD DELETE)
+      // ✅ FIX 26-FEB-2026 v2: Algoritmo robusto de detección de eliminación.
+      //
+      // El servidor SOLO envía órdenes activas (es_estado_final=false).
+      // Órdenes locales en estado FINAL no aparecen → eso es NORMAL.
+      //
+      // Para TODAS las demás órdenes locales (activas) que no aparecen
+      // en el servidor, verificamos directamente con GET /ordenes/:id.
+      // Si el servidor responde 404, la orden fue eliminada → purgar.
+      // Si responde 200, fue reasignada a otro técnico → no purgar.
+      //
+      // CRÍTICO: No usar isDirty ni enCola como guardas pre-verificación.
+      // El servidor es la fuente de verdad. Si dice 404, se purga todo
+      // incluyendo la cola de sync pendiente.
+      // =====================================================================
+      final idsServidor = ordenesServidor.map((o) => o.id).toSet();
+      int ordenesEliminadasCount = 0;
+
+      // ✅ FIX 26-FEB-2026: Usar esEstadoFinal del servidor (autoritativo)
+      // en vez de set hardcodeado que incluía APROBADA erróneamente.
+      // APROBADA = "aprobada para ejecución" (estado activo, NO final).
+      final estadosLocales2 = await _db.getAllEstadosOrden();
+      final estadosFinalesIds = estadosLocales2
+          .where((e) => e.esEstadoFinal)
+          .map((e) => e.id)
+          .toSet();
       debugPrint(
-        '🧠 [SMART SYNC] Resultado: ${aDescargar.length} a descargar, $omitidas sin cambios',
+        '🔍 [SMART SYNC PASO 4B] Estados finales (server-authoritative): '
+        '${estadosFinalesIds.toList()} '
+        '(${estadosLocales2.where((e) => e.esEstadoFinal).map((e) => e.codigo).join(', ')})',
+      );
+
+      // Construir mapa inverso de estadoId -> código para diagnóstico
+      final estadoIdACodigo = <int, String>{};
+      for (final e in estadosLocales2) {
+        estadoIdACodigo[e.id] = e.codigo;
+      }
+
+      // Recopilar órdenes candidatas a verificación
+      final candidatasVerificacion = <Ordene>[];
+      for (final entry in mapaLocal.entries) {
+        if (!idsServidor.contains(entry.key)) {
+          final orden = entry.value;
+          final codigoEstado = estadoIdACodigo[orden.idEstado] ?? '???';
+
+          // Órdenes en estado final no aparecen en compare → es normal
+          if (estadosFinalesIds.contains(orden.idEstado)) {
+            debugPrint(
+              '   ℹ️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
+              'en estado FINAL ($codigoEstado) → no verificar',
+            );
+            continue;
+          }
+
+          // TODAS las demás órdenes activas que no están en el servidor
+          // deben ser verificadas, sin importar isDirty o enCola
+          final enCola = await _db.existeOrdenEnColaPendiente(orden.idLocal);
+          debugPrint(
+            '   🔍 ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
+            'no en compare, estado=$codigoEstado, isDirty=${orden.isDirty}, enCola=$enCola → verificando servidor...',
+          );
+          candidatasVerificacion.add(orden);
+        }
+      }
+
+      if (candidatasVerificacion.isNotEmpty) {
+        debugPrint(
+          '🗑️ [SMART SYNC] ${candidatasVerificacion.length} órdenes activas no en servidor, verificando existencia...',
+        );
+
+        for (final orden in candidatasVerificacion) {
+          try {
+            final existeEnServidor = await _verificarOrdenExisteEnServidor(
+              orden.idBackend!,
+            );
+            if (!existeEnServidor) {
+              // Servidor confirmó 404 → orden eliminada, purgar todo
+              // Primero limpiar cola de sync pendiente (si existe)
+              await (_db.delete(
+                _db.ordenesPendientesSync,
+              )..where((o) => o.idOrdenLocal.equals(orden.idLocal))).go();
+
+              await _purgarOrdenLocalCompleta(orden.idLocal, orden.idBackend);
+              ordenesEliminadasCount++;
+              debugPrint(
+                '   🗑️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
+                'purgada localmente (isDirty=${orden.isDirty})',
+              );
+            } else {
+              debugPrint(
+                '   ⚠️ ${orden.numeroOrden} existe en servidor pero no en compare '
+                '(posible reasignación a otro técnico)',
+              );
+            }
+          } catch (e) {
+            debugPrint('   ❌ Error verificando ${orden.numeroOrden}: $e');
+          }
+        }
+      }
+
+      debugPrint(
+        '🧠 [SMART SYNC] Resultado: ${aDescargar.length} a descargar, $omitidas sin cambios, $ordenesEliminadasCount eliminadas del servidor',
       );
 
       // =====================================================================
@@ -563,6 +666,108 @@ class SmartSyncService {
 
     debugPrint(
       '🔧 [SMART SYNC] Guardados ${equiposData.length} equipos para orden $idOrdenServicio (multi-equipos)',
+    );
+  }
+
+  /// ✅ FIX 26-FEB-2026: Verifica si una orden aún existe en el servidor
+  /// Retorna false si el servidor responde 404 (orden eliminada)
+  Future<bool> _verificarOrdenExisteEnServidor(int idBackend) async {
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/ordenes/$idBackend',
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return false; // Orden no existe en servidor
+      }
+      // Otro error de red → asumir que existe (no purgar por error de red)
+      debugPrint(
+        '⚠️ [SMART SYNC] Error verificando orden $idBackend: ${e.message}',
+      );
+      return true;
+    } catch (e) {
+      debugPrint(
+        '⚠️ [SMART SYNC] Error inesperado verificando orden $idBackend: $e',
+      );
+      return true;
+    }
+  }
+
+  /// ✅ FIX 26-FEB-2026: Purga completa de una orden local y todos sus datos
+  /// Usado cuando se detecta que la orden fue eliminada del servidor (hard delete desde admin)
+  Future<void> _purgarOrdenLocalCompleta(
+    int idOrdenLocal,
+    int? idBackend,
+  ) async {
+    debugPrint(
+      '🗑️ [SMART SYNC] Purgando orden local $idOrdenLocal (backend=$idBackend)',
+    );
+
+    await _db.transaction(() async {
+      // 1. Eliminar archivos de evidencias
+      final evidencias = await _db.getEvidenciasByOrden(idOrdenLocal);
+      for (final ev in evidencias) {
+        try {
+          final archivo = File(ev.rutaLocal);
+          if (await archivo.exists()) {
+            await archivo.delete();
+          }
+        } catch (_) {}
+      }
+
+      // 2. Eliminar archivos de firmas
+      final firmas = await _db.getFirmasByOrden(idOrdenLocal);
+      for (final firma in firmas) {
+        try {
+          final archivo = File(firma.rutaLocal);
+          if (await archivo.exists()) {
+            await archivo.delete();
+          }
+        } catch (_) {}
+      }
+
+      // 3. Eliminar registros de BD (en orden por FK)
+      await (_db.delete(
+        _db.evidencias,
+      )..where((e) => e.idOrden.equals(idOrdenLocal))).go();
+
+      await (_db.delete(
+        _db.firmas,
+      )..where((f) => f.idOrden.equals(idOrdenLocal))).go();
+
+      await (_db.delete(
+        _db.mediciones,
+      )..where((m) => m.idOrden.equals(idOrdenLocal))).go();
+
+      await (_db.delete(
+        _db.actividadesEjecutadas,
+      )..where((a) => a.idOrden.equals(idOrdenLocal))).go();
+
+      await (_db.delete(
+        _db.actividadesPlan,
+      )..where((p) => p.idOrden.equals(idOrdenLocal))).go();
+
+      // Limpiar ordenesEquipos (vinculados por idOrdenServicio = idBackend)
+      if (idBackend != null) {
+        await (_db.delete(
+          _db.ordenesEquipos,
+        )..where((oe) => oe.idOrdenServicio.equals(idBackend))).go();
+      }
+
+      // Limpiar cola de sync pendiente
+      await (_db.delete(
+        _db.ordenesPendientesSync,
+      )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).go();
+
+      // Finalmente eliminar la orden
+      await (_db.delete(
+        _db.ordenes,
+      )..where((o) => o.idLocal.equals(idOrdenLocal))).go();
+    });
+
+    debugPrint(
+      '✅ [SMART SYNC] Orden local $idOrdenLocal purgada completamente',
     );
   }
 

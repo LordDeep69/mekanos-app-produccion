@@ -26,6 +26,7 @@ import {
     FileText,
     Loader2,
     Mail,
+    Paperclip,
     Plus,
     RefreshCw,
     Send,
@@ -50,10 +51,14 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     const [asuntoEmail, setAsuntoEmail] = useState('');
     const [mensajeEmail, setMensajeEmail] = useState('');
     const [incluirClienteEmail, setIncluirClienteEmail] = useState(true);
+    // ✅ FIX 03-MAR-2026: Estado para emails adicionales de notificación
+    const [incluirEmailsNotificacion, setIncluirEmailsNotificacion] = useState<Record<string, boolean>>({});
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
     const [showPreview, setShowPreview] = useState(false);
     const [emailSendStatus, setEmailSendStatus] = useState<EmailSendStatus>('idle');
     const [emailSendResult, setEmailSendResult] = useState<{ destinatarios: string[]; error?: string } | null>(null);
+    // ✅ FIX 11-MAR-2026: Estado para archivos adjuntos adicionales
+    const [archivosAdjuntos, setArchivosAdjuntos] = useState<File[]>([]);
 
     // ✅ FIX 04-FEB-2026: Obtener URL del PDF existente usando apiClient centralizado
     const { data: pdfExistenteData } = useQuery({
@@ -70,6 +75,18 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     // Obtener email del cliente (cast para acceder a campos adicionales)
     const clientePersona = orden.clientes?.persona as any;
     const clienteEmail = clientePersona?.email_principal || '';
+
+    // ✅ FIX 03-MAR-2026: Obtener emails adicionales del cliente/sede
+    // Fallback: si la sede no tiene emails_notificacion propios, usar los del cliente principal
+    const clienteData = orden.clientes as any;
+    const emailsSedeRaw: string = clienteData?.emails_notificacion || '';
+    const emailsPrincipalRaw: string = clienteData?.cliente_principal?.emails_notificacion || '';
+    const usandoEmailsPrincipal = !emailsSedeRaw && !!emailsPrincipalRaw;
+    const emailsNotificacionRaw = emailsSedeRaw || emailsPrincipalRaw;
+    const emailsNotificacion: string[] = emailsNotificacionRaw
+        .split(';;')
+        .map((e: string) => e.trim())
+        .filter((e: string) => e.length > 0 && e.includes('@'));
 
     // Mutation para regenerar PDF
     const regenerarMutation = useMutation({
@@ -124,11 +141,71 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         setEmailsDestinatarios(prev => prev.filter(e => e !== email));
     };
 
+    // ✅ FIX 11-MAR-2026: Funciones para manejar archivos adjuntos
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files) return;
+
+        const newFiles = Array.from(files);
+        const totalFiles = archivosAdjuntos.length + newFiles.length;
+
+        // Limitar a 5 archivos
+        if (totalFiles > 5) {
+            alert('Máximo 5 archivos adjuntos permitidos');
+            const allowedNewFiles = newFiles.slice(0, 5 - archivosAdjuntos.length);
+            setArchivosAdjuntos(prev => [...prev, ...allowedNewFiles]);
+        } else {
+            setArchivosAdjuntos(prev => [...prev, ...newFiles]);
+        }
+
+        // Limpiar input para permitir seleccionar el mismo archivo nuevamente
+        e.target.value = '';
+    };
+
+    const handleRemoveArchivo = (index: number) => {
+        setArchivosAdjuntos(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const fileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                // Remover el prefijo "data:*/*;base64," para obtener solo el base64
+                const base64String = reader.result?.toString().split(',')[1] || '';
+                resolve(base64String);
+            };
+            reader.onerror = error => reject(error);
+        });
+    };
+
+    const getFileIcon = (fileName: string) => {
+        const ext = fileName.split('.').pop()?.toLowerCase();
+        if (['pdf'].includes(ext || '')) return '📄';
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext || '')) return '🖼️';
+        if (['doc', 'docx'].includes(ext || '')) return '📝';
+        if (['xls', 'xlsx', 'csv'].includes(ext || '')) return '📊';
+        if (['zip', 'rar', '7z'].includes(ext || '')) return '📦';
+        return '📎';
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
     // Obtener todos los emails destino
     const getAllDestinatarios = (): string[] => {
         const emails: string[] = [];
         if (incluirClienteEmail && clienteEmail) {
             emails.push(clienteEmail);
+        }
+        // ✅ FIX 03-MAR-2026: Incluir emails adicionales seleccionados
+        for (const email of emailsNotificacion) {
+            if (incluirEmailsNotificacion[email] && !emails.includes(email)) {
+                emails.push(email);
+            }
         }
         for (const e of emailsDestinatarios) {
             if (!emails.includes(e)) emails.push(e);
@@ -137,6 +214,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     };
 
     // ✅ FIX 13-FEB-2026: Enviar con feedback visual completo y prevención de duplicados
+    // ✅ FIX 11-MAR-2026: Soporte para archivos adjuntos adicionales
     const handleEnviarPdf = async () => {
         const destinatarios = getAllDestinatarios();
         if (destinatarios.length === 0) return;
@@ -145,6 +223,15 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         setEmailSendResult(null);
 
         try {
+            // Convertir archivos a base64
+            const archivosAdicionales = await Promise.all(
+                archivosAdjuntos.map(async (file) => ({
+                    filename: file.name,
+                    contentBase64: await fileToBase64(file),
+                    contentType: file.type || 'application/octet-stream',
+                }))
+            );
+
             // Enviar a cada destinatario secuencialmente
             const emailPrincipal = destinatarios[0];
             const emailsCc = destinatarios.slice(1);
@@ -154,6 +241,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                 asuntoEmail: asuntoEmail || undefined,
                 mensajeEmail: mensajeEmail || undefined,
                 ...(emailsCc.length > 0 ? { emailsCc } : {}),
+                ...(archivosAdicionales.length > 0 ? { archivosAdicionales } : {}),
             });
 
             setEmailSendStatus('success');
@@ -170,6 +258,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                 setEmailsDestinatarios([]);
                 setAsuntoEmail('');
                 setMensajeEmail('');
+                setArchivosAdjuntos([]); // Limpiar archivos adjuntos
             }, 4000);
         } catch (error: any) {
             setEmailSendStatus('error');
@@ -189,6 +278,13 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         setAsuntoEmail('');
         setMensajeEmail('');
         setIncluirClienteEmail(!!clienteEmail);
+        // ✅ FIX 03-MAR-2026: Inicializar emails adicionales como seleccionados por defecto
+        const emailsNotifInitial: Record<string, boolean> = {};
+        for (const email of emailsNotificacion) {
+            emailsNotifInitial[email] = true;
+        }
+        setIncluirEmailsNotificacion(emailsNotifInitial);
+        setArchivosAdjuntos([]); // Reset archivos adjuntos
         setShowEmailModal(true);
     };
 
@@ -452,6 +548,48 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                                             </label>
                                         )}
 
+                                        {/* ✅ FIX 03-MAR-2026: Emails adicionales de notificación */}
+                                        {emailsNotificacion.length > 0 && (
+                                            <div className="space-y-1.5 mb-2">
+                                                {usandoEmailsPrincipal && (
+                                                    <p className="text-[10px] text-amber-600 font-medium px-1">
+                                                        Heredados del cliente principal
+                                                    </p>
+                                                )}
+                                                {emailsNotificacion.map((email: string, index: number) => (
+                                                    <label
+                                                        key={`notif-${index}`}
+                                                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${usandoEmailsPrincipal
+                                                            ? 'bg-amber-50 hover:bg-amber-100'
+                                                            : 'bg-blue-50 hover:bg-blue-100'
+                                                            }`}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={incluirEmailsNotificacion[email] || false}
+                                                            onChange={(e) => setIncluirEmailsNotificacion(prev => ({
+                                                                ...prev,
+                                                                [email]: e.target.checked
+                                                            }))}
+                                                            className="w-4 h-4 text-blue-600 rounded"
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={`text-sm font-medium ${usandoEmailsPrincipal ? 'text-amber-800' : 'text-blue-800'}`}>{email}</p>
+                                                            <p className={`text-xs truncate ${usandoEmailsPrincipal ? 'text-amber-500' : 'text-blue-500'}`}>
+                                                                {usandoEmailsPrincipal ? 'Heredado del cliente principal' : 'Email de notificación adicional'}
+                                                            </p>
+                                                        </div>
+                                                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${usandoEmailsPrincipal
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : 'bg-indigo-100 text-indigo-700'
+                                                            }`}>
+                                                            {usandoEmailsPrincipal ? 'PRINCIPAL' : 'ADICIONAL'}
+                                                        </span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
+
                                         {/* Lista de emails adicionales */}
                                         {emailsDestinatarios.length > 0 && (
                                             <div className="space-y-1.5 mb-2">
@@ -536,6 +674,71 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                                             rows={3}
                                             className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
                                         />
+                                    </div>
+
+                                    {/* ✅ FIX 11-MAR-2026: Archivos adjuntos adicionales */}
+                                    <div>
+                                        <label className="text-sm font-bold text-gray-700 mb-2 block flex items-center gap-2">
+                                            <Paperclip className="h-4 w-4" />
+                                            Archivos Adjuntos (opcional)
+                                        </label>
+
+                                        {/* Lista de archivos seleccionados */}
+                                        {archivosAdjuntos.length > 0 && (
+                                            <div className="space-y-2 mb-3">
+                                                {archivosAdjuntos.map((file, index) => (
+                                                    <div
+                                                        key={index}
+                                                        className="flex items-center gap-3 p-2.5 bg-blue-50 rounded-lg border border-blue-100"
+                                                    >
+                                                        <span className="text-xl">{getFileIcon(file.name)}</span>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium text-gray-700 truncate">{file.name}</p>
+                                                            <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRemoveArchivo(index)}
+                                                            className="p-1.5 hover:bg-red-100 rounded-lg transition-colors"
+                                                            title="Eliminar archivo"
+                                                        >
+                                                            <X className="h-4 w-4 text-red-500" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Input para agregar archivos */}
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                id="file-upload"
+                                                multiple
+                                                onChange={handleFileSelect}
+                                                className="hidden"
+                                                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar"
+                                            />
+                                            <label
+                                                htmlFor="file-upload"
+                                                className={cn(
+                                                    "flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all",
+                                                    archivosAdjuntos.length >= 5
+                                                        ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
+                                                        : "border-gray-300 hover:border-green-500 hover:bg-green-50"
+                                                )}
+                                            >
+                                                <Paperclip className="h-5 w-5 text-gray-500" />
+                                                <span className="text-sm font-medium text-gray-600">
+                                                    {archivosAdjuntos.length >= 5
+                                                        ? 'Máximo 5 archivos alcanzado'
+                                                        : 'Agregar archivos (máx. 5)'}
+                                                </span>
+                                            </label>
+                                        </div>
+
+                                        <p className="text-xs text-gray-400 mt-2">
+                                            Formatos permitidos: PDF, Word, Excel, imágenes, ZIP. Máx. 10MB por archivo.
+                                        </p>
                                     </div>
                                 </div>
 

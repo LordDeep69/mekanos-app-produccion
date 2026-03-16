@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart';
 import '../../auth/data/auth_provider.dart';
 import '../../evidencias/presentation/evidencias_screen.dart';
@@ -939,58 +940,18 @@ class _ResumenFinalizacionScreenState
   }
 
   /// Ejecuta la sincronización con el backend
+  /// ✅ FIX 26-FEB-2026: Usa diálogo reactivo con progreso SSE (mismo que ejecucion_screen)
   Future<void> _ejecutarFinalizacion({
     required String horaEntrada,
     required String horaSalida,
     required String observaciones,
     String? razonFalla,
   }) async {
-    // Mostrar loading
+    // ✅ FIX 26-FEB-2026: Diálogo reactivo con progreso SSE en tiempo real
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text(
-              'Finalizando servicio...',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            if (_esMultiEquipo) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Procesando ${_equipos.length} equipos...',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  _buildLoadingStep(Icons.photo, 'Subiendo evidencias...'),
-                  _buildLoadingStep(Icons.gesture, 'Subiendo firmas...'),
-                  _buildLoadingStep(Icons.picture_as_pdf, 'Generando PDF...'),
-                  _buildLoadingStep(Icons.email, 'Enviando notificación...'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Este proceso puede tardar hasta 30 segundos.\nNo cierres la aplicación.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
+      builder: (ctx) => _ResumenSyncProgressDialog(),
     );
 
     try {
@@ -1024,15 +985,7 @@ class _ResumenFinalizacionScreenState
       Navigator.of(context).pop(); // Cerrar loading
 
       if (resultado.success) {
-        if (resultado.guardadoOffline) {
-          _mostrarExitoOffline(resultado);
-        } else {
-          _mostrarExitoOnline(resultado);
-        }
-      } else if (resultado.guardadoOffline) {
-        // ✅ FIX 09-FEB-2026: Si falló pero se guardó en cola, NO mostrar error
-        // sino informar que se reintentará automáticamente
-        _mostrarExitoOffline(resultado);
+        _mostrarExitoOnline(resultado);
       } else {
         _mostrarError(resultado.mensaje);
       }
@@ -1042,44 +995,7 @@ class _ResumenFinalizacionScreenState
     }
   }
 
-  Widget _buildLoadingStep(IconData icon, String texto) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.blue.shade700),
-          const SizedBox(width: 8),
-          Text(
-            texto,
-            style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _mostrarExitoOnline(SyncUploadResult resultado) {
-    final datosRes = resultado.datos;
-
-    // ✅ 20-DIC-2025: Soportar ambas estructuras de respuesta
-    // Puede venir como datosRes['datos'] (SSE) o datosRes directamente (endpoint tradicional)
-    Map<String, dynamic>? datosInternos;
-    if (datosRes != null) {
-      // Primero intentar 'datos' (estructura SSE y respuesta del servicio)
-      if (datosRes['datos'] is Map<String, dynamic>) {
-        datosInternos = datosRes['datos'] as Map<String, dynamic>;
-      } else {
-        // Fallback: los datos podrían estar directamente en datosRes
-        datosInternos = datosRes;
-      }
-    }
-
-    final evidenciasCount =
-        (datosInternos?['evidencias'] as List?)?.length ?? 0;
-    final firmasCount = (datosInternos?['firmas'] as List?)?.length ?? 0;
-    final pdfGenerado = datosInternos?['documento'] != null;
-    final emailEnviado = datosInternos?['email']?['enviado'] == true;
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1103,21 +1019,16 @@ class _ResumenFinalizacionScreenState
             children: [
               Text(
                 _esMultiEquipo
-                    ? 'El servicio con ${_equipos.length} equipos ha sido finalizado y sincronizado.'
-                    : 'El servicio ha sido finalizado y sincronizado correctamente.',
+                    ? 'El servicio con ${_equipos.length} equipos ha sido finalizado y sincronizado con el servidor.'
+                    : 'El servicio ha sido finalizado y sincronizado correctamente con el servidor.',
                 style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 16),
               _buildResultadoItem(
-                Icons.photo,
-                'Evidencias',
-                '$evidenciasCount',
+                Icons.cloud_done,
+                'Servidor',
+                'Sincronizado ✅',
               ),
-              _buildResultadoItem(Icons.gesture, 'Firmas', '$firmasCount'),
-              if (pdfGenerado)
-                _buildResultadoItem(Icons.picture_as_pdf, 'PDF Generado', '✅'),
-              if (emailEnviado)
-                _buildResultadoItem(Icons.email, 'Email Enviado', '✅'),
             ],
           ),
         ),
@@ -1129,106 +1040,6 @@ class _ResumenFinalizacionScreenState
               Navigator.of(context).pop(); // Volver a lista de órdenes
             },
             child: const Text('ACEPTAR'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _mostrarExitoOffline(SyncUploadResult resultado) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_sync, color: Colors.blue, size: 28),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                'Servicio Completado',
-                style: TextStyle(fontSize: 18),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green.shade700),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        '¡Servicio finalizado correctamente!',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.blue.shade600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'El servidor está generando el PDF y enviando el email.',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildResultadoItem(Icons.save, 'Datos locales', 'Guardados ✅'),
-              _buildResultadoItem(
-                Icons.cloud_upload,
-                'Subida al servidor',
-                'En proceso 🔄',
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            child: const Text('CONTINUAR'),
           ),
         ],
       ),
@@ -1273,6 +1084,230 @@ class _ResumenFinalizacionScreenState
               _mostrarDialogoFinalizacion();
             },
             child: const Text('REINTENTAR'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ✅ FIX 26-FEB-2026: Diálogo reactivo de progreso de sincronización
+/// Usa el mismo SyncProgressNotifier que ejecucion_screen para mostrar
+/// progreso SSE en tiempo real durante la finalización.
+class _ResumenSyncProgressDialog extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progress = ref.watch(syncProgressProvider);
+
+    return PopScope(
+      canPop:
+          progress.pasoActual == SyncStep.completado ||
+          progress.pasoActual == SyncStep.error,
+      child: AlertDialog(
+        title: Row(
+          children: [
+            if (progress.pasoActual == SyncStep.completado)
+              const Icon(Icons.check_circle, color: Colors.green, size: 28)
+            else if (progress.pasoActual == SyncStep.error)
+              const Icon(Icons.error, color: Colors.red, size: 28)
+            else
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                progress.pasoActual == SyncStep.completado
+                    ? '¡Sincronización Exitosa!'
+                    : progress.pasoActual == SyncStep.error
+                    ? 'Error en Sincronización'
+                    : 'Sincronizando...',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (progress.mensajeActual != null &&
+                  progress.pasoActual != SyncStep.completado &&
+                  progress.pasoActual != SyncStep.error) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          progress.mensajeActual!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (progress.porcentaje > 0 &&
+                  progress.pasoActual != SyncStep.completado &&
+                  progress.pasoActual != SyncStep.error) ...[
+                LinearProgressIndicator(
+                  value: progress.porcentaje / 100,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Colors.blue.shade600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${progress.porcentaje}%',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 16),
+              ],
+              _buildStep(SyncStep.preparando, progress, Icons.settings),
+              _buildStep(SyncStep.validando, progress, Icons.verified_user),
+              _buildStep(SyncStep.evidencias, progress, Icons.photo_camera),
+              _buildStep(SyncStep.firmas, progress, Icons.draw),
+              if (progress.pasoActual == SyncStep.error &&
+                  progress.mensajeError != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          progress.mensajeError!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (progress.pasoActual == SyncStep.completado) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.celebration,
+                        color: Colors.green.shade700,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          '¡Orden sincronizada correctamente con el servidor!',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          if (progress.pasoActual == SyncStep.completado ||
+              progress.pasoActual == SyncStep.error)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: progress.pasoActual == SyncStep.completado
+                    ? Colors.green
+                    : Colors.blue,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                progress.pasoActual == SyncStep.completado
+                    ? 'CONTINUAR'
+                    : 'CERRAR',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep(SyncStep step, SyncProgress progress, IconData icon) {
+    final isCompleted = progress.pasosCompletados.contains(step);
+    final isActive = progress.pasoActual == step;
+
+    Color color;
+    Widget leading;
+
+    if (isCompleted) {
+      color = Colors.green;
+      leading = const Icon(Icons.check_circle, color: Colors.green, size: 22);
+    } else if (isActive) {
+      color = Colors.blue;
+      leading = const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else {
+      color = Colors.grey.shade400;
+      leading = Icon(
+        Icons.circle_outlined,
+        color: Colors.grey.shade400,
+        size: 22,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 12),
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isCompleted ? step.nombreCompletado : step.nombre,
+              style: TextStyle(
+                fontSize: 14,
+                color: color,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
           ),
         ],
       ),

@@ -72,26 +72,21 @@ class DataLifecycleManager {
   // CONFIGURACIÓN DE POLÍTICAS (valores por defecto, se actualizan desde prefs)
   // ============================================================================
 
-  /// Días de retención para órdenes completadas (default, se lee de prefs)
-  int _diasRetencionCompletadas = 7;
-
-  /// Días de retención para archivos multimedia después de sync (default, se lee de prefs)
-  int _diasRetencionArchivosPostSync = 3;
-
-  /// Máximo de órdenes en historial (soft limit para UI)
-  int _maxOrdenesHistorial = 15;
+  /// ✅ FIX 26-FEB-2026: Política de retención unificada (valor + unidad)
+  /// Duración configurable: minutos, horas o días desde la carga al servidor.
+  Duration _duracionRetencion = const Duration(days: 7);
 
   /// Si la limpieza automática está activa
   bool _limpiezaAutomaticaActiva = true;
 
   // Getters para acceso externo
-  int get diasRetencionCompletadas => _diasRetencionCompletadas;
-  int get diasRetencionArchivosPostSync => _diasRetencionArchivosPostSync;
-  int get maxOrdenesHistorial => _maxOrdenesHistorial;
+  Duration get duracionRetencion => _duracionRetencion;
   bool get limpiezaAutomaticaActiva => _limpiezaAutomaticaActiva;
 
   /// Estados considerados "finales" (candidatos a purga)
-  /// Incluye variantes históricas para compatibilidad retroactiva.
+  /// ✅ FIX 26-FEB-2026: SOLO estados terminales reales.
+  /// APROBADA NO es final — es estado activo ("aprobada para ejecución").
+  /// El servidor es autoritativo vía esEstadoFinal; este set es solo fallback.
   static const Set<String> estadosFinales = {
     'COMPLETADA',
     'COMPLETADO',
@@ -99,6 +94,8 @@ class DataLifecycleManager {
     'CERRADO',
     'FINALIZADA',
     'FINALIZADO',
+    'CANCELADA',
+    'CANCELADO',
   };
 
   /// Estados que NUNCA se deben purgar
@@ -115,15 +112,13 @@ class DataLifecycleManager {
   /// Carga las preferencias del usuario antes de ejecutar limpieza
   Future<void> _cargarPreferencias() async {
     final data = await _prefs.cargarPreferencias();
-    _diasRetencionCompletadas = data.diasRetencionCompletadas;
-    _diasRetencionArchivosPostSync = data.diasRetencionArchivos;
-    _maxOrdenesHistorial = data.maxOrdenesHistorial;
+    _duracionRetencion = data.duracionRetencion;
     _limpiezaAutomaticaActiva = data.limpiezaAutomaticaActiva;
 
     debugPrint('📋 [LIFECYCLE] Preferencias cargadas:');
-    debugPrint('   - Retención órdenes: $_diasRetencionCompletadas días');
-    debugPrint('   - Retención archivos: $_diasRetencionArchivosPostSync días');
-    debugPrint('   - Máx historial: $_maxOrdenesHistorial órdenes');
+    debugPrint(
+      '   - Retención: ${data.descripcionRetencion} (${_duracionRetencion.inMinutes} min)',
+    );
     debugPrint('   - Limpieza automática: $_limpiezaAutomaticaActiva');
   }
 
@@ -204,9 +199,7 @@ class DataLifecycleManager {
   /// Antes, evidencias con lastSyncedAt=NULL nunca se purgaban porque
   /// NULL <= fechaLimite = FALSE en SQL. Ahora usamos filtro manual.
   Future<int> purgarEvidenciasSincronizadas() async {
-    final fechaLimite = DateTime.now().subtract(
-      Duration(days: diasRetencionArchivosPostSync),
-    );
+    final fechaLimite = DateTime.now().subtract(_duracionRetencion);
     final estadosFinalesIds = (await _getEstadosFinalesIds()).toSet();
     if (estadosFinalesIds.isEmpty) return 0;
 
@@ -278,9 +271,7 @@ class DataLifecycleManager {
   ///
   /// ✅ FIX 14-FEB-2026: Manejar NULL lastSyncedAt con fallback a fechaFirma
   Future<int> purgarFirmasSincronizadas() async {
-    final fechaLimite = DateTime.now().subtract(
-      Duration(days: diasRetencionArchivosPostSync),
-    );
+    final fechaLimite = DateTime.now().subtract(_duracionRetencion);
     final estadosFinalesIds = (await _getEstadosFinalesIds()).toSet();
     if (estadosFinalesIds.isEmpty) return 0;
 
@@ -338,7 +329,10 @@ class DataLifecycleManager {
   // PURGA DE ÓRDENES ANTIGUAS
   // ============================================================================
 
-  /// Elimina órdenes completadas más antiguas que [diasRetencionCompletadas].
+  /// Purga órdenes completadas que superan el período de retención.
+  ///
+  /// ✅ FIX 26-FEB-2026: Usa Duration configurable (minutos/horas/días).
+  /// La referencia de tiempo es lastSyncedAt (momento de carga exitosa al servidor).
   ///
   /// SEGURIDAD ZERO TRUST:
   /// - NUNCA purga órdenes con isDirty=true
@@ -346,9 +340,7 @@ class DataLifecycleManager {
   /// - NUNCA purga órdenes sin evidencia de subida al servidor
   /// - Solo purga estados finales (COMPLETADA, CERRADA, etc.)
   Future<int> purgarOrdenesAntiguas() async {
-    final fechaLimite = DateTime.now().subtract(
-      Duration(days: diasRetencionCompletadas),
-    );
+    final fechaLimite = DateTime.now().subtract(_duracionRetencion);
 
     // Obtener IDs de estados finales
     final estadosFinalesIds = await _getEstadosFinalesIds();
@@ -368,17 +360,29 @@ class DataLifecycleManager {
               )) // Debe existir en servidor
             .get();
 
-    // Filtrar manualmente usando fechaFin, lastSyncedAt, o updatedAt como fallback
+    debugPrint(
+      '🔍 [LIFECYCLE] Órdenes en estado final: ${todasOrdenesFinales.length} '
+      '(retención=${_duracionRetencion.inMinutes}min, fechaLimite=$fechaLimite)',
+    );
+    for (final o in todasOrdenesFinales) {
+      final fechaRef = o.fechaFin ?? o.lastSyncedAt ?? o.updatedAt;
+      debugPrint(
+        '   📋 ${o.numeroOrden} idEstado=${o.idEstado} fechaRef=$fechaRef '
+        'isDirty=${o.isDirty} idBackend=${o.idBackend}',
+      );
+    }
+
+    // ✅ FIX 26-FEB-2026: Usar lastSyncedAt como referencia principal
+    // (momento exacto de carga exitosa al servidor), con fallbacks
     final ordenesCandidatas = todasOrdenesFinales.where((orden) {
-      // Usar fechaFin si existe, sino lastSyncedAt, sino updatedAt
       final fechaReferencia =
-          orden.fechaFin ?? orden.lastSyncedAt ?? orden.updatedAt;
+          orden.lastSyncedAt ?? orden.fechaFin ?? orden.updatedAt;
       return fechaReferencia.isBefore(fechaLimite) ||
           fechaReferencia.isAtSameMomentAs(fechaLimite);
     }).toList();
 
     debugPrint(
-      '🔍 [LIFECYCLE] Encontradas ${ordenesCandidatas.length} órdenes candidatas a purga',
+      '🔍 [LIFECYCLE] Candidatas a purga (post-fecha): ${ordenesCandidatas.length}',
     );
 
     int purgadas = 0;
@@ -554,21 +558,21 @@ class DataLifecycleManager {
   /// Elimina TODAS las fotos, firmas y órdenes completadas.
   /// NO espera el período de retención - elimina inmediatamente.
   ///
-  /// ✅ FIX 14-FEB-2026: REESCRITURA COMPLETA - Eliminación agresiva real
-  /// El técnico presiona "Limpiar Ahora" y espera que TODO lo completado desaparezca.
+  /// ✅ FIX 28-FEB-2026: REESCRITURA TOTAL - ELIMINACIÓN SIN EXCEPCIONES
+  /// Cuando el técnico presiona "Limpiar Ahora", TODO lo que esté en estado
+  /// final (COMPLETADA, CERRADA, CANCELADA, FINALIZADA) se elimina SIN
+  /// importar isDirty, idBackend, cola de sync, ni ninguna otra condición.
   ///
   /// Estrategia:
-  /// 1. Obtener TODAS las órdenes en estado final
-  /// 2. Para cada orden: eliminar TODOS sus archivos + registros (si ya subió a servidor)
-  /// 3. Limpiar entradas de cola de sync completadas/atascadas
-  /// 4. Purgar datos huérfanos restantes
+  /// 1. Obtener TODAS las órdenes en estado final (por esEstadoFinal del servidor)
+  /// 2. TAMBIÉN buscar por código de estado como fallback (por si esEstadoFinal=false)
+  /// 3. Para cada orden: eliminar archivos + registros de BD SIN EXCEPCIÓN
+  /// 4. Limpiar TODA la cola de sync (atascada o no) para órdenes purgadas
+  /// 5. Purgar datos huérfanos restantes
   ///
-  /// ÚNICAS protecciones:
-  /// - Solo purga órdenes finales con evidencia de subida al servidor
-  /// - isDirty=true sin huella de sync → NO purgar
-  /// - En cola con estado PENDIENTE → esperando conexión, NO purgar
+  /// ÚNICA protección: NO purgar estados activos (EN_PROCESO, ASIGNADA, etc.)
   Future<PurgeResult> limpiarFotosSincronizadasAhora() async {
-    debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA AGRESIVA...');
+    debugPrint('🧹 [LIFECYCLE] Limpieza FORZADA TOTAL (sin excepciones)...');
 
     // Reset contador de bytes para esta ejecución
     _espacioLiberadoBytes = 0;
@@ -578,50 +582,33 @@ class DataLifecycleManager {
 
     try {
       // =====================================================================
-      // PASO 1: Obtener órdenes en estado final (COMPLETADA, CERRADA, etc.)
+      // PASO 1: Obtener IDs de estados finales (doble estrategia)
       // =====================================================================
-      final estadosFinalesIds = await _getEstadosFinalesIds();
+      final estadosFinalesIds = await _getEstadosFinalesIdsForzado();
       int ordenesPurgadas = 0;
       int evidenciasEliminadas = 0;
       int firmasEliminadas = 0;
       int bytesLiberados = 0;
 
       if (estadosFinalesIds.isNotEmpty) {
-        // Obtener TODAS las órdenes en estado final
-        // (incluye isDirty=true para corregir inconsistencias históricas).
+        // Obtener TODAS las órdenes en estado final — SIN FILTRO de isDirty ni idBackend
         final ordenesCompletadas = await (_db.select(
           _db.ordenes,
         )..where((o) => o.idEstado.isIn(estadosFinalesIds))).get();
 
-        final ordenesDirty = ordenesCompletadas.where((o) => o.isDirty).length;
-
         debugPrint(
-          '🔍 [LIFECYCLE] Órdenes en estado final: ${ordenesCompletadas.length} '
-          '(isDirty=true: $ordenesDirty, isDirty=false: ${ordenesCompletadas.length - ordenesDirty})',
+          '🔍 [LIFECYCLE] Órdenes en estado final para PURGA TOTAL: ${ordenesCompletadas.length}',
         );
+        for (final o in ordenesCompletadas) {
+          debugPrint(
+            '   � ${o.numeroOrden} idEstado=${o.idEstado} isDirty=${o.isDirty} idBackend=${o.idBackend}',
+          );
+        }
 
         for (final orden in ordenesCompletadas) {
-          // ÚNICA protección fuerte: solo órdenes finales YA subidas al servidor.
-          final subidaServidor = await _fueSubidaAlServidor(
-            orden,
-            permitirDirtyConHuella: true,
-          );
-          if (!subidaServidor) {
-            debugPrint(
-              '🛡️ [LIFECYCLE] Orden ${orden.numeroOrden} sin confirmación de subida, protegida',
-            );
-            continue;
-          }
+          // ✅ FIX 28-FEB-2026: SIN PROTECCIONES - el usuario pidió limpiar TODO
 
-          // En limpieza forzada manual, una orden final con isDirty=true y sin
-          // cola pendiente se considera inconsistencia recuperable y se purga.
-          if (orden.isDirty) {
-            debugPrint(
-              '⚠️ [LIFECYCLE] Orden ${orden.numeroOrden} en estado final con isDirty=true: purgando por limpieza forzada manual',
-            );
-          }
-
-          // Eliminar TODOS los archivos de evidencias (sin importar subida)
+          // Eliminar TODOS los archivos de evidencias
           final evidencias = await _db.getEvidenciasByOrden(orden.idLocal);
           for (final ev in evidencias) {
             final archivo = File(ev.rutaLocal);
@@ -635,7 +622,7 @@ class DataLifecycleManager {
             }
           }
 
-          // Eliminar TODOS los archivos de firmas (sin importar subida)
+          // Eliminar TODOS los archivos de firmas
           final firmas = await _db.getFirmasByOrden(orden.idLocal);
           for (final firma in firmas) {
             final archivo = File(firma.rutaLocal);
@@ -657,8 +644,25 @@ class DataLifecycleManager {
       }
 
       // =====================================================================
-      // PASO 2: Limpiar entradas de cola atascadas (EN_PROCESO viejo, ERROR agotado)
+      // PASO 2: Limpiar TODA la cola de sync para órdenes que ya no existen
       // =====================================================================
+      final todasEnCola = await _db.select(_db.ordenesPendientesSync).get();
+      final ordenesVivas = (await _db.getAllOrdenes())
+          .map((o) => o.idLocal)
+          .toSet();
+      for (final entry in todasEnCola) {
+        // Si la orden fue purgada o es una entrada huérfana, limpiar
+        if (!ordenesVivas.contains(entry.idOrdenLocal)) {
+          await (_db.delete(
+            _db.ordenesPendientesSync,
+          )..where((o) => o.idOrdenLocal.equals(entry.idOrdenLocal))).go();
+          debugPrint(
+            '🗑️ [LIFECYCLE] Cola huérfana limpiada: orden ${entry.idOrdenBackend}',
+          );
+        }
+      }
+
+      // También limpiar entradas atascadas (EN_PROCESO viejo, ERROR agotado)
       final colaAtascada =
           await (_db.select(_db.ordenesPendientesSync)..where(
                 (o) =>
@@ -691,7 +695,7 @@ class DataLifecycleManager {
       resultado.duracionMs = stopwatch.elapsedMilliseconds;
       resultado.success = true;
 
-      debugPrint('✅ [LIFECYCLE] Limpieza forzada AGRESIVA completada:');
+      debugPrint('✅ [LIFECYCLE] Limpieza forzada TOTAL completada:');
       debugPrint('   📸 Fotos eliminadas: $evidenciasEliminadas');
       debugPrint('   ✍️ Firmas eliminadas: $firmasEliminadas');
       debugPrint('   📋 Órdenes purgadas: $ordenesPurgadas');
@@ -794,9 +798,7 @@ class DataLifecycleManager {
     resultado.addAll(asignadas);
     resultado.addAll(porSubir);
     resultado.addAll(otras);
-    resultado.addAll(
-      completadas.take(maxOrdenesHistorial),
-    ); // Limitar historial
+    resultado.addAll(completadas.take(15)); // Limitar historial (soft limit)
 
     return resultado.take(limite).toList();
   }
@@ -906,16 +908,76 @@ class DataLifecycleManager {
     return _fueSubidaAlServidor(orden, permitirDirtyConHuella: false);
   }
 
+  /// ✅ FIX 26-FEB-2026: Servidor es AUTORITATIVO vía esEstadoFinal.
+  /// Solo estados con esEstadoFinal=true en la BD se consideran finales.
+  /// El set estático es solo fallback informativo (log de advertencia).
   Future<List<int>> _getEstadosFinalesIds() async {
     final estados = await _db.getAllEstadosOrden();
-    return estados
-        .where((e) {
-          final codigoNormalizado = _normalizarEstadoCodigo(e.codigo);
-          if (estadosProtegidos.contains(codigoNormalizado)) return false;
-          return _esEstadoFinalCodigo(e.codigo);
-        })
-        .map((e) => e.id)
-        .toList();
+    if (estados.isEmpty) {
+      debugPrint(
+        '⚠️ [LIFECYCLE] Tabla estados_orden VACÍA - ¿falta sync completo?',
+      );
+      return [];
+    }
+
+    final resultado = <int>[];
+    for (final e in estados) {
+      final codigoNormalizado = _normalizarEstadoCodigo(e.codigo);
+      if (estadosProtegidos.contains(codigoNormalizado)) continue;
+
+      // Servidor es AUTORITATIVO: solo esEstadoFinal=true cuenta.
+      if (e.esEstadoFinal) {
+        resultado.add(e.id);
+      } else if (_esEstadoFinalCodigo(e.codigo)) {
+        // Nuestro set estático dice final pero servidor dice NO final → respetar servidor
+        debugPrint(
+          '⚠️ [LIFECYCLE] Estado ${e.codigo}(id=${e.id}) está en estadosFinales '
+          'pero servidor dice esEstadoFinal=false → RESPETANDO servidor',
+        );
+      }
+    }
+
+    debugPrint(
+      '🔍 [LIFECYCLE] Estados finales encontrados: $resultado '
+      '(de ${estados.length} estados totales: ${estados.map((e) => '${e.codigo}(id=${e.id},final=${e.esEstadoFinal})').join(', ')})',
+    );
+    return resultado;
+  }
+
+  /// ✅ FIX 28-FEB-2026: Versión FORZADA para limpieza manual.
+  /// Usa DOBLE estrategia: esEstadoFinal del servidor + código estático como fallback.
+  /// Esto asegura que NINGUNA orden completada escape la purga manual,
+  /// incluso si el servidor no marcó el estado como final.
+  Future<List<int>> _getEstadosFinalesIdsForzado() async {
+    final estados = await _db.getAllEstadosOrden();
+    if (estados.isEmpty) {
+      debugPrint(
+        '⚠️ [LIFECYCLE] Tabla estados_orden VACÍA - ¿falta sync completo?',
+      );
+      return [];
+    }
+
+    final resultado = <int>{};
+    for (final e in estados) {
+      final codigoNormalizado = _normalizarEstadoCodigo(e.codigo);
+      if (estadosProtegidos.contains(codigoNormalizado)) continue;
+
+      // Estrategia 1: servidor dice final → incluir
+      if (e.esEstadoFinal) {
+        resultado.add(e.id);
+      }
+
+      // Estrategia 2: nuestro set estático dice final → TAMBIÉN incluir (fallback)
+      if (estadosFinales.contains(codigoNormalizado)) {
+        resultado.add(e.id);
+      }
+    }
+
+    debugPrint(
+      '🔍 [LIFECYCLE] Estados finales FORZADO: ${resultado.toList()} '
+      '(de ${estados.length} estados totales: ${estados.map((e) => '${e.codigo}(id=${e.id},final=${e.esEstadoFinal})').join(', ')})',
+    );
+    return resultado.toList();
   }
 
   Future<Map<int, String>> _getEstadosCodigoMap() async {

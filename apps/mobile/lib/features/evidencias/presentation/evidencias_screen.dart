@@ -70,10 +70,8 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
         .toList();
   }
 
+  /// ✅ FIX 28-FEB-2026: Menú con 3 opciones: Cámara, Galería (1), Galería (múltiples)
   Future<void> _capturarFoto() async {
-    final service = ref.read(evidenciaServiceProvider);
-
-    // Mostrar opciones: Cámara o Galería
     final opcion = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
@@ -91,6 +89,15 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
               onTap: () => Navigator.pop(context, 'galeria'),
             ),
             ListTile(
+              leading: const Icon(
+                Icons.photo_library_outlined,
+                color: Colors.orange,
+              ),
+              title: const Text('Seleccionar múltiples fotos'),
+              subtitle: const Text('Elige varias fotos a la vez'),
+              onTap: () => Navigator.pop(context, 'galeria_multi'),
+            ),
+            ListTile(
               leading: const Icon(Icons.close, color: Colors.grey),
               title: const Text('Cancelar'),
               onTap: () => Navigator.pop(context),
@@ -101,6 +108,16 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
     );
 
     if (opcion == null) return;
+
+    if (opcion == 'galeria_multi') {
+      await _capturarFotosMultiples();
+    } else {
+      await _capturarFotoUnica(opcion);
+    }
+  }
+
+  Future<void> _capturarFotoUnica(String opcion) async {
+    final service = ref.read(evidenciaServiceProvider);
 
     // Mostrar indicador de carga
     if (mounted) {
@@ -177,6 +194,70 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
           ),
         );
       }
+    }
+  }
+
+  /// ✅ FIX 28-FEB-2026: Selección múltiple de fotos desde galería
+  Future<void> _capturarFotosMultiples() async {
+    final service = ref.read(evidenciaServiceProvider);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Procesando imágenes...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
+    }
+
+    final resultados = await service.seleccionarMultiplesDeGaleria(
+      idOrden: widget.idOrdenLocal,
+      tipo: _tipoSeleccionado,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
+
+    final exitosas = resultados.where((r) => r.exito).toList();
+
+    if (exitosas.isNotEmpty) {
+      await _cargarEvidencias();
+
+      if (mounted) {
+        final totalKB = exitosas.fold<double>(0, (sum, r) => sum + r.tamanoKB);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ ${exitosas.length} foto${exitosas.length > 1 ? 's' : ''} guardada${exitosas.length > 1 ? 's' : ''} (${totalKB.toStringAsFixed(0)} KB)',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } else if (resultados.isNotEmpty &&
+        resultados.first.error != 'Selección cancelada' &&
+        mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error: ${resultados.first.error}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

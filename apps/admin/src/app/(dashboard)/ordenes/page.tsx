@@ -34,6 +34,7 @@ import {
     Eye,
     Filter,
     Loader2,
+    Mail,
     Plus,
     RefreshCw,
     Search,
@@ -108,6 +109,24 @@ function OrdenCard({ orden }: { orden: Orden }) {
                     <div className="flex items-center gap-2 mt-1">
                         <EstadoBadge estado={orden.estados_orden?.codigo_estado} />
                         <PrioridadBadge prioridad={orden.prioridad} />
+                        {/* ✅ FIX 03-MAR-2026: Indicador de email enviado */}
+                        {orden.total_emails_enviados ? (
+                            <span
+                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"
+                                title={`${orden.total_emails_enviados} email(s) enviado(s)`}
+                            >
+                                <Mail className="h-3 w-3" />
+                                {orden.total_emails_enviados}
+                            </span>
+                        ) : (
+                            <span
+                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
+                                title="Sin emails enviados"
+                            >
+                                <Mail className="h-3 w-3" />
+                                -
+                            </span>
+                        )}
                     </div>
                 </div>
             </div>

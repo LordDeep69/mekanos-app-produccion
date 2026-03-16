@@ -150,14 +150,14 @@ class AppLifecycleObserver with WidgetsBindingObserver {
     }
   }
 
-  /// Llamar después de sync exitoso para limpiar archivos ya subidos
+  /// Llamar después de sync exitoso para limpiar archivos y órdenes completadas
+  /// ✅ FIX 26-FEB-2026: También purgar órdenes completadas con retención 0
+  /// (inmediata) para que el técnico no acumule órdenes viejas.
   Future<void> onPostSyncExitoso() async {
-    debugPrint(
-      '🔄 [LIFECYCLE] Post-sync: verificando archivos para limpiar...',
-    );
+    debugPrint('🔄 [LIFECYCLE] Post-sync: verificando datos para limpiar...');
 
-    // Solo limpiar evidencias/firmas ya sincronizadas (no órdenes completas)
     try {
+      // 1. Limpiar archivos de evidencias/firmas ya sincronizadas
       final evidenciasLimpiadas = await _lifecycleManager
           .purgarEvidenciasSincronizadas();
       final firmasLimpiadas = await _lifecycleManager
@@ -165,7 +165,17 @@ class AppLifecycleObserver with WidgetsBindingObserver {
 
       if (evidenciasLimpiadas > 0 || firmasLimpiadas > 0) {
         debugPrint(
-          '🧹 [LIFECYCLE] Post-sync: $evidenciasLimpiadas evidencias, $firmasLimpiadas firmas liberadas',
+          '🧹 [LIFECYCLE] Post-sync archivos: $evidenciasLimpiadas evidencias, $firmasLimpiadas firmas liberadas',
+        );
+      }
+
+      // 2. ✅ FIX 26-FEB-2026: Purgar órdenes según política de retención configurada.
+      // Ya NO se purgan inmediatamente (override=0). Cada orden tiene su propio
+      // tiempo basado en lastSyncedAt vs duración de retención configurada.
+      final ordenesPurgadas = await _lifecycleManager.purgarOrdenesAntiguas();
+      if (ordenesPurgadas > 0) {
+        debugPrint(
+          '🧹 [LIFECYCLE] Post-sync órdenes: $ordenesPurgadas órdenes completadas purgadas',
         );
       }
     } catch (e) {

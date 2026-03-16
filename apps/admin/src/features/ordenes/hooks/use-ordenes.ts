@@ -24,6 +24,7 @@ import {
     cancelarOrden,
     createMedicionOrden,
     createOrden,
+    deleteOrden,
     getActividadesOrden,
     getEvidenciasOrden,
     getFirmasOrden,
@@ -465,5 +466,40 @@ export function useHistorialEmails(idOrden: number) {
         queryFn: () => getHistorialEmails(idOrden),
         enabled: !!idOrden,
         ...CacheStrategy.DYNAMIC,
+    });
+}
+
+/**
+ * ✅ 26-FEB-2026: Hook para eliminar orden de servicio (HARD DELETE)
+ * Elimina permanentemente la orden y TODOS sus datos asociados
+ * Invalida cache de órdenes y dashboard tras eliminación
+ */
+export function useDeleteOrden() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: number) => deleteOrden(id),
+        onSuccess: (result, deletedId) => {
+            // ✅ FIX 26-FEB-2026: REMOVER todas las queries relacionadas con la orden eliminada
+            // para evitar que React Query intente refetchar datos que ya no existen (404)
+            queryClient.removeQueries({ queryKey: [...ORDENES_KEY, deletedId] });
+            queryClient.removeQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, deletedId] });
+            queryClient.removeQueries({ queryKey: [...ACTIVIDADES_ORDEN_KEY, deletedId] });
+            queryClient.removeQueries({ queryKey: [...MEDICIONES_ORDEN_KEY, deletedId] });
+            queryClient.removeQueries({ queryKey: [...EVIDENCIAS_ORDEN_KEY, deletedId] });
+            queryClient.removeQueries({ queryKey: [...FIRMAS_ORDEN_KEY, deletedId] });
+            queryClient.removeQueries({ queryKey: [...HISTORIAL_EMAILS_KEY, deletedId] });
+
+            // Luego invalidar la lista de órdenes y dashboard
+            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY });
+            toast.success(result.message || 'Orden eliminada permanentemente');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al eliminar la orden');
+        },
     });
 }

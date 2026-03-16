@@ -42,6 +42,8 @@ export interface ClienteOrden {
     // ✅ FIX 09-FEB-2026: Soporte para clientes-sede
     nombre_sede?: string;
     id_cliente_principal?: number;
+    // ✅ FIX 03-MAR-2026: Emails adicionales de notificación
+    emails_notificacion?: string | null;
     persona?: {
         nombre_comercial?: string;
         razon_social?: string;
@@ -92,6 +94,9 @@ export interface Orden {
     total_componentes?: number;
     total_general?: number;
 
+    // ✅ FIX 03-MAR-2026: Total de emails enviados para mostrar badge en lista
+    total_emails_enviados?: number;
+
     // Relaciones
     estados_orden?: EstadoOrden;
     tipos_servicio?: TipoServicio;
@@ -108,6 +113,8 @@ export interface Orden {
         orden_secuencia: number;
     }>;
 
+    id_tecnico_asignado?: number;
+    origen_solicitud?: string;
     empleados_ordenes_servicio_id_tecnico_asignadoToempleados?: TecnicoOrden;
     informes?: Array<{
         id_informe: number;

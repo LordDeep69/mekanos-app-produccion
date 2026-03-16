@@ -15,7 +15,7 @@ import {
   Put,
   Query,
   Res,
-  UseGuards,
+  UseGuards
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -45,6 +45,7 @@ import { CreateOrdenDto } from './dto/create-orden.dto';
 import { FinalizarOrdenCompletoDto } from './dto/finalizar-orden-completo.dto';
 import { AddActividadPlanDto, UpdateActividadPlanDto } from './dto/plan-actividades.dto';
 import { ProgramarOrdenDto } from './dto/programar-orden.dto';
+import { UpdateOrdenDto } from './dto/update-orden.dto';
 
 // Services
 import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
@@ -1008,6 +1009,168 @@ export class OrdenesController {
   }
 
   /**
+   * DELETE /api/ordenes/:id
+   * ✅ 26-FEB-2026: HARD DELETE - Elimina una orden de servicio y TODOS sus datos asociados
+   * Transacción atómica: borra registros hijos explícitamente antes de eliminar la orden
+   * Solo admin puede ejecutar esta acción
+   */
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Eliminar orden de servicio (HARD DELETE)',
+    description: `
+      Elimina permanentemente una orden de servicio y TODOS sus datos asociados.
+      Esta acción es IRREVERSIBLE.
+      
+      **Datos eliminados:**
+      - Actividades ejecutadas y sus evidencias/componentes
+      - Mediciones de servicio
+      - Evidencias fotográficas
+      - Componentes usados
+      - Gastos de la orden
+      - Detalle de servicios comerciales
+      - Historial de estados
+      - Historial de emails enviados
+      - Plan de actividades
+      - Equipos vinculados (ordenes_equipos)
+      - Informes generados
+      - Firmas digitales vinculadas
+      - Movimientos de inventario asociados
+    `,
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio a eliminar', example: 1 })
+  @ApiResponse({ status: 200, description: 'Orden eliminada permanentemente' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  async hardDeleteOrden(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('id') userId: number,
+  ) {
+    // 1. Verificar que la orden existe
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        id_firma_tecnico: true,
+        id_firma_cliente: true,
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden ${id} no encontrada`);
+    }
+
+    console.log(`🗑️ [HARD DELETE] Iniciando eliminación de orden ${orden.numero_orden} (id=${id}) por usuario ${userId}`);
+
+    // 2. Transacción atómica: eliminar todos los datos asociados
+    await this.prisma.$transaction(async (tx) => {
+      // 2a. Tablas hijas directas de ordenes_servicio
+      const deletedActividades = await tx.actividades_ejecutadas.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ actividades_ejecutadas: ${deletedActividades.count}`);
+
+      const deletedMediciones = await tx.mediciones_servicio.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ mediciones_servicio: ${deletedMediciones.count}`);
+
+      const deletedEvidencias = await tx.evidencias_fotograficas.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ evidencias_fotograficas: ${deletedEvidencias.count}`);
+
+      const deletedComponentes = await tx.componentes_usados.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ componentes_usados: ${deletedComponentes.count}`);
+
+      const deletedGastos = await tx.gastos_orden.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ gastos_orden: ${deletedGastos.count}`);
+
+      const deletedServicios = await tx.detalle_servicios_orden.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ detalle_servicios_orden: ${deletedServicios.count}`);
+
+      const deletedHistorial = await tx.historial_estados_orden.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ historial_estados_orden: ${deletedHistorial.count}`);
+
+      const deletedEmails = await tx.historial_emails_enviados.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ historial_emails_enviados: ${deletedEmails.count}`);
+
+      const deletedPlan = await tx.ordenes_actividades_plan.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ ordenes_actividades_plan: ${deletedPlan.count}`);
+
+      const deletedEquipos = await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ ordenes_equipos: ${deletedEquipos.count}`);
+
+      // 2b. Informes y sus bitácoras
+      const informes = await tx.informes.findMany({
+        where: { id_orden_servicio: id },
+        select: { id_informe: true },
+      });
+      if (informes.length > 0) {
+        const informeIds = informes.map(i => i.id_informe);
+        const deletedBitacoras = await tx.bitacoras_informes.deleteMany({
+          where: { id_informe: { in: informeIds } },
+        });
+        console.log(`  ├─ bitacoras_informes: ${deletedBitacoras.count}`);
+      }
+      const deletedInformes = await tx.informes.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ informes: ${deletedInformes.count}`);
+
+      // 2c. Movimientos de inventario asociados
+      const deletedMovimientos = await tx.movimientos_inventario.deleteMany({ where: { id_orden_servicio: id } });
+      console.log(`  ├─ movimientos_inventario: ${deletedMovimientos.count}`);
+
+      // 2d. Nullificar FK en cronogramas_servicio (no eliminar cronogramas, solo desvincular)
+      await tx.cronogramas_servicio.updateMany({
+        where: { id_orden_servicio_generada: id },
+        data: { id_orden_servicio_generada: null },
+      });
+
+      // 2e. Nullificar FK en cotizaciones (no eliminar cotizaciones, solo desvincular)
+      await tx.cotizaciones.updateMany({
+        where: { id_orden_servicio_generada: id },
+        data: { id_orden_servicio_generada: null },
+      });
+
+      // 2f. Nullificar FK en remisiones
+      await tx.remisiones.updateMany({
+        where: { id_orden_servicio: id },
+        data: { id_orden_servicio: null },
+      });
+
+      // 2g. Nullificar FK en propuestas_correctivo
+      await tx.$executeRaw`UPDATE propuestas_correctivo SET id_orden_servicio = NULL WHERE id_orden_servicio = ${id}`;
+      await tx.$executeRaw`UPDATE propuestas_correctivo SET id_orden_servicio_generada = NULL WHERE id_orden_servicio_generada = ${id}`;
+
+      // 2h. Desvincular firmas de la orden antes de borrarla
+      await tx.ordenes_servicio.update({
+        where: { id_orden_servicio: id },
+        data: { id_firma_tecnico: null, id_firma_cliente: null },
+      });
+
+      // 2i. Eliminar firmas digitales vinculadas (opcional: solo si son exclusivas de esta orden)
+      const firmaIds: number[] = [];
+      if (orden.id_firma_tecnico) firmaIds.push(orden.id_firma_tecnico);
+      if (orden.id_firma_cliente) firmaIds.push(orden.id_firma_cliente);
+      if (firmaIds.length > 0) {
+        const deletedFirmas = await tx.firmas_digitales.deleteMany({
+          where: { id_firma_digital: { in: firmaIds } },
+        });
+        console.log(`  ├─ firmas_digitales: ${deletedFirmas.count}`);
+      }
+
+      // 3. Finalmente, eliminar la orden
+      await tx.ordenes_servicio.delete({ where: { id_orden_servicio: id } });
+      console.log(`  └─ ✅ ordenes_servicio: ELIMINADA`);
+    }, {
+      timeout: 30000,
+      maxWait: 10000,
+    });
+
+    console.log(`🗑️ [HARD DELETE] ✅ Orden ${orden.numero_orden} (id=${id}) eliminada completamente`);
+
+    return {
+      success: true,
+      message: `Orden ${orden.numero_orden} eliminada permanentemente`,
+      data: { id_orden_servicio: id, numero_orden: orden.numero_orden },
+    };
+  }
+
+  /**
    * GET /api/ordenes/estados-debug
    * DEBUG: Listar estados
    */
@@ -1884,6 +2047,374 @@ export class OrdenesController {
       // Cerrar stream
       res.end();
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ✅ FIX 13-MAR-2026: TRANSFERIR DATOS ENTRE ÓRDENES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/ordenes/:id/transferir-datos
+   * Transfiere TODOS los datos/evidencias/firmas de una orden origen a esta orden destino.
+   * La orden destino NO debe estar COMPLETADA ni APROBADA.
+   */
+  @Post(':id/transferir-datos')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Transferir datos completos de otra orden',
+    description: 'Copia todos los datos (campos directos, actividades, evidencias, mediciones, firmas, componentes) de una orden origen a la orden destino.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden DESTINO', type: Number })
+  @ApiResponse({ status: 200, description: 'Datos transferidos exitosamente' })
+  async transferirDatosOrden(
+    @Param('id', ParseIntPipe) idDestino: number,
+    @Body() body: { idOrdenOrigen: number },
+    @UserId() userId: number,
+  ) {
+    const { idOrdenOrigen } = body;
+
+    if (!idOrdenOrigen || typeof idOrdenOrigen !== 'number') {
+      throw new BadRequestException('Debe proporcionar idOrdenOrigen (numérico)');
+    }
+
+    if (idOrdenOrigen === idDestino) {
+      throw new BadRequestException('La orden origen y destino no pueden ser la misma');
+    }
+
+    console.log(`🔄 [TRANSFER] Iniciando transferencia: Orden #${idOrdenOrigen} → Orden #${idDestino}`);
+
+    // 1. Validar que ambas órdenes existen
+    const [ordenOrigen, ordenDestino] = await Promise.all([
+      this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: idOrdenOrigen },
+        include: { estados_orden: true },
+      }),
+      this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: idDestino },
+        include: { estados_orden: true },
+      }),
+    ]);
+
+    if (!ordenOrigen) {
+      throw new NotFoundException(`Orden origen #${idOrdenOrigen} no encontrada`);
+    }
+    if (!ordenDestino) {
+      throw new NotFoundException(`Orden destino #${idDestino} no encontrada`);
+    }
+
+    // 2. Validar que destino NO esté en COMPLETADA o APROBADA
+    const estadoDestino = ordenDestino.estados_orden?.nombre_estado?.toUpperCase();
+    if (estadoDestino === 'COMPLETADA' || estadoDestino === 'APROBADA') {
+      throw new BadRequestException(
+        `La orden destino #${idDestino} está en estado "${estadoDestino}" y no se puede sobrescribir. Solo se puede transferir a órdenes no completadas.`
+      );
+    }
+
+    console.log(`🔄 [TRANSFER] Orden origen: ${ordenOrigen.numero_orden} (estado: ${ordenOrigen.estados_orden?.nombre_estado})`);
+    console.log(`🔄 [TRANSFER] Orden destino: ${ordenDestino.numero_orden} (estado: ${estadoDestino})`);
+
+    // 3. Ejecutar transferencia en transacción atómica
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      const stats = {
+        camposDirectos: false,
+        ordenesEquipos: 0,
+        actividadesEjecutadas: 0,
+        evidenciasFotograficas: 0,
+        medicionesServicio: 0,
+        componentesUsados: 0,
+        ordenesActividadesPlan: 0,
+      };
+
+      // ── PASO A: Limpiar datos existentes en destino (orden inverso de dependencias) ──
+      console.log(`🗑️ [TRANSFER] Limpiando datos existentes en orden destino #${idDestino}...`);
+
+      await tx.componentes_usados.deleteMany({ where: { id_orden_servicio: idDestino } });
+      await tx.evidencias_fotograficas.deleteMany({ where: { id_orden_servicio: idDestino } });
+      await tx.mediciones_servicio.deleteMany({ where: { id_orden_servicio: idDestino } });
+      await tx.actividades_ejecutadas.deleteMany({ where: { id_orden_servicio: idDestino } });
+      await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: idDestino } });
+      await tx.ordenes_actividades_plan.deleteMany({ where: { id_orden_servicio: idDestino } });
+
+      // ── PASO B: Copiar campos directos de la orden ──
+      console.log(`📋 [TRANSFER] Copiando campos directos...`);
+
+      await tx.ordenes_servicio.update({
+        where: { id_orden_servicio: idDestino },
+        data: {
+          id_estado_actual: ordenOrigen.id_estado_actual, // ✅ Transferir estado
+          trabajo_realizado: ordenOrigen.trabajo_realizado,
+          observaciones_tecnico: ordenOrigen.observaciones_tecnico,
+          observaciones_cierre: ordenOrigen.observaciones_cierre,
+          descripcion_inicial: ordenOrigen.descripcion_inicial,
+          fecha_inicio_real: ordenOrigen.fecha_inicio_real,
+          fecha_fin_real: ordenOrigen.fecha_fin_real,
+          duracion_minutos: ordenOrigen.duracion_minutos,
+          nombre_quien_recibe: ordenOrigen.nombre_quien_recibe,
+          cargo_quien_recibe: ordenOrigen.cargo_quien_recibe,
+          cliente_conforme: ordenOrigen.cliente_conforme,
+          calificacion_cliente: ordenOrigen.calificacion_cliente,
+          tiene_garantia: ordenOrigen.tiene_garantia,
+          meses_garantia: ordenOrigen.meses_garantia,
+          fecha_vencimiento_garantia: ordenOrigen.fecha_vencimiento_garantia,
+          observaciones_garantia: ordenOrigen.observaciones_garantia,
+          id_firma_cliente: ordenOrigen.id_firma_cliente,
+          id_firma_tecnico: ordenOrigen.id_firma_tecnico,
+          metadata: ordenOrigen.metadata ?? undefined,
+          total_servicios: ordenOrigen.total_servicios,
+          total_gastos: ordenOrigen.total_gastos,
+          total_componentes: ordenOrigen.total_componentes,
+          total_general: ordenOrigen.total_general,
+          modificado_por: userId || null,
+          fecha_modificacion: new Date(),
+        },
+      });
+      stats.camposDirectos = true;
+
+      // ✅ Crear registro en historial de estados
+      await tx.historial_estados_orden.create({
+        data: {
+          id_orden_servicio: idDestino,
+          id_estado_nuevo: ordenOrigen.id_estado_actual,
+          observaciones: `Estado transferido desde orden ${ordenOrigen.numero_orden} (ID: ${idOrdenOrigen})`,
+          fecha_cambio: new Date(),
+          realizado_por: userId || 1, // Usuario del sistema si no hay userId
+        },
+      });
+      console.log(`🔄 [TRANSFER] Estado actualizado: ${ordenOrigen.estados_orden?.nombre_estado}`);
+
+      // ── PASO C: Copiar ordenes_equipos (tabla pivote orden-equipo) ──
+      const equiposOrigen = await tx.ordenes_equipos.findMany({
+        where: { id_orden_servicio: idOrdenOrigen },
+        orderBy: { orden_secuencia: 'asc' },
+      });
+
+      // Mapa de ID viejo → ID nuevo para ordenes_equipos
+      const mapEquipos = new Map<number, number>();
+
+      for (const eq of equiposOrigen) {
+        const nuevoEq = await tx.ordenes_equipos.create({
+          data: {
+            id_orden_servicio: idDestino,
+            id_equipo: eq.id_equipo,
+            orden_secuencia: eq.orden_secuencia,
+            nombre_sistema: eq.nombre_sistema,
+            estado: eq.estado,
+            fecha_inicio: eq.fecha_inicio,
+            fecha_fin: eq.fecha_fin,
+            observaciones: eq.observaciones,
+            metadata: eq.metadata ?? undefined,
+            creado_por: eq.creado_por,
+            fecha_creacion: eq.fecha_creacion,
+          },
+        });
+        mapEquipos.set(eq.id_orden_equipo, nuevoEq.id_orden_equipo);
+        stats.ordenesEquipos++;
+      }
+
+      console.log(`📦 [TRANSFER] Copiados ${stats.ordenesEquipos} ordenes_equipos`);
+
+      // ── PASO D: Copiar actividades_ejecutadas ──
+      const actividadesOrigen = await tx.actividades_ejecutadas.findMany({
+        where: { id_orden_servicio: idOrdenOrigen },
+        orderBy: { orden_secuencia: 'asc' },
+      });
+
+      // Mapa de ID viejo → ID nuevo para actividades
+      const mapActividades = new Map<number, number>();
+
+      for (const act of actividadesOrigen) {
+        const nuevoIdOrdenEquipo = act.id_orden_equipo ? mapEquipos.get(act.id_orden_equipo) ?? null : null;
+        const nuevaAct = await tx.actividades_ejecutadas.create({
+          data: {
+            id_orden_servicio: idDestino,
+            id_actividad_catalogo: act.id_actividad_catalogo,
+            descripcion_manual: act.descripcion_manual,
+            sistema: act.sistema,
+            orden_secuencia: act.orden_secuencia,
+            estado: act.estado,
+            observaciones: act.observaciones,
+            ejecutada: act.ejecutada,
+            fecha_ejecucion: act.fecha_ejecucion,
+            ejecutada_por: act.ejecutada_por,
+            tiempo_ejecucion_minutos: act.tiempo_ejecucion_minutos,
+            requiere_evidencia: act.requiere_evidencia,
+            evidencia_capturada: act.evidencia_capturada,
+            fecha_registro: act.fecha_registro,
+            id_orden_equipo: nuevoIdOrdenEquipo,
+          },
+        });
+        mapActividades.set(act.id_actividad_ejecutada, nuevaAct.id_actividad_ejecutada);
+        stats.actividadesEjecutadas++;
+      }
+
+      console.log(`⚡ [TRANSFER] Copiadas ${stats.actividadesEjecutadas} actividades_ejecutadas`);
+
+      // ── PASO E: Copiar evidencias_fotograficas ──
+      const evidenciasOrigen = await tx.evidencias_fotograficas.findMany({
+        where: { id_orden_servicio: idOrdenOrigen },
+        orderBy: { orden_visualizacion: 'asc' },
+      });
+
+      for (const ev of evidenciasOrigen) {
+        const nuevoIdOrdenEquipo = ev.id_orden_equipo ? mapEquipos.get(ev.id_orden_equipo) ?? null : null;
+        const nuevoIdActividad = ev.id_actividad_ejecutada ? mapActividades.get(ev.id_actividad_ejecutada) ?? null : null;
+
+        await tx.evidencias_fotograficas.create({
+          data: {
+            id_orden_servicio: idDestino,
+            id_actividad_ejecutada: nuevoIdActividad,
+            tipo_evidencia: ev.tipo_evidencia,
+            descripcion: ev.descripcion,
+            nombre_archivo: ev.nombre_archivo,
+            ruta_archivo: ev.ruta_archivo,
+            hash_sha256: ev.hash_sha256,
+            tama_o_bytes: ev.tama_o_bytes,
+            mime_type: ev.mime_type,
+            ancho_pixels: ev.ancho_pixels,
+            alto_pixels: ev.alto_pixels,
+            orden_visualizacion: ev.orden_visualizacion,
+            es_principal: ev.es_principal,
+            fecha_captura: ev.fecha_captura,
+            capturada_por: ev.capturada_por,
+            latitud: ev.latitud,
+            longitud: ev.longitud,
+            metadata_exif: ev.metadata_exif ?? undefined,
+            tiene_miniatura: ev.tiene_miniatura,
+            ruta_miniatura: ev.ruta_miniatura,
+            esta_comprimida: ev.esta_comprimida,
+            tama_o_original_bytes: ev.tama_o_original_bytes,
+            fecha_registro: ev.fecha_registro,
+            id_orden_equipo: nuevoIdOrdenEquipo,
+          },
+        });
+        stats.evidenciasFotograficas++;
+      }
+
+      console.log(`📸 [TRANSFER] Copiadas ${stats.evidenciasFotograficas} evidencias_fotograficas`);
+
+      // ── PASO F: Copiar mediciones_servicio ──
+      const medicionesOrigen = await tx.mediciones_servicio.findMany({
+        where: { id_orden_servicio: idOrdenOrigen },
+      });
+
+      for (const med of medicionesOrigen) {
+        const nuevoIdOrdenEquipo = med.id_orden_equipo ? mapEquipos.get(med.id_orden_equipo) ?? null : null;
+
+        await tx.mediciones_servicio.create({
+          data: {
+            id_orden_servicio: idDestino,
+            id_parametro_medicion: med.id_parametro_medicion,
+            valor_numerico: med.valor_numerico,
+            valor_texto: med.valor_texto,
+            unidad_medida: med.unidad_medida,
+            fuera_de_rango: med.fuera_de_rango,
+            nivel_alerta: med.nivel_alerta,
+            mensaje_alerta: med.mensaje_alerta,
+            observaciones: med.observaciones,
+            temperatura_ambiente: med.temperatura_ambiente,
+            humedad_relativa: med.humedad_relativa,
+            fecha_medicion: med.fecha_medicion,
+            medido_por: med.medido_por,
+            instrumento_medicion: med.instrumento_medicion,
+            fecha_registro: med.fecha_registro,
+            id_orden_equipo: nuevoIdOrdenEquipo,
+          },
+        });
+        stats.medicionesServicio++;
+      }
+
+      console.log(`📏 [TRANSFER] Copiadas ${stats.medicionesServicio} mediciones_servicio`);
+
+      // ── PASO G: Copiar componentes_usados ──
+      const componentesOrigen = await tx.componentes_usados.findMany({
+        where: { id_orden_servicio: idOrdenOrigen },
+      });
+
+      for (const comp of componentesOrigen) {
+        const nuevoIdActividad = comp.id_actividad_ejecutada ? mapActividades.get(comp.id_actividad_ejecutada) ?? null : null;
+
+        // Generar nuevo ID (no es autoincrement)
+        const maxComp = await tx.componentes_usados.findFirst({
+          orderBy: { id_componente_usado: 'desc' },
+          select: { id_componente_usado: true },
+        });
+        const nuevoId = (maxComp?.id_componente_usado ?? 0) + 1;
+
+        await tx.componentes_usados.create({
+          data: {
+            id_componente_usado: nuevoId,
+            id_orden_servicio: idDestino,
+            id_componente: comp.id_componente,
+            id_tipo_componente: comp.id_tipo_componente,
+            id_actividad_ejecutada: nuevoIdActividad,
+            descripcion: comp.descripcion,
+            referencia_manual: comp.referencia_manual,
+            marca_manual: comp.marca_manual,
+            cantidad: comp.cantidad,
+            unidad: comp.unidad,
+            costo_unitario: comp.costo_unitario,
+            costo_total: comp.costo_total,
+            estado_componente_retirado: comp.estado_componente_retirado,
+            razon_uso: comp.razon_uso,
+            componente_guardado: comp.componente_guardado,
+            origen_componente: comp.origen_componente,
+            observaciones: comp.observaciones,
+            fecha_uso: comp.fecha_uso,
+            usado_por: comp.usado_por,
+            fecha_registro: comp.fecha_registro,
+            registrado_por: comp.registrado_por,
+          },
+        });
+        stats.componentesUsados++;
+      }
+
+      console.log(`🔧 [TRANSFER] Copiados ${stats.componentesUsados} componentes_usados`);
+
+      // ── PASO H: Copiar ordenes_actividades_plan ──
+      const planOrigen = await tx.ordenes_actividades_plan.findMany({
+        where: { id_orden_servicio: idOrdenOrigen },
+        orderBy: { orden_secuencia: 'asc' },
+      });
+
+      for (const plan of planOrigen) {
+        await tx.ordenes_actividades_plan.create({
+          data: {
+            id_orden_servicio: idDestino,
+            id_actividad_catalogo: plan.id_actividad_catalogo,
+            orden_secuencia: plan.orden_secuencia,
+            origen: plan.origen,
+            es_obligatoria: plan.es_obligatoria,
+            creado_por: plan.creado_por,
+            fecha_creacion: plan.fecha_creacion,
+          },
+        });
+        stats.ordenesActividadesPlan++;
+      }
+
+      console.log(`📋 [TRANSFER] Copiados ${stats.ordenesActividadesPlan} ordenes_actividades_plan`);
+
+      return stats;
+    }, {
+      timeout: 60000, // 60 segundos para transacciones grandes
+    });
+
+    console.log(`✅ [TRANSFER] Transferencia completada exitosamente: ${ordenOrigen.numero_orden} → ${ordenDestino.numero_orden}`);
+    console.log(`📊 [TRANSFER] Resumen: ${JSON.stringify(resultado)}`);
+
+    return {
+      success: true,
+      message: `Datos transferidos exitosamente de ${ordenOrigen.numero_orden} a ${ordenDestino.numero_orden}`,
+      ordenOrigen: {
+        id: idOrdenOrigen,
+        numero: ordenOrigen.numero_orden,
+      },
+      ordenDestino: {
+        id: idDestino,
+        numero: ordenDestino.numero_orden,
+      },
+      estadisticas: resultado,
+    };
   }
 
 }

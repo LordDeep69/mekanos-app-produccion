@@ -79,6 +79,12 @@ export class PrismaOrdenServicioRepository {
         },
       },
     },
+    // ✅ FIX 03-MAR-2026: Incluir conteo de emails enviados para mostrar badge en lista
+    _count: {
+      select: {
+        historial_emails_enviados: true,
+      },
+    },
   };
 
   /**
@@ -375,7 +381,17 @@ export class PrismaOrdenServicioRepository {
       where: { id_orden_servicio },
       include: {
         // Datos esenciales para la cabecera
-        clientes: { include: { persona: true } },
+        // ✅ FIX 03-MAR-2026: Incluir cliente_principal con emails_notificacion para fallback en sedes
+        clientes: {
+          include: {
+            persona: true,
+            cliente_principal: {
+              select: {
+                emails_notificacion: true,
+              },
+            },
+          },
+        },
         sedes_cliente: true,
         equipos: { include: { tipos_equipo: true } },
         tipos_servicio: true,
@@ -493,7 +509,7 @@ export class PrismaOrdenServicioRepository {
 
     // ✅ OPTIMIZACIÓN 05-ENE-2026: Usar INCLUDE_LITE para listas
     // Reduce de 10+ JOINs a solo 4, mejorando tiempo de ~5s a ~500ms
-    const [items, total] = await Promise.all([
+    const [itemsRaw, total] = await Promise.all([
       this.prisma.ordenes_servicio.findMany({
         where,
         include: this.INCLUDE_LITE,
@@ -503,6 +519,15 @@ export class PrismaOrdenServicioRepository {
       }),
       this.prisma.ordenes_servicio.count({ where }),
     ]);
+
+    // ✅ FIX 03-MAR-2026: Transformar _count a total_emails_enviados
+    const items = itemsRaw.map((orden: any) => {
+      const { _count, ...rest } = orden;
+      return {
+        ...rest,
+        total_emails_enviados: _count?.historial_emails_enviados || 0,
+      };
+    });
 
     return { items, total };
   }

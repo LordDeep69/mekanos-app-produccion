@@ -471,42 +471,20 @@ class SyncUploadService {
       final isOnline = await _connectivity.checkConnection();
 
       if (!isOnline) {
-        // ✅ SYNC MANUAL: Sin conexión → Guardar con estado POR_SUBIR
-        // Este estado permite al técnico ver la orden y subirla manualmente
-        await _guardarEstadoLocalPorSubir(
-          idOrdenLocal,
-          observaciones,
-          horaEntrada,
-          horaSalida,
-          razonFalla: razonFalla,
+        // ✅ FIX 26-FEB-2026: Sin conexión → NO guardar offline, NO cambiar estado.
+        // La orden permanece en su estado actual (EN_PROCESO). Todos los datos
+        // (actividades, mediciones, fotos, firmas) ya están en la BD local.
+        // El técnico simplemente reintenta cuando tenga conexión.
+        _progressNotifier.error('Sin conexión a internet');
+        return SyncUploadResult(
+          success: false,
+          mensaje:
+              'No hay conexión a internet.\n\n'
+              'Tus datos están guardados localmente de forma segura. '
+              'Intenta finalizar de nuevo cuando tengas conexión.',
+          error: 'NO_CONNECTION',
+          guardadoOffline: false,
         );
-
-        // Guardar en cola offline
-        final guardado = await _offlineSync.guardarEnCola(
-          idOrdenLocal: idOrdenLocal,
-          idOrdenBackend: idOrdenBackend,
-          payload: payload,
-        );
-
-        if (guardado) {
-          // ✅ ENTERPRISE: Notificar que se guardó offline
-          _notificationService.notifyOrderQueuedOffline('#$idOrdenBackend');
-          _progressNotifier.reset(); // No es error, pero no se subió
-
-          return SyncUploadResult(
-            success: true,
-            mensaje:
-                'Orden guardada localmente. Ve a "Órdenes por Subir" para sincronizarla.',
-            guardadoOffline: true,
-          );
-        } else {
-          _progressNotifier.error('Error guardando orden para sync posterior');
-          return SyncUploadResult(
-            success: false,
-            mensaje: 'Error guardando orden para sync posterior',
-            error: 'OFFLINE_SAVE_FAILED',
-          );
-        }
       }
 
       // 8. CON CONEXIÓN - Guardar estado COMPLETADA y sync normal
@@ -585,7 +563,33 @@ class SyncUploadService {
             datos: response.datos,
           );
         } else {
-          // Error del servidor - guardar en cola para retry
+          // ✅ FIX 26-FEB-2026: Detectar si el error es "orden no encontrada" (404)
+          // Si el servidor dice que la orden no existe, NO guardar en cola de retry
+          // ya que reintentar sería inútil y bloquearía la limpieza de la orden local
+          final errorMsg = (response.error ?? '').toLowerCase();
+          final esOrdenNoEncontrada =
+              errorMsg.contains('no encontrada') ||
+              errorMsg.contains('not found') ||
+              errorMsg.contains('404');
+
+          if (esOrdenNoEncontrada) {
+            debugPrint(
+              '🗑️ [SYNC] Orden $idOrdenBackend no existe en servidor (eliminada). '
+              'NO se guardará en cola de retry.',
+            );
+            _progressNotifier.error(
+              'La orden fue eliminada del servidor. Se limpiará en la próxima sincronización.',
+            );
+            return SyncUploadResult(
+              success: false,
+              mensaje:
+                  'La orden ya no existe en el servidor. Fue eliminada desde el portal administrativo.',
+              error: 'ORDEN_ELIMINADA_SERVIDOR',
+              guardadoOffline: false,
+            );
+          }
+
+          // Error genuino del servidor - guardar en cola para retry silencioso
           _progressNotifier.error(response.error ?? 'Error del servidor');
           await _offlineSync.guardarEnCola(
             idOrdenLocal: idOrdenLocal,
@@ -595,10 +599,10 @@ class SyncUploadService {
           return SyncUploadResult(
             success: false,
             mensaje:
-                response.error ??
-                'Error del servidor. Se reintentará automáticamente.',
+                'Error del servidor: ${response.error ?? 'desconocido'}.\n\n'
+                'Se reintentará automáticamente en segundo plano.',
             error: response.error,
-            guardadoOffline: true,
+            guardadoOffline: false,
           );
         }
       } on DioException catch (e) {
@@ -650,10 +654,12 @@ class SyncUploadService {
           payload: payload,
         );
         return SyncUploadResult(
-          success: true,
-          mensaje: 'Error de conexión. Se sincronizará automáticamente.',
+          success: false,
+          mensaje:
+              'Error de conexión durante la sincronización.\n\n'
+              'Se reintentará automáticamente en segundo plano.',
           error: e.message,
-          guardadoOffline: true,
+          guardadoOffline: false,
         );
       }
     } catch (e) {
@@ -676,9 +682,11 @@ class SyncUploadService {
         );
         return SyncUploadResult(
           success: false,
-          mensaje: 'Error al subir. Se reintentará desde "Órdenes por Subir".',
+          mensaje:
+              'Error inesperado durante la sincronización.\n\n'
+              'Se reintentará automáticamente en segundo plano.',
           error: e.toString(),
-          guardadoOffline: true,
+          guardadoOffline: false,
         );
       } catch (_) {
         return SyncUploadResult(
@@ -722,43 +730,6 @@ class SyncUploadService {
         updatedAt: Value(DateTime.now()),
       ),
     );
-  }
-
-  /// ✅ SYNC MANUAL: Guarda el estado local como POR_SUBIR (cuando no hay conexión)
-  /// Este estado permite al técnico ver la orden en la lista y subirla manualmente
-  /// cuando recupere conexión. El trabajo del técnico NO se pierde.
-  Future<void> _guardarEstadoLocalPorSubir(
-    int idOrdenLocal,
-    String observaciones,
-    String horaEntrada,
-    String horaSalida, {
-    String? razonFalla,
-  }) async {
-    // Obtener el ID del estado POR_SUBIR (creado en beforeOpen con ID -1)
-    final estadoPorSubir = await (_db.select(
-      _db.estadosOrden,
-    )..where((e) => e.codigo.equals('POR_SUBIR'))).getSingleOrNull();
-
-    await (_db.update(
-      _db.ordenes,
-    )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
-      OrdenesCompanion(
-        idEstado: estadoPorSubir != null
-            ? Value(estadoPorSubir.id)
-            : const Value.absent(),
-        observacionesTecnico: Value(observaciones),
-        horaEntradaTexto: Value(horaEntrada),
-        horaSalidaTexto: Value(horaSalida),
-        razonFalla: razonFalla != null && razonFalla.isNotEmpty
-            ? Value(razonFalla)
-            : const Value.absent(),
-        fechaFin: Value(DateTime.now()),
-        isDirty: const Value(true), // Marcado para sync
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-
-    debugPrint('📴 [SYNC] Orden $idOrdenLocal guardada con estado POR_SUBIR');
   }
 
   /// Convierte una imagen local a Base64

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../lifecycle/app_lifecycle_observer.dart';
 import 'smart_sync_service.dart';
 import 'sync_service.dart';
 
@@ -88,6 +89,7 @@ class SyncState {
 class SyncStateNotifier extends StateNotifier<SyncState> {
   final SyncService _syncService;
   final SmartSyncService _smartSyncService;
+  final AppLifecycleObserver _lifecycleObserver;
   Timer? _autoSyncTimer;
 
   // Intervalo de sincronización automática (5 minutos)
@@ -97,8 +99,11 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   static const _lastSyncKey = 'last_sync_at';
   static const _initialSyncDoneKey = 'initial_sync_done';
 
-  SyncStateNotifier(this._syncService, this._smartSyncService)
-    : super(const SyncState()) {
+  SyncStateNotifier(
+    this._syncService,
+    this._smartSyncService,
+    this._lifecycleObserver,
+  ) : super(const SyncState()) {
     _loadLastSync();
   }
 
@@ -250,6 +255,16 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
             '${smartResult.omitidas} sin cambios',
           );
 
+          // ✅ FIX 26-FEB-2026: Ejecutar limpieza post-sync
+          // Limpia archivos de evidencias/firmas ya sincronizados
+          // y ejecuta limpieza automática si corresponde (respeta intervalo mínimo de 6h)
+          try {
+            await _lifecycleObserver.onPostSyncExitoso();
+            await _lifecycleObserver.ejecutarLimpiezaAutomatica();
+          } catch (e) {
+            debugPrint('⚠️ [SYNC] Error en limpieza post-sync: $e');
+          }
+
           return SyncResult(
             success: true,
             message: 'Smart sync completado',
@@ -304,6 +319,13 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
           debugPrint(
             '✅ [SYNC] Completada: ${result.ordenesDescargadas} órdenes',
           );
+
+          // ✅ FIX 26-FEB-2026: Limpieza post-sync también en sync completo
+          try {
+            await _lifecycleObserver.onPostSyncExitoso();
+          } catch (e) {
+            debugPrint('⚠️ [SYNC] Error en limpieza post-sync completo: $e');
+          }
         } else {
           state = state.copyWith(
             status: SyncStatus.error,
@@ -353,7 +375,8 @@ final syncStateProvider = StateNotifierProvider<SyncStateNotifier, SyncState>((
 ) {
   final syncService = ref.watch(syncServiceProvider);
   final smartSyncService = ref.watch(smartSyncServiceProvider);
-  return SyncStateNotifier(syncService, smartSyncService);
+  final lifecycleObserver = ref.watch(appLifecycleObserverProvider);
+  return SyncStateNotifier(syncService, smartSyncService, lifecycleObserver);
 });
 
 /// Provider para verificar si hay sync en progreso

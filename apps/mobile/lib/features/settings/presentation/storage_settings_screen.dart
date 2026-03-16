@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/lifecycle/data_lifecycle_manager.dart';
@@ -44,6 +45,11 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
       final lifecycleManager = ref.read(dataLifecycleManagerProvider);
 
       final preferences = await prefs.cargarPreferencias();
+
+      // ✅ FIX 26-FEB-2026: Ejecutar limpieza ANTES de cargar stats
+      // para que el contador refleje inmediatamente las órdenes purgadas
+      await lifecycleManager.ejecutarLimpiezaInteligente();
+
       final stats = await lifecycleManager.getStorageStats();
 
       setState(() {
@@ -336,6 +342,9 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
   }
 
   Widget _buildRetentionCard() {
+    final valor = _preferences?.valorRetencion ?? 7;
+    final unidad = _preferences?.unidadRetencion ?? UnidadRetencion.dias;
+
     return Card(
       elevation: 2,
       child: Padding(
@@ -350,141 +359,176 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  'Política de Retención',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const Expanded(
+                  child: Text(
+                    'Política de Retención',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
             const Divider(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
 
-            // Días retención órdenes completadas
-            _buildSliderSetting(
-              title: 'Órdenes completadas',
-              subtitle:
-                  'Mantener por ${_preferences?.diasRetencionCompletadas ?? 7} días',
-              value: (_preferences?.diasRetencionCompletadas ?? 7).toDouble(),
-              min: 1,
-              max: 30,
-              divisions: 29,
-              icon: Icons.assignment_turned_in,
-              onChanged: (value) async {
-                final prefs = ref.read(storagePreferencesProvider);
-                await prefs.setDiasRetencionCompletadas(value.toInt());
-                setState(() {
-                  _preferences = _preferences?.copyWith(
-                    diasRetencionCompletadas: value.toInt(),
-                  );
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Días retención archivos
-            _buildSliderSetting(
-              title: 'Fotos/Firmas sincronizadas',
-              subtitle:
-                  'Eliminar después de ${_preferences?.diasRetencionArchivos ?? 3} días',
-              value: (_preferences?.diasRetencionArchivos ?? 3).toDouble(),
-              min: 1,
-              max: 14,
-              divisions: 13,
-              icon: Icons.photo_library,
-              onChanged: (value) async {
-                final prefs = ref.read(storagePreferencesProvider);
-                await prefs.setDiasRetencionArchivos(value.toInt());
-                setState(() {
-                  _preferences = _preferences?.copyWith(
-                    diasRetencionArchivos: value.toInt(),
-                  );
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Max órdenes en historial
-            _buildSliderSetting(
-              title: 'Historial visible',
-              subtitle:
-                  'Máximo ${_preferences?.maxOrdenesHistorial ?? 15} órdenes',
-              value: (_preferences?.maxOrdenesHistorial ?? 15).toDouble(),
-              min: 5,
-              max: 50,
-              divisions: 9,
-              icon: Icons.history,
-              onChanged: (value) async {
-                final prefs = ref.read(storagePreferencesProvider);
-                await prefs.setMaxOrdenesHistorial(value.toInt());
-                setState(() {
-                  _preferences = _preferences?.copyWith(
-                    maxOrdenesHistorial: value.toInt(),
-                  );
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSliderSetting({
-    required String title,
-    required String subtitle,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required IconData icon,
-    required ValueChanged<double> onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 20, color: Colors.grey[600]),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // Descripción
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: Colors.blue.shade700,
                   ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Las órdenes completadas y subidas al servidor se eliminarán '
+                      'automáticamente del dispositivo después del tiempo configurado.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                '${value.toInt()}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+            const SizedBox(height: 16),
+
+            // Selector de valor + unidad
+            Row(
+              children: [
+                Icon(Icons.timer, size: 22, color: Colors.grey[600]),
+                const SizedBox(width: 12),
+                const Text(
+                  'Eliminar después de:',
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
                 ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Input de valor numérico + selector de unidad
+            Row(
+              children: [
+                // Valor numérico
+                SizedBox(
+                  width: 90,
+                  child: TextFormField(
+                    initialValue: valor.toString(),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
+                    ),
+                    onChanged: (text) async {
+                      final nuevoValor = int.tryParse(text);
+                      if (nuevoValor != null && nuevoValor > 0) {
+                        final prefs = ref.read(storagePreferencesProvider);
+                        await prefs.setValorRetencion(nuevoValor);
+                        setState(() {
+                          _preferences = _preferences?.copyWith(
+                            valorRetencion: nuevoValor,
+                          );
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Selector de unidad
+                Expanded(
+                  child: SegmentedButton<UnidadRetencion>(
+                    segments: const [
+                      ButtonSegment(
+                        value: UnidadRetencion.minutos,
+                        label: Text('Min'),
+                        icon: Icon(Icons.timer, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: UnidadRetencion.horas,
+                        label: Text('Hrs'),
+                        icon: Icon(Icons.hourglass_bottom, size: 16),
+                      ),
+                      ButtonSegment(
+                        value: UnidadRetencion.dias,
+                        label: Text('Días'),
+                        icon: Icon(Icons.calendar_today, size: 16),
+                      ),
+                    ],
+                    selected: {unidad},
+                    onSelectionChanged: (selected) async {
+                      final nuevaUnidad = selected.first;
+                      final prefs = ref.read(storagePreferencesProvider);
+                      await prefs.setUnidadRetencion(nuevaUnidad);
+                      setState(() {
+                        _preferences = _preferences?.copyWith(
+                          unidadRetencion: nuevaUnidad,
+                        );
+                      });
+                    },
+                    style: ButtonStyle(visualDensity: VisualDensity.compact),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Preview de la política
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    size: 18,
+                    color: Colors.green.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cada orden se eliminará $valor ${unidad.etiquetaCorta} '
+                      'después de subirse exitosamente al servidor.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          onChanged: onChanged,
-        ),
-      ],
+      ),
     );
   }
 
