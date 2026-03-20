@@ -51,7 +51,9 @@ import {
   Loader2,
   Mail,
   Pencil,
+  Plus,
   Send,
+  Trash2,
   XCircle
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
