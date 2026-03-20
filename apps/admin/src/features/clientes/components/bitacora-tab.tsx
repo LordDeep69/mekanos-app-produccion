@@ -42,6 +42,7 @@ import {
   BookOpen,
   Building2,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -53,7 +54,7 @@ import {
   Send,
   XCircle
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { InformePreview, SedeGroup } from '../api/bitacoras.service';
 import { useBitacoraHistorial, useBitacoraPreview, useEnviarBitacora, useMesesDisponibles } from '../hooks/use-bitacoras';
 
