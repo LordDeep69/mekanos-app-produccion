@@ -555,8 +555,8 @@ export class BitacorasService {
     }
 
     // ✅ BATCH EMAILS: Dividir en batches si excede límite de tamaño
-    const MAX_SIZE_MB = 20; // 20MB límite seguro para Gmail (25MB máximo)
-    const MAX_PDFS_PER_BATCH = 10; // Máximo 10 PDFs por email
+    const MAX_SIZE_MB = 23; // 23MB límite seguro para Gmail (25MB máximo)
+    const MAX_PDFS_PER_BATCH = 20; // Máximo 20 PDFs por email
 
     const totalSizeBytes = attachments.reduce((sum, att) => sum + att.content.length, 0);
     const totalSizeMB = totalSizeBytes / (1024 * 1024);

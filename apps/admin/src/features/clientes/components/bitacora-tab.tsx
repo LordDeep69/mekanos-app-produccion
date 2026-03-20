@@ -28,6 +28,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -109,6 +110,10 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
+  // ✅ NUEVO: Estado para diálogo de envío con progreso
+  const [showSendingDialog, setShowSendingDialog] = useState(false);
+  const [sendingStep, setSendingStep] = useState<'preparing' | 'downloading' | 'sending' | 'completed' | 'error'>('preparing');
+  const [sendingProgress, setSendingProgress] = useState({ current: 0, total: 0, batchInfo: '' });
 
   // Hooks
   const {
@@ -242,26 +247,43 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   const handleEnviar = async () => {
     setShowConfirmDialog(false);
     setSendResult(null);
+    setShowSendingDialog(true);
+    setSendingStep('preparing');
+    setSendingProgress({ current: 0, total: documentosSeleccionados.size, batchInfo: '' });
 
     // Validar que hay documentos seleccionados
     if (documentosSeleccionados.size === 0) {
+      setSendingStep('error');
       setSendResult({
         success: false,
         message: 'Debe seleccionar al menos un documento para enviar',
       });
+      setTimeout(() => setShowSendingDialog(false), 2000);
       return;
     }
 
     // Validar que hay destinatarios
     if (emailsEditables.length === 0) {
+      setSendingStep('error');
       setSendResult({
         success: false,
         message: 'Debe agregar al menos un destinatario de email',
       });
+      setTimeout(() => setShowSendingDialog(false), 2000);
       return;
     }
 
     try {
+      setSendingStep('downloading');
+      // Simular progreso de descarga de PDFs
+      for (let i = 1; i <= Math.min(3, documentosSeleccionados.size); i++) {
+        await new Promise(r => setTimeout(r, 300));
+        setSendingProgress(prev => ({ ...prev, current: i }));
+      }
+
+      setSendingStep('sending');
+      setSendingProgress(prev => ({ ...prev, current: documentosSeleccionados.size, batchInfo: 'Enviando emails...' }));
+
       const result = await enviarMutation.mutateAsync({
         id_cliente_principal: clienteId,
         mes,
@@ -274,13 +296,27 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         email_destino: emailsEditables.join(','),
       });
 
+      setSendingStep('completed');
+      // Usar el conteo de destinatarios como proxy para batches (1 batch por cada 20 PDFs aprox)
+      const estimatedBatches = Math.ceil(documentosSeleccionados.size / 20);
+      setSendingProgress(prev => ({ ...prev, batchInfo: `${estimatedBatches} email(s) enviado(s)` }));
+
       setSendResult({
         success: result.email_enviado,
         message: result.email_enviado
           ? `Bitácora enviada exitosamente a ${result.destinatarios.join(', ')} (${result.informes_enviados} informes)`
           : result.error || 'Error al enviar la bitácora',
       });
+
+      // Cerrar diálogo después de 2 segundos en éxito
+      if (result.email_enviado) {
+        setTimeout(() => {
+          setShowSendingDialog(false);
+          setTimeout(() => setSendingStep('preparing'), 300);
+        }, 2500);
+      }
     } catch (err: any) {
+      setSendingStep('error');
       setSendResult({
         success: false,
         message: err?.response?.data?.message || err?.message || 'Error inesperado al enviar',
@@ -754,6 +790,98 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog de progreso de envío */}
+      <Dialog open={showSendingDialog} onOpenChange={(open) => {
+        // No permitir cerrar manualmente mientras se está enviando
+        if (!open && (sendingStep === 'completed' || sendingStep === 'error')) {
+          setShowSendingDialog(false);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => {
+          // Prevenir cierre al hacer clic fuera
+          if (sendingStep !== 'completed' && sendingStep !== 'error') {
+            e.preventDefault();
+          }
+        }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {sendingStep === 'completed' ? (
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              ) : sendingStep === 'error' ? (
+                <XCircle className="h-5 w-5 text-red-600" />
+              ) : (
+                <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+              )}
+              {sendingStep === 'preparing' && 'Preparando envío...'}
+              {sendingStep === 'downloading' && 'Descargando PDFs...'}
+              {sendingStep === 'sending' && 'Enviando bitácora...'}
+              {sendingStep === 'completed' && '¡Envío completado!'}
+              {sendingStep === 'error' && 'Error al enviar'}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-4 pt-4">
+                {/* Barra de progreso */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {sendingStep === 'preparing' && 'Verificando documentos y destinatarios...'}
+                      {sendingStep === 'downloading' && `Descargando ${sendingProgress.total} documentos...`}
+                      {sendingStep === 'sending' && 'Enviando emails con adjuntos...'}
+                      {sendingStep === 'completed' && 'Todos los emails han sido enviados'}
+                      {sendingStep === 'error' && sendResult?.message}
+                    </span>
+                  </div>
+
+                  {/* Barra de progreso visual */}
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${sendingStep === 'error' ? 'bg-red-500' :
+                        sendingStep === 'completed' ? 'bg-green-500' : 'bg-blue-600'
+                        }`}
+                      style={{
+                        width: sendingStep === 'completed' ? '100%' :
+                          sendingStep === 'error' ? '100%' :
+                            sendingStep === 'sending' ? '75%' :
+                              `${(sendingProgress.current / Math.max(sendingProgress.total, 1)) * 50}%`
+                      }}
+                    />
+                  </div>
+
+                  {/* Info adicional */}
+                  {sendingProgress.batchInfo && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      {sendingProgress.batchInfo}
+                    </p>
+                  )}
+                </div>
+
+                {/* Resumen de envío */}
+                {sendingStep === 'completed' && sendResult?.success && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                    <p className="font-medium text-green-900">
+                      {documentosSeleccionados.size} documentos enviados
+                    </p>
+                    <p className="text-green-700 text-xs mt-1">
+                      Destinatarios: {emailsEditables.join(', ')}
+                    </p>
+                  </div>
+                )}
+
+                {/* Botón para cerrar en error o completado */}
+                {(sendingStep === 'completed' || sendingStep === 'error') && (
+                  <Button
+                    onClick={() => setShowSendingDialog(false)}
+                    className={`w-full ${sendingStep === 'error' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    {sendingStep === 'error' ? 'Entendido' : 'Cerrar'}
+                  </Button>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
