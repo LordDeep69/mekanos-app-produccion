@@ -633,109 +633,111 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         <AlertDialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Envío de Bitácora</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-4">
-              <span className="block">
-                Se enviará la bitácora de <strong>{catLabel}</strong> de{' '}
-                <strong>{mesLabel} {anio}</strong> para <strong>{clienteNombre}</strong>.
-              </span>
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-muted-foreground space-y-4">
+                <span className="block">
+                  Se enviará la bitácora de <strong>{catLabel}</strong> de{' '}
+                  <strong>{mesLabel} {anio}</strong> para <strong>{clienteNombre}</strong>.
+                </span>
 
-              {/* ✅ NUEVO: Resumen de documentos seleccionados */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p className="font-semibold text-green-900 text-sm mb-2">
-                  <Check className="h-4 w-4 inline mr-1" />
-                  Documentos seleccionados ({documentosSeleccionados.size} de {documentosDisponibles.length})
-                </p>
-                <div className="max-h-32 overflow-y-auto space-y-1">
-                  {documentosSeleccionadosList.map((doc) => (
-                    <div key={doc.id_documento} className="text-xs text-green-800 flex items-center gap-2 bg-white rounded p-1.5">
-                      <FileText className="h-3 w-3" />
-                      <span className="truncate">{nombresCustom[doc.id_documento] || doc.nombre_sugerido}</span>
-                      <span className="text-gray-400">|</span>
-                      <span className="text-gray-500">{doc.nombre_sede}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ✅ NUEVO: Gestión de destinatarios editable */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
-                <p className="font-semibold text-blue-900 text-sm flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  Destinatarios del Email
-                </p>
-
-                {/* Lista de emails editables */}
-                <div className="space-y-2">
-                  {emailsEditables.map((email, index) => (
-                    <div key={index} className="flex items-center gap-2 bg-white rounded border border-blue-100 p-2">
-                      {emailEditando === index ? (
-                        <>
-                          <Input
-                            value={email}
-                            onChange={(e) => editarEmail(index, e.target.value)}
-                            onBlur={() => setEmailEditando(null)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') setEmailEditando(null);
-                            }}
-                            className="h-7 text-sm flex-1"
-                            autoFocus
-                          />
-                          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEmailEditando(null)}>
-                            <Check className="h-3.5 w-3.5 text-green-600" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Mail className="h-3.5 w-3.5 text-blue-600" />
-                          <span className="text-sm flex-1">{email}</span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2"
-                            onClick={() => setEmailEditando(index)}
-                          >
-                            <Pencil className="h-3.5 w-3.5 text-gray-500" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-red-500 hover:text-red-700"
-                            onClick={() => eliminarEmail(index)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Agregar nuevo email */}
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="nuevo@email.com"
-                    value={nuevoEmail}
-                    onChange={(e) => setNuevoEmail(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') agregarEmail();
-                    }}
-                    className="h-9 text-sm flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={agregarEmail}
-                    disabled={!nuevoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevoEmail)}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Agregar
-                  </Button>
-                </div>
-
-                {emailsEditables.length === 0 && (
-                  <p className="text-xs text-orange-600">
-                    ⚠ Agregue al menos un destinatario para poder enviar la bitácora.
+                {/* ✅ NUEVO: Resumen de documentos seleccionados */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="font-semibold text-green-900 text-sm mb-2">
+                    <Check className="h-4 w-4 inline mr-1" />
+                    Documentos seleccionados ({documentosSeleccionados.size} de {documentosDisponibles.length})
                   </p>
-                )}
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {documentosSeleccionadosList.map((doc) => (
+                      <div key={doc.id_documento} className="text-xs text-green-800 flex items-center gap-2 bg-white rounded p-1.5">
+                        <FileText className="h-3 w-3" />
+                        <span className="truncate">{nombresCustom[doc.id_documento] || doc.nombre_sugerido}</span>
+                        <span className="text-gray-400">|</span>
+                        <span className="text-gray-500">{doc.nombre_sede}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ✅ NUEVO: Gestión de destinatarios editable */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
+                  <p className="font-semibold text-blue-900 text-sm flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Destinatarios del Email
+                  </p>
+
+                  {/* Lista de emails editables */}
+                  <div className="space-y-2">
+                    {emailsEditables.map((email, index) => (
+                      <div key={index} className="flex items-center gap-2 bg-white rounded border border-blue-100 p-2">
+                        {emailEditando === index ? (
+                          <>
+                            <Input
+                              value={email}
+                              onChange={(e) => editarEmail(index, e.target.value)}
+                              onBlur={() => setEmailEditando(null)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') setEmailEditando(null);
+                              }}
+                              className="h-7 text-sm flex-1"
+                              autoFocus
+                            />
+                            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEmailEditando(null)}>
+                              <Check className="h-3.5 w-3.5 text-green-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-3.5 w-3.5 text-blue-600" />
+                            <span className="text-sm flex-1">{email}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              onClick={() => setEmailEditando(index)}
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-gray-500" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-red-500 hover:text-red-700"
+                              onClick={() => eliminarEmail(index)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Agregar nuevo email */}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="nuevo@email.com"
+                      value={nuevoEmail}
+                      onChange={(e) => setNuevoEmail(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') agregarEmail();
+                      }}
+                      className="h-9 text-sm flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={agregarEmail}
+                      disabled={!nuevoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevoEmail)}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Agregar
+                    </Button>
+                  </div>
+
+                  {emailsEditables.length === 0 && (
+                    <p className="text-xs text-orange-600">
+                      ⚠ Agregue al menos un destinatario para poder enviar la bitácora.
+                    </p>
+                  )}
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -792,9 +794,9 @@ function SedeCard({
 
   return (
     <Card>
-      <button
+      <div
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors rounded-t-lg"
+        className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors rounded-t-lg cursor-pointer"
       >
         <div className="flex items-center gap-3">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -816,7 +818,7 @@ function SedeCard({
           <Badge variant="outline">{sede.informes.length} informe(s)</Badge>
           <Badge variant="default" className="bg-green-600 text-[10px]">{sede.informes.length} PDF</Badge>
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <CardContent className="pt-0">
