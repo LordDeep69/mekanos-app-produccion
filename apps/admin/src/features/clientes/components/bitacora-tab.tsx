@@ -8,6 +8,7 @@
 
 'use client';
 
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +51,7 @@ import {
   Mail,
   Pencil,
   Send,
-  XCircle,
+  XCircle
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { InformePreview, SedeGroup } from '../api/bitacoras.service';
@@ -93,6 +94,15 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   const [nombresCustom, setNombresCustom] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedSedes, setExpandedSedes] = useState<Set<number>>(new Set());
+
+  // ✅ NUEVO: Estado para selección de documentos (inicialmente todos seleccionados)
+  const [documentosSeleccionados, setDocumentosSeleccionados] = useState<Set<number>>(new Set());
+
+  // ✅ NUEVO: Estado para emails editables
+  const [emailsEditables, setEmailsEditables] = useState<string[]>([]);
+  const [nuevoEmail, setNuevoEmail] = useState('');
+  const [emailEditando, setEmailEditando] = useState<number | null>(null);
+
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -115,16 +125,32 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
   const enviarMutation = useEnviarBitacora();
 
-  // Todos los documentos disponibles (todos tienen PDF desde documentos_generados)
+  // ✅ NUEVO: Efecto para inicializar documentos seleccionados cuando carga el preview
   const documentosDisponibles = useMemo(() => {
     if (!preview?.sedes) return [];
     return preview.sedes.flatMap(s => s.informes);
   }, [preview]);
 
+  // Inicializar todos los documentos como seleccionados cuando carga el preview
+  useEffect(() => {
+    if (documentosDisponibles.length > 0 && documentosSeleccionados.size === 0) {
+      setDocumentosSeleccionados(new Set(documentosDisponibles.map(d => d.id_documento)));
+    }
+  }, [documentosDisponibles]);
+
+  // ✅ NUEVO: Inicializar emails editables cuando cambia el preview
+  useEffect(() => {
+    if (preview?.emails_destinatarios && emailsEditables.length === 0) {
+      setEmailsEditables([...preview.emails_destinatarios]);
+    }
+  }, [preview?.emails_destinatarios]);
+
   const handleBuscar = () => {
     setShowPreview(true);
     setExpandedSedes(new Set());
     setSendResult(null);
+    setDocumentosSeleccionados(new Set()); // Reset selección
+    setEmailsEditables([]); // Reset emails
     refetchPreview();
   };
 
@@ -147,9 +173,89 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
     setEditingId(null);
   };
 
+  // ✅ NUEVO: Funciones para manejar selección de documentos
+  const toggleDocumentoSeleccionado = (idDocumento: number) => {
+    setDocumentosSeleccionados(prev => {
+      const next = new Set(prev);
+      if (next.has(idDocumento)) {
+        next.delete(idDocumento);
+      } else {
+        next.add(idDocumento);
+      }
+      return next;
+    });
+  };
+
+  const seleccionarTodos = () => {
+    setDocumentosSeleccionados(new Set(documentosDisponibles.map(d => d.id_documento)));
+  };
+
+  const deseleccionarTodos = () => {
+    setDocumentosSeleccionados(new Set());
+  };
+
+  const seleccionarSede = (sede: SedeGroup, seleccionar: boolean) => {
+    setDocumentosSeleccionados(prev => {
+      const next = new Set(prev);
+      sede.informes.forEach(informe => {
+        if (seleccionar) {
+          next.add(informe.id_documento);
+        } else {
+          next.delete(informe.id_documento);
+        }
+      });
+      return next;
+    });
+  };
+
+  // ✅ NUEVO: Funciones para gestionar emails
+  const agregarEmail = () => {
+    if (nuevoEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevoEmail)) {
+      if (!emailsEditables.includes(nuevoEmail)) {
+        setEmailsEditables([...emailsEditables, nuevoEmail]);
+        setNuevoEmail('');
+      }
+    }
+  };
+
+  const eliminarEmail = (index: number) => {
+    setEmailsEditables(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const editarEmail = (index: number, nuevoValor: string) => {
+    setEmailsEditables(prev => {
+      const nuevos = [...prev];
+      nuevos[index] = nuevoValor;
+      return nuevos;
+    });
+    setEmailEditando(null);
+  };
+
+  const documentosSeleccionadosList = useMemo(() => {
+    return documentosDisponibles.filter(d => documentosSeleccionados.has(d.id_documento));
+  }, [documentosDisponibles, documentosSeleccionados]);
+
   const handleEnviar = async () => {
     setShowConfirmDialog(false);
     setSendResult(null);
+
+    // Validar que hay documentos seleccionados
+    if (documentosSeleccionados.size === 0) {
+      setSendResult({
+        success: false,
+        message: 'Debe seleccionar al menos un documento para enviar',
+      });
+      return;
+    }
+
+    // Validar que hay destinatarios
+    if (emailsEditables.length === 0) {
+      setSendResult({
+        success: false,
+        message: 'Debe agregar al menos un destinatario de email',
+      });
+      return;
+    }
 
     try {
       const result = await enviarMutation.mutateAsync({
@@ -157,8 +263,11 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         mes,
         anio,
         categoria: categoria || 'TODAS',
-        documentos_ids: documentosDisponibles.map(i => i.id_documento),
+        // ✅ NUEVO: Solo enviar documentos seleccionados
+        documentos_ids: Array.from(documentosSeleccionados),
         nombres_pdf: Object.keys(nombresCustom).length > 0 ? nombresCustom : undefined,
+        // ✅ NUEVO: Usar emails editables en lugar de los del sistema
+        email_destino: emailsEditables.join(','),
       });
 
       setSendResult({
@@ -333,7 +442,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
       {/* Preview de informes */}
       {preview && showPreview && !loadingPreview && (
         <>
-          {/* Resumen */}
+          {/* Resumen con controles de selección */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -351,15 +460,36 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="h-4 w-4" />
-                <span>Destinatarios: </span>
-                <span className="font-medium text-foreground">
-                  {preview.emails_destinatarios.length > 0
-                    ? preview.emails_destinatarios.join(', ')
-                    : 'Sin destinatarios configurados'}
-                </span>
+            <CardContent className="space-y-4">
+              {/* ✅ NUEVO: Controles de selección masiva */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="select-all"
+                      checked={documentosSeleccionados.size === documentosDisponibles.length && documentosDisponibles.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) seleccionarTodos();
+                        else deseleccionarTodos();
+                      }}
+                    />
+                    <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                      {documentosSeleccionados.size === documentosDisponibles.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                    </label>
+                  </div>
+                  <Badge variant="outline" className="text-[10px]">
+                    {documentosSeleccionados.size} de {documentosDisponibles.length} seleccionados
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Mail className="h-4 w-4" />
+                  <span>Destinatarios: </span>
+                  <span className="font-medium text-foreground">
+                    {preview.emails_destinatarios.length > 0
+                      ? preview.emails_destinatarios.join(', ')
+                      : 'Sin destinatarios configurados'}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -396,6 +526,10 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                   nombresCustom={nombresCustom}
                   onStartEdit={setEditingId}
                   onRename={handleRename}
+                  // ✅ NUEVO: Props de selección
+                  documentosSeleccionados={documentosSeleccionados}
+                  onToggleDocumento={toggleDocumentoSeleccionado}
+                  onSeleccionarSede={seleccionarSede}
                 />
               ))}
             </div>
@@ -408,16 +542,24 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-semibold text-blue-900">
-                      {documentosDisponibles.length} informe(s) listos para enviar
+                      {documentosSeleccionados.size} de {documentosDisponibles.length} informe(s) seleccionados para enviar
                     </p>
                     <p className="text-sm text-blue-700">
-                      Se enviarán a: {preview.emails_destinatarios.join(', ') || 'Sin destinatarios'}
+                      Se enviarán a: {emailsEditables.length > 0
+                        ? emailsEditables.join(', ')
+                        : preview?.emails_destinatarios.join(', ') || 'Sin destinatarios'}
                     </p>
                   </div>
                   <Button
                     size="lg"
-                    onClick={() => setShowConfirmDialog(true)}
-                    disabled={enviarMutation.isPending || preview.emails_destinatarios.length === 0}
+                    onClick={() => {
+                      // Inicializar emails editables si están vacíos
+                      if (emailsEditables.length === 0 && preview?.emails_destinatarios) {
+                        setEmailsEditables([...preview.emails_destinatarios]);
+                      }
+                      setShowConfirmDialog(true);
+                    }}
+                    disabled={enviarMutation.isPending || documentosSeleccionados.size === 0}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     {enviarMutation.isPending ? (
@@ -482,9 +624,9 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         </CardContent>
       </Card>
 
-      {/* Dialog de confirmación */}
+      {/* Dialog de confirmación mejorado */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <AlertDialogContent className="max-w-2xl">
+        <AlertDialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Envío de Bitácora</AlertDialogTitle>
             <AlertDialogDescription className="space-y-4">
@@ -492,58 +634,116 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                 Se enviará la bitácora de <strong>{catLabel}</strong> de{' '}
                 <strong>{mesLabel} {anio}</strong> para <strong>{clienteNombre}</strong>.
               </span>
-              <span className="block">
-                <strong>{documentosDisponibles.length}</strong> informe(s) PDF serán adjuntados.
-              </span>
 
-              {/* ✅ FIX 03-MAR-2026: Destinatarios por sede */}
-              {preview && preview.sedes.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-                  <p className="font-semibold text-blue-900 text-sm">Destinatarios por sede:</p>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {preview.sedes.map((sede) => (
-                      <div key={sede.id_cliente} className="bg-white rounded border border-blue-100 p-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Building2 className="h-3.5 w-3.5 text-blue-600" />
-                          <span className="font-medium text-sm text-blue-800">{sede.nombre_sede}</span>
-                          <Badge variant="outline" className="text-[10px] h-4 px-1">
-                            {sede.informes.length} informes
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-gray-600 pl-5">
-                          {sede.emails_destinatarios && sede.emails_destinatarios.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {sede.emails_destinatarios.map((email, idx) => (
-                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                                  <Mail className="h-3 w-3" />
-                                  {email}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-orange-600">⚠ Sin correos configurados</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              {/* ✅ NUEVO: Resumen de documentos seleccionados */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="font-semibold text-green-900 text-sm mb-2">
+                  <Check className="h-4 w-4 inline mr-1" />
+                  Documentos seleccionados ({documentosSeleccionados.size} de {documentosDisponibles.length})
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {documentosSeleccionadosList.map((doc) => (
+                    <div key={doc.id_documento} className="text-xs text-green-800 flex items-center gap-2 bg-white rounded p-1.5">
+                      <FileText className="h-3 w-3" />
+                      <span className="truncate">{nombresCustom[doc.id_documento] || doc.nombre_sugerido}</span>
+                      <span className="text-gray-400">|</span>
+                      <span className="text-gray-500">{doc.nombre_sede}</span>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
 
-              {/* Total destinatarios únicos */}
-              <div className="pt-2 border-t">
-                <span className="block text-sm">
-                  <strong>Total destinatarios únicos:</strong>{' '}
-                  <span className="font-medium">{preview?.emails_destinatarios.join(', ')}</span>
-                </span>
+              {/* ✅ NUEVO: Gestión de destinatarios editable */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
+                <p className="font-semibold text-blue-900 text-sm flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Destinatarios del Email
+                </p>
+
+                {/* Lista de emails editables */}
+                <div className="space-y-2">
+                  {emailsEditables.map((email, index) => (
+                    <div key={index} className="flex items-center gap-2 bg-white rounded border border-blue-100 p-2">
+                      {emailEditando === index ? (
+                        <>
+                          <Input
+                            value={email}
+                            onChange={(e) => editarEmail(index, e.target.value)}
+                            onBlur={() => setEmailEditando(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') setEmailEditando(null);
+                            }}
+                            className="h-7 text-sm flex-1"
+                            autoFocus
+                          />
+                          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEmailEditando(null)}>
+                            <Check className="h-3.5 w-3.5 text-green-600" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="h-3.5 w-3.5 text-blue-600" />
+                          <span className="text-sm flex-1">{email}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={() => setEmailEditando(index)}
+                          >
+                            <Pencil className="h-3.5 w-3.5 text-gray-500" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-red-500 hover:text-red-700"
+                            onClick={() => eliminarEmail(index)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Agregar nuevo email */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="nuevo@email.com"
+                    value={nuevoEmail}
+                    onChange={(e) => setNuevoEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') agregarEmail();
+                    }}
+                    className="h-9 text-sm flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={agregarEmail}
+                    disabled={!nuevoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevoEmail)}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Agregar
+                  </Button>
+                </div>
+
+                {emailsEditables.length === 0 && (
+                  <p className="text-xs text-orange-600">
+                    ⚠ Agregue al menos un destinatario para poder enviar la bitácora.
+                  </p>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleEnviar} className="bg-blue-600 hover:bg-blue-700">
+            <AlertDialogCancel onClick={() => setEmailEditando(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleEnviar}
+              disabled={documentosSeleccionados.size === 0 || emailsEditables.length === 0}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               <Send className="h-4 w-4 mr-2" />
-              Confirmar Envío
+              Confirmar Envío ({documentosSeleccionados.size} docs)
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -564,9 +764,28 @@ interface SedeCardProps {
   nombresCustom: Record<number, string>;
   onStartEdit: (id: number | null) => void;
   onRename: (id: number, name: string) => void;
+  // ✅ NUEVO: Props para selección
+  documentosSeleccionados: Set<number>;
+  onToggleDocumento: (id: number) => void;
+  onSeleccionarSede: (sede: SedeGroup, seleccionar: boolean) => void;
 }
 
-function SedeCard({ sede, expanded, onToggle, editingId, nombresCustom, onStartEdit, onRename }: SedeCardProps) {
+function SedeCard({
+  sede,
+  expanded,
+  onToggle,
+  editingId,
+  nombresCustom,
+  onStartEdit,
+  onRename,
+  documentosSeleccionados,
+  onToggleDocumento,
+  onSeleccionarSede,
+}: SedeCardProps) {
+  // Verificar si todos los documentos de esta sede están seleccionados
+  const todosSeleccionados = sede.informes.every(i => documentosSeleccionados.has(i.id_documento));
+  const algunoSeleccionado = sede.informes.some(i => documentosSeleccionados.has(i.id_documento));
+
   return (
     <Card>
       <button
@@ -575,8 +794,19 @@ function SedeCard({ sede, expanded, onToggle, editingId, nombresCustom, onStartE
       >
         <div className="flex items-center gap-3">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <Checkbox
+            checked={todosSeleccionados}
+            onCheckedChange={(checked) => {
+              onSeleccionarSede(sede, checked as boolean);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className={algunoSeleccionado && !todosSeleccionados ? "bg-blue-100" : ""}
+          />
           <Building2 className="h-4 w-4 text-blue-600" />
           <span className="font-semibold">{sede.nombre_sede}</span>
+          <Badge variant="outline" className="text-[10px]">
+            {sede.informes.filter(i => documentosSeleccionados.has(i.id_documento)).length} / {sede.informes.length} seleccionados
+          </Badge>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline">{sede.informes.length} informe(s)</Badge>
@@ -597,6 +827,9 @@ function SedeCard({ sede, expanded, onToggle, editingId, nombresCustom, onStartE
                 onStartEdit={() => onStartEdit(informe.id_documento)}
                 onRename={(name) => onRename(informe.id_documento, name)}
                 onCancelEdit={() => onStartEdit(null)}
+                // ✅ NUEVO: Props de selección
+                isSelected={documentosSeleccionados.has(informe.id_documento)}
+                onToggleSelect={() => onToggleDocumento(informe.id_documento)}
               />
             ))}
           </div>
@@ -617,9 +850,21 @@ interface InformeRowProps {
   onStartEdit: () => void;
   onRename: (name: string) => void;
   onCancelEdit: () => void;
+  // ✅ NUEVO: Props de selección
+  isSelected: boolean;
+  onToggleSelect: () => void;
 }
 
-function InformeRow({ informe, isEditing, customName, onStartEdit, onRename, onCancelEdit }: InformeRowProps) {
+function InformeRow({
+  informe,
+  isEditing,
+  customName,
+  onStartEdit,
+  onRename,
+  onCancelEdit,
+  isSelected,
+  onToggleSelect,
+}: InformeRowProps) {
   const [editValue, setEditValue] = useState(customName || informe.nombre_sugerido);
   const displayName = customName || informe.nombre_sugerido;
   const fechaStr = informe.fecha_servicio
@@ -627,7 +872,14 @@ function InformeRow({ informe, isEditing, customName, onStartEdit, onRename, onC
     : 'Sin fecha';
 
   return (
-    <div className="flex items-center gap-3 p-2.5 rounded-lg border bg-white">
+    <div className={`flex items-center gap-3 p-2.5 rounded-lg border bg-white transition-colors ${isSelected ? 'border-blue-300 bg-blue-50/30' : ''}`}>
+      {/* ✅ NUEVO: Checkbox de selección */}
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={onToggleSelect}
+        className="flex-shrink-0"
+      />
+
       <FileText className="h-4 w-4 flex-shrink-0 text-green-600" />
 
       <div className="flex-1 min-w-0">
@@ -649,7 +901,7 @@ function InformeRow({ informe, isEditing, customName, onStartEdit, onRename, onC
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <p className="text-xs font-mono truncate" title={displayName}>
+            <p className={`text-xs font-mono truncate ${isSelected ? 'font-semibold' : ''}`} title={displayName}>
               {displayName}
             </p>
             <button onClick={onStartEdit} className="text-muted-foreground hover:text-foreground flex-shrink-0">
@@ -668,8 +920,8 @@ function InformeRow({ informe, isEditing, customName, onStartEdit, onRename, onC
         </div>
       </div>
 
-      <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-[10px] flex-shrink-0">
-        PDF
+      <Badge variant="outline" className={`text-[10px] flex-shrink-0 ${isSelected ? 'text-blue-700 border-blue-300 bg-blue-50' : 'text-green-700 border-green-300 bg-green-50'}`}>
+        {isSelected ? 'INCLUIR' : 'PDF'}
       </Badge>
     </div>
   );
