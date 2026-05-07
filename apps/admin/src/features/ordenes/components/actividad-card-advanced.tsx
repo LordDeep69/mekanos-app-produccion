@@ -30,6 +30,8 @@ interface Actividad {
     observaciones?: string;
     ejecutada?: boolean;
     fecha_ejecucion?: string;
+    // ✅ FIX 30-ABR-2026: Soporte multi-equipo para fotos
+    id_orden_equipo?: number;
     catalogo_actividades?: {
         descripcion_actividad?: string;
         codigo_actividad?: string;
@@ -251,6 +253,7 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
                     <GaleriaActividadFotos
                         idOrdenServicio={idOrdenServicio}
                         idActividadEjecutada={actividad.id_actividad_ejecutada}
+                        idOrdenEquipo={actividad.id_orden_equipo}
                         nombreActividad={descripcion}
                     />
                 </div>

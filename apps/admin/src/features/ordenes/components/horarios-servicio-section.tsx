@@ -113,9 +113,10 @@ export function HorariosServicioSection({ orden }: HorariosServicioSectionProps)
     // No mostrar si no hay datos de servicio realizado
     const tieneHorarios = orden.fecha_inicio_real || orden.fecha_fin_real;
 
-    // Estado bloqueado (APROBADA/CANCELADA)
+    // Estado bloqueado (solo CANCELADA)
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
     const estadoCodigo = orden.estados_orden?.codigo_estado || '';
-    const esBloqueado = ['APROBADA', 'CANCELADA'].includes(estadoCodigo);
+    const esBloqueado = ['CANCELADA'].includes(estadoCodigo);
 
     // Calcular duración existente
     const duracionActual = (() => {

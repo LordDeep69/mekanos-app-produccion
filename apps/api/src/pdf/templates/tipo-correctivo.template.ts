@@ -737,7 +737,7 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
   const generarGridFotos = (fotos: Array<{ url: string; caption: string }>): string =>
     fotos.map((ev, idx) => `
         <div class="evidencia-item-compacto">
-            <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+            <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
             <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
         </div>
     `).join('');
@@ -907,7 +907,7 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
               .map(
                 (ev: any, idx: number) => `
                             <div class="evidencia-item">
-                                <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+                                <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
                                 <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
                             </div>
                         `,

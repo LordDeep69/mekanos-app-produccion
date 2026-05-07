@@ -16,6 +16,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatDateSafe } from '@/lib/utils';
 import {
   PERIODICIDAD_LABELS,
   TIPO_CLIENTE_LABELS,
@@ -105,8 +106,7 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   const esPrincipal = !!cliente.es_cliente_principal;
 
   const formatDate = (date: string | null | undefined) => {
-    if (!date) return '-';
-    return new Date(date).toLocaleDateString('es-CO', {
+    return formatDateSafe(date, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',

@@ -27,6 +27,7 @@ model actividades_ejecutadas {
   evidencia_capturada      Boolean?                  @default(false)
   fecha_registro           DateTime?                 @default(now()) @db.Timestamp(6)
   id_orden_equipo          Int?
+  excluido_pdf             Boolean                   @default(false)
   empleados                empleados?                @relation(fields: [ejecutada_por], references: [id_empleado])
   catalogo_actividades     catalogo_actividades?     @relation(fields: [id_actividad_catalogo], references: [id_actividad_catalogo])
   ordenes_equipos          ordenes_equipos?          @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
@@ -1368,6 +1369,7 @@ model mediciones_servicio {
   instrumento_medicion  String?             @db.VarChar(200)
   fecha_registro        DateTime?           @default(now()) @db.Timestamp(6)
   id_orden_equipo       Int?
+  excluido_pdf          Boolean             @default(false)
   ordenes_equipos       ordenes_equipos?    @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
   ordenes_servicio      ordenes_servicio    @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: SetNull)
   parametros_medicion   parametros_medicion @relation(fields: [id_parametro_medicion], references: [id_parametro_medicion], onDelete: SetNull)

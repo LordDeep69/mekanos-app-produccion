@@ -20,7 +20,9 @@ import {
     useReportes,
     type ReporteItem,
 } from '@/features/reportes';
-import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/api/client';
+import { buildInformeFilename, descargarInformeAutenticado } from '@/lib/pdf-naming';
+import { cn, formatDateSafe } from '@/lib/utils';
 import {
     AlertCircle,
     Building2,
@@ -48,12 +50,7 @@ import { useEffect, useRef, useState } from 'react';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function formatDate(dateStr: string | null | undefined): string {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('es-CO', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-    });
+    return formatDateSafe(dateStr, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function formatFileSize(bytes: number | undefined): string {
@@ -102,6 +99,35 @@ function EstadoInformeBadge({ estado }: { estado: string }) {
 
 function ReporteRow({ reporte }: { reporte: ReporteItem }) {
     const pdfUrl = reporte.documento?.ruta_archivo;
+    const idDocumento = reporte.documento?.id_documento ?? reporte.id_documento;
+
+    /**
+     * ✅ FIX 29-ABR-2026: Descarga con nombre canónico
+     *   `INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - MES YYYY.pdf`
+     *
+     * Va por el endpoint proxy backend autenticado que sirve el PDF con
+     * Content-Disposition correcto (R2 es cross-origin → `<a download>` se ignora).
+     */
+    const handleDescargar = async () => {
+        const filename = buildInformeFilename({
+            fechaServicio: reporte.orden?.fecha_fin_real
+                || reporte.orden?.fecha_programada
+                || reporte.fecha_generacion,
+            codigoTipoServicio: reporte.tipo_servicio?.codigo,
+            nombreTipoServicio: reporte.tipo_servicio?.nombre,
+            // El campo `tipo` del equipo es la categoría (Generador / Bomba / Motor)
+            nombreTipoEquipo: reporte.equipo?.tipo,
+            nombreCliente: reporte.cliente.nombre,
+            numeroOrden: reporte.orden?.numero_orden,
+        });
+
+        try {
+            await descargarInformeAutenticado(apiClient, idDocumento, filename);
+        } catch (error) {
+            console.error('[Reportes] Error descargando PDF:', error);
+            alert('No se pudo descargar el PDF. Verifique su sesión e intente nuevamente.');
+        }
+    };
 
     return (
         <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
@@ -202,14 +228,14 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
                             >
                                 <Eye className="h-4 w-4" />
                             </a>
-                            <a
-                                href={pdfUrl}
-                                download
+                            <button
+                                type="button"
+                                onClick={handleDescargar}
                                 className="p-1.5 rounded-md hover:bg-green-50 text-green-600 hover:text-green-800 transition-colors"
-                                title="Descargar PDF"
+                                title="Descargar PDF (con nombre canónico)"
                             >
                                 <Download className="h-4 w-4" />
-                            </a>
+                            </button>
                         </>
                     )}
                     {reporte.orden && (

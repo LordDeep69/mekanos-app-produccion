@@ -1,4 +1,5 @@
-import { PartialType } from '@nestjs/swagger';
+import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { IsBoolean, IsOptional } from 'class-validator';
 import { CreateMedicionDto } from './create-medicion.dto';
 
 /**
@@ -15,6 +16,12 @@ export class UpdateMedicionDto extends PartialType(CreateMedicionDto) {
   // - humedadRelativa
   // - fechaMedicion
   // - instrumentoMedicion
+
+  // ✅ FIX 04-MAY-2026: Permite al admin excluir esta medición del PDF
+  @ApiPropertyOptional({ description: 'Si true, excluye esta medición del informe PDF', example: true })
+  @IsOptional()
+  @IsBoolean()
+  excluidoPdf?: boolean;
 
   // ⚠️ NO se pueden actualizar manualmente:
   // - idOrdenServicio (inmutable - FK)

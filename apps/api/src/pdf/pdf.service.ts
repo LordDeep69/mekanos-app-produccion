@@ -102,6 +102,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           'Accept-Charset': 'utf-8',
         });
 
+        // ✅ FIX 27-MAR-2026: Capturar mensajes de consola para diagnóstico de imágenes
+        page.on('console', msg => {
+          if (msg.type() === 'error' || msg.text().includes('Error cargando imagen')) {
+            this.logger.warn(`🌐 Browser console [${msg.type()}]: ${msg.text()}`);
+          }
+        });
+
         // Inyectar meta http-equiv para reforzar encoding UTF-8
         const htmlConEncoding = html.replace(
           '<meta charset="UTF-8">',
@@ -111,10 +118,27 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         // 🔧 FIX 02-ENE-2026: Revertir a 'networkidle0' - Las imágenes son URLs de Cloudinary
         // que necesitan cargarse via HTTP. 'domcontentloaded' NO espera las imágenes,
         // causando que aparezcan en blanco en el PDF generado.
+        // ✅ FIX 27-MAR-2026: Agregar 'load' adicional para asegurar que las imágenes se carguen
         await page.setContent(htmlConEncoding, {
-          waitUntil: 'networkidle0',
+          waitUntil: ['networkidle0', 'load'],
           timeout: 90000, // ✅ FIX 23-ENE-2026: 90s para Render free tier
         });
+
+        // ✅ FIX 27-MAR-2026: Espera adicional para asegurar que las imágenes de Cloudinary carguen
+        // Las imágenes externas a veces necesitan más tiempo para renderizarse
+        this.logger.log('⏳ Esperando carga de imágenes (2s)...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Verificar que las imágenes se cargaron (opcional, para debug)
+        const imagenesCargadas = await page.evaluate(() => {
+          const imgs = Array.from(document.querySelectorAll('img'));
+          return {
+            total: imgs.length,
+            completadas: imgs.filter((img: any) => img.complete && img.naturalWidth > 0).length,
+            fallidas: imgs.filter((img: any) => !img.complete || img.naturalWidth === 0).length
+          };
+        });
+        this.logger.log(`📷 Estado de imágenes: ${imagenesCargadas.completadas}/${imagenesCargadas.total} cargadas (${imagenesCargadas.fallidas} fallidas)`);
 
         // Generar PDF
         const pdfBuffer = await page.pdf({

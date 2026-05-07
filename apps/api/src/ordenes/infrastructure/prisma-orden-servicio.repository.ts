@@ -79,7 +79,7 @@ export class PrismaOrdenServicioRepository {
         },
       },
     },
-    // ✅ FIX 03-MAR-2026: Incluir conteo de emails enviados para mostrar badge en lista
+    // ✅ FIX 03-MAR-2026: Incluir conteo de emails enviados para badge en lista
     _count: {
       select: {
         historial_emails_enviados: true,
@@ -520,12 +520,30 @@ export class PrismaOrdenServicioRepository {
       this.prisma.ordenes_servicio.count({ where }),
     ]);
 
+    // ✅ FIX 06-MAY-2026: Contar documentos PDF (INFORME_SERVICIO) para cada orden
+    // Usamos Prisma findMany para evitar problemas de tipos en queryRaw
+    const ordenIds = itemsRaw.map((o: any) => o.id_orden_servicio);
+    const documentosCount = ordenIds.length > 0
+      ? await this.prisma.documentos_generados.groupBy({
+        by: ['id_referencia'],
+        where: {
+          id_referencia: { in: ordenIds },
+          tipo_documento: 'INFORME_SERVICIO',
+        },
+        _count: true,
+      })
+      : [];
+
+    const pdfCountMap = new Map(documentosCount.map((dc: any) => [dc.id_referencia, dc._count]));
+
     // ✅ FIX 03-MAR-2026: Transformar _count a total_emails_enviados
+    // ✅ FIX 06-MAY-2026: Agregar total_documentos_pdf desde query de documentos
     const items = itemsRaw.map((orden: any) => {
       const { _count, ...rest } = orden;
       return {
         ...rest,
         total_emails_enviados: _count?.historial_emails_enviados || 0,
+        total_documentos_pdf: pdfCountMap.get(orden.id_orden_servicio) || 0,
       };
     });
 

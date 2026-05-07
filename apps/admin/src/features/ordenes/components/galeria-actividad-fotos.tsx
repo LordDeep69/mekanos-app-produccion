@@ -7,6 +7,7 @@
 
 'use client';
 
+import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,16 +15,18 @@ import {
     Camera,
     ChevronLeft,
     ChevronRight,
+    Clipboard,
     Clock,
     Image as ImageIcon,
     Loader2,
     Plus,
     Trash2,
+    Upload,
     X,
     ZoomIn
 } from 'lucide-react';
 import Image from 'next/image';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface Evidencia {
@@ -41,6 +44,8 @@ interface Evidencia {
 interface GaleriaActividadFotosProps {
     idOrdenServicio: number;
     idActividadEjecutada?: number;
+    // ✅ FIX 30-ABR-2026: Vincular foto al equipo correcto en órdenes multi-equipo
+    idOrdenEquipo?: number;
     nombreActividad: string;
     filtroDescripcion?: string;
 }
@@ -207,6 +212,7 @@ function LightboxModal({
 export function GaleriaActividadFotos({
     idOrdenServicio,
     idActividadEjecutada,
+    idOrdenEquipo,
     nombreActividad,
     filtroDescripcion
 }: GaleriaActividadFotosProps) {
@@ -214,7 +220,46 @@ export function GaleriaActividadFotos({
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [tipoActivo, setTipoActivo] = useState<string>('ANTES');
     const [isUploading, setIsUploading] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploadProgress, setUploadProgress] = useState('');
+
+    // ✅ FIX 02-MAY-2026: Soporte drag-drop, paste y multi-file
+    const uploadFiles = async (files: File[]) => {
+        setIsUploading(true);
+        let uploaded = 0;
+        try {
+            for (const file of files) {
+                setUploadProgress(`${uploaded + 1}/${files.length}`);
+                const base64 = await fileToBase64(file);
+                await apiClient.post('/evidencias-fotograficas/upload-base64', {
+                    idOrdenServicio,
+                    idActividadEjecutada,
+                    ...(idOrdenEquipo ? { idOrdenEquipo } : {}),
+                    tipoEvidencia: tipoActivo,
+                    descripcion: nombreActividad,
+                    nombreArchivo: file.name,
+                    base64,
+                });
+                uploaded++;
+            }
+            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad'] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+            toast.success(files.length === 1 ? 'Foto subida exitosamente' : `${uploaded} fotos subidas exitosamente`);
+        } catch (error) {
+            console.error('Error uploading:', error);
+            toast.error(`Error al subir foto${files.length > 1 ? 's' : ''} (${uploaded}/${files.length} completadas)`);
+        } finally {
+            setIsUploading(false);
+            setUploadProgress('');
+        }
+    };
+
+    const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
+        onFiles: uploadFiles,
+        multiple: true,
+        disabled: isUploading,
+        onInvalidType: (name) => toast.error(`"${name}" no es una imagen válida`),
+        onMaxSizeExceeded: (name) => toast.error(`"${name}" supera el límite de 10MB`),
+    });
 
     // ✅ FIX 13-FEB-2026: Merge ambas fuentes (endpoint actividad + orden) para no perder fotos
     // Las fotos de mobile pueden no tener id_actividad_ejecutada (usan descripción),
@@ -337,66 +382,24 @@ export function GaleriaActividadFotos({
         setLightboxIndex(idx >= 0 ? idx : 0);
     };
 
-    // Subir foto
-    const handleUploadClick = () => {
-        fileInputRef.current?.click();
-    };
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        // Validar tipo de archivo
-        if (!file.type.startsWith('image/')) {
-            toast.error('Solo se permiten imágenes');
-            return;
-        }
-
-        // Validar tamaño (max 10MB)
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error('La imagen no puede superar 10MB');
-            return;
-        }
-
-        setIsUploading(true);
-        try {
-            // Convertir a base64
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-
-            // ✅ FIX 09-FEB-2026: Usar apiClient con interceptor auth
-            await apiClient.post('/evidencias-fotograficas/upload-base64', {
-                idOrdenServicio,
-                idActividadEjecutada,
-                tipoEvidencia: tipoActivo,
-                descripcion: nombreActividad,
-                nombreArchivo: file.name,
-                base64: base64,
-            });
-
-            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad'] });
-            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
-            toast.success('Foto subida exitosamente');
-        } catch (error) {
-            console.error('Error uploading:', error);
-            toast.error('Error al subir la foto');
-        } finally {
-            setIsUploading(false);
-            // Reset input
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
-        }
-    };
+    // Abrir selector de archivos
+    const handleUploadClick = () => openFilePicker();
 
     const tipoConfig = TIPOS_FOTO.find(t => t.key === tipoActivo) || TIPOS_FOTO[0];
 
     return (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div ref={setDropZoneRef} className={cn(
+            "bg-white rounded-lg border overflow-hidden transition-all relative",
+            isDragging ? "border-blue-400 border-2 ring-4 ring-blue-100" : "border-gray-200"
+        )}>
+            {/* Overlay drag-drop */}
+            {isDragging && (
+                <div className="absolute inset-0 z-20 bg-blue-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none rounded-lg">
+                    <Upload className="h-8 w-8 text-blue-500 animate-bounce" />
+                    <p className="text-sm font-bold text-blue-700">Suelte las imágenes aquí</p>
+                    <p className="text-xs text-blue-500">Se subirán como fotos {tipoActivo}</p>
+                </div>
+            )}
             {/* Header */}
             <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
                 <Camera className="h-4 w-4 text-gray-600" />
@@ -436,14 +439,8 @@ export function GaleriaActividadFotos({
                 })}
             </div>
 
-            {/* Input hidden para subir archivos */}
-            <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="image/*"
-                className="hidden"
-            />
+            {/* Input hidden para subir archivos (multi-select habilitado) */}
+            <input {...inputProps} />
 
             {/* Grid de fotos */}
             <div className="p-3">
@@ -453,7 +450,7 @@ export function GaleriaActividadFotos({
                     </div>
                 ) : (
                     <div className="grid grid-cols-3 gap-2">
-                        {/* Botón de agregar foto */}
+                        {/* Botón de agregar foto con hints de drag-drop y paste */}
                         <button
                             onClick={handleUploadClick}
                             disabled={isUploading}
@@ -463,13 +460,22 @@ export function GaleriaActividadFotos({
                                     ? "border-gray-200 bg-gray-50 cursor-wait"
                                     : "border-gray-300 hover:border-blue-400 hover:bg-blue-50 cursor-pointer"
                             )}
+                            title="Clic para seleccionar, arrastrar imágenes o pegar (Ctrl+V)"
                         >
                             {isUploading ? (
-                                <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                                <>
+                                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                                    {uploadProgress && (
+                                        <span className="text-[9px] text-gray-400">{uploadProgress}</span>
+                                    )}
+                                </>
                             ) : (
                                 <>
                                     <Plus className="h-5 w-5 text-gray-400" />
                                     <span className="text-[10px] text-gray-400">Agregar</span>
+                                    <span className="text-[8px] text-gray-300 flex items-center gap-0.5">
+                                        <Clipboard className="h-2.5 w-2.5" /> Ctrl+V
+                                    </span>
                                 </>
                             )}
                         </button>

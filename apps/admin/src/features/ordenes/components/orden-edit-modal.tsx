@@ -93,7 +93,8 @@ export function OrdenEditModal({ isOpen, onClose, orden }: OrdenEditModalProps) 
 
     const isLoading = updateOrden.isPending || asignarTecnico.isPending;
     const estadoCodigo = orden.estados_orden?.codigo_estado || '';
-    const isEstadoFinal = ['APROBADA', 'CANCELADA'].includes(estadoCodigo);
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
+    const isEstadoFinal = ['CANCELADA'].includes(estadoCodigo);
 
     if (!isOpen) return null;
 

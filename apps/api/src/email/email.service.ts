@@ -467,16 +467,21 @@ export class EmailService implements OnModuleInit {
     clienteEmail: string | string[],
     pdfBuffer: Buffer,
     idCuentaEmail?: number, // ✅ MULTI-EMAIL: Cuenta específica del cliente
+    attachmentFilename?: string, // ✅ FIX 29-ABR-2026: Nombre canónico del adjunto
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
 
     const htmlContent = this.buildInformeTecnicoTemplate(data);
+
+    // ✅ FIX 29-ABR-2026: Usar filename canónico si fue provisto, fallback al legacy
+    const filenameAdjunto = attachmentFilename
+      || `Informe_Tecnico_${data.ordenNumero.replace(/\s+/g, '_')}.pdf`;
 
     const emailOptions: SendEmailOptions = {
       to: clienteEmail,
       subject: `📋 Informe Técnico ${data.ordenNumero} - ${data.tipoMantenimiento} | MEKANOS S.A.S`,
       html: htmlContent,
       attachments: [{
-        filename: `Informe_Tecnico_${data.ordenNumero.replace(/\s+/g, '_')}.pdf`,
+        filename: filenameAdjunto,
         content: pdfBuffer,
         contentType: 'application/pdf'
       }]

@@ -35,6 +35,7 @@ import { Response } from 'express';
 import { EmailTemplatesService } from '../email/email-templates.service';
 import { EmailService } from '../email/email.service';
 import { R2StorageService } from '../storage/r2-storage.service';
+import { buildInformeFilename } from './pdf-naming.helper';
 import { PdfService, TipoInforme } from './pdf.service';
 import { DatosOrdenPDF } from './templates';
 
@@ -281,6 +282,17 @@ export class PdfController {
       throw new NotFoundException(`Orden con ID ${id} no encontrada`);
     }
 
+    // ✅ FIX 06-MAY-2026: Ordenar actividades por orden_secuencia (canónico)
+    // Prisma no permite orderBy en includes anidados, así que ordenamos manualmente
+    if (orden.actividades_ejecutadas) {
+      orden.actividades_ejecutadas.sort((a: any, b: any) => {
+        const seqA = a.orden_secuencia ?? Infinity;
+        const seqB = b.orden_secuencia ?? Infinity;
+        if (seqA !== seqB) return seqA - seqB;
+        return (a.id_actividad_ejecutada ?? 0) - (b.id_actividad_ejecutada ?? 0);
+      });
+    }
+
     // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
     const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
     this.logger.log(`📦 Orden ${id}: esMultiEquipo=${esMultiEquipo}, equipos=${orden.ordenes_equipos?.length || 0}`);
@@ -341,8 +353,8 @@ export class PdfController {
     let actividadesPorEquipo: any = undefined;
     if (esMultiEquipo && orden.ordenes_equipos) {
       // Primero, verificar si las actividades tienen id_orden_equipo asignado
-      const actividadesConEquipo = orden.actividades_ejecutadas?.filter((act: any) => act.id_orden_equipo != null) || [];
-      const actividadesSinEquipo = orden.actividades_ejecutadas?.filter((act: any) => act.id_orden_equipo == null) || [];
+      const actividadesConEquipo = orden.actividades_ejecutadas?.filter((act: any) => act.id_orden_equipo != null && !act.excluido_pdf) || [];
+      const actividadesSinEquipo = orden.actividades_ejecutadas?.filter((act: any) => act.id_orden_equipo == null && !act.excluido_pdf) || [];
 
       this.logger.log(`📊 Actividades: ${actividadesConEquipo.length} con equipo, ${actividadesSinEquipo.length} sin equipo`);
 
@@ -414,8 +426,8 @@ export class PdfController {
     let medicionesPorEquipo: any = undefined;
     if (esMultiEquipo && orden.ordenes_equipos) {
       // Verificar si las mediciones tienen id_orden_equipo asignado
-      const medicionesConEquipo = orden.mediciones_servicio?.filter((med: any) => med.id_orden_equipo != null) || [];
-      const medicionesSinEquipo = orden.mediciones_servicio?.filter((med: any) => med.id_orden_equipo == null) || [];
+      const medicionesConEquipo = orden.mediciones_servicio?.filter((med: any) => med.id_orden_equipo != null && !med.excluido_pdf) || [];
+      const medicionesSinEquipo = orden.mediciones_servicio?.filter((med: any) => med.id_orden_equipo == null && !med.excluido_pdf) || [];
 
       this.logger.log(`📊 Mediciones: ${medicionesConEquipo.length} con equipo, ${medicionesSinEquipo.length} sin equipo`);
 
@@ -477,111 +489,84 @@ export class PdfController {
       }
     }
 
-    // ✅ MULTI-EQUIPOS: Agrupar evidencias por equipo
+    // ✅ FIX 30-ABR-2026: Agrupar evidencias por equipo con fallback inteligente
+    // (misma lógica que en regenerarPdfOrden para mantener consistencia)
     let evidenciasPorEquipo: any = undefined;
     if (esMultiEquipo && orden.ordenes_equipos) {
-      // Verificar si las evidencias tienen id_orden_equipo asignado
-      const evidenciasConEquipo = orden.evidencias_fotograficas?.filter((ev: any) => ev.id_orden_equipo != null) || [];
-      const evidenciasSinEquipo = orden.evidencias_fotograficas?.filter((ev: any) => ev.id_orden_equipo == null) || [];
-
-      if (evidenciasSinEquipo.length > 0 && evidenciasConEquipo.length === 0) {
-        // ⚠️ FALLBACK: Todas las evidencias tienen id_orden_equipo = NULL
-        // Distribuir equitativamente basándose en momento_captura (ANTES, DURANTE, DESPUES)
-        this.logger.log(`⚠️ FALLBACK: Distribuyendo ${evidenciasSinEquipo.length} evidencias entre ${orden.ordenes_equipos.length} equipos`);
-
-        // Agrupar evidencias por momento
-        const evidenciasPorMomento: { [key: string]: any[] } = {
-          'ANTES': [],
-          'DURANTE': [],
-          'DESPUES': []
-        };
-
-        for (const ev of evidenciasSinEquipo) {
-          const momento = ev.momento_captura || 'DURANTE';
-          if (!evidenciasPorMomento[momento]) {
-            evidenciasPorMomento[momento] = [];
-          }
-          evidenciasPorMomento[momento].push(ev);
+      // Paso 1: Construir mapa actividad→equipo para resolver huérfanas
+      const actToEqMap = new Map<number, number>();
+      for (const act of (orden.actividades_ejecutadas || [])) {
+        if (act.id_actividad_ejecutada && act.id_orden_equipo) {
+          actToEqMap.set(act.id_actividad_ejecutada, act.id_orden_equipo);
         }
-
-        // Distribuir cada momento equitativamente entre equipos
-        const numEquipos = orden.ordenes_equipos.length;
-
-        evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any, index: number) => {
-          const evidenciasEquipo: any[] = [];
-
-          // Para cada momento, tomar las evidencias que corresponden a este equipo
-          for (const momento of ['ANTES', 'DURANTE', 'DESPUES']) {
-            const evidenciasMomento = evidenciasPorMomento[momento] || [];
-            // Asumir que las evidencias por momento están ordenadas por secuencia de equipo
-            // Cada N evidencias corresponden a los N equipos
-            const evidenciasParaEquipo = evidenciasMomento.filter((_, i) => i % numEquipos === index);
-            evidenciasEquipo.push(...evidenciasParaEquipo);
-          }
-
-          return {
-            equipo: {
-              idOrdenEquipo: oe.id_orden_equipo,
-              ordenSecuencia: oe.orden_secuencia || 1,
-              nombreSistema: oe.nombre_sistema || undefined,
-              codigoEquipo: oe.equipos?.codigo_equipo || undefined,
-              nombreEquipo: oe.equipos?.nombre_equipo || undefined,
-              estado: oe.estado_equipo || 'PENDIENTE',
-            },
-            evidencias: evidenciasEquipo.map((ev: any) => ({
-              url: ev.ruta_archivo,
-              caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
-              momento: ev.tipo_evidencia || ev.momento_captura || 'DURANTE',
-              idOrdenEquipo: oe.id_orden_equipo, // Asignar el ID del equipo distribuido
-            })),
-          };
-        });
-      } else {
-        // Caso normal: las evidencias ya tienen id_orden_equipo asignado
-        evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any) => ({
-          equipo: {
-            idOrdenEquipo: oe.id_orden_equipo,
-            ordenSecuencia: oe.orden_secuencia || 1,
-            nombreSistema: oe.nombre_sistema || undefined,
-            codigoEquipo: oe.equipos?.codigo_equipo || undefined,
-            nombreEquipo: oe.equipos?.nombre_equipo || undefined,
-            estado: oe.estado_equipo || 'PENDIENTE',
-          },
-          evidencias: orden.evidencias_fotograficas
-            ?.filter((ev: any) => ev.id_orden_equipo === oe.id_orden_equipo)
-            .map((ev: any) => ({
-              url: ev.ruta_archivo,
-              caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
-              momento: ev.tipo_evidencia || ev.momento_captura || 'DURANTE',
-              idOrdenEquipo: ev.id_orden_equipo || undefined,
-            })) || [],
-        }));
       }
 
-      // ✅ FIX: Agregar fotos GENERALES huérfanas (sin id_orden_equipo) como pseudo-equipo
-      if (evidenciasPorEquipo) {
-        const fotosGeneralesHuerfanas = (orden.evidencias_fotograficas || [])
-          .filter((ev: any) => !ev.id_orden_equipo && (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia))
+      // Paso 2: Clasificar evidencias
+      const evConEquipo: any[] = [];
+      const evHuerfanasNoGeneral: any[] = [];
+      const evGenerales: any[] = [];
+
+      for (const ev of (orden.evidencias_fotograficas || [])) {
+        if (ev.id_orden_equipo) {
+          evConEquipo.push(ev);
+        } else if (ev.id_actividad_ejecutada && actToEqMap.has(ev.id_actividad_ejecutada)) {
+          const idEqInferido = actToEqMap.get(ev.id_actividad_ejecutada)!;
+          evConEquipo.push({ ...ev, id_orden_equipo: idEqInferido });
+          this.logger.log(`📷 Evidencia ${ev.id_evidencia}: equipo inferido desde actividad ${ev.id_actividad_ejecutada} → ${idEqInferido}`);
+        } else if (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia) {
+          evGenerales.push(ev);
+        } else {
+          evHuerfanasNoGeneral.push(ev);
+        }
+      }
+
+      if (evHuerfanasNoGeneral.length > 0) {
+        this.logger.warn(`⚠️ ${evHuerfanasNoGeneral.length} evidencias sin equipo ni actividad vinculable`);
+      }
+
+      // Paso 3: Agrupar por equipo
+      evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any) => ({
+        equipo: {
+          idOrdenEquipo: oe.id_orden_equipo,
+          ordenSecuencia: oe.orden_secuencia || 1,
+          nombreSistema: oe.nombre_sistema || undefined,
+          codigoEquipo: oe.equipos?.codigo_equipo || undefined,
+          nombreEquipo: oe.equipos?.nombre_equipo || undefined,
+          estado: oe.estado_equipo || 'PENDIENTE',
+        },
+        evidencias: evConEquipo
+          .filter((ev: any) => ev.id_orden_equipo === oe.id_orden_equipo)
           .map((ev: any) => ({
             url: ev.ruta_archivo,
-            caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
-            momento: ev.tipo_evidencia || 'GENERAL',
-          }));
+            caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+            momento: ev.tipo_evidencia || ev.momento_captura || 'DURANTE',
+            idOrdenEquipo: ev.id_orden_equipo || undefined,
+          })),
+      }));
 
-        if (fotosGeneralesHuerfanas.length > 0) {
-          evidenciasPorEquipo.push({
-            equipo: {
-              idOrdenEquipo: 0,
-              ordenSecuencia: 999,
-              nombreSistema: 'FOTOGRAFÍAS GENERALES',
-              codigoEquipo: undefined,
-              nombreEquipo: 'FOTOGRAFÍAS GENERALES',
-              estado: undefined,
-            },
-            evidencias: fotosGeneralesHuerfanas,
-          });
-          this.logger.log(`📷 Fotos generales huérfanas agregadas: ${fotosGeneralesHuerfanas.length}`);
-        }
+      // Paso 4: Agregar fotos GENERALES + huérfanas irresolubles como pseudo-equipo
+      const fotosGenAll = [
+        ...evGenerales,
+        ...evHuerfanasNoGeneral,
+      ].map((ev: any) => ({
+        url: ev.ruta_archivo,
+        caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
+        momento: ev.tipo_evidencia || 'GENERAL',
+      }));
+
+      if (fotosGenAll.length > 0) {
+        evidenciasPorEquipo.push({
+          equipo: {
+            idOrdenEquipo: 0,
+            ordenSecuencia: 999,
+            nombreSistema: 'FOTOGRAFÍAS GENERALES',
+            codigoEquipo: undefined,
+            nombreEquipo: 'FOTOGRAFÍAS GENERALES',
+            estado: undefined,
+          },
+          evidencias: fotosGenAll,
+        });
+        this.logger.log(`📷 Fotos generales/huérfanas agregadas: ${fotosGenAll.length}`);
       }
     }
 
@@ -611,13 +596,13 @@ export class PdfController {
       tipoServicio: orden.tipos_servicio?.nombre_tipo || 'PREVENTIVO_A',
       numeroOrden: orden.numero_orden || `ORD-${id.substring(0, 8)}`,
       datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
-      actividades: orden.actividades_ejecutadas?.map((act: any) => ({
+      actividades: orden.actividades_ejecutadas?.filter((act: any) => !act.excluido_pdf).map((act: any) => ({
         sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
         descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
         resultado: (act.estado as any) || 'NA',
         observaciones: act.observaciones || '',
       })) || [],
-      mediciones: orden.mediciones_servicio?.map((med: any) => ({
+      mediciones: orden.mediciones_servicio?.filter((med: any) => !med.excluido_pdf).map((med: any) => ({
         parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
         valor: Number(med.valor_numerico) || 0,
         unidad: med.parametros_medicion?.unidad_medida || '',
@@ -674,6 +659,21 @@ export class PdfController {
     this.logger.log(`📊 DEBUG PDF - medicionesPorEquipo: ${JSON.stringify(medicionesPorEquipo?.length)} grupos`);
     this.logger.log(`📊 DEBUG PDF - evidenciasPorEquipo: ${JSON.stringify(evidenciasPorEquipo?.length)} grupos`);
     this.logger.log(`📊 DEBUG PDF - actividades totales: ${datosOrden.actividades?.length}`);
+
+    // ✅ DEBUG: Log de URLs de evidencias para diagnóstico de imágenes
+    if (evidenciasPorEquipo && evidenciasPorEquipo.length > 0) {
+      evidenciasPorEquipo.forEach((grupo: any, idx: number) => {
+        this.logger.log(`📷 DEBUG EVIDENCIAS - Grupo ${idx} (${grupo.equipo?.nombreSistema || 'N/A'}): ${grupo.evidencias?.length} fotos`);
+        if (grupo.evidencias?.length > 0) {
+          const primeraUrl = grupo.evidencias[0]?.url;
+          this.logger.log(`📷 DEBUG EVIDENCIAS - URL ejemplo: ${primeraUrl?.substring(0, 80)}...`);
+          // Verificar si es URL Cloudinary válida
+          if (primeraUrl && !primeraUrl.includes('res.cloudinary.com')) {
+            this.logger.warn(`⚠️ DEBUG EVIDENCIAS - URL no parece ser de Cloudinary: ${primeraUrl}`);
+          }
+        }
+      });
+    }
 
     // Determinar tipo de informe si no se especificó
     // ✅ FIX 16-DIC-2025: Prioridad de detección:
@@ -1095,6 +1095,12 @@ export class PdfController {
       if (pdfExistente && pdfExistente.ruta_archivo) {
         this.logger.log(`📄 PDF existente encontrado: ${pdfExistente.ruta_archivo}`);
 
+        // ✅ FIX 29-ABR-2026: Calcular filename canónico desde la orden
+        const ordenContexto = await this.cargarContextoFilename(idNumerico);
+        const filenameCanonico = ordenContexto
+          ? buildInformeFilename(ordenContexto)
+          : `Informe_${id}.pdf`;
+
         // Si se solicita enviar email, descargar el PDF y enviarlo
         if (dto.enviarEmail && dto.emailDestino) {
           try {
@@ -1103,31 +1109,25 @@ export class PdfController {
             if (response.ok) {
               const pdfBuffer = Buffer.from(await response.arrayBuffer());
 
-              // Obtener datos básicos de la orden para el email
-              const ordenBasica = await this.prisma.ordenes_servicio.findUnique({
-                where: { id_orden_servicio: idNumerico },
-                select: { numero_orden: true },
-              });
-
               const resultado = await this.emailService.sendEmail({
                 to: dto.emailDestino,
-                subject: dto.asuntoEmail || `Informe de Mantenimiento - ${ordenBasica?.numero_orden || id}`,
+                subject: dto.asuntoEmail || `Informe de Mantenimiento - ${ordenContexto?.numeroOrden || id}`,
                 html: `<p>Adjunto encontrará el informe de servicio.</p>`,
                 attachments: [{
-                  filename: `Informe_${ordenBasica?.numero_orden || id}.pdf`,
+                  filename: filenameCanonico,
                   content: pdfBuffer,
                   contentType: 'application/pdf',
                 }],
               });
 
-              this.logger.log(`📧 Email enviado usando PDF existente: ${resultado.success}`);
+              this.logger.log(`📧 Email enviado usando PDF existente: ${resultado.success} (${filenameCanonico})`);
 
               return {
                 success: true,
                 message: 'PDF existente enviado por email',
                 pdfUrl: pdfExistente.ruta_archivo,
                 emailEnviado: resultado.success,
-                filename: pdfExistente.numero_documento || `Informe_${id}.pdf`,
+                filename: filenameCanonico,
                 usoPdfExistente: true,
               };
             }
@@ -1142,7 +1142,7 @@ export class PdfController {
             message: 'PDF existente disponible (use forzarRegeneracion=true para regenerar)',
             pdfUrl: pdfExistente.ruta_archivo,
             emailEnviado: false,
-            filename: pdfExistente.numero_documento || `Informe_${id}.pdf`,
+            filename: filenameCanonico,
             usoPdfExistente: true,
           };
         }
@@ -1248,6 +1248,17 @@ export class PdfController {
       throw new NotFoundException(`Orden con ID ${id} no encontrada`);
     }
 
+    // ✅ FIX 06-MAY-2026: Ordenar actividades por orden_secuencia (canónico)
+    // Prisma no permite orderBy en includes anidados, así que ordenamos manualmente
+    if (orden.actividades_ejecutadas) {
+      orden.actividades_ejecutadas.sort((a: any, b: any) => {
+        const seqA = a.orden_secuencia ?? Infinity;
+        const seqB = b.orden_secuencia ?? Infinity;
+        if (seqA !== seqB) return seqA - seqB;
+        return (a.id_actividad_ejecutada ?? 0) - (b.id_actividad_ejecutada ?? 0);
+      });
+    }
+
     // ✅ FIX 15-ENE-2026: Extraer firmas digitales
     const firmaTecnico = orden.firmas_digitales_ordenes_servicio_id_firma_tecnicoTofirmas_digitales;
     const firmaCliente = orden.firmas_digitales; // Relación para id_firma_cliente
@@ -1318,9 +1329,9 @@ export class PdfController {
     if (esMultiEquipo && orden.ordenes_equipos?.length > 0) {
       // Agrupar actividades por equipo
       const actividadesConEquipo = (orden.actividades_ejecutadas || [])
-        .filter((act: any) => act.id_orden_equipo != null);
+        .filter((act: any) => act.id_orden_equipo != null && !act.excluido_pdf);
       const actividadesSinEquipo = (orden.actividades_ejecutadas || [])
-        .filter((act: any) => act.id_orden_equipo == null);
+        .filter((act: any) => act.id_orden_equipo == null && !act.excluido_pdf);
 
       if (actividadesConEquipo.length > 0) {
         actividadesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
@@ -1377,9 +1388,9 @@ export class PdfController {
 
       // Agrupar mediciones por equipo
       const medicionesConEquipo = (orden.mediciones_servicio || [])
-        .filter((med: any) => med.id_orden_equipo != null);
+        .filter((med: any) => med.id_orden_equipo != null && !med.excluido_pdf);
       const medicionesSinEquipo = (orden.mediciones_servicio || [])
-        .filter((med: any) => med.id_orden_equipo == null);
+        .filter((med: any) => med.id_orden_equipo == null && !med.excluido_pdf);
 
       if (medicionesConEquipo.length > 0) {
         medicionesPorEquipo = orden.ordenes_equipos.map((oe: any) => {
@@ -1430,9 +1441,48 @@ export class PdfController {
         }));
       }
 
-      // Agrupar evidencias por equipo
+      // ✅ FIX 30-ABR-2026: Agrupar evidencias por equipo con fallback inteligente
+      // Fotos subidas desde Admin Portal pueden tener id_orden_equipo=NULL pero SÍ
+      // tener id_actividad_ejecutada. Usamos la actividad como puente para inferir
+      // a qué equipo pertenece la foto.
+
+      // Paso 1: Construir mapa actividad→equipo para resolver huérfanas
+      const actividadToEquipoMap = new Map<number, number>();
+      for (const act of (orden.actividades_ejecutadas || [])) {
+        if (act.id_actividad_ejecutada && act.id_orden_equipo) {
+          actividadToEquipoMap.set(act.id_actividad_ejecutada, act.id_orden_equipo);
+        }
+      }
+
+      // Paso 2: Clasificar evidencias
+      const evidenciasConEquipo: any[] = [];
+      const evidenciasHuerfanasNoGeneral: any[] = [];
+      const evidenciasGenerales: any[] = [];
+
+      for (const ev of (orden.evidencias_fotograficas || [])) {
+        if (ev.id_orden_equipo) {
+          // Caso ideal: ya tiene equipo asignado
+          evidenciasConEquipo.push(ev);
+        } else if (ev.id_actividad_ejecutada && actividadToEquipoMap.has(ev.id_actividad_ejecutada)) {
+          // ✅ FIX: Inferir equipo desde la actividad vinculada
+          const idEquipoInferido = actividadToEquipoMap.get(ev.id_actividad_ejecutada)!;
+          evidenciasConEquipo.push({ ...ev, id_orden_equipo: idEquipoInferido });
+          this.logger.log(`📷 Evidencia ${ev.id_evidencia} (${ev.tipo_evidencia}): equipo inferido desde actividad ${ev.id_actividad_ejecutada} → equipo ${idEquipoInferido}`);
+        } else if (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia) {
+          evidenciasGenerales.push(ev);
+        } else {
+          // Huérfana no-general sin actividad que la vincule
+          evidenciasHuerfanasNoGeneral.push(ev);
+        }
+      }
+
+      if (evidenciasHuerfanasNoGeneral.length > 0) {
+        this.logger.warn(`⚠️ ${evidenciasHuerfanasNoGeneral.length} evidencias sin equipo ni actividad vinculable - se agregarán como generales`);
+      }
+
+      // Paso 3: Agrupar por equipo
       evidenciasPorEquipo = orden.ordenes_equipos.map((oe: any) => {
-        const evidenciasEquipo = (orden.evidencias_fotograficas || [])
+        const evidenciasEquipo = evidenciasConEquipo
           .filter((ev: any) => ev.id_orden_equipo === oe.id_orden_equipo)
           .map((ev: any) => ({
             url: ev.ruta_archivo,
@@ -1450,16 +1500,17 @@ export class PdfController {
         };
       });
 
-      // ✅ FIX: Agregar fotos GENERALES huérfanas (sin id_orden_equipo) como pseudo-equipo
-      const fotosGeneralesHuerfanas = (orden.evidencias_fotograficas || [])
-        .filter((ev: any) => !ev.id_orden_equipo && (ev.tipo_evidencia === 'GENERAL' || !ev.tipo_evidencia))
-        .map((ev: any) => ({
-          url: ev.ruta_archivo,
-          caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
-          momento: ev.tipo_evidencia || 'GENERAL',
-        }));
+      // Paso 4: Agregar fotos GENERALES + huérfanas irresolubles como pseudo-equipo
+      const fotosGeneralesAll = [
+        ...evidenciasGenerales,
+        ...evidenciasHuerfanasNoGeneral,
+      ].map((ev: any) => ({
+        url: ev.ruta_archivo,
+        caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
+        momento: ev.tipo_evidencia || 'GENERAL',
+      }));
 
-      if (fotosGeneralesHuerfanas.length > 0 && evidenciasPorEquipo) {
+      if (fotosGeneralesAll.length > 0 && evidenciasPorEquipo) {
         evidenciasPorEquipo.push({
           equipo: {
             idOrdenEquipo: 0,
@@ -1469,9 +1520,9 @@ export class PdfController {
             nombreEquipo: 'FOTOGRAFÍAS GENERALES',
             estado: undefined,
           },
-          evidencias: fotosGeneralesHuerfanas,
+          evidencias: fotosGeneralesAll,
         });
-        this.logger.log(`📷 Fotos generales huérfanas agregadas: ${fotosGeneralesHuerfanas.length}`);
+        this.logger.log(`📷 Fotos generales/huérfanas agregadas: ${fotosGeneralesAll.length}`);
       }
 
       if (actividadesPorEquipo) {
@@ -1509,14 +1560,14 @@ export class PdfController {
       // ✅ FIX 19-ENE-2026: Extraer datosModulo correctamente de las mediciones
       datosModulo: this.extraerDatosModuloReal(orden.mediciones_servicio),
       // Actividades flat (para backward compatibility y single-equipo)
-      actividades: orden.actividades_ejecutadas?.map((act: any) => ({
+      actividades: orden.actividades_ejecutadas?.filter((act: any) => !act.excluido_pdf).map((act: any) => ({
         sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
         descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
         resultado: (act.estado as any) || 'NA',
         observaciones: act.observaciones || '',
       })) || [],
       // Mediciones flat (para backward compatibility y single-equipo)
-      mediciones: orden.mediciones_servicio?.map((med: any) => ({
+      mediciones: orden.mediciones_servicio?.filter((med: any) => !med.excluido_pdf).map((med: any) => ({
         parametro: med.parametros_medicion?.nombre_parametro || med.nombre_parametro_snapshot || 'N/A',
         valor: Number(med.valor_numerico) || 0,
         unidad: med.parametros_medicion?.unidad_medida || med.unidad_medida_snapshot || '',
@@ -1629,11 +1680,20 @@ export class PdfController {
     let urlPdf: string | undefined;
     if (dto.guardarEnR2 !== false) {
       try {
-        // Subir a R2
+        // ✅ FIX 29-ABR-2026: Subir con Content-Disposition canónico
         const timestamp = Date.now();
         const r2Filename = `${orden.numero_orden}/informe_${timestamp}.pdf`;
-        urlPdf = await this.r2Service.uploadPDF(resultado.buffer, r2Filename);
-        this.logger.log(`📎 PDF subido a R2: ${urlPdf}`);
+        const downloadFilename = buildInformeFilename({
+          fechaServicio: orden.fecha_fin_real || orden.fecha_inicio_real || orden.fecha_programada,
+          codigoTipoServicio: orden.tipos_servicio?.codigo_tipo,
+          nombreTipoServicio: orden.tipos_servicio?.nombre_tipo,
+          codigoTipoEquipo: orden.equipos?.tipos_equipo?.codigo_tipo,
+          nombreTipoEquipo: orden.equipos?.tipos_equipo?.nombre_tipo,
+          nombreCliente: clienteNombre,
+          numeroOrden: orden.numero_orden,
+        });
+        urlPdf = await this.r2Service.uploadPDF(resultado.buffer, r2Filename, { downloadFilename });
+        this.logger.log(`📎 PDF subido a R2: ${urlPdf} (download: ${downloadFilename})`);
 
         // ✅ FIX 24-ENE-2026: Buscar documento existente y ACTUALIZAR en lugar de crear nuevo
         const hash = createHash('sha256').update(resultado.buffer).digest('hex');
@@ -2208,5 +2268,71 @@ export class PdfController {
     // Solo retornar si hay al menos un dato
     const tieneDatos = Object.values(datosModulo).some(v => v !== undefined);
     return tieneDatos ? datosModulo : undefined;
+  }
+
+  /**
+   * ✅ FIX 29-ABR-2026
+   * Carga el contexto mínimo necesario para construir el filename canónico
+   * (`INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - YYYY.pdf`).
+   *
+   * Se usa cuando el endpoint de regeneración detecta un PDF existente y
+   * necesita renombrarlo correctamente sin volver a cargar todo el detalle.
+   */
+  private async cargarContextoFilename(idOrden: number): Promise<{
+    fechaServicio: Date | null;
+    codigoTipoServicio?: string | null;
+    nombreTipoServicio?: string | null;
+    codigoTipoEquipo?: string | null;
+    nombreTipoEquipo?: string | null;
+    nombreCliente?: string | null;
+    numeroOrden?: string | null;
+  } | null> {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: idOrden },
+      select: {
+        numero_orden: true,
+        fecha_fin_real: true,
+        fecha_inicio_real: true,
+        fecha_programada: true,
+        tipos_servicio: { select: { codigo_tipo: true, nombre_tipo: true } },
+        equipos: { select: { tipos_equipo: { select: { codigo_tipo: true, nombre_tipo: true } } } },
+        clientes: {
+          select: {
+            nombre_sede: true,
+            persona: {
+              select: {
+                nombre_comercial: true,
+                razon_social: true,
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!orden) return null;
+
+    const persona = orden.clientes?.persona;
+    const nombreBase = persona?.nombre_comercial
+      || persona?.razon_social
+      || persona?.nombre_completo
+      || [persona?.primer_nombre, persona?.primer_apellido].filter(Boolean).join(' ')
+      || 'CLIENTE';
+    const nombreCliente = orden.clientes?.nombre_sede
+      ? `${nombreBase} - ${orden.clientes.nombre_sede}`
+      : nombreBase;
+
+    return {
+      fechaServicio: orden.fecha_fin_real || orden.fecha_inicio_real || orden.fecha_programada,
+      codigoTipoServicio: orden.tipos_servicio?.codigo_tipo,
+      nombreTipoServicio: orden.tipos_servicio?.nombre_tipo,
+      codigoTipoEquipo: orden.equipos?.tipos_equipo?.codigo_tipo,
+      nombreTipoEquipo: orden.equipos?.tipos_equipo?.nombre_tipo,
+      nombreCliente,
+      numeroOrden: orden.numero_orden,
+    };
   }
 }

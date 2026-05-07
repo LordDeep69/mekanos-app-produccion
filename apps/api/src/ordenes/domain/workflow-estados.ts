@@ -11,12 +11,12 @@ import { BadRequestException } from '@nestjs/common';
  * - ASIGNADA: Técnico asignado, pendiente ejecución
  * - EN_PROCESO: Técnico ejecutando en campo
  * - COMPLETADA: Trabajo finalizado, pendiente aprobación
- * - APROBADA: Supervisor aprobó (ESTADO FINAL)
+ * - APROBADA: Orden aprobada/creada, pendiente de asignación
  * - CANCELADA: Orden cancelada (ESTADO FINAL)
  * - EN_ESPERA_REPUESTO: Bloqueada esperando componentes
  * 
  * FLUJO TÍPICO:
- * PROGRAMADA → ASIGNADA → EN_PROCESO → COMPLETADA → APROBADA
+ * APROBADA → PROGRAMADA → ASIGNADA → EN_PROCESO → COMPLETADA
  * 
  * FLUJOS ALTERNATIVOS:
  * - Cancelación: CUALQUIER_ESTADO → CANCELADA
@@ -63,8 +63,14 @@ export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
     'CANCELADA',   // Cancelar (caso excepcional)
   ],
 
-  // Estados finales: sin transiciones salida
-  APROBADA: [],
+  // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial (orden recién creada/aprobada)
+  APROBADA: [
+    'PROGRAMADA',  // Programar la orden aprobada
+    'ASIGNADA',    // Asignar técnico directamente
+    'CANCELADA',   // Cancelar orden aprobada
+  ],
+
+  // Estado final: sin transiciones salida
   CANCELADA: [],
 };
 
@@ -145,13 +151,13 @@ export function validarCamposRequeridos(
   orden: any,
 ): void {
   const validacion = VALIDACIONES_POR_ESTADO[nuevoEstado];
-  
+
   if (!validacion) {
     return; // Estado sin validaciones especiales
   }
 
   const camposFaltantes: string[] = [];
-  
+
   for (const campo of validacion.campos_requeridos) {
     if (!orden[campo]) {
       camposFaltantes.push(campo);
@@ -171,10 +177,10 @@ export function validarCamposRequeridos(
  * Obtener flujo completo de estados (para visualización UI)
  * @returns Array de pasos del flujo típico
  */
-export function obtenerFlujoTipico(): { 
-  paso: number; 
-  codigo: string; 
-  nombre: string; 
+export function obtenerFlujoTipico(): {
+  paso: number;
+  codigo: string;
+  nombre: string;
   descripcion: string;
 }[] {
   return [
@@ -206,7 +212,7 @@ export function obtenerFlujoTipico(): {
       paso: 5,
       codigo: 'APROBADA',
       nombre: 'Aprobada',
-      descripcion: 'Supervisor/Admin aprobó el trabajo. Estado final.',
+      descripcion: 'Orden aprobada/creada, pendiente de programación o asignación.',
     },
   ];
 }
@@ -226,7 +232,7 @@ export function esEstadoFinal(codigo_estado: string): boolean {
  * @returns Array de códigos de estados finales
  */
 export function obtenerEstadosFinales(): string[] {
-  return Object.keys(ALLOWED_TRANSITIONS).filter(estado => 
+  return Object.keys(ALLOWED_TRANSITIONS).filter(estado =>
     ALLOWED_TRANSITIONS[estado].length === 0
   );
 }

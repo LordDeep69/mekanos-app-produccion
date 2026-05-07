@@ -12,20 +12,20 @@
 
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, formatDateSafe } from '@/lib/utils';
 import {
-    AlertCircle,
-    ChevronLeft, ChevronRight,
-    Edit2,
-    Eye,
-    Key,
-    Loader2,
-    Mail,
-    MoreVertical,
-    RefreshCw,
-    Search,
-    Trash2,
-    User
+  AlertCircle,
+  ChevronLeft, ChevronRight,
+  Edit2,
+  Eye,
+  Key,
+  Loader2,
+  Mail,
+  MoreVertical,
+  RefreshCw,
+  Search,
+  Trash2,
+  User
 } from 'lucide-react';
 import { useState } from 'react';
 import { useActualizarEstadoUsuario, useUsuarios } from '../lib/usuarios.service';
@@ -42,7 +42,7 @@ function Avatar({ nombre, size = 'md' }: { nombre: string; size?: 'sm' | 'md' | 
     .map(n => n[0])
     .join('')
     .toUpperCase();
-  
+
   const sizes = {
     sm: 'w-8 h-8 text-xs',
     md: 'w-10 h-10 text-sm',
@@ -51,7 +51,7 @@ function Avatar({ nombre, size = 'md' }: { nombre: string; size?: 'sm' | 'md' | 
 
   // Color basado en el nombre
   const colors = [
-    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500',
     'bg-pink-500', 'bg-orange-500', 'bg-teal-500'
   ];
   const colorIndex = nombre.charCodeAt(0) % colors.length;
@@ -69,7 +69,7 @@ function Avatar({ nombre, size = 'md' }: { nombre: string; size?: 'sm' | 'md' | 
 
 function RolBadge({ nombre, color }: { nombre: string; color?: string }) {
   return (
-    <span 
+    <span
       className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
       style={{ backgroundColor: color || '#6B7280' }}
     >
@@ -78,17 +78,17 @@ function RolBadge({ nombre, color }: { nombre: string; color?: string }) {
   );
 }
 
-function EstadoSwitch({ 
-  estado, 
-  onChange, 
-  loading 
-}: { 
-  estado: string | null; 
+function EstadoSwitch({
+  estado,
+  onChange,
+  loading
+}: {
+  estado: string | null;
   onChange: (nuevoEstado: string) => void;
   loading?: boolean;
 }) {
   const isActivo = estado === 'ACTIVO';
-  
+
   return (
     <button
       onClick={() => onChange(isActivo ? 'INACTIVO' : 'ACTIVO')}
@@ -173,7 +173,7 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
-        
+
         <div className="flex gap-2">
           <select
             value={estadoFiltro}
@@ -189,7 +189,7 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
             <option value="SUSPENDIDO">Suspendido</option>
             <option value="BLOQUEADO">Bloqueado</option>
           </select>
-          
+
           <button
             onClick={() => refetch()}
             className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -212,7 +212,7 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
         <div className="flex flex-col items-center justify-center py-12 text-red-500">
           <AlertCircle className="h-8 w-8 mb-2" />
           <p className="font-medium">Error al cargar usuarios</p>
-          <button 
+          <button
             onClick={() => refetch()}
             className="mt-2 text-sm text-blue-600 hover:underline"
           >
@@ -275,20 +275,20 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
                           </div>
                         </div>
                       </td>
-                      
+
                       {/* Identificación */}
                       <td className="px-4 py-4 text-sm text-gray-600">
                         <span className="font-mono">
                           {usuario.persona.tipo_identificacion} {usuario.persona.numero_identificacion}
                         </span>
                       </td>
-                      
+
                       {/* Roles */}
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-1">
                           {usuario.roles.map((rol) => (
-                            <RolBadge 
-                              key={rol.id_rol} 
+                            <RolBadge
+                              key={rol.id_rol}
                               nombre={rol.nombre_rol}
                             />
                           ))}
@@ -297,7 +297,7 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
                           )}
                         </div>
                       </td>
-                      
+
                       {/* Estado */}
                       <td className="px-4 py-4">
                         <EstadoSwitch
@@ -306,21 +306,21 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
                           loading={actualizandoEstado === usuario.id_usuario}
                         />
                       </td>
-                      
+
                       {/* Última sesión */}
                       <td className="px-4 py-4 text-sm text-gray-500">
-                        {usuario.ultima_sesion 
-                          ? new Date(usuario.ultima_sesion).toLocaleDateString('es-CO', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
+                        {usuario.ultima_sesion
+                          ? formatDateSafe(usuario.ultima_sesion, {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
                           : <span className="text-gray-400">Nunca</span>
                         }
                       </td>
-                      
+
                       {/* Acciones */}
                       <td className="px-4 py-4 text-right relative">
                         <button
@@ -329,12 +329,12 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
                         >
                           <MoreVertical className="h-5 w-5 text-gray-500" />
                         </button>
-                        
+
                         {menuAbierto === usuario.id_usuario && (
                           <>
-                            <div 
-                              className="fixed inset-0 z-10" 
-                              onClick={() => setMenuAbierto(null)} 
+                            <div
+                              className="fixed inset-0 z-10"
+                              onClick={() => setMenuAbierto(null)}
                             />
                             <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border z-20">
                               <div className="py-1">
@@ -395,15 +395,15 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
                 {Math.min(pagination.page * pagination.limit, pagination.total)} de{' '}
                 {pagination.total} usuarios
               </p>
-              
+
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage(page - 1)}
                   disabled={page === 1}
                   className={cn(
                     'flex items-center gap-1 px-3 py-1 rounded border',
-                    page === 1 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                    page === 1
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'bg-white text-gray-700 hover:bg-gray-50'
                   )}
                 >
@@ -415,8 +415,8 @@ export function UsuariosTable({ onView, onEdit, onResetPassword }: UsuariosTable
                   disabled={page >= pagination.totalPages}
                   className={cn(
                     'flex items-center gap-1 px-3 py-1 rounded border',
-                    page >= pagination.totalPages 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                    page >= pagination.totalPages
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'bg-white text-gray-700 hover:bg-gray-50'
                   )}
                 >

@@ -31,6 +31,7 @@ import {
     useServiciosSemana,
     useServiciosVencidos,
 } from '@/features/agenda';
+import { formatDateSafe } from '@/lib/utils';
 import type { AgendaView, NivelUrgencia, ServicioProgramado } from '@/types/agenda';
 import {
     AlertTriangle,
@@ -258,8 +259,7 @@ function ServiciosTable({ servicios, isLoading }: { servicios?: ServicioPrograma
     }
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('es-CO', {
+        return formatDateSafe(dateStr, {
             weekday: 'short',
             day: 'numeric',
             month: 'short',

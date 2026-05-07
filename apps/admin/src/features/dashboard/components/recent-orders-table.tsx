@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatDateSafe } from '@/lib/utils';
 import { ChevronRight, ClipboardList } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { OrdenRecienteUI } from '../api/dashboard.service';
@@ -33,17 +34,7 @@ function getEstadoStyle(estadoCodigo: string) {
 }
 
 function formatDate(dateString: string): string {
-  if (!dateString) return 'Sin fecha';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-CO', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return dateString;
-  }
+  return formatDateSafe(dateString);
 }
 
 export function RecentOrdersTable() {
@@ -134,7 +125,7 @@ export function RecentOrdersTable() {
             <tbody className="divide-y divide-gray-200">
               {ordenes.map((orden) => {
                 const style = getEstadoStyle(orden.estadoCodigo);
-                
+
                 return (
                   <tr
                     key={orden.id}

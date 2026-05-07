@@ -37,6 +37,7 @@ import { createHash } from 'crypto';
 import { ConfigParametrosService } from '../../config-parametros/config-parametros.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService, OrdenEmailData } from '../../email/email.service';
+import { buildInformeFilename } from '../../pdf/pdf-naming.helper';
 import { PdfService, TipoInforme } from '../../pdf/pdf.service';
 import { CloudinaryService } from '../../storage/cloudinary.service';
 import { R2StorageService } from '../../storage/r2-storage.service';
@@ -623,10 +624,14 @@ export class FinalizacionOrdenService {
                 emitProgress('subiendo_pdf', 'in_progress', 'Subiendo PDF y enviando email en paralelo...', 74);
                 this.logger.log('⚡ [PERF] Pasos 5+7: Subiendo PDF a R2 + Enviando email EN PARALELO...');
 
+                // ✅ FIX 29-ABR-2026: Calcular nombre de descarga canónico una sola vez
+                //    para mantener consistencia entre R2 (Content-Disposition) y email (filename adjunto).
+                const downloadFilename = this.calcularDownloadFilename(orden);
+
                 const startParallel = Date.now();
                 const [r2Res, emailRes] = await Promise.all([
-                    this.subirPDFaR2(pdfResult.buffer, orden.numero_orden),
-                    this.enviarEmailInforme(orden, pdfResult, dto.emailAdicional),
+                    this.subirPDFaR2(pdfResult.buffer, orden.numero_orden, downloadFilename),
+                    this.enviarEmailInforme(orden, pdfResult, dto.emailAdicional, downloadFilename),
                 ]);
                 r2Result = r2Res;
                 emailResult = emailRes;
@@ -1613,23 +1618,62 @@ export class FinalizacionOrdenService {
     /**
      * Sube el PDF a Cloudflare R2
      * Guarda URL base en BD (la URL requiere autenticación pero el PDF se envía por email)
+     *
+     * ✅ FIX 29-ABR-2026: Recibe `downloadFilename` (nombre canónico) que se persiste
+     *     como Content-Disposition en R2 para que al descargar el PDF el navegador
+     *     sugiera el nombre legible (`INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - YYYY.pdf`).
      */
     private async subirPDFaR2(
         buffer: Buffer,
         numeroOrden: string,
+        downloadFilename?: string,
     ): Promise<{ url: string; key: string }> {
         const timestamp = Date.now();
         const filename = `${numeroOrden}/informe_${timestamp}.pdf`;
 
-        // Subir el archivo y obtener URL base
-        const url = await this.r2Service.uploadPDF(buffer, filename);
+        const url = await this.r2Service.uploadPDF(buffer, filename, { downloadFilename });
 
-        this.logger.log(`📎 PDF subido a R2: ${filename}`);
+        this.logger.log(`📎 PDF subido a R2: ${filename}${downloadFilename ? ` (download: ${downloadFilename})` : ''}`);
 
         return {
             url,
             key: `ordenes/pdfs/${filename}`,
         };
+    }
+
+    /**
+     * Calcula el nombre canónico de descarga del informe a partir de la orden.
+     * Centraliza la lógica para que R2 (Content-Disposition) y el email adjunto
+     * usen exactamente el mismo nombre.
+     */
+    private calcularDownloadFilename(orden: any): string {
+        const cliente = orden.clientes;
+        const persona = cliente?.persona;
+        const tipoServicio = orden.tipos_servicio;
+        const equipo = orden.equipos;
+        const tipoEquipo = equipo?.tipos_equipo;
+
+        // Preferir fecha real de fin → fecha real de inicio → programada → ahora
+        const fechaServicio = orden.fecha_fin_real
+            || orden.fecha_inicio_real
+            || orden.fecha_programada
+            || new Date();
+
+        const nombreCliente = persona?.nombre_comercial
+            || persona?.razon_social
+            || persona?.nombre_completo
+            || (persona ? [persona.primer_nombre, persona.primer_apellido].filter(Boolean).join(' ') : null)
+            || 'CLIENTE';
+
+        return buildInformeFilename({
+            fechaServicio,
+            codigoTipoServicio: tipoServicio?.codigo_tipo,
+            nombreTipoServicio: tipoServicio?.nombre_tipo,
+            codigoTipoEquipo: tipoEquipo?.codigo_tipo,
+            nombreTipoEquipo: tipoEquipo?.nombre_tipo,
+            nombreCliente,
+            numeroOrden: orden.numero_orden,
+        });
     }
 
     /**
@@ -1673,6 +1717,7 @@ export class FinalizacionOrdenService {
         orden: any,
         pdfResult: any,
         emailAdicional?: string,
+        downloadFilename?: string,
     ): Promise<{ enviado: boolean; destinatario: string; messageId?: string }> {
         const EMAIL_FALLBACK = 'notificaciones@mekanos.com';
 
@@ -1747,11 +1792,14 @@ export class FinalizacionOrdenService {
                 || null;
 
             // ✅ 24-FEB-2026: Enviar a TODOS los destinatarios
+            // ✅ FIX 29-ABR-2026: Pasar filename canónico para que el adjunto del email
+            //    use el mismo nombre legible que la descarga desde R2/Portal.
             const result = await this.emailService.sendInformeTecnicoEmail(
                 emailData,
                 destinatarios,
                 pdfResult.buffer,
                 idCuentaEmailCliente,
+                downloadFilename,
             );
 
             return {

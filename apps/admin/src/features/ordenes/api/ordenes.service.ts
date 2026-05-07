@@ -361,6 +361,8 @@ export interface UpdateMedicionDto {
     valorNumerico?: number;
     valorTexto?: string;
     observaciones?: string;
+    // FIX 04-MAY-2026: Excluir/incluir medición del PDF
+    excluidoPdf?: boolean;
 }
 
 export interface MedicionResponse {
@@ -374,6 +376,7 @@ export interface MedicionResponse {
     nivelAlerta?: string;
     mensajeAlerta?: string;
     observaciones?: string;
+    excluidoPdf?: boolean;
     parametrosMedicion?: {
         nombreParametro?: string;
         codigoParametro?: string;

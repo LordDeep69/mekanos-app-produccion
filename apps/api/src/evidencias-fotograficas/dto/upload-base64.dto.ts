@@ -27,6 +27,12 @@ export class UploadBase64Dto {
     @IsInt()
     idActividadEjecutada?: number;
 
+    // ✅ FIX 30-ABR-2026: Soporte multi-equipo — vincular evidencia al equipo correcto
+    @ApiPropertyOptional({ description: 'ID orden_equipo (FK) para órdenes multi-equipo', example: 456 })
+    @IsOptional()
+    @IsInt()
+    idOrdenEquipo?: number;
+
     @ApiProperty({
         enum: TipoEvidenciaEnum,
         description: 'Tipo evidencia (ANTES, DURANTE, DESPUES, etc.)',

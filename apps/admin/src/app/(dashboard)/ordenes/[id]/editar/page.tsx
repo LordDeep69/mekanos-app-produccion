@@ -176,7 +176,8 @@ export default function EditarOrdenPage() {
 
     // Verificar si se puede editar
     const estadoActual = orden.estados_orden?.codigo_estado;
-    const esEstadoFinal = ['APROBADA', 'CANCELADA'].includes(estadoActual || '');
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
+    const esEstadoFinal = ['CANCELADA'].includes(estadoActual || '');
 
     if (esEstadoFinal) {
         return (

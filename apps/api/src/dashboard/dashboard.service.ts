@@ -156,8 +156,9 @@ export class DashboardService {
     });
 
     // IDs de estados no finales para contar pendientes
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial (orden recién creada)
     const estadosPendientes = Array.from(estadosCache!.ordenes.entries())
-      .filter(([_, nombre]) => !['COMPLETADA', 'APROBADA', 'CANCELADA'].includes(nombre))
+      .filter(([_, nombre]) => !['COMPLETADA', 'CANCELADA'].includes(nombre))
       .map(([id]) => id);
 
     const pendientes = ordenesCount
@@ -282,7 +283,8 @@ export class DashboardService {
 
     // Órdenes pendientes (no completadas ni canceladas)
     const estadosPendientes = await this.prisma.estados_orden.findMany({
-      where: { nombre_estado: { notIn: ['COMPLETADA', 'APROBADA', 'CANCELADA'] } },
+      // ✅ FIX 09-ABR-2026: APROBADA NO es estado final
+      where: { nombre_estado: { notIn: ['COMPLETADA', 'CANCELADA'] } },
       select: { id_estado: true },
     });
     const idsPendientes = estadosPendientes.map(e => e.id_estado);

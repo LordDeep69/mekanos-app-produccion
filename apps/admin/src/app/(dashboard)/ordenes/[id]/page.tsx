@@ -81,7 +81,7 @@ import {
 import { getSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -380,6 +380,152 @@ function TabGeneral({ orden }: { orden: Orden }) {
     );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MULTI-EQUIPO: Helper para agrupar actividades/mediciones por equipo
+// Misma estrategia dual que pdf.controller.ts (ideal FK + fallback por índice)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface EquipoGroup {
+    idOrdenEquipo: number;
+    ordenSecuencia: number;
+    codigoEquipo: string;
+    nombreEquipo: string;
+    nombreSistema?: string;
+}
+
+interface ActividadesPorEquipo {
+    equipo: EquipoGroup;
+    actividades: any[];
+}
+
+interface MedicionesPorEquipo {
+    equipo: EquipoGroup;
+    mediciones: any[];
+}
+
+function agruparActividadesPorEquipo(
+    actividades: any[],
+    equipos: NonNullable<Orden['ordenes_equipos']>,
+): ActividadesPorEquipo[] {
+    const conEquipo = actividades.filter((a: any) => a.id_orden_equipo != null);
+    const sinEquipo = actividades.filter((a: any) => a.id_orden_equipo == null);
+
+    const mapEquipos = equipos.map((oe): EquipoGroup => ({
+        idOrdenEquipo: oe.id_orden_equipo,
+        ordenSecuencia: oe.orden_secuencia || 1,
+        codigoEquipo: oe.equipo?.codigo_equipo || 'N/A',
+        nombreEquipo: oe.equipo?.nombre_equipo || 'Equipo',
+        nombreSistema: oe.nombre_sistema,
+    }));
+
+    if (conEquipo.length > 0) {
+        // CASO IDEAL: actividades tienen id_orden_equipo asignado
+        return mapEquipos.map((eq) => ({
+            equipo: eq,
+            actividades: conEquipo.filter((a: any) => a.id_orden_equipo === eq.idOrdenEquipo),
+        }));
+    }
+
+    if (sinEquipo.length > 0) {
+        // FALLBACK: distribuir por descripción (mismo algoritmo que PDF service)
+        const actividadesUnicas = new Map<string, any[]>();
+        for (const act of sinEquipo) {
+            const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || 'N/A';
+            if (!actividadesUnicas.has(key)) actividadesUnicas.set(key, []);
+            actividadesUnicas.get(key)!.push(act);
+        }
+
+        return mapEquipos.map((eq, equipoIndex) => ({
+            equipo: eq,
+            actividades: Array.from(actividadesUnicas.entries()).map(([, acts]) => {
+                return acts[equipoIndex] || acts[0];
+            }),
+        }));
+    }
+
+    return mapEquipos.map((eq) => ({ equipo: eq, actividades: [] }));
+}
+
+function agruparMedicionesPorEquipo(
+    mediciones: any[],
+    equipos: NonNullable<Orden['ordenes_equipos']>,
+): MedicionesPorEquipo[] {
+    const conEquipo = mediciones.filter((m: any) => m.id_orden_equipo != null);
+    const sinEquipo = mediciones.filter((m: any) => m.id_orden_equipo == null);
+
+    const mapEquipos = equipos.map((oe): EquipoGroup => ({
+        idOrdenEquipo: oe.id_orden_equipo,
+        ordenSecuencia: oe.orden_secuencia || 1,
+        codigoEquipo: oe.equipo?.codigo_equipo || 'N/A',
+        nombreEquipo: oe.equipo?.nombre_equipo || 'Equipo',
+        nombreSistema: oe.nombre_sistema,
+    }));
+
+    if (conEquipo.length > 0) {
+        // CASO IDEAL: mediciones tienen id_orden_equipo asignado
+        return mapEquipos.map((eq) => ({
+            equipo: eq,
+            mediciones: conEquipo.filter((m: any) => m.id_orden_equipo === eq.idOrdenEquipo),
+        }));
+    }
+
+    if (sinEquipo.length > 0) {
+        // FALLBACK: distribuir por nombre de parámetro (mismo algoritmo que PDF service)
+        const medicionesUnicas = new Map<string, any[]>();
+        for (const med of sinEquipo) {
+            const key = med.parametros_medicion?.nombre_parametro || 'N/A';
+            if (!medicionesUnicas.has(key)) medicionesUnicas.set(key, []);
+            medicionesUnicas.get(key)!.push(med);
+        }
+
+        return mapEquipos.map((eq, equipoIndex) => ({
+            equipo: eq,
+            mediciones: Array.from(medicionesUnicas.entries()).map(([, meds]) => {
+                return meds[equipoIndex] || meds[0];
+            }),
+        }));
+    }
+
+    return mapEquipos.map((eq) => ({ equipo: eq, mediciones: [] }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MULTI-EQUIPO: Subcomponente header de equipo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const EQUIPO_COLORS = [
+    { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-600', light: 'bg-blue-100' },
+    { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-600', light: 'bg-emerald-100' },
+    { bg: 'bg-violet-50', border: 'border-violet-200', text: 'text-violet-700', badge: 'bg-violet-600', light: 'bg-violet-100' },
+    { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-600', light: 'bg-amber-100' },
+    { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', badge: 'bg-rose-600', light: 'bg-rose-100' },
+    { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-700', badge: 'bg-cyan-600', light: 'bg-cyan-100' },
+    { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', badge: 'bg-orange-600', light: 'bg-orange-100' },
+    { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', badge: 'bg-indigo-600', light: 'bg-indigo-100' },
+];
+
+function EquipoHeader({ equipo, index, count }: { equipo: EquipoGroup; index: number; count: number }) {
+    const color = EQUIPO_COLORS[index % EQUIPO_COLORS.length];
+    const label = equipo.nombreSistema || equipo.nombreEquipo || `Equipo ${equipo.ordenSecuencia}`;
+
+    return (
+        <div className={`flex items-center gap-3 p-3 rounded-lg ${color.bg} border ${color.border}`}>
+            <div className={`flex-shrink-0 w-8 h-8 rounded-lg ${color.badge} text-white flex items-center justify-center font-bold text-sm shadow-sm`}>
+                {equipo.ordenSecuencia}
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className={`font-bold text-sm ${color.text} truncate`}>{label}</p>
+                <p className="text-[10px] text-gray-500 font-mono">{equipo.codigoEquipo}</p>
+            </div>
+            <span className={`text-[10px] font-bold ${color.text} uppercase tracking-wider`}>
+                EQ{equipo.ordenSecuencia}/{count}
+            </span>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function TabEjecucion({ orden }: { orden: Orden }) {
     const [subTab, setSubTab] = useState<'checklist' | 'mediciones'>('checklist');
     const { data: actividadesData, isLoading: isLoadingAct } = useActividadesOrden(orden.id_orden_servicio);
@@ -391,13 +537,43 @@ function TabEjecucion({ orden }: { orden: Orden }) {
     const mediciones = medicionesData?.data || [];
     const parametrosSinMedir = (medicionesData as any)?.parametros_sin_medir || [];
 
-    const actividadesCompletadas = actividades.filter((a: any) => a.ejecutada).length;
-    const porcentajeProgreso = actividades.length > 0
-        ? Math.round((actividadesCompletadas / actividades.length) * 100)
+    // ✅ MULTI-EQUIPO: Detectar y agrupar
+    const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
+    const equipos = orden.ordenes_equipos || [];
+    const [equipoFiltro, setEquipoFiltro] = useState<number | 'todos'>('todos');
+
+    const actividadesPorEquipo = useMemo(() => {
+        if (!esMultiEquipo || equipos.length === 0) return null;
+        return agruparActividadesPorEquipo(actividades, equipos);
+    }, [actividades, equipos, esMultiEquipo]);
+
+    const medicionesPorEquipo = useMemo(() => {
+        if (!esMultiEquipo || equipos.length === 0) return null;
+        return agruparMedicionesPorEquipo(mediciones, equipos);
+    }, [mediciones, equipos, esMultiEquipo]);
+
+    // Actividades/mediciones filtradas según equipo seleccionado
+    const actividadesFiltradas = useMemo(() => {
+        if (!esMultiEquipo || !actividadesPorEquipo) return actividades;
+        if (equipoFiltro === 'todos') return actividades;
+        const grupo = actividadesPorEquipo.find((g: ActividadesPorEquipo) => g.equipo.idOrdenEquipo === equipoFiltro);
+        return grupo?.actividades || [];
+    }, [actividades, actividadesPorEquipo, equipoFiltro, esMultiEquipo]);
+
+    const medicionesFiltradas = useMemo(() => {
+        if (!esMultiEquipo || !medicionesPorEquipo) return mediciones;
+        if (equipoFiltro === 'todos') return mediciones;
+        const grupo = medicionesPorEquipo.find((g: MedicionesPorEquipo) => g.equipo.idOrdenEquipo === equipoFiltro);
+        return grupo?.mediciones || [];
+    }, [mediciones, medicionesPorEquipo, equipoFiltro, esMultiEquipo]);
+
+    const actividadesCompletadas = actividadesFiltradas.filter((a: any) => a.ejecutada).length;
+    const porcentajeProgreso = actividadesFiltradas.length > 0
+        ? Math.round((actividadesCompletadas / actividadesFiltradas.length) * 100)
         : 0;
 
     // Contadores para mediciones
-    const medicionesCritico = mediciones.filter((m: any) => m.fuera_de_rango || m.nivel_alerta === 'CRITICO').length;
+    const medicionesCritico = medicionesFiltradas.filter((m: any) => m.fuera_de_rango || m.nivel_alerta === 'CRITICO').length;
 
     // ✅ 24-FEB-2026: Estado para crear nueva medición desde parámetro sin medir
     const [creandoParam, setCreandoParam] = useState<number | null>(null);
@@ -423,17 +599,112 @@ function TabEjecucion({ orden }: { orden: Orden }) {
         }
     };
 
+    // Helper para renderizar el contenido de checklist de un grupo de actividades
+    const renderChecklistContent = (acts: any[]) => (
+        <div className="space-y-2">
+            {acts.map((act: any) => (
+                <ActividadCardAdvanced
+                    key={act.id_actividad_ejecutada}
+                    actividad={act}
+                    idOrdenServicio={orden.id_orden_servicio}
+                />
+            ))}
+        </div>
+    );
+
+    // Helper para renderizar mediciones de un grupo
+    const renderMedicionesContent = (meds: any[]) => (
+        <div className="space-y-2">
+            {meds.map((med: any) => (
+                <MedicionCardAdvanced
+                    key={med.id_medicion}
+                    medicion={med}
+                    idOrdenServicio={orden.id_orden_servicio}
+                />
+            ))}
+        </div>
+    );
+
     return (
         <div className="space-y-4">
+            {/* ✅ MULTI-EQUIPO: Banner indicador */}
+            {esMultiEquipo && (
+                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 p-4 shadow-sm">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="flex-shrink-0 w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
+                            <Wrench className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-indigo-900 text-sm">Orden Multi-Equipos ({equipos.length} equipos)</h4>
+                            <p className="text-[10px] text-indigo-600">Filtre por equipo para ver checklist y mediciones individuales</p>
+                        </div>
+                    </div>
+                    {/* Selector de equipos */}
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            onClick={() => setEquipoFiltro('todos')}
+                            className={cn(
+                                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border',
+                                equipoFiltro === 'todos'
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                    : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+                            )}
+                        >
+                            Todos
+                        </button>
+                        {equipos.map((oe, idx) => {
+                            const color = EQUIPO_COLORS[idx % EQUIPO_COLORS.length];
+                            const isActive = equipoFiltro === oe.id_orden_equipo;
+                            const label = oe.nombre_sistema || oe.equipo?.nombre_equipo || `Equipo ${oe.orden_secuencia}`;
+                            // Calcular conteo de actividades para este equipo
+                            const actGroup = actividadesPorEquipo?.find((g: ActividadesPorEquipo) => g.equipo.idOrdenEquipo === oe.id_orden_equipo);
+                            const actCount = actGroup?.actividades.length || 0;
+                            const actDone = actGroup?.actividades.filter((a: any) => a.ejecutada).length || 0;
+
+                            return (
+                                <button
+                                    key={oe.id_orden_equipo}
+                                    onClick={() => setEquipoFiltro(oe.id_orden_equipo)}
+                                    className={cn(
+                                        'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5',
+                                        isActive
+                                            ? `${color.badge} text-white border-transparent shadow-sm`
+                                            : `bg-white ${color.text} ${color.border} hover:${color.bg}`
+                                    )}
+                                >
+                                    <span className={cn(
+                                        'w-5 h-5 rounded flex items-center justify-center text-[10px] font-black',
+                                        isActive ? 'bg-white/20' : color.light
+                                    )}>
+                                        {oe.orden_secuencia}
+                                    </span>
+                                    <span className="truncate max-w-[120px]">{label}</span>
+                                    <span className={cn(
+                                        'text-[9px] px-1 py-0.5 rounded-full',
+                                        isActive ? 'bg-white/20' : 'bg-gray-100 text-gray-500'
+                                    )}>
+                                        {actDone}/{actCount}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Progreso General */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                     <div>
                         <h4 className="font-bold text-gray-900">Progreso de Ejecución</h4>
-                        <p className="text-xs text-gray-500">Avance basado en checklist técnico</p>
+                        <p className="text-xs text-gray-500">
+                            {esMultiEquipo && equipoFiltro !== 'todos'
+                                ? `Equipo: ${equipos.find(e => e.id_orden_equipo === equipoFiltro)?.equipo?.codigo_equipo || ''}`
+                                : 'Avance basado en checklist técnico'}
+                        </p>
                     </div>
                     <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
-                        {actividadesCompletadas} / {actividades.length} actividades
+                        {actividadesCompletadas} / {actividadesFiltradas.length} actividades
                     </span>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden border border-gray-200">
@@ -460,7 +731,7 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                         Checklist de Actividades
                         <span className={`px-2 py-0.5 rounded-full text-xs ${subTab === 'checklist' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
                             }`}>
-                            {actividades.length}
+                            {actividadesFiltradas.length}
                         </span>
                     </button>
                     <button
@@ -474,7 +745,7 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                         Mediciones Técnicas
                         <span className={`px-2 py-0.5 rounded-full text-xs ${subTab === 'mediciones' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-600'
                             }`}>
-                            {mediciones.length}
+                            {medicionesFiltradas.length}
                         </span>
                         {parametrosSinMedir.length > 0 && (
                             <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-white font-bold">
@@ -497,24 +768,36 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                                 <div className="flex justify-center py-12">
                                     <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                                 </div>
-                            ) : actividades.length === 0 ? (
+                            ) : actividadesFiltradas.length === 0 ? (
                                 <div className="text-center py-12 text-gray-500">
                                     <Play className="h-12 w-12 mx-auto mb-3 text-gray-200" />
                                     <p className="font-medium">No hay actividades registradas</p>
                                     <p className="text-xs">Las actividades se sincronizan desde la App Móvil</p>
                                 </div>
-                            ) : (
-                                <>
+                            ) : esMultiEquipo && actividadesPorEquipo && equipoFiltro === 'todos' ? (
+                                /* ✅ MULTI-EQUIPO: Vista agrupada por equipo */
+                                <div className="space-y-4">
                                     <ResumenEstados actividades={actividades} />
-                                    <div className="space-y-2">
-                                        {actividades.map((act: any) => (
-                                            <ActividadCardAdvanced
-                                                key={act.id_actividad_ejecutada}
-                                                actividad={act}
-                                                idOrdenServicio={orden.id_orden_servicio}
+                                    {actividadesPorEquipo.map((grupo: ActividadesPorEquipo, idx: number) => (
+                                        <div key={grupo.equipo.idOrdenEquipo} className="space-y-2">
+                                            <EquipoHeader
+                                                equipo={grupo.equipo}
+                                                index={idx}
+                                                count={equipos.length}
                                             />
-                                        ))}
-                                    </div>
+                                            {grupo.actividades.length > 0 ? (
+                                                renderChecklistContent(grupo.actividades)
+                                            ) : (
+                                                <p className="text-xs text-gray-400 pl-11 py-2">Sin actividades para este equipo</p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                /* Vista normal (orden simple o equipo filtrado) */
+                                <>
+                                    <ResumenEstados actividades={actividadesFiltradas} />
+                                    {renderChecklistContent(actividadesFiltradas)}
                                 </>
                             )}
                         </div>
@@ -526,29 +809,40 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                                 <div className="flex justify-center py-12">
                                     <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                                 </div>
-                            ) : mediciones.length === 0 && parametrosSinMedir.length === 0 ? (
+                            ) : medicionesFiltradas.length === 0 && parametrosSinMedir.length === 0 ? (
                                 <div className="text-center py-12 text-gray-500">
                                     <Settings className="h-12 w-12 mx-auto mb-3 text-gray-200" />
                                     <p className="font-medium">Sin mediciones de campo</p>
                                 </div>
                             ) : (
                                 <>
-                                    {mediciones.length > 0 && (
-                                        <ResumenMediciones mediciones={mediciones} totalParametros={mediciones.length + parametrosSinMedir.length} />
+                                    {medicionesFiltradas.length > 0 && (
+                                        <ResumenMediciones mediciones={medicionesFiltradas} totalParametros={medicionesFiltradas.length + parametrosSinMedir.length} />
                                     )}
 
                                     {/* Mediciones registradas */}
-                                    {mediciones.length > 0 && (
-                                        <div className="space-y-2">
-                                            {mediciones.map((med: any) => (
-                                                <MedicionCardAdvanced
-                                                    key={med.id_medicion}
-                                                    medicion={med}
-                                                    idOrdenServicio={orden.id_orden_servicio}
-                                                />
+                                    {esMultiEquipo && medicionesPorEquipo && equipoFiltro === 'todos' ? (
+                                        /* ✅ MULTI-EQUIPO: Vista agrupada por equipo */
+                                        <div className="space-y-4">
+                                            {medicionesPorEquipo.map((grupo: MedicionesPorEquipo, idx: number) => (
+                                                <div key={grupo.equipo.idOrdenEquipo} className="space-y-2">
+                                                    <EquipoHeader
+                                                        equipo={grupo.equipo}
+                                                        index={idx}
+                                                        count={equipos.length}
+                                                    />
+                                                    {grupo.mediciones.length > 0 ? (
+                                                        renderMedicionesContent(grupo.mediciones)
+                                                    ) : (
+                                                        <p className="text-xs text-gray-400 pl-11 py-2">Sin mediciones para este equipo</p>
+                                                    )}
+                                                </div>
                                             ))}
                                         </div>
-                                    )}
+                                    ) : medicionesFiltradas.length > 0 ? (
+                                        /* Vista normal */
+                                        renderMedicionesContent(medicionesFiltradas)
+                                    ) : null}
 
                                     {/* ✅ 24-FEB-2026: Parámetros sin medir (para que admin pueda registrarlos) */}
                                     {parametrosSinMedir.length > 0 && (
@@ -1317,7 +1611,8 @@ export default function OrdenDetallePage() {
     }
 
     const estadoActual = orden.estados_orden?.codigo_estado;
-    const esEstadoFinal = ['COMPLETADA', 'APROBADA', 'CANCELADA'].includes(estadoActual || '');
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial (orden recién creada/aprobada)
+    const esEstadoFinal = ['COMPLETADA', 'CANCELADA'].includes(estadoActual || '');
 
     return (
         <div className="space-y-6">
@@ -1402,7 +1697,8 @@ export default function OrdenDetallePage() {
                         />
                     )}
                     {/* ✅ FIX 13-MAR-2026: Botón de transferencia de datos */}
-                    {!esEstadoFinal && (
+                    {/* ✅ FIX 09-ABR-2026: Habilitado también para APROBADA (no solo EN_PROCESO) */}
+                    {(['EN_PROCESO', 'APROBADA'].includes(estadoActual || '')) && (
                         <ActionButton
                             icon={ArrowRightLeft}
                             label="Transferir Datos"

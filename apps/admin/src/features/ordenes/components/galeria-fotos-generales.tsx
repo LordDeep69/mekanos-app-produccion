@@ -8,6 +8,7 @@
 
 'use client';
 
+import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,16 +16,18 @@ import {
     Camera,
     ChevronLeft,
     ChevronRight,
+    Clipboard,
     Clock,
     Image as ImageIcon,
     Loader2,
     Plus,
     Trash2,
+    Upload,
     X,
     ZoomIn
 } from 'lucide-react';
 import Image from 'next/image';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface Evidencia {
@@ -233,8 +236,46 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
     const queryClient = useQueryClient();
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState('');
     const [descripcionNueva, setDescripcionNueva] = useState('');
-    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // ✅ FIX 02-MAY-2026: Soporte drag-drop, paste y multi-file
+    const uploadFiles = async (files: File[]) => {
+        setIsUploading(true);
+        let uploaded = 0;
+        try {
+            for (const file of files) {
+                setUploadProgress(`${uploaded + 1}/${files.length}`);
+                const base64 = await fileToBase64(file);
+                await apiClient.post('/evidencias-fotograficas/upload-base64', {
+                    idOrdenServicio,
+                    tipoEvidencia: 'GENERAL',
+                    descripcion: descripcionNueva.trim() || 'Foto general del servicio',
+                    nombreArchivo: file.name,
+                    base64,
+                });
+                uploaded++;
+            }
+            queryClient.invalidateQueries({ queryKey: ['evidencias-generales', idOrdenServicio] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+            setDescripcionNueva('');
+            toast.success(files.length === 1 ? 'Foto general subida exitosamente' : `${uploaded} fotos generales subidas`);
+        } catch (error) {
+            console.error('Error uploading general photo:', error);
+            toast.error(`Error al subir foto${files.length > 1 ? 's' : ''} (${uploaded}/${files.length} completadas)`);
+        } finally {
+            setIsUploading(false);
+            setUploadProgress('');
+        }
+    };
+
+    const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
+        onFiles: uploadFiles,
+        multiple: true,
+        disabled: isUploading,
+        onInvalidType: (name) => toast.error(`"${name}" no es una imagen válida`),
+        onMaxSizeExceeded: (name) => toast.error(`"${name}" supera el límite de 10MB`),
+    });
 
     // ✅ FIX 09-FEB-2026: Usar apiClient con interceptor auth
     const { data: evidenciasData, isLoading } = useQuery({
@@ -303,61 +344,23 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
         setLightboxIndex(idx >= 0 ? idx : 0);
     };
 
-    // Upload
-    const handleUploadClick = () => {
-        fileInputRef.current?.click();
-    };
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (!file.type.startsWith('image/')) {
-            toast.error('Solo se permiten imágenes');
-            return;
-        }
-
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error('La imagen no puede superar 10MB');
-            return;
-        }
-
-        setIsUploading(true);
-        try {
-            // Convert to base64
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-
-            // ✅ FIX 09-FEB-2026: Usar apiClient con interceptor auth
-            await apiClient.post('/evidencias-fotograficas/upload-base64', {
-                idOrdenServicio,
-                tipoEvidencia: 'GENERAL',
-                descripcion: descripcionNueva.trim() || 'Foto general del servicio',
-                nombreArchivo: file.name,
-                base64: base64,
-            });
-
-            queryClient.invalidateQueries({ queryKey: ['evidencias-generales', idOrdenServicio] });
-            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
-            setDescripcionNueva('');
-            toast.success('Foto general subida exitosamente');
-        } catch (error) {
-            console.error('Error uploading general photo:', error);
-            toast.error('Error al subir la foto general');
-        } finally {
-            setIsUploading(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
-        }
-    };
+    // Abrir selector de archivos
+    const handleUploadClick = () => openFilePicker();
 
     return (
-        <div className="bg-white rounded-xl border-2 border-purple-200 shadow-sm overflow-hidden">
+        <div ref={setDropZoneRef} className={cn(
+            "bg-white rounded-xl border-2 shadow-sm overflow-hidden transition-all relative",
+            isDragging ? "border-purple-400 ring-4 ring-purple-100" : "border-purple-200"
+        )}>
+            {/* Overlay drag-drop */}
+            {isDragging && (
+                <div className="absolute inset-0 z-20 bg-purple-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none rounded-xl">
+                    <Upload className="h-10 w-10 text-purple-500 animate-bounce" />
+                    <p className="text-base font-bold text-purple-700">Suelte las imágenes aquí</p>
+                    <p className="text-xs text-purple-500">Se subirán como fotos generales del servicio</p>
+                </div>
+            )}
+
             {/* Header */}
             <div className="p-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -383,9 +386,13 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
                             ? "bg-gray-100 text-gray-400 cursor-wait"
                             : "bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200"
                     )}
+                    title="Clic para seleccionar, arrastrar imágenes o pegar (Ctrl+V)"
                 >
                     {isUploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            {uploadProgress && <span>{uploadProgress}</span>}
+                        </>
                     ) : (
                         <Plus className="h-4 w-4" />
                     )}
@@ -393,14 +400,8 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
                 </button>
             </div>
 
-            {/* Hidden file input */}
-            <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="image/*"
-                className="hidden"
-            />
+            {/* Hidden file input (multi-select habilitado) */}
+            <input {...inputProps} />
 
             {/* Optional description input */}
             <div className="px-4 pt-3">
@@ -420,12 +421,19 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
                         <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
                     </div>
                 ) : fotosGenerales.length === 0 ? (
-                    <div className="text-center py-8 text-purple-300">
+                    <div
+                        onClick={handleUploadClick}
+                        className="text-center py-8 text-purple-300 cursor-pointer hover:bg-purple-50/50 rounded-xl transition-colors"
+                    >
                         <Camera className="h-10 w-10 mx-auto mb-2 opacity-40" />
                         <p className="font-medium text-sm">Sin fotos generales</p>
                         <p className="text-xs mt-1 text-purple-400">
-                            Haz clic en &quot;Agregar Foto&quot; para subir fotos generales del servicio
+                            Clic, arrastrar imágenes o pegar con Ctrl+V
                         </p>
+                        <div className="flex items-center justify-center gap-3 mt-2 text-[10px] text-purple-300">
+                            <span className="flex items-center gap-1"><Upload className="h-3 w-3" /> Arrastrar</span>
+                            <span className="flex items-center gap-1"><Clipboard className="h-3 w-3" /> Ctrl+V</span>
+                        </div>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">

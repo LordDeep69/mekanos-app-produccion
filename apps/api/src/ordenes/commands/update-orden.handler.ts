@@ -58,7 +58,8 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
     }
 
     // Estados que NO permiten NINGUNA edición (ni siquiera documentación)
-    const estadosBloqueados = ['APROBADA', 'CANCELADA'];
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
+    const estadosBloqueados = ['CANCELADA'];
     if (estadosBloqueados.includes(estadoCodigo)) {
       throw new BadRequestException(
         `La orden en estado ${estadoCodigo} no puede ser modificada.`,

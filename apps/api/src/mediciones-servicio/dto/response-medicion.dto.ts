@@ -29,10 +29,10 @@ export class ResponseMedicionDto {
   @ApiPropertyOptional({ description: 'Indicador si el valor está fuera del rango crítico (calculado por trigger BD)', example: false })
   fueraDeRango?: boolean;
 
-  @ApiPropertyOptional({ 
-    description: 'Nivel de alerta calculado por backend', 
-    enum: ['OK', 'ADVERTENCIA', 'CRITICO'], 
-    example: 'OK' 
+  @ApiPropertyOptional({
+    description: 'Nivel de alerta calculado por backend',
+    enum: ['OK', 'ADVERTENCIA', 'CRITICO'],
+    example: 'OK'
   })
   nivelAlerta?: NivelAlertaEnum;
 
@@ -59,6 +59,9 @@ export class ResponseMedicionDto {
 
   @ApiPropertyOptional({ description: 'Fecha de registro en el sistema', example: '2025-11-24T15:30:00Z' })
   fechaRegistro?: Date;
+
+  @ApiPropertyOptional({ description: 'Si true, esta medición está excluida del informe PDF', example: false })
+  excluidoPdf?: boolean;
 
   // ======= RELACIONES ANIDADAS =======
 

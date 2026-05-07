@@ -14,6 +14,7 @@ import {
     ChevronDown,
     ChevronUp,
     Edit2,
+    FileText,
     Gauge,
     Loader2,
     MessageSquare,
@@ -27,6 +28,8 @@ interface Medicion {
     id_medicion: number;
     id_orden_servicio: number;
     id_actividad_ejecutada?: number | null;
+    // ✅ FIX 30-ABR-2026: Soporte multi-equipo para fotos
+    id_orden_equipo?: number | null;
     valor_numerico?: number | null;
     valor_texto?: string | null;
     unidad_medida?: string;
@@ -34,6 +37,8 @@ interface Medicion {
     nivel_alerta?: string;
     mensaje_alerta?: string;
     observaciones?: string;
+    // ✅ FIX 04-MAY-2026: Exclusión de PDF
+    excluido_pdf?: boolean;
     parametros_medicion?: {
         nombre_parametro?: string;
         codigo_parametro?: string;
@@ -186,6 +191,29 @@ export function MedicionCardAdvanced({ medicion, idOrdenServicio, onUpdate }: Me
         setObservaciones(medicion.observaciones || '');
     };
 
+    // ✅ FIX 04-MAY-2026: Toggle exclusión del PDF con confirmación
+    const handleToggleExcluirPdf = async (e: React.MouseEvent) => {
+        e.stopPropagation(); // Evitar expandir/colapsar la tarjeta
+
+        const nuevoEstado = !medicion.excluido_pdf;
+        const accion = nuevoEstado ? 'EXCLUIR' : 'INCLUIR';
+        const mensaje = nuevoEstado
+            ? `¿Estás seguro de EXCLUIR "${nombreParametro}" del informe PDF?`
+            : `¿Estás seguro de INCLUIR "${nombreParametro}" en el informe PDF?`;
+
+        if (!confirm(mensaje)) return;
+
+        try {
+            await updateMedicion.mutateAsync({
+                idMedicion: medicion.id_medicion,
+                data: { excluidoPdf: nuevoEstado },
+            });
+            onUpdate?.();
+        } catch (error) {
+            console.error('Error al cambiar estado de exclusión PDF:', error);
+        }
+    };
+
     return (
         <div className={cn(
             "rounded-xl border-2 transition-all duration-200",
@@ -229,9 +257,24 @@ export function MedicionCardAdvanced({ medicion, idOrdenServicio, onUpdate }: Me
                         )}
                     </div>
 
-                    {/* Chevron */}
-                    <div className="flex-shrink-0 text-gray-400">
-                        {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                    {/* Chevron + Toggle PDF */}
+                    <div className="flex-shrink-0 flex items-center gap-1">
+                        {/* ✅ FIX 04-MAY-2026: Toggle sutil para excluir del PDF */}
+                        <button
+                            onClick={handleToggleExcluirPdf}
+                            className={cn(
+                                "p-1.5 rounded-lg transition-all",
+                                medicion.excluido_pdf
+                                    ? "bg-red-100 text-red-600 hover:bg-red-200"
+                                    : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
+                            )}
+                            title={medicion.excluido_pdf ? "Incluir en PDF" : "Excluir del PDF"}
+                        >
+                            <FileText className="h-4 w-4" />
+                        </button>
+                        <div className="flex-shrink-0 text-gray-400">
+                            {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -331,6 +374,7 @@ export function MedicionCardAdvanced({ medicion, idOrdenServicio, onUpdate }: Me
                     <div className="mt-3">
                         <GaleriaActividadFotos
                             idOrdenServicio={idOrdenServicio}
+                            idOrdenEquipo={medicion.id_orden_equipo ?? undefined}
                             nombreActividad={nombreParametro}
                             filtroDescripcion={nombreParametro}
                         />

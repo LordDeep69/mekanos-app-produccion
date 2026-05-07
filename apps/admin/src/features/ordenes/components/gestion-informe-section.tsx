@@ -14,6 +14,7 @@
 'use client';
 
 import { apiClient } from '@/lib/api/client';
+import { buildInformeFilename, descargarInformeAutenticado, previsualizarInformeAutenticado } from '@/lib/pdf-naming';
 import { cn } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -71,6 +72,8 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         staleTime: 0,
     });
     const urlPdfExistente = pdfExistenteData?.data?.url || null;
+    const previewUrlExistente = pdfExistenteData?.data?.previewUrl || null;
+    const idDocumentoExistente: number | null = pdfExistenteData?.data?.id_documento || null;
 
     // Obtener email del cliente (cast para acceder a campos adicionales)
     const clientePersona = orden.clientes?.persona as any;
@@ -288,12 +291,53 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         setShowEmailModal(true);
     };
 
-    const handleDescargarPdf = () => {
-        const urlToUse = pdfPreviewUrl || urlPdfExistente;
-        if (urlToUse) {
+    /**
+     * ✅ FIX 29-ABR-2026: Descarga con nombre canónico
+     *  - Preview blob (regenerar): mismo origen → atributo `download` respetado.
+     *  - PDF existente en R2: descarga vía proxy backend autenticado, que aplica
+     *    Content-Disposition con el nombre canónico
+     *    (`INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - MES YYYY.pdf`).
+     */
+    const handleDescargarPdf = async () => {
+        const filenameCanonico = buildInformeFilename({
+            fechaServicio: orden.fecha_fin_real || orden.fecha_inicio_real || orden.fecha_programada,
+            codigoTipoServicio: orden.tipos_servicio?.codigo_tipo,
+            nombreTipoServicio: orden.tipos_servicio?.nombre_tipo,
+            // El tipo del frontend EquipoOrden no expone tipos_equipo, pero el backend
+            // sí lo envía. Usamos cast para leerlo cuando esté disponible.
+            codigoTipoEquipo: (orden.equipos as any)?.tipos_equipo?.codigo_tipo,
+            nombreTipoEquipo: (orden.equipos as any)?.tipos_equipo?.nombre_tipo,
+            nombreCliente: orden.clientes?.persona?.nombre_comercial
+                || orden.clientes?.persona?.razon_social
+                || (orden.clientes?.nombre_sede ? orden.clientes.nombre_sede : null),
+            numeroOrden: orden.numero_orden,
+        });
+
+        // 1) Si hay preview en memoria (regenerar), usarlo con el nombre canónico
+        if (pdfPreviewUrl) {
             const link = document.createElement('a');
-            link.href = urlToUse;
-            link.download = `Informe_${orden.numero_orden}.pdf`;
+            link.href = pdfPreviewUrl;
+            link.download = filenameCanonico;
+            link.click();
+            return;
+        }
+
+        // 2) Si hay un PDF persistido en R2 e ID conocido → proxy backend autenticado
+        if (idDocumentoExistente) {
+            try {
+                await descargarInformeAutenticado(apiClient, idDocumentoExistente, filenameCanonico);
+            } catch (error) {
+                console.error('[Informe] Error descargando vía proxy:', error);
+                alert('No se pudo descargar el PDF. Verifique su sesión e intente nuevamente.');
+            }
+            return;
+        }
+
+        // 3) Fallback: URL R2 directa (cross-origin, el download attr puede ser ignorado)
+        if (urlPdfExistente) {
+            const link = document.createElement('a');
+            link.href = urlPdfExistente;
+            link.download = filenameCanonico;
             link.target = '_blank';
             link.click();
         } else {
@@ -301,10 +345,34 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
         }
     };
 
-    const handlePrevisualizar = () => {
-        const urlToUse = pdfPreviewUrl || urlPdfExistente;
-        if (urlToUse) {
-            window.open(urlToUse, '_blank');
+    const handlePrevisualizar = async () => {
+        // 1) Si hay preview en memoria (regenerar), usar el blob directamente
+        if (pdfPreviewUrl) {
+            window.open(pdfPreviewUrl, '_blank');
+            return;
+        }
+
+        // 2) ✅ FIX 06-MAY-2026: URL firmada R2 con Content-Disposition=inline (instantáneo)
+        // El navegador se conecta directamente a R2, eliminando la latencia del proxy backend (~3-5s).
+        if (previewUrlExistente) {
+            window.open(previewUrlExistente, '_blank');
+            return;
+        }
+
+        // 3) Fallback: proxy autenticado para previsualizar (más lento, solo si no hay previewUrl)
+        if (idDocumentoExistente) {
+            try {
+                await previsualizarInformeAutenticado(apiClient, idDocumentoExistente);
+            } catch (error) {
+                console.error('[Informe] Error previsualizando vía proxy:', error);
+                alert('No se pudo previsualizar el PDF. Verifique su sesión e intente nuevamente.');
+            }
+            return;
+        }
+
+        // 4) Último fallback: URL R2 directa sin inline (puede forzar descarga)
+        if (urlPdfExistente) {
+            window.open(urlPdfExistente, '_blank');
         } else {
             alert('No hay PDF disponible. Regenere el informe primero.');
         }

@@ -97,6 +97,9 @@ export interface Orden {
     // ✅ FIX 03-MAR-2026: Total de emails enviados para mostrar badge en lista
     total_emails_enviados?: number;
 
+    // ✅ FIX 06-MAY-2026: Total de documentos PDF generados para mostrar badge en lista
+    total_documentos_pdf?: number;
+
     // Relaciones
     estados_orden?: EstadoOrden;
     tipos_servicio?: TipoServicio;
@@ -111,6 +114,7 @@ export interface Orden {
         id_orden_equipo: number;
         equipo: EquipoOrden;
         orden_secuencia: number;
+        nombre_sistema?: string;
     }>;
 
     id_tecnico_asignado?: number;

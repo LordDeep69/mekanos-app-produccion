@@ -15,14 +15,13 @@ import { UpdateMedicionCommand } from './update-medicion.command';
 
 @CommandHandler(UpdateMedicionCommand)
 export class UpdateMedicionHandler
-  implements ICommandHandler<UpdateMedicionCommand, ResponseMedicionDto>
-{
+  implements ICommandHandler<UpdateMedicionCommand, ResponseMedicionDto> {
   constructor(
     @Inject('IMedicionesRepository')
     private readonly repository: PrismaMedicionesRepository,
     private readonly prisma: PrismaService,
     private readonly mapper: MedicionMapper,
-  ) {}
+  ) { }
 
   async execute(command: UpdateMedicionCommand): Promise<any> {
     const { id, dto } = command;
@@ -116,6 +115,8 @@ export class UpdateMedicionHandler
         ? new Date(dto.fechaMedicion)
         : undefined,
       instrumentoMedicion: dto.instrumentoMedicion,
+      // ✅ FIX 04-MAY-2026: Excluir/incluir medición del PDF
+      excluidoPdf: dto.excluidoPdf,
     });
 
     return this.mapper.toDto(medicionActualizada);

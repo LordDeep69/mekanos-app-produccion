@@ -9,7 +9,7 @@ import { IMedicionesRepository } from '../domain/mediciones.repository.interface
 
 @Injectable()
 export class PrismaMedicionesRepository implements IMedicionesRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private get fullIncludes() {
     return {
@@ -72,6 +72,7 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
       humedadRelativa?: number;
       fechaMedicion?: Date;
       instrumentoMedicion?: string;
+      excluidoPdf?: boolean;
     },
   ): Promise<any> {
     // Spread dinámico para solo actualizar campos provistos
@@ -94,6 +95,8 @@ export class PrismaMedicionesRepository implements IMedicionesRepository {
       updateData.fecha_medicion = data.fechaMedicion;
     if (data.instrumentoMedicion !== undefined)
       updateData.instrumento_medicion = data.instrumentoMedicion;
+    if (data.excluidoPdf !== undefined)
+      updateData.excluido_pdf = data.excluidoPdf;
 
     return await this.prisma.mediciones_servicio.update({
       where: { id_medicion: id },

@@ -46,6 +46,8 @@ export class MedicionMapper {
       medidoPor: entity.medido_por ?? undefined,
       instrumentoMedicion: entity.instrumento_medicion ?? undefined,
       fechaRegistro: entity.fecha_registro ?? undefined,
+      // ✅ FIX 04-MAY-2026: Exponer flag de exclusión de PDF
+      excluidoPdf: entity.excluido_pdf ?? false,
 
       // ======= RELACIONES ANIDADAS =======
 

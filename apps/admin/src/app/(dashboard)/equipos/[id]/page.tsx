@@ -7,7 +7,7 @@
 'use client';
 
 import { useCambiarEstadoEquipo, useEquipo, useRegistrarLecturaHorometro } from '@/features/equipos';
-import { cn } from '@/lib/utils';
+import { cn, formatDateSafe } from '@/lib/utils';
 import {
   AlertCircle,
   AlertTriangle,
@@ -692,9 +692,9 @@ export default function EquipoDetallePage() {
           <p className="text-gray-900">{equipo.ubicacion_texto || 'Sin ubicación'}</p>
         </InfoCard>
         <InfoCard title="Fechas Clave" icon={Calendar}>
-          <DataRow label="Instalación" value={equipo.fecha_instalacion ? new Date(equipo.fecha_instalacion).toLocaleDateString('es-CO') : null} />
-          <DataRow label="Inicio Servicio Mekanos" value={equipo.fecha_inicio_servicio_mekanos ? new Date(equipo.fecha_inicio_servicio_mekanos).toLocaleDateString('es-CO') : null} />
-          <DataRow label="Registro" value={equipo.fecha_creacion ? new Date(equipo.fecha_creacion).toLocaleDateString('es-CO') : null} />
+          <DataRow label="Instalación" value={formatDateSafe(equipo.fecha_instalacion, { day: '2-digit', month: 'short', year: 'numeric' })} />
+          <DataRow label="Inicio Servicio Mekanos" value={formatDateSafe(equipo.fecha_inicio_servicio_mekanos, { day: '2-digit', month: 'short', year: 'numeric' })} />
+          <DataRow label="Registro" value={formatDateSafe(equipo.fecha_creacion, { day: '2-digit', month: 'short', year: 'numeric' })} />
         </InfoCard>
       </div>
 
@@ -731,9 +731,7 @@ export default function EquipoDetallePage() {
           </div>
           <DataRow
             label="Última Lectura"
-            value={equipo.fecha_ultima_lectura_horas
-              ? new Date(equipo.fecha_ultima_lectura_horas).toLocaleDateString('es-CO')
-              : 'Sin registro'}
+            value={formatDateSafe(equipo.fecha_ultima_lectura_horas, { day: '2-digit', month: 'short', year: 'numeric' }) || 'Sin registro'}
           />
         </InfoCard>
         <InfoCard title="Estado Físico" icon={PaintBucket}>
@@ -781,15 +779,11 @@ export default function EquipoDetallePage() {
           <div>
             <DataRow
               label="Inicio Garantía"
-              value={equipo.fecha_inicio_garantia
-                ? new Date(equipo.fecha_inicio_garantia).toLocaleDateString('es-CO')
-                : null}
+              value={formatDateSafe(equipo.fecha_inicio_garantia, { day: '2-digit', month: 'short', year: 'numeric' })}
             />
             <DataRow
               label="Fin Garantía"
-              value={equipo.fecha_fin_garantia
-                ? new Date(equipo.fecha_fin_garantia).toLocaleDateString('es-CO')
-                : null}
+              value={formatDateSafe(equipo.fecha_fin_garantia, { day: '2-digit', month: 'short', year: 'numeric' })}
             />
           </div>
         </div>
@@ -851,7 +845,7 @@ export default function EquipoDetallePage() {
               <h4 className="font-semibold text-red-800">Equipo dado de baja</h4>
               {equipo.fecha_baja && (
                 <p className="text-sm text-red-600 mt-1">
-                  Fecha: {new Date(equipo.fecha_baja).toLocaleDateString('es-CO')}
+                  Fecha: {formatDateSafe(equipo.fecha_baja, { day: '2-digit', month: 'short', year: 'numeric' })}
                 </p>
               )}
               {equipo.motivo_baja && (
@@ -878,7 +872,7 @@ export default function EquipoDetallePage() {
           <div className="space-y-2">
             {equipo.lecturas_horometro.map((lectura: any, idx: number) => (
               <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-                <span className="text-sm text-gray-500">{new Date(lectura.fecha_lectura).toLocaleDateString('es-CO')}</span>
+                <span className="text-sm text-gray-500">{formatDateSafe(lectura.fecha_lectura, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                 <span className="font-mono font-medium text-gray-900">{lectura.horas_lectura} hrs</span>
               </div>
             ))}
@@ -896,7 +890,7 @@ export default function EquipoDetallePage() {
                   <span className="text-sm font-medium text-gray-900">{estado.estado_nuevo}</span>
                   {estado.motivo_cambio && <p className="text-xs text-gray-500">{estado.motivo_cambio}</p>}
                 </div>
-                <span className="text-sm text-gray-500">{new Date(estado.fecha_cambio).toLocaleDateString('es-CO')}</span>
+                <span className="text-sm text-gray-500">{formatDateSafe(estado.fecha_cambio, { day: '2-digit', month: 'short', year: 'numeric' })}</span>
               </div>
             ))}
           </div>

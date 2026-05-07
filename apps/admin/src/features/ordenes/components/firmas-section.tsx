@@ -8,9 +8,11 @@
 
 'use client';
 
+import { useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { cn } from '@/lib/utils';
 import {
     CheckCircle2,
+    Clipboard,
     Clock,
     Edit,
     Eraser,
@@ -261,19 +263,11 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
     const [previewBase64, setPreviewBase64] = useState<string | null>(null);
     const [nombreFirmante, setNombreFirmante] = useState(firma?.nombre_firmante || '');
     const [cargoFirmante, setCargoFirmante] = useState(firma?.cargo_firmante || '');
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+    // ✅ FIX 02-MAY-2026: Soporte drag-drop y paste para firma
+    const handleImageFiles = useCallback((files: File[]) => {
+        const file = files[0];
         if (!file) return;
-        if (!file.type.startsWith('image/')) {
-            alert('Por favor seleccione un archivo de imagen (PNG, JPG, etc.)');
-            return;
-        }
-        if (file.size > 5 * 1024 * 1024) {
-            alert('El archivo no debe superar 5MB.');
-            return;
-        }
         const reader = new FileReader();
         reader.onload = () => {
             const result = reader.result as string;
@@ -282,6 +276,13 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
         };
         reader.readAsDataURL(file);
     }, []);
+
+    const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
+        onFiles: handleImageFiles,
+        multiple: false,
+        maxSizeBytes: 5 * 1024 * 1024,
+        disabled: updateFirma.isPending,
+    });
 
     const handleSaveDrawn = useCallback((base64: string) => {
         updateFirma.mutate({
@@ -400,14 +401,16 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
 
                     {/* Upload Mode */}
                     {mode === 'upload' && (
-                        <div className="space-y-3">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handleFileUpload}
-                                className="hidden"
-                            />
+                        <div ref={setDropZoneRef} className="space-y-3 relative">
+                            <input {...inputProps} />
+
+                            {/* Overlay drag-drop */}
+                            {isDragging && (
+                                <div className="absolute inset-0 z-20 bg-indigo-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none rounded-xl border-2 border-dashed border-indigo-400">
+                                    <Upload className="h-8 w-8 text-indigo-500 animate-bounce" />
+                                    <p className="text-sm font-bold text-indigo-700">Suelte la imagen de firma aquí</p>
+                                </div>
+                            )}
 
                             {previewBase64 ? (
                                 <div className="space-y-3">
@@ -425,7 +428,7 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
                                     <div className="flex items-center gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => { setPreviewBase64(null); fileInputRef.current?.click(); }}
+                                            onClick={() => { setPreviewBase64(null); openFilePicker(); }}
                                             className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1.5"
                                         >
                                             <Upload className="h-4 w-4" /> Cambiar imagen
@@ -447,12 +450,21 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
                                 </div>
                             ) : (
                                 <div
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all"
+                                    onClick={() => openFilePicker()}
+                                    className={cn(
+                                        "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all",
+                                        isDragging
+                                            ? "border-indigo-400 bg-indigo-50/50"
+                                            : "border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30"
+                                    )}
                                 >
                                     <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                                    <p className="text-sm font-medium text-gray-600">Haga clic para seleccionar una imagen</p>
+                                    <p className="text-sm font-medium text-gray-600">Clic, arrastre o pegue una imagen</p>
                                     <p className="text-xs text-gray-400 mt-1">PNG, JPG, WEBP (max 5MB)</p>
+                                    <div className="flex items-center justify-center gap-3 mt-2 text-[10px] text-gray-300">
+                                        <span className="flex items-center gap-1"><Upload className="h-3 w-3" /> Arrastrar</span>
+                                        <span className="flex items-center gap-1"><Clipboard className="h-3 w-3" /> Ctrl+V</span>
+                                    </div>
                                 </div>
                             )}
                         </div>

@@ -37,6 +37,7 @@ export interface IMedicionesRepository {
       humedadRelativa?: number;
       fechaMedicion?: Date;
       instrumentoMedicion?: string;
+      excluidoPdf?: boolean;
     },
   ): Promise<any>;
 

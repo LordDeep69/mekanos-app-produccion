@@ -48,6 +48,8 @@ import { ProgramarOrdenDto } from './dto/programar-orden.dto';
 import { UpdateOrdenDto } from './dto/update-orden.dto';
 
 // Services
+import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
+import { R2StorageService } from '../storage/r2-storage.service';
 import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
 
 // Decorators
@@ -78,6 +80,7 @@ export class OrdenesController {
     private readonly queryBus: QueryBus,
     private readonly prisma: PrismaService,
     private readonly finalizacionService: FinalizacionOrdenService,
+    private readonly r2Service: R2StorageService,
   ) { }
 
   /**
@@ -436,7 +439,12 @@ export class OrdenesController {
         catalogo_actividades: true,
         empleados: { include: { persona: true } },
       },
-      orderBy: { fecha_ejecucion: 'desc' },
+      // ✅ FIX 06-MAY-2026: Ordenar por orden_secuencia (canónico) en lugar de fecha_ejecucion
+      // Esto evita que editar una actividad cambie su posición en la lista
+      orderBy: [
+        { orden_secuencia: 'asc' },
+        { id_actividad_ejecutada: 'asc' },
+      ],
     });
 
     return {
@@ -998,10 +1006,27 @@ export class OrdenesController {
 
     console.log(`[PDF] Resultado para orden ${id}:`, documento ? documento.ruta_archivo : 'NO ENCONTRADO');
 
+    // ✅ FIX 06-MAY-2026: Generar URL firmada de previsualización inline para R2 directo
+    let previewUrl: string | null = null;
+    if (documento?.ruta_archivo) {
+      try {
+        const key = extractR2KeyFromUrl(documento.ruta_archivo);
+        if (key) {
+          previewUrl = await this.r2Service.getSignedPreviewUrl(key, 3600);
+        }
+      } catch (err) {
+        console.warn('[PDF-URL] No se pudo generar previewUrl firmada:', err);
+      }
+    }
+
     return {
       success: true,
       data: documento ? {
+        // ✅ FIX 29-ABR-2026: Exponer id_documento para que el portal use el proxy
+        // de descarga `/informes/documento/:id/descargar` con Content-Disposition canónico.
+        id_documento: documento.id_documento,
         url: documento.ruta_archivo,
+        previewUrl, // URL firmada R2 con inline (previsualización instantánea)
         fecha: documento.fecha_generacion,
         numero: documento.numero_documento,
       } : null,
@@ -1386,9 +1411,10 @@ export class OrdenesController {
       throw new NotFoundException(`Orden ${id} no encontrada`);
     }
 
-    // 2. Validar que no sea estado final bloqueado (APROBADA/CANCELADA)
+    // 2. Validar que no sea estado final bloqueado (solo CANCELADA)
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
     const estadoCodigo = orden.estados_orden?.codigo_estado;
-    if (estadoCodigo === 'APROBADA' || estadoCodigo === 'CANCELADA') {
+    if (estadoCodigo === 'CANCELADA') {
       throw new BadRequestException(
         `No se puede modificar una orden en estado ${estadoCodigo}`,
       );
@@ -1448,9 +1474,10 @@ export class OrdenesController {
       throw new NotFoundException(`Orden ${id} no encontrada`);
     }
 
-    // 2. Validar que no sea estado final bloqueado (APROBADA/CANCELADA)
+    // 2. Validar que no sea estado final bloqueado (solo CANCELADA)
+    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
     const estadoCodigo = orden.estados_orden?.codigo_estado;
-    if (estadoCodigo === 'APROBADA' || estadoCodigo === 'CANCELADA') {
+    if (estadoCodigo === 'CANCELADA') {
       throw new BadRequestException(
         `No se puede modificar una orden en estado ${estadoCodigo}`,
       );
@@ -1548,7 +1575,7 @@ export class OrdenesController {
       - EN_PROCESO → COMPLETADA, EN_ESPERA_REPUESTO, CANCELADA
       - EN_ESPERA_REPUESTO → ASIGNADA, EN_PROCESO, CANCELADA
       - COMPLETADA → APROBADA, EN_PROCESO, CANCELADA
-      - APROBADA → (estado final)
+      - APROBADA → PROGRAMADA, ASIGNADA, CANCELADA (estado inicial, no final)
       - CANCELADA → (estado final)
       
       **Historial:** Cada cambio se registra automáticamente en historial_estados_orden.
@@ -2056,7 +2083,7 @@ export class OrdenesController {
   /**
    * POST /api/ordenes/:id/transferir-datos
    * Transfiere TODOS los datos/evidencias/firmas de una orden origen a esta orden destino.
-   * La orden destino NO debe estar COMPLETADA ni APROBADA.
+   * La orden destino NO debe estar COMPLETADA ni CANCELADA.
    */
   @Post(':id/transferir-datos')
   @HttpCode(200)
@@ -2103,11 +2130,12 @@ export class OrdenesController {
       throw new NotFoundException(`Orden destino #${idDestino} no encontrada`);
     }
 
-    // 2. Validar que destino NO esté en COMPLETADA o APROBADA
-    const estadoDestino = ordenDestino.estados_orden?.nombre_estado?.toUpperCase();
-    if (estadoDestino === 'COMPLETADA' || estadoDestino === 'APROBADA') {
+    // 2. Validar que destino NO esté en COMPLETADA o CANCELADA
+    // ✅ FIX 09-ABR-2026: APROBADA ya no es estado final, es el estado inicial de la orden
+    const estadoDestino = ordenDestino.estados_orden?.codigo_estado?.toUpperCase() || ordenDestino.estados_orden?.nombre_estado?.toUpperCase();
+    if (estadoDestino === 'COMPLETADA' || estadoDestino === 'CANCELADA') {
       throw new BadRequestException(
-        `La orden destino #${idDestino} está en estado "${estadoDestino}" y no se puede sobrescribir. Solo se puede transferir a órdenes no completadas.`
+        `La orden destino #${idDestino} está en estado "${estadoDestino}" y no se puede sobrescribir. Solo se puede transferir a órdenes que no estén completadas o canceladas.`
       );
     }
 
@@ -2129,11 +2157,12 @@ export class OrdenesController {
       // ── PASO A: Limpiar datos existentes en destino (orden inverso de dependencias) ──
       console.log(`🗑️ [TRANSFER] Limpiando datos existentes en orden destino #${idDestino}...`);
 
+      // ✅ FIX 14-ABR-2026: NO borrar ordenes_equipos - mantener equipo de orden destino
       await tx.componentes_usados.deleteMany({ where: { id_orden_servicio: idDestino } });
       await tx.evidencias_fotograficas.deleteMany({ where: { id_orden_servicio: idDestino } });
       await tx.mediciones_servicio.deleteMany({ where: { id_orden_servicio: idDestino } });
       await tx.actividades_ejecutadas.deleteMany({ where: { id_orden_servicio: idDestino } });
-      await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: idDestino } });
+      // await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: idDestino } }); // ❌ NO borrar equipos
       await tx.ordenes_actividades_plan.deleteMany({ where: { id_orden_servicio: idDestino } });
 
       // ── PASO B: Copiar campos directos de la orden ──
@@ -2183,36 +2212,10 @@ export class OrdenesController {
       });
       console.log(`🔄 [TRANSFER] Estado actualizado: ${ordenOrigen.estados_orden?.nombre_estado}`);
 
-      // ── PASO C: Copiar ordenes_equipos (tabla pivote orden-equipo) ──
-      const equiposOrigen = await tx.ordenes_equipos.findMany({
-        where: { id_orden_servicio: idOrdenOrigen },
-        orderBy: { orden_secuencia: 'asc' },
-      });
-
-      // Mapa de ID viejo → ID nuevo para ordenes_equipos
-      const mapEquipos = new Map<number, number>();
-
-      for (const eq of equiposOrigen) {
-        const nuevoEq = await tx.ordenes_equipos.create({
-          data: {
-            id_orden_servicio: idDestino,
-            id_equipo: eq.id_equipo,
-            orden_secuencia: eq.orden_secuencia,
-            nombre_sistema: eq.nombre_sistema,
-            estado: eq.estado,
-            fecha_inicio: eq.fecha_inicio,
-            fecha_fin: eq.fecha_fin,
-            observaciones: eq.observaciones,
-            metadata: eq.metadata ?? undefined,
-            creado_por: eq.creado_por,
-            fecha_creacion: eq.fecha_creacion,
-          },
-        });
-        mapEquipos.set(eq.id_orden_equipo, nuevoEq.id_orden_equipo);
-        stats.ordenesEquipos++;
-      }
-
-      console.log(`📦 [TRANSFER] Copiados ${stats.ordenesEquipos} ordenes_equipos`);
+      // ── PASO C: NO copiar ordenes_equipos (mantener equipo de orden destino)
+      // ✅ FIX 14-ABR-2026: Si el técnico se equivocó de equipo, queremos mantener el equipo correcto de destino
+      console.log(`📦 [TRANSFER] Equipos NO transferidos (manteniendo equipo de orden destino)`);
+      const mapEquipos = new Map<number, number>(); // Map vacío para compatibilidad con código posterior
 
       // ── PASO D: Copiar actividades_ejecutadas ──
       const actividadesOrigen = await tx.actividades_ejecutadas.findMany({
@@ -2224,7 +2227,8 @@ export class OrdenesController {
       const mapActividades = new Map<number, number>();
 
       for (const act of actividadesOrigen) {
-        const nuevoIdOrdenEquipo = act.id_orden_equipo ? mapEquipos.get(act.id_orden_equipo) ?? null : null;
+        // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
+        const nuevoIdOrdenEquipo = null;
         const nuevaAct = await tx.actividades_ejecutadas.create({
           data: {
             id_orden_servicio: idDestino,
@@ -2257,7 +2261,8 @@ export class OrdenesController {
       });
 
       for (const ev of evidenciasOrigen) {
-        const nuevoIdOrdenEquipo = ev.id_orden_equipo ? mapEquipos.get(ev.id_orden_equipo) ?? null : null;
+        // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
+        const nuevoIdOrdenEquipo = null;
         const nuevoIdActividad = ev.id_actividad_ejecutada ? mapActividades.get(ev.id_actividad_ejecutada) ?? null : null;
 
         await tx.evidencias_fotograficas.create({
@@ -2299,7 +2304,8 @@ export class OrdenesController {
       });
 
       for (const med of medicionesOrigen) {
-        const nuevoIdOrdenEquipo = med.id_orden_equipo ? mapEquipos.get(med.id_orden_equipo) ?? null : null;
+        // ✅ FIX 14-ABR-2026: id_orden_equipo a null (no transferir equipos)
+        const nuevoIdOrdenEquipo = null;
 
         await tx.mediciones_servicio.create({
           data: {

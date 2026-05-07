@@ -247,6 +247,10 @@ export class EvidenciasController {
       data: {
         id_orden_servicio: dto.idOrdenServicio,
         id_actividad_ejecutada: dto.idActividadEjecutada || null,
+        // ✅ FIX 30-ABR-2026: Guardar id_orden_equipo para órdenes multi-equipo
+        // Sin esto, las fotos subidas desde Admin quedan con id_orden_equipo=NULL
+        // y no aparecen en el PDF regenerado (el filtro por equipo las excluye).
+        id_orden_equipo: dto.idOrdenEquipo || null,
         tipo_evidencia: dto.tipoEvidencia as any,
         descripcion: dto.descripcion || `Evidencia ${dto.tipoEvidencia} agregada desde Admin`,
         nombre_archivo: nombreArchivo,
