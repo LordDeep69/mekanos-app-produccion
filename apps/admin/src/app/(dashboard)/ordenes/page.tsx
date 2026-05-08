@@ -20,7 +20,7 @@ import {
     useOrdenes,
 } from '@/features/ordenes';
 import { useTiposServicio } from '@/features/ordenes/hooks/use-catalogos';
-import { cn } from '@/lib/utils';
+import { cn, formatDateSafe } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
 import {
     AlertCircle,
@@ -32,6 +32,7 @@ import {
     ClipboardList,
     Clock,
     Eye,
+    FileText,
     Filter,
     Loader2,
     Mail,
@@ -91,11 +92,7 @@ function PrioridadBadge({ prioridad }: { prioridad?: string }) {
 
 function OrdenCard({ orden }: { orden: Orden }) {
     const fechaProgramada = orden.fecha_programada
-        ? new Date(orden.fecha_programada).toLocaleDateString('es-CO', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-        })
+        ? formatDateSafe(orden.fecha_programada)
         : 'Sin programar';
 
     return (
@@ -124,6 +121,24 @@ function OrdenCard({ orden }: { orden: Orden }) {
                                 title="Sin emails enviados"
                             >
                                 <Mail className="h-3 w-3" />
+                                -
+                            </span>
+                        )}
+                        {/* ✅ FIX 06-MAY-2026: Indicador de PDF generado */}
+                        {orden.total_documentos_pdf ? (
+                            <span
+                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"
+                                title={`${orden.total_documentos_pdf} PDF(s) generado(s)`}
+                            >
+                                <FileText className="h-3 w-3" />
+                                {orden.total_documentos_pdf}
+                            </span>
+                        ) : (
+                            <span
+                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
+                                title="Sin PDF generado"
+                            >
+                                <FileText className="h-3 w-3" />
                                 -
                             </span>
                         )}
