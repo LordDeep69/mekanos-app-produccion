@@ -210,7 +210,7 @@ function OrdenCard({ orden }: { orden: Orden }) {
 // PÁGINA PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function OrdenesPage() {
+function OrdenesPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -631,5 +631,14 @@ export default function OrdenesPage() {
                 </>
             )}
         </div>
+    );
+}
+
+// Wrapper con Suspense para useSearchParams
+export default function OrdenesPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center">Cargando...</div>}>
+            <OrdenesPageContent />
+        </Suspense>
     );
 }
