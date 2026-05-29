@@ -79,7 +79,6 @@ import {
     XCircle
 } from 'lucide-react';
 import { getSession } from 'next-auth/react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -1598,13 +1597,13 @@ export default function OrdenDetallePage() {
                         <RefreshCw className="h-4 w-4" />
                         Reintentar
                     </button>
-                    <Link
-                        href="/ordenes"
+                    <button
+                        onClick={() => router.back()}
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
                         <ArrowLeft className="h-4 w-4" />
                         Volver a Órdenes
-                    </Link>
+                    </button>
                 </div>
             </div>
         );
@@ -1619,13 +1618,13 @@ export default function OrdenDetallePage() {
             {/* Header */}
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                 <div>
-                    <Link
-                        href="/ordenes"
+                    <button
+                        onClick={() => router.back()}
                         className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-2"
                     >
                         <ArrowLeft className="h-4 w-4" />
                         Volver a Órdenes
-                    </Link>
+                    </button>
 
                     <div className="flex items-center gap-3 mb-2">
                         <h1 className="text-2xl font-bold text-gray-900 font-mono">
