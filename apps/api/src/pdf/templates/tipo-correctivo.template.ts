@@ -194,7 +194,9 @@ const correctivoStyles = `
     font-size: 10px;
     color: #2c3e50;
     line-height: 1.6;
-    white-space: pre-line;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
 
   /* --- Badges de estado (inicial / final) --- */

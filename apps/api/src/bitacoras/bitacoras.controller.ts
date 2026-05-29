@@ -32,7 +32,18 @@ export class BitacorasController {
     @Query('mes') mesStr: string,
     @Query('anio') anioStr: string,
     @Query('categoria') categoria?: string,
+    @Query('fecha_inicio') fechaInicio?: string,
+    @Query('fecha_fin') fechaFin?: string,
   ) {
+    // ✅ Modo rango de fechas: si se proporcionan fecha_inicio y fecha_fin, usar ese rango
+    if (fechaInicio && fechaFin) {
+      const result = await this.bitacorasService.previewInformesPorSede(
+        idCliente, 0, 0, categoria || undefined, fechaInicio, fechaFin,
+      );
+      return { success: true, data: result };
+    }
+
+    // Modo estándar: mes/año
     const mes = parseInt(mesStr, 10);
     const anio = parseInt(anioStr, 10);
 
@@ -66,6 +77,8 @@ export class BitacorasController {
       asunto_personalizado: dto.asunto_personalizado,
       mensaje_personalizado: dto.mensaje_personalizado,
       usuario_id: userId,
+      fecha_inicio: dto.fecha_inicio,
+      fecha_fin: dto.fecha_fin,
     });
 
     return { success: result.success, data: result };

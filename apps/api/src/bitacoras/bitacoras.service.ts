@@ -54,6 +54,9 @@ export interface BitacoraPreviewResult {
   total_sin_pdf: number;
   emails_destinatarios: string[];
   id_cuenta_email_remitente: number | null;
+  // ✅ Rango de fechas (cuando se usa modo rango)
+  fecha_inicio?: string;
+  fecha_fin?: string;
 }
 
 export interface EnviarBitacoraDto {
@@ -68,6 +71,9 @@ export interface EnviarBitacoraDto {
   asunto_personalizado?: string;
   mensaje_personalizado?: string;
   usuario_id: number;
+  // ✅ Rango de fechas opcional (alternativa a mes/anio)
+  fecha_inicio?: string;
+  fecha_fin?: string;
 }
 
 @Injectable()
@@ -214,6 +220,8 @@ export class BitacorasService {
     mes: number,
     anio: number,
     categoria?: string,
+    fechaInicioStr?: string,
+    fechaFinStr?: string,
   ): Promise<BitacoraPreviewResult> {
     // 1. Validar cliente principal
     const principal = await this.prisma.clientes.findUnique({
@@ -244,11 +252,20 @@ export class BitacorasService {
     const nombrePrincipal = principal.persona?.nombre_comercial || principal.persona?.razon_social || 'Cliente';
     this.logger.log(`[BITACORA PREVIEW] Cliente: ${nombrePrincipal} | Sedes: ${clienteIds.length} | Mes: ${mes}/${anio} | Cat: ${categoria || 'TODAS'}`);
 
-    // 3. Calcular rango de fechas del mes (DATE type en PostgreSQL)
-    const fechaInicio = `${anio}-${String(mes).padStart(2, '0')}-01`;
-    // Último día del mes
-    const ultimoDia = new Date(anio, mes, 0).getDate();
-    const fechaFin = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+    // 3. Calcular rango de fechas: por rango explícito o por mes/año
+    let fechaInicio: string;
+    let fechaFin: string;
+    const modoRango = !!(fechaInicioStr && fechaFinStr);
+
+    if (modoRango) {
+      fechaInicio = fechaInicioStr;
+      fechaFin = fechaFinStr;
+      this.logger.log(`[BITACORA PREVIEW] Modo RANGO: ${fechaInicio} → ${fechaFin}`);
+    } else {
+      fechaInicio = `${anio}-${String(mes).padStart(2, '0')}-01`;
+      const ultimoDia = new Date(anio, mes, 0).getDate();
+      fechaFin = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+    }
 
     // 4. Query SQL directo: documentos_generados → ordenes_servicio → equipos → clientes
     const conditions: string[] = [
@@ -426,6 +443,7 @@ export class BitacorasService {
       total_sin_pdf: 0,
       emails_destinatarios: Array.from(emailsSet),
       id_cuenta_email_remitente: principal.id_cuenta_email_remitente,
+      ...(modoRango ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin } : {}),
     };
   }
 
@@ -566,21 +584,62 @@ export class BitacorasService {
     let emailBatches: { attachments: typeof attachments; batchNumber: number; totalBatches: number }[] = [];
 
     if (totalSizeMB > MAX_SIZE_MB || attachments.length > MAX_PDFS_PER_BATCH) {
-      // Dividir en batches
-      const numBatches = Math.ceil(attachments.length / MAX_PDFS_PER_BATCH);
-      this.logger.log(`[BITACORA] Dividiendo en ${numBatches} emails (tamaño/límite excedido)`);
+      // Dividir en batches por tamaño acumulado (no solo por cantidad)
+      this.logger.log(`[BITACORA] Dividiendo en múltiples emails (tamaño/límite excedido)`);
 
-      for (let i = 0; i < numBatches; i++) {
-        const startIdx = i * MAX_PDFS_PER_BATCH;
-        const endIdx = Math.min(startIdx + MAX_PDFS_PER_BATCH, attachments.length);
-        const batchAttachments = attachments.slice(startIdx, endIdx);
+      let currentBatch: typeof attachments = [];
+      let currentBatchSizeBytes = 0;
+      let batchNumber = 0;
 
+      for (const att of attachments) {
+        const attSizeBytes = att.content.length;
+
+        // Si agregar este PDF excede el límite Y ya hay PDFs en el batch actual, cerrar batch
+        if (currentBatch.length > 0 &&
+          (currentBatchSizeBytes + attSizeBytes) / (1024 * 1024) > MAX_SIZE_MB) {
+          emailBatches.push({
+            attachments: currentBatch,
+            batchNumber: batchNumber + 1,
+            totalBatches: 0, // Se actualizará al final
+          });
+          currentBatch = [];
+          currentBatchSizeBytes = 0;
+          batchNumber++;
+        }
+
+        // También respetar límite de cantidad de PDFs por batch
+        if (currentBatch.length >= MAX_PDFS_PER_BATCH) {
+          emailBatches.push({
+            attachments: currentBatch,
+            batchNumber: batchNumber + 1,
+            totalBatches: 0,
+          });
+          currentBatch = [];
+          currentBatchSizeBytes = 0;
+          batchNumber++;
+        }
+
+        currentBatch.push(att);
+        currentBatchSizeBytes += attSizeBytes;
+      }
+
+      // Agregar el último batch si tiene contenido
+      if (currentBatch.length > 0) {
         emailBatches.push({
-          attachments: batchAttachments,
-          batchNumber: i + 1,
-          totalBatches: numBatches,
+          attachments: currentBatch,
+          batchNumber: batchNumber + 1,
+          totalBatches: 0,
         });
       }
+
+      // Actualizar totalBatches para todos
+      const totalBatches = emailBatches.length;
+      emailBatches = emailBatches.map(batch => ({
+        ...batch,
+        totalBatches,
+      }));
+
+      this.logger.log(`[BITACORA] Dividido en ${totalBatches} emails (tamaño/límite excedido)`);
     } else {
       // Un solo email
       emailBatches = [{
@@ -591,18 +650,24 @@ export class BitacorasService {
     }
 
     // 4. Crear registro de bitácora
-    const numeroBitacora = `BIT-${anio}${String(mes).padStart(2, '0')}-${id_cliente_principal}`;
+    // ✅ Modo rango: usar fecha_inicio para generar número de bitácora
+    const esRangoFechas = !!(dto.fecha_inicio && dto.fecha_fin);
+    const bitMes = esRangoFechas ? new Date(dto.fecha_inicio!).getMonth() + 1 : mes;
+    const bitAnio = esRangoFechas ? new Date(dto.fecha_inicio!).getFullYear() : anio;
+    const numeroBitacora = `BIT-${bitAnio}${String(bitMes).padStart(2, '0')}-${id_cliente_principal}`;
 
     const bitacora = await this.prisma.bitacoras.create({
       data: {
         numero_bitacora: numeroBitacora,
         id_cliente: id_cliente_principal,
-        mes,
-        anio,
+        mes: bitMes,
+        anio: bitAnio,
         generado_por: usuario_id,
         estado_bitacora: 'BORRADOR',
         cantidad_informes: attachments.length,
-        observaciones: `Bitácora ${categoria} - ${attachments.length} informes${emailBatches.length > 1 ? ` (enviada en ${emailBatches.length} partes)` : ''}`,
+        observaciones: esRangoFechas
+          ? `Bitácora ${categoria} - ${attachments.length} informes (Rango: ${dto.fecha_inicio} a ${dto.fecha_fin})${emailBatches.length > 1 ? ` (enviada en ${emailBatches.length} partes)` : ''}`
+          : `Bitácora ${categoria} - ${attachments.length} informes${emailBatches.length > 1 ? ` (enviada en ${emailBatches.length} partes)` : ''}`,
       },
     });
 
@@ -611,6 +676,11 @@ export class BitacorasService {
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const mesNombre = meses[mes - 1] || `Mes ${mes}`;
     const categoriaLabel = categoria === 'ENERGIA' ? 'Plantas Eléctricas' : categoria === 'HIDRAULICA' ? 'Bombas' : categoria || 'Equipos';
+
+    // ✅ Periodo label: rango de fechas o mes/año
+    const periodoLabel = esRangoFechas
+      ? `del ${dto.fecha_inicio} al ${dto.fecha_fin}`
+      : `${mesNombre} ${anio}`;
 
     // Recopilar destinatarios
     const destinatarios: string[] = [];
@@ -675,7 +745,7 @@ export class BitacorasService {
 
       // Construir asunto con número de parte si hay múltiples
       const batchSuffix = totalBatches > 1 ? ` (Parte ${batchNumber}/${totalBatches})` : '';
-      const asuntoBatch = (dto.asunto_personalizado || `Informes de Mantenimiento ${categoriaLabel} - ${mesNombre} ${anio} | ${nombreCliente}`) + batchSuffix;
+      const asuntoBatch = (dto.asunto_personalizado || `Informes de Mantenimiento ${categoriaLabel} - ${periodoLabel} | ${nombreCliente}`) + batchSuffix;
 
       // Construir HTML para este batch
       const htmlBatch = `
@@ -688,7 +758,7 @@ export class BitacorasService {
           <p style="font-size:16px;color:#111827;margin:0 0 8px;">Estimado(a) <strong>${nombreCliente}</strong>,</p>
           <p style="color:#374151;margin:0 0 16px;">
             Adjunto encontrará los informes de mantenimiento de <strong>${categoriaLabel}</strong>
-            correspondientes al mes de <strong>${mesNombre} ${anio}</strong>${totalBatches > 1 ? ` (parte ${batchNumber} de ${totalBatches})` : ''}.
+            correspondientes al periodo <strong>${periodoLabel}</strong>${totalBatches > 1 ? ` (parte ${batchNumber} de ${totalBatches})` : ''}.
           </p>
           ${dto.mensaje_personalizado ? `<p style="margin:16px 0;color:#374151;">${dto.mensaje_personalizado}</p>` : ''}
           <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin:16px 0;">

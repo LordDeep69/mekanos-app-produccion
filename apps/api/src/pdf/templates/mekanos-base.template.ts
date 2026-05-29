@@ -672,6 +672,9 @@ export const baseStyles = `
     border-radius: 4px;
     min-height: 60px;
     border-left: 3px solid ${MEKANOS_COLORS.secondary};
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
   
   /* ✅ FIX: Sección de Firmas - Más grande y profesional */

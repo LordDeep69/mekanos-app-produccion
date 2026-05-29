@@ -17,8 +17,8 @@ import {
 // Query Keys
 export const bitacorasKeys = {
   all: ['bitacoras'] as const,
-  preview: (idCliente: number, mes: number, anio: number, categoria?: string) =>
-    [...bitacorasKeys.all, 'preview', idCliente, mes, anio, categoria] as const,
+  preview: (idCliente: number, mes: number, anio: number, categoria?: string, fechaInicio?: string, fechaFin?: string) =>
+    [...bitacorasKeys.all, 'preview', idCliente, mes, anio, categoria, fechaInicio, fechaFin] as const,
   historial: (idCliente: number) =>
     [...bitacorasKeys.all, 'historial', idCliente] as const,
   mesesDisponibles: (idCliente: number, categoria?: string) =>
@@ -27,6 +27,7 @@ export const bitacorasKeys = {
 
 /**
  * Hook para obtener preview de informes agrupados por sede
+ * Soporta modo estándar (mes/año) y modo rango (fechaInicio/fechaFin)
  */
 export function useBitacoraPreview(
   idCliente: number,
@@ -34,12 +35,16 @@ export function useBitacoraPreview(
   anio: number,
   categoria?: string,
   options?: { enabled?: boolean },
+  fechaInicio?: string,
+  fechaFin?: string,
 ) {
+  const modoRango = !!(fechaInicio && fechaFin);
+
   return useQuery({
-    queryKey: bitacorasKeys.preview(idCliente, mes, anio, categoria),
-    queryFn: () => getBitacoraPreview(idCliente, mes, anio, categoria),
+    queryKey: bitacorasKeys.preview(idCliente, mes, anio, categoria, fechaInicio, fechaFin),
+    queryFn: () => getBitacoraPreview(idCliente, mes, anio, categoria, fechaInicio, fechaFin),
     staleTime: 2 * 60 * 1000,
-    enabled: options?.enabled ?? (idCliente > 0 && mes > 0 && anio > 0),
+    enabled: options?.enabled ?? (modoRango ? (idCliente > 0) : (idCliente > 0 && mes > 0 && anio > 0)),
   });
 }
 

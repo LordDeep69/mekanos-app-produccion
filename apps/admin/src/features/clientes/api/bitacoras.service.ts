@@ -51,6 +51,8 @@ export interface BitacoraPreviewResult {
   total_sin_pdf: number;
   emails_destinatarios: string[];
   id_cuenta_email_remitente: number | null;
+  fecha_inicio?: string;
+  fecha_fin?: string;
 }
 
 export interface EnviarBitacoraRequest {
@@ -64,6 +66,8 @@ export interface EnviarBitacoraRequest {
   emails_cc?: string[];
   asunto_personalizado?: string;
   mensaje_personalizado?: string;
+  fecha_inicio?: string;
+  fecha_fin?: string;
 }
 
 export interface EnviarBitacoraResponse {
@@ -97,17 +101,28 @@ const BITACORAS_BASE = '/bitacoras';
 
 /**
  * Preview: Obtener informes agrupados por sede para un cliente principal
+ * Soporta modo estándar (mes/año) y modo rango (fecha_inicio/fecha_fin)
  */
 export async function getBitacoraPreview(
   idCliente: number,
   mes: number,
   anio: number,
   categoria?: string,
+  fechaInicio?: string,
+  fechaFin?: string,
 ): Promise<BitacoraPreviewResult> {
-  const params = new URLSearchParams({
-    mes: String(mes),
-    anio: String(anio),
-  });
+  const params = new URLSearchParams();
+
+  if (fechaInicio && fechaFin) {
+    // Modo rango de fechas
+    params.append('fecha_inicio', fechaInicio);
+    params.append('fecha_fin', fechaFin);
+  } else {
+    // Modo estándar mes/año
+    params.append('mes', String(mes));
+    params.append('anio', String(anio));
+  }
+
   if (categoria) params.append('categoria', categoria);
 
   const response = await apiClient.get<{ success: boolean; data: BitacoraPreviewResult }>(

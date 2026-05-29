@@ -100,6 +100,11 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedSedes, setExpandedSedes] = useState<Set<number>>(new Set());
 
+  // ✅ NUEVO: Modo rango de fechas
+  const [modoRango, setModoRango] = useState(false);
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
+
   // ✅ NUEVO: Estado para selección de documentos (inicialmente todos seleccionados)
   const [documentosSeleccionados, setDocumentosSeleccionados] = useState<Set<number>>(new Set());
 
@@ -122,9 +127,12 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
     isError: errorPreview,
     error: previewError,
     refetch: refetchPreview,
-  } = useBitacoraPreview(clienteId, mes, anio, categoria || undefined, {
-    enabled: showPreview,
-  });
+  } = useBitacoraPreview(
+    clienteId, mes, anio, categoria || undefined,
+    { enabled: showPreview },
+    modoRango ? fechaInicio : undefined,
+    modoRango ? fechaFin : undefined,
+  );
 
   const { data: historial, isLoading: loadingHistorial } = useBitacoraHistorial(clienteId);
 
@@ -140,16 +148,16 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
     return preview.sedes.flatMap(s => s.informes);
   }, [preview]);
 
-  // Inicializar todos los documentos como seleccionados cuando carga el preview
+  // Inicializar todos los documentos como seleccionados cuando cambian los documentos disponibles
   useEffect(() => {
-    if (documentosDisponibles.length > 0 && documentosSeleccionados.size === 0) {
+    if (documentosDisponibles.length > 0) {
       setDocumentosSeleccionados(new Set(documentosDisponibles.map(d => d.id_documento)));
     }
   }, [documentosDisponibles]);
 
   // ✅ NUEVO: Inicializar emails editables cuando cambia el preview
   useEffect(() => {
-    if (preview?.emails_destinatarios && emailsEditables.length === 0) {
+    if (preview?.emails_destinatarios) {
       setEmailsEditables([...preview.emails_destinatarios]);
     }
   }, [preview?.emails_destinatarios]);
@@ -294,6 +302,8 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         nombres_pdf: Object.keys(nombresCustom).length > 0 ? nombresCustom : undefined,
         // ✅ NUEVO: Usar emails editables en lugar de los del sistema
         email_destino: emailsEditables.join(','),
+        // ✅ Rango de fechas (si aplica)
+        ...(modoRango && fechaInicio && fechaFin ? { fecha_inicio: fechaInicio, fecha_fin: fechaFin } : {}),
       });
 
       setSendingStep('completed');
@@ -337,62 +347,129 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5" />
-            Bitácora de Informes Mensuales
+            Bitácora de Informes {modoRango ? 'por Rango de Fechas' : 'Mensuales'}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            <div className="space-y-2">
-              <Label>Mes</Label>
-              <Select value={String(mes)} onValueChange={v => setMes(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MESES.map(m => (
-                    <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Año</Label>
-              <Select value={String(anio)} onValueChange={v => setAnio(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {anios.map(a => (
-                    <SelectItem key={a} value={String(a)}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Tipo de Equipo</Label>
-              <Select value={categoria} onValueChange={v => setCategoria(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIAS.map(c => (
-                    <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button onClick={handleBuscar} disabled={loadingPreview}>
-              {loadingPreview ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Calendar className="h-4 w-4 mr-2" />
-              )}
-              Buscar Informes
-            </Button>
+        <CardContent className="space-y-4">
+          {/* Toggle modo rango */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="modo-rango"
+              checked={modoRango}
+              onCheckedChange={(checked) => {
+                setModoRango(!!checked);
+                setShowPreview(false);
+                setSendResult(null);
+              }}
+            />
+            <Label htmlFor="modo-rango" className="text-sm font-medium cursor-pointer">
+              Buscar por rango de fechas
+            </Label>
+            {modoRango && (
+              <Badge variant="outline" className="ml-2 text-xs text-blue-600 border-blue-300">
+                Modo Rango
+              </Badge>
+            )}
           </div>
+
+          {/* Filtros según modo */}
+          {modoRango ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div className="space-y-2">
+                <Label>Fecha Inicio</Label>
+                <Input
+                  type="date"
+                  value={fechaInicio}
+                  onChange={e => setFechaInicio(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Fecha Fin</Label>
+                <Input
+                  type="date"
+                  value={fechaFin}
+                  onChange={e => setFechaFin(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tipo de Equipo</Label>
+                <Select value={categoria} onValueChange={v => setCategoria(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIAS.map(c => (
+                      <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button onClick={handleBuscar} disabled={loadingPreview || !fechaInicio || !fechaFin}>
+                {loadingPreview ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Calendar className="h-4 w-4 mr-2" />
+                )}
+                Buscar Informes
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div className="space-y-2">
+                <Label>Mes</Label>
+                <Select value={String(mes)} onValueChange={v => setMes(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MESES.map(m => (
+                      <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Año</Label>
+                <Select value={String(anio)} onValueChange={v => setAnio(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {anios.map(a => (
+                      <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tipo de Equipo</Label>
+                <Select value={categoria} onValueChange={v => setCategoria(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIAS.map(c => (
+                      <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button onClick={handleBuscar} disabled={loadingPreview}>
+                {loadingPreview ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Calendar className="h-4 w-4 mr-2" />
+                )}
+                Buscar Informes
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -213,6 +213,9 @@ export function generarRemisionHTML(datos: DatosRemisionPDF): string {
             border-radius: 4px;
             margin-bottom: 15px;
             font-size: 9px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         
         .firmas-section {

@@ -45,6 +45,7 @@ import {
     X
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -210,19 +211,24 @@ function OrdenCard({ orden }: { orden: Orden }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function OrdenesPage() {
-    const [page, setPage] = useState(1);
-    const [busqueda, setBusqueda] = useState('');
-    const [busquedaDebounced, setBusquedaDebounced] = useState('');
-    const [filtroEstado, setFiltroEstado] = useState<string>('');
-    const [filtroPrioridad, setFiltroPrioridad] = useState<string>('');
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // Inicializar filtros desde URL params
+    const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
+    const [busqueda, setBusqueda] = useState(searchParams.get('busqueda') || '');
+    const [busquedaDebounced, setBusquedaDebounced] = useState(searchParams.get('busqueda') || '');
+    const [filtroEstado, setFiltroEstado] = useState<string>(searchParams.get('estado') || '');
+    const [filtroPrioridad, setFiltroPrioridad] = useState<string>(searchParams.get('prioridad') || '');
     // ENTERPRISE: Nuevos filtros avanzados
-    const [sortBy, setSortBy] = useState<'fecha_creacion' | 'fecha_programada' | 'numero_orden'>('fecha_creacion');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-    const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>('');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [sortBy, setSortBy] = useState<'fecha_creacion' | 'fecha_programada' | 'numero_orden'>((searchParams.get('sortBy') as any) || 'fecha_creacion');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sortOrder') as any) || 'desc');
+    const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>(searchParams.get('tipoServicio') || '');
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(searchParams.get('advanced') === 'true');
 
     // ✅ DEBOUNCE: Esperar 400ms después de que el usuario deje de escribir
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
+    const isInitialMount = useRef(true);
     useEffect(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
@@ -231,6 +237,28 @@ export default function OrdenesPage() {
         }, 400);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     }, [busqueda]);
+
+    // ✅ PERSISTENCIA: Actualizar URL cuando cambian los filtros (evitar en el primer mount)
+    useEffect(() => {
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+
+        const params = new URLSearchParams();
+        if (page > 1) params.set('page', String(page));
+        if (busqueda) params.set('busqueda', busqueda);
+        if (filtroEstado) params.set('estado', filtroEstado);
+        if (filtroPrioridad) params.set('prioridad', filtroPrioridad);
+        if (sortBy !== 'fecha_creacion') params.set('sortBy', sortBy);
+        if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
+        if (filtroTipoServicio) params.set('tipoServicio', filtroTipoServicio);
+        if (showAdvancedFilters) params.set('advanced', 'true');
+
+        const queryString = params.toString();
+        const newPath = queryString ? `/ordenes?${queryString}` : '/ordenes';
+        router.replace(newPath);
+    }, [page, busqueda, filtroEstado, filtroPrioridad, sortBy, sortOrder, filtroTipoServicio, showAdvancedFilters, router]);
 
     const pageSize = 12;
 

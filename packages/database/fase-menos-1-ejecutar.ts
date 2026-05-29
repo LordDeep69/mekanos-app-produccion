@@ -518,7 +518,7 @@ async function insertarActividadesBomPrevA() {
     { codigo: 'BPA_07', desc: 'REVISIÓN DE FUGAS EN BOMBAS, TANQUES Y TUBERÍA INMEDIATA', sistema: 'SIS_BOMBA', tipo: 'INSPECCION', orden: 7 },
     { codigo: 'BPA_08', desc: 'LIMPIEZA Y REVISIÓN DE FUNCIONAMIENTO DEL TABLERO DE CONTROL', sistema: 'SIS_BOMBA', tipo: 'LIMPIEZA', orden: 8 },
     { codigo: 'BPA_09', desc: 'RETORQUEO DE CONEXIONES EN EL TABLERO', sistema: 'SIS_BOMBA', tipo: 'AJUSTE', orden: 9 },
-    { codigo: 'BPA_10', desc: 'ESTADO DE JUAN OMEGA', sistema: 'SIS_BOMBA', tipo: 'INSPECCION', orden: 10 },
+    { codigo: 'BPA_10', desc: 'REVISIÓN DE ACOPLE OMEGA', sistema: 'SIS_BOMBA', tipo: 'INSPECCION', orden: 10 },
     { codigo: 'BPA_11', desc: 'ENGRASAR PUNTOS DE LUBRICACIÓN', sistema: 'SIS_BOMBA', tipo: 'LUBRICACION', orden: 11 },
     { codigo: 'BPA_12', desc: 'REVISAR SELLO MECÁNICO', sistema: 'SIS_BOMBA', tipo: 'INSPECCION', orden: 12 },
     { codigo: 'BPA_13', desc: 'AJUSTAR Y REVISAR SELLO TIPO PRENSA', sistema: 'SIS_BOMBA', tipo: 'AJUSTE', orden: 13 },
