@@ -222,6 +222,10 @@ export class InformesService {
         const nombreTecnico = [row.tecnico_nombre, row.tecnico_apellido]
           .filter(Boolean).join(' ').trim() || 'Sin técnico';
 
+        // ✅ FIX 05-JUN-2026: Si hay sede, usar su nombre. Si no, usar nombre del cliente.
+        const nombreSedeOCliente = row.nombre_sede || nombreCliente;
+        const ciudadSedeOCliente = row.ciudad_sede || null;
+
         return {
           id_documento: row.id_documento,
           id_informe: row.id_informe,
@@ -267,10 +271,10 @@ export class InformesService {
           tecnico: {
             nombre: nombreTecnico,
           },
-          sede: row.nombre_sede ? {
-            nombre: row.nombre_sede,
-            ciudad: row.ciudad_sede,
-          } : null,
+          sede: {
+            nombre: nombreSedeOCliente,
+            ciudad: ciudadSedeOCliente,
+          },
         };
       });
 

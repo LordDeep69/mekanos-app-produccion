@@ -62,7 +62,7 @@ export interface ReporteItem {
     sede: {
         nombre: string;
         ciudad: string | null;
-    } | null;
+    };
 }
 
 export interface ReportesResponse {

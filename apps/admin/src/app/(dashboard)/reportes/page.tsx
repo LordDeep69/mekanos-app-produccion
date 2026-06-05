@@ -117,7 +117,7 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
             nombreTipoServicio: reporte.tipo_servicio?.nombre,
             // El campo `tipo` del equipo es la categoría (Generador / Bomba / Motor)
             nombreTipoEquipo: reporte.equipo?.tipo,
-            nombreCliente: reporte.sede?.nombre || reporte.cliente.nombre,
+            nombreCliente: reporte.sede.nombre,
             numeroOrden: reporte.orden?.numero_orden,
         });
 
@@ -167,8 +167,8 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
             {/* Cliente / Sede */}
             <td className="px-4 py-3">
                 <div className="max-w-[200px]">
-                    <p className="text-sm font-medium text-gray-900 truncate" title={reporte.sede?.nombre || reporte.cliente.nombre}>
-                        {reporte.sede?.nombre || reporte.cliente.nombre}
+                    <p className="text-sm font-medium text-gray-900 truncate" title={reporte.sede.nombre}>
+                        {reporte.sede.nombre}
                     </p>
                     {reporte.cliente.nit && (
                         <p className="text-xs text-gray-500">NIT: {reporte.cliente.nit}</p>
