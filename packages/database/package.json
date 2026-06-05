@@ -5,13 +5,13 @@
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "scripts": {
-    "db:pull": "prisma db pull",
-    "db:generate": "prisma generate",
-    "db:studio": "prisma studio",
-    "db:migrate": "prisma migrate dev",
+    "db:pull": "prisma db pull --schema=./prisma/schema.prisma",
+    "db:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "db:studio": "prisma studio --schema=./prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
     "db:seed": "tsx prisma/seed.ts",
     "build": "tsc",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate --schema=./prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/common": "^10.2.10",

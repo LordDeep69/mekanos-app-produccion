@@ -21,7 +21,7 @@ import {
     type ReporteItem,
 } from '@/features/reportes';
 import { apiClient } from '@/lib/api/client';
-import { buildInformeFilename, descargarInformeAutenticado } from '@/lib/pdf-naming';
+import { buildInformeFilename, descargarInformeAutenticado, previsualizarInformeAutenticado } from '@/lib/pdf-naming';
 import { cn, formatDateSafe } from '@/lib/utils';
 import {
     AlertCircle,
@@ -117,7 +117,7 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
             nombreTipoServicio: reporte.tipo_servicio?.nombre,
             // El campo `tipo` del equipo es la categoría (Generador / Bomba / Motor)
             nombreTipoEquipo: reporte.equipo?.tipo,
-            nombreCliente: reporte.cliente.nombre,
+            nombreCliente: reporte.sede?.nombre || reporte.cliente.nombre,
             numeroOrden: reporte.orden?.numero_orden,
         });
 
@@ -126,6 +126,19 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
         } catch (error) {
             console.error('[Reportes] Error descargando PDF:', error);
             alert('No se pudo descargar el PDF. Verifique su sesión e intente nuevamente.');
+        }
+    };
+
+    /**
+     * ✅ FIX 05-JUN-2026: Previsualizar PDF en nueva pestaña (inline, sin descargar).
+     * Usa el endpoint proxy backend `/preview` que devuelve Content-Disposition: inline.
+     */
+    const handlePrevisualizar = async () => {
+        try {
+            await previsualizarInformeAutenticado(apiClient, idDocumento);
+        } catch (error) {
+            console.error('[Reportes] Error previsualizando PDF:', error);
+            alert('No se pudo previsualizar el PDF. Verifique su sesión e intente nuevamente.');
         }
     };
 
@@ -151,11 +164,11 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
                 <EstadoInformeBadge estado={reporte.estado_informe} />
             </td>
 
-            {/* Cliente */}
+            {/* Cliente / Sede */}
             <td className="px-4 py-3">
                 <div className="max-w-[200px]">
-                    <p className="text-sm font-medium text-gray-900 truncate" title={reporte.cliente.nombre}>
-                        {reporte.cliente.nombre}
+                    <p className="text-sm font-medium text-gray-900 truncate" title={reporte.sede?.nombre || reporte.cliente.nombre}>
+                        {reporte.sede?.nombre || reporte.cliente.nombre}
                     </p>
                     {reporte.cliente.nit && (
                         <p className="text-xs text-gray-500">NIT: {reporte.cliente.nit}</p>
@@ -219,15 +232,14 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
                 <div className="flex items-center gap-1 justify-end">
                     {pdfUrl && (
                         <>
-                            <a
-                                href={pdfUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                            <button
+                                type="button"
+                                onClick={handlePrevisualizar}
                                 className="p-1.5 rounded-md hover:bg-blue-50 text-blue-600 hover:text-blue-800 transition-colors"
                                 title="Ver PDF"
                             >
                                 <Eye className="h-4 w-4" />
-                            </a>
+                            </button>
                             <button
                                 type="button"
                                 onClick={handleDescargar}

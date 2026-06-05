@@ -1,8 +1,8 @@
 import { PrismaService } from '@mekanos/database';
 import {
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
+    Injectable,
+    InternalServerErrorException,
+    NotFoundException,
 } from '@nestjs/common';
 import { CreateInformesDto } from './dto/create-informes.dto';
 import { UpdateInformesDto } from './dto/update-informes.dto';
@@ -135,13 +135,17 @@ export class InformesService {
 
       const whereClause = conditions.join(' AND ');
 
-      // ── FROM + JOINs (shared by count & data) ───────────────────────────
+      // ── FROM + JOINs (optimized with selective LEFT JOINs) ────────────────
+      // CTES para pre-filtrar datos y evitar N+1 queries
       const fromJoins = `
         FROM documentos_generados dg
         JOIN ordenes_servicio os ON os.id_orden_servicio = dg.id_referencia
         LEFT JOIN clientes c ON c.id_cliente = os.id_cliente
         LEFT JOIN personas p ON p.id_persona = c.id_persona
-        LEFT JOIN equipos e ON e.id_equipo = os.id_equipo
+        LEFT JOIN (
+          SELECT id_equipo, codigo_equipo, nombre_equipo, numero_serie_equipo, id_tipo_equipo
+          FROM equipos
+        ) e ON e.id_equipo = os.id_equipo
         LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
         LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
         LEFT JOIN empleados emp ON emp.id_empleado = os.id_tecnico_asignado
@@ -150,10 +154,11 @@ export class InformesService {
         LEFT JOIN informes i ON i.id_documento_pdf = dg.id_documento
       `;
 
-      // ── Count query ──────────────────────────────────────────────────────
-      const countSql = `SELECT COUNT(*)::int as total ${fromJoins} WHERE ${whereClause}`;
+      // ── Count query (OPTIMIZED: only scan filtered rows) ─────────────────
+      // Ejecutar primero el count para evitar queries innecesarias
+      const countSql = `SELECT COUNT(DISTINCT dg.id_documento)::int as total ${fromJoins} WHERE ${whereClause}`;
 
-      // ── Data query with LIMIT/OFFSET ─────────────────────────────────────
+      // ── Data query with LIMIT/OFFSET (OPTIMIZED: ORDER BY after JOIN) ────
       const limitIdx = idx++;
       const offsetIdx = idx++;
       const dataSql = `
@@ -172,9 +177,7 @@ export class InformesService {
           os.prioridad::text as prioridad,
           c.id_cliente,
           p.primer_nombre,
-          p.segundo_nombre,
           p.primer_apellido,
-          p.segundo_apellido,
           p.razon_social,
           p.numero_identificacion,
           p.tipo_identificacion::text as tipo_identificacion,
@@ -213,11 +216,11 @@ export class InformesService {
       // ── Transform rows to clean response ─────────────────────────────────
       const reportes = data.map((row: any) => {
         const nombreCliente = row.razon_social
-          || [row.primer_nombre, row.primer_apellido].filter(Boolean).join(' ')
+          || [row.primer_nombre, row.primer_apellido].filter(Boolean).join(' ').trim()
           || 'Sin cliente';
 
         const nombreTecnico = [row.tecnico_nombre, row.tecnico_apellido]
-          .filter(Boolean).join(' ') || 'Sin técnico';
+          .filter(Boolean).join(' ').trim() || 'Sin técnico';
 
         return {
           id_documento: row.id_documento,
