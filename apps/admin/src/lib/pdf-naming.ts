@@ -3,11 +3,12 @@
  * (Mirror del helper de backend `apps/api/src/pdf/pdf-naming.helper.ts`).
  *
  * Formato canónico:
- *   INFORME - DDMM-YY - <SERVICIO> <EQUIPO> - <CLIENTE> - <MES> <YYYY>.pdf
+ *   INFORME - DDMM-YY - <SERVICIO> <EQUIPO> - <CLIENTE> - <NOMBRE EQUIPO> - <MES> <YYYY>.pdf
  *
  * Ejemplos:
- *   INFORME - 2504-26 - MANTENIMIENTO PREVENTIVO TIPO A PLANTA - BALMORAL - ABRIL 2026.pdf
- *   INFORME - 1203-26 - CORRECTIVO BOMBA - TAKURIKA CUARTO SUR - MARZO 2026.pdf
+ *   INFORME - 2504-26 - MANTENIMIENTO PREVENTIVO TIPO A PLANTA - BALMORAL - GEN-001 - ABRIL 2026.pdf
+ *   INFORME - 1203-26 - CORRECTIVO BOMBA - TAKURIKA CUARTO SUR - BOMBA PRINCIPAL - MARZO 2026.pdf
+ *   (Sin equipo nombrado) INFORME - 1203-26 - CORRECTIVO BOMBA - TAKURIKA CUARTO SUR - MARZO 2026.pdf
  *
  * Se mantiene en paralelo al backend para garantizar consistencia entre:
  *  - el filename que se establece como Content-Disposition al subir el PDF a R2
@@ -42,6 +43,8 @@ export interface InformeFilenameInput {
     codigoTipoEquipo?: string | null;
     nombreTipoEquipo?: string | null;
     nombreCliente?: string | null;
+    /** Nombre propio del equipo (ej: "GEN-001", "Bomba Principal"). Se incluye tras el cliente. */
+    nombreEquipo?: string | null;
     numeroOrden?: string | null;
 }
 
@@ -69,7 +72,13 @@ export function buildInformeFilename(input: InformeFilenameInput): string {
         ? `${servicio} ${equipo}`.replace(/\s+/g, ' ').trim()
         : servicio;
 
-    const base = `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${mesNombre} ${yyyy}`;
+    const equipoNombre = input.nombreEquipo
+        ? sanitizar(input.nombreEquipo.toUpperCase())
+        : '';
+
+    const base = equipoNombre
+        ? `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${equipoNombre} - ${mesNombre} ${yyyy}`
+        : `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${mesNombre} ${yyyy}`;
     return `${truncar(base, 180)}.pdf`;
 }
 

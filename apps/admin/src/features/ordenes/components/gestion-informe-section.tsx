@@ -296,7 +296,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
      *  - Preview blob (regenerar): mismo origen → atributo `download` respetado.
      *  - PDF existente en R2: descarga vía proxy backend autenticado, que aplica
      *    Content-Disposition con el nombre canónico
-     *    (`INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - MES YYYY.pdf`).
+     *    (`INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - NOMBRE EQUIPO - MES YYYY.pdf`).
      */
     const handleDescargarPdf = async () => {
         const filenameCanonico = buildInformeFilename({
@@ -310,6 +310,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             nombreCliente: orden.clientes?.persona?.nombre_comercial
                 || orden.clientes?.persona?.razon_social
                 || (orden.clientes?.nombre_sede ? orden.clientes.nombre_sede : null),
+            nombreEquipo: orden.equipos?.nombre,
             numeroOrden: orden.numero_orden,
         });
 

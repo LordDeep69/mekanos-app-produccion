@@ -24,9 +24,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-llenar para desarrollo (QUITAR EN PRODUCCIÓN)
-    _emailController.text = 'admin@mekanos.com';
-    _passwordController.text = 'Admin123!';
+    // Los campos se inician vacíos por seguridad
   }
 
   @override
@@ -190,7 +188,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Info de conexión (debug)
+                  // Info de conexión
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -198,8 +196,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Text(
-                      'Conectando a: API Backend\n'
-                      'Credenciales de prueba pre-llenadas',
+                      'Conectando a: API Backend',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),

@@ -176,6 +176,7 @@ export class InformesService {
           os.fecha_fin_real,
           os.prioridad::text as prioridad,
           c.id_cliente,
+          c.nombre_sede as nombre_sede_cliente,
           p.primer_nombre,
           p.primer_apellido,
           p.razon_social,
@@ -222,8 +223,13 @@ export class InformesService {
         const nombreTecnico = [row.tecnico_nombre, row.tecnico_apellido]
           .filter(Boolean).join(' ').trim() || 'Sin técnico';
 
-        // ✅ FIX 05-JUN-2026: Si hay sede, usar su nombre. Si no, usar nombre del cliente.
-        const nombreSedeOCliente = row.nombre_sede || nombreCliente;
+        // ✅ FIX 06-JUN-2026: Prioridad para mostrar el nombre correcto:
+        // 1. Si el cliente tiene nombre_sede (es una sede registrada en clientes), usar eso
+        // 2. Si no, usar nombre_sede de sedes_cliente (si existe)
+        // 3. Si no, usar el nombre del cliente
+        const nombreSedeOCliente = row.nombre_sede_cliente 
+          || row.nombre_sede 
+          || nombreCliente;
         const ciudadSedeOCliente = row.ciudad_sede || null;
 
         return {

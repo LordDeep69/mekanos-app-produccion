@@ -88,8 +88,8 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                             value={observaciones}
                             onChange={(e) => setObservaciones(e.target.value)}
                             placeholder="Observaciones del técnico al finalizar el servicio..."
-                            rows={4}
-                            className="w-full px-4 py-3 text-sm border-2 border-green-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                            rows={14}
+                            className="w-full px-4 py-3 text-sm border-2 border-green-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-y min-h-[260px] h-[280px]"
                             autoFocus
                         />
                         <div className="flex gap-2 justify-end">

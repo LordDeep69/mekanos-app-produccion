@@ -70,7 +70,6 @@ export interface DocumentoGeneradoResult {
 @Injectable()
 export class GeneradorDocumentosFacadeService {
     private readonly logger = new Logger(GeneradorDocumentosFacadeService.name);
-    private browser: puppeteer.Browser | null = null;
 
     /**
      * Genera un documento PDF según el tipo especificado
@@ -161,11 +160,19 @@ export class GeneradorDocumentosFacadeService {
 
     /**
      * Convierte HTML a PDF usando Puppeteer
+     * ✅ FIX 09-JUN-2026: Resolución cross-platform de Chrome
      */
     private async htmlToPDF(html: string, opciones?: GenerarDocumentoInput['opciones']): Promise<Buffer> {
+        const executablePath = this.resolverChromePath();
+        const isWindows = process.platform === 'win32';
+
+        const baseArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'];
+        const linuxOnlyArgs = isWindows ? [] : ['--single-process', '--no-zygote'];
+
         const browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            ...(executablePath ? { executablePath } : {}),
+            args: [...baseArgs, ...linuxOnlyArgs],
         });
 
         try {
@@ -183,6 +190,56 @@ export class GeneradorDocumentosFacadeService {
         } finally {
             await browser.close();
         }
+    }
+
+    /**
+     * ✅ NEW 09-JUN-2026: Resolución cross-platform de Chrome executable
+     */
+    private resolverChromePath(): string | undefined {
+        const path = require('path');
+        const fs = require('fs');
+        const isWindows = process.platform === 'win32';
+
+        // 1. puppeteer.executablePath()
+        try {
+            const defaultPath = puppeteer.executablePath();
+            if (defaultPath && fs.existsSync(defaultPath)) return defaultPath;
+        } catch { /* ignore */ }
+
+        // 2. PUPPETEER_CACHE_DIR scan
+        const cacheDir = process.env.PUPPETEER_CACHE_DIR;
+        if (cacheDir && fs.existsSync(cacheDir)) {
+            const chromeDirBase = path.join(cacheDir, 'chrome');
+            if (fs.existsSync(chromeDirBase)) {
+                try {
+                    const versions = fs.readdirSync(chromeDirBase)
+                        .filter((d: string) => fs.statSync(path.join(chromeDirBase, d)).isDirectory())
+                        .sort().reverse();
+                    for (const version of versions) {
+                        const candidates = isWindows
+                            ? [path.join(chromeDirBase, version, 'chrome-win64', 'chrome.exe')]
+                            : [path.join(chromeDirBase, version, 'chrome-linux64', 'chrome')];
+                        for (const c of candidates) {
+                            if (fs.existsSync(c)) return c;
+                        }
+                    }
+                } catch { /* ignore scan errors */ }
+            }
+        }
+
+        // 3. System Chrome
+        const systemPaths = isWindows
+            ? [
+                path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+                path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+              ]
+            : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium-browser'];
+
+        for (const p of systemPaths) {
+            if (p && fs.existsSync(p)) return p;
+        }
+
+        return undefined; // Puppeteer intentará usar su propio descubrimiento
     }
 
     /**

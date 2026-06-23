@@ -118,6 +118,7 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
             // El campo `tipo` del equipo es la categoría (Generador / Bomba / Motor)
             nombreTipoEquipo: reporte.equipo?.tipo,
             nombreCliente: reporte.sede.nombre,
+            nombreEquipo: reporte.equipo?.nombre,
             numeroOrden: reporte.orden?.numero_orden,
         });
 
@@ -193,11 +194,11 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
             {/* Equipo */}
             <td className="px-4 py-3">
                 {reporte.equipo ? (
-                    <div className="max-w-[180px]">
-                        <p className="text-sm text-gray-900 truncate" title={reporte.equipo.nombre}>
-                            {reporte.equipo.codigo}
+                    <div className="max-w-[200px]">
+                        <p className="text-sm text-gray-900 truncate" title={reporte.equipo.codigo}>
+                            {reporte.equipo.nombre || reporte.equipo.codigo}
                         </p>
-                        <p className="text-xs text-gray-500 truncate" title={reporte.equipo.nombre}>
+                        <p className="text-xs text-gray-500 truncate" title={reporte.equipo.numero_serie || ''}>
                             {reporte.equipo.tipo}
                         </p>
                     </div>

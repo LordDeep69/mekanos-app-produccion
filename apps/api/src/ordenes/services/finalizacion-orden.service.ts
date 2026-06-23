@@ -883,24 +883,40 @@ export class FinalizacionOrdenService {
 
         const folder = `mekanos/evidencias/${numeroOrden}`;
 
-        // PASO 1: Subir TODAS las imágenes a Cloudinary EN PARALELO
-        this.logger.log(`   📤 Subiendo ${evidencias.length} evidencias en paralelo...`);
+        // PASO 1: Subir imágenes a Cloudinary CON CUPO CONTROLADO (3 en paralelo)
+        this.logger.log(`   📤 Subiendo ${evidencias.length} evidencias (cupo=3)...`);
         const startUpload = Date.now();
 
-        const uploadPromises = evidencias.map(async (ev) => {
-            const buffer = Buffer.from(ev.base64, 'base64');
-            const result = await this.cloudinaryService.uploadImage(buffer, {
-                folder,
-                tags: [ev.tipo, numeroOrden],
+        const MAX_CONCURRENCY = 3;
+        const uploadResults: Array<{ ev: EvidenciaInput; buffer: Buffer; result: UploadResult }> = [];
+        let idx = 0;
+
+        while (idx < evidencias.length) {
+            const batch = evidencias.slice(idx, idx + MAX_CONCURRENCY);
+            const batchPromises = batch.map(async (ev) => {
+                try {
+                    const buffer = Buffer.from(ev.base64, 'base64');
+                    const result = await this.cloudinaryService.uploadImage(buffer, {
+                        folder,
+                        tags: [ev.tipo, numeroOrden],
+                    });
+                    return { ev, buffer, result };
+                } catch (err) {
+                    this.logger.error(`   ❌ Error subiendo evidencia ${ev.tipo}: ${err instanceof Error ? err.message : err}`);
+                    return null;
+                }
             });
-            return { ev, buffer, result };
-        });
+            const batchResults = await Promise.all(batchPromises);
+            for (const r of batchResults) {
+                if (r) uploadResults.push(r);
+            }
+            idx += MAX_CONCURRENCY;
+        }
 
-        const uploadResults = await Promise.all(uploadPromises);
         const uploadTime = Date.now() - startUpload;
-        this.logger.log(`   ⚡ Subida paralela completada en ${uploadTime}ms`);
+        this.logger.log(`   ⚡ Subida completada en ${uploadTime}ms (${uploadResults.length} archivos)`);
 
-        // PASO 2: Validar resultados de Cloudinary
+        // PASO 2: Validar resultados de Cloudinary (saltar fallos)
         const ahora = new Date();
         const datosValidados: Array<{
             ev: EvidenciaInput;
@@ -914,13 +930,17 @@ export class FinalizacionOrdenService {
             const { ev, buffer, result: cloudinaryResult } = uploadResults[i];
 
             if (!cloudinaryResult.success || !cloudinaryResult.url) {
-                throw new InternalServerErrorException(
-                    `Error subiendo evidencia ${ev.tipo}: ${cloudinaryResult.error || 'URL no generada'}`,
-                );
+                this.logger.warn(`   ⚠️ Evidencia ${ev.tipo} saltada por fallo en Cloudinary: ${cloudinaryResult.error || 'URL no generada'}`);
+                continue;
             }
 
             const hash = createHash('sha256').update(buffer).digest('hex');
             datosValidados.push({ ev, buffer, url: cloudinaryResult.url, hash, index: i });
+        }
+
+        if (datosValidados.length === 0) {
+            this.logger.warn('   ⚠️ Ninguna evidencia pudo ser subida a Cloudinary');
+            return [];
         }
 
         // PASO 3: Registrar en BD EN PARALELO (necesitamos IDs individuales)
@@ -1672,6 +1692,7 @@ export class FinalizacionOrdenService {
             codigoTipoEquipo: tipoEquipo?.codigo_tipo,
             nombreTipoEquipo: tipoEquipo?.nombre_tipo,
             nombreCliente,
+            nombreEquipo: equipo?.nombre_equipo,
             numeroOrden: orden.numero_orden,
         });
     }

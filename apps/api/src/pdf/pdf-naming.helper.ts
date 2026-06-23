@@ -2,11 +2,12 @@
  * MEKANOS S.A.S - Helper centralizado de nombres de archivo para informes PDF
  *
  * Formato canónico (Legacy-friendly):
- *   INFORME - DDMM-YY - <SERVICIO> <EQUIPO> - <CLIENTE> - <MES> <YYYY>.pdf
+ *   INFORME - DDMM-YY - <SERVICIO> <EQUIPO> - <CLIENTE> - <NOMBRE EQUIPO> - <MES> <YYYY>.pdf
  *
  * Ejemplos:
- *   INFORME - 2504-26 - MANTENIMIENTO PREVENTIVO TIPO A PLANTA - BALMORAL - ABRIL 2026.pdf
- *   INFORME - 1203-26 - CORRECTIVO BOMBA - TAKURIKA CUARTO SUR - MARZO 2026.pdf
+ *   INFORME - 2504-26 - MANTENIMIENTO PREVENTIVO TIPO A PLANTA - BALMORAL - GEN-001 - ABRIL 2026.pdf
+ *   INFORME - 1203-26 - CORRECTIVO BOMBA - TAKURIKA CUARTO SUR - BOMBA PRINCIPAL - MARZO 2026.pdf
+ *   (Sin equipo nombrado) INFORME - 1203-26 - CORRECTIVO BOMBA - TAKURIKA CUARTO SUR - MARZO 2026.pdf
  *
  * Diseño robusto frente a datos faltantes: nunca lanza, usa fallbacks
  * razonables. La salida está sanitizada para ser segura como nombre de
@@ -49,6 +50,8 @@ export interface InformeFilenameInput {
     nombreTipoEquipo?: string | null;
     /** Nombre del cliente (razón social, comercial o completo). */
     nombreCliente?: string | null;
+    /** Nombre propio del equipo (ej: "GEN-001", "Bomba Principal"). Se incluye tras el cliente. */
+    nombreEquipo?: string | null;
     /** Número de orden (fallback si no hay nombre de cliente). */
     numeroOrden?: string | null;
 }
@@ -83,7 +86,13 @@ export function buildInformeFilename(input: InformeFilenameInput): string {
         ? `${servicio} ${equipo}`.replace(/\s+/g, ' ').trim()
         : servicio;
 
-    const base = `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${mesNombre} ${yyyy}`;
+    const equipoNombre = input.nombreEquipo
+        ? sanitizar(input.nombreEquipo.toUpperCase())
+        : '';
+
+    const base = equipoNombre
+        ? `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${equipoNombre} - ${mesNombre} ${yyyy}`
+        : `INFORME - ${dd}${mm}-${yy} - ${servicioEquipo} - ${cliente} - ${mesNombre} ${yyyy}`;
     return `${truncar(base, 180)}.pdf`;
 }
 

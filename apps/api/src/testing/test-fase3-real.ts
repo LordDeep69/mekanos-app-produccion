@@ -67,9 +67,40 @@ async function testPDFGeneration(): Promise<Buffer | null> {
   console.log('\n📄 TEST 3: Generando PDF de prueba...');
   
   try {
+    // ✅ FIX 09-JUN-2026: Resolución cross-platform de Chrome
+    const path = require('path');
+    const fs = require('fs');
+    const isWindows = process.platform === 'win32';
+    
+    // Resolver Chrome executable
+    let execPath: string | undefined;
+    try {
+      const defaultPath = puppeteer.executablePath();
+      if (defaultPath && fs.existsSync(defaultPath)) execPath = defaultPath;
+    } catch { /* ignore */ }
+    
+    if (!execPath) {
+      const cacheDir = process.env.PUPPETEER_CACHE_DIR;
+      if (cacheDir && fs.existsSync(path.join(cacheDir, 'chrome'))) {
+        const versions = fs.readdirSync(path.join(cacheDir, 'chrome'))
+          .filter((d: string) => fs.statSync(path.join(cacheDir, 'chrome', d)).isDirectory())
+          .sort().reverse();
+        for (const v of versions) {
+          const candidate = isWindows
+            ? path.join(cacheDir, 'chrome', v, 'chrome-win64', 'chrome.exe')
+            : path.join(cacheDir, 'chrome', v, 'chrome-linux64', 'chrome');
+          if (fs.existsSync(candidate)) { execPath = candidate; break; }
+        }
+      }
+    }
+
+    const baseArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'];
+    const linuxArgs = isWindows ? [] : ['--single-process', '--no-zygote'];
+
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      ...(execPath ? { executablePath: execPath } : {}),
+      args: [...baseArgs, ...linuxArgs],
     });
     
     const page = await browser.newPage();

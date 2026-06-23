@@ -18,9 +18,11 @@ import {
     ChevronRight,
     Clipboard,
     Clock,
+    Edit2,
     Image as ImageIcon,
     Loader2,
     Plus,
+    Save,
     Trash2,
     Upload,
     X,
@@ -80,10 +82,12 @@ function FotoThumbnail({
     evidencia,
     onView,
     onDelete,
+    onEdit,
 }: {
     evidencia: Evidencia;
     onView: () => void;
     onDelete: () => void;
+    onEdit?: () => void;
 }) {
     const fotoUrl = getEvUrl(evidencia);
     const { subTipo, descripcionLimpia } = getSubTipo(evidencia);
@@ -106,6 +110,15 @@ function FotoThumbnail({
                         >
                             <ZoomIn className="h-4 w-4 text-gray-700" />
                         </button>
+                        {onEdit && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                                className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+                                title="Editar observación"
+                            >
+                                <Edit2 className="h-4 w-4 text-white" />
+                            </button>
+                        )}
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(); }}
                             className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors"
@@ -338,6 +351,43 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
         }
     };
 
+    // ✅ Edición inline de observación
+    const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
+    const [editDescripcion, setEditDescripcion] = useState('');
+
+    const updateDescripcionMutation = useMutation({
+        mutationFn: async ({ id, descripcion }: { id: number; descripcion: string }) => {
+            const res = await apiClient.put(`/evidencias-fotograficas/${id}`, { descripcion });
+            return res.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['evidencias-generales', idOrdenServicio] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+            toast.success('Observación actualizada');
+            setEditingEvidenciaId(null);
+            setEditDescripcion('');
+        },
+        onError: () => {
+            toast.error('Error al actualizar observación');
+        },
+    });
+
+    const handleEditClick = (evidencia: Evidencia) => {
+        setEditingEvidenciaId(getEvId(evidencia));
+        setEditDescripcion(evidencia.descripcion || '');
+    };
+
+    const handleSaveDescripcion = (idEvidencia: number) => {
+        if (editDescripcion.trim()) {
+            updateDescripcionMutation.mutate({ id: idEvidencia, descripcion: editDescripcion.trim() });
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingEvidenciaId(null);
+        setEditDescripcion('');
+    };
+
     const handleViewLightbox = (evidencia: Evidencia) => {
         const evId = getEvId(evidencia);
         const idx = fotosGenerales.findIndex((e) => getEvId(e) === evId);
@@ -437,14 +487,53 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                        {fotosGenerales.map((evidencia) => (
-                            <FotoThumbnail
-                                key={getEvId(evidencia)}
-                                evidencia={evidencia}
-                                onView={() => handleViewLightbox(evidencia)}
-                                onDelete={() => handleDelete(getEvId(evidencia))}
-                            />
-                        ))}
+                        {fotosGenerales.map((evidencia) => {
+                            const evId = getEvId(evidencia);
+                            const isEditing = editingEvidenciaId === evId;
+                            return (
+                                <div key={evId} className="relative">
+                                    {isEditing ? (
+                                        <div className="aspect-square rounded-xl border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2">
+                                            <textarea
+                                                value={editDescripcion}
+                                                onChange={(e) => setEditDescripcion(e.target.value)}
+                                                className="w-full flex-1 text-xs px-2 py-1 border border-blue-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
+                                                placeholder="Observación..."
+                                                autoFocus
+                                            />
+                                            <div className="flex gap-1 justify-end">
+                                                <button
+                                                    onClick={handleCancelEdit}
+                                                    className="p-1.5 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                                                    title="Cancelar"
+                                                >
+                                                    <X className="h-3.5 w-3.5 text-gray-600" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleSaveDescripcion(evId)}
+                                                    disabled={updateDescripcionMutation.isPending}
+                                                    className="p-1.5 bg-blue-500 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
+                                                    title="Guardar"
+                                                >
+                                                    {updateDescripcionMutation.isPending ? (
+                                                        <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                                                    ) : (
+                                                        <Save className="h-3.5 w-3.5 text-white" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <FotoThumbnail
+                                            evidencia={evidencia}
+                                            onView={() => handleViewLightbox(evidencia)}
+                                            onDelete={() => handleDelete(evId)}
+                                            onEdit={() => handleEditClick(evidencia)}
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>

@@ -12,6 +12,9 @@
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { v2 as cloudinary, UploadApiErrorResponse, UploadApiResponse } from 'cloudinary';
+import { setTimeout } from 'timers/promises';
+
+const CLOUDINARY_UPLOAD_TIMEOUT_MS = 120_000; // 2 minutos por upload
 
 export type CloudinaryAccount = 'PLANTAS' | 'BOMBAS';
 
@@ -114,6 +117,7 @@ export class CloudinaryService implements OnModuleInit {
         folder: options.folder || 'mekanos/evidencias',
         resource_type: 'image',
         tags: options.tags || [],
+        timeout: CLOUDINARY_UPLOAD_TIMEOUT_MS,
       };
 
       if (options.publicId) {

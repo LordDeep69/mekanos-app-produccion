@@ -61,7 +61,7 @@ export class InformesPdfController {
     @UseGuards(JwtAuthGuard)
     @ApiOperation({
         summary: 'Descargar PDF de informe con nombre canónico',
-        description: 'Proxy que sirve el PDF desde R2 con Content-Disposition forzado al formato INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - YYYY.pdf',
+        description: 'Proxy que sirve el PDF desde R2 con Content-Disposition forzado al formato INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - NOMBRE EQUIPO - MES YYYY.pdf',
     })
     async descargarInforme(
         @Param('id', ParseIntPipe) idDocumento: number,
@@ -208,6 +208,7 @@ export class InformesPdfController {
                 codigoTipoEquipo: doc.codigo_tipo_equipo,
                 nombreTipoEquipo: doc.nombre_tipo_equipo,
                 nombreCliente: doc.nombre_cliente,
+                nombreEquipo: doc.nombre_equipo,
                 numeroOrden: doc.numero_orden,
             });
 
@@ -297,6 +298,7 @@ export class InformesPdfController {
                 ts.nombre_tipo AS nombre_tipo_servicio,
                 te.codigo_tipo AS codigo_tipo_equipo,
                 te.nombre_tipo AS nombre_tipo_equipo,
+                e.nombre_equipo AS nombre_equipo,
                 COALESCE(p.nombre_comercial, p.razon_social, p.nombre_completo,
                          CONCAT_WS(' ', p.primer_nombre, p.primer_apellido), 'CLIENTE') AS nombre_cliente
             FROM documentos_generados dg
@@ -324,6 +326,7 @@ export class InformesPdfController {
                 codigoTipoEquipo: row.codigo_tipo_equipo,
                 nombreTipoEquipo: row.nombre_tipo_equipo,
                 nombreCliente: row.nombre_cliente,
+                nombreEquipo: row.nombre_equipo,
                 numeroOrden: row.numero_orden,
             },
         };
@@ -342,6 +345,7 @@ export class InformesPdfController {
         nombre_tipo_servicio: string | null;
         codigo_tipo_equipo: string | null;
         nombre_tipo_equipo: string | null;
+        nombre_equipo: string | null;
         nombre_cliente: string;
     }>> {
         const limitClause = limit ? `LIMIT ${limit}` : '';
@@ -355,6 +359,7 @@ export class InformesPdfController {
                 ts.nombre_tipo AS nombre_tipo_servicio,
                 te.codigo_tipo AS codigo_tipo_equipo,
                 te.nombre_tipo AS nombre_tipo_equipo,
+                e.nombre_equipo AS nombre_equipo,
                 COALESCE(p.nombre_comercial, p.razon_social, p.nombre_completo,
                          CONCAT_WS(' ', p.primer_nombre, p.primer_apellido), 'CLIENTE') AS nombre_cliente
             FROM documentos_generados dg

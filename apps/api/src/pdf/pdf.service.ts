@@ -582,34 +582,51 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Inicializa el browser de Puppeteer
+   * ✅ FIX 09-JUN-2026: Soporte cross-platform Windows/Linux robusto
    */
   private async initBrowser(): Promise<void> {
-    const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/tmp/.cache/puppeteer';
+    const isWindows = process.platform === 'win32';
+    // Fallback inteligente: en Windows no existe /tmp
+    const defaultCacheDir = isWindows
+      ? require('path').join(process.env.USERPROFILE || process.env.HOME || '.', '.cache', 'puppeteer')
+      : '/tmp/.cache/puppeteer';
+    const cacheDir = process.env.PUPPETEER_CACHE_DIR || defaultCacheDir;
+
     this.logger.log('🚀 Inicializando Puppeteer browser...');
+    this.logger.log(`📍 Plataforma: ${process.platform}, Entorno: ${process.env.NODE_ENV}`);
     this.logger.log(`📍 PUPPETEER_CACHE_DIR: ${cacheDir}`);
 
     try {
-      // ✅ FIX 24-ENE-2026: Railway - Instalar Chrome dinámicamente en runtime si no existe
-      let executablePath = puppeteer.executablePath();
-      this.logger.log(`📍 Chrome executable path esperado: ${executablePath}`);
+      // ═══════════════════════════════════════════════════════════════════
+      // PASO 1: Resolver Chrome executable path de forma robusta
+      // Busca en múltiples ubicaciones para máxima compatibilidad
+      // ═══════════════════════════════════════════════════════════════════
+      let executablePath = this.resolverChromePath(cacheDir);
+      this.logger.log(`📍 Chrome executable path resuelto: ${executablePath || '(no encontrado)'}`);
 
-      // Verificar si Chrome existe, si no, instalarlo
-      if (!fs.existsSync(executablePath)) {
-        this.logger.warn('⚠️ Chrome no encontrado, instalando en runtime...');
+      // ═══════════════════════════════════════════════════════════════════
+      // PASO 2: Si Chrome no existe, instalarlo en runtime
+      // ═══════════════════════════════════════════════════════════════════
+      if (!executablePath) {
+        this.logger.warn('⚠️ Chrome no encontrado en ninguna ubicación conocida, instalando en runtime...');
         try {
-          // Instalar Chrome con la variable de entorno correcta
-          const installCmd = `PUPPETEER_CACHE_DIR=${cacheDir} npx puppeteer browsers install chrome`;
-          this.logger.log(`📦 Ejecutando: ${installCmd}`);
+          // ✅ FIX 09-JUN-2026: Comando cross-platform (sin prefijo de env vars estilo Unix)
+          // Las env vars se pasan únicamente via el objeto `env` de execSync
+          const installCmd = 'npx puppeteer browsers install chrome';
+          this.logger.log(`📦 Ejecutando: ${installCmd} (con PUPPETEER_CACHE_DIR=${cacheDir})`);
           execSync(installCmd, {
             stdio: 'inherit',
             timeout: 120000,
-            env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir }
+            env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
           });
           this.logger.log('✅ Chrome instalado correctamente');
 
-          // Actualizar el path después de la instalación
-          executablePath = puppeteer.executablePath();
-          this.logger.log(`📍 Nuevo Chrome executable path: ${executablePath}`);
+          // Resolver de nuevo después de la instalación
+          executablePath = this.resolverChromePath(cacheDir);
+          if (!executablePath) {
+            throw new Error('Chrome se instaló pero no se encontró el ejecutable');
+          }
+          this.logger.log(`📍 Chrome encontrado post-instalación: ${executablePath}`);
         } catch (installError: any) {
           this.logger.error(`❌ Error instalando Chrome: ${installError.message}`);
           throw new Error(`No se pudo instalar Chrome: ${installError.message}`);
@@ -618,9 +635,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         this.logger.log('✅ Chrome encontrado en el path esperado');
       }
 
-      // ✅ FIX 03-FEB-2026: Detectar Windows vs Linux para configuración apropiada
-      const isWindows = process.platform === 'win32';
-      // const _isProduction = process.env.NODE_ENV === 'production';
+      // ═══════════════════════════════════════════════════════════════════
+      // PASO 3: Configurar args por plataforma y lanzar browser
+      // ═══════════════════════════════════════════════════════════════════
 
       // Args base que funcionan en ambas plataformas
       const baseArgs = [
@@ -663,8 +680,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         '--memory-pressure-off',
       ];
 
-      this.logger.log(`📍 Plataforma: ${process.platform}, Entorno: ${process.env.NODE_ENV}`);
-
       this.browser = await puppeteer.launch({
         headless: true,
         executablePath,
@@ -682,6 +697,87 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         `Asegúrese de que Chrome está instalado (npx puppeteer browsers install chrome)`
       );
     }
+  }
+
+  /**
+   * ✅ NEW 09-JUN-2026: Resuelve la ruta de Chrome de forma robusta y cross-platform
+   * Busca en múltiples ubicaciones con orden de prioridad:
+   * 1. puppeteer.executablePath() (respeta .puppeteerrc.cjs)
+   * 2. PUPPETEER_CACHE_DIR (env var explícita)
+   * 3. Rutas comunes del sistema según plataforma
+   */
+  private resolverChromePath(cacheDir: string): string | null {
+    const path = require('path');
+
+    // 1. Intentar con puppeteer.executablePath() (usa .puppeteerrc.cjs)
+    try {
+      const defaultPath = puppeteer.executablePath();
+      if (defaultPath && fs.existsSync(defaultPath)) {
+        this.logger.log(`📍 Chrome vía puppeteer.executablePath(): ${defaultPath}`);
+        return defaultPath;
+      }
+    } catch {
+      // executablePath puede lanzar si no encuentra el binario
+    }
+
+    // 2. Buscar en PUPPETEER_CACHE_DIR (escaneo de directorios de versión)
+    if (cacheDir && fs.existsSync(cacheDir)) {
+      const chromeDirBase = path.join(cacheDir, 'chrome');
+      if (fs.existsSync(chromeDirBase)) {
+        try {
+          const versions = fs.readdirSync(chromeDirBase)
+            .filter((d: string) => fs.statSync(path.join(chromeDirBase, d)).isDirectory())
+            .sort()
+            .reverse(); // Más reciente primero
+
+          for (const version of versions) {
+            const isWindows = process.platform === 'win32';
+            // En Windows: chrome/win64-XXX/chrome-win64/chrome.exe
+            // En Linux:   chrome/linux-XXX/chrome-linux64/chrome
+            const candidates = isWindows
+              ? [path.join(chromeDirBase, version, 'chrome-win64', 'chrome.exe')]
+              : [
+                  path.join(chromeDirBase, version, 'chrome-linux64', 'chrome'),
+                  path.join(chromeDirBase, version, 'chrome'),
+                ];
+
+            for (const candidate of candidates) {
+              if (fs.existsSync(candidate)) {
+                this.logger.log(`📍 Chrome vía PUPPETEER_CACHE_DIR scan: ${candidate}`);
+                return candidate;
+              }
+            }
+          }
+        } catch (e) {
+          this.logger.warn(`⚠️ Error escaneando cacheDir ${chromeDirBase}: ${(e as Error).message}`);
+        }
+      }
+    }
+
+    // 3. Buscar en ubicaciones comunes del sistema
+    const isWindows = process.platform === 'win32';
+    const systemPaths = isWindows
+      ? [
+          path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+          path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+          path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        ]
+      : [
+          '/usr/bin/google-chrome',
+          '/usr/bin/google-chrome-stable',
+          '/usr/bin/chromium-browser',
+          '/usr/bin/chromium',
+        ];
+
+    for (const sysPath of systemPaths) {
+      if (sysPath && fs.existsSync(sysPath)) {
+        this.logger.log(`📍 Chrome vía ruta del sistema: ${sysPath}`);
+        return sysPath;
+      }
+    }
+
+    this.logger.warn('⚠️ No se encontró Chrome en ninguna ubicación conocida');
+    return null;
   }
 
   /**

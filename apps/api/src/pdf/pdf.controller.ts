@@ -1690,6 +1690,7 @@ export class PdfController {
           codigoTipoEquipo: orden.equipos?.tipos_equipo?.codigo_tipo,
           nombreTipoEquipo: orden.equipos?.tipos_equipo?.nombre_tipo,
           nombreCliente: clienteNombre,
+      nombreEquipo: orden.equipos?.nombre_equipo,
           numeroOrden: orden.numero_orden,
         });
         urlPdf = await this.r2Service.uploadPDF(resultado.buffer, r2Filename, { downloadFilename });
@@ -2285,6 +2286,7 @@ export class PdfController {
     codigoTipoEquipo?: string | null;
     nombreTipoEquipo?: string | null;
     nombreCliente?: string | null;
+    nombreEquipo?: string | null;
     numeroOrden?: string | null;
   } | null> {
     const orden = await this.prisma.ordenes_servicio.findUnique({
@@ -2295,7 +2297,7 @@ export class PdfController {
         fecha_inicio_real: true,
         fecha_programada: true,
         tipos_servicio: { select: { codigo_tipo: true, nombre_tipo: true } },
-        equipos: { select: { tipos_equipo: { select: { codigo_tipo: true, nombre_tipo: true } } } },
+        equipos: { select: { nombre_equipo: true, tipos_equipo: { select: { codigo_tipo: true, nombre_tipo: true } } } },
         clientes: {
           select: {
             nombre_sede: true,
@@ -2332,6 +2334,7 @@ export class PdfController {
       codigoTipoEquipo: orden.equipos?.tipos_equipo?.codigo_tipo,
       nombreTipoEquipo: orden.equipos?.tipos_equipo?.nombre_tipo,
       nombreCliente,
+      nombreEquipo: orden.equipos?.nombre,
       numeroOrden: orden.numero_orden,
     };
   }

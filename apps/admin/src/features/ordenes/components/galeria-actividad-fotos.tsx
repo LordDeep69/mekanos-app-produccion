@@ -17,9 +17,11 @@ import {
     ChevronRight,
     Clipboard,
     Clock,
+    Edit2,
     Image as ImageIcon,
     Loader2,
     Plus,
+    Save,
     Trash2,
     Upload,
     X,
@@ -74,14 +76,17 @@ function FotoThumbnail({
     evidencia,
     onView,
     onDelete,
+    onEdit,
     canDelete
 }: {
     evidencia: Evidencia;
     onView: () => void;
     onDelete: () => void;
+    onEdit: () => void;
     canDelete: boolean;
 }) {
     const fotoUrl = getEvidenciaUrl(evidencia);
+    const hasDescripcion = evidencia.descripcion && evidencia.descripcion.trim();
 
     return (
         <div className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
@@ -98,18 +103,32 @@ function FotoThumbnail({
                         <button
                             onClick={onView}
                             className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+                            title="Ver en grande"
                         >
                             <ZoomIn className="h-4 w-4 text-gray-700" />
+                        </button>
+                        <button
+                            onClick={onEdit}
+                            className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+                            title="Editar observación"
+                        >
+                            <Edit2 className="h-4 w-4 text-white" />
                         </button>
                         {canDelete && (
                             <button
                                 onClick={onDelete}
                                 className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors"
+                                title="Eliminar"
                             >
                                 <Trash2 className="h-4 w-4 text-white" />
                             </button>
                         )}
                     </div>
+                    {hasDescripcion && (
+                        <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent">
+                            <p className="text-white text-[10px] truncate">{evidencia.descripcion}</p>
+                        </div>
+                    )}
                 </>
             ) : (
                 <div className="w-full h-full flex items-center justify-center">
@@ -260,6 +279,44 @@ export function GaleriaActividadFotos({
         onInvalidType: (name) => toast.error(`"${name}" no es una imagen válida`),
         onMaxSizeExceeded: (name) => toast.error(`"${name}" supera el límite de 10MB`),
     });
+
+    // ✅ FIX: Estado y mutación para editar descripción de evidencia
+    const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
+    const [editDescripcion, setEditDescripcion] = useState('');
+
+    const updateDescripcionMutation = useMutation({
+        mutationFn: async ({ id, descripcion }: { id: number; descripcion: string }) => {
+            const res = await apiClient.put(`/evidencias-fotograficas/${id}`, { descripcion });
+            return res.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+            queryClient.invalidateQueries({ queryKey: ['ordenes', 'evidencias'] });
+            toast.success('Observación actualizada');
+            setEditingEvidenciaId(null);
+            setEditDescripcion('');
+        },
+        onError: () => {
+            toast.error('Error al actualizar observación');
+        }
+    });
+
+    const handleEditClick = (evidencia: Evidencia) => {
+        setEditingEvidenciaId(getEvidenciaId(evidencia));
+        setEditDescripcion(evidencia.descripcion || '');
+    };
+
+    const handleSaveDescripcion = (idEvidencia: number) => {
+        if (editDescripcion.trim()) {
+            updateDescripcionMutation.mutate({ id: idEvidencia, descripcion: editDescripcion.trim() });
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingEvidenciaId(null);
+        setEditDescripcion('');
+    };
 
     // ✅ FIX 13-FEB-2026: Merge ambas fuentes (endpoint actividad + orden) para no perder fotos
     // Las fotos de mobile pueden no tener id_actividad_ejecutada (usan descripción),
@@ -481,15 +538,54 @@ export function GaleriaActividadFotos({
                         </button>
 
                         {/* Fotos existentes */}
-                        {evidenciasActivas.map(evidencia => (
-                            <FotoThumbnail
-                                key={getEvidenciaId(evidencia)}
-                                evidencia={evidencia}
-                                onView={() => handleViewLightbox(evidencia)}
-                                onDelete={() => handleDelete(getEvidenciaId(evidencia))}
-                                canDelete={true}
-                            />
-                        ))}
+                        {evidenciasActivas.map(evidencia => {
+                            const evId = getEvidenciaId(evidencia);
+                            const isEditing = editingEvidenciaId === evId;
+                            return (
+                                <div key={evId} className="relative">
+                                    {isEditing ? (
+                                        <div className="aspect-square rounded-lg border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2">
+                                            <textarea
+                                                value={editDescripcion}
+                                                onChange={(e) => setEditDescripcion(e.target.value)}
+                                                className="w-full flex-1 text-xs px-2 py-1 border border-blue-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
+                                                placeholder="Observación..."
+                                                autoFocus
+                                            />
+                                            <div className="flex gap-1 justify-end">
+                                                <button
+                                                    onClick={handleCancelEdit}
+                                                    className="p-1.5 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                                                    title="Cancelar"
+                                                >
+                                                    <X className="h-3.5 w-3.5 text-gray-600" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleSaveDescripcion(evId)}
+                                                    disabled={updateDescripcionMutation.isPending}
+                                                    className="p-1.5 bg-blue-500 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
+                                                    title="Guardar"
+                                                >
+                                                    {updateDescripcionMutation.isPending ? (
+                                                        <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                                                    ) : (
+                                                        <Save className="h-3.5 w-3.5 text-white" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <FotoThumbnail
+                                            evidencia={evidencia}
+                                            onView={() => handleViewLightbox(evidencia)}
+                                            onDelete={() => handleDelete(evId)}
+                                            onEdit={() => handleEditClick(evidencia)}
+                                            canDelete={true}
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
 
                         {/* Mensaje si no hay fotos */}
                         {evidenciasActivas.length === 0 && !isUploading && (

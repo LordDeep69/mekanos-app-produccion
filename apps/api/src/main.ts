@@ -223,11 +223,9 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-// Capturar errores globales NO manejados
-process.on('unhandledRejection', (reason, promise) => {
+// Capturar errores globales NO manejados - loguear pero NO matar el proceso
+process.on('unhandledRejection', (reason, _promise) => {
   console.error('❌ [FATAL] Unhandled Promise Rejection:', reason);
-  console.error('❌ [FATAL] Promise:', promise);
-  process.exit(1);
 });
 
 process.on('uncaughtException', (error) => {

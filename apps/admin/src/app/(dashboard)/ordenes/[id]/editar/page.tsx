@@ -363,9 +363,9 @@ export default function EditarOrdenPage() {
                             <textarea
                                 value={formData.descripcion_inicial}
                                 onChange={(e) => handleChange('descripcion_inicial', e.target.value)}
-                                rows={4}
+                                rows={8}
                                 placeholder="Describe el trabajo a realizar..."
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[140px] h-[160px]"
                             />
                             <p className="text-xs text-gray-400 mt-1">
                                 {formData.descripcion_inicial.length} caracteres
@@ -380,9 +380,9 @@ export default function EditarOrdenPage() {
                             <textarea
                                 value={formData.observaciones_tecnico}
                                 onChange={(e) => handleChange('observaciones_tecnico', e.target.value)}
-                                rows={3}
+                                rows={12}
                                 placeholder="Observaciones adicionales..."
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y min-h-[200px] h-[220px]"
                             />
                         </div>
                     </div>
