@@ -18,6 +18,18 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) { }
 
+  // Cache en memoria para validación de usuarios (5 min TTL)
+  // Evita 401 por caídas momentáneas de conexión a la BD
+  private readonly userValidationCache = new Map<number, { user: any; expiresAt: number }>();
+  private readonly USER_CACHE_TTL_MS = 5 * 60 * 1000;
+
+  /**
+   * Invalida la caché de un usuario (ej. después de cambiar su estado/roles)
+   */
+  invalidateUserCache(userId: number) {
+    this.userValidationCache.delete(userId);
+  }
+
   /**
    * Login: valida credenciales y retorna tokens JWT
    */
@@ -128,57 +140,80 @@ export class AuthService {
 
   /**
    * Valida un usuario desde el JWT payload (usado por JwtStrategy)
+   * ✅ MEJORADO: Cache en memoria para tolerar caídas de conexión
    * ✅ MEJORADO: Incluye roles reales e idEmpleado para sistema multi-asesor
    */
   async validateUser(userId: number) {
-    const usuario = await this.prisma.usuarios.findUnique({
-      where: { id_usuario: userId },
-      include: {
-        persona: true,
-        usuarios_roles: {
-          include: {
-            roles: true,
-          },
-        },
-      },
-    });
-
-    if (!usuario || usuario.estado !== 'ACTIVO') {
-      throw new UnauthorizedException('Usuario no encontrado o inactivo');
+    // 1. Intentar servir desde caché
+    const cached = this.userValidationCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.user;
     }
 
-    // Buscar empleado asociado (por id_persona)
-    const empleado = await this.prisma.empleados.findFirst({
-      where: { id_persona: usuario.id_persona },
-    });
+    try {
+      const usuario = await this.prisma.usuarios.findUnique({
+        where: { id_usuario: userId },
+        include: {
+          persona: true,
+          usuarios_roles: {
+            include: {
+              roles: true,
+            },
+          },
+        },
+      });
 
-    // Extraer roles del usuario
-    const roles = usuario.usuarios_roles?.map(
-      ur => ({
-        id: ur.roles.id_rol,
-        codigo: ur.roles.codigo_rol,
-        nombre: ur.roles.nombre_rol,
-      })
-    ) || [];
+      if (!usuario || usuario.estado !== 'ACTIVO') {
+        throw new UnauthorizedException('Usuario no encontrado o inactivo');
+      }
 
-    // Determinar si es admin (tiene rol ADMIN, GERENTE, SUPERVISOR)
-    // ✅ FIX 02-FEB-2026: admin@mekanos.com siempre es superadmin
-    const esSuperadminPorEmail = usuario.email === 'admin@mekanos.com';
-    const esAdmin = esSuperadminPorEmail || roles.some(r => ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes(r.codigo));
+      // Buscar empleado asociado (por id_persona)
+      const empleado = await this.prisma.empleados.findFirst({
+        where: { id_persona: usuario.id_persona },
+      });
 
-    // Determinar si es asesor
-    const esAsesor = empleado?.es_asesor || roles.some(r => r.codigo === 'ASESOR');
+      // Extraer roles del usuario
+      const roles = usuario.usuarios_roles?.map(
+        ur => ({
+          id: ur.roles.id_rol,
+          codigo: ur.roles.codigo_rol,
+          nombre: ur.roles.nombre_rol,
+        })
+      ) || [];
 
-    return {
-      id: usuario.id_usuario,
-      email: usuario.email,
-      nombre: usuario.persona?.nombre_completo || 'Usuario',
-      personaId: usuario.id_persona,
-      idEmpleado: empleado?.id_empleado || null,
-      roles,
-      esAdmin,
-      esAsesor,
-    };
+      // Determinar si es admin (tiene rol ADMIN, GERENTE, SUPERVISOR)
+      const esSuperadminPorEmail = usuario.email === 'admin@mekanos.com';
+      const esAdmin = esSuperadminPorEmail || roles.some(r => ['ADMIN', 'GERENTE', 'SUPERVISOR'].includes(r.codigo));
+
+      // Determinar si es asesor
+      const esAsesor = empleado?.es_asesor || roles.some(r => r.codigo === 'ASESOR');
+
+      const userData = {
+        id: usuario.id_usuario,
+        email: usuario.email,
+        nombre: usuario.persona?.nombre_completo || 'Usuario',
+        personaId: usuario.id_persona,
+        idEmpleado: empleado?.id_empleado || null,
+        roles,
+        esAdmin,
+        esAsesor,
+      };
+
+      // Guardar en caché
+      this.userValidationCache.set(userId, {
+        user: userData,
+        expiresAt: Date.now() + this.USER_CACHE_TTL_MS,
+      });
+
+      return userData;
+    } catch (error) {
+      // Si la BD falla pero hay caché vieja, servirla (tolerancia a cortes)
+      if (cached) {
+        console.warn(`⚠️ [Auth] BD caída, sirviendo caché para userId=${userId}`);
+        return cached.user;
+      }
+      throw error;
+    }
   }
 
   /**

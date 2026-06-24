@@ -36,11 +36,33 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   /**
-   * Conecta a la base de datos al inicializar el módulo
+   * Conecta a la base de datos al inicializar el módulo.
+   * Reintenta con backoff exponencial si hay problemas de conexión
+   * (ej. internet inestable, pooler temporalmente caído).
    */
   async onModuleInit() {
-    await this.$connect();
-    console.log('✅ Database connection established');
+    const maxRetries = 5;
+    const initialDelayMs = 2000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.$connect();
+        console.log('✅ Database connection established');
+        return;
+      } catch (error) {
+        const delayMs = initialDelayMs * Math.pow(2, attempt - 1);
+        console.error(
+          `❌ Database connection attempt ${attempt}/${maxRetries} failed. ` +
+          `Retrying in ${delayMs / 1000}s...`,
+        );
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        } else {
+          console.error(`❌ All ${maxRetries} connection attempts failed`);
+          throw error;
+        }
+      }
+    }
   }
 
   /**
