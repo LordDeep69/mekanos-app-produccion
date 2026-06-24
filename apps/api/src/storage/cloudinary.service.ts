@@ -12,9 +12,13 @@
 
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { v2 as cloudinary, UploadApiErrorResponse, UploadApiResponse } from 'cloudinary';
-import { setTimeout } from 'timers/promises';
+import * as fs from 'fs';
+import * as path from 'path';
 
-const CLOUDINARY_UPLOAD_TIMEOUT_MS = 120_000; // 2 minutos por upload
+const CLOUDINARY_UPLOAD_TIMEOUT_MS = 300_000; // 5 minutos por upload (conexión lenta)
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 5_000; // 5s inicial, luego 10s, 20s
+const PENDING_DIR = path.join(process.cwd(), 'uploads', 'pending');
 
 export type CloudinaryAccount = 'PLANTAS' | 'BOMBAS';
 
@@ -90,7 +94,7 @@ export class CloudinaryService implements OnModuleInit {
   }
 
   /**
-   * Sube una imagen desde un buffer
+   * Sube una imagen desde un buffer con retry y fallback local
    */
   async uploadImage(
     buffer: Buffer,
@@ -112,7 +116,36 @@ export class CloudinaryService implements OnModuleInit {
 
     this.configureAccount(account);
 
-    return new Promise((resolve) => {
+    // Intentar Cloudinary con retry
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await this._uploadToCloudinary(buffer, options);
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `⚠️ Cloudinary intento ${attempt}/${MAX_RETRIES} falló: ${message}`,
+        );
+        if (attempt < MAX_RETRIES) {
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+
+    // Fallback local: guardar imagen en disco
+    this.logger.warn('⚠️ Cloudinary no disponible tras reintentos - guardando localmente');
+    return this._saveLocally(buffer, options);
+  }
+
+  /**
+   * Sube a Cloudinary (un intento)
+   */
+  private _uploadToCloudinary(
+    buffer: Buffer,
+    options: { folder?: string; publicId?: string; tags?: string[] } = {},
+  ): Promise<UploadResult> {
+    return new Promise((resolve, reject) => {
       const uploadOptions: any = {
         folder: options.folder || 'mekanos/evidencias',
         resource_type: 'image',
@@ -124,16 +157,11 @@ export class CloudinaryService implements OnModuleInit {
         uploadOptions.public_id = options.publicId;
       }
 
-      // Usar upload_stream para buffers
       const uploadStream = cloudinary.uploader.upload_stream(
         uploadOptions,
         (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
           if (error) {
-            this.logger.error(`Error uploading to Cloudinary: ${error.message}`);
-            resolve({
-              success: false,
-              error: error.message,
-            });
+            reject(error);
           } else if (result) {
             resolve({
               success: true,
@@ -141,16 +169,45 @@ export class CloudinaryService implements OnModuleInit {
               publicId: result.public_id,
             });
           } else {
-            resolve({
-              success: false,
-              error: 'Unknown error',
-            });
+            reject(new Error('Unknown Cloudinary error'));
           }
-        }
+        },
       );
 
       uploadStream.end(buffer);
     });
+  }
+
+  /**
+   * Guarda la imagen localmente como fallback cuando Cloudinary no está disponible
+   */
+  private async _saveLocally(
+    buffer: Buffer,
+    options: { folder?: string; publicId?: string } = {},
+  ): Promise<UploadResult> {
+    try {
+      const pendingDir = path.join(process.cwd(), 'uploads', 'pending');
+      fs.mkdirSync(pendingDir, { recursive: true });
+
+      const timestamp = Date.now();
+      const filename = options.publicId
+        ? `${options.publicId}_${timestamp}.jpg`
+        : `pending_${timestamp}.jpg`;
+      const filePath = path.join(pendingDir, filename);
+      fs.writeFileSync(filePath, buffer);
+
+      this.logger.log(`✅ Imagen guardada localmente: ${filePath}`);
+
+      return {
+        success: true,
+        url: `/uploads/pending/${filename}`,
+        publicId: `local_${timestamp}`,
+      };
+    } catch (fsError) {
+      const message = fsError instanceof Error ? fsError.message : 'File system error';
+      this.logger.error(`❌ Error guardando imagen local: ${message}`);
+      return { success: false, error: `Error de almacenamiento: ${message}` };
+    }
   }
 
   /**

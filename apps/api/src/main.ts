@@ -2,6 +2,7 @@ import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
+import * as path from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
@@ -32,6 +33,11 @@ async function bootstrap(): Promise<void> {
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ limit: '50mb', extended: true }));
     console.log('✅ [DEBUG 3.1] Body parser limit: 50MB (bodyParser interno desactivado)');
+
+    // ✅ SERVIDOR DE ARCHIVOS ESTÁTICOS: Imágenes locales (fallback Cloudinary)
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    app.use('/uploads', express.static(uploadsDir));
+    console.log('✅ [DEBUG 3.2] Static files: /uploads →', uploadsDir);
 
     // ✅ AUDITORÍA DE TRÁFICO: Middleware de Logging Global (Después de body-parser)
     app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
