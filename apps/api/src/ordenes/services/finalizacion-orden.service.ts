@@ -943,42 +943,54 @@ export class FinalizacionOrdenService {
             return [];
         }
 
-        // PASO 3: Registrar en BD EN PARALELO (necesitamos IDs individuales)
-        // ✅ DEFENSE-IN-DEPTH 07-FEB-2026: Detectar fotos generales no clasificadas
-        // Mobile sync_upload_service añade prefijo "ANTES: " / "DURANTE: " / "DESPUES: " a descripciones de fotos generales
-        // Si el mobile no fue reconstruido, el tipo llega como ANTES/DURANTE/DESPUES en vez de GENERAL
+        // PASO 3: Registrar en BD CON CUPO CONTROLADO (5 en paralelo)
+        // ✅ OPTIMIZACIÓN: Evita saturar el pool de conexiones PgBouncer
+        // El pooler de Supabase permite ~21 conexiones; varias ya están en uso
+        // por otras operaciones de la finalización, así que limitamos a 5.
         const GENERAL_PREFIX_RE = /^(ANTES|DURANTE|DESPUES):\s/i;
         const RECLASSIFIABLE_TYPES = ['ANTES', 'DURANTE', 'DESPUES'];
 
-        const dbPromises = datosValidados.map(({ ev, buffer, url, hash, index }) => {
-            let tipoFinal = ev.tipo;
-            if (RECLASSIFIABLE_TYPES.includes(ev.tipo?.toUpperCase()) && GENERAL_PREFIX_RE.test(ev.descripcion || '')) {
-                this.logger.log(`   📸 Reclasificando evidencia ${ev.tipo} → GENERAL (prefijo detectado en descripción)`);
-                tipoFinal = 'GENERAL';
-            }
-            return this.prisma.evidencias_fotograficas.create({
-                data: {
-                    id_orden_servicio: idOrden,
-                    id_orden_equipo: ev.idOrdenEquipo || null, // Multi-equipos: opcional
-                    tipo_evidencia: tipoFinal,
-                    descripcion: ev.descripcion || `Evidencia ${ev.tipo} del servicio`,
-                    nombre_archivo: `${ev.tipo.toLowerCase()}_${ahora.getTime()}_${index}.${ev.formato || 'png'}`,
-                    ruta_archivo: url,
-                    hash_sha256: hash,
-                    tama_o_bytes: BigInt(buffer.length),
-                    mime_type: `image/${ev.formato || 'png'}`,
-                    orden_visualizacion: index + 1,
-                    es_principal: index === 0,
-                    fecha_captura: ahora,
-                },
-            }).then(evidenciaDB => ({
-                id: evidenciaDB.id_evidencia,
-                tipo: ev.tipo,
-                url,
-            }));
-        });
+        const DB_CONCURRENCY = 5;
+        const resultados: Array<{ id: number; tipo: string; url: string }> = [];
+        let dbIdx = 0;
 
-        const resultados = await Promise.all(dbPromises);
+        while (dbIdx < datosValidados.length) {
+            const dbBatch = datosValidados.slice(dbIdx, dbIdx + DB_CONCURRENCY);
+            const dbBatchPromises = dbBatch.map(({ ev, buffer, url, hash, index }) => {
+                let tipoFinal = ev.tipo;
+                if (RECLASSIFIABLE_TYPES.includes(ev.tipo?.toUpperCase()) && GENERAL_PREFIX_RE.test(ev.descripcion || '')) {
+                    this.logger.log(`   📸 Reclasificando evidencia ${ev.tipo} → GENERAL (prefijo detectado en descripción)`);
+                    tipoFinal = 'GENERAL';
+                }
+                return this.prisma.evidencias_fotograficas.create({
+                    data: {
+                        id_orden_servicio: idOrden,
+                        id_orden_equipo: ev.idOrdenEquipo || null,
+                        tipo_evidencia: tipoFinal,
+                        descripcion: ev.descripcion || `Evidencia ${ev.tipo} del servicio`,
+                        nombre_archivo: `${ev.tipo.toLowerCase()}_${ahora.getTime()}_${index}.${ev.formato || 'png'}`,
+                        ruta_archivo: url,
+                        hash_sha256: hash,
+                        tama_o_bytes: BigInt(buffer.length),
+                        mime_type: `image/${ev.formato || 'png'}`,
+                        orden_visualizacion: index + 1,
+                        es_principal: index === 0,
+                        fecha_captura: ahora,
+                    },
+                }).then(evidenciaDB => ({
+                    id: evidenciaDB.id_evidencia,
+                    tipo: ev.tipo,
+                    url,
+                }));
+            });
+
+            const batchResults = await Promise.all(dbBatchPromises);
+            for (const r of batchResults) {
+                resultados.push(r);
+            }
+            dbIdx += DB_CONCURRENCY;
+        }
+
         this.logger.log(`   ✅ ${resultados.length} evidencias procesadas`);
         return resultados;
     }
