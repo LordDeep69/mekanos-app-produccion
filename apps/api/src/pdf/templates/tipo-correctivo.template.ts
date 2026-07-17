@@ -135,6 +135,45 @@ export interface DatosCorrectivoOrdenPDF {
   medicionesPorEquipo?: MedicionesPorEquipoPDF[];
   evidenciasPorEquipo?: EvidenciasPorEquipoPDF[];
   equiposOrden?: EquipoOrdenPDF[];
+
+  // ✅ MULTI-EQUIPO CORRECTIVO: Datos estructurados narrativos POR equipo
+  // Cada entrada contiene los campos dedos de correctivo (estadoInicial, problema, etc.)
+  // extraidos de las actividades de ese equipo específico.
+  datosPorEquipo?: DatosEstructuradosCorrectivoPorEquipo[];
+}
+
+/**
+ * ✅ MULTI-EQUIPO CORRECTIVO: Datos estructurados de correctivo para un equipo específico
+ * Contiene los mismos campos que DatosCorrectivoOrdenPDF pero scoped a un solo equipo.
+ * Se extrae iterando las actividades de cada equipo por separado, evitando el bug de
+ * sobrescritura del array plano que solo mostraba el último equipo.
+ */
+export interface DatosEstructuradosCorrectivoPorEquipo {
+  equipo: EquipoOrdenPDF;
+
+  estadoInicial?: string;
+  estadoFinal?: string;
+  problemaReportado?: string;
+  fallasObservadas?: string;
+  diagnosticoTecnico?: string;
+  trabajosRealizados?: string;
+  trabajosPendientes?: string;
+  recomendaciones?: string;
+  sistemasAfectados?: string[];
+  repuestosUtilizados?: string[];
+  materialesUtilizados?: string[];
+
+  obsEstadoInicial?: string;
+  obsEstadoFinal?: string;
+  obsSistemas?: string;
+  obsProblema?: string;
+  obsFallas?: string;
+  obsDiagnostico?: string;
+  obsTrabajos?: string;
+  obsPendientes?: string;
+  obsRecomendaciones?: string;
+  obsRepuestos?: string;
+  obsMateriales?: string;
 }
 
 export interface MedicionCorrectivoPDF {
@@ -329,12 +368,15 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
     esMultiEquipo,
   )}
         
-        <!-- 2. DATOS DEL CLIENTE Y SERVICIO + ESTADO INICIAL -->
+        <!-- 2. DATOS DEL CLIENTE Y SERVICIO (siempre visible) -->
         ${generarDatosCliente(datos)}
         
         <!-- 3. REGISTRO DE DATOS DEL MÓDULO DE CONTROL (solo si aplica) -->
         ${tieneDatosModulo ? generarDatosModulo(datos) : ''}
         
+        ${esMultiEquipo && datos.datosPorEquipo && datos.datosPorEquipo.length > 0
+      ? generarNarrativaCorrectivoPorEquipo(datos.datosPorEquipo)
+      : `
         <!-- 4. PROBLEMA Y DIAGNÓSTICO -->
         ${tieneProblemaODiagnostico ? generarProblemaYDiagnostico(datos) : ''}
         
@@ -346,6 +388,8 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         
         <!-- 7. RESULTADO DEL SERVICIO -->
         ${tieneResultado ? generarResultadoServicio(datos) : ''}
+        `
+    }
         
         <!-- 8. MEDICIONES TÉCNICAS (solo si aplica) -->
         ${esMultiEquipo && datos.medicionesPorEquipo
@@ -626,6 +670,127 @@ const generarResultadoServicio = (datos: DatosCorrectivoOrdenPDF): string => {
         <div class="corr-fields-container">
             ${items.join('')}
         </div>
+    </div>
+  `;
+};
+
+const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosCorrectivoPorEquipo[]): string => {
+  if (!datosPorEquipo || datosPorEquipo.length === 0) return '';
+
+  const coloresEquipo = [
+    { bg: '#fef2f2', border: '#dc2626', header: '#b91c1c' },
+    { bg: '#fef3c7', border: '#d97706', header: '#b45309' },
+    { bg: '#e0f2fe', border: '#0284c7', header: '#0369a1' },
+    { bg: '#dcfce7', border: '#16a34a', header: '#15803d' },
+  ];
+
+  const equiposHTML = datosPorEquipo.map((eq, idx) => {
+    const color = coloresEquipo[idx % coloresEquipo.length];
+    const nombreEquipo = eq.equipo?.nombreSistema || eq.equipo?.nombreEquipo || `Equipo ${eq.equipo?.ordenSecuencia || idx + 1}`;
+    const codigoEquipo = eq.equipo?.codigoEquipo;
+    const nombreCompleto = nombreEquipo + (codigoEquipo ? ` (${codigoEquipo})` : '');
+
+    const sections: string[] = [];
+
+    // --- ESTADO INICIAL ---
+    if (eq.estadoInicial) {
+      sections.push(`
+        <div style="margin-bottom: 10px;">
+          <div class="corr-field-label" style="color: ${color.header};">📋 Estado Inicial</div>
+          <div class="corr-field-value">${eq.estadoInicial}</div>
+          ${eq.obsEstadoInicial ? `<div style="font-size:9px; color:#6b7280; margin-top:3px; font-style:italic;">📝 ${eq.obsEstadoInicial}</div>` : ''}
+        </div>
+      `);
+    }
+
+    // --- PROBLEMA Y DIAGNÓSTICO ---
+    const problemas: string[] = [];
+    if (eq.problemaReportado) problemas.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Problema Reportado</div><div class="corr-field-value">${eq.problemaReportado}</div>${eq.obsProblema ? renderObsAux(eq.obsProblema) : ''}</div>`);
+    if (eq.fallasObservadas) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔍 Fallas Observadas</div><div class="corr-field-value">${eq.fallasObservadas}</div>${eq.obsFallas ? renderObsAux(eq.obsFallas) : ''}</div>`);
+    if (eq.sistemasAfectados && eq.sistemasAfectados.length > 0) {
+      problemas.push(`<div class="corr-field"><div class="corr-field-label">⚙️ Sistemas Afectados</div><div class="corr-chips">${eq.sistemasAfectados.map(s => `<span class="corr-chip">${s}</span>`).join('')}</div>${eq.obsSistemas ? renderObsAux(eq.obsSistemas) : ''}</div>`);
+    }
+    if (eq.diagnosticoTecnico) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔧 Diagnóstico Técnico</div><div class="corr-field-value">${eq.diagnosticoTecnico}</div>${eq.obsDiagnostico ? renderObsAux(eq.obsDiagnostico) : ''}</div>`);
+    if (problemas.length > 0) {
+      sections.push(`
+        <div style="margin-bottom: 10px;">
+          <div class="corr-field-label" style="color: ${color.header};">🔍 Problema y Diagnóstico</div>
+          <div class="corr-fields-container">${problemas.join('')}</div>
+        </div>
+      `);
+    }
+
+    // --- TRABAJOS REALIZADOS ---
+    if (eq.trabajosRealizados) {
+      sections.push(`
+        <div style="margin-bottom: 10px;">
+          <div class="corr-field-label" style="color: ${color.header};">🛠️ Trabajos Realizados</div>
+          <div class="corr-narrative-box">${eq.trabajosRealizados}</div>
+          ${eq.obsTrabajos ? renderObsAux(eq.obsTrabajos) : ''}
+        </div>
+      `);
+    }
+
+    // --- REPUESTOS Y MATERIALES ---
+    const repRows: string[] = [];
+    (eq.repuestosUtilizados || []).forEach((r: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`));
+    (eq.materialesUtilizados || []).forEach((m: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${(eq.repuestosUtilizados || []).length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`));
+    if (repRows.length > 0) {
+      sections.push(`
+        <div style="margin-bottom: 10px;">
+          <div class="corr-field-label" style="color: ${color.header};">📦 Repuestos y Materiales</div>
+          <table class="checklist-table" style="font-size:9px;">
+            <thead><tr><th style="width:10%;">#</th><th style="width:70%;">Descripción</th><th style="width:20%;">Tipo</th></tr></thead>
+            <tbody>${repRows.join('')}</tbody>
+          </table>
+          ${eq.obsRepuestos ? renderObsAux(eq.obsRepuestos) : ''}
+          ${eq.obsMateriales ? renderObsAux(eq.obsMateriales) : ''}
+        </div>
+      `);
+    }
+
+    // --- RESULTADO ---
+    const resultadoItems: string[] = [];
+    if (eq.estadoFinal) {
+      resultadoItems.push(`
+        <div class="corr-resultado-estado">
+          <span class="corr-estado-label">ESTADO FINAL:</span>
+          <span class="corr-estado-badge corr-estado-final">${eq.estadoFinal}</span>
+        </div>
+        ${eq.obsEstadoFinal ? renderObsAux(eq.obsEstadoFinal) : ''}
+      `);
+    }
+    if (eq.trabajosPendientes) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Trabajos Pendientes</div><div class="corr-field-value corr-pendientes">${eq.trabajosPendientes}</div>${eq.obsPendientes ? renderObsAux(eq.obsPendientes) : ''}</div>`);
+    if (eq.recomendaciones) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">💡 Recomendaciones</div><div class="corr-field-value">${eq.recomendaciones}</div>${eq.obsRecomendaciones ? renderObsAux(eq.obsRecomendaciones) : ''}</div>`);
+    if (resultadoItems.length > 0) {
+      sections.push(`
+        <div style="margin-bottom: 10px;">
+          <div class="corr-field-label" style="color: ${color.header};">📊 Resultado del Servicio</div>
+          <div class="corr-fields-container">${resultadoItems.join('')}</div>
+        </div>
+      `);
+    }
+
+    const contentHTML = sections.length > 0
+      ? sections.join('')
+      : '<div style="text-align:center; color:#9ca3af; padding:8px; font-size:10px;">Sin datos de diagnóstico o traballos para este equipo</div>';
+
+    return `
+      <div style="margin-bottom: 16px; border: 2px solid ${color.border}; border-radius: 8px; overflow: hidden;">
+        <div style="background: ${color.header}; color: white; padding: 8px 14px; font-weight: bold; font-size: 12px;">
+          🔧 EQUIPO ${eq.equipo?.ordenSecuencia || idx + 1}: ${nombreCompleto.toUpperCase()}
+        </div>
+        <div style="padding: 12px; background: ${color.bg};">
+          ${contentHTML}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section">
+      <div class="section-title">DATOS TÉCNICOS POR EQUIPO (${datosPorEquipo.length} equipos)</div>
+      ${equiposHTML}
     </div>
   `;
 };

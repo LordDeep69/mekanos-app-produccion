@@ -15,6 +15,6 @@ export { generarTipoABombaHTML } from './tipo-a-bomba.template';
 export { generarTipoAGeneradorHTML } from './tipo-a-generador.template';
 export { generarTipoBGeneradorHTML } from './tipo-b-generador.template';
 export {
-  DatosCorrectivoOrdenPDF, EvidenciaCorrectivoPDF, MedicionCorrectivoPDF, generarCorrectivoOrdenHTML
+  DatosCorrectivoOrdenPDF, DatosEstructuradosCorrectivoPorEquipo, EvidenciaCorrectivoPDF, MedicionCorrectivoPDF, generarCorrectivoOrdenHTML
 } from './tipo-correctivo.template';
 

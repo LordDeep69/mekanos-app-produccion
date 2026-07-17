@@ -426,7 +426,7 @@ function agruparActividadesPorEquipo(
     }
 
     if (sinEquipo.length > 0) {
-        // FALLBACK: distribuir por descripción (mismo algoritmo que PDF service)
+        // FALLBACK: distribuir por descripción, ordenar por id para determinismo
         const actividadesUnicas = new Map<string, any[]>();
         for (const act of sinEquipo) {
             const key = act.catalogo_actividades?.descripcion_actividad || act.descripcion_manual || 'N/A';
@@ -437,7 +437,9 @@ function agruparActividadesPorEquipo(
         return mapEquipos.map((eq, equipoIndex) => ({
             equipo: eq,
             actividades: Array.from(actividadesUnicas.entries()).map(([, acts]) => {
-                return acts[equipoIndex] || acts[0];
+                const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
+                const act = ordenados[equipoIndex] || ordenados[0];
+                return { ...act, id_orden_equipo: eq.idOrdenEquipo };
             }),
         }));
     }
@@ -469,7 +471,7 @@ function agruparMedicionesPorEquipo(
     }
 
     if (sinEquipo.length > 0) {
-        // FALLBACK: distribuir por nombre de parámetro (mismo algoritmo que PDF service)
+        // FALLBACK: distribuir por nombre de parámetro, ordenar por id_medicion para determinismo
         const medicionesUnicas = new Map<string, any[]>();
         for (const med of sinEquipo) {
             const key = med.parametros_medicion?.nombre_parametro || 'N/A';
@@ -480,7 +482,9 @@ function agruparMedicionesPorEquipo(
         return mapEquipos.map((eq, equipoIndex) => ({
             equipo: eq,
             mediciones: Array.from(medicionesUnicas.entries()).map(([, meds]) => {
-                return meds[equipoIndex] || meds[0];
+                const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
+                const med = ordenados[equipoIndex] || ordenados[0];
+                return { ...med, id_orden_equipo: eq.idOrdenEquipo };
             }),
         }));
     }

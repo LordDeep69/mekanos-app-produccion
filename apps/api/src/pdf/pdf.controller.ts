@@ -407,8 +407,8 @@ export class PdfController {
             estado: oe.estado_equipo || 'PENDIENTE',
           },
           actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
-            // Tomar la actividad correspondiente a este equipo (por índice)
-            const actEquipo = acts[equipoIndex] || acts[0]; // Fallback al primero si no hay suficientes
+            const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
+            const actEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
               sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
               descripcion: descripcion,
@@ -475,7 +475,8 @@ export class PdfController {
             estado: oe.estado_equipo || 'PENDIENTE',
           },
           mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
-            const medEquipo = meds[equipoIndex] || meds[0];
+            const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
+            const medEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
               parametro: parametro,
               valor: Number(medEquipo.valor_numerico) || 0,
@@ -615,6 +616,7 @@ export class PdfController {
         caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
       })) || [],
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
+      observaciones_tecnico: orden.observaciones_tecnico || undefined,
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
       equiposOrden,
@@ -1375,7 +1377,8 @@ export class PdfController {
             nombreEquipo: oe.equipos?.nombre_equipo,
           },
           actividades: Array.from(actividadesUnicas.entries()).map(([descripcion, acts]) => {
-            const actEquipo = acts[equipoIndex] || acts[0];
+            const ordenados = [...acts].sort((a: any, b: any) => (a.id_actividad_ejecutada || 0) - (b.id_actividad_ejecutada || 0));
+            const actEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
               sistema: actEquipo.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
               descripcion,
@@ -1430,7 +1433,8 @@ export class PdfController {
             nombreSistema: oe.nombre_sistema || oe.equipos?.nombre_equipo || 'Equipo',
           },
           mediciones: Array.from(medicionesUnicas.entries()).map(([parametro, meds]) => {
-            const medEquipo = meds[equipoIndex] || meds[0];
+            const ordenados = [...meds].sort((a: any, b: any) => (a.id_medicion || 0) - (b.id_medicion || 0));
+            const medEquipo = ordenados[equipoIndex] || ordenados[0];
             return {
               parametro,
               valor: Number(medEquipo.valor_numerico) || 0,
@@ -1579,6 +1583,7 @@ export class PdfController {
         caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
       })) || [],
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
+      observaciones_tecnico: orden.observaciones_tecnico || undefined,
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
       esMultiEquipo,
       actividadesPorEquipo,

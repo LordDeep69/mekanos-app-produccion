@@ -222,6 +222,7 @@ export class BitacorasService {
     categoria?: string,
     fechaInicioStr?: string,
     fechaFinStr?: string,
+    tipoServicio?: string,
   ): Promise<BitacoraPreviewResult> {
     // 1. Validar cliente principal
     const principal = await this.prisma.clientes.findUnique({
@@ -281,6 +282,11 @@ export class BitacorasService {
     // Filtro por categoría de equipo
     if (categoria) {
       conditions.push(`te.categoria = '${categoria}'::categoria_equipo_enum`);
+    }
+
+    // Filtro por tipo de servicio
+    if (tipoServicio) {
+      conditions.push(`ts.codigo_tipo = '${tipoServicio}'`);
     }
 
     const whereClause = conditions.join(' AND ');
@@ -864,7 +870,7 @@ export class BitacorasService {
   // DIAGNÓSTICO: Meses con informes disponibles para un cliente
   // ═══════════════════════════════════════════════════════════════
 
-  async mesesDisponibles(idClientePrincipal: number, categoria?: string) {
+  async mesesDisponibles(idClientePrincipal: number, categoria?: string, tipoServicio?: string) {
     // 1. Obtener principal + sedes
     const principal = await this.prisma.clientes.findUnique({
       where: { id_cliente: idClientePrincipal },
@@ -900,6 +906,11 @@ export class BitacorasService {
       conditions.push(`te.categoria = '${categoria}'::categoria_equipo_enum`);
     }
 
+    // Filtro por tipo de servicio
+    if (tipoServicio) {
+      conditions.push(`ts.codigo_tipo = '${tipoServicio}'`);
+    }
+
     const whereClause = conditions.join(' AND ');
 
     const sql = `
@@ -911,6 +922,7 @@ export class BitacorasService {
       JOIN ordenes_servicio os ON os.id_orden_servicio = dg.id_referencia
       LEFT JOIN equipos e ON e.id_equipo = os.id_equipo
       LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
+      LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
       WHERE ${whereClause}
       GROUP BY anio, mes
       ORDER BY anio DESC, mes DESC

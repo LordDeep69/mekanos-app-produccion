@@ -625,8 +625,17 @@ export class ClientesService {
         await tx.personas.update({
           where: { id_persona: idPersonaDestino },
           data: {
+            ...(personaPayload!.tipo_identificacion !== undefined && { tipo_identificacion: personaPayload!.tipo_identificacion }),
+            ...(personaPayload!.numero_identificacion !== undefined && { numero_identificacion: personaPayload!.numero_identificacion }),
+            ...(personaPayload!.tipo_persona !== undefined && { tipo_persona: personaPayload!.tipo_persona }),
+            ...(personaPayload!.primer_nombre !== undefined && { primer_nombre: personaPayload!.primer_nombre }),
+            ...(personaPayload!.segundo_nombre !== undefined && { segundo_nombre: personaPayload!.segundo_nombre }),
+            ...(personaPayload!.primer_apellido !== undefined && { primer_apellido: personaPayload!.primer_apellido }),
+            ...(personaPayload!.segundo_apellido !== undefined && { segundo_apellido: personaPayload!.segundo_apellido }),
             ...(personaPayload!.razon_social !== undefined && { razon_social: personaPayload!.razon_social }),
             ...(personaPayload!.nombre_comercial !== undefined && { nombre_comercial: personaPayload!.nombre_comercial }),
+            ...(personaPayload!.representante_legal !== undefined && { representante_legal: personaPayload!.representante_legal }),
+            ...(personaPayload!.cedula_representante !== undefined && { cedula_representante: personaPayload!.cedula_representante }),
             ...(personaPayload!.email_principal !== undefined && { email_principal: personaPayload!.email_principal }),
             ...(personaPayload!.telefono_principal !== undefined && { telefono_principal: personaPayload!.telefono_principal }),
             ...(personaPayload!.celular !== undefined && { celular: personaPayload!.celular }),

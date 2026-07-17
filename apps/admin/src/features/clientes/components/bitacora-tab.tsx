@@ -48,6 +48,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Eye,
   FileText,
   Info,
   Loader2,
@@ -61,6 +62,8 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import type { InformePreview, SedeGroup } from '../api/bitacoras.service';
 import { useBitacoraHistorial, useBitacoraPreview, useEnviarBitacora, useMesesDisponibles } from '../hooks/use-bitacoras';
+import { apiClient } from '@/lib/api';
+import { previsualizarInformeAutenticado } from '@/lib/pdf-naming';
 
 interface BitacoraTabProps {
   clienteId: number;
@@ -90,11 +93,26 @@ const CATEGORIAS = [
   { value: 'COMPRESION', label: 'Compresión' },
 ];
 
+const TIPOS_SERVICIO = [
+  { value: '', label: 'Todos los tipos' },
+  { value: 'GEN_PREV_A', label: 'Preventivo Tipo A - Generador' },
+  { value: 'GEN_PREV_B', label: 'Preventivo Tipo B - Generador' },
+  { value: 'BOM_PREV_A', label: 'Preventivo Tipo A - Bomba' },
+  { value: 'GEN_CORR', label: 'Correctivo - Generador' },
+  { value: 'BOM_CORR', label: 'Mantenimiento Correctivo - Bomba' },
+  { value: 'COMP_PREV_A', label: 'Preventivo Tipo A - Compresor' },
+  { value: 'BOM_PREV_A_GASOLINA', label: 'Preventivo Tipo A - Bomba Gasolina' },
+  { value: 'CORRECTIVO', label: 'Mantenimiento Correctivo (General)' },
+  { value: 'EMERGENCIA', label: 'Servicio de Emergencia' },
+  { value: 'INSPECCION', label: 'Visita de Inspección' },
+];
+
 export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
   const now = new Date();
   const [mes, setMes] = useState(now.getMonth() + 1);
   const [anio, setAnio] = useState(now.getFullYear());
   const [categoria, setCategoria] = useState('ENERGIA');
+  const [tipoServicio, setTipoServicio] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [nombresCustom, setNombresCustom] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -132,12 +150,13 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
     { enabled: showPreview },
     modoRango ? fechaInicio : undefined,
     modoRango ? fechaFin : undefined,
+    tipoServicio || undefined,
   );
 
   const { data: historial, isLoading: loadingHistorial } = useBitacoraHistorial(clienteId);
 
   const { data: mesesData, isLoading: loadingMeses } = useMesesDisponibles(
-    clienteId, categoria || undefined,
+    clienteId, categoria || undefined, undefined, tipoServicio || undefined,
   );
 
   const enviarMutation = useEnviarBitacora();
@@ -336,6 +355,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
   const mesLabel = MESES.find(m => m.value === mes)?.label || '';
   const catLabel = CATEGORIAS.find(c => c.value === categoria)?.label || 'Todas';
+  const tipoServicioLabel = TIPOS_SERVICIO.find(t => t.value === tipoServicio)?.label || 'Todos';
 
   // Años disponibles
   const anios = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
@@ -374,7 +394,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
 
           {/* Filtros según modo */}
           {modoRango ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
               <div className="space-y-2">
                 <Label>Fecha Inicio</Label>
                 <Input
@@ -407,6 +427,20 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                 </Select>
               </div>
 
+              <div className="space-y-2">
+                <Label>Tipo de Servicio</Label>
+                <Select value={tipoServicio || '_all'} onValueChange={v => setTipoServicio(v === '_all' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_SERVICIO.map(t => (
+                      <SelectItem key={t.value} value={t.value || '_all'}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button onClick={handleBuscar} disabled={loadingPreview || !fechaInicio || !fechaFin}>
                 {loadingPreview ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -417,7 +451,7 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
               <div className="space-y-2">
                 <Label>Mes</Label>
                 <Select value={String(mes)} onValueChange={v => setMes(Number(v))}>
@@ -455,6 +489,20 @@ export function BitacoraTab({ clienteId, clienteNombre }: BitacoraTabProps) {
                   <SelectContent>
                     {CATEGORIAS.map(c => (
                       <SelectItem key={c.value} value={c.value || '_all'}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tipo de Servicio</Label>
+                <Select value={tipoServicio || '_all'} onValueChange={v => setTipoServicio(v === '_all' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_SERVICIO.map(t => (
+                      <SelectItem key={t.value} value={t.value || '_all'}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1077,10 +1125,39 @@ function InformeRow({
   onToggleSelect,
 }: InformeRowProps) {
   const [editValue, setEditValue] = useState(customName || informe.nombre_sugerido);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const displayName = customName || informe.nombre_sugerido;
   const fechaStr = informe.fecha_servicio
     ? new Date(informe.fecha_servicio).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
     : 'Sin fecha';
+
+  // ✅ NUEVO: Visualizar PDF del informe en nueva pestaña
+  const handleVisualizar = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsPreviewing(true);
+    try {
+      // 1) Proxy autenticado vía endpoint /preview — streaming con Content-Disposition: inline
+      if (informe.id_documento) {
+        await previsualizarInformeAutenticado(apiClient, informe.id_documento);
+        return;
+      }
+      // 2) Fallback: URL directa del PDF (R2) si no hay id_documento
+      if (informe.pdf_url) {
+        window.open(informe.pdf_url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      alert('Este informe no tiene PDF disponible todavía.');
+    } catch (error) {
+      console.error('[Bitácora] Error visualizando informe:', error);
+      alert('No se pudo visualizar el PDF. Intente nuevamente.');
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  // Determina si hay PDF disponible
+  const tienePdf = Boolean(informe.pdf_url) || Boolean(informe.id_documento);
 
   return (
     <div className={`flex items-center gap-3 p-2.5 rounded-lg border bg-white transition-colors ${isSelected ? 'border-blue-300 bg-blue-50/30' : ''}`}>
@@ -1130,6 +1207,28 @@ function InformeRow({
           <span>{fechaStr}</span>
         </div>
       </div>
+
+      {/* ✅ NUEVO: Botón Visualizar PDF */}
+      {tienePdf && !isEditing && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={handleVisualizar}
+          disabled={isPreviewing}
+          className="flex-shrink-0 h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+          title="Visualizar PDF en nueva pestaña"
+        >
+          {isPreviewing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <>
+              <Eye className="h-3.5 w-3.5" />
+              <span className="ml-1 text-[10px] font-semibold hidden sm:inline">Ver</span>
+            </>
+          )}
+        </Button>
+      )}
 
       <Badge variant="outline" className={`text-[10px] flex-shrink-0 ${isSelected ? 'text-blue-700 border-blue-300 bg-blue-50' : 'text-green-700 border-green-300 bg-green-50'}`}>
         {isSelected ? 'INCLUIR' : 'PDF'}

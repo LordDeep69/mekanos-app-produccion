@@ -34,6 +34,8 @@ import { toast } from 'sonner';
 interface Evidencia {
     id_evidencia?: number;
     idEvidencia?: number;
+    id_orden_equipo?: number | null;
+    idOrdenEquipo?: number | null;
     tipo_evidencia?: 'ANTES' | 'DURANTE' | 'DESPUES' | 'INSUMOS' | 'MEDICION';
     tipoEvidencia?: 'ANTES' | 'DURANTE' | 'DESPUES' | 'INSUMOS' | 'MEDICION';
     ruta_archivo?: string;
@@ -70,6 +72,9 @@ function getEvidenciaUrl(e: Evidencia): string | undefined {
 }
 function getEvidenciaFecha(e: Evidencia): string | undefined {
     return e.fecha_captura ?? e.fechaCaptura;
+}
+function getEvidenciaIdEquipo(e: Evidencia): number | null {
+    return e.id_orden_equipo ?? e.idOrdenEquipo ?? null;
 }
 
 function FotoThumbnail({
@@ -322,7 +327,7 @@ export function GaleriaActividadFotos({
     // Las fotos de mobile pueden no tener id_actividad_ejecutada (usan descripción),
     // mientras que las fotos subidas desde admin SÍ lo tienen. Debemos combinar ambas.
     const { data: evidenciasData, isLoading } = useQuery({
-        queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada, nombreActividad, filtroDescripcion],
+        queryKey: ['evidencias-actividad', idOrdenServicio, idActividadEjecutada, nombreActividad, filtroDescripcion, idOrdenEquipo],
         queryFn: async () => {
             try {
                 const seenIds = new Set<number>();
@@ -363,6 +368,13 @@ export function GaleriaActividadFotos({
                 for (const e of todasEvidencias) {
                     const evId = e.id_evidencia ?? e.idEvidencia ?? 0;
                     if (evId && seenIds.has(evId)) continue; // ya agregada
+
+                    // ✅ FIX MULTI-EQUIPO: Excluir fotos de OTRO equipo
+                    if (idOrdenEquipo) {
+                        const evEquipo = getEvidenciaIdEquipo(e);
+                        // Si la foto pertenece a otro equipo distinto, saltarla
+                        if (evEquipo != null && evEquipo !== idOrdenEquipo) continue;
+                    }
 
                     // Coincidencia por id_actividad_ejecutada
                     if (idActividadEjecutada && (e.idActividadEjecutada === idActividadEjecutada ||

@@ -32,13 +32,14 @@ export class BitacorasController {
     @Query('mes') mesStr: string,
     @Query('anio') anioStr: string,
     @Query('categoria') categoria?: string,
+    @Query('tipo_servicio') tipoServicio?: string,
     @Query('fecha_inicio') fechaInicio?: string,
     @Query('fecha_fin') fechaFin?: string,
   ) {
     // ✅ Modo rango de fechas: si se proporcionan fecha_inicio y fecha_fin, usar ese rango
     if (fechaInicio && fechaFin) {
       const result = await this.bitacorasService.previewInformesPorSede(
-        idCliente, 0, 0, categoria || undefined, fechaInicio, fechaFin,
+        idCliente, 0, 0, categoria || undefined, fechaInicio, fechaFin, tipoServicio || undefined,
       );
       return { success: true, data: result };
     }
@@ -55,7 +56,7 @@ export class BitacorasController {
     }
 
     const result = await this.bitacorasService.previewInformesPorSede(
-      idCliente, mes, anio, categoria || undefined,
+      idCliente, mes, anio, categoria || undefined, undefined, undefined, tipoServicio || undefined,
     );
 
     return { success: true, data: result };
@@ -94,8 +95,9 @@ export class BitacorasController {
   async mesesDisponibles(
     @Param('idCliente', ParseIntPipe) idCliente: number,
     @Query('categoria') categoria?: string,
+    @Query('tipo_servicio') tipoServicio?: string,
   ) {
-    const data = await this.bitacorasService.mesesDisponibles(idCliente, categoria || undefined);
+    const data = await this.bitacorasService.mesesDisponibles(idCliente, categoria || undefined, tipoServicio || undefined);
     return { success: true, data };
   }
 

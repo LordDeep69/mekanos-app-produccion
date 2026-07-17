@@ -644,6 +644,7 @@ export class OrdenesController {
       valor_numerico?: number;
       valor_texto?: string;
       observaciones?: string;
+      id_orden_equipo?: number;
     },
   ) {
     // Validar que la orden existe
@@ -697,6 +698,7 @@ export class OrdenesController {
       data: {
         id_orden_servicio: id,
         id_parametro_medicion: body.id_parametro_medicion,
+        id_orden_equipo: body.id_orden_equipo || null,
         valor_numerico: body.valor_numerico,
         valor_texto: body.valor_texto,
         unidad_medida: parametro.unidad_medida,

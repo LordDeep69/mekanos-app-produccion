@@ -17,12 +17,12 @@ import {
 // Query Keys
 export const bitacorasKeys = {
   all: ['bitacoras'] as const,
-  preview: (idCliente: number, mes: number, anio: number, categoria?: string, fechaInicio?: string, fechaFin?: string) =>
-    [...bitacorasKeys.all, 'preview', idCliente, mes, anio, categoria, fechaInicio, fechaFin] as const,
+  preview: (idCliente: number, mes: number, anio: number, categoria?: string, fechaInicio?: string, fechaFin?: string, tipoServicio?: string) =>
+    [...bitacorasKeys.all, 'preview', idCliente, mes, anio, categoria, fechaInicio, fechaFin, tipoServicio] as const,
   historial: (idCliente: number) =>
     [...bitacorasKeys.all, 'historial', idCliente] as const,
-  mesesDisponibles: (idCliente: number, categoria?: string) =>
-    [...bitacorasKeys.all, 'meses-disponibles', idCliente, categoria] as const,
+  mesesDisponibles: (idCliente: number, categoria?: string, tipoServicio?: string) =>
+    [...bitacorasKeys.all, 'meses-disponibles', idCliente, categoria, tipoServicio] as const,
 };
 
 /**
@@ -37,12 +37,13 @@ export function useBitacoraPreview(
   options?: { enabled?: boolean },
   fechaInicio?: string,
   fechaFin?: string,
+  tipoServicio?: string,
 ) {
   const modoRango = !!(fechaInicio && fechaFin);
 
   return useQuery({
-    queryKey: bitacorasKeys.preview(idCliente, mes, anio, categoria, fechaInicio, fechaFin),
-    queryFn: () => getBitacoraPreview(idCliente, mes, anio, categoria, fechaInicio, fechaFin),
+    queryKey: bitacorasKeys.preview(idCliente, mes, anio, categoria, fechaInicio, fechaFin, tipoServicio),
+    queryFn: () => getBitacoraPreview(idCliente, mes, anio, categoria, fechaInicio, fechaFin, tipoServicio),
     staleTime: 2 * 60 * 1000,
     enabled: options?.enabled ?? (modoRango ? (idCliente > 0) : (idCliente > 0 && mes > 0 && anio > 0)),
   });
@@ -79,10 +80,10 @@ export function useBitacoraHistorial(idCliente: number, options?: { enabled?: bo
 /**
  * Hook para obtener meses con informes disponibles
  */
-export function useMesesDisponibles(idCliente: number, categoria?: string, options?: { enabled?: boolean }) {
+export function useMesesDisponibles(idCliente: number, categoria?: string, options?: { enabled?: boolean }, tipoServicio?: string) {
   return useQuery({
-    queryKey: bitacorasKeys.mesesDisponibles(idCliente, categoria),
-    queryFn: () => getMesesDisponibles(idCliente, categoria),
+    queryKey: bitacorasKeys.mesesDisponibles(idCliente, categoria, tipoServicio),
+    queryFn: () => getMesesDisponibles(idCliente, categoria, tipoServicio),
     staleTime: 5 * 60 * 1000,
     enabled: options?.enabled ?? idCliente > 0,
   });

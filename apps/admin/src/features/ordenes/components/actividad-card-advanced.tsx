@@ -100,7 +100,7 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
             await updateActividad.mutateAsync({
                 idActividad: actividad.id_actividad_ejecutada,
                 data: {
-                    observaciones: observaciones || undefined,
+                    observaciones: observaciones || null,
                 },
             });
             setShowObservaciones(false);

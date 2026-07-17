@@ -43,7 +43,7 @@ export class PrismaActividadesRepository implements ActividadesRepository {
         ...(command.sistema !== undefined && { sistema: command.sistema }),
         ...(command.ordenSecuencia !== undefined && { orden_secuencia: command.ordenSecuencia }),
         ...(command.estado !== undefined && { estado: command.estado }),
-        ...(command.observaciones !== undefined && { observaciones: command.observaciones }),
+        ...(command.observaciones !== undefined && { observaciones: command.observaciones || null }),
         ...(command.ejecutada !== undefined && { ejecutada: command.ejecutada }),
         ...(command.ejecutadaPor !== undefined && { ejecutada_por: command.ejecutadaPor }),
         ...(command.tiempoEjecucionMinutos !== undefined && { tiempo_ejecucion_minutos: command.tiempoEjecucionMinutos }),

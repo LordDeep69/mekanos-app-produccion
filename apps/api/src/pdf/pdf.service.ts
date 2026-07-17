@@ -29,6 +29,7 @@ import {
   generarTipoAGeneradorHTML,
   generarTipoBGeneradorHTML,
 } from './templates';
+import { DatosEstructuradosCorrectivoPorEquipo } from './templates/tipo-correctivo.template';
 
 export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
 
@@ -213,7 +214,50 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     // PASO 1: Extraer datos estructurados de observaciones de actividades
     // Los widgets móviles guardan datos con prefijos: ESTADO_INICIAL:, PROBLEMA:, etc.
     // ═══════════════════════════════════════════════════════════════════════════
-    const ext = this.extraerDatosEstructuradosCorrectivo(datos.actividades || []);
+    const obsParaParsear = [datos.observaciones, datos.observaciones_tecnico].filter(Boolean).join('\n') || undefined;
+    const ext = this.extraerDatosEstructuradosCorrectivo(datos.actividades || [], obsParaParsear);
+
+    // Helper para detectar valores "sin información"
+    const sinInfo = (v: string) => !v || v === '(Sin información)' || v === '(Ninguno)';
+
+    // ✅ MULTI-EQUIPO: Extraer datos estructurados POR equipo
+    // Cuando es multi-equipo, extraerDatosEstructuradosCorrectivo sobre el array plano
+    // sobreescribe los valores de cada equipo (queda solo el último). Debemos procesar
+    // cada grupo de actividadesPorEquipo por separado.
+    let datosPorEquipo: DatosEstructuradosCorrectivoPorEquipo[] | undefined = undefined;
+    const esMulti = datos.esMultiEquipo && datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1;
+    if (esMulti && datos.actividadesPorEquipo) {
+      datosPorEquipo = datos.actividadesPorEquipo.map((grupo) => {
+        const extEquipo = this.extraerDatosEstructuradosCorrectivo(
+          grupo.actividades.map((a) => ({ observaciones: a.observaciones, descripcion: a.descripcion })),
+        );
+        return {
+          equipo: grupo.equipo,
+          estadoInicial: extEquipo.estadoInicial || undefined,
+          estadoFinal: extEquipo.estadoFinal || undefined,
+          problemaReportado: sinInfo(extEquipo.problema) ? undefined : extEquipo.problema,
+          fallasObservadas: sinInfo(extEquipo.sintomas) ? undefined : extEquipo.sintomas,
+          diagnosticoTecnico: sinInfo(extEquipo.diagnostico) ? undefined : extEquipo.diagnostico,
+          trabajosRealizados: sinInfo(extEquipo.trabajos) ? undefined : extEquipo.trabajos,
+          trabajosPendientes: sinInfo(extEquipo.pendientes) ? undefined : extEquipo.pendientes,
+          recomendaciones: sinInfo(extEquipo.recomendaciones) ? undefined : extEquipo.recomendaciones,
+          sistemasAfectados: extEquipo.sistemasAfectados.length > 0 ? extEquipo.sistemasAfectados : undefined,
+          repuestosUtilizados: extEquipo.repuestos.length > 0 ? extEquipo.repuestos : undefined,
+          materialesUtilizados: extEquipo.materiales.length > 0 ? extEquipo.materiales : undefined,
+          obsEstadoInicial: extEquipo.obsEstadoInicial || undefined,
+          obsEstadoFinal: extEquipo.obsEstadoFinal || undefined,
+          obsProblema: extEquipo.obsProblema || undefined,
+          obsFallas: extEquipo.obsFallas || undefined,
+          obsDiagnostico: extEquipo.obsDiagnostico || undefined,
+          obsTrabajos: extEquipo.obsTrabajos || undefined,
+          obsPendientes: extEquipo.obsPendientes || undefined,
+          obsRecomendaciones: extEquipo.obsRecomendaciones || undefined,
+          obsRepuestos: extEquipo.obsRepuestos || undefined,
+          obsMateriales: extEquipo.obsMateriales || undefined,
+          obsSistemas: extEquipo.obsSistemas || undefined,
+        };
+      });
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PASO 2: Filtrar mediciones con valor para renderizado condicional
@@ -236,7 +280,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     // PASO 4: Construir objeto con campos dedicados (NO blob HTML)
     // Cada campo se renderiza en su sección propia del template
     // ═══════════════════════════════════════════════════════════════════════════
-    const sinInfo = (v: string) => !v || v === '(Sin información)' || v === '(Ninguno)';
 
     return {
       // --- Datos generales ---
@@ -292,6 +335,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       medicionesPorEquipo: datos.medicionesPorEquipo,
       evidenciasPorEquipo: datos.evidenciasPorEquipo,
 
+      // ✅ MULTI-EQUIPO: Datos estructurados por equipo (para renderizar secciones separadas)
+      datosPorEquipo,
+
       // --- Evidencias con tipo para agrupación ---
       // ✅ FIX 06-FEB-2026: Reconocer GENERAL y MEDICION además de ANTES/DURANTE/DESPUES
       evidencias: (datos.evidencias || []).map(e => {
@@ -322,7 +368,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * ✅ FIX 02-FEB-2026: Extrae datos estructurados de las observaciones de actividades correctivas
    * Los widgets móviles guardan datos con prefijos como ESTADO_INICIAL:, PROBLEMA:, etc.
    */
-  private extraerDatosEstructuradosCorrectivo(actividades: Array<{ observaciones?: string }>): {
+  private extraerDatosEstructuradosCorrectivo(
+    actividades: Array<{ observaciones?: string; descripcion?: string }>,
+    ordenObservaciones?: string,
+  ): {
     estadoInicial: string;
     estadoFinal: string;
     sistemasAfectados: string[];
@@ -334,7 +383,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     recomendaciones: string;
     repuestos: string[];
     materiales: string[];
-    // ✅ FIX 06-FEB-2026: Observaciones del técnico por actividad (parte después de |||)
     obsEstadoInicial: string;
     obsEstadoFinal: string;
     obsSistemas: string;
@@ -359,7 +407,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       recomendaciones: '',
       repuestos: [] as string[],
       materiales: [] as string[],
-      // Observaciones auxiliares por actividad
       obsEstadoInicial: '',
       obsEstadoFinal: '',
       obsSistemas: '',
@@ -373,52 +420,113 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       obsMateriales: '',
     };
 
+    const mapaDescripcionCampo: Record<string, keyof typeof resultado> = {
+      'ESTADO INICIAL DEL EQUIPO': 'estadoInicial',
+      'ESTADO FINAL DEL EQUIPO': 'estadoFinal',
+      'SISTEMAS AFECTADOS': 'sistemasAfectados',
+      'DESCRIPCIÓN DEL PROBLEMA REPORTADO': 'problema',
+      'PROBLEMA REPORTADO': 'problema',
+      'FALLAS OBSERVADAS': 'sintomas',
+      'DIAGNÓSTICO': 'diagnostico',
+      'DIAGNOSTICO': 'diagnostico',
+      'TRABAJOS REALIZADOS': 'trabajos',
+      'TRABAJOS PENDIENTES': 'pendientes',
+      'RECOMENDACIONES': 'recomendaciones',
+      'REPUESTOS UTILIZADOS': 'repuestos',
+      'MATERIALES E INSUMOS': 'materiales',
+      'MATERIALES': 'materiales',
+    };
+
     for (const actividad of actividades) {
-      // ✅ FIX 03-FEB-2026: Extraer valor especial (antes de |||) y observación (después de |||)
-      // Formato: "VALOR_ESPECIAL|||Observación del técnico"
       const obsRaw = actividad.observaciones || '';
       const partes = obsRaw.split('|||');
       const obs = partes[0].trim();
       const obsAux = partes.length > 1 ? partes.slice(1).join(' ').trim() : '';
 
+      let matched = false;
+
       if (obs.startsWith('ESTADO_INICIAL: ')) {
         resultado.estadoInicial = this.mapearEstadoInicial(obs.substring(16).trim());
         if (obsAux) resultado.obsEstadoInicial = obsAux;
+        matched = true;
       } else if (obs.startsWith('ESTADO_FINAL: ')) {
         resultado.estadoFinal = this.mapearEstadoFinal(obs.substring(14).trim());
         if (obsAux) resultado.obsEstadoFinal = obsAux;
+        matched = true;
       } else if (obs.startsWith('SISTEMAS: ')) {
         const sistemas = obs.substring(10).split(',').map(s => s.trim()).filter(s => s);
         resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
         if (obsAux) resultado.obsSistemas = obsAux;
+        matched = true;
       } else if (obs.startsWith('PROBLEMA: ')) {
         resultado.problema = obs.substring(10).trim();
         if (obsAux) resultado.obsProblema = obsAux;
+        matched = true;
       } else if (obs.startsWith('SINTOMAS: ') || obs.startsWith('FALLAS: ')) {
-        // ✅ FIX 03-FEB-2026: Soportar ambos prefijos (SINTOMAS y FALLAS)
         const prefijo = obs.startsWith('FALLAS: ') ? 'FALLAS: ' : 'SINTOMAS: ';
         resultado.sintomas = obs.substring(prefijo.length).trim();
         if (obsAux) resultado.obsFallas = obsAux;
+        matched = true;
       } else if (obs.startsWith('DIAGNOSTICO: ')) {
         resultado.diagnostico = obs.substring(13).trim();
         if (obsAux) resultado.obsDiagnostico = obsAux;
+        matched = true;
       } else if (obs.startsWith('TRABAJOS: ')) {
         resultado.trabajos = obs.substring(10).trim();
         if (obsAux) resultado.obsTrabajos = obsAux;
+        matched = true;
       } else if (obs.startsWith('PENDIENTES: ')) {
         resultado.pendientes = obs.substring(12).trim();
         if (obsAux) resultado.obsPendientes = obsAux;
+        matched = true;
       } else if (obs.startsWith('RECOMENDACIONES: ')) {
         resultado.recomendaciones = obs.substring(17).trim();
         if (obsAux) resultado.obsRecomendaciones = obsAux;
+        matched = true;
       } else if (obs.startsWith('REPUESTOS: ')) {
         const items = obs.substring(11).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
         resultado.repuestos = items;
         if (obsAux) resultado.obsRepuestos = obsAux;
+        matched = true;
       } else if (obs.startsWith('MATERIALES: ')) {
         const items = obs.substring(12).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
         resultado.materiales = items;
         if (obsAux) resultado.obsMateriales = obsAux;
+        matched = true;
+      }
+
+      if (!matched && obs && actividad.descripcion) {
+        const descUpper = actividad.descripcion.toUpperCase().trim();
+        const campo = mapaDescripcionCampo[descUpper];
+        if (campo && obs) {
+          if (campo === 'sistemasAfectados') {
+            const sistemas = obs.split(',').map(s => s.trim()).filter(s => s);
+            resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
+          } else if (campo === 'repuestos') {
+            const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
+            resultado.repuestos = items;
+          } else if (campo === 'materiales') {
+            const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
+            resultado.materiales = items;
+          } else if (campo === 'estadoInicial') {
+            resultado.estadoInicial = this.mapearEstadoInicial(obs);
+          } else if (campo === 'estadoFinal') {
+            resultado.estadoFinal = this.mapearEstadoFinal(obs);
+          } else {
+            (resultado as any)[campo] = obs;
+          }
+        }
+      }
+    }
+
+    if (ordenObservaciones) {
+      for (const linea of ordenObservaciones.split('\n')) {
+        const trimLinea = linea.trim();
+        if (trimLinea.startsWith('DIAGNOSTICO: ') && !resultado.diagnostico) {
+          resultado.diagnostico = trimLinea.substring(13).trim();
+        } else if (trimLinea.startsWith('FALLAS: ') && !resultado.sintomas) {
+          resultado.sintomas = trimLinea.substring(7).trim();
+        }
       }
     }
 

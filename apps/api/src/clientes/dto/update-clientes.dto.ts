@@ -14,6 +14,8 @@ import {
 import {
     PeriodicidadMantenimientoEnum,
     TipoClienteEnum,
+    TipoIdentificacionEnum,
+    TipoPersonaEnum,
 } from './create-clientes.dto';
 
 /**
@@ -22,12 +24,48 @@ import {
  */
 export class UpdatePersonaContactoDto {
     @IsOptional()
+    @IsEnum(TipoIdentificacionEnum)
+    tipo_identificacion?: TipoIdentificacionEnum;
+
+    @IsOptional()
+    @IsString()
+    numero_identificacion?: string;
+
+    @IsOptional()
+    @IsEnum(TipoPersonaEnum)
+    tipo_persona?: TipoPersonaEnum;
+
+    @IsOptional()
+    @IsString()
+    primer_nombre?: string;
+
+    @IsOptional()
+    @IsString()
+    segundo_nombre?: string;
+
+    @IsOptional()
+    @IsString()
+    primer_apellido?: string;
+
+    @IsOptional()
+    @IsString()
+    segundo_apellido?: string;
+
+    @IsOptional()
     @IsString()
     razon_social?: string;
 
     @IsOptional()
     @IsString()
     nombre_comercial?: string;
+
+    @IsOptional()
+    @IsString()
+    representante_legal?: string;
+
+    @IsOptional()
+    @IsString()
+    cedula_representante?: string;
 
     @IsOptional()
     @IsEmail()

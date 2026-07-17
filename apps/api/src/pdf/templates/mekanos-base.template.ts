@@ -132,6 +132,9 @@ export interface DatosOrdenPDF {
   // Observaciones
   observaciones: string;
 
+  // ✅ Observaciones del técnico (admin edita este campo, contiene DIAGNOSTICO:/FALLAS:)
+  observaciones_tecnico?: string;
+
   // Firmas
   firmaTecnico?: string;
   firmaCliente?: string;

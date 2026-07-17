@@ -441,10 +441,19 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           id_asesor_asignado: values.id_asesor_asignado ?? undefined,
           id_cuenta_email_remitente: values.id_cuenta_email_remitente,
           emails_notificacion: emailsList.length > 0 ? emailsList.join(';;') : null,
-          // Datos de persona editables (contacto + nombres)
+          // Datos de persona editables (identidad + contacto + nombres)
           persona: {
+            tipo_identificacion: values.tipo_identificacion,
+            numero_identificacion: values.numero_identificacion || undefined,
+            tipo_persona: values.tipo_persona,
+            primer_nombre: values.primer_nombre || undefined,
+            segundo_nombre: values.segundo_nombre || undefined,
+            primer_apellido: values.primer_apellido || undefined,
+            segundo_apellido: values.segundo_apellido || undefined,
             razon_social: values.razon_social || undefined,
             nombre_comercial: values.nombre_comercial || undefined,
+            representante_legal: values.representante_legal || undefined,
+            cedula_representante: values.cedula_representante || undefined,
             email_principal: values.email_principal && values.email_principal.trim() !== '' ? values.email_principal : undefined,
             telefono_principal: values.telefono_principal || undefined,
             celular: values.celular || undefined,
@@ -828,7 +837,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={mode === 'editar' || !!esSede}
+                      disabled={!!esSede}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -857,7 +866,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={mode === 'editar' || !!esSede}
+                      disabled={!!esSede}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -889,7 +898,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <Input
                       placeholder="Ej: 900123456-7"
                       {...field}
-                      disabled={mode === 'editar' || !!esSede}
+                      disabled={!!esSede}
                     />
                   </FormControl>
                   <FormDescription>
@@ -957,7 +966,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Nombre completo"
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -975,7 +984,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Número de documento"
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -998,7 +1007,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Nombre"
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -1016,7 +1025,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Segundo nombre"
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -1036,7 +1045,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Apellido"
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />
@@ -1054,7 +1063,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                           <Input
                             placeholder="Segundo apellido"
                             {...field}
-                            disabled={mode === 'editar' || !!esSede}
+                            disabled={!!esSede}
                           />
                         </FormControl>
                         <FormMessage />

@@ -110,6 +110,7 @@ export async function getBitacoraPreview(
   categoria?: string,
   fechaInicio?: string,
   fechaFin?: string,
+  tipoServicio?: string,
 ): Promise<BitacoraPreviewResult> {
   const params = new URLSearchParams();
 
@@ -124,6 +125,7 @@ export async function getBitacoraPreview(
   }
 
   if (categoria) params.append('categoria', categoria);
+  if (tipoServicio) params.append('tipo_servicio', tipoServicio);
 
   const response = await apiClient.get<{ success: boolean; data: BitacoraPreviewResult }>(
     `${BITACORAS_BASE}/preview/${idCliente}?${params.toString()}`
@@ -179,9 +181,11 @@ export interface MesesDisponiblesResult {
 export async function getMesesDisponibles(
   idCliente: number,
   categoria?: string,
+  tipoServicio?: string,
 ): Promise<MesesDisponiblesResult> {
   const params = new URLSearchParams();
   if (categoria) params.append('categoria', categoria);
+  if (tipoServicio) params.append('tipo_servicio', tipoServicio);
 
   const url = `${BITACORAS_BASE}/meses-disponibles/${idCliente}${params.toString() ? '?' + params.toString() : ''}`;
   const response = await apiClient.get<{ success: boolean; data: MesesDisponiblesResult }>(url);
