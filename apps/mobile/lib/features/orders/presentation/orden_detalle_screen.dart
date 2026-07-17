@@ -99,10 +99,11 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         foregroundColor: Colors.white,
       ),
       body: _buildBody(),
-      // ✅ FIX 21-FEB-2026: Mostrar botón RESUBIR para órdenes COMPLETADA con datos locales
-      // O botón normal de ejecución para órdenes no finalizadas
+      // ✅ FIX 17-JUL-2026: Solo permitir INICIAR EJECUCIÓN en órdenes NO finalizadas.
+      // Órdenes COMPLETADA/CERRADA/CANCELADA/FINALIZADA ya no son editables desde aquí;
+      // deben visualizarse a través del módulo HISTORIAL DE SERVICIOS (read-only).
       bottomNavigationBar: _detalle != null
-          ? (!_detalle!.estaFinalizada ? _buildBottomBar() : _buildResubirBar())
+          ? (!_detalle!.estaFinalizada ? _buildBottomBar() : const SizedBox.shrink())
           : null,
     );
   }
@@ -760,8 +761,21 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
     );
   }
 
+  // ════════════════════════════════════════════════════════════════
+  // ⚠️ MÉTODOS BLOQUEADOS - 17-JUL-2026
+  // Por política corporativa, los técnicos NO pueden editar órdenes
+  // finalizadas desde la app mobile. Estas funciones fueron
+  // diseñadas anteriormente para permitir "resubir" órdenes
+  // COMPLETADA, pero fueron suspendidas por integridad de datos.
+  // Las órdenes finalizadas ahora SOLO se visualizan en modo
+  // read-only desde el módulo HISTORIAL DE SERVICIOS.
+  // ⚠️ NO LLAMAR - dejar como referencia histórica.
+  // ════════════════════════════════════════════════════════════════
+
   /// ✅ FIX 26-FEB-2026: Barra inferior para órdenes COMPLETADA
   /// Permite al técnico entrar a la vista de ejecución para revisar/editar y resubir
+  /// ⚠️ BLOQUEADO desde 17-JUL-2026
+  // ignore: unused_element
   Widget _buildResubirBar() {
     // Solo mostrar para COMPLETADA (no CERRADA ni CANCELADA)
     final codigoEstado = _detalle?.codigoEstado.toUpperCase() ?? '';
@@ -842,6 +856,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   /// ✅ FIX 26-FEB-2026: Navega a EjecucionScreen en modo resubida
   /// NO llama iniciarEjecucion (datos ya existen en BD local)
   /// Pasa esResubida=true para que el botón muestre RESUBIR ORDEN
+  /// ⚠️ BLOQUEADO desde 17-JUL-2026
   Future<void> _navegarAEjecucionResubida() async {
     if (_detalle == null) return;
 

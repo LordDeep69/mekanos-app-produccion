@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../historial/presentation/historial_detalle_screen.dart';
 import '../../historial/presentation/historial_screen.dart';
 import '../data/orden_repository.dart';
 import 'home_production_screen.dart';
@@ -1267,11 +1268,15 @@ class _OrdenCardOptimizado extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
+          final codigoEstado = detalles?.codigoEstado.toUpperCase() ?? '';
+          final esFinalizada = const ['COMPLETADA', 'CERRADA', 'CANCELADA', 'FINALIZADA']
+              .contains(codigoEstado);
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
+              builder: (context) => esFinalizada
+                  ? HistorialDetalleScreen(idOrdenLocal: orden.idLocal)
+                  : OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
             ),
           ).then((_) {
             onReturn?.call();

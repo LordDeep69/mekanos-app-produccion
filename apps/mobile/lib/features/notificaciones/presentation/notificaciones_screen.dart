@@ -9,7 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/database_service.dart';
+import '../../orders/data/orden_repository.dart';
 import '../../orders/presentation/orden_detalle_screen.dart';
+import '../../historial/presentation/historial_detalle_screen.dart';
 import '../data/notificaciones_provider.dart';
 import '../data/notificaciones_service.dart';
 
@@ -94,9 +96,23 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
       if (orden != null) {
         // Navegar con el ID local
         if (mounted) {
+          // ✅ FIX: Redirigir órdenes finalizadas a la vista de solo lectura (Historial)
+          final ordenRepo = ref.read(ordenRepositoryProvider);
+          final detalle = await ordenRepo.getDetalleCompleto(orden.idLocal);
+          final codigoEstado =
+              detalle?.codigoEstado.toUpperCase() ?? '';
+          final esFinalizada = const [
+            'COMPLETADA',
+            'CERRADA',
+            'CANCELADA',
+            'FINALIZADA',
+          ].contains(codigoEstado);
+
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
+              builder: (_) => esFinalizada
+                  ? HistorialDetalleScreen(idOrdenLocal: orden.idLocal)
+                  : OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
             ),
           );
         }
