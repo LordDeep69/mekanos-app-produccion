@@ -233,10 +233,17 @@ const correctivoStyles = `
     font-size: 10px;
     color: #2c3e50;
     line-height: 1.6;
-    white-space: pre-wrap;
+    white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
+  .corr-narrative-box p { margin: 0 0 6px 0; }
+  .corr-narrative-box p:last-child { margin-bottom: 0; }
+  .corr-narrative-box ul { margin: 4px 0; padding-left: 20px; list-style-type: disc; }
+  .corr-narrative-box ol { margin: 4px 0; padding-left: 20px; list-style-type: decimal; }
+  .corr-narrative-box li { margin: 2px 0; line-height: 1.5; }
+  .corr-narrative-box strong { font-weight: bold; }
+  .corr-narrative-box hr { border: none; border-top: 1px solid #d1d5db; margin: 8px 0; }
 
   /* --- Badges de estado (inicial / final) --- */
   .corr-estado-inicial-bar,

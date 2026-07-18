@@ -213,10 +213,17 @@ export function generarRemisionHTML(datos: DatosRemisionPDF): string {
             border-radius: 4px;
             margin-bottom: 15px;
             font-size: 9px;
-            white-space: pre-wrap;
+            white-space: normal;
             word-wrap: break-word;
             overflow-wrap: break-word;
         }
+        .observaciones-box p { margin: 0 0 6px 0; }
+        .observaciones-box p:last-child { margin-bottom: 0; }
+        .observaciones-box ul { margin: 4px 0; padding-left: 20px; list-style-type: disc; }
+        .observaciones-box ol { margin: 4px 0; padding-left: 20px; list-style-type: decimal; }
+        .observaciones-box li { margin: 2px 0; line-height: 1.4; }
+        .observaciones-box strong { font-weight: bold; }
+        .observaciones-box hr { border: none; border-top: 1px solid #d1d5db; margin: 8px 0; }
         
         .firmas-section {
             display: grid;

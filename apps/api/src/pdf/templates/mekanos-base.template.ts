@@ -675,9 +675,58 @@ export const baseStyles = `
     border-radius: 4px;
     min-height: 60px;
     border-left: 3px solid ${MEKANOS_COLORS.secondary};
-    white-space: pre-wrap;
+    white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
+  }
+
+  /* ✅ FIX 17-JUL-2026: Estilos para HTML enriquecido en observaciones (TipTap) */
+  .observaciones-box p {
+    margin: 0 0 8px 0;
+  }
+  .observaciones-box p:last-child {
+    margin-bottom: 0;
+  }
+  .observaciones-box h2 {
+    font-size: 13px;
+    font-weight: bold;
+    margin: 12px 0 6px 0;
+    color: #111827;
+  }
+  .observaciones-box h3 {
+    font-size: 12px;
+    font-weight: 600;
+    margin: 10px 0 4px 0;
+    color: #1f2937;
+  }
+  .observaciones-box strong {
+    font-weight: bold;
+    color: #111827;
+  }
+  .observaciones-box em {
+    font-style: italic;
+  }
+  .observaciones-box u {
+    text-decoration: underline;
+  }
+  .observaciones-box ul {
+    margin: 6px 0;
+    padding-left: 24px;
+    list-style-type: disc;
+  }
+  .observaciones-box ol {
+    margin: 6px 0;
+    padding-left: 24px;
+    list-style-type: decimal;
+  }
+  .observaciones-box li {
+    margin: 3px 0;
+    line-height: 1.5;
+  }
+  .observaciones-box hr {
+    border: none;
+    border-top: 1px solid #d1d5db;
+    margin: 10px 0;
   }
   
   /* ✅ FIX: Sección de Firmas - Más grande y profesional */
@@ -1088,8 +1137,15 @@ export const baseStyles = `
   }
   
   .obs-detalle {
-    white-space: pre-wrap;
+    white-space: normal;
   }
+  .obs-detalle p { margin: 0 0 6px 0; }
+  .obs-detalle p:last-child { margin-bottom: 0; }
+  .obs-detalle ul { margin: 4px 0; padding-left: 20px; list-style-type: disc; }
+  .obs-detalle ol { margin: 4px 0; padding-left: 20px; list-style-type: decimal; }
+  .obs-detalle li { margin: 2px 0; line-height: 1.5; }
+  .obs-detalle strong { font-weight: bold; }
+  .obs-detalle hr { border: none; border-top: 1px solid #d1d5db; margin: 8px 0; }
   
   /* Tarjeta Recomendaciones - Amarillo */
   .obs-recomendaciones .obs-card-header {
