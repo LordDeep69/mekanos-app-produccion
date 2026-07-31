@@ -28,11 +28,12 @@ import {
     ParseIntPipe,
     Post,
     Query,
+    Req,
     Res,
     UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { buildContentDisposition, buildInformeFilename, extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
@@ -65,6 +66,7 @@ export class InformesPdfController {
     })
     async descargarInforme(
         @Param('id', ParseIntPipe) idDocumento: number,
+        @Req() req: Request,
         @Res() res: Response,
     ): Promise<void> {
         const ctx = await this.cargarContextoDescarga(idDocumento);
@@ -88,11 +90,39 @@ export class InformesPdfController {
             res.status(HttpStatus.OK).send(buffer);
 
             this.logger.log(`📥 Descarga servida: ${filename} (${buffer.length} bytes)`);
+
+            // ✅ FIX 21-JUL-2026: Tracking de descargas (no bloquea el response)
+            // Se ejecuta en background; un fallo aquí no afecta la descarga.
+            const idUsuario = (req.user as { id?: number })?.id ?? null;
+            setImmediate(() => {
+                this.registrarDescarga(idDocumento, idUsuario).catch((err) => {
+                    this.logger.warn(`⚠️ No se pudo registrar descarga del documento ${idDocumento}: ${err instanceof Error ? err.message : err}`);
+                });
+            });
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`❌ Error sirviendo PDF: ${msg}`);
             throw new NotFoundException(`No se pudo descargar el PDF: ${msg}`);
         }
+    }
+
+    /**
+     * ✅ FIX 21-JUL-2026: Persiste una descarga exitosa en documentos_generados
+     *
+     * Incrementa `veces_descargado` y actualiza `fecha_ultima_descarga` e
+     * `id_usuario_ultima_descarga`. Pensado para llamarse en background vía
+     * `setImmediate` desde `descargarInforme` para no bloquear la respuesta.
+     */
+    private async registrarDescarga(idDocumento: number, idUsuario: number | null): Promise<void> {
+        await this.prisma.documentos_generados.update({
+            where: { id_documento: idDocumento },
+            data: {
+                veces_descargado: { increment: 1 },
+                fecha_ultima_descarga: new Date(),
+                ...(idUsuario !== null ? { id_usuario_ultima_descarga: idUsuario } : {}),
+            },
+        });
+        this.logger.log(`📊 Descarga registrada (doc ${idDocumento}, usuario ${idUsuario ?? 'N/A'})`);
     }
 
     /**

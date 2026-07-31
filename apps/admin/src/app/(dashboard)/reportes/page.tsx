@@ -17,6 +17,7 @@
 
 import {
     useClientesConInformes,
+    useInvalidarReportes,
     useReportes,
     type ReporteItem,
 } from '@/features/reportes';
@@ -25,6 +26,7 @@ import { buildInformeFilename, descargarInformeAutenticado, previsualizarInforme
 import { cn, formatDateSafe } from '@/lib/utils';
 import {
     AlertCircle,
+    BadgeCheck,
     Building2,
     ChevronLeft,
     ChevronRight,
@@ -100,6 +102,11 @@ function EstadoInformeBadge({ estado }: { estado: string }) {
 function ReporteRow({ reporte }: { reporte: ReporteItem }) {
     const pdfUrl = reporte.documento?.ruta_archivo;
     const idDocumento = reporte.documento?.id_documento ?? reporte.id_documento;
+    const invalidateReportes = useInvalidarReportes();
+
+    // ✅ FIX 21-JUL-2026: Tracking de descargas — campos del backend
+    const vecesDescargado = reporte.documento?.veces_descargado ?? 0;
+    const fechaUltimaDescarga = reporte.documento?.fecha_ultima_descarga;
 
     /**
      * ✅ FIX 29-ABR-2026: Descarga con nombre canónico
@@ -107,6 +114,9 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
      *
      * Va por el endpoint proxy backend autenticado que sirve el PDF con
      * Content-Disposition correcto (R2 es cross-origin → `<a download>` se ignora).
+     *
+     * ✅ FIX 21-JUL-2026: Tras descarga exitosa, invalida el cache de reportes
+     * para que el badge "descargado" se actualice silenciosamente (~200ms).
      */
     const handleDescargar = async () => {
         const filename = buildInformeFilename({
@@ -124,6 +134,8 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
 
         try {
             await descargarInformeAutenticado(apiClient, idDocumento, filename);
+            // Invalida cache → el badge se actualizará con el nuevo conteo
+            invalidateReportes();
         } catch (error) {
             console.error('[Reportes] Error descargando PDF:', error);
             alert('No se pudo descargar el PDF. Verifique su sesión e intente nuevamente.');
@@ -231,6 +243,35 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
             {/* Acciones */}
             <td className="px-4 py-3">
                 <div className="flex items-center gap-1 justify-end">
+                    {/* ✅ FIX 21-JUL-2026: Badge indicador de descarga */}
+                    {vecesDescargado > 0 && (
+                        <span
+                            className="group relative inline-flex items-center"
+                            title={
+                                `Descargado ${vecesDescargado} vez${vecesDescargado !== 1 ? 'es' : ''}` +
+                                (fechaUltimaDescarga
+                                    ? `\nÚltima: ${formatDate(fechaUltimaDescarga)}`
+                                    : '')
+                            }
+                        >
+                            <BadgeCheck className="h-4 w-4 text-green-500" />
+                            <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500 text-[8px] text-white font-bold items-center justify-center leading-none">
+                                    {vecesDescargado > 9 ? '9+' : vecesDescargado}
+                                </span>
+                            </span>
+                            {/* Tooltip hover */}
+                            <span className="pointer-events-none absolute z-50 bottom-full right-0 mb-1.5 w-max max-w-[220px] rounded-md bg-gray-900 px-2.5 py-1.5 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100 whitespace-nowrap shadow-lg">
+                                {`Descargado ${vecesDescargado} vez${vecesDescargado !== 1 ? 'es' : ''}`}
+                                {fechaUltimaDescarga && (
+                                    <span className="block text-gray-300 text-[10px]">
+                                        Última: {formatDate(fechaUltimaDescarga)}
+                                    </span>
+                                )}
+                            </span>
+                        </span>
+                    )}
                     {pdfUrl && (
                         <>
                             <button

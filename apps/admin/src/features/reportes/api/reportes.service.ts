@@ -30,6 +30,10 @@ export interface ReporteItem {
         mime_type: string;
         fecha_generacion: string;
         hash_sha256: string;
+        // ✅ FIX 21-JUL-2026: Tracking de descargas desde el Admin Portal
+        veces_descargado: number | null;
+        fecha_ultima_descarga: string | null;
+        id_usuario_ultima_descarga: number | null;
     } | null;
     orden: {
         id_orden_servicio: number;

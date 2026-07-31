@@ -170,6 +170,9 @@ export class InformesService {
           dg."tamaño_bytes"::float8 as tamano_bytes,
           dg.mime_type,
           dg.fecha_generacion,
+          dg.veces_descargado,
+          dg.fecha_ultima_descarga,
+          dg.id_usuario_ultima_descarga,
           os.id_orden_servicio,
           os.numero_orden,
           os.fecha_programada,
@@ -248,6 +251,10 @@ export class InformesService {
             mime_type: row.mime_type,
             fecha_generacion: row.fecha_generacion,
             hash_sha256: row.hash_sha256,
+            // ✅ FIX 21-JUL-2026: Tracking de descargas
+            veces_descargado: row.veces_descargado ?? 0,
+            fecha_ultima_descarga: row.fecha_ultima_descarga ?? null,
+            id_usuario_ultima_descarga: row.id_usuario_ultima_descarga ?? null,
           },
           orden: row.id_orden_servicio ? {
             id_orden_servicio: row.id_orden_servicio,

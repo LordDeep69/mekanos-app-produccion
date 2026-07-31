@@ -639,6 +639,10 @@ model documentos_generados {
   fecha_generacion       DateTime            @default(now()) @db.Timestamp(6)
   generado_por           Int
   herramienta_generacion String?             @db.VarChar(50)
+  // ✅ FIX 21-JUL-2026: Tracking de descargas desde el Admin Portal
+  veces_descargado               Int?        @default(0)
+  fecha_ultima_descarga          DateTime?   @db.Timestamp(6)
+  id_usuario_ultima_descarga     Int?
   bitacoras              bitacoras[]
   informes               informes[]
 
