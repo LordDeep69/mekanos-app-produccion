@@ -42,10 +42,14 @@ interface Evidencia {
     descripcion?: string;
     fecha_captura?: string;
     fechaCaptura?: string;
+    id_orden_equipo?: number | null;
+    idOrdenEquipo?: number | null;
 }
 
 interface GaleriaFotosGeneralesProps {
     idOrdenServicio: number;
+    /** Si se establece, solo se muestran fotos asignadas a este id_orden_equipo */
+    idOrdenEquipoFiltro?: number | null;
 }
 
 function getEvId(e: Evidencia): number {
@@ -245,7 +249,7 @@ function LightboxModal({
     );
 }
 
-export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGeneralesProps) {
+export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = null }: GaleriaFotosGeneralesProps) {
     const queryClient = useQueryClient();
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -327,7 +331,12 @@ export function GaleriaFotosGenerales({ idOrdenServicio }: GaleriaFotosGenerales
         enabled: !!idOrdenServicio,
     });
 
-    const fotosGenerales: Evidencia[] = evidenciasData?.data || [];
+    const fotosGeneralesRaw: Evidencia[] = evidenciasData?.data || [];
+
+    // ✅ MULTI-EQUIPO: Filtrar por id_orden_equipo si se especifica
+    const fotosGenerales: Evidencia[] = idOrdenEquipoFiltro != null
+        ? fotosGeneralesRaw.filter((e) => (e.id_orden_equipo ?? e.idOrdenEquipo ?? null) === idOrdenEquipoFiltro)
+        : fotosGeneralesRaw;
 
     // Delete mutation
     const deleteMutation = useMutation({

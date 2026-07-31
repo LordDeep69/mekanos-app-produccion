@@ -38,6 +38,8 @@ interface Evidencia {
     descripcion?: string;
     fecha_captura?: string;
     id_actividad_ejecutada?: number;
+    id_orden_equipo?: number | null;
+    idOrdenEquipo?: number | null;
     actividad_asociada?: {
         descripcion_actividad?: string;
     };
@@ -46,6 +48,8 @@ interface Evidencia {
 interface EvidenciasGalleryProps {
     evidencias: Evidencia[];
     isLoading?: boolean;
+    /** Si se establece, solo se muestran evidencias asignadas a este id_orden_equipo */
+    idOrdenEquipoFiltro?: number | null;
 }
 
 const TIPO_CONFIG: Record<string, { label: string; color: string; bgColor: string; borderColor: string }> = {
@@ -299,7 +303,7 @@ function Lightbox({
     );
 }
 
-export function EvidenciasGallery({ evidencias, isLoading }: EvidenciasGalleryProps) {
+export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro = null }: EvidenciasGalleryProps) {
     const queryClient = useQueryClient();
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
@@ -339,7 +343,11 @@ export function EvidenciasGallery({ evidencias, isLoading }: EvidenciasGalleryPr
     };
 
     // GENERAL photos are managed separately in GaleriaFotosGenerales (CRUD)
-    const evidenciasSinGeneral = evidencias.filter((ev) => ev.tipo_evidencia !== 'GENERAL');
+    // ✅ MULTI-EQUIPO: Si hay filtro por equipo, aplicar antes de agrupar
+    const evidenciasFiltradasEquipo = idOrdenEquipoFiltro != null
+        ? evidencias.filter((ev) => (ev.id_orden_equipo ?? ev.idOrdenEquipo ?? null) === idOrdenEquipoFiltro)
+        : evidencias;
+    const evidenciasSinGeneral = evidenciasFiltradasEquipo.filter((ev) => ev.tipo_evidencia !== 'GENERAL');
 
     const tiposEvidencia = ['ANTES', 'DURANTE', 'DESPUES', 'INSUMOS', 'MEDICION'] as const;
     const evidenciasPorTipo = tiposEvidencia.reduce((acc, tipo) => {

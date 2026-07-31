@@ -1222,6 +1222,11 @@ function TabDocumentos({ orden }: { orden: Orden }) {
     const { data: evidenciasData, isLoading: isLoadingEv } = useEvidenciasOrden(orden.id_orden_servicio);
     const { data: firmasData, isLoading: isLoadingFi } = useFirmasOrden(orden.id_orden_servicio);
 
+    // ✅ MULTI-EQUIPO: Detectar y habilitar filtro por equipo
+    const esMultiEquipo = (orden.ordenes_equipos?.length || 0) > 1;
+    const equipos = orden.ordenes_equipos || [];
+    const [equipoFiltro, setEquipoFiltro] = useState<number | 'todos'>('todos');
+
     // ✅ FIX 05-ENE-2026: Obtener URL del PDF desde documentos_generados
     const { data: pdfData } = useQuery({
         queryKey: ['orden-pdf-url', orden.id_orden_servicio],
@@ -1250,14 +1255,75 @@ function TabDocumentos({ orden }: { orden: Orden }) {
             {/* Historial de Emails Enviados - FIX 18-FEB-2026 */}
             <HistorialEmailsSection idOrden={orden.id_orden_servicio} />
 
+            {/* ✅ MULTI-EQUIPO: Filtro por equipo para fotos/evidencias */}
+            {esMultiEquipo && (
+                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 p-4 shadow-sm">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="flex-shrink-0 w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
+                            <Camera className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-indigo-900 text-sm">Orden Multi-Equipos ({equipos.length} equipos)</h4>
+                            <p className="text-[10px] text-indigo-600">Filtre por equipo para ver las fotos de cada equipo</p>
+                        </div>
+                    </div>
+                    {/* Selector de equipos */}
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            onClick={() => setEquipoFiltro('todos')}
+                            className={cn(
+                                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border',
+                                equipoFiltro === 'todos'
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                    : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+                            )}
+                        >
+                            Todos
+                        </button>
+                        {equipos.map((oe, idx) => {
+                            const color = EQUIPO_COLORS[idx % EQUIPO_COLORS.length];
+                            const isActive = equipoFiltro === oe.id_orden_equipo;
+                            const label = oe.nombre_sistema || oe.equipo?.nombre_equipo || `Equipo ${oe.orden_secuencia}`;
+                            return (
+                                <button
+                                    key={oe.id_orden_equipo}
+                                    onClick={() => setEquipoFiltro(oe.id_orden_equipo)}
+                                    className={cn(
+                                        'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5',
+                                        isActive
+                                            ? `${color.badge} text-white border-transparent shadow-sm`
+                                            : `bg-white ${color.text} ${color.border} hover:${color.bg}`
+                                    )}
+                                >
+                                    <span className={cn(
+                                        'w-5 h-5 rounded flex items-center justify-center text-[10px] font-black',
+                                        isActive ? 'bg-white/20' : color.light
+                                    )}>
+                                        {oe.orden_secuencia}
+                                    </span>
+                                    <span className="truncate max-w-[120px]">{label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Firmas Digitales - Componente Avanzado */}
             <FirmasSection firmas={firmas} isLoading={isLoadingFi} idOrdenServicio={orden.id_orden_servicio} />
 
             {/* Fotos Generales del Servicio - CRUD */}
-            <GaleriaFotosGenerales idOrdenServicio={orden.id_orden_servicio} />
+            <GaleriaFotosGenerales
+                idOrdenServicio={orden.id_orden_servicio}
+                idOrdenEquipoFiltro={esMultiEquipo && equipoFiltro !== 'todos' ? equipoFiltro : null}
+            />
 
             {/* Evidencias Fotográficas - Componente Avanzado con Lightbox */}
-            <EvidenciasGallery evidencias={evidencias} isLoading={isLoadingEv} />
+            <EvidenciasGallery
+                evidencias={evidencias}
+                isLoading={isLoadingEv}
+                idOrdenEquipoFiltro={esMultiEquipo && equipoFiltro !== 'todos' ? equipoFiltro : null}
+            />
 
             {/* Documentos Generados (Informe PDF) - Legacy */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
