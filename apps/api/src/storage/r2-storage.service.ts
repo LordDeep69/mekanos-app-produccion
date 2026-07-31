@@ -208,10 +208,18 @@ export class R2StorageService implements OnModuleInit {
   /**
    * Construye el header Content-Disposition compatible con RFC 5987.
    * Permite caracteres especiales y espacios en cualquier navegador moderno.
+   *
+   * ✅ FIX 21-JUL-2026: El parámetro `filename` (fallback ASCII) solo acepta
+   * caracteres ASCII imprimibles (RFC 2616 §2.2). Caracteres como °, ñ,
+   * tildes se eliminan del fallback pero se preservan en `filename*` (UTF-8).
+   * Cloudflare R2 reconstruye internamente el Content-Disposition para firmar;
+   * si contiene bytes no-ASCII en `filename`, la firma no coincide.
    */
   private buildContentDispositionHeader(filename: string): string {
-    const safe = filename.replace(/"/g, '');
-    return `attachment; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+    const asciiSafe = filename
+      .replace(/"/g, '')
+      .replace(/[^\x20-\x7E]/g, '');
+    return `attachment; filename="${asciiSafe}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
   }
 
   /**

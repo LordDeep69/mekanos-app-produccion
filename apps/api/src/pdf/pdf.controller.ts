@@ -1671,6 +1671,18 @@ export class PdfController {
 
     this.logger.log(`📋 Tipo de servicio: ${codigoTipo} -> Tipo de informe: ${tipoInforme}`);
 
+    // ⚠️ FIX PUNTUAL 23-JUL-2026 (ATÓMICO, AISLADO, NO GENERALIZABLE):
+    // Exclusivamente para la orden OS-202607-0134, suprimir las secciones de
+    // MEDICIONES TÉCNICAS en el PDF (no se renderizan). Esto incluye
+    // `datosModulo`, `mediciones` y `medicionesPorEquipo`.
+    // ⛔ NO heredar, NO generalizar, NO aplicar a ninguna otra orden.
+    if (orden.numero_orden === 'OS-202607-0134') {
+      this.logger.warn('⚠️ [FIX ATÓMICO] OS-202607-0134: suprimiendo secciones de mediciones del PDF');
+      (datosOrden as any).datosModulo = undefined;
+      (datosOrden as any).mediciones = [];
+      (datosOrden as any).medicionesPorEquipo = undefined;
+    }
+
     // Generar PDF
     const resultado = await this.pdfService.generarPDF({
       tipoInforme,

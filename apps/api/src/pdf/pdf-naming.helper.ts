@@ -100,10 +100,22 @@ export function buildInformeFilename(input: InformeFilenameInput): string {
  * Construye el header HTTP Content-Disposition compatible con RFC 5987.
  * Permite caracteres especiales / espacios sin problemas en cualquier
  * navegador moderno (incluye fallback ASCII para clientes legacy).
+ *
+ * ✅ FIX 21-JUL-2026: El parámetro `filename` (fallback ASCII) solo acepta
+ * caracteres ASCII imprimibles. Caracteres como °, ñ, tildes se eliminan
+ * del fallback pero se preservan en `filename*` (UTF-8).
+ * Cloudflare R2 firma la request incluyendo este header; si contiene
+ * bytes no-ASCII en `filename`, la firma calculada no coincide con la
+ * que R2 reconstruye internamente → SignatureDoesNotMatch.
  */
 export function buildContentDisposition(filename: string): string {
-    const safe = filename.replace(/"/g, '');
-    return `attachment; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+    // filename* soporta UTF-8 completo
+    const encoded = encodeURIComponent(filename);
+    // filename (fallback) solo ASCII imprimibles (RFC 2616 §2.2)
+    const asciiSafe = filename
+        .replace(/"/g, '')
+        .replace(/[^\x20-\x7E]/g, '');  // eliminar chars no-ASCII
+    return `attachment; filename="${asciiSafe}"; filename*=UTF-8''${encoded}`;
 }
 
 /**
