@@ -4,6 +4,11 @@
  * 
  * Permite cambiar el estado de cada actividad del checklist
  * similar a la funcionalidad de la app móvil.
+ *
+ * ✅ FIX 23-JUL-2026: Items correctivos (problema, fallas, diagnóstico, etc.) ahora
+ * usan editor TipTap WYSIWYG en lugar de textarea plano, replicando el patrón de
+ * ObservacionesCierreSection. Los saltos de línea y formato (negrita, listas, etc.)
+ * se preservan tanto en edición como en el PDF final (que renderiza HTML).
  */
 
 'use client';
@@ -21,6 +26,14 @@ import { useState } from 'react';
 import type { EstadoActividad } from '../api/ordenes.service';
 import { useUpdateActividad } from '../hooks/use-ordenes';
 import { GaleriaActividadFotos } from './galeria-actividad-fotos';
+import {
+    EDITOR_STYLES,
+    EditorToolbar,
+    EditorContent,
+    useRichEditor,
+    plainTextToHtml,
+    isHtml,
+} from './rich-text-editor';
 
 interface Actividad {
     id_actividad_ejecutada: number;
@@ -66,6 +79,103 @@ function getEstadoBgColor(estado?: string | null) {
     }
 }
 
+/**
+ * ✅ FIX 23-JUL-2026: Items correctivos editables con editor rico.
+ * Lista de descripciones de actividad (catalogo_actividades.descripcion_actividad)
+ * que corresponden a campos narrativos correctivos. Para estos, se usa el editor
+ * TipTap en lugar de textarea plano.
+ *
+ * Debe coincidir con los textos usados por pdf.service.ts (mapaDescripcionCampo).
+ */
+const DESCRIPCIONES_CORRECTIVO_RICO = new Set([
+    'DESCRIPCIÓN DEL PROBLEMA REPORTADO',
+    'PROBLEMA REPORTADO',
+    'FALLAS OBSERVADAS',
+    'SÍNTOMAS OBSERVADOS',
+    'DIAGNÓSTICO',
+    'DIAGNOSTICO',
+    'DIAGNÓSTICO Y CAUSA RAÍZ',
+    'TRABAJOS REALIZADOS',
+    'TRABAJOS PENDIENTES',
+    'RECOMENDACIONES',
+]);
+
+/**
+ * Determina si la actividad es un campo correctivo que merece editor rico.
+ */
+function esCampoCorrectivoRico(actividad: Actividad): boolean {
+    const desc = (actividad.catalogo_actividades?.descripcion_actividad ||
+        actividad.descripcion_manual || '').toUpperCase().trim();
+    return DESCRIPCIONES_CORRECTIVO_RICO.has(desc);
+}
+
+/**
+ * ✅ La app móvil guarda los campos con prefijos como "PROBLEMA: ", "FALLAS: ",
+ * "DIAGNOSTICO: ", "TRABAJOS: ", etc. El editor solo edita el contenido DESPUÉS del
+ * prefijo; el prefijo se preserva al guardar para que el backend/PDF lo procese.
+ *
+ * Si no hay prefijo, se edita el texto completo.
+ *
+ * Manejo robusto:
+ * - Texto plano (clásico): separar prefijo cortando el string.
+ * - Texto HTML (guardado por editor): el prefijo siempre es texto plano en el inicio,
+ *   antes del primer tag. Si existe, se separa; si no, se edita el HTML completo.
+ */
+const PREFIJOS_CORRECTIVO = [
+    'PROBLEMA: ',
+    'SINTOMAS: ',
+    'FALLAS: ',
+    'DIAGNOSTICO: ',
+    'TRABAJOS: ',
+    'PENDIENTES: ',
+    'RECOMENDACIONES: ',
+    'REPUESTOS: ',
+    'MATERIALES: ',
+    'ESTADO_INICIAL: ',
+    'ESTADO_FINAL: ',
+    'SISTEMAS: ',
+];
+
+interface PrefijoResultado {
+    prefijo: string;
+    contenido: string;
+}
+
+function separarPrefijo(texto: string): PrefijoResultado {
+    if (!texto) return { prefijo: '', contenido: '' };
+
+    // Caso texto plano: cortar prefijo directamente
+    if (!isHtml(texto)) {
+        const upper = texto.toUpperCase();
+        for (const p of PREFIJOS_CORRECTIVO) {
+            if (upper.startsWith(p)) {
+                return {
+                    prefijo: texto.substring(0, p.length),
+                    contenido: texto.substring(p.length),
+                };
+            }
+        }
+        return { prefijo: '', contenido: texto };
+    }
+
+    // Caso HTML: el prefijo, si existe, aparece como texto literal al inicio del HTML
+    // antes del primer tag "<". Lo separamos extrayendo el segmento inicial.
+    const primerMenor = texto.indexOf('<');
+    if (primerMenor > 0) {
+        const head = texto.substring(0, primerMenor);
+        const upperHead = head.toUpperCase();
+        for (const p of PREFIJOS_CORRECTIVO) {
+            if (upperHead.startsWith(p)) {
+                return {
+                    prefijo: head.substring(0, p.length),
+                    contenido: texto.substring(p.length),
+                };
+            }
+        }
+    }
+    return { prefijo: '', contenido: texto };
+}
+
 export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: ActividadCardAdvancedProps) {
     const updateActividad = useUpdateActividad();
     const [isExpanded, setIsExpanded] = useState(false);
@@ -75,6 +185,18 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
     const descripcion = actividad.catalogo_actividades?.descripcion_actividad || actividad.descripcion_manual || 'Sin descripción';
     const estadoActual = actividad.estado as EstadoActividad;
     const estadoConfig = getEstadoConfig(estadoActual);
+
+    // ✅ FIX 23-JUL-2026: Si la actividad es un campo correctivo narrativo
+    // (PROBLEMA REPORTADO / FALLAS OBSERVADAS / DIAGNÓSTICO / TRABAJOS / etc.),
+    // habilitar editor TipTap en lugar de textarea plano.
+    const esRico = esCampoCorrectivoRico(actividad);
+
+    // Separar prefijo ("PROBLEMA: ", etc.) del contenido a editar
+    const separado = separarPrefijo(actividad.observaciones || '');
+
+    const editor = useRichEditor(
+        esRico ? plainTextToHtml(separado.contenido) : ''
+    );
 
     const handleEstadoChange = async (nuevoEstado: EstadoActividad) => {
         if (updateActividad.isPending) return;
@@ -97,10 +219,21 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
         if (updateActividad.isPending) return;
 
         try {
+            let valorAGuardar: string;
+
+            if (esRico && editor) {
+                const html = editor.getHTML();
+                const contenidoHtml = html === '<p></p>' ? '' : html;
+                // Reconstruir observación final = PREFIJO + contenido
+                valorAGuardar = (separado.prefijo + contenidoHtml) || null;
+            } else {
+                valorAGuardar = observaciones || null;
+            }
+
             await updateActividad.mutateAsync({
                 idActividad: actividad.id_actividad_ejecutada,
                 data: {
-                    observaciones: observaciones || null,
+                    observaciones: valorAGuardar,
                 },
             });
             setShowObservaciones(false);
@@ -110,12 +243,24 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
         }
     };
 
+    const handleCancelarEdicion = () => {
+        setShowObservaciones(false);
+        // Resetear estado de texto plano
+        setObservaciones(actividad.observaciones || '');
+        // Resetear editor rico al contenido original
+        if (esRico && editor) {
+            editor.commands.setContent(plainTextToHtml(separado.contenido));
+        }
+    };
+
     return (
         <div className={cn(
             "rounded-xl border-2 transition-all duration-200",
             getEstadoBgColor(estadoActual),
             isExpanded && "ring-2 ring-blue-200"
         )}>
+            {/* ✅ Estilos del editor TipTap (sin sangrar; aplica a selectores globales) */}
+            <style dangerouslySetInnerHTML={{ __html: EDITOR_STYLES }} />
             {/* Header */}
             <div
                 className="p-3 cursor-pointer"
@@ -206,7 +351,43 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
                             <MessageSquare className="h-3.5 w-3.5" />
                             {actividad.observaciones ? 'Editar Observación' : 'Agregar Observación'}
                         </button>
+                    ) : esRico && editor ? (
+                        /* ✅ Editor TipTap para campos correctivos narrativos */
+                        <div className="space-y-2">
+                            {separado.prefijo && (
+                                <div className="px-3 py-1.5 text-xs font-mono text-purple-700 bg-purple-50 rounded-md border border-purple-200">
+                                    Prefijo: <strong>{separado.prefijo.trim()}</strong>
+                                    <span className="ml-1 text-purple-400">(se preserva al guardar)</span>
+                                </div>
+                            )}
+                            <div className="obs-editor border-2 border-purple-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-purple-500">
+                                <EditorToolbar editor={editor} />
+                                <EditorContent editor={editor} />
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleCancelarEdicion}
+                                    className="flex-1 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all flex items-center justify-center gap-1"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleGuardarObservaciones}
+                                    disabled={updateActividad.isPending}
+                                    className="flex-1 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                                >
+                                    {updateActividad.isPending ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Check className="h-3.5 w-3.5" />
+                                    )}
+                                    Guardar
+                                </button>
+                            </div>
+                        </div>
                     ) : (
+                        /* Textarea plano para actividades estándar (no narrativas) */
                         <div className="space-y-2">
                             <textarea
                                 value={observaciones}
@@ -217,10 +398,7 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
                             />
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => {
-                                        setShowObservaciones(false);
-                                        setObservaciones(actividad.observaciones || '');
-                                    }}
+                                    onClick={handleCancelarEdicion}
                                     className="flex-1 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all flex items-center justify-center gap-1"
                                 >
                                     <X className="h-3.5 w-3.5" />
@@ -244,9 +422,33 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
 
                     {/* Mostrar observación existente */}
                     {actividad.observaciones && !showObservaciones && (
-                        <div className="bg-white/80 rounded-lg p-2 border border-purple-100">
-                            <p className="text-xs text-gray-600 italic">"{actividad.observaciones}"</p>
-                        </div>
+                        esRico ? (
+                            /* ✅ Renderizado HTML para campos correctivos narrativos */
+                            <div className="bg-white/80 rounded-lg p-2 border border-purple-100">
+                                {separado.prefijo && (
+                                    <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider mb-1">
+                                        {separado.prefijo.trim()}
+                                    </p>
+                                )}
+                                {separado.contenido ? (
+                                    <div
+                                        className="prose prose-sm max-w-none text-gray-700 leading-relaxed obs-observaciones"
+                                        dangerouslySetInnerHTML={{
+                                            __html: isHtml(separado.contenido)
+                                                ? separado.contenido
+                                                : plainTextToHtml(separado.contenido),
+                                        }}
+                                    />
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic">Sin contenido</p>
+                                )}
+                            </div>
+                        ) : (
+                            /* Texto plano para observaciones normales */
+                            <div className="bg-white/80 rounded-lg p-2 border border-purple-100">
+                                <p className="text-xs text-gray-600 italic">&ldquo;{actividad.observaciones}&rdquo;</p>
+                            </div>
+                        )
                     )}
 
                     {/* Galería de Fotos ANTES/DURANTE/DESPUÉS */}

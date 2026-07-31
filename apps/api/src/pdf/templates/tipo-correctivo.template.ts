@@ -222,7 +222,23 @@ const correctivoStyles = `
     font-size: 10px;
     color: #2c3e50;
     line-height: 1.5;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
+  /* ✅ FIX 23-JUL-2026: Estilos HTML para .corr-field-value (campos narrativos editados con TipTap):
+     problema, fallas, diagnóstico, pendientes, recomendaciones. */
+  .corr-field-value p { margin: 0 0 6px 0; }
+  .corr-field-value p:last-child { margin-bottom: 0; }
+  .corr-field-value ul { margin: 4px 0; padding-left: 20px; list-style-type: disc; }
+  .corr-field-value ol { margin: 4px 0; padding-left: 20px; list-style-type: decimal; }
+  .corr-field-value li { margin: 2px 0; line-height: 1.5; }
+  .corr-field-value strong { font-weight: bold; }
+  .corr-field-value em { font-style: italic; }
+  .corr-field-value u { text-decoration: underline; }
+  .corr-field-value h2 { font-size: 13px; font-weight: bold; margin: 6px 0 3px 0; color: #1f2937; }
+  .corr-field-value h3 { font-size: 11px; font-weight: bold; margin: 4px 0 2px 0; color: #1f2937; }
+  .corr-field-value hr { border: none; border-top: 1px solid #d1d5db; margin: 8px 0; }
 
   /* --- Caja narrativa (trabajos realizados, observaciones) --- */
   .corr-narrative-box {
@@ -243,6 +259,10 @@ const correctivoStyles = `
   .corr-narrative-box ol { margin: 4px 0; padding-left: 20px; list-style-type: decimal; }
   .corr-narrative-box li { margin: 2px 0; line-height: 1.5; }
   .corr-narrative-box strong { font-weight: bold; }
+  .corr-narrative-box em { font-style: italic; }
+  .corr-narrative-box u { text-decoration: underline; }
+  .corr-narrative-box h2 { font-size: 13px; font-weight: bold; margin: 6px 0 3px 0; color: #1f2937; }
+  .corr-narrative-box h3 { font-size: 11px; font-weight: bold; margin: 4px 0 2px 0; color: #1f2937; }
   .corr-narrative-box hr { border: none; border-top: 1px solid #d1d5db; margin: 8px 0; }
 
   /* --- Badges de estado (inicial / final) --- */
