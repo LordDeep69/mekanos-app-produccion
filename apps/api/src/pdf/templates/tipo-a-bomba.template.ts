@@ -448,6 +448,108 @@ const getTituloSeccionBomba = (tipo: string): { titulo: string; icono: string } 
   }
 };
 
+/**
+ * ✅ FIX 06-AGO-2026: Fase interna de fotos generales ("GENERAL: ANTES: X" → ANTES)
+ */
+const detectarFaseFotoGeneral = (caption: string): string => {
+  const m = caption.match(/(?:ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN):/i);
+  if (!m) return 'GENERAL';
+  const raw = m[0].toUpperCase().replace(':', '').trim();
+  if (raw === 'DESPUÉS') return 'DESPUES';
+  if (raw === 'MEDICIÓN') return 'MEDICION';
+  return raw;
+};
+
+/**
+ * ✅ FIX 06-AGO-2026: Quita TODOS los prefijos de fase ("GENERAL: ANTES: X" → "X")
+ */
+const limpiarPrefijosCaption = (caption: string): string => {
+  let limpio = caption;
+  const re = /^(?:ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i;
+  while (re.test(limpio)) {
+    limpio = limpio.replace(re, '');
+  }
+  return limpio;
+};
+
+const SUB_LABEL_FASE: Record<string, string> = {
+  ANTES: 'Antes del servicio',
+  DURANTE: 'Durante el servicio',
+  DESPUES: 'Después del servicio',
+  MEDICION: 'Mediciones',
+};
+
+// ✅ FIX 06-AGO-2026: Color distintivo por fase (igual que el selector de la app)
+const SUB_COLOR_FASE: Record<string, { bg: string; border: string; text: string }> = {
+  ANTES: { bg: 'rgba(59,130,246,0.10)', border: '#3b82f6', text: '#1d4ed8' },
+  DURANTE: { bg: 'rgba(245,158,11,0.12)', border: '#f59e0b', text: '#b45309' },
+  DESPUES: { bg: 'rgba(34,197,94,0.10)', border: '#22c55e', text: '#15803d' },
+  MEDICION: { bg: 'rgba(139,92,246,0.10)', border: '#8b5cf6', text: '#6d28d9' },
+};
+
+const SUB_ICONO_FASE: Record<string, string> = {
+  ANTES: '📸',
+  DURANTE: '🔧',
+  DESPUES: '✅',
+  MEDICION: '📏',
+};
+
+/**
+ * ✅ FIX 06-AGO-2026: Sub-secciones SUTILES de fase dentro de FOTOS GENERALES
+ * (las generales no llevan la separación fuerte de las actividades; cada fase
+ *  va en su propio contenedor con el color distintivo: azul/ámbar/verde).
+ * Fotos sin fase van sueltas, como antes.
+ */
+const generarSubSeccionesGenerales = (
+  evidencias: Array<{ url: string; caption: string; fase?: string }>,
+  gridClass: string,
+  itemClass: string,
+  captionClass: string,
+): string => {
+  const subOrden = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
+  const subGrupos: Record<string, Array<{ url: string; caption: string }>> = {};
+  evidencias.forEach((ev) => {
+    const fase = ev.fase || 'GENERAL';
+    if (!subGrupos[fase]) subGrupos[fase] = [];
+    subGrupos[fase].push({ url: ev.url, caption: ev.caption });
+  });
+
+  return subOrden
+    .filter((f) => subGrupos[f] && subGrupos[f].length > 0)
+    .map((f) => {
+      const fotos = subGrupos[f];
+      const color = SUB_COLOR_FASE[f];
+      const esColoreada = f !== 'GENERAL' && color;
+
+      const gridFotos = `
+        <div class="${gridClass}" style="${esColoreada ? 'padding: 8px; background: #f8f9fa;' : ''}">
+          ${fotos
+            .map(
+              (ev, idx) => `
+            <div class="${itemClass}">
+              <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" crossorigin="anonymous" onerror="this.style.display='none'" />
+              <div class="${captionClass}" style="${esColoreada ? `background: ${color.border}; color: #ffffff;` : ''}">${ev.caption || `Foto ${idx + 1}`}</div>
+            </div>
+          `,
+            )
+            .join('')}
+        </div>`;
+
+      if (!esColoreada) return gridFotos;
+
+      return `
+      <div style="border: 1px solid ${color.border}; border-radius: 8px; overflow: hidden; margin: 8px 0; background: #ffffff;">
+        <div style="display: flex; align-items: center; gap: 6px; background: ${color.bg}; border-bottom: 1px solid ${color.border}; color: ${color.text}; padding: 5px 10px; font-size: 9px; font-weight: bold; letter-spacing: 0.8px; text-transform: uppercase;">
+          <span>${SUB_ICONO_FASE[f] || '📷'}</span>
+          <span>${SUB_LABEL_FASE[f]}</span>
+          <span style="margin-left: auto; background: ${color.border}; color: #ffffff; border-radius: 999px; padding: 1px 7px; font-size: 8px; line-height: 13px;">${fotos.length}</span>
+        </div>
+        ${gridFotos}
+      </div>`;
+    })
+    .join('');
+};
+
 const generarEvidencias = (evidencias: string[] | { url: string; caption?: string }[]): string => {
   if (!evidencias || evidencias.length === 0) {
     return `
@@ -480,11 +582,8 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
   evidenciasRegulares.forEach((ev: any) => {
     const tipo = extraerTipoEvidencia(ev.caption);
     if (!grupos[tipo]) grupos[tipo] = [];
-    const captionLimpio = ev.caption.replace(
-      /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
-      '',
-    );
-    grupos[tipo].push({ url: ev.url, caption: captionLimpio });
+    const captionLimpio = limpiarPrefijosCaption(ev.caption);
+    grupos[tipo].push({ url: ev.url, caption: captionLimpio, fase: detectarFaseFotoGeneral(ev.caption) });
   });
 
   // Generar HTML agrupado por secciones
@@ -506,11 +605,13 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
         : '';
 
       return `
-      <div class="evidencias-grupo" style="margin-bottom: 20px; ${bordeGrupo} ${fondoGrupo} border-radius: 8px; overflow: hidden;">
+        <div class="evidencias-grupo" style="margin-bottom: 20px; ${bordeGrupo} ${fondoGrupo} border-radius: 8px; overflow: hidden;">
         <div style="background: ${colorFondo}; color: white; padding: 8px 15px; font-weight: bold; margin-bottom: 0; ${esGeneral ? 'font-size: 12px; letter-spacing: 0.5px;' : ''}">
           ${tituloMostrar} (${evidenciasTipo.length})
         </div>
-        <div class="evidencias-grid" style="padding: 10px;">
+        ${esGeneral
+          ? generarSubSeccionesGenerales(evidenciasTipo, 'evidencias-grid', 'evidencia-item', 'evidencia-caption')
+          : `<div class="evidencias-grid" style="padding: 10px;">
           ${evidenciasTipo
           .map(
             (ev: any, idx: number) => `
@@ -521,7 +622,7 @@ const generarEvidencias = (evidencias: string[] | { url: string; caption?: strin
           `,
           )
           .join('')}
-        </div>
+        </div>`}
       </div>
     `;
     })
@@ -605,13 +706,11 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
       evidencias.forEach((ev: any) => {
         const tipo = extraerTipoEvidencia(ev.caption || '');
         if (!grupos[tipo]) grupos[tipo] = [];
-        const captionLimpio = (ev.caption || '').replace(
-          /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
-          '',
-        );
+        const captionLimpio = limpiarPrefijosCaption(ev.caption || '');
         grupos[tipo].push({
           url: ev.url,
           caption: captionLimpio || `Foto ${grupos[tipo].length + 1}`,
+          fase: detectarFaseFotoGeneral(ev.caption || ''),
         });
       });
 
@@ -627,7 +726,9 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
           <div style="background: linear-gradient(135deg, ${MEKANOS_COLORS.secondary} 0%, ${MEKANOS_COLORS.primary} 100%); color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
             ${icono} ${titulo} (${evidenciasTipo.length})
           </div>
-          <div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
+          ${tipo === 'GENERAL'
+            ? generarSubSeccionesGenerales(evidenciasTipo, 'evidencias-grid', 'evidencia-item', 'evidencia-caption')
+            : `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
             ${evidenciasTipo
               .map(
                 (ev: any, idx: number) => `
@@ -638,7 +739,7 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
             `,
               )
               .join('')}
-          </div>
+          </div>`}
         </div>
       `;
         })

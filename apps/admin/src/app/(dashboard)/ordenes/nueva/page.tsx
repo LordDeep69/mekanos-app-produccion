@@ -23,9 +23,12 @@ import {
     useCascadaClienteEquipo,
     useCrearOrden,
     useTecnicosSelector,
+    useUltimasSeleccionesEquipos,
     useWizardCatalogos,
+    type CategoriaSeleccion,
     type ClienteSelector,
     type EquipoSelector,
+    type SeleccionEquipos,
     type TecnicoSelector,
     type TipoServicio,
 } from '@/features/ordenes';
@@ -35,6 +38,7 @@ import {
     Building2,
     Check,
     ClipboardList,
+    History,
     Loader2,
     MapPin,
     Plus,
@@ -46,6 +50,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TIPOS
@@ -141,8 +146,26 @@ function PasoContexto({
     const [busquedaCliente, setBusquedaCliente] = useState('');
     const [busquedaEquipo, setBusquedaEquipo] = useState('');
 
+    // ✅ FIX 06-AGO-2026: Mini-filtro PREVEN/CORR en "Últimas selecciones"
+    // (los correctivos puntuales de 1-2 equipos ensucian la lista; por defecto PREVEN.)
+    const [filtroCategoria, setFiltroCategoria] = useState<CategoriaSeleccion>('PREVENTIVO');
+    const OPCIONES_FILTRO: { key: CategoriaSeleccion; label: string }[] = [
+        { key: 'PREVENTIVO', label: 'PREVEN.' },
+        { key: 'CORRECTIVO', label: 'CORR.' },
+        { key: 'TODAS', label: 'TODAS' },
+    ];
+
     const { clientes, sedes, equipos, isLoadingClientes, isFetchingClientes, isLoadingSedes, isLoadingEquipos } =
         useCascadaClienteEquipo(data.clienteId, data.sedeId, busquedaCliente);
+
+    // ✅ FIX 06-AGO-2026: Últimas selecciones de equipos del cliente (y tipo de servicio si ya se eligió)
+    const { data: ultimasSelecciones = [], isLoading: isLoadingSelecciones } =
+        useUltimasSeleccionesEquipos(data.clienteId, data.tipoServicioId);
+
+    const seleccionesFiltradas = ultimasSelecciones.filter((s) => {
+        if (filtroCategoria === 'TODAS') return true;
+        return (s.tipo_servicio?.categoria ?? '') === filtroCategoria;
+    });
 
     const equiposDisponibles = equipos
         .filter((e) => !data.equiposSeleccionados.some((sel) => sel.id_equipo === e.id_equipo))
@@ -169,6 +192,18 @@ function PasoContexto({
         onChange({
             equiposSeleccionados: data.equiposSeleccionados.filter((e) => e.id_equipo !== idEquipo),
         });
+    };
+
+    // ✅ FIX 06-AGO-2026: Aplicar una selección anterior (equipos + tipo de servicio)
+    const aplicarSeleccion = (seleccion: SeleccionEquipos) => {
+        onChange({
+            equiposSeleccionados: seleccion.equipos,
+            tipoServicioId: seleccion.tipo_servicio?.id_tipo_servicio,
+            tipoServicioSeleccionado: seleccion.tipo_servicio
+                ? (seleccion.tipo_servicio as TipoServicio)
+                : undefined,
+        });
+        toast.success(`Se aplicaron ${seleccion.equipos.length} equipos de ${seleccion.numero_orden}`);
     };
 
     return (
@@ -238,6 +273,92 @@ function PasoContexto({
                                 isLoading={isLoadingSedes}
                                 emptyMessage="El cliente no tiene sedes"
                             />
+                        </div>
+                    )}
+
+                    {/* ✅ FIX 06-AGO-2026: Últimas selecciones de equipos del cliente (debajo de Cliente/Sede) */}
+                    {data.clienteId && (isLoadingSelecciones || ultimasSelecciones.length > 0) && (
+                        <div className="rounded-xl border border-purple-100 bg-purple-50/40 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2">
+                                <div className="flex items-center gap-1.5">
+                                    <History className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-700">
+                                        Últimas selecciones
+                                    </span>
+                                    <span className="hidden sm:inline text-[9px] text-purple-400 font-bold">
+                                        (clic para reutilizar)
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    {OPCIONES_FILTRO.map((op) => (
+                                        <button
+                                            key={op.key}
+                                            type="button"
+                                            onClick={() => setFiltroCategoria(op.key)}
+                                            className={cn(
+                                                'text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full border transition-colors',
+                                                filtroCategoria === op.key
+                                                    ? 'bg-purple-600 text-white border-purple-600'
+                                                    : 'bg-white text-purple-500 border-purple-200 hover:bg-purple-100'
+                                            )}
+                                        >
+                                            {op.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {isLoadingSelecciones ? (
+                                <div className="flex justify-center py-2">
+                                    <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1 content-start">
+                                    {seleccionesFiltradas.length === 0 && ultimasSelecciones.length > 0 ? (
+                                        <div className="text-[9px] font-bold text-purple-600 text-center py-2 bg-white rounded-lg border border-dashed border-purple-200 col-span-full">
+                                            Sin selecciones {filtroCategoria === 'PREVENTIVO' ? 'PREVENTIVAS' : 'CORRECTIVAS'} recientes — cambie el filtro
+                                        </div>
+                                    ) : (
+                                        seleccionesFiltradas.map((s) => (
+                                        <button
+                                            key={s.id_orden_servicio}
+                                            type="button"
+                                            onClick={() => aplicarSeleccion(s)}
+                                            className="w-full text-left p-2 rounded-lg border-2 border-dashed border-purple-200 bg-white hover:border-purple-400 hover:bg-purple-50 transition-all group min-w-0"
+                                            title={`Aplicar ${s.equipos.length} equipos de ${s.numero_orden}`}
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[10px] font-black text-purple-800 truncate min-w-0">
+                                                    {s.numero_orden}
+                                                    {s.tipo_servicio?.categoria && (
+                                                        <span className={cn('ml-1.5 text-[8px] font-bold rounded-full px-1.5 py-0.5 align-middle', getCategoriaServicioColor(s.tipo_servicio.categoria))}>
+                                                            {getCategoriaServicioLabel(s.tipo_servicio.categoria)}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                {s.fecha_creacion && (
+                                                    <span className="text-[8px] text-slate-400 font-bold shrink-0">
+                                                        {new Date(s.fecha_creacion).toLocaleDateString('es-CO')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {s.equipos.slice(0, 6).map((e) => (
+                                                    <span key={e.id_equipo} className="text-[8px] font-bold bg-purple-50 border border-purple-200 text-purple-700 rounded-md px-1.5 py-0.5 truncate max-w-full">
+                                                        {e.codigo_equipo || e.nombre_equipo}
+                                                    </span>
+                                                ))}
+                                                {s.equipos.length > 6 && (
+                                                    <span className="text-[8px] font-bold text-purple-400">+{s.equipos.length - 6}</span>
+                                                )}
+                                            </div>
+                                            <p className="text-[8px] font-bold text-purple-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                Aplicar selección ({s.equipos.length} equipos) →
+                                            </p>
+                                        </button>
+                                        ))
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

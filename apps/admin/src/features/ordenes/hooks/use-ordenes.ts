@@ -44,6 +44,7 @@ import {
     type AddServicioDetalleDto,
     type UpdateActividadDto,
     type UpdateFirmaOrdenDto,
+    getFirmasHistorialTecnico,
     type UpdateHorariosServicioDto,
     type UpdateMedicionDto,
     type UpdateOrdenDto
@@ -56,6 +57,7 @@ const ACTIVIDADES_ORDEN_KEY = ['ordenes', 'actividades'];
 const MEDICIONES_ORDEN_KEY = ['ordenes', 'mediciones'];
 const EVIDENCIAS_ORDEN_KEY = ['ordenes', 'evidencias'];
 const FIRMAS_ORDEN_KEY = ['ordenes', 'firmas'];
+const FIRMAS_HISTORIAL_TECNICO_KEY = ['ordenes', 'firmas', 'historial-tecnico'];
 const HISTORIAL_EMAILS_KEY = ['ordenes', 'historial-emails'];
 
 // ... (existing hooks) ...
@@ -80,6 +82,19 @@ export function useFirmasOrden(idOrden: number) {
         queryKey: [...FIRMAS_ORDEN_KEY, idOrden],
         queryFn: () => getFirmasOrden(idOrden),
         enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
+    });
+}
+
+/**
+ * ✅ 06-AGO-2026: Hook para obtener el historial de firmas del técnico de una orden
+ * (solo se consulta cuando enabled=true, p.ej. al editar la firma del técnico)
+ */
+export function useFirmasHistorialTecnico(idOrden: number, enabled = true) {
+    return useQuery({
+        queryKey: [...FIRMAS_HISTORIAL_TECNICO_KEY, idOrden],
+        queryFn: () => getFirmasHistorialTecnico(idOrden),
+        enabled: !!idOrden && enabled,
         ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }

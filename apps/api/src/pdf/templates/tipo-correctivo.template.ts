@@ -855,15 +855,14 @@ const generarMediciones = (mediciones: MedicionCorrectivoPDF[]): string => `
 // Soporte para evidencias - Estructura idéntica a Tipo A
 type EvidenciaInput = EvidenciaCorrectivoPDF | string | { url: string; caption?: string };
 
-const extraerTipoEvidencia = (caption: string): string => {
-  const tipoMatch = caption.match(/^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i);
-  if (tipoMatch) {
-    const tipo = tipoMatch[1].toUpperCase();
-    if (tipo === 'DESPUÉS') return 'DESPUES';
-    if (tipo === 'MEDICIÓN') return 'MEDICION';
-    return tipo;
-  }
-  return 'GENERAL';
+export const extraerTipoEvidencia = (caption: string): string => {
+  // El ÚLTIMO prefijo del caption manda: p.ej. "GENERAL: ANTES: Bombín dañado" → ANTES
+  const prefijos = caption.match(/(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/gi);
+  if (!prefijos || prefijos.length === 0) return 'GENERAL';
+  const ultimo = prefijos[prefijos.length - 1].toUpperCase().replace(':', '').trim();
+  if (ultimo === 'DESPUÉS') return 'DESPUES';
+  if (ultimo === 'MEDICIÓN') return 'MEDICION';
+  return ultimo;
 };
 
 const getTituloSeccion = (tipo: string): { titulo: string; icono: string } => {
@@ -885,7 +884,47 @@ const getTituloSeccion = (tipo: string): { titulo: string; icono: string } => {
 
 // ✅ FIX 06-FEB-2026: Separar fotos de actividades (ANTES/DURANTE/DESPUÉS) de fotos GENERALES
 // Ahora retorna DOS secciones HTML independientes en el PDF
-const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
+/**
+ * ✅ Colores distintivos por tipo de evidencia (semáforo):
+ * ANTES=azul (estado inicial) · DURANTE=ámbar (proceso) · DESPUES=verde (resultado)
+ * MEDICION=violeta · GENERAL=teal
+ */
+const getColoresTipoEvidencia = (tipo: string): { fondo: string; borde: string; caption: string } => {
+  switch (tipo) {
+    case 'ANTES':
+      return {
+        fondo: 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)',
+        borde: '#0284c7',
+        caption: '#0369a1',
+      };
+    case 'DURANTE':
+      return {
+        fondo: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)',
+        borde: '#d97706',
+        caption: '#b45309',
+      };
+    case 'DESPUES':
+      return {
+        fondo: 'linear-gradient(135deg, #22c55e 0%, #15803d 100%)',
+        borde: '#16a34a',
+        caption: '#15803d',
+      };
+    case 'MEDICION':
+      return {
+        fondo: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+        borde: '#7c3aed',
+        caption: '#6d28d9',
+      };
+    default:
+      return {
+        fondo: 'linear-gradient(135deg, #0d9488 0%, #115e59 100%)',
+        borde: '#0d9488',
+        caption: '#0d9488',
+      };
+  }
+};
+
+export const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
   if (!evidencias || evidencias.length === 0) {
     return `
         <div class="section">
@@ -916,81 +955,51 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
 
   // Agrupar evidencias por tipo
   const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+  const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
 
   evidenciasNormalizadas.forEach((ev) => {
     const tipo = extraerTipoEvidencia(ev.caption);
     if (!grupos[tipo]) grupos[tipo] = [];
-    const captionLimpio = ev.caption.replace(
-      /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
-      '',
-    );
+    const captionLimpio = ev.caption
+      .replace(/(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/gi, '')
+      .trim();
     grupos[tipo].push({ url: ev.url, caption: captionLimpio });
   });
 
-  // Helper: generar grid de fotos para un grupo
-  const generarGridFotos = (fotos: Array<{ url: string; caption: string }>): string =>
-    fotos.map((ev, idx) => `
-        <div class="evidencia-item-compacto">
-            <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
-            <div class="evidencia-caption-compacto">${ev.caption || `Foto ${idx + 1}`}</div>
-        </div>
-    `).join('');
-
-  // ── SECCIÓN 1: Fotos de actividades (ANTES / DURANTE / DESPUÉS / MEDICION) ──
-  const tiposActividad = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION'];
-  const gruposActividad = tiposActividad
+  // Generar secciones por tipo (estilo preventivo: header con gradiente + count)
+  const seccionesHTML = ordenTipos
     .filter((tipo) => grupos[tipo] && grupos[tipo].length > 0)
     .map((tipo) => {
       const { titulo, icono } = getTituloSeccion(tipo);
       const evidenciasTipo = grupos[tipo];
+      const esGeneral = tipo === 'GENERAL';
+      const tituloMostrar = esGeneral ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
+      const colores = getColoresTipoEvidencia(tipo);
+
       return `
-        <div class="evidencias-grupo">
-            <div class="evidencias-grupo-titulo">${icono} ${titulo} (${evidenciasTipo.length})</div>
-            <div class="evidencias-grid-compacto">
-                ${generarGridFotos(evidenciasTipo)}
+        <div class="evidencias-grupo ${esGeneral ? 'evidencias-grupo-general' : ''}" style="margin-bottom: 20px; border-radius: 8px; overflow: hidden;">
+            <div class="evidencias-grupo-titulo" style="background: ${colores.fondo}; font-size: ${esGeneral ? '12px' : '11px'}; letter-spacing: 0.4px;">
+                ${tituloMostrar} (${evidenciasTipo.length})
+            </div>
+            <div class="evidencias-grid" style="padding: 10px; background: #f8f9fa; margin-top: 0;">
+                ${evidenciasTipo.map((ev, idx) => `
+                    <div class="evidencia-item" style="border: 2px solid ${colores.borde};">
+                        <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
+                        <div class="evidencia-caption" style="background: ${colores.caption};">${ev.caption || `Foto ${idx + 1}`}</div>
+                    </div>
+                `).join('')}
             </div>
         </div>
       `;
     })
     .join('');
 
-  let htmlActividades = '';
-  if (gruposActividad) {
-    htmlActividades = `
+  return `
     <div class="section evidencias-section">
         <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
-        ${gruposActividad}
+        ${seccionesHTML}
     </div>
     `;
-  }
-
-  // ── SECCIÓN 2: Fotos GENERALES (separadas visualmente) ──
-  const fotosGenerales = grupos['GENERAL'] || [];
-  let htmlGenerales = '';
-  if (fotosGenerales.length > 0) {
-    htmlGenerales = `
-    <div class="section evidencias-section evidencias-section-general" style="margin-top: 20px;">
-        <div class="section-title" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);">📷 FOTOS GENERALES DEL SERVICIO (${fotosGenerales.length})</div>
-        <div class="evidencias-grid-compacto">
-            ${generarGridFotos(fotosGenerales)}
-        </div>
-    </div>
-    `;
-  }
-
-  // Si no hay fotos de actividad pero sí generales, o viceversa
-  if (!htmlActividades && !htmlGenerales) {
-    return `
-        <div class="section">
-            <div class="section-title">📷 REGISTRO FOTOGRÁFICO DEL SERVICIO</div>
-            <div class="evidencias-empty">
-                <p>No se registraron evidencias fotográficas para este servicio.</p>
-            </div>
-        </div>
-        `;
-  }
-
-  return htmlActividades + htmlGenerales;
 };
 
 const generarObservaciones = (datos: DatosCorrectivoOrdenPDF): string => {
@@ -1072,12 +1081,16 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
       const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
 
       evidencias.forEach((ev: any) => {
-        const tipo = ev.momento || extraerTipoEvidenciaCorrectivo(ev.caption || '');
+        const captionRaw = ev.caption || '';
+        // Si el caption trae prefijos internos (p.ej. "GENERAL: ANTES: ..."), el último manda;
+        // si no trae, se usa el momento asignado por el controller
+        const tipo = /(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):/i.test(captionRaw)
+          ? extraerTipoEvidencia(captionRaw)
+          : ev.momento || 'GENERAL';
         if (!grupos[tipo]) grupos[tipo] = [];
-        const captionLimpio = (ev.caption || '').replace(
-          /^(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/i,
-          '',
-        );
+        const captionLimpio = captionRaw
+          .replace(/(ANTES|DURANTE|DESPUES|DESPUÉS|MEDICION|MEDICIÓN|GENERAL):\s*/gi, '')
+          .trim();
         grupos[tipo].push({
           url: ev.url,
           caption: captionLimpio || `Foto ${grupos[tipo].length + 1}`,
@@ -1090,19 +1103,20 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
         .map((tipo) => {
           const { titulo, icono } = getTituloSeccionCorrectivo(tipo);
           const evidenciasTipo = grupos[tipo];
+          const colores = getColoresTipoEvidencia(tipo);
 
           return `
                 <div style="margin-bottom: 12px;">
-                    <div style="background: linear-gradient(135deg, ${MEKANOS_COLORS.secondary} 0%, ${MEKANOS_COLORS.primary} 100%); color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
+                    <div style="background: ${colores.fondo}; color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
                         ${icono} ${titulo} (${evidenciasTipo.length})
                     </div>
                     <div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
                         ${evidenciasTipo
               .map(
                 (ev: any, idx: number) => `
-                            <div class="evidencia-item">
+                            <div class="evidencia-item" style="border: 2px solid ${colores.borde};">
                                 <img src="${optimizarUrlCloudinary(ev.url)}" alt="${ev.caption}" loading="eager" onerror="console.error('Error cargando imagen:', this.src)" />
-                                <div class="evidencia-caption">${ev.caption || `Foto ${idx + 1}`}</div>
+                                <div class="evidencia-caption" style="background: ${colores.caption};">${ev.caption || `Foto ${idx + 1}`}</div>
                             </div>
                         `,
               )
@@ -1142,18 +1156,6 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
         ${equiposHTML}
     </div>
     `;
-};
-
-/**
- * Extrae el tipo de evidencia del caption
- */
-const extraerTipoEvidenciaCorrectivo = (caption: string): string => {
-  const upper = caption.toUpperCase();
-  if (upper.includes('ANTES')) return 'ANTES';
-  if (upper.includes('DURANTE')) return 'DURANTE';
-  if (upper.includes('DESPUES') || upper.includes('DESPUÉS')) return 'DESPUES';
-  if (upper.includes('MEDICION') || upper.includes('MEDICIÓN')) return 'MEDICION';
-  return 'GENERAL';
 };
 
 /**

@@ -36,6 +36,7 @@ import {
     getTecnicosSelector,
     getTipoServicio,
     getTiposServicio,
+    getUltimasSeleccionesEquipos,
     updateActividadCatalogo,
     updateEstadoOrden,
     updateParametroMedicion,
@@ -453,6 +454,22 @@ export function useEquipo(id: number | undefined) {
         queryKey: [...CATALOGOS_KEYS.equipos, 'detalle', id],
         queryFn: () => getEquipo(id!),
         enabled: !!id,
+    });
+}
+
+/**
+ * ✅ FIX 06-AGO-2026: Últimas selecciones de equipos del cliente para un
+ * tipo de servicio. Atajo del wizard de creación para servicios periódicos.
+ */
+export function useUltimasSeleccionesEquipos(
+    clienteId?: number,
+    tipoServicioId?: number,
+) {
+    return useQuery({
+        queryKey: ['ultimas-selecciones-equipos', clienteId, tipoServicioId],
+        queryFn: () => getUltimasSeleccionesEquipos(clienteId!, tipoServicioId),
+        enabled: !!clienteId,
+        staleTime: 30_000, // 30s: los equipos de órdenes recientes cambian poco
     });
 }
 

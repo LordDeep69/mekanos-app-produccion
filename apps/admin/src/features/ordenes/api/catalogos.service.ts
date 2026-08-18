@@ -327,6 +327,45 @@ export async function getEquipo(id: number): Promise<EquipoSelector> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ÚLTIMAS SELECCIONES DE EQUIPOS (Wizard de creación de órdenes)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface SeleccionEquipos {
+    id_orden_servicio: number;
+    numero_orden: string;
+    fecha_creacion?: string | null;
+    tipo_servicio?: {
+        id_tipo_servicio: number;
+        nombre_tipo?: string;
+        categoria?: string;
+    } | null;
+    equipos: EquipoSelector[];
+}
+
+export type CategoriaSeleccion = 'TODAS' | 'PREVENTIVO' | 'CORRECTIVO';
+
+/**
+ * ✅ FIX 06-AGO-2026: Últimas selecciones de equipos del cliente
+ * (opcionalmente filtradas por tipo de servicio). Atajo para servicios
+ * periódicos: con un clic se reutiliza la selección de equipos anterior.
+ */
+export async function getUltimasSeleccionesEquipos(
+    clienteId: number,
+    tipoServicioId?: number,
+): Promise<SeleccionEquipos[]> {
+    const queryParams = new URLSearchParams();
+    if (tipoServicioId) {
+        queryParams.append('tipoServicioId', String(tipoServicioId));
+    }
+    const qs = queryParams.toString();
+
+    const response = await apiClient.get<ApiResponse<SeleccionEquipos[]>>(
+        `/ordenes/ultimas-selecciones/${clienteId}${qs ? `?${qs}` : ''}`
+    );
+    return response.data.data || [];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TÉCNICOS/EMPLEADOS (Para selector en wizard)
 // ═══════════════════════════════════════════════════════════════════════════════
 

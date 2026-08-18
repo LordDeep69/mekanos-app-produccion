@@ -327,6 +327,27 @@ export async function updateFirmaOrden(
     return response.data;
 }
 
+/**
+ * ✅ 06-AGO-2026: Historial de firmas del técnico de una orden
+ * (agrupado por hash: incluye la firma estándar más usada)
+ */
+export interface FirmaHistorialTecnico {
+    id_firma_digital: number;
+    firma_base64: string;
+    veces_usada: number;
+    fecha_captura?: string;
+    es_estandar: boolean;
+}
+
+export async function getFirmasHistorialTecnico(
+    idOrden: number
+): Promise<{ success: boolean; data: FirmaHistorialTecnico[] }> {
+    const response = await apiClient.get(
+        `${ORDENES_BASE}/${idOrden}/firmas-historial-tecnico`
+    );
+    return response.data;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ACTIVIDADES EJECUTADAS - EDICIÓN AVANZADA
 // ═══════════════════════════════════════════════════════════════════════════════

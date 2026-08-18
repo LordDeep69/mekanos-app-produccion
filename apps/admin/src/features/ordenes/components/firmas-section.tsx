@@ -17,10 +17,12 @@ import {
     Edit,
     Eraser,
     ExternalLink,
+    History,
     Loader2,
     Pen,
     Plus,
     Save,
+    Star,
     Upload,
     User,
     UserCheck,
@@ -29,7 +31,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useUpdateFirmaOrden } from '../hooks/use-ordenes';
+import { useFirmasHistorialTecnico, useUpdateFirmaOrden } from '../hooks/use-ordenes';
 
 interface Firma {
     id_firma: number;
@@ -259,6 +261,8 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
     const config = getTipoFirmaConfig(tipo);
     const Icon = config.icon;
     const updateFirma = useUpdateFirmaOrden();
+    const historialQuery = useFirmasHistorialTecnico(idOrdenServicio, tipo === 'TECNICO');
+    const firmasHistorial = historialQuery.data?.data || [];
     const [mode, setMode] = useState<'draw' | 'upload'>('draw');
     const [previewBase64, setPreviewBase64] = useState<string | null>(null);
     const [nombreFirmante, setNombreFirmante] = useState(firma?.nombre_firmante || '');
@@ -387,6 +391,65 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
                                     placeholder="Ej: Jefe de Mantenimiento"
                                 />
                             </div>
+                        </div>
+                    )}
+
+                    {/* Firmas estándares del técnico (historial agrupado por hash) */}
+                    {tipo === 'TECNICO' && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <History className="h-4 w-4 text-blue-600" />
+                                <p className="text-sm font-bold text-gray-700">Firmas estándares del técnico</p>
+                                <span className="text-[10px] text-gray-400">clic en una para usarla</span>
+                            </div>
+                            {historialQuery.isLoading ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                                </div>
+                            ) : firmasHistorial.length === 0 ? (
+                                <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
+                                    Sin firmas anteriores registradas para este técnico.
+                                </p>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {firmasHistorial.map((f) => (
+                                        <button
+                                            key={f.id_firma_digital}
+                                            type="button"
+                                            onClick={() => {
+                                                setPreviewBase64(f.firma_base64);
+                                                setMode('upload');
+                                            }}
+                                            className={cn(
+                                                "relative rounded-lg border-2 overflow-hidden bg-white transition-all hover:shadow-md",
+                                                f.es_estandar
+                                                    ? "border-amber-400 ring-2 ring-amber-200"
+                                                    : "border-gray-200 hover:border-blue-300"
+                                            )}
+                                        >
+                                            <div className="relative h-16 w-full bg-white">
+                                                <Image
+                                                    src={`data:image/png;base64,${f.firma_base64}`}
+                                                    alt="Firma estándar del técnico"
+                                                    fill
+                                                    className="object-contain"
+                                                    unoptimized
+                                                />
+                                            </div>
+                                            <div className="px-2 py-1.5 flex items-center justify-between bg-gray-50">
+                                                <span className="text-[9px] font-bold text-gray-600">
+                                                    {f.veces_usada} uso{f.veces_usada !== 1 ? 's' : ''}
+                                                </span>
+                                                {f.es_estandar && (
+                                                    <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-600">
+                                                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> Estándar
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 

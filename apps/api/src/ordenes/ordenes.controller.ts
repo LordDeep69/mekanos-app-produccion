@@ -841,20 +841,205 @@ export class OrdenesController {
     }
 
     // Mapear para incluir nombre_firmante desde persona
-    const firmasConNombre = firmasOrden.map(f => ({
-      ...f,
-      nombre_firmante: f.persona
+    const firmasConNombre = firmasOrden.map(f => {
+      // ✅ FIX 06-AGO-2026: Para CLIENTE, priorizar nombre_quien_recibe de la orden
+      // (capturado del mobile: nombreFirmante/cargoFirmante) sobre el nombre de la persona
+      const nombrePersona = f.persona
         ? `${(f.persona as any).primer_nombre || (f.persona as any).nombres || ''} ${(f.persona as any).primer_apellido || (f.persona as any).apellidos || ''}`.trim()
-        : (f.tipo_firma === 'CLIENTE' ? orden.nombre_quien_recibe : 'Sin nombre'),
-      cargo_firmante: f.tipo_firma === 'TECNICO'
-        ? 'Técnico Responsable'
-        : (orden.cargo_quien_recibe || 'Cliente / Autorizador'),
-    }));
+        : '';
+      const nombreQuienRecibe = orden.nombre_quien_recibe;
+
+      let nombreFirmante: string;
+      if (f.tipo_firma === 'CLIENTE' && nombreQuienRecibe && nombreQuienRecibe !== 'Cliente') {
+        nombreFirmante = nombreQuienRecibe;
+      } else if (nombrePersona) {
+        nombreFirmante = nombrePersona;
+      } else {
+        nombreFirmante = f.tipo_firma === 'CLIENTE' ? (nombreQuienRecibe || 'Cliente') : 'Sin nombre';
+      }
+
+      return {
+        ...f,
+        nombre_firmante: nombreFirmante,
+        cargo_firmante: f.tipo_firma === 'TECNICO'
+          ? 'Técnico Responsable'
+          : (orden.cargo_quien_recibe || 'Cliente / Autorizador'),
+      };
+    });
 
     return {
       success: true,
       data: firmasConNombre,
     };
+  }
+
+  /**
+   * GET /api/ordenes/:id/firmas-historial-tecnico
+   * ✅ 06-AGO-2026: Firmas históricas del técnico asignado a la orden.
+   * Agrupa por hash_firma para detectar la firma ESTÁNDAR (la más usada por el técnico).
+   * ✅ FIX 06-AGO-2026: Optimización de rendimiento — solo analiza las últimas 15 firmas
+   * (no todo el historial) y devuelve máximo 3 variantes. Cargar cientos de firmas
+   * con su base64 hacía la consulta muy lenta.
+   */
+  @Get(':id/firmas-historial-tecnico')
+  @UseGuards(JwtAuthGuard)
+  async getFirmasHistorialTecnico(@Param('id', ParseIntPipe) id: number) {
+    const ordenData = await this.prisma.$queryRaw<any[]>`
+      SELECT id_tecnico_asignado, id_firma_tecnico
+      FROM ordenes_servicio WHERE id_orden_servicio = ${id}
+    `;
+    if (!ordenData || ordenData.length === 0) {
+      throw new NotFoundException('Orden no encontrada');
+    }
+    const orden = ordenData[0];
+
+    if (!orden.id_tecnico_asignado) {
+      throw new BadRequestException('La orden no tiene técnico asignado.');
+    }
+
+    const empleado = await this.prisma.empleados.findUnique({
+      where: { id_empleado: orden.id_tecnico_asignado },
+      select: { id_persona: true },
+    });
+    if (!empleado?.id_persona) {
+      return { success: true, data: [] };
+    }
+
+    const firmas = await this.prisma.firmas_digitales.findMany({
+      where: {
+        id_persona: empleado.id_persona,
+        tipo_firma: 'TECNICO',
+        ...(orden.id_firma_tecnico
+          ? { id_firma_digital: { not: orden.id_firma_tecnico } }
+          : {}),
+      },
+      select: {
+        id_firma_digital: true,
+        firma_base64: true,
+        hash_firma: true,
+        fecha_registro: true,
+      },
+      orderBy: { fecha_registro: 'desc' },
+      take: 15,
+    });
+
+    // Agrupar por hash: firma ESTÁNDAR = la más usada (empate → la más reciente)
+    const porHash = new Map<
+      string,
+      { id: number; base64: string; fecha: Date | null; veces: number }
+    >();
+    firmas.forEach((f) => {
+      const existente = porHash.get(f.hash_firma);
+      if (existente) {
+        existente.veces += 1;
+        if (f.fecha_registro && (!existente.fecha || f.fecha_registro > existente.fecha)) {
+          existente.id = f.id_firma_digital;
+          existente.base64 = f.firma_base64;
+          existente.fecha = f.fecha_registro;
+        }
+      } else {
+        porHash.set(f.hash_firma, {
+          id: f.id_firma_digital,
+          base64: f.firma_base64,
+          fecha: f.fecha_registro,
+          veces: 1,
+        });
+      }
+    });
+
+    const lista = Array.from(porHash.values()).map((info) => ({
+      id_firma_digital: info.id,
+      firma_base64: info.base64,
+      veces_usada: info.veces,
+      fecha_captura: info.fecha,
+    }));
+
+    // Ordenar: más usada primero, luego más reciente
+    lista.sort(
+      (a, b) =>
+        b.veces_usada - a.veces_usada ||
+        (b.fecha_captura?.getTime() || 0) - (a.fecha_captura?.getTime() || 0),
+    );
+
+    const maxVeces = lista.length > 0 ? lista[0].veces_usada : 0;
+
+    // ✅ FIX 06-AGO-2026: Solo las 3 variantes más relevantes (no 12)
+    return {
+      success: true,
+      data: lista.slice(0, 3).map((f) => ({
+        ...f,
+        es_estandar: f.veces_usada === maxVeces,
+      })),
+    };
+  }
+
+  /**
+   * GET /api/ordenes/ultimas-selecciones/:idCliente?tipoServicioId=N
+   * ✅ 06-AGO-2026: Últimas selecciones de equipos del cliente para un servicio.
+   * Devuelve las 6 órdenes más recientes del cliente (filtradas por tipo de
+   * servicio si se indica) con sus equipos, para el atajo "Últimas selecciones"
+   * del wizard de creación de órdenes (servicios periódicos como preventivos).
+   * La categoría del tipo de servicio permite al admin filtrar PREVEN/CORR.
+   */
+  @Get('ultimas-selecciones/:idCliente')
+  @UseGuards(JwtAuthGuard)
+  async getUltimasSeleccionesEquipos(
+    @Param('idCliente', ParseIntPipe) idCliente: number,
+    @Query('tipoServicioId') tipoServicioIdRaw?: string,
+  ) {
+    const tipoServicioId = tipoServicioIdRaw ? parseInt(tipoServicioIdRaw, 10) : undefined;
+
+    const ordenes = await this.prisma.ordenes_servicio.findMany({
+      where: {
+        id_cliente: idCliente,
+        ...(tipoServicioId && !isNaN(tipoServicioId) ? { id_tipo_servicio: tipoServicioId } : {}),
+        ordenes_equipos: { some: {} },
+      },
+      orderBy: { fecha_creacion: 'desc' },
+      take: 6,
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        fecha_creacion: true,
+        tipos_servicio: {
+          select: { id_tipo_servicio: true, nombre_tipo: true, categoria: true },
+        },
+        ordenes_equipos: {
+          orderBy: { orden_secuencia: 'asc' },
+          select: {
+            equipos: {
+              select: {
+                id_equipo: true,
+                codigo_equipo: true,
+                nombre_equipo: true,
+                id_sede: true,
+                id_tipo_equipo: true,
+                tipos_equipo: {
+                  select: { id_tipo_equipo: true, nombre_tipo: true, codigo_tipo: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const data = ordenes.map((o) => ({
+      id_orden_servicio: o.id_orden_servicio,
+      numero_orden: o.numero_orden,
+      fecha_creacion: o.fecha_creacion,
+      tipo_servicio: o.tipos_servicio,
+      equipos: o.ordenes_equipos.map((oe) => ({
+        id_equipo: oe.equipos.id_equipo,
+        codigo_equipo: oe.equipos.codigo_equipo || '',
+        nombre_equipo: oe.equipos.nombre_equipo,
+        id_sede: oe.equipos.id_sede,
+        id_tipo_equipo: oe.equipos.id_tipo_equipo,
+        tipos_equipo: oe.equipos.tipos_equipo,
+      })),
+    }));
+
+    return { success: true, data };
   }
 
   /**
@@ -2014,6 +2199,9 @@ export class OrdenesController {
             base64: dto.firmas.cliente.base64,
             idPersona: dto.firmas.cliente.idPersona,
             formato: dto.firmas.cliente.formato,
+            // ✅ FIX 06-AGO-2026: Pasar nombre y cargo del firmante cliente al servicio
+            nombreFirmante: dto.firmas.cliente.nombreFirmante,
+            cargoFirmante: dto.firmas.cliente.cargoFirmante,
           } : undefined,
         },
         actividades: dto.actividades.map(a => ({

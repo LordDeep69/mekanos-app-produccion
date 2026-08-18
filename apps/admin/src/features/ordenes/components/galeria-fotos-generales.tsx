@@ -14,22 +14,26 @@ import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera,
+    CheckCircle2,
     ChevronLeft,
     ChevronRight,
     Clipboard,
     Clock,
     Edit2,
+    History,
     Image as ImageIcon,
+    LayoutGrid,
     Loader2,
     Plus,
     Save,
     Trash2,
     Upload,
+    Wrench,
     X,
     ZoomIn
 } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface Evidencia {
@@ -80,7 +84,73 @@ const SUB_TIPO_COLORS: Record<string, string> = {
     ANTES: 'bg-blue-500',
     DURANTE: 'bg-amber-500',
     DESPUES: 'bg-green-500',
+    GENERAL: 'bg-teal-500',
 };
+
+// ✅ FIX 06-AGO-2026: Selector visual de fase (ANTES/DURANTE/DESPUES/GENERAL)
+// Reemplaza la práctica de escribir "ANTES:" a mano en la descripción.
+// La fase se inyecta como prefijo "FASE: " para mantener compatibilidad con
+// el filtro de galería, el mobile y la clasificación del PDF.
+type FaseFoto = 'GENERAL' | 'ANTES' | 'DURANTE' | 'DESPUES';
+type FaseOpcion = FaseFoto | 'TODAS';
+
+// ✅ FIX 06-AGO-2026: Descripción por defecto según la fase seleccionada
+const FASE_DESCRIPCION_DEFECTO: Record<FaseFoto, string> = {
+    GENERAL: 'Foto general del servicio',
+    ANTES: 'Foto general de antes',
+    DURANTE: 'Foto general de durante',
+    DESPUES: 'Foto general de después',
+};
+
+const FASES_FOTO: { valor: FaseOpcion; label: string; icono: React.ReactNode; activo: string }[] = [
+    { valor: 'TODAS', label: 'Todas', icono: <LayoutGrid className="h-3.5 w-3.5" />, activo: 'border-purple-400 bg-purple-50 text-purple-700' },
+    { valor: 'GENERAL', label: 'General', icono: <ImageIcon className="h-3.5 w-3.5" />, activo: 'border-teal-400 bg-teal-50 text-teal-700' },
+    { valor: 'ANTES', label: 'Antes', icono: <History className="h-3.5 w-3.5" />, activo: 'border-blue-400 bg-blue-50 text-blue-700' },
+    { valor: 'DURANTE', label: 'Durante', icono: <Wrench className="h-3.5 w-3.5" />, activo: 'border-amber-400 bg-amber-50 text-amber-700' },
+    { valor: 'DESPUES', label: 'Después', icono: <CheckCircle2 className="h-3.5 w-3.5" />, activo: 'border-green-400 bg-green-50 text-green-700' },
+];
+
+function SelectorFase({
+    valor,
+    onChange,
+    incluirTodas = false,
+}: {
+    valor: FaseOpcion;
+    onChange: (v: FaseOpcion) => void;
+    /** Mostrar la opción "Todas" (para filtrar la galería) */
+    incluirTodas?: boolean;
+}) {
+    const fases = incluirTodas ? FASES_FOTO : FASES_FOTO.filter((f) => f.valor !== 'TODAS');
+    return (
+        <div className="flex items-center gap-1.5 flex-wrap">
+            {fases.map((f) => {
+                const activo = valor === f.valor;
+                return (
+                    <button
+                        key={f.valor}
+                        type="button"
+                        onClick={() => onChange(f.valor)}
+                        title={activo ? `Fase: ${f.label}` : `Marcar como ${f.label}`}
+                        className={cn(
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border-2 transition-all",
+                            activo
+                                ? f.activo + " shadow-sm"
+                                : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                        )}
+                    >
+                        <span className={cn(
+                            "flex items-center justify-center rounded-full p-0.5 text-white shrink-0",
+                            activo ? "bg-purple-600" : "bg-gray-300"
+                        )}>
+                            {f.icono}
+                        </span>
+                        {f.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
 
 function FotoThumbnail({
     evidencia,
@@ -189,9 +259,12 @@ function LightboxModal({
                 <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent z-10 flex justify-between items-center">
                     <div className="text-white">
                         <p className="text-sm font-bold">📷 Foto General</p>
-                        {evidencia.descripcion && (
-                            <p className="text-xs text-white/70">{evidencia.descripcion}</p>
-                        )}
+                        {(() => {
+                            const { descripcionLimpia } = getSubTipo(evidencia);
+                            return descripcionLimpia && (
+                                <p className="text-xs text-white/70">{descripcionLimpia}</p>
+                            );
+                        })()}
                         <p className="text-xs text-white/50 mt-0.5">
                             {currentIndex + 1} / {total}
                         </p>
@@ -255,19 +328,31 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState('');
     const [descripcionNueva, setDescripcionNueva] = useState('');
+    // ✅ FIX 06-AGO-2026: Selector único de fase — filtra la galería y define
+    // la fase de las fotos a subir (TODAS ⇒ se suben como GENERAL)
+    const [filtroFase, setFiltroFase] = useState<FaseOpcion>('TODAS');
 
     // ✅ FIX 02-MAY-2026: Soporte drag-drop, paste y multi-file
     const uploadFiles = async (files: File[]) => {
         setIsUploading(true);
         let uploaded = 0;
         try {
+            // ✅ FIX 06-AGO-2026: La fase se toma del selector único (Ver).
+            // Si no hay descripción, usar texto por defecto según la fase.
+            const faseSubida: FaseFoto = filtroFase === 'TODAS' ? 'GENERAL' : filtroFase;
+            const descripcionBase = descripcionNueva.trim();
+            const descripcionFinal = faseSubida === 'GENERAL'
+                ? (descripcionBase || FASE_DESCRIPCION_DEFECTO.GENERAL)
+                : descripcionBase
+                    ? `${faseSubida}: ${descripcionBase}`
+                    : `${faseSubida}: ${FASE_DESCRIPCION_DEFECTO[faseSubida]}`;
             for (const file of files) {
                 setUploadProgress(`${uploaded + 1}/${files.length}`);
                 const base64 = await fileToBase64(file);
                 await apiClient.post('/evidencias-fotograficas/upload-base64', {
                     idOrdenServicio,
                     tipoEvidencia: 'GENERAL',
-                    descripcion: descripcionNueva.trim() || 'Foto general del servicio',
+                    descripcion: descripcionFinal,
                     nombreArchivo: file.name,
                     base64,
                 });
@@ -338,6 +423,17 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
         ? fotosGeneralesRaw.filter((e) => (e.id_orden_equipo ?? e.idOrdenEquipo ?? null) === idOrdenEquipoFiltro)
         : fotosGeneralesRaw;
 
+    // ✅ FIX 06-AGO-2026: Filtrar la galería por fase seleccionada
+    // (GENERAL = fotos sin prefijo de fase; ANTES/DURANTE/DESPUES = con prefijo)
+    const fotosFiltradas: Evidencia[] = useMemo(() => {
+        if (filtroFase === 'TODAS') return fotosGenerales;
+        return fotosGenerales.filter((e) => {
+            const { subTipo } = getSubTipo(e);
+            if (filtroFase === 'GENERAL') return !subTipo;
+            return subTipo === filtroFase;
+        });
+    }, [fotosGenerales, filtroFase]);
+
     // Delete mutation
     const deleteMutation = useMutation({
         mutationFn: async (idEvidencia: number) => {
@@ -363,6 +459,8 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
     // ✅ Edición inline de observación
     const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
     const [editDescripcion, setEditDescripcion] = useState('');
+    // ✅ FIX 06-AGO-2026: Fase seleccionada al editar (detectada del prefijo existente)
+    const [editFase, setEditFase] = useState<FaseFoto>('GENERAL');
 
     const updateDescripcionMutation = useMutation({
         mutationFn: async ({ id, descripcion }: { id: number; descripcion: string }) => {
@@ -375,6 +473,7 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
             toast.success('Observación actualizada');
             setEditingEvidenciaId(null);
             setEditDescripcion('');
+            setEditFase('GENERAL');
         },
         onError: () => {
             toast.error('Error al actualizar observación');
@@ -382,24 +481,33 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
     });
 
     const handleEditClick = (evidencia: Evidencia) => {
+        // ✅ FIX 06-AGO-2026: Detectar fase actual del prefijo y pre-seleccionarla
+        const { subTipo, descripcionLimpia } = getSubTipo(evidencia);
         setEditingEvidenciaId(getEvId(evidencia));
-        setEditDescripcion(evidencia.descripcion || '');
+        setEditFase(subTipo === 'ANTES' || subTipo === 'DURANTE' || subTipo === 'DESPUES' ? subTipo : 'GENERAL');
+        setEditDescripcion(descripcionLimpia || evidencia.descripcion || '');
     };
 
     const handleSaveDescripcion = (idEvidencia: number) => {
-        if (editDescripcion.trim()) {
-            updateDescripcionMutation.mutate({ id: idEvidencia, descripcion: editDescripcion.trim() });
-        }
+        // ✅ FIX 06-AGO-2026: Reconstruir descripción con prefijo de fase seleccionado
+        const texto = editDescripcion.trim();
+        const descripcionFinal = editFase === 'GENERAL'
+            ? texto
+            : texto
+                ? `${editFase}: ${texto}`
+                : `${editFase}:`;
+        updateDescripcionMutation.mutate({ id: idEvidencia, descripcion: descripcionFinal });
     };
 
     const handleCancelEdit = () => {
         setEditingEvidenciaId(null);
         setEditDescripcion('');
+        setEditFase('GENERAL');
     };
 
     const handleViewLightbox = (evidencia: Evidencia) => {
         const evId = getEvId(evidencia);
-        const idx = fotosGenerales.findIndex((e) => getEvId(e) === evId);
+        const idx = fotosFiltradas.findIndex((e) => getEvId(e) === evId);
         setLightboxIndex(idx >= 0 ? idx : 0);
     };
 
@@ -430,7 +538,9 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                         <h4 className="font-bold text-purple-900">Fotos Generales del Servicio</h4>
                         <p className="text-xs text-purple-600">
                             Fotos no asociadas a actividades específicas
-                            {fotosGenerales.length > 0 && ` · ${fotosGenerales.length} foto${fotosGenerales.length !== 1 ? 's' : ''}`}
+                            {fotosGenerales.length > 0 && (
+                                <> · {filtroFase !== 'TODAS' ? `${fotosFiltradas.length} de ` : ''}{fotosGenerales.length} foto{fotosGenerales.length !== 1 ? 's' : ''}</>
+                            )}
                         </p>
                     </div>
                 </div>
@@ -475,6 +585,18 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
 
             {/* Grid de fotos */}
             <div className="p-4">
+                {/* ✅ FIX 06-AGO-2026: Selector único de fase — filtra la galería
+                    y define la fase de las fotos a subir (TODAS ⇒ GENERAL) */}
+                <div className="mb-3 flex items-center gap-2 flex-wrap border-b border-purple-50 pb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-purple-500 shrink-0">
+                        Ver
+                    </span>
+                    <SelectorFase
+                        valor={filtroFase}
+                        onChange={setFiltroFase}
+                        incluirTodas
+                    />
+                </div>
                 {isLoading ? (
                     <div className="flex justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
@@ -494,15 +616,27 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                             <span className="flex items-center gap-1"><Clipboard className="h-3 w-3" /> Ctrl+V</span>
                         </div>
                     </div>
+                ) : fotosFiltradas.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400 rounded-xl">
+                        <Camera className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                        <p className="font-medium text-sm">Sin fotos en esta fase</p>
+                        <p className="text-xs mt-1 text-gray-300">
+                            Elige otra fase o selecciona "Todas"
+                        </p>
+                    </div>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                        {fotosGenerales.map((evidencia) => {
+                        {fotosFiltradas.map((evidencia) => {
                             const evId = getEvId(evidencia);
                             const isEditing = editingEvidenciaId === evId;
                             return (
                                 <div key={evId} className="relative">
                                     {isEditing ? (
-                                        <div className="aspect-square rounded-xl border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2">
+                                        <div className="rounded-xl border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2 min-h-[170px]">
+                                            <SelectorFase
+                                                valor={editFase}
+                                                onChange={(v) => { if (v !== 'TODAS') setEditFase(v); }}
+                                            />
                                             <textarea
                                                 value={editDescripcion}
                                                 onChange={(e) => setEditDescripcion(e.target.value)}
@@ -548,16 +682,16 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
             </div>
 
             {/* Lightbox */}
-            {lightboxIndex !== null && fotosGenerales[lightboxIndex] && (
+            {lightboxIndex !== null && fotosFiltradas[lightboxIndex] && (
                 <LightboxModal
-                    evidencia={fotosGenerales[lightboxIndex]}
+                    evidencia={fotosFiltradas[lightboxIndex]}
                     onClose={() => setLightboxIndex(null)}
                     onPrev={() => setLightboxIndex(Math.max(0, lightboxIndex - 1))}
-                    onNext={() => setLightboxIndex(Math.min(fotosGenerales.length - 1, lightboxIndex + 1))}
+                    onNext={() => setLightboxIndex(Math.min(fotosFiltradas.length - 1, lightboxIndex + 1))}
                     hasPrev={lightboxIndex > 0}
-                    hasNext={lightboxIndex < fotosGenerales.length - 1}
+                    hasNext={lightboxIndex < fotosFiltradas.length - 1}
                     currentIndex={lightboxIndex}
-                    total={fotosGenerales.length}
+                    total={fotosFiltradas.length}
                 />
             )}
         </div>
