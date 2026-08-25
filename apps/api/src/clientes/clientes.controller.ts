@@ -3,14 +3,17 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ClientesService } from './clientes.service';
@@ -115,6 +118,71 @@ export class ClientesController {
         totalPages: Math.ceil(total / takeNum),
       },
     };
+  }
+
+  /**
+   * GET /api/clientes/:id/trazabilidad-servicios
+   * Trazabilidad histórica 360° de servicios por cliente y sus sedes
+   */
+  @Get(':id/trazabilidad-servicios')
+  async getTrazabilidadServicios(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('idEquipo') idEquipo?: string,
+    @Query('categoria') categoria?: string,
+    @Query('idSede') idSede?: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
+    @Query('search') search?: string,
+  ) {
+    const data = await this.clientesService.getTrazabilidadServicios(id, {
+      idEquipo: idEquipo ? parseInt(idEquipo, 10) : undefined,
+      categoria,
+      idSede: idSede ? parseInt(idSede, 10) : undefined,
+      fechaDesde,
+      fechaHasta,
+      search,
+    });
+    return {
+      success: true,
+      data,
+    };
+  }
+
+  /**
+   * GET /api/clientes/:id/trazabilidad-pdf
+   * Genera o previsualiza el informe ejecutivo PDF de trazabilidad según filtros
+   */
+  @Get(':id/trazabilidad-pdf')
+  async getTrazabilidadPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('idEquipo') idEquipo: string | undefined,
+    @Query('categoria') categoria: string | undefined,
+    @Query('idSede') idSede: string | undefined,
+    @Query('fechaDesde') fechaDesde: string | undefined,
+    @Query('fechaHasta') fechaHasta: string | undefined,
+    @Query('search') search: string | undefined,
+    @Query('preview') preview: string | undefined,
+    @Res() res: Response,
+  ) {
+    const isPreview = preview === 'true' || preview === '1';
+    const pdfResult = await this.clientesService.generarPdfTrazabilidad(id, {
+      idEquipo: idEquipo ? parseInt(idEquipo, 10) : undefined,
+      categoria,
+      idSede: idSede ? parseInt(idSede, 10) : undefined,
+      fechaDesde,
+      fechaHasta,
+      search,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      isPreview
+        ? `inline; filename="${pdfResult.filename}"`
+        : `attachment; filename="${pdfResult.filename}"`,
+    );
+    res.setHeader('Content-Length', pdfResult.size);
+    res.status(HttpStatus.OK).send(pdfResult.buffer);
   }
 
   @Get(':id')

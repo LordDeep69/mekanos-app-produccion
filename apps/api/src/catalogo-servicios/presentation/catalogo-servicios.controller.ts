@@ -31,22 +31,22 @@ export class CatalogoServiciosController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async crear(@Body() dto: CrearCatalogoServicioDto) {
+  async crear(@Body() dto: any) {
     const command = new CrearCatalogoServicioCommand(
-      dto.codigoServicio,
-      dto.nombreServicio,
+      dto.codigoServicio ?? dto.codigo_servicio,
+      dto.nombreServicio ?? dto.nombre_servicio,
       dto.categoria,
       dto.descripcion,
-      dto.tipoServicioId,
-      dto.tipoEquipoId,
-      dto.duracionEstimadaHoras,
-      dto.requiereCertificacion,
-      dto.tipoCertificacionRequerida,
-      dto.precioBase,
-      dto.incluyeRepuestos,
+      dto.tipoServicioId ?? dto.id_tipo_servicio,
+      dto.tipoEquipoId ?? dto.id_tipo_equipo,
+      dto.duracionEstimadaHoras ?? dto.duracion_estimada_horas,
+      dto.requiereCertificacion ?? dto.requiere_certificacion,
+      dto.tipoCertificacionRequerida ?? dto.tipo_certificacion_requerida,
+      dto.precioBase ?? dto.precio_base,
+      dto.incluyeRepuestos ?? dto.incluye_repuestos,
       dto.activo,
       dto.observaciones,
-      dto.creadoPor,
+      dto.creadoPor ?? dto.creado_por,
     );
 
     const result = await this.commandBus.execute(command);
@@ -74,13 +74,18 @@ export class CatalogoServiciosController {
     @Query('activo') activo?: string,
     @Query('categoria') categoria?: string,
     @Query('tipoServicioId') tipoServicioId?: string,
+    @Query('idTipoServicio') idTipoServicio?: string,
     @Query('tipoEquipoId') tipoEquipoId?: string,
+    @Query('idTipoEquipo') idTipoEquipo?: string,
+    @Query('limit') limit?: string,
   ) {
+    const sId = tipoServicioId || idTipoServicio;
+    const eId = tipoEquipoId || idTipoEquipo;
     const query = new ListarCatalogosServicioQuery(
       activo === 'true' ? true : activo === 'false' ? false : undefined,
       categoria,
-      tipoServicioId ? parseInt(tipoServicioId) : undefined,
-      tipoEquipoId ? parseInt(tipoEquipoId) : undefined,
+      sId ? parseInt(sId) : undefined,
+      eId ? parseInt(eId) : undefined,
     );
     const result = await this.queryBus.execute(query);
 
@@ -115,23 +120,23 @@ export class CatalogoServiciosController {
   @Put(':id')
   async actualizar(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ActualizarCatalogoServicioDto,
+    @Body() dto: any,
   ) {
     const command = new ActualizarCatalogoServicioCommand(
       id,
-      dto.nombreServicio,
+      dto.nombreServicio ?? dto.nombre_servicio,
       dto.descripcion,
       dto.categoria,
-      dto.tipoServicioId,
-      dto.tipoEquipoId,
-      dto.duracionEstimadaHoras,
-      dto.requiereCertificacion,
-      dto.tipoCertificacionRequerida,
-      dto.precioBase,
-      dto.incluyeRepuestos,
+      dto.tipoServicioId ?? dto.id_tipo_servicio,
+      dto.tipoEquipoId ?? dto.id_tipo_equipo,
+      dto.duracionEstimadaHoras ?? dto.duracion_estimada_horas,
+      dto.requiereCertificacion ?? dto.requiere_certificacion,
+      dto.tipoCertificacionRequerida ?? dto.tipo_certificacion_requerida,
+      dto.precioBase ?? dto.precio_base,
+      dto.incluyeRepuestos ?? dto.incluye_repuestos,
       dto.activo,
       dto.observaciones,
-      dto.modificadoPor,
+      dto.modificadoPor ?? dto.modificado_por,
     );
 
     const result = await this.commandBus.execute(command);

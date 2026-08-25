@@ -1,5 +1,6 @@
 'use client';
 
+import { useServiciosComerciales } from '@/features/ordenes';
 import { cn } from '@/lib/utils';
 import {
     Activity,
@@ -8,11 +9,14 @@ import {
     ChevronDown, ChevronRight,
     Clock,
     Gauge,
+    Layers,
     Loader2,
     Settings,
+    Tag,
     Wrench,
     X
 } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { CATEGORIAS_SERVICIO, type SistemaConActividades } from '../api/tipos-servicio.service';
 import { useTipoServicioDetalleCompleto } from '../hooks/use-tipos-servicio';
@@ -153,6 +157,9 @@ export function TipoServicioDetailDrawer({ tipoServicioId, onClose }: Props) {
                                     {detalle.descripcion}
                                 </p>
                             )}
+
+                            {/* Servicios Específicos del Catálogo vinculados a este tipo */}
+                            <ServiciosEspecificosSection tipoServicioId={tipoServicioId} />
 
                             {/* Actividades por Sistema */}
                             <div>
@@ -299,6 +306,69 @@ function SistemaAccordion({ sistema, isExpanded, onToggle }: {
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+function ServiciosEspecificosSection({ tipoServicioId }: { tipoServicioId: number }) {
+    const { data: servicios, isLoading } = useServiciosComerciales({ idTipoServicio: tipoServicioId, limit: 100 });
+
+    if (isLoading) {
+        return (
+            <div className="p-4 flex justify-center bg-gray-50 rounded-xl">
+                <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
+            </div>
+        );
+    }
+
+    if (!servicios || servicios.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Tag className="h-5 w-5 text-orange-600" />
+                    Servicios Específicos / Correctivos ({servicios.length})
+                </h3>
+                <Link
+                    href="/configuracion/catalogos/servicios"
+                    className="text-xs text-blue-600 hover:underline font-bold"
+                >
+                    Ver Catálogo Completo →
+                </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {servicios.map((s) => (
+                    <div
+                        key={s.id_servicio}
+                        className="p-3 bg-orange-50/50 rounded-xl border border-orange-200 flex flex-col justify-between gap-1 shadow-2xs"
+                    >
+                        <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono text-[9px] font-black text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded">
+                                    {s.codigo_servicio}
+                                </span>
+                                {s.duracion_estimada_horas && (
+                                    <span className="text-[10px] font-bold text-gray-600">
+                                        ⏱️ {s.duracion_estimada_horas}h
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs font-bold text-gray-800 mt-1 line-clamp-2">
+                                {s.nombre_servicio}
+                            </p>
+                        </div>
+                        {s.precio_base ? (
+                            <p className="text-[10px] font-bold text-green-700 mt-1">
+                                Base: ${Number(s.precio_base).toLocaleString('es-CO')} COP
+                            </p>
+                        ) : null}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

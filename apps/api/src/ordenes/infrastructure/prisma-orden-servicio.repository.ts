@@ -117,6 +117,11 @@ export class PrismaOrdenServicioRepository {
         documentos_generados: true,
       },
     },
+    detalle_servicios_orden: {
+      include: {
+        catalogo_servicios: true,
+      },
+    },
   };
 
   // ============================================================================
@@ -124,10 +129,10 @@ export class PrismaOrdenServicioRepository {
   // ============================================================================
 
   /**
-   * Guarda una orden con soporte para múltiples equipos (Enterprise)
+   * Guarda una orden con soporte para múltiples equipos (Enterprise) y servicios específicos
    * Realiza la creación de la orden y la vinculación de equipos en una transacción atómica.
    */
-  async saveWithEquipos(orden: any, equiposIds: number[]): Promise<any> {
+  async saveWithEquipos(orden: any, equiposIds: number[], serviciosIds?: number[]): Promise<any> {
     return this.prisma.$transaction(async (tx) => {
       // 1. Crear la cabecera de la orden
       const savedOrden = await tx.ordenes_servicio.create({
@@ -167,6 +172,29 @@ export class PrismaOrdenServicioRepository {
         });
       }
 
+      // 3. Vincular servicios específicos en detalle_servicios_orden
+      if (serviciosIds && serviciosIds.length > 0) {
+        const serviciosCat = await tx.catalogo_servicios.findMany({
+          where: { id_servicio: { in: serviciosIds } },
+        });
+
+        if (serviciosCat.length > 0) {
+          const vinculacionesServicios = serviciosCat.map((serv) => ({
+            id_orden_servicio: savedOrden.id_orden_servicio,
+            id_servicio: serv.id_servicio,
+            cantidad: 1,
+            precio_unitario: serv.precio_base || 0,
+            subtotal: serv.precio_base || 0,
+            estado_servicio: 'PENDIENTE' as const,
+            registrado_por: orden.creado_por,
+          }));
+
+          await tx.detalle_servicios_orden.createMany({
+            data: vinculacionesServicios,
+          });
+        }
+      }
+
       return savedOrden;
     }, {
       // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
@@ -179,7 +207,7 @@ export class PrismaOrdenServicioRepository {
    * ✅ OPTIMIZADO 05-ENE-2026: Guardar con equipos y retornar datos LITE
    * Evita el findById pesado que causaba +10 segundos de latencia
    */
-  async saveWithEquiposOptimizado(orden: any, equiposIds: number[]): Promise<any> {
+  async saveWithEquiposOptimizado(orden: any, equiposIds: number[], serviciosIds?: number[]): Promise<any> {
     // ✅ FIX: Aumentar timeout para conexiones lentas con Supabase
     return this.prisma.$transaction(async (tx) => {
       // 1. Crear la cabecera de la orden
@@ -220,6 +248,29 @@ export class PrismaOrdenServicioRepository {
         await tx.ordenes_equipos.createMany({
           data: vinculaciones,
         });
+      }
+
+      // 3. Vincular servicios específicos en detalle_servicios_orden
+      if (serviciosIds && serviciosIds.length > 0) {
+        const serviciosCat = await tx.catalogo_servicios.findMany({
+          where: { id_servicio: { in: serviciosIds } },
+        });
+
+        if (serviciosCat.length > 0) {
+          const vinculacionesServicios = serviciosCat.map((serv) => ({
+            id_orden_servicio: savedOrden.id_orden_servicio,
+            id_servicio: serv.id_servicio,
+            cantidad: 1,
+            precio_unitario: serv.precio_base || 0,
+            subtotal: serv.precio_base || 0,
+            estado_servicio: 'PENDIENTE' as const,
+            registrado_por: orden.creado_por,
+          }));
+
+          await tx.detalle_servicios_orden.createMany({
+            data: vinculacionesServicios,
+          });
+        }
       }
 
       // ✅ Retornar directamente sin consulta adicional

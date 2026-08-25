@@ -24,6 +24,16 @@ export class CreateOrdenDto {
   id_tipo_servicio!: number;
 
   @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  servicios_ids?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  serviciosIds?: number[];
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   id_sede_cliente?: number;
@@ -31,6 +41,10 @@ export class CreateOrdenDto {
   @IsOptional()
   @IsString()
   descripcion_inicial?: string;
+
+  @IsOptional()
+  @IsString()
+  razon_falla?: string;
 
   @IsOptional()
   @IsEnum(PrioridadOrdenEnum)

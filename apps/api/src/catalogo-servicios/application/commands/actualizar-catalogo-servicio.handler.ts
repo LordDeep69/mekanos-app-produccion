@@ -22,7 +22,7 @@ export class ActualizarCatalogoServicioHandler
     }
 
     // 2. Validar FK tipo_servicio (si se modifica)
-    if (command.tipoServicioId !== undefined) {
+    if (command.tipoServicioId) {
       const tipoServicio = await this.prisma.tipos_servicio.findUnique({
         where: { id_tipo_servicio: command.tipoServicioId },
       });
@@ -32,7 +32,7 @@ export class ActualizarCatalogoServicioHandler
     }
 
     // 3. Validar FK tipo_equipo (si se modifica)
-    if (command.tipoEquipoId !== undefined) {
+    if (command.tipoEquipoId) {
       const tipoEquipo = await this.prisma.tipos_equipo.findUnique({
         where: { id_tipo_equipo: command.tipoEquipoId },
       });
@@ -66,7 +66,7 @@ export class ActualizarCatalogoServicioHandler
       dataUpdate.categoria = command.categoria as any;
     }
     if (command.tipoServicioId !== undefined) {
-      dataUpdate.tipo_servicio = command.tipoServicioId ? { connect: { id_tipo_servicio: command.tipoServicioId } } : { disconnect: true };
+      dataUpdate.tipos_servicio = command.tipoServicioId ? { connect: { id_tipo_servicio: command.tipoServicioId } } : { disconnect: true };
     }
     if (command.tipoEquipoId !== undefined) {
       dataUpdate.tipos_equipo = command.tipoEquipoId ? { connect: { id_tipo_equipo: command.tipoEquipoId } } : { disconnect: true };
@@ -93,9 +93,7 @@ export class ActualizarCatalogoServicioHandler
       dataUpdate.observaciones = command.observaciones?.trim();
     }
     if (command.modificadoPor) {
-      dataUpdate.usuarios_catalogo_servicios_modificado_porTousuarios = {
-        connect: { id_usuario: command.modificadoPor },
-      };
+      dataUpdate.modificado_por = command.modificadoPor;
     }
 
     // 6. Actualizar

@@ -23,17 +23,69 @@ export class CatalogoServiciosService {
     }
   }
 
-  async findAll(page: number = 1, limit: number = 10) {
+  async findAll(
+    page: number = 1,
+    limit: number = 50,
+    categoria?: string,
+    idTipoEquipo?: number,
+    idTipoServicio?: number,
+    activo?: boolean,
+    search?: string,
+  ) {
     try {
       const skip = (page - 1) * limit;
+      const where: any = {};
+
+      if (activo !== undefined) {
+        where.activo = activo;
+      } else {
+        where.activo = true;
+      }
+
+      if (categoria) {
+        where.categoria = categoria;
+      }
+
+      if (idTipoServicio) {
+        where.id_tipo_servicio = idTipoServicio;
+      }
+
+      if (idTipoEquipo) {
+        where.OR = [
+          { id_tipo_equipo: idTipoEquipo },
+          { id_tipo_equipo: null },
+        ];
+      }
+
+      if (search) {
+        const s = search.trim();
+        const searchConditions = [
+          { nombre_servicio: { contains: s, mode: 'insensitive' } },
+          { codigo_servicio: { contains: s, mode: 'insensitive' } },
+        ];
+        if (where.OR) {
+          where.AND = [
+            { OR: where.OR },
+            { OR: searchConditions },
+          ];
+          delete where.OR;
+        } else {
+          where.OR = searchConditions;
+        }
+      }
       
       const [data, total] = await Promise.all([
         this.prisma.catalogo_servicios.findMany({
+          where,
           skip,
           take: limit,
-          orderBy: { id_servicio: 'desc' },
+          orderBy: { id_servicio: 'asc' },
+          include: {
+            tipos_equipo: true,
+            tipos_servicio: true,
+          },
         }),
-        this.prisma.catalogo_servicios.count(),
+        this.prisma.catalogo_servicios.count({ where }),
       ]);
 
       return {

@@ -19,6 +19,7 @@ import {
     Plus,
     Search,
     ShieldCheck,
+    Sparkles,
     Tag,
     Trash2,
     X
@@ -33,6 +34,7 @@ export default function CatalogoServiciosComercialesPage() {
 
     const { data: servicios, isLoading, isError, refetch } = useServiciosComerciales({
         idTipoServicio: filtroTipoServicio ? Number(filtroTipoServicio) : undefined,
+        limit: 100,
     });
 
     const { data: tiposServicio } = useTiposServicio({ activo: true });
@@ -230,26 +232,134 @@ export default function CatalogoServiciosComercialesPage() {
     );
 }
 
+function sugerirCodigoServicio(nombre: string, categoria?: string): string {
+    const cleanNombre = (nombre || '')
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    const actionMap: [RegExp, string][] = [
+        [/REEMPLAZ|CAMBI|SUSTITU/i, 'CAMB'],
+        [/REPARAC|REPARAR|ARREGL/i, 'REP'],
+        [/REVISI|INSPECC|EVALUA/i, 'REV'],
+        [/SUMINISTR|ENTREGA|DOTAC/i, 'SUM'],
+        [/INSTALAC|MONTAJE/i, 'INST'],
+        [/CALIBRAC|AJUSTE|SINCRONIZ/i, 'CALIB'],
+        [/LIMPIEZA|LAVAD|DESENGRAS/i, 'LIMP'],
+        [/DIAGNOST|ESCANEO|ANALIS/i, 'DIAG'],
+        [/MANTENIMIENTO|RUTINA/i, 'MNT'],
+        [/PRUEBA|TESTEO|MEDIC/i, 'PRB'],
+        [/REBOBINAD|EMBOBINAD/i, 'REBOB'],
+        [/PROGRAMAC|CONFIGURAC/i, 'PROG'],
+    ];
+
+    const nounMap: [RegExp, string][] = [
+        [/MODULO|CONTROLADOR|CONTROL|DEEP\s*SEA|COMAP/i, 'MOD-CTRL'],
+        [/FILTRO.*AIRE/i, 'FILT-AIRE'],
+        [/FILTRO.*ACEITE/i, 'FILT-ACTE'],
+        [/FILTRO.*COMBUSTIBLE|FILTRO.*ACPM|FILTRO.*DIESEL/i, 'FILT-COMB'],
+        [/FILTRO.*RACOR|TRAMPA.*AGUA/i, 'FILT-RACOR'],
+        [/FILTRO/i, 'FILTRO'],
+        [/ACEITE|LUBRICANTE/i, 'LUB-ACTE'],
+        [/REFRIGERANTE|ANTICONGELANTE/i, 'REFRIG'],
+        [/INYECTOR/i, 'INYECT'],
+        [/BOMBA.*INYEC/i, 'BOM-INY'],
+        [/BOMBA.*AGUA/i, 'BOM-AGUA'],
+        [/BOMBA/i, 'BOMBA'],
+        [/SENSOR.*PRES/i, 'SENS-PRES'],
+        [/SENSOR.*TEMP/i, 'SENS-TEMP'],
+        [/SENSOR/i, 'SENSOR'],
+        [/ALTERNADOR/i, 'ALT'],
+        [/MOTOR.*ARRANQUE|STARTER/i, 'ARRANQ'],
+        [/BATERIA/i, 'BAT'],
+        [/CARGADOR.*BATER/i, 'CARG-BAT'],
+        [/CORREA/i, 'CORREA'],
+        [/RADIADOR/i, 'RADIAD'],
+        [/TRANSFERENCIA|ATS/i, 'ATS'],
+        [/PLANTA|GENERADOR/i, 'GEN'],
+        [/TANQUE|COMBUSTIBLE/i, 'COMB'],
+    ];
+
+    const prefix = categoria === 'CORRECTIVO' ? 'CORR' : categoria === 'PREVENTIVO' ? 'PREV' : 'SRV';
+
+    let action = '';
+    for (const [regex, code] of actionMap) {
+        if (regex.test(cleanNombre)) {
+            action = code;
+            break;
+        }
+    }
+
+    let noun = '';
+    for (const [regex, code] of nounMap) {
+        if (regex.test(cleanNombre)) {
+            noun = code;
+            break;
+        }
+    }
+
+    if (!action && !noun) {
+        const words = cleanNombre
+            .replace(/[^A-Z0-9\s]/g, '')
+            .split(/\s+/)
+            .filter((w) => !['DE', 'DEL', 'LA', 'EL', 'Y', 'EN', 'PARA', 'CON', 'A', 'LOS', 'LAS', 'UN', 'UNA', 'AL'].includes(w));
+        action = words.slice(0, 3).map((w) => w.substring(0, 4)).join('-');
+    }
+
+    const baseParts = [prefix, action, noun].filter(Boolean);
+    return baseParts.join('-');
+}
+
 function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSubmit, isLoading }: any) {
     const [formData, setFormData] = useState({
         nombre_servicio: servicio?.nombre_servicio || '',
         codigo_servicio: servicio?.codigo_servicio || '',
-        categoria: servicio?.categoria || 'PREVENTIVO',
+        categoria: servicio?.categoria || 'CORRECTIVO',
         id_tipo_servicio: servicio?.id_tipo_servicio || '',
         descripcion: servicio?.descripcion || '',
-        precio_base: servicio?.precio_base || '',
+        precio_base: servicio?.precio_base != null ? servicio.precio_base : '',
         duracion_estimada_horas: servicio?.duracion_estimada_horas || '',
         requiere_certificacion: servicio?.requiere_certificacion ?? false,
         tipo_certificacion_requerida: servicio?.tipo_certificacion_requerida || '',
         incluye_repuestos: servicio?.incluye_repuestos ?? false,
     });
 
+    const [isManualCode, setIsManualCode] = useState(!!servicio);
+
+    const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newNombre = e.target.value;
+        const newCode = (!isManualCode && !servicio) ? sugerirCodigoServicio(newNombre, formData.categoria) : formData.codigo_servicio;
+        setFormData({
+            ...formData,
+            nombre_servicio: newNombre,
+            codigo_servicio: newCode,
+        });
+    };
+
+    const handleCategoriaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newCat = e.target.value;
+        const newCode = (!isManualCode && !servicio) ? sugerirCodigoServicio(formData.nombre_servicio, newCat) : formData.codigo_servicio;
+        setFormData({
+            ...formData,
+            categoria: newCat,
+            codigo_servicio: newCode,
+        });
+    };
+
+    const handleRegenerarCodigo = () => {
+        const generated = sugerirCodigoServicio(formData.nombre_servicio, formData.categoria);
+        setFormData((prev) => ({ ...prev, codigo_servicio: generated }));
+        setIsManualCode(false);
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const finalCode = formData.codigo_servicio.trim() || sugerirCodigoServicio(formData.nombre_servicio, formData.categoria);
         const data: any = {
             ...formData,
+            codigo_servicio: finalCode.toUpperCase().trim(),
             id_tipo_servicio: formData.id_tipo_servicio ? Number(formData.id_tipo_servicio) : null,
-            precio_base: formData.precio_base ? Number(formData.precio_base) : null,
+            precio_base: (formData.precio_base !== '' && formData.precio_base != null) ? Number(formData.precio_base) : null,
             duracion_estimada_horas: formData.duracion_estimada_horas ? Number(formData.duracion_estimada_horas) : null,
         };
         onSubmit(data);
@@ -276,22 +386,40 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSu
                                 required
                                 type="text"
                                 value={formData.nombre_servicio}
-                                onChange={(e) => setFormData({ ...formData, nombre_servicio: e.target.value })}
+                                onChange={handleNombreChange}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                placeholder="Ej: Mantenimiento 250 Horas"
+                                placeholder="Ej: Cambio de Filtro de Aire"
                             />
                         </div>
                         <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Código Comercial *</label>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-sm font-bold text-gray-700">Código Comercial</label>
+                                {!servicio && (
+                                    <button
+                                        type="button"
+                                        onClick={handleRegenerarCodigo}
+                                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                                        title="Generar código automático basado en palabras clave"
+                                    >
+                                        <Sparkles className="h-3 w-3" />
+                                        <span>Auto-generar</span>
+                                    </button>
+                                )}
+                            </div>
                             <input
-                                required
                                 type="text"
                                 value={formData.codigo_servicio}
-                                onChange={(e) => setFormData({ ...formData, codigo_servicio: e.target.value.toUpperCase().trim() })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono"
-                                placeholder="SERV_M250"
+                                onChange={(e) => {
+                                    setFormData({ ...formData, codigo_servicio: e.target.value.toUpperCase().trim() });
+                                    setIsManualCode(true);
+                                }}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono uppercase bg-slate-50 focus:bg-white"
+                                placeholder="Auto-generado (ej: CORR-CAMB-FILT-AIRE)"
                                 disabled={!!servicio}
                             />
+                            <p className="text-[10px] text-gray-400 mt-1">
+                                {servicio ? 'El código comercial es inmutable.' : 'Se genera automáticamente de las palabras clave del servicio.'}
+                            </p>
                         </div>
                     </div>
 
@@ -301,23 +429,24 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSu
                             <select
                                 required
                                 value={formData.categoria}
-                                onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+                                onChange={handleCategoriaChange}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                             >
+                                <option value="CORRECTIVO">Correctivo (Específico)</option>
                                 <option value="PREVENTIVO">Preventivo</option>
-                                <option value="CORRECTIVO">Correctivo</option>
                                 <option value="EMERGENCIA">Emergencia</option>
+                                <option value="ESPECIALIZADO">Especializado</option>
                                 <option value="OTRO">Otro</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Vincular a Tipo de Servicio</label>
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Vincular a Tipo de Servicio (Opcional)</label>
                             <select
                                 value={formData.id_tipo_servicio}
                                 onChange={(e) => setFormData({ ...formData, id_tipo_servicio: e.target.value })}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                             >
-                                <option value="">No vincular</option>
+                                <option value="">No vincular (General / Multi-tipo)</option>
                                 {tiposServicio?.map((t: any) => (
                                     <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>{t.nombre_tipo}</option>
                                 ))}
@@ -327,19 +456,20 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSu
 
                     <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-200">
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                <DollarSign className="h-3 w-3" /> Precio Base ($)
+                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                                <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> Precio Base ($)</span>
+                                <span className="text-[10px] font-normal text-gray-400 normal-case">(Opcional)</span>
                             </label>
                             <input
                                 type="number"
                                 value={formData.precio_base}
                                 onChange={(e) => setFormData({ ...formData, precio_base: e.target.value })}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"
-                                placeholder="500000"
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold bg-white"
+                                placeholder="Opcional / Por cotizar"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                                 <Clock className="h-3 w-3" /> Duración Est. (h)
                             </label>
                             <input
@@ -347,8 +477,8 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSu
                                 step="0.5"
                                 value={formData.duracion_estimada_horas}
                                 onChange={(e) => setFormData({ ...formData, duracion_estimada_horas: e.target.value })}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                placeholder="4.0"
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                                placeholder="Ej: 2.0"
                             />
                         </div>
                     </div>

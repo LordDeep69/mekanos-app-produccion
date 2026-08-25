@@ -22,35 +22,79 @@ export class CatalogoServiciosController {
   constructor(private readonly catalogoServiciosService: CatalogoServiciosService) {}
 
   @Post()
-  create(@Body() createDto: CreateCatalogoServiciosDto) {
-    return this.catalogoServiciosService.create(createDto);
+  async create(@Body() createDto: CreateCatalogoServiciosDto) {
+    const result = await this.catalogoServiciosService.create(createDto);
+    return {
+      success: true,
+      message: 'Servicio comercial creado exitosamente',
+      data: result,
+    };
   }
 
   @Get()
-  findAll(
+  async findAll(
     @Query('page') pageStr?: string,
     @Query('limit') limitStr?: string,
+    @Query('categoria') categoria?: string,
+    @Query('idTipoEquipo') idTipoEquipoStr?: string,
+    @Query('idTipoServicio') idTipoServicioStr?: string,
+    @Query('activo') activoStr?: string,
+    @Query('search') search?: string,
   ) {
     const page = pageStr ? parseInt(pageStr, 10) : 1;
-    const limit = limitStr ? parseInt(limitStr, 10) : 10;
-    return this.catalogoServiciosService.findAll(page, limit);
+    const limit = limitStr ? parseInt(limitStr, 10) : 50;
+    const idTipoEquipo = idTipoEquipoStr ? parseInt(idTipoEquipoStr, 10) : undefined;
+    const idTipoServicio = idTipoServicioStr ? parseInt(idTipoServicioStr, 10) : undefined;
+    const activo = activoStr !== undefined ? activoStr === 'true' : undefined;
+
+    const result = await this.catalogoServiciosService.findAll(
+      page,
+      limit,
+      categoria,
+      idTipoEquipo,
+      idTipoServicio,
+      activo,
+      search,
+    );
+
+    return {
+      success: true,
+      message: 'Catálogo de servicios obtenido exitosamente',
+      data: result.data,
+      meta: result.meta,
+    };
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.catalogoServiciosService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.catalogoServiciosService.findOne(id);
+    return {
+      success: true,
+      message: 'Servicio comercial obtenido exitosamente',
+      data: result,
+    };
   }
 
   @Put(':id')
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateCatalogoServiciosDto,
   ) {
-    return this.catalogoServiciosService.update(id, updateDto);
+    const result = await this.catalogoServiciosService.update(id, updateDto);
+    return {
+      success: true,
+      message: 'Servicio comercial actualizado exitosamente',
+      data: result,
+    };
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.catalogoServiciosService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.catalogoServiciosService.remove(id);
+    return {
+      success: true,
+      message: 'Servicio comercial desactivado exitosamente',
+      data: result,
+    };
   }
 }

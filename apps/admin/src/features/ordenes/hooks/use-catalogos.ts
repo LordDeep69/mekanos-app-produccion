@@ -74,7 +74,7 @@ export const CATALOGOS_KEYS = {
 // CATÁLOGO DE SERVICIOS (COMERCIAL)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function useServiciosComerciales(params?: { activo?: boolean; idTipoServicio?: number }) {
+export function useServiciosComerciales(params?: { activo?: boolean; idTipoServicio?: number; categoria?: string; idTipoEquipo?: number; limit?: number }) {
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.serviciosComerciales, params],
         queryFn: () => getServiciosComerciales(params),

@@ -17,6 +17,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/environment.dart';
 import '../storage/secure_storage.dart';
 
+/// Resultado del intento de refresh en el interceptor
+/// - [ok]: refresh exitoso
+/// - [rejected]: el backend rechazó el refresh (401/400/403) → sesión inválida
+/// - [unavailable]: sin red o servidor no disponible (5xx/429/502/530/1033) →
+///   conservar la sesión local, NO hacer logout
+enum _RefreshOutcome { ok, rejected, unavailable }
+
 /// Evento de autenticación expirada
 /// Los listeners pueden redirigir al login
 final authExpiredEventProvider = StateProvider<DateTime?>((ref) => null);
@@ -34,7 +41,7 @@ class ApiClient {
   
   // Lock para evitar múltiples refresh simultáneos
   bool _isRefreshing = false;
-  Completer<bool>? _refreshCompleter;
+  Completer<_RefreshOutcome>? _refreshCompleter;
 
   ApiClient(this._storage, this._ref) {
     dio = _createDio();
@@ -85,31 +92,41 @@ class ApiClient {
           // ✅ ENTERPRISE: Manejar 401 Unauthorized con auto-refresh
           if (error.response?.statusCode == 401) {
             debugPrint('🔐 [API] Token expirado - intentando refresh...');
-            
-            final refreshed = await _tryRefreshToken();
-            
-            if (refreshed) {
+
+            final outcome = await _tryRefreshToken();
+
+            if (outcome == _RefreshOutcome.ok) {
               // Reintentar request original con nuevo token
               debugPrint('🔐 [API] Token renovado - reintentando request...');
               try {
                 final newToken = await _storage.getAccessToken();
                 final retryOptions = error.requestOptions;
                 retryOptions.headers['Authorization'] = 'Bearer $newToken';
-                
+
                 final response = await dio.fetch(retryOptions);
                 return handler.resolve(response);
               } catch (retryError) {
                 debugPrint('❌ [API] Error en retry: $retryError');
                 return handler.next(error);
               }
-            } else {
-              // Refresh falló - sesión expirada completamente
-              debugPrint('🔐 [API] Refresh falló - emitiendo evento de sesión expirada');
+            } else if (outcome == _RefreshOutcome.rejected) {
+              // El backend rechazó el refresh explícitamente (401/400/403):
+              // la sesión ya no es válida → sí emitir logout
+              debugPrint(
+                '🔐 [API] Refresh rechazado - sesión inválida, cerrando sesión',
+              );
               _emitAuthExpired();
+              return handler.next(error);
+            } else {
+              // Servidor caído o sin red (5xx/429/502/530/1033/timeout):
+              // NO invalidar la sesión local, solo dejar pasar el error
+              debugPrint(
+                '📡 [API] Servidor no disponible - conservando sesión local',
+              );
               return handler.next(error);
             }
           }
-          
+
           if (Environment.isDebug) {
             debugPrint(
               '❌ ERROR [${error.response?.statusCode}]: ${error.message}',
@@ -125,59 +142,72 @@ class ApiClient {
   }
   
   /// Intenta refrescar el access token usando el refresh token
-  Future<bool> _tryRefreshToken() async {
+  ///
+  /// Clasificación del resultado:
+  /// - 200/201 → [ok]
+  /// - 401/400/403 → [rejected] (el backend rechazó explícitamente la sesión)
+  /// - 5xx/429/otros errores HTTP o sin conexión → [unavailable]
+  Future<_RefreshOutcome> _tryRefreshToken() async {
     // Evitar múltiples refresh simultáneos
     if (_isRefreshing) {
       debugPrint('🔐 [API] Refresh ya en progreso - esperando...');
-      return await _refreshCompleter?.future ?? false;
+      return await _refreshCompleter?.future ?? _RefreshOutcome.unavailable;
     }
-    
+
     _isRefreshing = true;
-    _refreshCompleter = Completer<bool>();
-    
+    _refreshCompleter = Completer<_RefreshOutcome>();
+
     try {
       final refreshToken = await _storage.getRefreshToken();
-      
+
       if (refreshToken == null) {
         debugPrint('🔐 [API] No hay refresh token disponible');
-        _refreshCompleter!.complete(false);
-        return false;
+        _refreshCompleter!.complete(_RefreshOutcome.unavailable);
+        return _RefreshOutcome.unavailable;
       }
-      
+
       debugPrint('🔐 [API] Enviando refresh token...');
-      
+
       // Crear Dio temporal sin interceptors para evitar loop infinito
       final tempDio = Dio(BaseOptions(
         baseUrl: Environment.apiBaseUrl,
         headers: {'Content-Type': 'application/json'},
       ));
-      
+
       final response = await tempDio.post(
         '/auth/refresh',
         data: {'refresh_token': refreshToken},
       );
-      
-      if (response.statusCode == 200 || response.statusCode == 201) {
+
+      final statusCode = response.statusCode ?? 0;
+
+      if (statusCode == 200 || statusCode == 201) {
         final data = response.data as Map<String, dynamic>;
         final newAccessToken = data['access_token'] as String;
         final newRefreshToken = data['refresh_token'] as String;
-        
+
         await _storage.saveAccessToken(newAccessToken);
         await _storage.saveRefreshToken(newRefreshToken);
-        
+
         debugPrint('✅ [API] Tokens renovados exitosamente');
-        _refreshCompleter!.complete(true);
-        return true;
+        _refreshCompleter!.complete(_RefreshOutcome.ok);
+        return _RefreshOutcome.ok;
       }
-      
-      debugPrint('❌ [API] Refresh falló con status: ${response.statusCode}');
-      _refreshCompleter!.complete(false);
-      return false;
-      
+
+      if (statusCode == 401 || statusCode == 400 || statusCode == 403) {
+        debugPrint('⛔ [API] Refresh rechazado (HTTP $statusCode)');
+        _refreshCompleter!.complete(_RefreshOutcome.rejected);
+        return _RefreshOutcome.rejected;
+      }
+
+      debugPrint('📡 [API] Servidor no disponible (HTTP $statusCode)');
+      _refreshCompleter!.complete(_RefreshOutcome.unavailable);
+      return _RefreshOutcome.unavailable;
+
     } catch (e) {
-      debugPrint('❌ [API] Error en refresh: $e');
-      _refreshCompleter!.complete(false);
-      return false;
+      debugPrint('📡 [API] Error de red en refresh - conservando sesión: $e');
+      _refreshCompleter!.complete(_RefreshOutcome.unavailable);
+      return _RefreshOutcome.unavailable;
     } finally {
       _isRefreshing = false;
     }

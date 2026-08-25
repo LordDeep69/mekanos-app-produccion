@@ -5,6 +5,7 @@
 // Componentes
 export { ConfigParametrosEditor } from './components/ConfigParametrosEditor';
 export { EquipoForm } from './components/EquipoForm';
+export { HojaVidaEquipo } from './components/hoja-vida-equipo';
 
 // Servicios y hooks
 export {
@@ -17,7 +18,9 @@ export {
     useEliminarEquipoCompletamente,
     useEquipo,
     useEquipos,
-    useRegistrarLecturaHorometro
+    useRegistrarLecturaHorometro,
+    useTrazabilidadEquipo,
+    type TrazabilidadEquipoResponse,
 } from './lib/equipos.service';
 
 // Tipos

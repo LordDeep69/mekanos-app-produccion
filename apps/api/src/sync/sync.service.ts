@@ -595,6 +595,12 @@ export class SyncService {
           },
           orderBy: { orden_secuencia: 'asc' },
         },
+        // Trazabilidad: Incluir servicios específicos vinculados a la orden
+        detalle_servicios_orden: {
+          include: {
+            catalogo_servicios: true,
+          },
+        },
         // Incluir informes para obtener URL del PDF
         informes: {
           orderBy: { fecha_generacion: 'desc' },
@@ -819,6 +825,14 @@ export class SyncService {
         ordenSecuencia: p.orden_secuencia,
         origen: p.origen,
         esObligatoria: p.es_obligatoria ?? undefined,
+      })),
+      serviciosEspecificos: (o as any).detalle_servicios_orden?.map((d: any) => ({
+        idDetalleServicio: d.id_detalle_servicio,
+        idServicio: d.id_servicio,
+        codigoServicio: d.catalogo_servicios?.codigo_servicio || '',
+        nombreServicio: d.catalogo_servicios?.nombre_servicio || '',
+        categoria: d.catalogo_servicios?.categoria || '',
+        duracionEstimadaHoras: d.catalogo_servicios?.duracion_estimada_horas ? Number(d.catalogo_servicios.duracion_estimada_horas) : undefined,
       })),
       // ✅ FIX: Incluir URL del PDF desde documentos_generados (consulta directa)
       urlPdf: documentosMap.get(o.id_orden_servicio) || undefined,

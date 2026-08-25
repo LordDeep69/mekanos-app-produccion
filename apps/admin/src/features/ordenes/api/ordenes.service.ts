@@ -91,9 +91,11 @@ export async function createOrden(data: CreateOrdenDto): Promise<{ success: bool
     // Transformar datos para el backend
     const payload = {
         id_cliente: data.clienteId,
-        id_equipo: data.equipoId,           // Equipo principal (legacy)
+        id_equipo: data.equipoId,           // Equipo principal
         equipos_ids: data.equiposIds,       // MULTI-EQUIPOS: Array de IDs
         id_tipo_servicio: data.tipoServicioId,
+        servicios_ids: data.serviciosIds,   // SERVICIOS CORRECTIVOS ESPECÍFICOS
+        razon_falla: data.razonFalla,
         id_sede_cliente: data.sedeClienteId,
         descripcion_inicial: data.descripcion,
         prioridad: data.prioridad || 'NORMAL',

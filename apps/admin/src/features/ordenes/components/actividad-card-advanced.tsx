@@ -86,6 +86,11 @@ function getEstadoBgColor(estado?: string | null) {
  * TipTap en lugar de textarea plano.
  *
  * Debe coincidir con los textos usados por pdf.service.ts (mapaDescripcionCampo).
+ *
+ * ✅ FIX 20-AGO-2026: El editor rico ahora aplica a TODAS las actividades
+ * narrativas de cualquier tipo de servicio (preventivo y correctivo), no solo
+ * a esta lista. Esta lista se conserva como referencia documentaria del
+ * comportamiento original para campos correctivos.
  */
 const DESCRIPCIONES_CORRECTIVO_RICO = new Set([
     'DESCRIPCIÓN DEL PROBLEMA REPORTADO',
@@ -101,13 +106,67 @@ const DESCRIPCIONES_CORRECTIVO_RICO = new Set([
 ]);
 
 /**
- * Determina si la actividad es un campo correctivo que merece editor rico.
+ * ✅ FIX 20-AGO-2026: Prefijos de observación ESTRUCTURADA que guarda la app
+ * móvil en sus inputs especiales (selectores de nivel, SI/NO, horómetro, etc.).
+ * Si se edita con HTML, la app móvil deja de reconocer el valor → NO usar
+ * editor rico en esas actividades.
  */
-function esCampoCorrectivoRico(actividad: Actividad): boolean {
-    const desc = (actividad.catalogo_actividades?.descripcion_actividad ||
-        actividad.descripcion_manual || '').toUpperCase().trim();
-    return DESCRIPCIONES_CORRECTIVO_RICO.has(desc);
+const PREFIJOS_MOVIL_ESTRUCTURADOS = [
+    'NIVEL: ',
+    'ACEITE: ',
+    'BATERIA: ',
+    'ELECTROLITOS: ',
+    'HORAS: ',
+    'TEMP: ',
+    'RESPUESTA: ',
+    'SISTEMAS: ',
+    'ESTADO_INICIAL: ',
+    'ESTADO_FINAL: ',
+];
+
+function observacionTienePrefijoEstructurado(observacion: string): boolean {
+    const upper = (observacion || '').toUpperCase();
+    return PREFIJOS_MOVIL_ESTRUCTURADOS.some(p => upper.startsWith(p));
 }
+
+/**
+ * ✅ FIX 20-AGO-2026: Por DESCRIPCIÓN detecta si la actividad usa un input
+ * estructurado en la app móvil (aunque aún no tenga valor guardado).
+ * Replica _getTipoActividadEspecial de ejecucion_screen.dart para los tipos
+ * que guardan valores con prefijo (selectores/números de la app móvil).
+ */
+function descripcionEsInputEstructurado(descripcion: string): boolean {
+    const desc = descripcion.toUpperCase();
+    if (desc.includes('(SI/NO)') || desc.includes('(S/N)')) return true;
+    if ((desc.includes('NIVEL DE COMBUSTIBLE') || desc.includes('NIVEL COMBUSTIBLE')) && !desc.includes('TANQUE')) return true;
+    if (desc.includes('NIVEL DE ACEITE') || desc.includes('NIVEL ACEITE')) return true;
+    if (desc.includes('HOROMETRO') || desc.includes('HORÁMETRO') || desc.includes('HORAS DE TRABAJO') || desc.includes('LECTURA DE HORAS')) return true;
+    if (desc.includes('ELECTROLITOS')) return true;
+    if (desc.includes('CARGA DE BATERIA') && !desc.includes('CARGADOR') && !desc.includes('SISTEMA DE CARGA')) return true;
+    if (desc.includes('TEMPERATURA') || desc.includes('TEMP.')) return true;
+    // Correctivo estructurados (excluidos intencionalmente del editor rico
+    // desde el commit 56b0d5f — son selectores/listas, no narrativa libre)
+    if (desc.includes('ESTADO INICIAL DEL EQUIPO') || desc.includes('ESTADO FINAL DEL EQUIPO')) return true;
+    if (desc.includes('SISTEMAS AFECTADOS')) return true;
+    if (desc.includes('REPUESTOS UTILIZADOS') || desc.includes('MATERIALES E INSUMOS')) return true;
+    return false;
+}
+
+/**
+ * ✅ FIX 20-AGO-2026: ¿La observación de esta actividad es un valor
+ * estructurado de la app móvil?
+ */
+function usaObservacionEstructurada(actividad: Actividad): boolean {
+    const desc = actividad.catalogo_actividades?.descripcion_actividad ||
+        actividad.descripcion_manual || '';
+    if (descripcionEsInputEstructurado(desc)) return true;
+    return observacionTienePrefijoEstructurado(actividad.observaciones || '');
+}
+
+/**
+ * ✅ FIX 20-AGO-2026: Función anterior (borrada).
+ * El criterio de editor rico ahora es el opuesto: usaObservacionEstructurada().
+ */
 
 /**
  * ✅ La app móvil guarda los campos con prefijos como "PROBLEMA: ", "FALLAS: ",
@@ -189,7 +248,14 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
     // ✅ FIX 23-JUL-2026: Si la actividad es un campo correctivo narrativo
     // (PROBLEMA REPORTADO / FALLAS OBSERVADAS / DIAGNÓSTICO / TRABAJOS / etc.),
     // habilitar editor TipTap en lugar de textarea plano.
-    const esRico = esCampoCorrectivoRico(actividad);
+    //
+    // ✅ FIX 20-AGO-2026: El editor TipTap ahora también aplica a las
+    // actividades narrativas de cualquier otro servicio (preventivo, A/B,
+    // Bomba/Generador, etc.), no solo correctivos. Solo se mantienen con
+    // textarea plano las actividades cuya observación guarda un valor
+    // ESTRUCTURADO de la app móvil (NIVEL:/ACEITE:/BATERIA:/RESPUESTA:/etc.)
+    // — usar HTML ahí rompería el input especial del técnico.
+    const esRico = !usaObservacionEstructurada(actividad);
 
     // Separar prefijo ("PROBLEMA: ", etc.) del contenido a editar
     const separado = separarPrefijo(actividad.observaciones || '');

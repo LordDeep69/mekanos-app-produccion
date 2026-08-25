@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MEKANOS S.A.S - Portal Admin
  * Servicio API para Catálogos del Módulo de Órdenes
  * 
@@ -554,10 +554,13 @@ export interface CatalogoServicio {
 // CATÁLOGO DE SERVICIOS (COMERCIAL)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export async function getServiciosComerciales(params?: { activo?: boolean; idTipoServicio?: number }): Promise<CatalogoServicio[]> {
+export async function getServiciosComerciales(params?: { activo?: boolean; idTipoServicio?: number; categoria?: string; idTipoEquipo?: number; limit?: number }): Promise<CatalogoServicio[]> {
     const queryParams = new URLSearchParams();
+    queryParams.append('limit', String(params?.limit || 100));
     if (params?.activo !== undefined) queryParams.append('activo', String(params.activo));
     if (params?.idTipoServicio) queryParams.append('idTipoServicio', String(params.idTipoServicio));
+    if (params?.categoria) queryParams.append('categoria', params.categoria);
+    if (params?.idTipoEquipo) queryParams.append('idTipoEquipo', String(params.idTipoEquipo));
 
     const response = await apiClient.get<PaginatedResponse<CatalogoServicio>>(`/catalogo-servicios?${queryParams.toString()}`);
     return response.data.data || [];

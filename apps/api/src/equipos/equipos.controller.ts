@@ -201,6 +201,20 @@ export class EquiposController {
   }
 
   /**
+   * GET /api/equipos/:id/trazabilidad-servicios
+   * Hoja de vida y trazabilidad histórica de intervenciones sobre el equipo
+   */
+  @Get(':id/trazabilidad-servicios')
+  @ApiOperation({ summary: 'Obtener historial de mantenimientos y servicios del equipo' })
+  async getTrazabilidadServicios(@Param('id', ParseIntPipe) id: number) {
+    const data = await this.equiposGestionService.getTrazabilidadServicios(id);
+    return {
+      success: true,
+      data,
+    };
+  }
+
+  /**
    * GET /api/equipos/:id
    * Obtener un equipo por ID
    */

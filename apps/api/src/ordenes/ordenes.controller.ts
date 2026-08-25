@@ -1403,14 +1403,18 @@ export class OrdenesController {
     @UserId() userId: number
   ) {
     const tecnicoId = dto.id_tecnico_asignado || dto.tecnicoId;
-    const equiposIds = dto.equipos_ids || [dto.id_equipo];
+    const equiposIds = dto.equipos_ids || (dto.id_equipo ? [dto.id_equipo] : []);
+    const serviciosIds = dto.servicios_ids || dto.serviciosIds;
+    const razonFalla = dto.razon_falla;
 
     const command = new CreateOrdenCommand(
       dto.id_cliente,
       equiposIds,
       dto.id_tipo_servicio,
+      serviciosIds,
       dto.id_sede_cliente,
       dto.descripcion_inicial,
+      razonFalla,
       dto.prioridad,
       // ✅ FIX TIMEZONE: Agregar T12:00:00 para evitar offset de día
       // "2026-01-05" → "2026-01-05T12:00:00" (mediodía evita problemas de timezone)

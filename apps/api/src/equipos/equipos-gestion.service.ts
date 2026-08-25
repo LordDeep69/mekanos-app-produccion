@@ -1133,4 +1133,147 @@ export class EquiposGestionService {
       data: resultado,
     };
   }
+
+  /**
+   * ✅ TRAZABILIDAD 360° / HOJA DE VIDA DEL EQUIPO:
+   * Retorna todas las intervenciones de mantenimiento realizadas a la máquina
+   * con sus servicios específicos (preventivos o correctivos), mediciones, técnico y PDF.
+   */
+  async getTrazabilidadServicios(idEquipo: number) {
+    const equipo = await this.prisma.equipos.findUnique({
+      where: { id_equipo: idEquipo },
+      include: {
+        tipos_equipo: true,
+        cliente: {
+          include: {
+            persona: true,
+          },
+        },
+      },
+    });
+
+    if (!equipo) {
+      throw new NotFoundException(`Equipo con ID ${idEquipo} no encontrado`);
+    }
+
+    // Buscar todas las órdenes donde este equipo participa
+    const ordenes = await this.prisma.ordenes_servicio.findMany({
+      where: {
+        OR: [
+          { id_equipo: idEquipo },
+          { ordenes_equipos: { some: { id_equipo: idEquipo } } },
+        ],
+      },
+      orderBy: [
+        { fecha_programada: 'desc' },
+        { id_orden_servicio: 'desc' },
+      ],
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        fecha_programada: true,
+        fecha_inicio_real: true,
+        fecha_fin_real: true,
+        fecha_creacion: true,
+        prioridad: true,
+        descripcion_inicial: true,
+        observaciones_tecnico: true,
+        observaciones_cierre: true,
+        trabajo_realizado: true,
+        estados_orden: {
+          select: {
+            id_estado: true,
+            codigo_estado: true,
+            nombre_estado: true,
+            color_hex: true,
+          },
+        },
+        tipos_servicio: {
+          select: {
+            id_tipo_servicio: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+            categoria: true,
+            icono: true,
+          },
+        },
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+          select: {
+            id_empleado: true,
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+        detalle_servicios_orden: {
+          select: {
+            id_detalle_servicio: true,
+            cantidad: true,
+            estado_servicio: true,
+            precio_unitario: true,
+            catalogo_servicios: {
+              select: {
+                id_servicio: true,
+                codigo_servicio: true,
+                nombre_servicio: true,
+                categoria: true,
+                duracion_estimada_horas: true,
+              },
+            },
+          },
+        },
+        mediciones_servicio: {
+          where: {
+            id_equipo: idEquipo,
+          },
+          select: {
+            id_medicion: true,
+            valor_medido: true,
+            es_critico: true,
+            fuera_de_rango: true,
+            parametros_medicion: {
+              select: {
+                nombre_parametro: true,
+                unidad_medida: true,
+              },
+            },
+          },
+        },
+        informes: {
+          orderBy: { fecha_generacion: 'desc' },
+          take: 1,
+          select: {
+            id_informe: true,
+            numero_informe: true,
+            fecha_generacion: true,
+            documentos_generados: {
+              select: {
+                id_documento: true,
+                ruta_archivo: true,
+                tipo_documento: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      equipo: {
+        id_equipo: equipo.id_equipo,
+        codigo_equipo: equipo.codigo_equipo,
+        nombre_equipo: equipo.nombre_equipo,
+        tipo: equipo.tipo,
+        horas_actuales: equipo.horas_actuales,
+        ubicacion_texto: equipo.ubicacion_texto,
+        cliente_nombre: equipo.cliente?.persona?.nombre_comercial || equipo.cliente?.persona?.razon_social || equipo.cliente?.persona?.nombre_completo,
+      },
+      total_intervenciones: ordenes.length,
+      intervenciones: ordenes,
+    };
+  }
 }

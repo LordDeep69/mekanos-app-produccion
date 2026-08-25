@@ -24,6 +24,7 @@ import {
   Package,
   Settings2,
   Shield,
+  Tag,
   Users2,
   Wrench,
   Zap
@@ -78,6 +79,7 @@ const navSections: NavSection[] = [
         icon: HardDrive,
         children: [
           { title: 'Tipos de Servicio', href: '/configuracion/catalogos/tipos-servicio', icon: Activity },
+          { title: 'Servicios Específicos', href: '/configuracion/catalogos/servicios', icon: Tag },
           { title: 'Estados de Orden', href: '/configuracion/catalogos/estados', icon: CheckCircle2 },
           { title: 'Actividades', href: '/configuracion/catalogos/actividades', icon: ClipboardList },
           { title: 'Sistemas', href: '/configuracion/catalogos/sistemas', icon: Layers },

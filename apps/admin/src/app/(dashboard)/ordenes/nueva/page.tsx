@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MEKANOS S.A.S - Portal Admin
  * Wizard de Creación de Orden de Servicio - MULTI-EQUIPOS
  * 
@@ -22,9 +22,11 @@ import {
     getTecnicoLabel,
     useCascadaClienteEquipo,
     useCrearOrden,
+    useServiciosComerciales,
     useTecnicosSelector,
     useUltimasSeleccionesEquipos,
     useWizardCatalogos,
+    type CatalogoServicio,
     type CategoriaSeleccion,
     type ClienteSelector,
     type EquipoSelector,
@@ -35,15 +37,19 @@ import {
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { cn } from '@/lib/utils';
 import {
+    AlertTriangle,
     Building2,
     Check,
+    CheckCircle2,
     ClipboardList,
     History,
+    Layers,
     Loader2,
     MapPin,
     Plus,
     Search,
     Settings,
+    Tag,
     User,
     Wrench,
     X
@@ -63,6 +69,8 @@ interface WizardData {
     equiposSeleccionados: EquipoSelector[];
     tipoServicioId?: number;
     tipoServicioSeleccionado?: TipoServicio;
+    serviciosCorrectivosSeleccionados?: CatalogoServicio[];
+    razonFalla?: string;
     prioridad: 'BAJA' | 'NORMAL' | 'ALTA' | 'URGENTE';
     fechaProgramada?: string;
     descripcion?: string;
@@ -440,6 +448,10 @@ function PasoAlcance({
         tipoEquipoId: tipoEquipoId ? Number(tipoEquipoId) : undefined
     });
 
+    const { data: serviciosComerciales, isLoading: isLoadingServicios } = useServiciosComerciales({ activo: true, limit: 100 });
+    const [busquedaCorrectivo, setBusquedaCorrectivo] = useState('');
+    const [filtroTipoEquipo, setFiltroTipoEquipo] = useState<string>('TODOS');
+
     if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="h-10 w-10 animate-spin text-blue-500" /></div>;
 
     const tiposPorCategoria = tiposServicio.reduce((acc, tipo) => {
@@ -448,6 +460,46 @@ function PasoAlcance({
         acc[cat].push(tipo);
         return acc;
     }, {} as Record<string, TipoServicio[]>);
+
+    const esCorrectivoOEmergencia = 
+        data.tipoServicioSeleccionado?.categoria === 'CORRECTIVO' ||
+        data.tipoServicioSeleccionado?.categoria === 'EMERGENCIA' ||
+        data.tipoServicioSeleccionado?.categoria === 'ESPECIALIZADO' ||
+        data.tipoServicioSeleccionado?.categoria === 'DIAGNOSTICO';
+
+    // Filtrar servicios comerciales correctivos/especializados
+    const serviciosFiltrados = (serviciosComerciales || []).filter((s) => {
+        // Filtrar por término de búsqueda
+        const matchSearch = busquedaCorrectivo.trim() === '' ||
+            s.nombre_servicio.toLowerCase().includes(busquedaCorrectivo.toLowerCase()) ||
+            s.codigo_servicio.toLowerCase().includes(busquedaCorrectivo.toLowerCase()) ||
+            (s.descripcion && s.descripcion.toLowerCase().includes(busquedaCorrectivo.toLowerCase()));
+
+        if (!matchSearch) return false;
+
+        // Filtrar por tipo de equipo si se selecciona tab
+        if (filtroTipoEquipo !== 'TODOS') {
+            if (filtroTipoEquipo === 'GEN') return s.codigo_servicio.startsWith('GEN-') || !s.id_tipo_equipo;
+            if (filtroTipoEquipo === 'BOM') return s.codigo_servicio.startsWith('BOM-') || !s.id_tipo_equipo;
+            if (filtroTipoEquipo === 'MOT') return s.codigo_servicio.startsWith('MOT-') || !s.id_tipo_equipo;
+        }
+
+        return true;
+    });
+
+    const toggleServicioCorrectivo = (servicio: CatalogoServicio) => {
+        const actuales = data.serviciosCorrectivosSeleccionados || [];
+        const existe = actuales.some((s) => s.id_servicio === servicio.id_servicio);
+        if (existe) {
+            onChange({
+                serviciosCorrectivosSeleccionados: actuales.filter((s) => s.id_servicio !== servicio.id_servicio),
+            });
+        } else {
+            onChange({
+                serviciosCorrectivosSeleccionados: [...actuales, servicio],
+            });
+        }
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -458,15 +510,18 @@ function PasoAlcance({
                     </div>
                     <div>
                         <h3 className="text-xl font-bold text-slate-900">Configuración del Alcance</h3>
-                        <p className="text-slate-600 text-sm">Define el tipo de intervención y su urgencia.</p>
+                        <p className="text-slate-600 text-sm">Define el tipo de intervención, servicios específicos y su urgencia.</p>
                     </div>
                 </div>
             </div>
 
             <div className="space-y-6">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-wider block">
+                    1. Seleccione el Tipo de Servicio Macro
+                </label>
                 {Object.entries(tiposPorCategoria).map(([categoria, tipos]) => (
                     <div key={categoria} className="space-y-3">
-                        <h4 className={cn("text-[10px] font-black px-2 py-0.5 rounded uppercase", getCategoriaServicioColor(categoria))}>
+                        <h4 className={cn("text-[10px] font-black px-2 py-0.5 rounded uppercase inline-block", getCategoriaServicioColor(categoria))}>
                             {getCategoriaServicioLabel(categoria)}
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -475,6 +530,7 @@ function PasoAlcance({
                                 return (
                                     <button
                                         key={tipo.id_tipo_servicio}
+                                        type="button"
                                         onClick={() => onChange({ tipoServicioId: tipo.id_tipo_servicio, tipoServicioSeleccionado: tipo })}
                                         className={cn(
                                             'flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all',
@@ -484,10 +540,11 @@ function PasoAlcance({
                                         <div className={cn("p-2 rounded-lg", isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}>
                                             <Wrench className="h-5 w-5" />
                                         </div>
-                                        <div className="min-w-0">
+                                        <div className="min-w-0 flex-1">
                                             <p className="font-bold text-slate-700 text-sm truncate">{tipo.nombre_tipo}</p>
                                             {tipo.duracion_estimada_horas && <p className="text-[10px] text-slate-400 font-bold">{tipo.duracion_estimada_horas}h estimadas</p>}
                                         </div>
+                                        {isSelected && <CheckCircle2 className="h-5 w-5 text-blue-600 shrink-0" />}
                                     </button>
                                 );
                             })}
@@ -495,6 +552,127 @@ function PasoAlcance({
                     </div>
                 ))}
             </div>
+
+            {/* ✅ SECCIÓN DE SERVICIOS CORRECTIVOS ESPECÍFICOS (TRAZABILIDAD GRANULAR) */}
+            {esCorrectivoOEmergencia && (
+                <div className="rounded-2xl border-2 border-orange-200 bg-orange-50/30 p-5 space-y-4 animate-in fade-in slide-in-from-top-3 duration-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-orange-500 text-white rounded-lg">
+                                <Layers className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-sm text-slate-900">Servicios Correctivos Específicos</h4>
+                                <p className="text-xs text-slate-500">Seleccione las intervenciones técnicas exactas para la bitácora histórica.</p>
+                            </div>
+                        </div>
+                        <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300 self-start sm:self-auto text-[10px]">
+                            {data.serviciosCorrectivosSeleccionados?.length || 0} seleccionados
+                        </Badge>
+                    </div>
+
+                    {/* Filtros y buscador de correctivos */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Buscar: batería, radiador, sensor, bomba, motor..."
+                                value={busquedaCorrectivo}
+                                onChange={(e) => setBusquedaCorrectivo(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-xs outline-none focus:ring-2 focus:ring-orange-500"
+                            />
+                        </div>
+                        <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0">
+                            {['TODOS', 'GEN', 'BOM', 'MOT'].map((cat) => (
+                                <button
+                                    key={cat}
+                                    type="button"
+                                    onClick={() => setFiltroTipoEquipo(cat)}
+                                    className={cn(
+                                        'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                        filtroTipoEquipo === cat
+                                            ? 'bg-orange-600 text-white shadow-sm'
+                                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                    )}
+                                >
+                                    {cat === 'TODOS' ? 'Todos' : cat === 'GEN' ? 'Generador' : cat === 'BOM' ? 'Bomba' : 'Motor'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Listado de cards de correctivos */}
+                    {isLoadingServicios ? (
+                        <div className="flex justify-center py-6">
+                            <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+                        </div>
+                    ) : serviciosFiltrados.length === 0 ? (
+                        <div className="p-4 text-center bg-white rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">
+                            No se encontraron servicios que coincidan con la búsqueda.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1">
+                            {serviciosFiltrados.map((s) => {
+                                const isChecked = (data.serviciosCorrectivosSeleccionados || []).some(
+                                    (item) => item.id_servicio === s.id_servicio
+                                );
+                                return (
+                                    <button
+                                        key={s.id_servicio}
+                                        type="button"
+                                        onClick={() => toggleServicioCorrectivo(s)}
+                                        className={cn(
+                                            'p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 bg-white',
+                                            isChecked
+                                                ? 'border-orange-500 bg-orange-50/50 ring-2 ring-orange-400/20 shadow-sm'
+                                                : 'border-slate-200 hover:border-orange-300'
+                                        )}
+                                    >
+                                        <div
+                                            className={cn(
+                                                'w-4 h-4 rounded mt-0.5 flex items-center justify-center border transition-colors shrink-0',
+                                                isChecked
+                                                    ? 'bg-orange-600 border-orange-600 text-white'
+                                                    : 'border-slate-300 bg-white'
+                                            )}
+                                        >
+                                            {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-mono text-[9px] font-black text-slate-500 bg-slate-100 px-1 py-0.5 rounded">
+                                                    {s.codigo_servicio}
+                                                </span>
+                                                <span className="text-[9px] font-bold text-orange-700">
+                                                    {s.duracion_estimada_horas ? `${s.duracion_estimada_horas}h` : ''}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-bold text-slate-800 mt-1 line-clamp-2">
+                                                {s.nombre_servicio}
+                                            </p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Campo de Motivo o Razón de la Falla */}
+                    <div className="pt-3 border-t border-orange-200">
+                        <label className="text-xs font-bold text-slate-700 uppercase block mb-1.5">
+                            Motivo / Falla Reportada (Diagnóstico Inicial)
+                        </label>
+                        <textarea
+                            rows={2}
+                            placeholder="Ej. Batería no retiene carga, fuga de refrigerante en manguera superior de radiador..."
+                            value={data.razonFalla || ''}
+                            onChange={(e) => onChange({ razonFalla: e.target.value })}
+                            className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                        />
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t">
                 <div>
@@ -585,6 +763,24 @@ function ResumenOrden({ data }: { data: WizardData }) {
                     <p className="text-slate-400 text-[10px] uppercase font-bold">Servicio</p>
                     <p className="font-bold truncate">{data.tipoServicioSeleccionado?.nombre_tipo || 'N/A'}</p>
                 </div>
+                {data.serviciosCorrectivosSeleccionados && data.serviciosCorrectivosSeleccionados.length > 0 && (
+                    <div>
+                        <p className="text-orange-400 text-[10px] uppercase font-bold">Correctivos Específicos ({data.serviciosCorrectivosSeleccionados.length})</p>
+                        <div className="flex flex-col gap-1 mt-1">
+                            {data.serviciosCorrectivosSeleccionados.map((s) => (
+                                <span key={s.id_servicio} className="text-[10px] bg-orange-950/80 text-orange-300 border border-orange-800 rounded px-1.5 py-0.5 truncate">
+                                    • {s.nombre_servicio}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {data.razonFalla && (
+                    <div>
+                        <p className="text-amber-400 text-[10px] uppercase font-bold">Motivo de Falla</p>
+                        <p className="text-xs text-slate-300 line-clamp-2 italic">{data.razonFalla}</p>
+                    </div>
+                )}
                 <div>
                     <p className="text-slate-400 text-[10px] uppercase font-bold">Equipos ({data.equiposSeleccionados.length})</p>
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -625,6 +821,8 @@ export default function NuevaOrdenPage() {
                 equipoId: data.equiposSeleccionados[0]?.id_equipo, // Equipo principal (requerido)
                 equiposIds: data.equiposSeleccionados.map(e => e.id_equipo),
                 tipoServicioId: data.tipoServicioId!,
+                serviciosIds: data.serviciosCorrectivosSeleccionados?.map(s => s.id_servicio),
+                razonFalla: data.razonFalla,
                 sedeClienteId: data.sedeId,
                 prioridad: data.prioridad,
                 // ✅ FIX TIMEZONE: Enviar fecha como string YYYY-MM-DD sin conversión a Date

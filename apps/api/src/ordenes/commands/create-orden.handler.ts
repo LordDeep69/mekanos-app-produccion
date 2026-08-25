@@ -23,8 +23,10 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       equiposIds,
       clienteId,
       tipoServicioId,
+      serviciosIds,
       sedeClienteId,
       descripcion,
+      razonFalla,
       prioridad,
       fechaProgramada,
       tecnicoId,
@@ -53,6 +55,11 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       throw new Error(`Ya existe una orden con número ${numeroOrden.getValue()}`);
     }
 
+    // Descripción consolidada (si viene razon_falla, se anexa)
+    const descripcionFinal = razonFalla
+      ? (descripcion ? `${descripcion}\n[Motivo/Falla Reportada]: ${razonFalla}` : `[Motivo/Falla Reportada]: ${razonFalla}`)
+      : descripcion;
+
     // Crear entidad de dominio
     const orden = OrdenServicioEntity.create({
       numeroOrden: numeroOrden.getValue(),
@@ -60,7 +67,7 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       clienteId,
       sedeClienteId,
       tipoServicioId,
-      descripcion,
+      descripcion: descripcionFinal,
       prioridad,
       fechaProgramada,
     });
@@ -86,10 +93,10 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       creado_por: command.userId,
     };
 
-    // --- TRANSACCIÓN ENTERPRISE: Orden + Múltiples Equipos ---
+    // --- TRANSACCIÓN ENTERPRISE: Orden + Múltiples Equipos + Servicios Específicos ---
     // ✅ OPTIMIZADO 05-ENE-2026: Retornar orden con relaciones LITE directamente
     // Evita el findById pesado que causaba +10 segundos de latencia
-    const savedOrden = await (this.ordenRepository as any).saveWithEquiposOptimizado(ordenData, equiposIds);
+    const savedOrden = await (this.ordenRepository as any).saveWithEquiposOptimizado(ordenData, equiposIds, serviciosIds);
 
     return savedOrden;
   }

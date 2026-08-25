@@ -116,6 +116,16 @@ export const equiposService = {
   },
 
   /**
+   * ✅ TRAZABILIDAD 360° / HOJA DE VIDA: Obtener historial de intervenciones y servicios del equipo
+   */
+  async obtenerTrazabilidadEquipo(id: number): Promise<TrazabilidadEquipoResponse> {
+    const response = await apiClient.get<{ success: boolean; data: TrazabilidadEquipoResponse }>(
+      `/equipos/${id}/trazabilidad-servicios`
+    );
+    return response.data.data;
+  },
+
+  /**
    * ✅ 23-FEB-2026: Actualiza datos específicos del equipo (Motor, Generador, Bomba)
    */
   async actualizarDatosEspecificos(
@@ -297,5 +307,100 @@ export function useEliminarEquipoCompletamente() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
     },
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TIPOS Y HOOK DE TRAZABILIDAD / HOJA DE VIDA DEL EQUIPO
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface TrazabilidadEquipoResponse {
+  equipo: {
+    id_equipo: number;
+    codigo_equipo: string;
+    nombre_equipo?: string;
+    tipo: string;
+    horas_actuales?: number;
+    ubicacion_texto?: string;
+    cliente_nombre?: string;
+  };
+  total_intervenciones: number;
+  intervenciones: Array<{
+    id_orden_servicio: number;
+    numero_orden: string;
+    fecha_programada?: string;
+    fecha_inicio_real?: string;
+    fecha_fin_real?: string;
+    fecha_creacion?: string;
+    prioridad: string;
+    descripcion_inicial?: string;
+    diagnostico_tecnico?: string;
+    trabajo_realizado?: string;
+    estados_orden?: {
+      id_estado: number;
+      codigo_estado: string;
+      nombre_estado: string;
+      color_hex?: string;
+    };
+    tipos_servicio?: {
+      id_tipo_servicio: number;
+      codigo_tipo: string;
+      nombre_tipo: string;
+      categoria: string;
+      icono?: string;
+    };
+    empleados_ordenes_servicio_id_tecnico_asignadoToempleados?: {
+      id_empleado: number;
+      persona?: {
+        nombre_completo?: string;
+        primer_nombre?: string;
+        primer_apellido?: string;
+      };
+    };
+    detalle_servicios_orden?: Array<{
+      id_detalle_servicio: number;
+      cantidad: number;
+      estado_servicio: string;
+      precio_unitario: number;
+      catalogo_servicios: {
+        id_servicio: number;
+        codigo_servicio: string;
+        nombre_servicio: string;
+        categoria: string;
+        duracion_estimada_horas?: number;
+      };
+    }>;
+    mediciones_servicio?: Array<{
+      id_medicion: number;
+      valor_medido: number;
+      es_critico?: boolean;
+      fuera_de_rango?: boolean;
+      parametros_medicion?: {
+        nombre_parametro: string;
+        unidad_medida: string;
+      };
+    }>;
+    informes?: Array<{
+      id_informe: number;
+      numero_informe: string;
+      fecha_generacion: string;
+      documentos_generados?: Array<{
+        id_documento: number;
+        url_documento: string;
+        tipo_documento: string;
+      }>;
+    }>;
+  }>;
+}
+
+/**
+ * Hook para obtener la hoja de vida y trazabilidad de servicios del equipo
+ */
+export function useTrazabilidadEquipo(id: number, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['trazabilidad-equipo', id],
+    queryFn: () => equiposService.obtenerTrazabilidadEquipo(id),
+    staleTime: 2 * 60 * 1000,
+    enabled: options?.enabled ?? id > 0,
   });
 }

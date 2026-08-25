@@ -18,6 +18,9 @@ import '../../../core/storage/secure_storage.dart';
 import 'auth_models.dart';
 
 /// Resultado del intento de refresh
+/// - [ok]: refresh exitoso, hay token nuevo
+/// - [expired]: el backend rechazó el refresh (401/400/403) — sesión inválida
+/// - [offline]: sin red o servidor no disponible (5xx/429/timeout) — conservar sesión local
 enum _RefreshResult { ok, expired, offline }
 
 /// Provider para el servicio de autenticación
@@ -180,6 +183,12 @@ class AuthService {
   }
 
   /// Refresca el access token vía el endpoint de refresh
+  ///
+  /// Clasificación de errores:
+  /// - 401/400/403 → [expired]: el backend rechazó explícitamente el refresh
+  /// - 5xx/429/otros errores HTTP sin respuesta de red → [offline]:
+  ///   servidor apagado o no disponible (ej. Cloudflare 502/530/1033 detrás
+  ///   del túnel) — NO se debe invalidar la sesión local
   Future<_RefreshResult> _tryRefreshToken() async {
     try {
       final refreshToken = await _storage.getRefreshToken();
@@ -191,26 +200,83 @@ class AuthService {
         data: {'refresh_token': refreshToken},
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode == 200 || statusCode == 201) {
         final data = response.data as Map<String, dynamic>;
         await _storage.saveAccessToken(data['access_token'] as String);
         await _storage.saveRefreshToken(data['refresh_token'] as String);
         return _RefreshResult.ok;
       }
-      return _RefreshResult.expired;
+
+      // Rechazo explícito del backend → la sesión ya no es válida
+      if (statusCode == 401 || statusCode == 400 || statusCode == 403) {
+        debugPrint('⛔ Refresh rechazado por el backend (HTTP $statusCode)');
+        return _RefreshResult.expired;
+      }
+
+      // Cualquier otra respuesta HTTP (5xx, 429, 502/530/1033 de Cloudflare,
+      // etc.) significa que el servidor está caído o no disponible:
+      // conservar la sesión y trabajar con datos locales.
+      debugPrint(
+        '📡 Servidor no disponible (HTTP $statusCode) - conservando sesión local',
+      );
+      return _RefreshResult.offline;
     } on DioException catch (e) {
+      final response = e.response;
+      if (response != null) {
+        final statusCode = response.statusCode ?? 0;
+        if (statusCode == 401 || statusCode == 400 || statusCode == 403) {
+          return _RefreshResult.expired;
+        }
+        debugPrint(
+          '📡 Servidor no disponible (HTTP $statusCode) - conservando sesión local',
+        );
+        return _RefreshResult.offline;
+      }
+
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.receiveTimeout) {
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
         debugPrint('📡 Sin conexión durante refresh - usando datos locales');
         return _RefreshResult.offline;
       }
       debugPrint('⚠️ Error en refresh proactivo: $e');
-      return _RefreshResult.expired;
+      return _RefreshResult.offline;
     } catch (e) {
       debugPrint('⚠️ Error en refresh proactivo: $e');
-      return _RefreshResult.expired;
+      return _RefreshResult.offline;
     }
+  }
+
+  /// Reconstruye una sesión local (offline) desde los datos guardados.
+  ///
+  /// Permite que el técnico conserve la sesión aunque no haya access token
+  /// (p. ej. servidor apagado): si existe un refresh token y datos de usuario
+  /// guardados, se devuelve un [UserInfo] local para trabajar offline sin
+  /// volver a pedir credenciales.
+  Future<UserInfo?> _buildLocalUserFromStorage() async {
+    final refreshToken = await _storage.getRefreshToken();
+    if (refreshToken == null) return null;
+
+    final userId = await _storage.getUserId();
+    if (userId == null) return null;
+
+    final email = await _storage.getUserEmail();
+    final userName = await _storage.getUserName();
+    final idEmpleado = await _storage.getIdEmpleado();
+
+    debugPrint(
+      '📱 Sesión local recuperada (offline) - userId: $userId, idEmpleado: $idEmpleado',
+    );
+
+    return UserInfo(
+      id: userId,
+      email: email ?? '',
+      nombre: userName,
+      rol: '',
+      idEmpleado: idEmpleado,
+    );
   }
 
   /// Verifica si hay un token guardado y es válido.
@@ -218,7 +284,12 @@ class AuthService {
   Future<UserInfo?> checkAuthStatus() async {
     try {
       String? token = await _storage.getAccessToken();
-      if (token == null) return null;
+      if (token == null) {
+        // No hay access token: intentar conservar la sesión local offline
+        final localUser = await _buildLocalUserFromStorage();
+        if (localUser != null) return localUser;
+        return null;
+      }
 
       // Si el token expiró, intentar refresh proactivo
       final expiry = _getTokenExpiry(token);
@@ -230,7 +301,8 @@ class AuthService {
             if (token == null) return null;
             break;
           case _RefreshResult.offline:
-            // Sin internet — usar token actual para ver datos locales
+            // Sin internet o servidor caído — usar token actual (aunque esté
+            // expirado) para mostrar/guardar datos locales sin perder sesión
             debugPrint('📡 Sin conexión - mostrando datos locales');
             break;
           case _RefreshResult.expired:

@@ -16,6 +16,7 @@ import {
   deleteCliente,
   getCliente,
   getClientes,
+  getTrazabilidadCliente,
   updateCliente,
 } from '../api/clientes.service';
 
@@ -98,6 +99,29 @@ export function useDeleteCliente() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: clientesKeys.lists() });
     },
+  });
+}
+
+/**
+ * Hook para obtener la trazabilidad y bitácora histórica de servicios del cliente
+ */
+export function useTrazabilidadCliente(
+  id: number,
+  params?: {
+    idEquipo?: number;
+    categoria?: string;
+    idSede?: number;
+    fechaDesde?: string;
+    fechaHasta?: string;
+    search?: string;
+  },
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: ['trazabilidad-cliente', id, params],
+    queryFn: () => getTrazabilidadCliente(id, params),
+    staleTime: 2 * 60 * 1000,
+    enabled: options?.enabled ?? id > 0,
   });
 }
 

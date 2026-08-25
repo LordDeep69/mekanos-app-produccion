@@ -13,7 +13,7 @@ export class PrismaCatalogoServiciosRepository {
   // ✅ CRITICAL: Usar campos REALES de personas (primer_nombre, primer_apellido, nombre_completo)
   // Aprendizaje tabla 1: NO usar "nombre" ni "apellido" (no existen en schema)
   readonly INCLUDE_RELATIONS_DETAIL = {
-    tipo_servicio: {
+    tipos_servicio: {
       select: {
         id_tipo_servicio: true,
         codigo_tipo: true,
@@ -27,36 +27,10 @@ export class PrismaCatalogoServiciosRepository {
         nombre_tipo: true,
       },
     },
-    usuarios_catalogo_servicios_creado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        persona: {
-          select: {
-            id_persona: true,
-            primer_nombre: true,
-            primer_apellido: true,
-            nombre_completo: true,
-          },
-        },
-      },
-    },
-    usuarios_catalogo_servicios_modificado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        persona: {
-          select: {
-            id_persona: true,
-            primer_nombre: true,
-            primer_apellido: true,
-            nombre_completo: true,
-          },
-        },
-      },
-    },
   } as const;
 
   readonly INCLUDE_RELATIONS_LIST = {
-    tipo_servicio: {
+    tipos_servicio: {
       select: {
         id_tipo_servicio: true,
         codigo_tipo: true,
@@ -86,7 +60,7 @@ export class PrismaCatalogoServiciosRepository {
   }
 
   async findByCodigo(codigo: string): Promise<catalogo_servicios | null> {
-    return this.prisma.catalogo_servicios.findUnique({
+    return this.prisma.catalogo_servicios.findFirst({
       where: { codigo_servicio: codigo.toUpperCase().trim() },
     });
   }

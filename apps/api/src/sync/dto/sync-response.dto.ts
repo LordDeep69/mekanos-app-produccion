@@ -147,6 +147,26 @@ export class SyncActividadPlanDto {
   esObligatoria?: boolean;
 }
 
+export class SyncServicioEspecificoDto {
+  @ApiProperty()
+  idDetalleServicio: number;
+
+  @ApiProperty()
+  idServicio: number;
+
+  @ApiProperty()
+  codigoServicio: string;
+
+  @ApiProperty()
+  nombreServicio: string;
+
+  @ApiProperty()
+  categoria: string;
+
+  @ApiPropertyOptional()
+  duracionEstimadaHoras?: number;
+}
+
 /**
  * Equipo asignado a una orden multi-equipo
  * Para órdenes de Preventivo Tipo A con múltiples bombas/generadores
@@ -279,6 +299,9 @@ export class SyncOrdenDownloadDto {
 
   @ApiPropertyOptional({ type: [SyncActividadPlanDto] })
   actividadesPlan?: SyncActividadPlanDto[];
+
+  @ApiPropertyOptional({ type: [SyncServicioEspecificoDto], description: 'Servicios específicos correctivos/especializados vinculados a la orden' })
+  serviciosEspecificos?: SyncServicioEspecificoDto[];
 
   // ✅ FIX: Agregar URL del PDF para sincronización
   @ApiPropertyOptional({ description: 'URL del PDF generado (órdenes completadas)' })

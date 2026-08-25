@@ -1,11 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { PdfService } from '../pdf/pdf.service';
+import { DatosTrazabilidadClientePDF } from '../pdf/templates';
 import { CreateClientesDto } from './dto/create-clientes.dto';
 import { UpdateClientesDto } from './dto/update-clientes.dto';
 
 @Injectable()
 export class ClientesService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pdfService: PdfService,
+  ) { }
 
   async create(createDto: CreateClientesDto, userId: number) {
     // ✅ MULTI-SEDE: toda sede debe pasar por flujo especializado
@@ -669,5 +674,417 @@ export class ClientesService {
         cliente_activo: false,
       },
     });
+  }
+
+  /**
+   * ✅ TRAZABILIDAD 360°: Obtener historial cronológico de servicios del cliente
+   * Retorna todas las órdenes con sus servicios específicos, equipos, técnicos e informes.
+   */
+  async getTrazabilidadServicios(
+    clienteId: number,
+    filtros?: {
+      idEquipo?: number;
+      categoria?: string;
+      idSede?: number;
+      fechaDesde?: string;
+      fechaHasta?: string;
+      search?: string;
+    }
+  ) {
+    // 1. Verificar cliente
+    const cliente = await this.prisma.clientes.findUnique({
+      where: { id_cliente: clienteId },
+      include: {
+        persona: true,
+        sedes: { select: { id_cliente: true, nombre_sede: true } },
+      },
+    });
+
+    if (!cliente) {
+      throw new NotFoundException(`Cliente con ID ${clienteId} no encontrado`);
+    }
+
+    // Si es cliente principal y no se especifica sede, incluir IDs de sedes
+    const clienteIds = [clienteId];
+    if (cliente.es_cliente_principal && cliente.sedes?.length > 0) {
+      cliente.sedes.forEach((s) => clienteIds.push(s.id_cliente));
+    }
+
+    const where: any = {
+      id_cliente: filtros?.idSede ? filtros.idSede : { in: clienteIds },
+    };
+
+    if (filtros?.idEquipo) {
+      where.OR = [
+        { id_equipo: filtros.idEquipo },
+        { ordenes_equipos: { some: { id_equipo: filtros.idEquipo } } },
+      ];
+    }
+
+    if (filtros?.categoria) {
+      where.tipos_servicio = {
+        categoria: filtros.categoria as any,
+      };
+    }
+
+    if (filtros?.fechaDesde || filtros?.fechaHasta) {
+      where.fecha_programada = {};
+      if (filtros.fechaDesde) {
+        where.fecha_programada.gte = new Date(`${filtros.fechaDesde}T00:00:00`);
+      }
+      if (filtros.fechaHasta) {
+        where.fecha_programada.lte = new Date(`${filtros.fechaHasta}T23:59:59`);
+      }
+    }
+
+    if (filtros?.search) {
+      const s = filtros.search.trim();
+      where.OR = [
+        ...(where.OR || []),
+        { numero_orden: { contains: s, mode: 'insensitive' } },
+        { descripcion_inicial: { contains: s, mode: 'insensitive' } },
+        { trabajo_realizado: { contains: s, mode: 'insensitive' } },
+      ];
+    }
+
+    const ordenes = await this.prisma.ordenes_servicio.findMany({
+      where,
+      orderBy: [
+        { fecha_programada: 'desc' },
+        { id_orden_servicio: 'desc' },
+      ],
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        fecha_programada: true,
+        fecha_inicio_real: true,
+        fecha_fin_real: true,
+        fecha_creacion: true,
+        prioridad: true,
+        descripcion_inicial: true,
+        observaciones_tecnico: true,
+        observaciones_cierre: true,
+        trabajo_realizado: true,
+        clientes: {
+          select: {
+            id_cliente: true,
+            nombre_sede: true,
+            persona: {
+              select: {
+                nombre_comercial: true,
+                razon_social: true,
+                nombre_completo: true,
+              },
+            },
+          },
+        },
+        estados_orden: {
+          select: {
+            id_estado: true,
+            codigo_estado: true,
+            nombre_estado: true,
+            color_hex: true,
+          },
+        },
+        tipos_servicio: {
+          select: {
+            id_tipo_servicio: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+            categoria: true,
+            icono: true,
+          },
+        },
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+          select: {
+            id_empleado: true,
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                segundo_nombre: true,
+                primer_apellido: true,
+                segundo_apellido: true,
+                razon_social: true,
+              },
+            },
+          },
+        },
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+            tipos_equipo: {
+              select: {
+                id_tipo_equipo: true,
+                codigo_tipo: true,
+                nombre_tipo: true,
+              },
+            },
+            horas_actuales: true,
+            ubicacion_texto: true,
+          },
+        },
+        ordenes_equipos: {
+          select: {
+            id_equipo: true,
+            orden_secuencia: true,
+            equipos: {
+              select: {
+                id_equipo: true,
+                codigo_equipo: true,
+                nombre_equipo: true,
+                tipos_equipo: {
+                  select: {
+                    id_tipo_equipo: true,
+                    codigo_tipo: true,
+                    nombre_tipo: true,
+                  },
+                },
+                horas_actuales: true,
+                ubicacion_texto: true,
+              },
+            },
+          },
+        },
+        detalle_servicios_orden: {
+          select: {
+            id_detalle_servicio: true,
+            cantidad: true,
+            estado_servicio: true,
+            precio_unitario: true,
+            catalogo_servicios: {
+              select: {
+                id_servicio: true,
+                codigo_servicio: true,
+                nombre_servicio: true,
+                categoria: true,
+                duracion_estimada_horas: true,
+              },
+            },
+          },
+        },
+        informes: {
+          orderBy: { fecha_generacion: 'desc' },
+          take: 1,
+          select: {
+            id_informe: true,
+            numero_informe: true,
+            fecha_generacion: true,
+            documentos_generados: {
+              select: {
+                id_documento: true,
+                ruta_archivo: true,
+                tipo_documento: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      cliente: {
+        id_cliente: cliente.id_cliente,
+        nombre: cliente.persona?.nombre_comercial || cliente.persona?.razon_social || cliente.persona?.nombre_completo,
+        es_principal: cliente.es_cliente_principal,
+      },
+      total_ordenes: ordenes.length,
+      ordenes,
+    };
+  }
+
+  /**
+   * ✅ Genera el buffer del PDF Ejecutivo de Trazabilidad aplicando filtros de la tabla
+   */
+  async generarPdfTrazabilidad(
+    clienteId: number,
+    filtros?: {
+      idEquipo?: number;
+      categoria?: string;
+      idSede?: number;
+      fechaDesde?: string;
+      fechaHasta?: string;
+      search?: string;
+    },
+  ) {
+    // 1. Obtener la trazabilidad estructurada
+    const { cliente, ordenes } = await this.getTrazabilidadServicios(clienteId, filtros);
+
+    const clienteDb = await this.prisma.clientes.findUnique({
+      where: { id_cliente: clienteId },
+      include: { persona: true },
+    });
+
+    // 2. Extraer equipos auditados únicos
+    const equiposMap = new Map<number, string>();
+    ordenes.forEach((o: any) => {
+      if (o.equipos) {
+        equiposMap.set(o.equipos.id_equipo, o.equipos.nombre_equipo);
+      }
+      if (o.ordenes_equipos) {
+        o.ordenes_equipos.forEach((oe: any) => {
+          if (oe.equipos) {
+            equiposMap.set(oe.equipos.id_equipo, oe.equipos.nombre_equipo);
+          }
+        });
+      }
+    });
+
+    // 3. Obtener nombres de filtros
+    let equipoFiltroNombre: string | undefined;
+    if (filtros?.idEquipo && equiposMap.has(filtros.idEquipo)) {
+      equipoFiltroNombre = equiposMap.get(filtros.idEquipo);
+    } else if (filtros?.idEquipo) {
+      const eq = await this.prisma.equipos.findUnique({
+        where: { id_equipo: filtros.idEquipo },
+        select: { nombre_equipo: true },
+      });
+      equipoFiltroNombre = eq?.nombre_equipo;
+    }
+
+    let sedeFiltroNombre: string | undefined;
+    if (filtros?.idSede) {
+      const s = await this.prisma.clientes.findUnique({
+        where: { id_cliente: filtros.idSede },
+        select: { nombre_sede: true },
+      });
+      sedeFiltroNombre = s?.nombre_sede || undefined;
+    }
+
+    // 4. Formatear KPIs
+    const totalPreventivos = ordenes.filter((o: any) => o.tipos_servicio?.categoria === 'PREVENTIVO').length;
+    const totalCorrectivos = ordenes.filter((o: any) => o.tipos_servicio?.categoria === 'CORRECTIVO').length;
+    const totalEmergencias = ordenes.filter((o: any) => o.tipos_servicio?.categoria === 'EMERGENCIA').length;
+
+    const fechaGen = new Intl.DateTimeFormat('es-CO', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date());
+
+    // Helper para limpiar HTML a texto plano
+    const cleanHtml = (html?: string | null): string => {
+      if (!html) return '';
+      return html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<li>/gi, ' • ')
+        .replace(/<\/?(h[1-6]|div|blockquote)[^>]*>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\n\s*\n/g, '\n')
+        .trim();
+    };
+
+    // Helper para formatear técnico
+    const formatTecnico = (tecnicoEmp?: any): string => {
+      if (!tecnicoEmp?.persona) return 'Sin asignar';
+      const p = tecnicoEmp.persona;
+      if (p.nombre_completo && p.nombre_completo.trim()) {
+        return p.nombre_completo.trim();
+      }
+      const parts = [p.primer_nombre, p.segundo_nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean);
+      if (parts.length > 0) {
+        return parts.join(' ').replace(/\s+/g, ' ').trim();
+      }
+      return p.razon_social || 'Especialista Mekanos';
+    };
+
+    // 5. Mapear órdenes
+    const ordenesMapeadas = ordenes.map((o: any) => {
+      const fechaOrd = o.fecha_programada || o.fecha_creacion;
+      const fechaFormateada = fechaOrd
+        ? new Intl.DateTimeFormat('es-CO', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(fechaOrd))
+        : 'N/A';
+
+      // Lista de equipos de la orden
+      const eqList: any[] = [];
+      if (o.equipos) {
+        eqList.push({
+          nombre: o.equipos.nombre_equipo,
+          codigo: o.equipos.codigo_equipo,
+          tipo: o.equipos.tipos_equipo?.nombre_tipo,
+          horas: o.equipos.horas_actuales,
+        });
+      }
+      if (o.ordenes_equipos && o.ordenes_equipos.length > 0) {
+        o.ordenes_equipos.forEach((oe: any) => {
+          if (oe.equipos && !eqList.some((e) => e.nombre === oe.equipos.nombre_equipo)) {
+            eqList.push({
+              nombre: oe.equipos.nombre_equipo,
+              codigo: oe.equipos.codigo_equipo,
+              tipo: oe.equipos.tipos_equipo?.nombre_tipo,
+              horas: oe.equipos.horas_actuales,
+            });
+          }
+        });
+      }
+
+      // Servicios específicos
+      const serviciosEsp = (o.detalle_servicios_orden || []).map((det: any) => ({
+        nombre: det.catalogo_servicios?.nombre_servicio || 'Servicio Específico',
+        cantidad: Number(det.cantidad) || 1,
+      }));
+
+      return {
+        id_orden_servicio: o.id_orden_servicio,
+        numero_orden: o.numero_orden,
+        fecha: fechaFormateada,
+        estado: o.estados_orden?.nombre_estado || 'REGISTRADA',
+        color_estado: o.estados_orden?.color_hex,
+        tipoServicio: o.tipos_servicio?.nombre_tipo || 'Mantenimiento',
+        categoria: o.tipos_servicio?.categoria || 'SERVICIO',
+        equipos: eqList,
+        serviciosEspecificos: serviciosEsp,
+        diagnosticoTrabajo: {
+          trabajo: cleanHtml(o.trabajo_realizado),
+          falla: cleanHtml(o.descripcion_inicial),
+          cierre: cleanHtml(o.observaciones_cierre || o.observaciones_tecnico),
+        },
+        tecnico: formatTecnico(o.empleados_ordenes_servicio_id_tecnico_asignadoToempleados),
+      };
+    });
+
+    const payload: DatosTrazabilidadClientePDF = {
+      cliente: {
+        nombre: clienteDb?.persona?.razon_social || clienteDb?.persona?.nombre_comercial || clienteDb?.persona?.nombre_completo || 'Cliente',
+        nit: clienteDb?.persona?.numero_identificacion || undefined,
+        direccion: clienteDb?.persona?.direccion_principal || undefined,
+        telefono: clienteDb?.persona?.telefono_principal || clienteDb?.persona?.celular || undefined,
+        email: clienteDb?.persona?.email_principal || undefined,
+        ciudad: clienteDb?.persona?.ciudad || undefined,
+      },
+      periodo: {
+        desde: filtros?.fechaDesde,
+        hasta: filtros?.fechaHasta,
+        fechaGeneracion: fechaGen,
+      },
+      filtrosAplicados: {
+        equipo: equipoFiltroNombre,
+        categoria: filtros?.categoria,
+        sede: sedeFiltroNombre,
+        search: filtros?.search,
+      },
+      resumenKpis: {
+        totalOrdenes: ordenes.length,
+        totalPreventivos,
+        totalCorrectivos,
+        totalEmergencias,
+        totalEquiposAuditados: equiposMap.size,
+      },
+      ordenes: ordenesMapeadas,
+    };
+
+    return this.pdfService.generarPDFTrazabilidadCliente(payload);
   }
 }

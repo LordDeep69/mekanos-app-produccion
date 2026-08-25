@@ -165,6 +165,8 @@ export interface CreateOrdenDto {
     // MULTI-EQUIPOS: equipoId para compatibilidad, equiposIds para múltiples
     equipoId: number;           // Equipo principal (legacy/compatibilidad)
     equiposIds?: number[];      // Array de IDs de equipos (MULTI-EQUIPOS)
+    serviciosIds?: number[];    // Array de IDs de catalogo_servicios (Correctivos específicos)
+    razonFalla?: string;        // Motivo o falla reportada
     sedeClienteId?: number;
     descripcion?: string;
     prioridad?: 'BAJA' | 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';

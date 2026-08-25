@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useCambiarEstadoEquipo, useEquipo, useRegistrarLecturaHorometro } from '@/features/equipos';
+import { HojaVidaEquipo, useCambiarEstadoEquipo, useEquipo, useRegistrarLecturaHorometro } from '@/features/equipos';
 import { cn, formatDateSafe } from '@/lib/utils';
 import {
   AlertCircle,
@@ -865,6 +865,9 @@ export default function EquipoDetallePage() {
         {equipo.tipo === 'GENERADOR' && <FichaTecnicaGenerador datos={datosEspecificos} motor={motor} />}
         {equipo.tipo === 'BOMBA' && <FichaTecnicaBomba datos={datosEspecificos} motor={motor} />}
       </div>
+
+      {/* Hoja de Vida y Trazabilidad de Mantenimientos */}
+      <HojaVidaEquipo equipoId={id} />
 
       {/* Historial de Horómetro */}
       {equipo.lecturas_horometro && equipo.lecturas_horometro.length > 0 && (

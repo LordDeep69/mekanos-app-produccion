@@ -30,7 +30,7 @@ export const MEKANOS_COLORS = {
  * No depende de URLs externas - garantiza renderizado perfecto
  */
 
-const getLogoBase64 = (): string => {
+export const getLogoBase64 = (): string => {
   try {
     // En producción compilada con webpack, todo está en dist/main.js
     // Los assets se copian a dist/pdf/assets/
@@ -588,6 +588,38 @@ export const baseStyles = `
   .observacion-actividad:empty {
     display: none;
   }
+
+  /* ✅ FIX 20-AGO-2026: Soporte HTML enriquecido (TipTap) en observaciones
+     de actividad. El admin ahora permite editor rico en cualquier actividad
+     narrativa (no solo correctivos). Estos estilos evitan que el HTML
+     deforme las filas del checklist (margins por defecto de <p>). */
+  .observacion-actividad p {
+    margin: 0;
+    line-height: 1.3;
+  }
+  .observacion-actividad ul,
+  .observacion-actividad ol {
+    margin: 2px 0;
+    padding-left: 14px;
+  }
+  .observacion-actividad li {
+    margin: 0;
+    line-height: 1.3;
+  }
+  .observacion-actividad strong { font-weight: bold; }
+  .observacion-actividad em { font-style: italic; }
+  .observacion-actividad u { text-decoration: underline; }
+  .observacion-actividad h2,
+  .observacion-actividad h3 {
+    font-size: 9px;
+    font-weight: bold;
+    margin: 2px 0;
+  }
+  .observacion-actividad hr {
+    border: none;
+    border-top: 1px solid ${MEKANOS_COLORS.border};
+    margin: 3px 0;
+  }
   
   .alerta-OK { color: ${MEKANOS_COLORS.success}; }
   .alerta-ADVERTENCIA { color: ${MEKANOS_COLORS.warning}; }
@@ -1024,6 +1056,30 @@ export const baseStyles = `
   }
   .obs-multiequipo .obs-eq-line {
     margin-bottom: 1px;
+  }
+
+  /* ✅ FIX 20-AGO-2026: Soporte HTML enriquecido (TipTap) en observaciones
+     multi-equipo — mismos estilos que las filas de checklist por actividad */
+  .obs-multiequipo p { margin: 0; line-height: 1.3; }
+  .obs-multiequipo ul,
+  .obs-multiequipo ol {
+    margin: 2px 0;
+    padding-left: 14px;
+  }
+  .obs-multiequipo li { margin: 0; line-height: 1.3; }
+  .obs-multiequipo strong { font-weight: bold; }
+  .obs-multiequipo em { font-style: italic; }
+  .obs-multiequipo u { text-decoration: underline; }
+  .obs-multiequipo h2,
+  .obs-multiequipo h3 {
+    font-size: 8px;
+    font-weight: bold;
+    margin: 2px 0;
+  }
+  .obs-multiequipo hr {
+    border: none;
+    border-top: 1px solid ${MEKANOS_COLORS.border};
+    margin: 3px 0;
   }
 
   .mediciones-multiequipo {

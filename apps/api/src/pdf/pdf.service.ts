@@ -23,11 +23,13 @@ import {
   DatosCorrectivoOrdenPDF,
   DatosCotizacionPDF,
   DatosOrdenPDF,
+  DatosTrazabilidadClientePDF,
   generarCorrectivoOrdenHTML,
   generarCotizacionHTML,
   generarTipoABombaHTML,
   generarTipoAGeneradorHTML,
   generarTipoBGeneradorHTML,
+  generarTrazabilidadClienteHTML,
 } from './templates';
 import { DatosEstructuradosCorrectivoPorEquipo } from './templates/tipo-correctivo.template';
 
@@ -1155,6 +1157,74 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     };
 
     return this.generarPDFCotizacion(datosPrueba);
+  }
+
+  /**
+   * Genera el PDF Ejecutivo de Trazabilidad de Servicios por Cliente
+   */
+  async generarPDFTrazabilidadCliente(datos: DatosTrazabilidadClientePDF): Promise<PDFResult> {
+    const startTime = Date.now();
+    try {
+      this.logger.log(`📄 Generando Informe Ejecutivo de Trazabilidad para: ${datos.cliente.nombre}`);
+
+      await this.initBrowser();
+      const html = generarTrazabilidadClienteHTML(datos);
+      const filename = this.generarFilenameTrazabilidad(datos.cliente.nombre);
+
+      const page = await this.browser!.newPage();
+
+      try {
+        await page.setExtraHTTPHeaders({
+          'Content-Type': 'text/html; charset=utf-8',
+          'Accept-Charset': 'utf-8',
+        });
+
+        await page.setContent(html, {
+          waitUntil: ['networkidle0', 'load'],
+          timeout: 90000,
+        });
+
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: {
+            top: '0',
+            right: '0',
+            bottom: '0',
+            left: '0',
+          },
+          preferCSSPageSize: true,
+          timeout: 90000,
+        });
+
+        const elapsed = Date.now() - startTime;
+        const finalSizeKB = (pdfBuffer.length / 1024).toFixed(2);
+        this.logger.log(`✅ PDF Trazabilidad listo en ${elapsed}ms: ${filename} (${finalSizeKB} KB)`);
+
+        return {
+          buffer: Buffer.from(pdfBuffer),
+          filename,
+          size: pdfBuffer.length,
+          tipoInforme: 'TRAZABILIDAD_CLIENTE' as any,
+        };
+      } finally {
+        await page.close();
+        if (this.browser) {
+          await this.browser.close();
+          this.browser = null;
+        }
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      this.logger.error(`❌ Error generando PDF de trazabilidad: ${err.message}`, err.stack);
+      throw new InternalServerErrorException(`Error al generar PDF de trazabilidad: ${err.message}`);
+    }
+  }
+
+  private generarFilenameTrazabilidad(clienteNombre: string): string {
+    const sanitize = (clienteNombre || 'CLIENTE').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase().substring(0, 30);
+    const fecha = new Date().toISOString().split('T')[0];
+    return `INFORME_EJECUTIVO_TRAZABILIDAD_${sanitize}_${fecha}.pdf`;
   }
 }
 

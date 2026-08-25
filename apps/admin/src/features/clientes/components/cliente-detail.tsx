@@ -31,6 +31,7 @@ import {
   Clock,
   CreditCard,
   Globe,
+  History,
   Mail,
   MapPin,
   Pencil,
@@ -42,6 +43,7 @@ import { useRouter } from 'next/navigation';
 import { useCliente } from '../hooks/use-clientes';
 import { BitacoraTab } from './bitacora-tab';
 import { EquiposClienteTable } from './equipos-cliente-table';
+import { TrazabilidadServiciosCliente } from './trazabilidad-servicios-cliente';
 
 interface ClienteDetailProps {
   clienteId: number;
@@ -168,14 +170,18 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
         </Button>
       </div>
 
-      {/* Tabs: General + Bitácora (solo principal) */}
+      {/* Tabs: General + Historial de Servicios + Bitácora (solo principal) */}
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="trazabilidad" className="flex items-center gap-1.5">
+            <History className="h-3.5 w-3.5" />
+            Historial de Servicios
+          </TabsTrigger>
           {esPrincipal && (
             <TabsTrigger value="bitacora" className="flex items-center gap-1.5">
               <BookOpen className="h-3.5 w-3.5" />
-              Bitácora
+              Bitácora Mensual
             </TabsTrigger>
           )}
         </TabsList>
@@ -452,6 +458,13 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             {/* Tabla de Equipos del Cliente */}
             <EquiposClienteTable clienteId={clienteId} />
           </div>
+        </TabsContent>
+
+        <TabsContent value="trazabilidad" className="mt-4">
+          <TrazabilidadServiciosCliente
+            clienteId={clienteId}
+            clienteNombre={nombreCliente || 'Cliente'}
+          />
         </TabsContent>
 
         {esPrincipal && (

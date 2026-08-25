@@ -118,12 +118,14 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       );
 
       // Calcular estadísticas de actividades
+      // ✅ FIX CONTEO: Contar con `completada` (mismo criterio que el
+      // recálculo en memoria y que el resumen de finalización)
       _total = 0;
       _completadas = 0;
       for (final actividades in _actividadesPorSistema.values) {
         for (final act in actividades) {
           _total++;
-          if (act.simbologia != null) {
+          if (act.completada) {
             _completadas++;
           }
         }
@@ -205,8 +207,13 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         for (int i = 0; i < actividades.length; i++) {
           if (actividades[i].idLocal == idActividadLocal) {
             // Crear copia con nueva simbología
+            // ✅ FIX CONTEO: También actualizar `completada` en memoria.
+            // Sin esto, al marcar una actividad especial (NIVEL COMBUSTIBLE,
+            // etc.) el contador global se recalcula con `completada` y las
+            // actividades marcadas con chips B/M/C/NA quedaban en 0.
             actividades[i] = actividades[i].copyWith(
               simbologia: Value(simbologia),
+              completada: true,
             );
             break;
           }
@@ -632,8 +639,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     List<ActividadesEjecutada> actividades,
   ) {
     // Contar completadas en este sistema
+    // ✅ FIX CONTEO: Mismo criterio que el contador global (`completada`)
     final completadasSistema = actividades
-        .where((a) => a.simbologia != null)
+        .where((a) => a.completada)
         .length;
     final esTodoCompletado = completadasSistema == actividades.length;
 

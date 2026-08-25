@@ -17,4 +17,7 @@ export { generarTipoBGeneradorHTML } from './tipo-b-generador.template';
 export {
   DatosCorrectivoOrdenPDF, DatosEstructuradosCorrectivoPorEquipo, EvidenciaCorrectivoPDF, MedicionCorrectivoPDF, generarCorrectivoOrdenHTML
 } from './tipo-correctivo.template';
+export {
+  DatosTrazabilidadClientePDF, generarTrazabilidadClienteHTML
+} from './trazabilidad-cliente.template';
 
