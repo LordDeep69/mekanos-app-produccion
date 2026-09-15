@@ -1053,15 +1053,30 @@ export class OrdenesController {
     @Param('id', ParseIntPipe) id: number,
     @Param('tipo') tipo: string,
     @CurrentUser('id') userId: number,
-    @Body() body: { firma_base64: string; nombre_firmante?: string; cargo_firmante?: string },
+    @Body() body: {
+      firma_base64?: string;
+      nombre_firmante?: string;
+      cargo_firmante?: string;
+    },
   ) {
     const tipoUpper = tipo.toUpperCase();
     if (!['TECNICO', 'CLIENTE'].includes(tipoUpper)) {
       throw new BadRequestException('Tipo de firma inválido. Use TECNICO o CLIENTE.');
     }
 
-    if (!body.firma_base64) {
-      throw new BadRequestException('firma_base64 es requerido.');
+    // ✅ FIX 20-AGO-2026: Edición PARCIAL independiente.
+    // - Se puede guardar solo la IMAGEN (firma_base64), o
+    // - solo los DATOS del firmante (nombre/cargo), o
+    // - ambos a la vez (flujo clásico).
+    const tieneImagen = !!body.firma_base64;
+    const tieneDatosCliente =
+      tipoUpper === 'CLIENTE' &&
+      (body.nombre_firmante !== undefined || body.cargo_firmante !== undefined);
+
+    if (!tieneImagen && !tieneDatosCliente) {
+      throw new BadRequestException(
+        'Debe enviar firma_base64 (imagen) o datos del firmante (nombre/cargo).',
+      );
     }
 
     // 1. Obtener la orden y sus FKs de firma actuales
@@ -1075,83 +1090,90 @@ export class OrdenesController {
     }
     const orden = ordenData[0];
 
-    // 2. Determinar id_persona según tipo de firma
-    let idPersona: number;
-    if (tipoUpper === 'TECNICO') {
-      // Obtener id_persona del técnico asignado
-      if (!orden.id_tecnico_asignado) {
-        throw new BadRequestException('La orden no tiene técnico asignado.');
-      }
-      const empleado = await this.prisma.empleados.findUnique({
-        where: { id_empleado: orden.id_tecnico_asignado },
-        select: { id_persona: true },
-      });
-      if (!empleado) throw new BadRequestException('Técnico no encontrado.');
-      idPersona = empleado.id_persona;
-    } else {
-      // CLIENTE: buscar persona del cliente
-      const cliente = await this.prisma.clientes.findUnique({
-        where: { id_cliente: orden.id_cliente },
-        select: { id_persona: true },
-      });
-      if (!cliente) throw new BadRequestException('Cliente no encontrado.');
-      idPersona = cliente.id_persona;
-    }
-
-    // 3. Generar hash de la firma
-    const { createHash } = require('crypto');
-    const hashFirma = createHash('sha256').update(body.firma_base64).digest('hex').substring(0, 64);
-
-    // 4. Verificar si ya existe una firma vinculada a la orden para este tipo
+    let firmaId: number | null = null;
     const fkField = tipoUpper === 'TECNICO' ? 'id_firma_tecnico' : 'id_firma_cliente';
     const existingFirmaId = orden[fkField];
 
-    let firmaId: number;
-
-    if (existingFirmaId) {
-      // Actualizar la firma existente
-      await this.prisma.firmas_digitales.update({
-        where: { id_firma_digital: existingFirmaId },
-        data: {
-          firma_base64: body.firma_base64,
-          hash_firma: hashFirma,
-          fecha_captura: new Date(),
-        },
-      });
-      firmaId = existingFirmaId;
-      console.log(`[FIRMAS] ✅ Firma ${tipoUpper} actualizada (id=${firmaId}) para orden ${id}`);
-    } else {
-      // Crear nueva firma
-      const nuevaFirma = await this.prisma.firmas_digitales.create({
-        data: {
-          id_persona: idPersona,
-          tipo_firma: tipoUpper as any,
-          firma_base64: body.firma_base64,
-          formato_firma: 'PNG',
-          hash_firma: hashFirma,
-          es_firma_principal: false,
-          activa: true,
-          registrada_por: userId,
-          fecha_captura: new Date(),
-          fecha_registro: new Date(),
-        },
-      });
-      firmaId = nuevaFirma.id_firma_digital;
-
-      // Vincular la firma a la orden
+    // 2. Si viene imagen → crear/actualizar la firma digital
+    if (tieneImagen) {
+      // 2.1 Determinar id_persona según tipo de firma
+      let idPersona: number;
       if (tipoUpper === 'TECNICO') {
-        await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_tecnico = ${firmaId} WHERE id_orden_servicio = ${id}`;
+        if (!orden.id_tecnico_asignado) {
+          throw new BadRequestException('La orden no tiene técnico asignado.');
+        }
+        const empleado = await this.prisma.empleados.findUnique({
+          where: { id_empleado: orden.id_tecnico_asignado },
+          select: { id_persona: true },
+        });
+        if (!empleado) throw new BadRequestException('Técnico no encontrado.');
+        idPersona = empleado.id_persona;
       } else {
-        await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_cliente = ${firmaId} WHERE id_orden_servicio = ${id}`;
+        const cliente = await this.prisma.clientes.findUnique({
+          where: { id_cliente: orden.id_cliente },
+          select: { id_persona: true },
+        });
+        if (!cliente) throw new BadRequestException('Cliente no encontrado.');
+        idPersona = cliente.id_persona;
       }
-      console.log(`[FIRMAS] ✅ Nueva firma ${tipoUpper} creada (id=${firmaId}) y vinculada a orden ${id}`);
+
+      // 2.2 Generar hash de la firma y limpiar prefijo data-url si viene
+      const { createHash } = require('crypto');
+      let base64Data = body.firma_base64!;
+      if (base64Data.includes(',')) {
+        base64Data = base64Data.split(',')[1];
+      }
+      const hashFirma = createHash('sha256').update(base64Data).digest('hex').substring(0, 64);
+
+      if (existingFirmaId) {
+        // Actualizar la firma existente
+        await this.prisma.firmas_digitales.update({
+          where: { id_firma_digital: existingFirmaId },
+          data: {
+            firma_base64: base64Data,
+            hash_firma: hashFirma,
+            fecha_captura: new Date(),
+          },
+        });
+        firmaId = existingFirmaId;
+        console.log(`[FIRMAS] ✅ Firma ${tipoUpper} actualizada (id=${firmaId}) para orden ${id}`);
+      } else {
+        // Crear nueva firma
+        const nuevaFirma = await this.prisma.firmas_digitales.create({
+          data: {
+            id_persona: idPersona,
+            tipo_firma: tipoUpper as any,
+            firma_base64: base64Data,
+            formato_firma: 'PNG',
+            hash_firma: hashFirma,
+            es_firma_principal: false,
+            activa: true,
+            registrada_por: userId,
+            fecha_captura: new Date(),
+            fecha_registro: new Date(),
+          },
+        });
+        firmaId = nuevaFirma.id_firma_digital;
+
+        // Vincular la firma a la orden
+        if (tipoUpper === 'TECNICO') {
+          await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_tecnico = ${firmaId} WHERE id_orden_servicio = ${id}`;
+        } else {
+          await this.prisma.$executeRaw`UPDATE ordenes_servicio SET id_firma_cliente = ${firmaId} WHERE id_orden_servicio = ${id}`;
+        }
+        console.log(`[FIRMAS] ✅ Nueva firma ${tipoUpper} creada (id=${firmaId}) y vinculada a orden ${id}`);
+      }
     }
 
-    // 5. Actualizar nombre/cargo en la orden si es firma de cliente
+    // 3. Actualizar nombre/cargo del firmante SIEMPRE que vengan (firma de cliente)
     if (tipoUpper === 'CLIENTE') {
       const updateData: any = {};
-      if (body.nombre_firmante) updateData.nombre_quien_recibe = body.nombre_firmante;
-      if (body.cargo_firmante) updateData.cargo_quien_recibe = body.cargo_firmante;
+      if (body.nombre_firmante !== undefined) {
+        updateData.nombre_quien_recibe = body.nombre_firmante ? body.nombre_firmante.trim() : null;
+      }
+      if (body.cargo_firmante !== undefined) {
+        updateData.cargo_quien_recibe = body.cargo_firmante ? body.cargo_firmante.trim() : null;
+      }
       if (Object.keys(updateData).length > 0) {
         await this.prisma.ordenes_servicio.update({
           where: { id_orden_servicio: id },
@@ -1160,10 +1182,150 @@ export class OrdenesController {
       }
     }
 
+    const message = tieneImagen
+      ? `Firma de ${tipoUpper} ${existingFirmaId ? 'actualizada' : 'creada'} exitosamente`
+      : 'Datos del firmante actualizados exitosamente';
+
     return {
       success: true,
-      message: `Firma de ${tipoUpper} ${existingFirmaId ? 'actualizada' : 'creada'} exitosamente`,
+      message,
       data: { id_firma: firmaId, tipo: tipoUpper },
+    };
+  }
+
+  /**
+   * GET /api/ordenes/:id/cuenta-remitente
+   *
+   * ✅ FIX 20-AGO-2026: Resuelve DESDE QUÉ CUENTA de correo se enviará el
+   * informe de esta orden, usando EXACTAMENTE la misma lógica que aplica
+   * EmailService.sendEmailFromAccount() al enviar:
+   *  1) Cuenta asignada al cliente (id_cuenta_email_remitente) si está activa
+   *     y con credenciales Gmail API completas
+   *  2) Si no → cuenta principal activa (o primera cuenta activa)
+   *  3) Si no → EMAIL_FROM del entorno
+   * Así el Portal Admin muestra el remitente REAL, nunca uno aproximado.
+   */
+  @Get(':id/cuenta-remitente')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Obtener la cuenta de correo remitente que se usará para esta orden' })
+  @ApiParam({ name: 'id', type: Number })
+  async getCuentaRemitente(@Param('id', ParseIntPipe) id: number) {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      include: {
+        clientes: {
+          include: {
+            cliente_principal: {
+              select: { id_cuenta_email_remitente: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden ${id} no encontrada`);
+    }
+
+    const cliente = orden.clientes as any;
+    const idCuentaCliente: number | null =
+      cliente?.id_cuenta_email_remitente ??
+      cliente?.cliente_principal?.id_cuenta_email_remitente ??
+      null;
+
+    // 1) Cuenta específica del cliente
+    if (idCuentaCliente) {
+      const cuenta = await this.prisma.cuentas_email.findUnique({
+        where: { id_cuenta_email: idCuentaCliente },
+        select: {
+          id_cuenta_email: true,
+          nombre: true,
+          email: true,
+          activa: true,
+          gmail_client_id: true,
+          gmail_client_secret: true,
+          gmail_refresh_token: true,
+        },
+      });
+
+      const operativa =
+        !!cuenta &&
+        cuenta.activa === true &&
+        !!cuenta.gmail_client_id &&
+        !!cuenta.gmail_client_secret &&
+        !!cuenta.gmail_refresh_token;
+
+      if (operativa && cuenta) {
+        return {
+          email: cuenta.email,
+          nombre: cuenta.nombre || 'MEKANOS S.A.S',
+          origen: 'CLIENTE',
+          idCuentaEmail: cuenta.id_cuenta_email,
+          advertencia: undefined as string | undefined,
+        };
+      }
+
+      // Cuenta asignada pero NO operativa → el envío caerá a la cuenta por defecto
+      const advertencia = !cuenta
+        ? `La cuenta asignada al cliente (ID ${idCuentaCliente}) no existe. Se usará la cuenta por defecto.`
+        : cuenta.activa === false
+          ? `La cuenta asignada al cliente (${cuenta.email}) está INACTIVA. Se usará la cuenta por defecto.`
+          : `La cuenta asignada al cliente (${cuenta.email}) no tiene credenciales Gmail API completas. Se usará la cuenta por defecto.`;
+
+      const defecto = await this.resolverCuentaPorDefecto();
+      return { ...defecto, advertencia };
+    }
+
+    // 2) Cuenta por defecto
+    return this.resolverCuentaPorDefecto();
+  }
+
+  /**
+   * Cuenta usada cuando el cliente no tiene una asignada (o no está operativa):
+   * cuenta principal activa → primera cuenta activa → EMAIL_FROM del entorno
+   */
+  private async resolverCuentaPorDefecto(): Promise<{
+    email: string;
+    nombre: string;
+    origen: 'CUENTA_PRINCIPAL' | 'DEFAULT_ENV';
+    idCuentaEmail?: number;
+  }> {
+    const principal = await this.prisma.cuentas_email.findFirst({
+      where: { es_cuenta_principal: true, activa: true },
+      select: { id_cuenta_email: true, nombre: true, email: true },
+    });
+
+    if (principal) {
+      return {
+        email: principal.email,
+        nombre: principal.nombre || 'MEKANOS S.A.S',
+        origen: 'CUENTA_PRINCIPAL',
+        idCuentaEmail: principal.id_cuenta_email,
+      };
+    }
+
+    const fallback = await this.prisma.cuentas_email.findFirst({
+      where: { activa: true },
+      orderBy: { fecha_creacion: 'asc' },
+      select: { id_cuenta_email: true, nombre: true, email: true },
+    });
+
+    if (fallback) {
+      return {
+        email: fallback.email,
+        nombre: fallback.nombre || 'MEKANOS S.A.S',
+        origen: 'CUENTA_PRINCIPAL',
+        idCuentaEmail: fallback.id_cuenta_email,
+      };
+    }
+
+    return {
+      email:
+        process.env.EMAIL_FROM ||
+        process.env.EMAIL_FROM_ADDRESS ||
+        'mekanossas4@gmail.com',
+      nombre: process.env.EMAIL_FROM_NAME || 'MEKANOS S.A.S',
+      origen: 'DEFAULT_ENV',
     };
   }
 
@@ -1652,7 +1814,13 @@ export class OrdenesController {
   @ApiResponse({ status: 400, description: 'Datos inválidos o estado no permite edición' })
   async updateHorariosServicio(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { fecha_inicio_real?: string; fecha_fin_real?: string },
+    @Body() body: {
+      fecha_inicio_real?: string;
+      fecha_fin_real?: string;
+      // ✅ FIX 20-AGO-2026: Permite guardar duraciones > 24h tras confirmación
+      // explícita del usuario en el Portal Admin (alert "Estoy seguro")
+      forzarDuracion?: boolean;
+    },
     @UserId() userId: number,
   ) {
     // 1. Verificar que la orden existe y obtener estado actual
@@ -1720,9 +1888,15 @@ export class OrdenesController {
       const diffMs = finFinal.getTime() - inicioFinal.getTime();
       const duracionMinutos = Math.round(diffMs / 60000);
 
-      if (duracionMinutos > 1440) {
+      if (duracionMinutos > 1440 && !body.forzarDuracion) {
         throw new BadRequestException(
           `Duración calculada (${duracionMinutos} min) excede las 24 horas. Verifique las fechas.`,
+        );
+      }
+
+      if (duracionMinutos > 1440 && body.forzarDuracion) {
+        console.warn(
+          `⏰ Orden ${id}: duración ${duracionMinutos} min excede 24h — guardada FORZADA por usuario ${userId} (confirmación "Estoy seguro")`,
         );
       }
 

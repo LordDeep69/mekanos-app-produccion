@@ -31,7 +31,10 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFirmasHistorialTecnico, useUpdateFirmaOrden } from '../hooks/use-ordenes';
+import type { UpdateFirmaOrdenDto } from '../api/ordenes.service';
 
 interface Firma {
     id_firma: number;
@@ -51,6 +54,7 @@ interface FirmasSectionProps {
     firmas: Firma[];
     isLoading?: boolean;
     idOrdenServicio: number;
+    orden?: any;
 }
 
 function getTipoFirmaConfig(tipo: string) {
@@ -98,14 +102,16 @@ function getTipoFirmaConfig(tipo: string) {
 // SIGNATURE DRAWING CANVAS (native HTML5 Canvas - zero dependencies)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SignatureCanvas({ onSave, onCancel, isLoading }: {
-    onSave: (base64: string) => void;
-    onCancel: () => void;
-    isLoading: boolean;
+function SignatureCanvas({
+    canvasRef,
+    hasDrawn,
+    setHasDrawn,
+}: {
+    canvasRef: React.RefObject<HTMLCanvasElement | null>;
+    hasDrawn: boolean;
+    setHasDrawn: (drawn: boolean) => void;
 }) {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    const [hasDrawn, setHasDrawn] = useState(false);
 
     const getCtx = useCallback(() => {
         const canvas = canvasRef.current;
@@ -113,7 +119,7 @@ function SignatureCanvas({ onSave, onCancel, isLoading }: {
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
         return ctx;
-    }, []);
+    }, [canvasRef]);
 
     const getPos = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -132,7 +138,7 @@ function SignatureCanvas({ onSave, onCancel, isLoading }: {
             x: (e.clientX - rect.left) * scaleX,
             y: (e.clientY - rect.top) * scaleY,
         };
-    }, []);
+    }, [canvasRef]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -147,7 +153,7 @@ function SignatureCanvas({ onSave, onCancel, isLoading }: {
         ctx.lineWidth = 2.5;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-    }, []);
+    }, [canvasRef]);
 
     const startDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
         e.preventDefault();
@@ -168,7 +174,7 @@ function SignatureCanvas({ onSave, onCancel, isLoading }: {
         ctx.lineTo(pos.x, pos.y);
         ctx.stroke();
         setHasDrawn(true);
-    }, [isDrawing, getCtx, getPos]);
+    }, [isDrawing, getCtx, getPos, setHasDrawn]);
 
     const endDraw = useCallback(() => {
         setIsDrawing(false);
@@ -186,19 +192,11 @@ function SignatureCanvas({ onSave, onCancel, isLoading }: {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         setHasDrawn(false);
-    }, []);
-
-    const handleSave = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || !hasDrawn) return;
-        const dataUrl = canvas.toDataURL('image/png');
-        const base64 = dataUrl.split(',')[1];
-        onSave(base64);
-    }, [hasDrawn, onSave]);
+    }, [canvasRef, setHasDrawn]);
 
     return (
-        <div className="space-y-3">
-            <div className="relative border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-white">
+        <div className="space-y-2">
+            <div className="relative border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-white shadow-inner">
                 <canvas
                     ref={canvasRef}
                     className="w-full cursor-crosshair touch-none"
@@ -213,36 +211,23 @@ function SignatureCanvas({ onSave, onCancel, isLoading }: {
                 />
                 {!hasDrawn && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <p className="text-gray-300 text-sm font-medium">Dibuje su firma aqui</p>
+                        <p className="text-gray-300 text-sm font-medium select-none">Dibuje su firma aquí</p>
                     </div>
                 )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between">
                 <button
                     type="button"
                     onClick={clearCanvas}
-                    className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1.5"
+                    className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1.5"
                 >
-                    <Eraser className="h-4 w-4" /> Limpiar
+                    <Eraser className="h-3.5 w-3.5" /> Limpiar lienzo
                 </button>
-                <div className="flex-1" />
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    disabled={isLoading}
-                    className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                    Cancelar
-                </button>
-                <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={!hasDrawn || isLoading}
-                    className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Guardar Firma
-                </button>
+                {hasDrawn && (
+                    <span className="text-xs font-medium text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Nueva firma trazada
+                    </span>
+                )}
             </div>
         </div>
     );
@@ -252,23 +237,44 @@ function SignatureCanvas({ onSave, onCancel, isLoading }: {
 // EDIT SIGNATURE MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
+function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose, orden }: {
     tipo: 'TECNICO' | 'CLIENTE';
     idOrdenServicio: number;
     firma?: Firma | null;
     onClose: () => void;
+    orden?: any;
 }) {
     const config = getTipoFirmaConfig(tipo);
     const Icon = config.icon;
     const updateFirma = useUpdateFirmaOrden();
     const historialQuery = useFirmasHistorialTecnico(idOrdenServicio, tipo === 'TECNICO');
     const firmasHistorial = historialQuery.data?.data || [];
-    const [mode, setMode] = useState<'draw' | 'upload'>('draw');
-    const [previewBase64, setPreviewBase64] = useState<string | null>(null);
-    const [nombreFirmante, setNombreFirmante] = useState(firma?.nombre_firmante || '');
-    const [cargoFirmante, setCargoFirmante] = useState(firma?.cargo_firmante || '');
 
-    // ✅ FIX 02-MAY-2026: Soporte drag-drop y paste para firma
+    // URL o base64 de la firma existente
+    const existingFirmaUrl = firma?.url_firma || (firma?.firma_base64
+        ? (firma.firma_base64.startsWith('data:') ? firma.firma_base64 : `data:image/png;base64,${firma.firma_base64}`)
+        : null);
+    const hasExistingSignature = !!existingFirmaUrl;
+
+    // Modo de firma:
+    // Si ya existe firma registrada: por defecto 'keep' (Conservar firma actual).
+    // Si no existe firma registrada: por defecto 'draw' (Dibujar firma).
+    const [mode, setMode] = useState<'keep' | 'draw' | 'upload'>(hasExistingSignature ? 'keep' : 'draw');
+
+    // Canvas de dibujo
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const [hasDrawn, setHasDrawn] = useState(false);
+
+    // Subida de imagen
+    const [previewBase64, setPreviewBase64] = useState<string | null>(null);
+
+    // Datos del cliente (nombre y cargo)
+    const initialNombre = firma?.nombre_firmante || orden?.nombre_quien_recibe || '';
+    const initialCargo = firma?.cargo_firmante || orden?.cargo_quien_recibe || '';
+    const [nombreFirmante, setNombreFirmante] = useState(initialNombre);
+    const [cargoFirmante, setCargoFirmante] = useState(initialCargo);
+
+    // Soporte drag-drop y paste para firma
     const handleImageFiles = useCallback((files: File[]) => {
         const file = files[0];
         if (!file) return;
@@ -288,42 +294,52 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
         disabled: updateFirma.isPending,
     });
 
-    const handleSaveDrawn = useCallback((base64: string) => {
-        updateFirma.mutate({
-            idOrden: idOrdenServicio,
-            tipo,
-            data: {
-                firma_base64: base64,
-                ...(tipo === 'CLIENTE' && nombreFirmante ? { nombre_firmante: nombreFirmante } : {}),
-                ...(tipo === 'CLIENTE' && cargoFirmante ? { cargo_firmante: cargoFirmante } : {}),
-            },
-        }, {
-            onSuccess: () => onClose(),
-        });
-    }, [updateFirma, idOrdenServicio, tipo, nombreFirmante, cargoFirmante, onClose]);
+    // Validar si se puede guardar:
+    // - Si hay firma existente, el usuario puede guardar cualquier cambio (nombre, cargo, o nueva firma).
+    // - Si no hay firma existente, puede guardar si trazó una firma, subió imagen, o ingresó datos del cliente.
+    const hasNewSignature = (mode === 'draw' && hasDrawn) || (mode === 'upload' && !!previewBase64);
+    const hasClientData = tipo === 'CLIENTE' && (nombreFirmante.trim().length > 0 || cargoFirmante.trim().length > 0);
+    const canSave = !updateFirma.isPending && (hasExistingSignature || hasNewSignature || hasClientData);
 
-    const handleSaveUploaded = useCallback(() => {
-        if (!previewBase64) return;
-        updateFirma.mutate({
-            idOrden: idOrdenServicio,
-            tipo,
-            data: {
-                firma_base64: previewBase64,
-                ...(tipo === 'CLIENTE' && nombreFirmante ? { nombre_firmante: nombreFirmante } : {}),
-                ...(tipo === 'CLIENTE' && cargoFirmante ? { cargo_firmante: cargoFirmante } : {}),
-            },
-        }, {
-            onSuccess: () => onClose(),
-        });
-    }, [previewBase64, updateFirma, idOrdenServicio, tipo, nombreFirmante, cargoFirmante, onClose]);
+    const handleSave = async () => {
+        if (!canSave || updateFirma.isPending) return;
+
+        const data: UpdateFirmaOrdenDto = {};
+
+        // 1. Firma (solo si el usuario trazó o subió una nueva firma)
+        if (mode === 'draw' && hasDrawn && canvasRef.current) {
+            const canvas = canvasRef.current;
+            const base64 = canvas.toDataURL('image/png').split(',')[1];
+            data.firma_base64 = base64;
+        } else if (mode === 'upload' && previewBase64) {
+            data.firma_base64 = previewBase64;
+        }
+
+        // 2. Datos de cliente (nombre y cargo)
+        if (tipo === 'CLIENTE') {
+            data.nombre_firmante = nombreFirmante.trim();
+            data.cargo_firmante = cargoFirmante.trim();
+        }
+
+        try {
+            await updateFirma.mutateAsync({
+                idOrden: idOrdenServicio,
+                tipo,
+                data,
+            });
+            onClose();
+        } catch {
+            // Error manejado en useUpdateFirmaOrden
+        }
+    };
 
     return (
         <div
-            className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-xs"
             onClick={onClose}
         >
             <div
-                className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto shadow-2xl"
+                className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
@@ -332,206 +348,314 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose }: {
                     config.bgGradient
                 )}>
                     <div className="flex items-center gap-3">
-                        <Icon className="h-5 w-5" />
+                        <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                            <Icon className="h-5 w-5" />
+                        </div>
                         <div>
-                            <p className="font-bold">{firma ? 'Editar' : 'Agregar'} Firma {config.label}</p>
-                            <p className="text-xs text-white/80">Dibuje o suba una imagen de firma</p>
+                            <p className="font-bold text-base">
+                                {firma ? 'Editar' : 'Registrar'} Firma y Datos {config.label === 'Cliente' ? 'del Cliente' : 'del Técnico'}
+                            </p>
+                            <p className="text-xs text-white/80">
+                                {tipo === 'CLIENTE'
+                                    ? 'Modifique de forma independiente el cargo, el nombre o la firma'
+                                    : 'Dibuje o suba una imagen de firma para el técnico'}
+                            </p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                    >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <div className="p-5 space-y-4">
-                    {/* Mode Tabs */}
-                    <div className="flex bg-gray-100 rounded-lg p-1">
-                        <button
-                            type="button"
-                            onClick={() => setMode('draw')}
-                            className={cn(
-                                "flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2",
-                                mode === 'draw' ? "bg-white shadow-sm text-indigo-700" : "text-gray-500 hover:text-gray-700"
-                            )}
-                        >
-                            <Pen className="h-4 w-4" /> Dibujar Firma
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setMode('upload')}
-                            className={cn(
-                                "flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2",
-                                mode === 'upload' ? "bg-white shadow-sm text-indigo-700" : "text-gray-500 hover:text-gray-700"
-                            )}
-                        >
-                            <Upload className="h-4 w-4" /> Subir Imagen
-                        </button>
-                    </div>
-
-                    {/* Client-specific fields */}
+                {/* Body con scroll */}
+                <div className="p-5 space-y-5 overflow-y-auto flex-1">
+                    {/* Campos específicos del cliente */}
                     {tipo === 'CLIENTE' && (
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-600 mb-1">Nombre del firmante</label>
-                                <input
-                                    type="text"
-                                    value={nombreFirmante}
-                                    onChange={(e) => setNombreFirmante(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                    placeholder="Nombre completo"
-                                />
+                        <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                                    <User className="h-3.5 w-3.5 text-purple-600" /> Datos de Quien Recibe / Firma
+                                </label>
+                                <span className="text-[10px] text-purple-600 font-medium">
+                                    Edite solo el cargo, solo el nombre o ambos
+                                </span>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-600 mb-1">Cargo</label>
-                                <input
-                                    type="text"
-                                    value={cargoFirmante}
-                                    onChange={(e) => setCargoFirmante(e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                    placeholder="Ej: Jefe de Mantenimiento"
-                                />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                        Nombre de quien recibe / firmante
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={nombreFirmante}
+                                        onChange={(e) => setNombreFirmante(e.target.value)}
+                                        className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-white transition-all shadow-xs"
+                                        placeholder="Nombre completo"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                                        Cargo
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={cargoFirmante}
+                                        onChange={(e) => setCargoFirmante(e.target.value)}
+                                        className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-white transition-all shadow-xs"
+                                        placeholder="Ej: Jefe de Mantenimiento, Administrador..."
+                                    />
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Firmas estándares del técnico (historial agrupado por hash) */}
-                    {tipo === 'TECNICO' && (
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                                <History className="h-4 w-4 text-blue-600" />
-                                <p className="text-sm font-bold text-gray-700">Firmas estándares del técnico</p>
-                                <span className="text-[10px] text-gray-400">clic en una para usarla</span>
-                            </div>
-                            {historialQuery.isLoading ? (
-                                <div className="flex items-center justify-center py-4">
-                                    <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                    {/* Sección Firma */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                                <Pen className="h-3.5 w-3.5 text-indigo-600" /> Firma Digital
+                            </p>
+                            {hasExistingSignature && mode === 'keep' && (
+                                <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Conservando firma actual
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Mode Tabs */}
+                        <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+                            {hasExistingSignature && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMode('keep')}
+                                    className={cn(
+                                        "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                                        mode === 'keep'
+                                            ? "bg-white shadow-xs text-indigo-700"
+                                            : "text-gray-500 hover:text-gray-700"
+                                    )}
+                                >
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Firma Actual
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => setMode('draw')}
+                                className={cn(
+                                    "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                                    mode === 'draw'
+                                        ? "bg-white shadow-xs text-indigo-700"
+                                        : "text-gray-500 hover:text-gray-700"
+                                )}
+                            >
+                                <Pen className="h-3.5 w-3.5" /> {hasExistingSignature ? 'Dibujar Nueva' : 'Dibujar Firma'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setMode('upload')}
+                                className={cn(
+                                    "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                                    mode === 'upload'
+                                        ? "bg-white shadow-xs text-indigo-700"
+                                        : "text-gray-500 hover:text-gray-700"
+                                )}
+                            >
+                                <Upload className="h-3.5 w-3.5" /> {hasExistingSignature ? 'Subir Nueva Imagen' : 'Subir Imagen'}
+                            </button>
+                        </div>
+
+                        {/* Modo KEEP: Mostrar firma actual */}
+                        {mode === 'keep' && hasExistingSignature && (
+                            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col items-center justify-center gap-3">
+                                <div className="relative h-28 w-full max-w-sm bg-white rounded-lg border border-gray-200 p-2 shadow-inner">
+                                    <Image
+                                        src={existingFirmaUrl!}
+                                        alt="Firma actual registrada"
+                                        fill
+                                        className="object-contain"
+                                        unoptimized={existingFirmaUrl!.startsWith('data:')}
+                                    />
                                 </div>
-                            ) : firmasHistorial.length === 0 ? (
-                                <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
-                                    Sin firmas anteriores registradas para este técnico.
+                                <div className="flex items-center justify-between w-full max-w-sm pt-1">
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Firma actual conservada
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('draw')}
+                                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
+                                    >
+                                        <Pen className="h-3 w-3" /> Cambiar firma
+                                    </button>
+                                </div>
+                                <p className="text-[11px] text-gray-500 text-center">
+                                    Esta firma se mantendrá sin cambios. Si solo desea modificar el cargo o nombre, edítelos arriba y presione &quot;Guardar Cambios&quot;.
                                 </p>
-                            ) : (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                    {firmasHistorial.map((f) => (
-                                        <button
-                                            key={f.id_firma_digital}
-                                            type="button"
-                                            onClick={() => {
-                                                setPreviewBase64(f.firma_base64);
-                                                setMode('upload');
-                                            }}
-                                            className={cn(
-                                                "relative rounded-lg border-2 overflow-hidden bg-white transition-all hover:shadow-md",
-                                                f.es_estandar
-                                                    ? "border-amber-400 ring-2 ring-amber-200"
-                                                    : "border-gray-200 hover:border-blue-300"
-                                            )}
-                                        >
-                                            <div className="relative h-16 w-full bg-white">
+                            </div>
+                        )}
+
+                        {/* Firmas estándares del técnico (historial agrupado por hash) */}
+                        {tipo === 'TECNICO' && (
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <History className="h-4 w-4 text-blue-600" />
+                                    <p className="text-sm font-bold text-gray-700">Firmas estándares del técnico</p>
+                                    <span className="text-[10px] text-gray-400">clic en una para usarla</span>
+                                </div>
+                                {historialQuery.isLoading ? (
+                                    <div className="flex items-center justify-center py-4">
+                                        <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                                    </div>
+                                ) : firmasHistorial.length === 0 ? (
+                                    <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
+                                        Sin firmas anteriores registradas para este técnico.
+                                    </p>
+                                ) : (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        {firmasHistorial.map((f) => (
+                                            <button
+                                                key={f.id_firma_digital}
+                                                type="button"
+                                                onClick={() => {
+                                                    setPreviewBase64(f.firma_base64);
+                                                    setMode('upload');
+                                                }}
+                                                className={cn(
+                                                    "relative rounded-lg border-2 overflow-hidden bg-white transition-all hover:shadow-md text-left",
+                                                    f.es_estandar
+                                                        ? "border-amber-400 ring-2 ring-amber-200"
+                                                        : "border-gray-200 hover:border-blue-300"
+                                                )}
+                                            >
+                                                <div className="relative h-16 w-full bg-white">
+                                                    <Image
+                                                        src={`data:image/png;base64,${f.firma_base64}`}
+                                                        alt="Firma estándar del técnico"
+                                                        fill
+                                                        className="object-contain"
+                                                        unoptimized
+                                                    />
+                                                </div>
+                                                <div className="px-2 py-1.5 flex items-center justify-between bg-gray-50">
+                                                    <span className="text-[9px] font-bold text-gray-600">
+                                                        {f.veces_usada} uso{f.veces_usada !== 1 ? 's' : ''}
+                                                    </span>
+                                                    {f.es_estandar && (
+                                                        <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-600">
+                                                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> Estándar
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Modo DRAW: Dibujar */}
+                        {mode === 'draw' && (
+                            <SignatureCanvas
+                                canvasRef={canvasRef}
+                                hasDrawn={hasDrawn}
+                                setHasDrawn={setHasDrawn}
+                            />
+                        )}
+
+                        {/* Modo UPLOAD: Subir imagen */}
+                        {mode === 'upload' && (
+                            <div ref={setDropZoneRef} className="space-y-3 relative">
+                                <input {...inputProps} />
+
+                                {isDragging && (
+                                    <div className="absolute inset-0 z-20 bg-indigo-50/90 backdrop-blur-xs flex flex-col items-center justify-center gap-2 pointer-events-none rounded-xl border-2 border-dashed border-indigo-400">
+                                        <Upload className="h-8 w-8 text-indigo-500 animate-bounce" />
+                                        <p className="text-sm font-bold text-indigo-700">Suelte la imagen de firma aquí</p>
+                                    </div>
+                                )}
+
+                                {previewBase64 ? (
+                                    <div className="space-y-3">
+                                        <div className="relative border-2 border-indigo-200 rounded-xl overflow-hidden bg-white p-4 shadow-inner">
+                                            <div className="relative h-36 w-full">
                                                 <Image
-                                                    src={`data:image/png;base64,${f.firma_base64}`}
-                                                    alt="Firma estándar del técnico"
+                                                    src={`data:image/png;base64,${previewBase64}`}
+                                                    alt="Vista previa de firma"
                                                     fill
                                                     className="object-contain"
                                                     unoptimized
                                                 />
                                             </div>
-                                            <div className="px-2 py-1.5 flex items-center justify-between bg-gray-50">
-                                                <span className="text-[9px] font-bold text-gray-600">
-                                                    {f.veces_usada} uso{f.veces_usada !== 1 ? 's' : ''}
-                                                </span>
-                                                {f.es_estandar && (
-                                                    <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-600">
-                                                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> Estándar
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Draw Mode */}
-                    {mode === 'draw' && (
-                        <SignatureCanvas
-                            onSave={handleSaveDrawn}
-                            onCancel={onClose}
-                            isLoading={updateFirma.isPending}
-                        />
-                    )}
-
-                    {/* Upload Mode */}
-                    {mode === 'upload' && (
-                        <div ref={setDropZoneRef} className="space-y-3 relative">
-                            <input {...inputProps} />
-
-                            {/* Overlay drag-drop */}
-                            {isDragging && (
-                                <div className="absolute inset-0 z-20 bg-indigo-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none rounded-xl border-2 border-dashed border-indigo-400">
-                                    <Upload className="h-8 w-8 text-indigo-500 animate-bounce" />
-                                    <p className="text-sm font-bold text-indigo-700">Suelte la imagen de firma aquí</p>
-                                </div>
-                            )}
-
-                            {previewBase64 ? (
-                                <div className="space-y-3">
-                                    <div className="relative border-2 border-indigo-200 rounded-xl overflow-hidden bg-white p-4">
-                                        <div className="relative h-40 w-full">
-                                            <Image
-                                                src={`data:image/png;base64,${previewBase64}`}
-                                                alt="Vista previa de firma"
-                                                fill
-                                                className="object-contain"
-                                                unoptimized
-                                            />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setPreviewBase64(null); openFilePicker(); }}
+                                                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1.5"
+                                            >
+                                                <Upload className="h-3.5 w-3.5" /> Cambiar imagen
+                                            </button>
+                                            <span className="text-xs font-medium text-emerald-600 flex items-center gap-1">
+                                                <CheckCircle2 className="h-3.5 w-3.5" /> Imagen cargada lista para guardar
+                                            </span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => { setPreviewBase64(null); openFilePicker(); }}
-                                            className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1.5"
-                                        >
-                                            <Upload className="h-4 w-4" /> Cambiar imagen
-                                        </button>
-                                        <div className="flex-1" />
-                                        <button type="button" onClick={onClose} disabled={updateFirma.isPending} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                                            Cancelar
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveUploaded}
-                                            disabled={updateFirma.isPending}
-                                            className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                                        >
-                                            {updateFirma.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                            Guardar Firma
-                                        </button>
+                                ) : (
+                                    <div
+                                        onClick={() => openFilePicker()}
+                                        className={cn(
+                                            "border-2 border-dashed rounded-xl p-7 text-center cursor-pointer transition-all",
+                                            isDragging
+                                                ? "border-indigo-400 bg-indigo-50/50"
+                                                : "border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30"
+                                        )}
+                                    >
+                                        <Upload className="h-9 w-9 text-gray-300 mx-auto mb-2" />
+                                        <p className="text-sm font-medium text-gray-600">Clic, arrastre o pegue una imagen de firma</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (max 5MB)</p>
+                                        <div className="flex items-center justify-center gap-3 mt-2 text-[10px] text-gray-400">
+                                            <span className="flex items-center gap-1"><Upload className="h-3 w-3" /> Arrastrar archivo</span>
+                                            <span className="flex items-center gap-1"><Clipboard className="h-3 w-3" /> Pegar con Ctrl+V</span>
+                                        </div>
                                     </div>
-                                </div>
-                            ) : (
-                                <div
-                                    onClick={() => openFilePicker()}
-                                    className={cn(
-                                        "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all",
-                                        isDragging
-                                            ? "border-indigo-400 bg-indigo-50/50"
-                                            : "border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30"
-                                    )}
-                                >
-                                    <Upload className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                                    <p className="text-sm font-medium text-gray-600">Clic, arrastre o pegue una imagen</p>
-                                    <p className="text-xs text-gray-400 mt-1">PNG, JPG, WEBP (max 5MB)</p>
-                                    <div className="flex items-center justify-center gap-3 mt-2 text-[10px] text-gray-300">
-                                        <span className="flex items-center gap-1"><Upload className="h-3 w-3" /> Arrastrar</span>
-                                        <span className="flex items-center gap-1"><Clipboard className="h-3 w-3" /> Ctrl+V</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer Modal con botones claros */}
+                <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={updateFirma.isPending}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 rounded-xl transition-colors shadow-xs disabled:opacity-50"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={!canSave || updateFirma.isPending}
+                        className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {updateFirma.isPending ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Guardando cambios...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="h-4 w-4" />
+                                Guardar Cambios
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
         </div>
@@ -784,7 +908,7 @@ function FirmaPendiente({ tipo, onAdd }: { tipo: string; onAdd?: () => void }) {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function FirmasSection({ firmas, isLoading, idOrdenServicio }: FirmasSectionProps) {
+export function FirmasSection({ firmas, isLoading, idOrdenServicio, orden }: FirmasSectionProps) {
     const firmaTecnico = firmas.find(f => f.tipo_firma === 'TECNICO');
     const firmaCliente = firmas.find(f => f.tipo_firma === 'CLIENTE');
     const otrasFirmas = firmas.filter(f => !['TECNICO', 'CLIENTE'].includes(f.tipo_firma));
@@ -880,6 +1004,7 @@ export function FirmasSection({ firmas, isLoading, idOrdenServicio }: FirmasSect
                     idOrdenServicio={idOrdenServicio}
                     firma={editModal.firma}
                     onClose={() => setEditModal(null)}
+                    orden={orden}
                 />
             )}
         </div>

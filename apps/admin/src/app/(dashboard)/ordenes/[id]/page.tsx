@@ -1310,7 +1310,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
             )}
 
             {/* Firmas Digitales - Componente Avanzado */}
-            <FirmasSection firmas={firmas} isLoading={isLoadingFi} idOrdenServicio={orden.id_orden_servicio} />
+            <FirmasSection firmas={firmas} isLoading={isLoadingFi} idOrdenServicio={orden.id_orden_servicio} orden={orden} />
 
             {/* Fotos Generales del Servicio - CRUD */}
             <GaleriaFotosGenerales

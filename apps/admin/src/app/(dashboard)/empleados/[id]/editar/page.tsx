@@ -12,6 +12,16 @@
 
 'use client';
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -44,6 +54,7 @@ import {
     KeyRound,
     Loader2,
     Lock,
+    Mail,
     MapPin,
     Phone,
     Save,
@@ -193,6 +204,74 @@ export default function EditarEmpleadoPage() {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
+
+    // Estados para edición de correo de ingreso al sistema (campo crítico con alerta)
+    const [editandoEmail, setEditandoEmail] = useState(false);
+    const [nuevoEmail, setNuevoEmail] = useState('');
+    const [syncEmailConPersona, setSyncEmailConPersona] = useState(true);
+    const [showConfirmEmailDialog, setShowConfirmEmailDialog] = useState(false);
+    const [savingEmail, setSavingEmail] = useState(false);
+
+    // Validación y solicitud de confirmación para cambio de email
+    const handleSolicitarCambioEmail = () => {
+        const trimmed = nuevoEmail.trim().toLowerCase();
+        if (!trimmed) {
+            toast.error('El correo electrónico no puede estar vacío');
+            return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmed)) {
+            toast.error('Por favor ingrese un correo electrónico válido');
+            return;
+        }
+        if (trimmed === usuarioData?.email?.toLowerCase()) {
+            toast.info('El nuevo correo es idéntico al actual');
+            setEditandoEmail(false);
+            return;
+        }
+        setShowConfirmEmailDialog(true);
+    };
+
+    // Confirmación y ejecución del cambio de correo de ingreso
+    const handleConfirmarCambioEmail = async () => {
+        const trimmed = nuevoEmail.trim().toLowerCase();
+        const usuario = (empleado as any)?.usuario;
+        if (!usuario?.id_usuario) {
+            toast.error('No se encontró el usuario asociado a este empleado');
+            return;
+        }
+
+        setSavingEmail(true);
+        try {
+            // 1. Actualizar email en la cuenta de usuario del sistema
+            await apiClient.put(`/usuarios/${usuario.id_usuario}`, {
+                email: trimmed,
+            });
+
+            // 2. Sincronizar con persona si el usuario lo confirmó
+            if (syncEmailConPersona && empleado?.id_persona) {
+                await apiClient.put(`/personas/${empleado.id_persona}`, {
+                    email_principal: trimmed,
+                });
+                setPersonaData((prev) => (prev ? { ...prev, email_principal: trimmed } : null));
+            }
+
+            // 3. Actualizar estado local
+            setUsuarioData((prev) => (prev ? { ...prev, email: trimmed } : null));
+            toast.success('Correo de ingreso al sistema actualizado exitosamente');
+            setShowConfirmEmailDialog(false);
+            setEditandoEmail(false);
+
+            // Refrescar cachés de React Query
+            queryClient.invalidateQueries({ queryKey: ['empleado', id] });
+            queryClient.invalidateQueries({ queryKey: ['empleados'] });
+        } catch (error: any) {
+            const msg = error.response?.data?.message || error.message || 'Error al actualizar el correo';
+            toast.error(`Error: ${msg}`);
+        } finally {
+            setSavingEmail(false);
+        }
+    };
 
     // Función para cargar la contraseña actual (solo para admins)
     const loadCurrentPassword = async () => {
@@ -350,6 +429,8 @@ export default function EditarEmpleadoPage() {
             // Guardar usuario si existe
             if (hasUsuario && usuarioData) {
                 await updateUsuario.mutateAsync({
+                    username: usuarioData.username,
+                    email: usuarioData.email,
                     estado: usuarioData.estado,
                     debe_cambiar_password: usuarioData.debe_cambiar_password,
                 });
@@ -955,11 +1036,80 @@ export default function EditarEmpleadoPage() {
                                         )}
                                     </div>
 
-                                    {/* Email - Sincronizado desde Persona */}
+                                    {/* Email - Correo de Ingreso al Sistema - Campo Crítico con Confirmación */}
                                     <div className="space-y-2">
-                                        <Label>Email</Label>
-                                        <Input value={usuarioData.email} disabled className="bg-gray-100" />
-                                        <p className="text-xs text-gray-500">El email se sincroniza automáticamente desde los datos personales</p>
+                                        <Label className="flex items-center gap-2">
+                                            <Mail className="h-4 w-4" />
+                                            Correo de Ingreso al Sistema
+                                            <span className="text-xs text-orange-500 font-normal">(Campo Crítico)</span>
+                                        </Label>
+                                        {!editandoEmail ? (
+                                            <div className="flex gap-2">
+                                                <Input value={usuarioData.email} disabled className="bg-gray-100 flex-1 font-mono text-sm" />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setNuevoEmail(usuarioData.email);
+                                                        setEditandoEmail(true);
+                                                    }}
+                                                >
+                                                    <Lock className="h-4 w-4 mr-1" />
+                                                    Cambiar Correo
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg space-y-3">
+                                                <div className="flex items-center gap-2 text-orange-700">
+                                                    <AlertTriangle className="h-5 w-5" />
+                                                    <span className="font-semibold">⚠️ Cambio de Correo de Ingreso al Sistema</span>
+                                                </div>
+                                                <p className="text-sm text-orange-600">
+                                                    Este correo electrónico es la credencial principal con la que el empleado inicia sesión en el Portal Web y la App Móvil. Al modificarlo, el empleado deberá utilizar el nuevo correo para acceder.
+                                                </p>
+                                                <Input
+                                                    type="email"
+                                                    value={nuevoEmail}
+                                                    onChange={(e) => setNuevoEmail(e.target.value)}
+                                                    placeholder="nuevo.correo@mekanos.com"
+                                                    className="bg-white"
+                                                />
+                                                <div className="flex items-center space-x-2 pt-1">
+                                                    <input
+                                                        type="checkbox"
+                                                        id="syncPersonaEmail"
+                                                        checked={syncEmailConPersona}
+                                                        onChange={(e) => setSyncEmailConPersona(e.target.checked)}
+                                                        className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 h-4 w-4"
+                                                    />
+                                                    <label htmlFor="syncPersonaEmail" className="text-xs text-gray-700 font-medium cursor-pointer">
+                                                        Actualizar también el correo principal de contacto en los datos personales
+                                                    </label>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        onClick={handleSolicitarCambioEmail}
+                                                        className="bg-orange-600 hover:bg-orange-700 text-white"
+                                                    >
+                                                        Confirmar Cambio
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => setEditandoEmail(false)}
+                                                    >
+                                                        Cancelar
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <p className="text-xs text-gray-500">
+                                            El correo de ingreso se utiliza como credencial de inicio de sesión y para recepción de notificaciones de órdenes.
+                                        </p>
                                     </div>
 
                                     {/* Password - Campo Crítico con Confirmación */}
@@ -1207,6 +1357,63 @@ export default function EditarEmpleadoPage() {
                     {hasUsuario && ` ID Usuario: ${(empleado as any).usuario?.id_usuario} |`}
                 </p>
             </div>
+
+            {/* ⚠️ DIALOG DE CONFIRMACIÓN CRÍTICA: Cambio de Correo de Ingreso al Sistema */}
+            <AlertDialog open={showConfirmEmailDialog} onOpenChange={setShowConfirmEmailDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-orange-700">
+                            <AlertTriangle className="h-5 w-5 text-orange-600" />
+                            Confirmar Cambio de Correo de Ingreso al Sistema
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-3 pt-2 text-left text-sm text-gray-600">
+                                <p>
+                                    ¿Está seguro de que desea cambiar el correo de ingreso al sistema para este empleado?
+                                </p>
+                                <div className="p-3 bg-gray-50 border rounded-md space-y-1.5 text-xs">
+                                    <p>
+                                        <span className="text-gray-500 font-medium">Correo actual:</span>{' '}
+                                        <span className="font-mono text-gray-800">{usuarioData?.email}</span>
+                                    </p>
+                                    <p>
+                                        <span className="text-gray-500 font-medium">Nuevo correo de acceso:</span>{' '}
+                                        <span className="font-mono font-bold text-orange-700">{nuevoEmail.trim().toLowerCase()}</span>
+                                    </p>
+                                    {syncEmailConPersona && (
+                                        <p className="text-blue-600 font-medium pt-1 border-t border-gray-200">
+                                            ✓ Se sincronizará y actualizará también el correo en los datos personales de la persona.
+                                        </p>
+                                    )}
+                                </div>
+                                <p className="text-xs text-red-600 font-medium">
+                                    ⚠️ Importante: El empleado perderá acceso con su correo anterior y deberá utilizar este nuevo correo para autenticarse en el Portal Web y la App Móvil.
+                                </p>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={savingEmail}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleConfirmarCambioEmail();
+                            }}
+                            disabled={savingEmail}
+                            className="bg-orange-600 hover:bg-orange-700 text-white"
+                        >
+                            {savingEmail ? (
+                                <span className="flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Actualizando...
+                                </span>
+                            ) : (
+                                'Sí, Confirmar Cambio'
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

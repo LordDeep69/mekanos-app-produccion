@@ -349,6 +349,20 @@ export class PdfController {
       estado: oe.estado_equipo || 'PENDIENTE',
     })) : undefined;
 
+    // ✅ FIX 20-AGO-2026: Cargar lotes de galería (fotos generales agrupadas por lote)
+    const lotesGaleria = await this.prisma.lotes_galeria.findMany({
+      where: { id_orden_servicio: idNumerico },
+      orderBy: [{ orden_lote: 'asc' }, { id_lote_galeria: 'asc' }],
+      select: {
+        id_lote_galeria: true,
+        nombre_lote: true,
+        orden_lote: true,
+      },
+    });
+    if (lotesGaleria.length > 0) {
+      this.logger.log(`📦 Lotes de galería encontrados: ${lotesGaleria.length}`);
+    }
+
     // ✅ MULTI-EQUIPOS: Agrupar actividades por equipo
     let actividadesPorEquipo: any = undefined;
     if (esMultiEquipo && orden.ordenes_equipos) {
@@ -553,6 +567,7 @@ export class PdfController {
         url: ev.ruta_archivo,
         caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
         momento: ev.tipo_evidencia || 'GENERAL',
+        idLote: ev.id_lote_galeria || undefined,
       }));
 
       if (fotosGenAll.length > 0) {
@@ -584,10 +599,15 @@ export class PdfController {
       // ✅ FIX 07-FEB-2026: Usar fecha_inicio_real (fecha real del servicio) cuando existe,
       // fallback a fecha_programada. Antes siempre usaba fecha_programada causando desfase.
       fecha: orden.fecha_inicio_real
-        ? new Date(orden.fecha_inicio_real).toLocaleDateString('es-CO')
+        ? this.formatearFecha(orden.fecha_inicio_real)
         : orden.fecha_programada
-          ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
-          : new Date().toLocaleDateString('es-CO'),
+          ? this.formatearFecha(orden.fecha_programada)
+          : this.formatearFecha(new Date()),
+      // ✅ FIX 20-AGO-2026: Fecha de salida + flag de días distintos
+      fechaSalida: orden.fecha_fin_real
+        ? this.formatearFecha(orden.fecha_fin_real)
+        : undefined,
+      diasDiferentes: this.sonDiasDiferentes(orden.fecha_inicio_real, orden.fecha_fin_real),
       tecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
         ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() || 'N/A'
         : 'N/A',
@@ -614,7 +634,16 @@ export class PdfController {
       evidencias: orden.evidencias_fotograficas?.map((ev: any) => ({
         url: ev.ruta_archivo,
         caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+        idLote: ev.id_lote_galeria || undefined,
       })) || [],
+      // ✅ FIX 20-AGO-2026: Lotes de galería para el PDF
+      lotesGaleria: lotesGaleria.length > 0
+        ? lotesGaleria.map((l) => ({
+          idLoteGaleria: l.id_lote_galeria,
+          nombreLote: l.nombre_lote,
+          ordenLote: l.orden_lote || 0,
+        }))
+        : undefined,
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
       observaciones_tecnico: orden.observaciones_tecnico || undefined,
       // ✅ MULTI-EQUIPOS: Datos adicionales
@@ -1324,6 +1353,20 @@ export class PdfController {
     }
 
     // Construir actividadesPorEquipo si es multi-equipo
+    // ✅ FIX 20-AGO-2026: Cargar lotes de galería (flujo regenerar PDF)
+    const lotesGaleria = await this.prisma.lotes_galeria.findMany({
+      where: { id_orden_servicio: idNumerico },
+      orderBy: [{ orden_lote: 'asc' }, { id_lote_galeria: 'asc' }],
+      select: {
+        id_lote_galeria: true,
+        nombre_lote: true,
+        orden_lote: true,
+      },
+    });
+    if (lotesGaleria.length > 0) {
+      this.logger.log(`📦 Lotes de galería encontrados: ${lotesGaleria.length}`);
+    }
+
     let actividadesPorEquipo: any[] | undefined;
     let medicionesPorEquipo: any[] | undefined;
     let evidenciasPorEquipo: any[] | undefined;
@@ -1512,6 +1555,7 @@ export class PdfController {
         url: ev.ruta_archivo,
         caption: `${ev.tipo_evidencia || 'GENERAL'}: ${ev.descripcion || ''}`.trim(),
         momento: ev.tipo_evidencia || 'GENERAL',
+        idLote: ev.id_lote_galeria || undefined,
       }));
 
       if (fotosGeneralesAll.length > 0 && evidenciasPorEquipo) {
@@ -1549,10 +1593,15 @@ export class PdfController {
       // ✅ FIX 07-FEB-2026: Usar fecha_inicio_real (fecha real del servicio) cuando existe,
       // fallback a fecha_programada. Antes siempre usaba fecha_programada causando desfase.
       fecha: orden.fecha_inicio_real
-        ? new Date(orden.fecha_inicio_real).toLocaleDateString('es-CO')
+        ? this.formatearFecha(orden.fecha_inicio_real)
         : orden.fecha_programada
-          ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
-          : new Date().toLocaleDateString('es-CO'),
+          ? this.formatearFecha(orden.fecha_programada)
+          : this.formatearFecha(new Date()),
+      // ✅ FIX 20-AGO-2026: Fecha de salida + flag de días distintos
+      fechaSalida: orden.fecha_fin_real
+        ? this.formatearFecha(orden.fecha_fin_real)
+        : undefined,
+      diasDiferentes: this.sonDiasDiferentes(orden.fecha_inicio_real, orden.fecha_fin_real),
       tecnico: orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona
         ? `${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_nombre || ''} ${orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados.persona.primer_apellido || ''}`.trim() || 'N/A'
         : 'N/A',
@@ -1581,7 +1630,16 @@ export class PdfController {
       evidencias: orden.evidencias_fotograficas?.map((ev: any) => ({
         url: ev.ruta_archivo,
         caption: `${ev.tipo_evidencia || 'EVIDENCIA'}: ${ev.descripcion || ''}`.trim(),
+        idLote: ev.id_lote_galeria || undefined,
       })) || [],
+      // ✅ FIX 20-AGO-2026: Lotes de galería para el PDF
+      lotesGaleria: lotesGaleria.length > 0
+        ? lotesGaleria.map((l) => ({
+          idLoteGaleria: l.id_lote_galeria,
+          nombreLote: l.nombre_lote,
+          ordenLote: l.orden_lote || 0,
+        }))
+        : undefined,
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
       observaciones_tecnico: orden.observaciones_tecnico || undefined,
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
@@ -2248,6 +2306,40 @@ export class PdfController {
     const hours = d.getHours().toString().padStart(2, '0');
     const minutes = d.getMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
+  }
+
+  /**
+   * ✅ FIX 20-AGO-2026: Indica si la entrada y la salida del servicio ocurrieron
+   * en DÍAS DISTINTOS (compara año/mes/día en hora local del servidor).
+   * Si alguno falta o es inválido ⇒ false (se muestra una sola fecha).
+   */
+  private sonDiasDiferentes(
+    inicio: Date | string | null | undefined,
+    fin: Date | string | null | undefined,
+  ): boolean {
+    if (!inicio || !fin) return false;
+    const dIni = new Date(inicio);
+    const dFin = new Date(fin);
+    if (isNaN(dIni.getTime()) || isNaN(dFin.getTime())) return false;
+
+    return (
+      dIni.getFullYear() !== dFin.getFullYear() ||
+      dIni.getMonth() !== dFin.getMonth() ||
+      dIni.getDate() !== dFin.getDate()
+    );
+  }
+
+  /**
+   * ✅ FIX 20-AGO-2026: Fecha en formato dd/mm/aaaa (ancho uniforme).
+   * Evita el desalineado de "26/8/2026" frente a "07/09/2026" en el encabezado.
+   */
+  private formatearFecha(fecha: Date | string | null | undefined): string {
+    if (!fecha) return 'N/A';
+    const d = new Date(fecha);
+    if (isNaN(d.getTime())) return 'N/A';
+    const dia = d.getDate().toString().padStart(2, '0');
+    const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+    return `${dia}/${mes}/${d.getFullYear()}`;
   }
 
   /**

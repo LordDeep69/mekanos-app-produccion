@@ -32,6 +32,7 @@ import {
     RefreshCw,
     Send,
     Trash2,
+    Upload,
     X
 } from 'lucide-react';
 import { useState } from 'react';
@@ -60,6 +61,53 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     const [emailSendResult, setEmailSendResult] = useState<{ destinatarios: string[]; error?: string } | null>(null);
     // ✅ FIX 11-MAR-2026: Estado para archivos adjuntos adicionales
     const [archivosAdjuntos, setArchivosAdjuntos] = useState<File[]>([]);
+    // ✅ FIX 20-AGO-2026: Zona drag & drop para adjuntos del correo
+    const [isDraggingAdjuntos, setIsDraggingAdjuntos] = useState(false);
+
+    /** Máximo de archivos adjuntos permitidos por correo */
+    const MAX_ARCHIVOS_ADJUNTOS = 5;
+
+    /**
+     * ✅ FIX 20-AGO-2026: Agrega archivos respetando el límite.
+     * Reutilizada por: input file (clic), drag & drop y pegar (Ctrl+V).
+     */
+    const agregarArchivos = (files: File[]) => {
+        if (files.length === 0) return;
+
+        const disponibles = MAX_ARCHIVOS_ADJUNTOS - archivosAdjuntos.length;
+        if (disponibles <= 0) {
+            alert('Máximo 5 archivos adjuntos permitidos');
+            return;
+        }
+
+        const aceptados = files.slice(0, disponibles);
+        setArchivosAdjuntos(prev => [...prev, ...aceptados]);
+
+        if (files.length > disponibles) {
+            alert(`Máximo 5 archivos adjuntos permitidos (se agregaron ${aceptados.length})`);
+        }
+    };
+
+    // ✅ FIX 20-AGO-2026: Cuenta remitente real (resuelta por el backend con la
+    // misma lógica de envío) para mostrar "Desde:" en el formulario
+    const { data: remitenteData } = useQuery({
+        queryKey: ['orden-cuenta-remitente', orden.id_orden_servicio],
+        queryFn: async () => {
+            try {
+                const response = await apiClient.get(`/ordenes/${orden.id_orden_servicio}/cuenta-remitente`);
+                return response.data as {
+                    email: string;
+                    nombre?: string;
+                    origen: 'CLIENTE' | 'CUENTA_PRINCIPAL' | 'DEFAULT_ENV';
+                    advertencia?: string;
+                };
+            } catch {
+                return null;
+            }
+        },
+        enabled: !!orden.id_orden_servicio,
+        staleTime: 5 * 60 * 1000,
+    });
 
     // ✅ FIX 04-FEB-2026: Obtener URL del PDF existente usando apiClient centralizado
     const { data: pdfExistenteData } = useQuery({
@@ -145,25 +193,20 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     };
 
     // ✅ FIX 11-MAR-2026: Funciones para manejar archivos adjuntos
+    // ✅ FIX 20-AGO-2026: Ahora usa la función común (también sirve para drag & drop)
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files) return;
 
-        const newFiles = Array.from(files);
-        const totalFiles = archivosAdjuntos.length + newFiles.length;
-
-        // Limitar a 5 archivos
-        if (totalFiles > 5) {
-            alert('Máximo 5 archivos adjuntos permitidos');
-            const allowedNewFiles = newFiles.slice(0, 5 - archivosAdjuntos.length);
-            setArchivosAdjuntos(prev => [...prev, ...allowedNewFiles]);
-        } else {
-            setArchivosAdjuntos(prev => [...prev, ...newFiles]);
-        }
+        agregarArchivos(Array.from(files));
 
         // Limpiar input para permitir seleccionar el mismo archivo nuevamente
         e.target.value = '';
     };
+
+    /** ✅ FIX 20-AGO-2026: Extrae archivos de un evento drop o paste */
+    const extraerArchivos = (dt: DataTransfer | null): File[] =>
+        Array.from(dt?.files || []);
 
     const handleRemoveArchivo = (index: number) => {
         setArchivosAdjuntos(prev => prev.filter((_, i) => i !== index));
@@ -310,7 +353,7 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             nombreCliente: orden.clientes?.persona?.nombre_comercial
                 || orden.clientes?.persona?.razon_social
                 || (orden.clientes?.nombre_sede ? orden.clientes.nombre_sede : null),
-            nombreEquipo: orden.equipos?.nombre,
+            nombreEquipo: orden.equipos?.nombre_equipo || (orden.equipos as any)?.nombre,
             numeroOrden: orden.numero_orden,
         });
 
@@ -592,6 +635,48 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                         {emailSendStatus === 'idle' && (
                             <>
                                 <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                                    {/* ✅ FIX 20-AGO-2026: Remitente (DE:) — se muestra antes de los
+                                        destinatarios para seguir el flujo natural De → Para.
+                                        El dato lo resuelve el backend con la misma lógica de envío. */}
+                                    {remitenteData && (
+                                        <div className="rounded-xl border-2 border-gray-200 bg-gray-50 overflow-hidden">
+                                            <div className="flex items-center gap-3 p-3">
+                                                <div className="p-1.5 bg-gray-600 rounded-lg shrink-0">
+                                                    <Send className="h-3.5 w-3.5 text-white" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[10px] uppercase tracking-wide font-bold text-gray-500">
+                                                        Se enviará desde
+                                                    </p>
+                                                    <p className="text-sm font-bold text-gray-800 truncate">
+                                                        {remitenteData.email}
+                                                    </p>
+                                                    {remitenteData.nombre && remitenteData.nombre !== remitenteData.email && (
+                                                        <p className="text-[11px] text-gray-500 truncate">
+                                                            {remitenteData.nombre}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <span className={cn(
+                                                    "px-2 py-0.5 text-[9px] font-bold rounded-full shrink-0",
+                                                    remitenteData.origen === 'CLIENTE'
+                                                        ? "bg-emerald-100 text-emerald-700"
+                                                        : "bg-blue-100 text-blue-700"
+                                                )}>
+                                                    {remitenteData.origen === 'CLIENTE'
+                                                        ? 'CUENTA DEL CLIENTE'
+                                                        : 'CUENTA CORPORATIVA'}
+                                                </span>
+                                            </div>
+                                            {remitenteData.advertencia && (
+                                                <div className="px-3 py-2 bg-amber-50 border-t border-amber-200 flex items-start gap-2">
+                                                    <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                                    <p className="text-[11px] text-amber-700">{remitenteData.advertencia}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Email del cliente */}
                                     <div>
                                         <label className="text-sm font-bold text-gray-700 mb-2 block">
@@ -777,8 +862,40 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                                             </div>
                                         )}
 
-                                        {/* Input para agregar archivos */}
-                                        <div className="relative">
+                                        {/* ✅ FIX 20-AGO-2026: Zona drag & drop para adjuntos
+                                            (mantiene el clic para seleccionar + Ctrl+V para pegar) */}
+                                        <div
+                                            className="relative"
+                                            onDragEnter={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setIsDraggingAdjuntos(true);
+                                            }}
+                                            onDragOver={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setIsDraggingAdjuntos(true);
+                                            }}
+                                            onDragLeave={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setIsDraggingAdjuntos(false);
+                                            }}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setIsDraggingAdjuntos(false);
+                                                const files = extraerArchivos(e.dataTransfer);
+                                                if (files.length > 0) agregarArchivos(files);
+                                            }}
+                                            onPaste={(e) => {
+                                                const files = extraerArchivos(e.clipboardData);
+                                                if (files.length > 0) {
+                                                    e.preventDefault();
+                                                    agregarArchivos(files);
+                                                }
+                                            }}
+                                        >
                                             <input
                                                 type="file"
                                                 id="file-upload"
@@ -790,23 +907,42 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                                             <label
                                                 htmlFor="file-upload"
                                                 className={cn(
-                                                    "flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-                                                    archivosAdjuntos.length >= 5
-                                                        ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
-                                                        : "border-gray-300 hover:border-green-500 hover:bg-green-50"
+                                                    "flex flex-col items-center justify-center gap-1.5 px-4 py-4 border-2 border-dashed rounded-xl cursor-pointer transition-all",
+                                                    isDraggingAdjuntos
+                                                        ? "border-green-500 bg-green-50"
+                                                        : archivosAdjuntos.length >= MAX_ARCHIVOS_ADJUNTOS
+                                                            ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
+                                                            : "border-gray-300 hover:border-green-500 hover:bg-green-50"
                                                 )}
                                             >
-                                                <Paperclip className="h-5 w-5 text-gray-500" />
-                                                <span className="text-sm font-medium text-gray-600">
-                                                    {archivosAdjuntos.length >= 5
-                                                        ? 'Máximo 5 archivos alcanzado'
-                                                        : 'Agregar archivos (máx. 5)'}
+                                                <Paperclip className={cn(
+                                                    "h-5 w-5",
+                                                    isDraggingAdjuntos ? "text-green-600" : "text-gray-500"
+                                                )} />
+                                                <span className="text-sm font-medium text-gray-600 text-center">
+                                                    {isDraggingAdjuntos
+                                                        ? 'Suelta los archivos aquí'
+                                                        : archivosAdjuntos.length >= MAX_ARCHIVOS_ADJUNTOS
+                                                            ? 'Máximo 5 archivos alcanzado'
+                                                            : 'Arrastra archivos aquí o haz clic para seleccionar'}
+                                                </span>
+                                                <span className="text-[10px] text-gray-400">
+                                                    {archivosAdjuntos.length}/{MAX_ARCHIVOS_ADJUNTOS} archivos
                                                 </span>
                                             </label>
+
+                                            {/* Overlay mientras se arrastra */}
+                                            {isDraggingAdjuntos && (
+                                                <div className="absolute inset-0 z-10 bg-green-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-1.5 rounded-xl pointer-events-none border-2 border-dashed border-green-500">
+                                                    <Upload className="h-6 w-6 text-green-600 animate-bounce" />
+                                                    <p className="text-xs font-bold text-green-700">Suelta para adjuntar</p>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <p className="text-xs text-gray-400 mt-2">
                                             Formatos permitidos: PDF, Word, Excel, imágenes, ZIP. Máx. 10MB por archivo.
+                                            También puedes pegar con Ctrl+V.
                                         </p>
                                     </div>
                                 </div>

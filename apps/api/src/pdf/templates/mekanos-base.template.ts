@@ -103,6 +103,12 @@ export interface DatosOrdenPDF {
   tecnico: string;
   horaEntrada: string;
   horaSalida: string;
+  // ✅ FIX 20-AGO-2026: Cuando la entrada y la salida ocurren en DÍAS DISTINTOS,
+  // el PDF muestra ambas fechas ("Entrada: X · Salida: Y"). Si son el mismo día,
+  // se muestra una sola fecha (comportamiento estándar).
+  fechaSalida?: string;
+  // Se calcula en el backend comparando día/mes/año en hora local
+  diasDiferentes?: boolean;
   tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO';
 
   // Número de orden
@@ -163,6 +169,11 @@ export interface DatosOrdenPDF {
   // ✅ MULTI-EQUIPOS: Evidencias agrupadas por equipo (alternativa)
   evidenciasPorEquipo?: EvidenciasPorEquipoPDF[];
 
+  // ✅ FIX 20-AGO-2026: Galería por lotes — lotes de fotos generales de la orden.
+  // El template separa las evidencias con idLote y las agrupa por lote;
+  // si no hay lotes, el renderizado es idéntico al estándar.
+  lotesGaleria?: LoteGaleriaPDF[];
+
   // ✅ MULTI-EQUIPOS (15-DIC-2025): Actividades agrupadas por equipo
   actividadesPorEquipo?: ActividadesPorEquipoPDF[];
 
@@ -219,6 +230,18 @@ export interface EvidenciaPDF {
   caption?: string;
   // ✅ MULTI-EQUIPOS: ID del equipo al que pertenece (opcional)
   idOrdenEquipo?: number;
+  // ✅ FIX 20-AGO-2026: Galería por lotes — ID del lote al que pertenece la
+  // evidencia general (undefined = grupo estándar de fotos generales)
+  idLote?: number;
+}
+
+// ✅ FIX 20-AGO-2026: Galería por lotes — lote de fotos generales de la orden.
+// Cada lote se renderiza en el PDF como un contenedor independiente con su
+// nombre como título, distinto del contenedor estándar de fotos generales.
+export interface LoteGaleriaPDF {
+  idLoteGaleria: number;
+  nombreLote: string;
+  ordenLote: number;
 }
 
 export interface ActividadPDF {
@@ -250,6 +273,26 @@ export interface MedicionPDF {
   unidad: string;
   nivelAlerta: 'OK' | 'ADVERTENCIA' | 'CRITICO';
 }
+
+/**
+ * ✅ FIX 20-AGO-2026: Texto del campo "Fecha" de los informes.
+ * - Mismo día  → una sola fecha (comportamiento clásico): "26/08/2026"
+ * - Días distintos → muestra AMBAS: "Entrada: 26/08/2026 · Salida: 02/09/2026"
+ * Compartido por todos los templates (A/B · Generador/Bomba · Correctivo) para
+ * que el formato sea idéntico en cualquier tipo de servicio.
+ */
+export const formatearFechaServicio = (datos: {
+  fecha: string;
+  fechaSalida?: string;
+  diasDiferentes?: boolean;
+}): string => {
+  // Días distintos → dos líneas compactas dentro de la misma celda (evita que el
+  // texto largo se parta o desborde el grid de 4 columnas del encabezado)
+  if (datos.diasDiferentes && datos.fechaSalida) {
+    return `<span>${datos.fecha}</span><span style="display:block; font-size: 8px; color: #64748b; line-height: 1.1; margin-top: 1px;">&#8594; Salida: ${datos.fechaSalida}</span>`;
+  }
+  return datos.fecha || '-';
+};
 
 export const getResultadoLabel = (resultado: string): string => {
   const labels: Record<string, string> = {

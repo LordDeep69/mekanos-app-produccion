@@ -108,9 +108,15 @@ export function useUpdateFirmaOrden() {
     return useMutation({
         mutationFn: ({ idOrden, tipo, data }: { idOrden: number; tipo: 'TECNICO' | 'CLIENTE'; data: UpdateFirmaOrdenDto }) =>
             updateFirmaOrden(idOrden, tipo, data),
-        onSuccess: (_, { idOrden }) => {
+        onSuccess: (res, { idOrden, tipo, data }) => {
             queryClient.invalidateQueries({ queryKey: [...FIRMAS_ORDEN_KEY, idOrden] });
-            toast.success('Firma actualizada exitosamente');
+            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
+            queryClient.invalidateQueries({ queryKey: ['orden', idOrden] });
+            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            const msg = res?.message || (tipo === 'CLIENTE' && !data?.firma_base64
+                ? 'Datos del firmante actualizados exitosamente'
+                : 'Firma actualizada exitosamente');
+            toast.success(msg);
         },
         onError: (error: any) => {
             toast.error(error?.response?.data?.message || 'Error al actualizar la firma');

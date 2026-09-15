@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { ActividadesEjecutadasModule } from './actividades-ejecutadas/actividades.module';
 import { AlertasStockModule } from './alertas-stock/alertas-stock.module';
@@ -191,8 +193,22 @@ import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
     // ✅ FLEXIBILIZACIÓN PARÁMETROS: Config personalizada por equipo (Sesión Ene 06)
     ConfigParametrosModule, // ✅ Servicio resolución cascada: equipo → plantilla → global
     CuentasEmailModule, // ✅ MULTI-EMAIL re-habilitado (09-Feb-2026)
+    // 🛡️ SEGURIDAD: Rate Limiting global contra fuerza bruta y DoS (120 reqs/min por IP)
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000,
+        limit: 120,
+      },
+    ]),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule { }

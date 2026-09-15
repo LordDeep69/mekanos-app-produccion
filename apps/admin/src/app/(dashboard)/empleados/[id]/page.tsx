@@ -12,13 +12,26 @@
 
 'use client';
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { getEmpleado } from '@/features/empleados/api/empleados.service';
+import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertCircle,
+    AlertTriangle,
     ArrowLeft,
     Briefcase,
     Calendar,
@@ -27,6 +40,7 @@ import {
     GraduationCap,
     KeyRound,
     Loader2,
+    Lock,
     Mail,
     MapPin,
     Phone,
@@ -36,6 +50,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -76,13 +92,62 @@ function Badge({ children, variant = 'default' }: { children: React.ReactNode; v
 export default function EmpleadoDetallePage() {
     const params = useParams();
     const router = useRouter();
+    const queryClient = useQueryClient();
     const id = Number(params.id);
+
+    // Estados para cambio de correo de ingreso con alerta de confirmación
+    const [showChangeEmailDialog, setShowChangeEmailDialog] = useState(false);
+    const [nuevoEmail, setNuevoEmail] = useState('');
+    const [syncEmailConPersona, setSyncEmailConPersona] = useState(true);
+    const [savingEmail, setSavingEmail] = useState(false);
 
     const { data: empleado, isLoading, isError, error } = useQuery({
         queryKey: ['empleado', id],
         queryFn: () => getEmpleado(id),
         enabled: !isNaN(id),
     });
+
+    const handleOpenChangeEmail = (currentEmail?: string) => {
+        setNuevoEmail(currentEmail || '');
+        setSyncEmailConPersona(true);
+        setShowChangeEmailDialog(true);
+    };
+
+    const handleConfirmarCambioEmail = async () => {
+        const trimmed = nuevoEmail.trim().toLowerCase();
+        if (!trimmed) {
+            toast.error('El correo electrónico no puede estar vacío');
+            return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmed)) {
+            toast.error('Por favor ingrese un correo electrónico válido');
+            return;
+        }
+
+        const usuarioId = (empleado as any)?.usuario?.id_usuario;
+        if (!usuarioId) {
+            toast.error('No se encontró el usuario asociado a este empleado');
+            return;
+        }
+
+        setSavingEmail(true);
+        try {
+            await apiClient.put(`/usuarios/${usuarioId}`, { email: trimmed });
+            if (syncEmailConPersona && empleado?.id_persona) {
+                await apiClient.put(`/personas/${empleado.id_persona}`, { email_principal: trimmed });
+            }
+            toast.success('Correo de ingreso al sistema actualizado correctamente');
+            setShowChangeEmailDialog(false);
+            queryClient.invalidateQueries({ queryKey: ['empleado', id] });
+            queryClient.invalidateQueries({ queryKey: ['empleados'] });
+        } catch (error: any) {
+            const msg = error.response?.data?.message || error.message || 'Error al actualizar el correo';
+            toast.error(`Error: ${msg}`);
+        } finally {
+            setSavingEmail(false);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -302,41 +367,76 @@ export default function EmpleadoDetallePage() {
                         </CardContent>
                     </Card>
 
-                    <Card className={tieneUsuario ? 'border-purple-200' : 'border-gray-200'}>
+                    <Card className={tieneUsuario ? 'border-purple-200 shadow-sm' : 'border-gray-200'}>
                         <CardHeader className={cn(
                             'border-b pb-3',
                             tieneUsuario ? 'bg-purple-50' : 'bg-gray-50'
                         )}>
-                            <CardTitle className="text-base flex items-center gap-2">
-                                <KeyRound className={cn('h-4 w-4', tieneUsuario ? 'text-purple-600' : 'text-gray-400')} />
-                                Acceso al Sistema
-                            </CardTitle>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <KeyRound className={cn('h-4 w-4', tieneUsuario ? 'text-purple-600' : 'text-gray-400')} />
+                                    Acceso al Sistema
+                                </CardTitle>
+                                {tieneUsuario && (
+                                    <Badge variant="success">
+                                        <Shield className="h-3 w-3 mr-1" />
+                                        {(empleado as any).usuario?.estado || 'ACTIVO'}
+                                    </Badge>
+                                )}
+                            </div>
                             <CardDescription>
-                                {tieneUsuario ? 'Usuario configurado' : 'Sin acceso al sistema'}
+                                {tieneUsuario ? 'Credenciales de acceso a Web y Móvil' : 'Sin acceso al sistema'}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="pt-4">
+                        <CardContent className="pt-4 space-y-3">
                             {tieneUsuario ? (
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="success">
-                                            <Shield className="h-3 w-3 mr-1" />
-                                            Usuario Activo
-                                        </Badge>
+                                <>
+                                    <div className="space-y-2 text-xs">
+                                        <div className="bg-gray-50 p-2.5 rounded-md border space-y-1.5">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-gray-500 font-medium">Username:</span>
+                                                <span className="font-mono text-gray-800 font-semibold">
+                                                    {(empleado as any).usuario?.username || '—'}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-center border-t pt-1.5">
+                                                <span className="text-gray-500 font-medium">Correo de Ingreso:</span>
+                                                <span className="font-mono text-purple-700 font-semibold">
+                                                    {(empleado as any).usuario?.email || '—'}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <p className="text-xs text-gray-500">
-                                        Ver detalles del usuario en Configuración → Usuarios
-                                    </p>
-                                </div>
+
+                                    <div className="flex gap-2 pt-1">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1 text-xs h-8 border-orange-200 hover:bg-orange-50 text-orange-700"
+                                            onClick={() => handleOpenChangeEmail((empleado as any).usuario?.email)}
+                                        >
+                                            <Lock className="h-3.5 w-3.5 mr-1" />
+                                            Cambiar Correo
+                                        </Button>
+                                        <Link href={`/empleados/${id}/editar`}>
+                                            <Button variant="outline" size="sm" className="text-xs h-8">
+                                                Gestionar Acceso
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </>
                             ) : (
                                 <div className="text-center py-4">
                                     <KeyRound className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                                     <p className="text-sm text-gray-500 mb-3">
                                         Este empleado no tiene acceso al sistema
                                     </p>
-                                    <Button variant="outline" size="sm">
-                                        Crear Acceso
-                                    </Button>
+                                    <Link href={`/empleados/${id}/editar`}>
+                                        <Button variant="outline" size="sm">
+                                            Crear Acceso
+                                        </Button>
+                                    </Link>
                                 </div>
                             )}
                         </CardContent>
@@ -362,6 +462,78 @@ export default function EmpleadoDetallePage() {
                 <p>ID Empleado: {empleado.id_empleado} | ID Persona: {empleado.id_persona}</p>
                 <p>Creado: {empleado.fecha_creacion}</p>
             </div>
+
+            {/* ⚠️ DIALOG DE CONFIRMACIÓN CRÍTICA: Cambio de Correo de Ingreso al Sistema */}
+            <AlertDialog open={showChangeEmailDialog} onOpenChange={setShowChangeEmailDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-orange-700">
+                            <AlertTriangle className="h-5 w-5 text-orange-600" />
+                            Confirmar Cambio de Correo de Ingreso al Sistema
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-3 pt-2 text-left text-sm text-gray-600">
+                                <p>
+                                    ¿Está seguro de que desea cambiar el correo de ingreso al sistema para este empleado?
+                                </p>
+                                <div className="p-3 bg-gray-50 border rounded-md space-y-1.5 text-xs">
+                                    <p>
+                                        <span className="text-gray-500 font-medium">Correo actual:</span>{' '}
+                                        <span className="font-mono text-gray-800">{(empleado as any)?.usuario?.email}</span>
+                                    </p>
+                                    <div className="pt-2">
+                                        <label className="text-gray-700 font-semibold block mb-1">
+                                            Nuevo correo de acceso:
+                                        </label>
+                                        <Input
+                                            type="email"
+                                            value={nuevoEmail}
+                                            onChange={(e) => setNuevoEmail(e.target.value)}
+                                            placeholder="nuevo.correo@mekanos.com"
+                                            className="bg-white"
+                                        />
+                                    </div>
+                                    <div className="flex items-center space-x-2 pt-2">
+                                        <input
+                                            type="checkbox"
+                                            id="syncPersonaEmailDetail"
+                                            checked={syncEmailConPersona}
+                                            onChange={(e) => setSyncEmailConPersona(e.target.checked)}
+                                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 h-4 w-4"
+                                        />
+                                        <label htmlFor="syncPersonaEmailDetail" className="text-xs text-gray-700 font-medium cursor-pointer">
+                                            Sincronizar también el correo en datos personales de la persona
+                                        </label>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-red-600 font-medium">
+                                    ⚠️ Importante: El empleado perderá acceso con su correo anterior y deberá utilizar este nuevo correo para autenticarse en el Portal Web y la App Móvil.
+                                </p>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={savingEmail}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleConfirmarCambioEmail();
+                            }}
+                            disabled={savingEmail}
+                            className="bg-orange-600 hover:bg-orange-700 text-white"
+                        >
+                            {savingEmail ? (
+                                <span className="flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Actualizando...
+                                </span>
+                            ) : (
+                                'Sí, Confirmar Cambio'
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

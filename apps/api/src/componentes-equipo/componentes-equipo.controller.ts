@@ -8,9 +8,10 @@ import {
     Post,
     Put,
     Query,
+    UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { Public } from '../auth/decorators/public.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ActualizarComponenteEquipoCommand } from './application/commands/actualizar-componente-equipo.command';
 import { CrearComponenteEquipoCommand } from './application/commands/crear-componente-equipo.command';
 import { DesactivarComponenteEquipoCommand } from './application/commands/desactivar-componente-equipo.command';
@@ -21,7 +22,8 @@ import { CreateComponenteEquipoDto } from './dto/create-componente-equipo.dto';
 import { UpdateComponenteEquipoDto } from './dto/update-componente-equipo.dto';
 
 @Controller('componentes-equipo')
-@Public()
+// @Public() // DESHABILITADO - Se requiere JWT
+@UseGuards(JwtAuthGuard)
 export class ComponentesEquipoController {
   constructor(
     private readonly commandBus: CommandBus,

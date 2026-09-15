@@ -35,7 +35,7 @@ import { GetEquiposQuery, GetEquiposQueryDto } from './queries/get-equipos.query
 @ApiTags('FASE 1 - Equipos')
 @ApiBearerAuth('JWT-auth')
 @Controller('equipos')
-@Public()
+// @Public() // DESHABILITADO - Se requiere JWT para creado_por y seguridad
 @UseGuards(JwtAuthGuard)
 export class EquiposController {
   constructor(

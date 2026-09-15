@@ -117,13 +117,36 @@ export class UsuariosService {
     try {
       await this.findOne(id); // Verifica existencia
 
+      const dataToUpdate: any = { ...updateDto };
+      if (typeof dataToUpdate.email === 'string') {
+        dataToUpdate.email = dataToUpdate.email.trim().toLowerCase();
+      }
+      if (typeof dataToUpdate.username === 'string') {
+        dataToUpdate.username = dataToUpdate.username.trim().toLowerCase();
+      }
+
       return await this.prisma.usuarios.update({
         where: { id_usuario: id },
-        data: updateDto as any,
+        data: dataToUpdate,
       });
-    } catch (error: unknown) {
-      if (error instanceof NotFoundException) {
+    } catch (error: any) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      ) {
         throw error;
+      }
+      if (error?.code === 'P2002') {
+        const target = error.meta?.target;
+        const targetStr = Array.isArray(target) ? target.join(', ') : (target || '');
+        const campo = targetStr.includes('email')
+          ? 'correo electrónico'
+          : targetStr.includes('username')
+          ? 'nombre de usuario'
+          : 'campo único';
+        throw new ConflictException(
+          `El ${campo} ya está registrado en el sistema por otro usuario.`,
+        );
       }
       throw new InternalServerErrorException(
         `Error al actualizar usuarios: ${(error as Error).message}`,

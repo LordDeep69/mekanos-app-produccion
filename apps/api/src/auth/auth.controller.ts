@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Roles } from './decorators/roles.decorator';
@@ -27,7 +28,9 @@ export class AuthController {
    * POST /auth/login
    * Login con credenciales email/password
    * Retorna access_token, refresh_token y datos del usuario
+   * 🛡️ SEGURIDAD: Máximo 5 intentos por minuto por IP para prevenir ataques de fuerza bruta y DoS
    */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(loginDto);

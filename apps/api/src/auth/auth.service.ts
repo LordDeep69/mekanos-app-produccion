@@ -50,35 +50,21 @@ export class AuthService {
         },
       });
 
-      console.log('📝 [DEBUG] Usuario encontrado:', {
-        exists: !!usuario,
-        id: usuario?.id_usuario,
-        estado: usuario?.estado,
-        hasPassword: !!usuario?.password_hash,
-        hasPersona: !!usuario?.persona,
-      });
+      // 🛡️ MITIGACIÓN DE TIMING ATTACKS:
+      // Ejecutar siempre bcrypt.compare con hash dummy si el usuario no existe.
+      // Esto garantiza un tiempo de respuesta uniforme (~1.5s) imposibilitando
+      // que un atacante deduzca qué cuentas existen mediante medición de latencia.
+      const DUMMY_BCRYPT_HASH = '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW';
+      const hashToCompare = usuario?.password_hash || DUMMY_BCRYPT_HASH;
+      const isPasswordValid = await bcrypt.compare(loginDto.password, hashToCompare);
 
-      if (!usuario) {
-        console.log('❌ [DEBUG] Usuario no existe');
+      if (!usuario || !isPasswordValid) {
         throw new UnauthorizedException('Credenciales inválidas');
       }
 
       // 2. Validar usuario activo (campo real: estado = 'ACTIVO')
       if (usuario.estado !== 'ACTIVO') {
-        console.log('❌ [DEBUG] Usuario inactivo:', usuario.estado);
-        throw new UnauthorizedException('Usuario inactivo. Contacte al administrador');
-      }
-
-      console.log('✅ [DEBUG] Usuario activo validado');
-
-      // 3. Validar contraseña (campo real: password_hash)
-      console.log('🔑 [DEBUG] Validando password...');
-      const isPasswordValid = await bcrypt.compare(loginDto.password, usuario.password_hash);
-      console.log('🔑 [DEBUG] Password válido:', isPasswordValid);
-
-      if (!isPasswordValid) {
-        console.log('❌ [DEBUG] Password inválido');
-        throw new UnauthorizedException('Credenciales inválidas');
+        throw new UnauthorizedException('Usuario inactivo o credenciales inválidas');
       }
 
       // 4. Generar tokens JWT

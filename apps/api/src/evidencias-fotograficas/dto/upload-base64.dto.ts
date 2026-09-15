@@ -33,6 +33,13 @@ export class UploadBase64Dto {
     @IsInt()
     idOrdenEquipo?: number;
 
+    // ✅ FIX 20-AGO-2026: Galería por lotes — asociar la foto a un lote específico
+    // (undefined/null = grupo estándar de fotos generales)
+    @ApiPropertyOptional({ description: 'ID lote de galería (FK) para agrupar la foto en un lote', example: 3 })
+    @IsOptional()
+    @IsInt()
+    idLoteGaleria?: number;
+
     @ApiProperty({
         enum: TipoEvidenciaEnum,
         description: 'Tipo evidencia (ANTES, DURANTE, DESPUES, etc.)',

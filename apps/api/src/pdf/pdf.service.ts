@@ -287,6 +287,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       // --- Datos generales ---
       numeroOrden: datos.numeroOrden,
       fecha: datos.fecha,
+      // ✅ FIX 20-AGO-2026: Fecha de salida + flag de días distintos
+      fechaSalida: datos.fechaSalida,
+      diasDiferentes: datos.diasDiferentes,
       horaEntrada: datos.horaEntrada,
       horaSalida: datos.horaSalida,
       tipoServicio: 'CORRECTIVO',
@@ -353,8 +356,17 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           else if (raw === 'MEDICIÓN') tipo = 'MEDICION';
           else tipo = raw as TipoEvidencia;
         }
-        return { tipo, url: typeof e === 'string' ? e : e.url, descripcion: caption };
+        // ✅ FIX 20-AGO-2026: Preservar idLote para agrupar fotos generales por lote
+        return {
+          tipo,
+          url: typeof e === 'string' ? e : e.url,
+          descripcion: caption,
+          idLote: typeof e === 'string' ? undefined : (e as any).idLote,
+        };
       }),
+
+      // ✅ FIX 20-AGO-2026: Lotes de galería (contenedores independientes en el PDF)
+      lotesGaleria: datos.lotesGaleria,
 
       // --- Firmas ---
       firmaTecnico: datos.firmaTecnico,

@@ -24,7 +24,7 @@ import { CreateEquipoBombaDto } from './dto/create-equipo-bomba.dto';
 import { UpdateEquipoBombaDto } from './dto/update-equipo-bomba.dto';
 
 @Controller('equipos-bomba')
-@Public()
+// @Public() // DESHABILITADO - Se requiere JWT para creado_por
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EquiposBombaController {
   constructor(

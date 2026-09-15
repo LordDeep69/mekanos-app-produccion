@@ -1,9 +1,18 @@
-/**
+﻿/**
  * MEKANOS S.A.S - Portal Admin
  * Galería de Fotos Generales del Servicio
- * 
+ *
  * Componente CRUD para gestionar fotos GENERALES (no asociadas a actividad).
  * Permite subir, ver en lightbox y eliminar fotos generales de una orden.
+ *
+ * ✅ FIX 20-AGO-2026: GALERÍA POR LOTES
+ * Permite crear LOTES de galería (ej. "Fotos del 08/26", "Fotos del 09/26")
+ * para mantener el orden de secuencias de fotos. Cada lote:
+ * - Tiene su propio NOMBRE (título del contenedor en el PDF)
+ * - Tiene sus apartados ANTES/DURANTE/DESPUÉS
+ * - Alimenta sus fotos de forma independiente (id_lote_galeria en BD)
+ * - En el PDF se renderiza en un contenedor sólido distinto por lote
+ * El grupo estándar muestra solo fotos SIN lote; el PDF separa ambos.
  */
 
 'use client';
@@ -20,10 +29,12 @@ import {
     Clipboard,
     Clock,
     Edit2,
+    FolderPlus,
     History,
     Image as ImageIcon,
     LayoutGrid,
     Loader2,
+    Package,
     Plus,
     Save,
     Trash2,
@@ -33,7 +44,7 @@ import {
     ZoomIn
 } from 'lucide-react';
 import Image from 'next/image';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 interface Evidencia {
@@ -48,6 +59,17 @@ interface Evidencia {
     fechaCaptura?: string;
     id_orden_equipo?: number | null;
     idOrdenEquipo?: number | null;
+    id_lote_galeria?: number | null;
+    idLoteGaleria?: number | null;
+}
+
+interface LoteGaleria {
+    idLoteGaleria: number;
+    idOrdenServicio: number;
+    nombreLote: string;
+    ordenLote: number;
+    fechaCreacion?: string;
+    cantidadFotos?: number;
 }
 
 interface GaleriaFotosGeneralesProps {
@@ -68,6 +90,9 @@ function getEvUrl(e: Evidencia): string | undefined {
 function getEvFecha(e: Evidencia): string | undefined {
     return e.fecha_captura ?? e.fechaCaptura;
 }
+function getEvLote(e: Evidencia): number | null {
+    return e.id_lote_galeria ?? e.idLoteGaleria ?? null;
+}
 
 // ✅ FIX 07-FEB-2026: Extraer sub-tipo (ANTES/DURANTE/DESPUES) del prefijo de descripción
 function getSubTipo(e: Evidencia): { subTipo: string; descripcionLimpia: string } {
@@ -87,14 +112,23 @@ const SUB_TIPO_COLORS: Record<string, string> = {
     GENERAL: 'bg-teal-500',
 };
 
+// ✅ FIX 20-AGO-2026: Colores de lote para el admin (coinciden con el PDF)
+const LOTE_COLORS_ADMIN = [
+    { border: 'border-violet-500', bg: 'bg-violet-500', soft: 'bg-violet-50', text: 'text-violet-700' },
+    { border: 'border-sky-500', bg: 'bg-sky-500', soft: 'bg-sky-50', text: 'text-sky-700' },
+    { border: 'border-green-500', bg: 'bg-green-500', soft: 'bg-green-50', text: 'text-green-700' },
+    { border: 'border-amber-500', bg: 'bg-amber-500', soft: 'bg-amber-50', text: 'text-amber-700' },
+    { border: 'border-pink-500', bg: 'bg-pink-500', soft: 'bg-pink-50', text: 'text-pink-700' },
+    { border: 'border-teal-500', bg: 'bg-teal-500', soft: 'bg-teal-50', text: 'text-teal-700' },
+];
+function getColorLoteAdmin(ordenLote: number) {
+    return LOTE_COLORS_ADMIN[(ordenLote || 0) % LOTE_COLORS_ADMIN.length];
+}
+
 // ✅ FIX 06-AGO-2026: Selector visual de fase (ANTES/DURANTE/DESPUES/GENERAL)
-// Reemplaza la práctica de escribir "ANTES:" a mano en la descripción.
-// La fase se inyecta como prefijo "FASE: " para mantener compatibilidad con
-// el filtro de galería, el mobile y la clasificación del PDF.
 type FaseFoto = 'GENERAL' | 'ANTES' | 'DURANTE' | 'DESPUES';
 type FaseOpcion = FaseFoto | 'TODAS';
 
-// ✅ FIX 06-AGO-2026: Descripción por defecto según la fase seleccionada
 const FASE_DESCRIPCION_DEFECTO: Record<FaseFoto, string> = {
     GENERAL: 'Foto general del servicio',
     ANTES: 'Foto general de antes',
@@ -226,6 +260,7 @@ function FotoThumbnail({
 
 function LightboxModal({
     evidencia,
+    titulo,
     onClose,
     onPrev,
     onNext,
@@ -235,6 +270,7 @@ function LightboxModal({
     total,
 }: {
     evidencia: Evidencia;
+    titulo?: string;
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
@@ -258,7 +294,7 @@ function LightboxModal({
                 {/* Header */}
                 <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent z-10 flex justify-between items-center">
                     <div className="text-white">
-                        <p className="text-sm font-bold">📷 Foto General</p>
+                        <p className="text-sm font-bold">{titulo || '📷 Foto General'}</p>
                         {(() => {
                             const { descripcionLimpia } = getSubTipo(evidencia);
                             return descripcionLimpia && (
@@ -322,64 +358,478 @@ function LightboxModal({
     );
 }
 
+/** ✅ FIX 20-AGO-2026: Grid de fotos agrupado por fase (ANTES/DURANTE/DESPUÉS/GENERAL) */
+function GridFotosPorFase({
+    fotos,
+    onEdit,
+    onDelete,
+    onView,
+    editingEvidenciaId,
+    editFase,
+    editDescripcion,
+    setEditFase,
+    setEditDescripcion,
+    onCancelEdit,
+    onSaveDescripcion,
+    isSavingEdit,
+}: {
+    fotos: Evidencia[];
+    onEdit: (ev: Evidencia) => void;
+    onView: (ev: Evidencia) => void;
+    onDelete: (id: number) => void;
+    editingEvidenciaId: number | null;
+    editFase: FaseFoto;
+    editDescripcion: string;
+    setEditFase: (f: FaseFoto) => void;
+    setEditDescripcion: (d: string) => void;
+    onCancelEdit: () => void;
+    onSaveDescripcion: (id: number) => void;
+    isSavingEdit: boolean;
+}) {
+    // Agrupar por fase con orden ANTES → DURANTE → DESPUES → GENERAL
+    const grupos: { fase: string; fotos: Evidencia[] }[] = [];
+    ['ANTES', 'DURANTE', 'DESPUES', 'GENERAL'].forEach((fase) => {
+        const delFase = fotos.filter((e) => {
+            const { subTipo } = getSubTipo(e);
+            return fase === 'GENERAL' ? !subTipo : subTipo === fase;
+        });
+        if (delFase.length > 0) grupos.push({ fase, fotos: delFase });
+    });
+    // Fotos restantes (por seguridad, cualquier otra fase) van al final
+    const restantes = fotos.filter((e) => {
+        const { subTipo } = getSubTipo(e);
+        return !['ANTES', 'DURANTE', 'DESPUES'].includes(subTipo) && subTipo !== '';
+    });
+    if (restantes.length > 0) grupos.push({ fase: 'OTRO', fotos: restantes });
+
+    return (
+        <div className="space-y-3">
+            {grupos.map(({ fase, fotos: delFase }) => (
+                <div key={fase}>
+                    {fase !== 'GENERAL' && fase !== 'OTRO' && (
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className={cn(
+                                "px-2 py-0.5 rounded-md text-[9px] font-bold text-white shadow-sm",
+                                SUB_TIPO_COLORS[fase] || 'bg-gray-500'
+                            )}>
+                                {fase}
+                            </span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                                {fase === 'ANTES' ? 'Antes del servicio' : fase === 'DURANTE' ? 'Durante el servicio' : 'Después del servicio'} · {delFase.length}
+                            </span>
+                        </div>
+                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {delFase.map((evidencia) => {
+                            const evId = getEvId(evidencia);
+                            const isEditing = editingEvidenciaId === evId;
+                            return (
+                                <div key={evId} className="relative">
+                                    {isEditing ? (
+                                        <div className="rounded-xl border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2 min-h-[170px]">
+                                            <SelectorFase
+                                                valor={editFase}
+                                                onChange={(v) => { if (v !== 'TODAS') setEditFase(v); }}
+                                            />
+                                            <textarea
+                                                value={editDescripcion}
+                                                onChange={(e) => setEditDescripcion(e.target.value)}
+                                                className="w-full flex-1 text-xs px-2 py-1 border border-blue-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
+                                                placeholder="Observación..."
+                                                autoFocus
+                                            />
+                                            <div className="flex gap-1 justify-end">
+                                                <button
+                                                    onClick={onCancelEdit}
+                                                    className="p-1.5 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                                                    title="Cancelar"
+                                                >
+                                                    <X className="h-3.5 w-3.5 text-gray-600" />
+                                                </button>
+                                                <button
+                                                    onClick={() => onSaveDescripcion(evId)}
+                                                    disabled={isSavingEdit}
+                                                    className="p-1.5 bg-blue-500 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
+                                                    title="Guardar"
+                                                >
+                                                    {isSavingEdit ? (
+                                                        <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                                                    ) : (
+                                                        <Save className="h-3.5 w-3.5 text-white" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <FotoThumbnail
+                                            evidencia={evidencia}
+                                            onView={() => onView(evidencia)}
+                                            onDelete={() => onDelete(evId)}
+                                            onEdit={() => onEdit(evidencia)}
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/**
+ * ✅ FIX 20-AGO-2026 v3: Tarjeta de LOTE con subida EN LÍNEA.
+ *
+ * Registra listeners NATIVOS de drag&drop en fase CAPTURE sobre su propio nodo:
+ * el drop dentro de la tarjeta se detiene ahí (stopPropagation) y NO llega al
+ * contenedor global (que sube al grupo estándar). Así cada lote recibe
+ * exclusivamente sus imágenes, con clic, arrastre o Ctrl+V en su descripción.
+ * Incluye overlay de progreso visible durante la subida múltiple.
+ */
+function TarjetaLoteGaleria({
+    lote,
+    fotosDelLote,
+    colorAdmin,
+    faseLoteVista,
+    setFaseLote,
+    descripcionLote,
+    setDescripcionLote,
+    isRenombrando,
+    nombreRenombrar,
+    setNombreRenombrar,
+    onGuardarNombre,
+    onCancelarRenombrar,
+    onRenombrarClick,
+    onEliminarLote,
+    renombrarPending,
+    isUploading,
+    subiendoEsteLote,
+    uploadCount,
+    uploadTotal,
+    onUploadFiles,
+    onEditClick,
+    onViewLightbox,
+    onDeleteFoto,
+    editingEvidenciaId,
+    editFase,
+    editDescripcion,
+    setEditFase,
+    setEditDescripcion,
+    onCancelEdit,
+    onSaveDescripcion,
+    isSavingEdit,
+}: {
+    lote: LoteGaleria;
+    fotosDelLote: Evidencia[];
+    colorAdmin: { border: string; bg: string; soft: string; text: string };
+    faseLoteVista: FaseOpcion;
+    setFaseLote: (v: FaseOpcion) => void;
+    descripcionLote: string;
+    setDescripcionLote: (d: string) => void;
+    isRenombrando: boolean;
+    nombreRenombrar: string;
+    setNombreRenombrar: (n: string) => void;
+    onGuardarNombre: (n: string) => void;
+    onCancelarRenombrar: () => void;
+    onRenombrarClick: () => void;
+    onEliminarLote: () => void;
+    renombrarPending: boolean;
+    isUploading: boolean;
+    subiendoEsteLote: boolean;
+    uploadCount: number;
+    uploadTotal: number;
+    onUploadFiles: (files: File[], idLote: number) => void;
+    onEditClick: (ev: Evidencia) => void;
+    onViewLightbox: (ev: Evidencia) => void;
+    onDeleteFoto: (id: number) => void;
+    editingEvidenciaId: number | null;
+    editFase: FaseFoto;
+    editDescripcion: string;
+    setEditFase: (f: FaseFoto) => void;
+    setEditDescripcion: (d: string) => void;
+    onCancelEdit: () => void;
+    onSaveDescripcion: (id: number) => void;
+    isSavingEdit: boolean;
+}) {
+    const tarjetaRef = useRef<HTMLDivElement | null>(null);
+    const [dragLocal, setDragLocal] = useState(false);
+    const inputLoteId = `input-lote-${lote.idLoteGaleria}`;
+    const onUploadFilesRef = useRef(onUploadFiles);
+    onUploadFilesRef.current = onUploadFiles;
+
+    // Listeners NATIVOS en fase CAPTURE: el drop del lote no burbujea al
+    // contenedor global (evita que las fotos del lote se suban al estándar)
+    useEffect(() => {
+        const node = tarjetaRef.current;
+        if (!node) return;
+
+        const enter = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragLocal(true);
+        };
+        const leave = (e: DragEvent) => {
+            e.stopPropagation();
+            setDragLocal(false);
+        };
+        const over = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+        const drop = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragLocal(false);
+            const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+            if (files.length > 0) onUploadFilesRef.current(files, lote.idLoteGaleria);
+        };
+
+        node.addEventListener('dragenter', enter, true);
+        node.addEventListener('dragleave', leave, true);
+        node.addEventListener('dragover', over, true);
+        node.addEventListener('drop', drop, true);
+        return () => {
+            node.removeEventListener('dragenter', enter, true);
+            node.removeEventListener('dragleave', leave, true);
+            node.removeEventListener('dragover', over, true);
+            node.removeEventListener('drop', drop, true);
+        };
+    }, [lote.idLoteGaleria]);
+
+    // Vista del lote según la fase seleccionada (misma lógica que el estándar)
+    const fotosLoteVista = faseLoteVista === 'TODAS'
+        ? fotosDelLote
+        : fotosDelLote.filter((e) => {
+            const { subTipo } = getSubTipo(e);
+            if (faseLoteVista === 'GENERAL') return !subTipo;
+            return subTipo === faseLoteVista;
+        });
+
+    const inputLoteHandler = () => document.getElementById(inputLoteId)?.click();
+    const subiendo = subiendoEsteLote && isUploading;
+    const progresoPct = uploadTotal > 0 ? Math.round((uploadCount / uploadTotal) * 100) : 0;
+
+    return (
+        <div
+            ref={tarjetaRef}
+            className={cn(
+                "rounded-xl border-2 overflow-hidden bg-white shadow-sm relative",
+                colorAdmin.border
+            )}
+        >
+            {/* Input file nativo del lote (subida directa) */}
+            <input
+                id={inputLoteId}
+                type="file"
+                multiple
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) onUploadFiles(files, lote.idLoteGaleria);
+                    e.target.value = '';
+                }}
+            />
+
+            {/* ✅ v3: Overlay de progreso visible durante la subida al lote */}
+            {subiendoEsteLote && isUploading && (
+                <div className="absolute inset-0 z-30 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-xl pointer-events-none">
+                    <Loader2 className="h-8 w-8 text-violet-600 animate-spin" />
+                    <p className="text-sm font-bold text-violet-700">
+                        Subiendo al lote... {uploadCount}/{uploadTotal}
+                    </p>
+                    <div className="w-48 h-2 bg-violet-100 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-violet-600 transition-all duration-300"
+                            style={{ width: `${progresoPct}%` }}
+                        />
+                    </div>
+                    <p className="text-[10px] text-violet-400">{progresoPct}%</p>
+                </div>
+            )}
+
+            {/* Overlay de drag sobre el lote */}
+            {dragLocal && !subiendoEsteLote && (
+                <div className="absolute inset-0 z-20 bg-violet-50/90 backdrop-blur-sm flex flex-col items-center justify-center gap-1.5 rounded-xl pointer-events-none border-4 border-dashed border-violet-400">
+                    <Upload className="h-7 w-7 text-violet-500 animate-bounce" />
+                    <p className="text-sm font-bold text-violet-700">Suelte para subir al lote</p>
+                    <p className="text-[10px] text-violet-500">{lote.nombreLote}</p>
+                </div>
+            )}
+
+            {/* Header del lote */}
+            <div className={cn(
+                "px-3 py-2.5 flex items-center gap-2 flex-wrap",
+                colorAdmin.soft
+            )}>
+                <div className={cn("p-1.5 rounded-lg shadow-sm", colorAdmin.bg)}>
+                    <Package className="h-4 w-4 text-white" />
+                </div>
+
+                {isRenombrando ? (
+                    <div className="flex items-center gap-1.5 flex-1 min-w-[180px]">
+                        <input
+                            type="text"
+                            value={nombreRenombrar}
+                            onChange={(e) => setNombreRenombrar(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && nombreRenombrar.trim()) {
+                                    onGuardarNombre(nombreRenombrar.trim());
+                                }
+                            }}
+                            className="flex-1 px-2 py-1 text-xs border border-violet-300 rounded focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            autoFocus
+                            maxLength={100}
+                        />
+                        <button
+                            onClick={() => {
+                                const n = nombreRenombrar.trim();
+                                if (n) onGuardarNombre(n);
+                            }}
+                            disabled={renombrarPending}
+                            className="p-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50"
+                            title="Guardar nombre"
+                        >
+                            {renombrarPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                            onClick={onCancelarRenombrar}
+                            className="p-1.5 bg-gray-200 rounded hover:bg-gray-300"
+                            title="Cancelar"
+                        >
+                            <X className="h-3.5 w-3.5 text-gray-600" />
+                        </button>
+                    </div>
+                ) : (
+                    <span className={cn("font-bold text-sm truncate", colorAdmin.text)}>
+                        {lote.nombreLote}
+                    </span>
+                )}
+
+                <span className="px-2 py-0.5 rounded-full bg-white border text-[10px] font-bold text-gray-600 shadow-sm">
+                    {fotosDelLote.length} foto{fotosDelLote.length !== 1 ? 's' : ''}
+                </span>
+
+                <div className="ml-auto flex items-center gap-1.5">
+                    <button
+                        onClick={onRenombrarClick}
+                        className="p-1.5 rounded-lg bg-white border text-gray-500 hover:text-blue-600 hover:border-blue-300 transition-colors"
+                        title="Renombrar lote"
+                    >
+                        <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                        onClick={onEliminarLote}
+                        className="p-1.5 rounded-lg bg-white border text-gray-500 hover:text-red-600 hover:border-red-300 transition-colors"
+                        title="Eliminar lote (las fotos vuelven al grupo estándar)"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                        onClick={inputLoteHandler}
+                        disabled={isUploading}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white border-2 hover:shadow-sm transition-all disabled:opacity-50"
+                        title="Agregar fotos a este lote (clic, arrastrar o Ctrl+V)"
+                    >
+                        <Plus className="h-3.5 w-3.5" />
+                        Agregar Foto
+                    </button>
+                </div>
+            </div>
+
+            {/* Contenido del lote — MENÚ CLÁSICO en línea */}
+            <div className="p-3">
+                <div className="mb-3 flex items-center gap-2 flex-wrap border-b border-purple-50 pb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-purple-500 shrink-0">
+                        Ver
+                    </span>
+                    <SelectorFase valor={faseLoteVista} onChange={setFaseLote} incluirTodas />
+                </div>
+
+                <input
+                    type="text"
+                    value={descripcionLote}
+                    onChange={(e) => setDescripcionLote(e.target.value)}
+                    onPaste={(e) => {
+                        // ✅ Ctrl+V en la descripción del lote → sube a ESTE lote.
+                        // stopPropagation evita que el paste global (grupo estándar) lo procese
+                        const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith('image/'));
+                        if (files.length > 0) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onUploadFiles(files, lote.idLoteGaleria);
+                        }
+                    }}
+                    placeholder="Descripción opcional para la próxima foto..."
+                    className="w-full px-3 py-1.5 border border-purple-200 rounded-lg text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400 mb-3"
+                />
+
+                {fotosDelLote.length === 0 ? (
+                    <div
+                        onClick={inputLoteHandler}
+                        className="text-center py-6 text-gray-400 cursor-pointer hover:bg-gray-50 rounded-xl transition-colors"
+                    >
+                        <Package className="h-8 w-8 mx-auto mb-1.5 opacity-30" />
+                        <p className="text-xs font-medium">Lote vacío</p>
+                        <p className="text-[10px] mt-1 text-gray-300">
+                            Clic, arrastrar imágenes aquí o pegar con Ctrl+V en la descripción
+                        </p>
+                    </div>
+                    ) : fotosLoteVista.length === 0 ? (
+                        <div className="text-center py-4 text-gray-400">
+                            <Package className="h-6 w-6 mx-auto mb-1 opacity-30" />
+                            <p className="text-xs font-medium">Sin fotos en esta fase</p>
+                            <p className="text-[10px] mt-1 text-gray-300">Elige otra fase o selecciona "Todas"</p>
+                        </div>
+                    ) : (
+                        <GridFotosPorFase
+                            fotos={fotosLoteVista}
+                            onEdit={onEditClick}
+                            onView={onViewLightbox}
+                            onDelete={onDeleteFoto}
+                            editingEvidenciaId={editingEvidenciaId}
+                            editFase={editFase}
+                            editDescripcion={editDescripcion}
+                            setEditFase={setEditFase}
+                            setEditDescripcion={setEditDescripcion}
+                            onCancelEdit={onCancelEdit}
+                            onSaveDescripcion={onSaveDescripcion}
+                            isSavingEdit={isSavingEdit}
+                        />
+                    )}
+                </div>
+            </div>
+        );
+}
+
 export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = null }: GaleriaFotosGeneralesProps) {
     const queryClient = useQueryClient();
-    const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState('');
+    // ✅ v3: Progreso visible — saber a dónde se está subiendo y cuántas van
+    const [uploadLoteId, setUploadLoteId] = useState<number | null>(null);
+    const [uploadTotal, setUploadTotal] = useState(0);
+    const [uploadCount, setUploadCount] = useState(0);
     const [descripcionNueva, setDescripcionNueva] = useState('');
-    // ✅ FIX 06-AGO-2026: Selector único de fase — filtra la galería y define
-    // la fase de las fotos a subir (TODAS ⇒ se suben como GENERAL)
     const [filtroFase, setFiltroFase] = useState<FaseOpcion>('TODAS');
 
-    // ✅ FIX 02-MAY-2026: Soporte drag-drop, paste y multi-file
-    const uploadFiles = async (files: File[]) => {
-        setIsUploading(true);
-        let uploaded = 0;
-        try {
-            // ✅ FIX 06-AGO-2026: La fase se toma del selector único (Ver).
-            // Si no hay descripción, usar texto por defecto según la fase.
-            const faseSubida: FaseFoto = filtroFase === 'TODAS' ? 'GENERAL' : filtroFase;
-            const descripcionBase = descripcionNueva.trim();
-            const descripcionFinal = faseSubida === 'GENERAL'
-                ? (descripcionBase || FASE_DESCRIPCION_DEFECTO.GENERAL)
-                : descripcionBase
-                    ? `${faseSubida}: ${descripcionBase}`
-                    : `${faseSubida}: ${FASE_DESCRIPCION_DEFECTO[faseSubida]}`;
-            for (const file of files) {
-                setUploadProgress(`${uploaded + 1}/${files.length}`);
-                const base64 = await fileToBase64(file);
-                await apiClient.post('/evidencias-fotograficas/upload-base64', {
-                    idOrdenServicio,
-                    tipoEvidencia: 'GENERAL',
-                    descripcion: descripcionFinal,
-                    nombreArchivo: file.name,
-                    base64,
-                });
-                uploaded++;
-            }
-            queryClient.invalidateQueries({ queryKey: ['evidencias-generales', idOrdenServicio] });
-            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
-            setDescripcionNueva('');
-            toast.success(files.length === 1 ? 'Foto general subida exitosamente' : `${uploaded} fotos generales subidas`);
-        } catch (error) {
-            console.error('Error uploading general photo:', error);
-            toast.error(`Error al subir foto${files.length > 1 ? 's' : ''} (${uploaded}/${files.length} completadas)`);
-        } finally {
-            setIsUploading(false);
-            setUploadProgress('');
-        }
-    };
+    // ✅ FIX 20-AGO-2026: Estado de LOTES
+    const [dialogNuevoLote, setDialogNuevoLote] = useState(false);
+    const [nombreNuevoLote, setNombreNuevoLote] = useState('');
+    // ✅ FIX 20-AGO-2026 v2: Cada lote funciona EN LÍNEA (sin modal):
+    // - faseLoteActiva[loteId]: fase de vista/subida del lote (TODAS ⇒ GENERAL)
+    // - descripcionLote[loteId]: descripción opcional en línea del lote
+    // - Subida directa: clic en zona vacía, arrastrar sobre la tarjeta o
+    //   pegar (Ctrl+V) en el campo de descripción del lote
+    const [faseLoteActiva, setFaseLoteActiva] = useState<Record<number, FaseOpcion>>({});
+    const [descripcionLote, setDescripcionLote] = useState<Record<number, string>>({});
+    const [renombrandoLoteId, setRenombrandoLoteId] = useState<number | null>(null);
+    const [nombreRenombrar, setNombreRenombrar] = useState('');
 
-    const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
-        onFiles: uploadFiles,
-        multiple: true,
-        disabled: isUploading,
-        onInvalidType: (name) => toast.error(`"${name}" no es una imagen válida`),
-        onMaxSizeExceeded: (name) => toast.error(`"${name}" supera el límite de 10MB`),
-    });
-
-    // ✅ FIX 09-FEB-2026: Usar apiClient con interceptor auth
+    // ============================================================
+    // QUERY: evidencias generales de la orden
+    // ============================================================
     const { data: evidenciasData, isLoading } = useQuery({
         queryKey: ['evidencias-generales', idOrdenServicio],
         queryFn: async () => {
@@ -390,9 +840,6 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                 const allData = res.data;
                 const todasEvidencias = Array.isArray(allData) ? allData : (allData.data || []);
 
-                // Filter GENERAL photos: tipo_evidencia='GENERAL' OR description has sub-type prefix
-                // ✅ DEFENSE-IN-DEPTH 07-FEB-2026: Also catch photos from mobile apps that
-                // weren't rebuilt (sent as ANTES/DURANTE/DESPUES with "SUBTIPO: " prefix in description)
                 const GENERAL_PREFIX_RE = /^(ANTES|DURANTE|DESPUES):\s/i;
                 const generales = todasEvidencias.filter((e: any) => {
                     const tipo = (e.tipo_evidencia ?? e.tipoEvidencia ?? '').toUpperCase();
@@ -400,7 +847,6 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                     return tipo === 'GENERAL' || GENERAL_PREFIX_RE.test(desc);
                 });
 
-                // ✅ FIX 07-FEB-2026: Ordenar por sub-tipo (ANTES → DURANTE → DESPUES)
                 const sorted = generales.sort((a: Evidencia, b: Evidencia) => {
                     const { subTipo: stA } = getSubTipo(a);
                     const { subTipo: stB } = getSubTipo(b);
@@ -416,25 +862,152 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
         enabled: !!idOrdenServicio,
     });
 
+    // ✅ FIX 20-AGO-2026: QUERY de lotes de galería
+    const { data: lotesData, isLoading: isLoadingLotes } = useQuery({
+        queryKey: ['galeria-lotes', idOrdenServicio],
+        queryFn: async () => {
+            try {
+                const res = await apiClient.get(`/galeria-lotes/orden/${idOrdenServicio}`);
+                return (res.data || []) as LoteGaleria[];
+            } catch {
+                return [] as LoteGaleria[];
+            }
+        },
+        enabled: !!idOrdenServicio,
+    });
+
+    const lotesGaleria: LoteGaleria[] = lotesData || [];
+
     const fotosGeneralesRaw: Evidencia[] = evidenciasData?.data || [];
 
-    // ✅ MULTI-EQUIPO: Filtrar por id_orden_equipo si se especifica
     const fotosGenerales: Evidencia[] = idOrdenEquipoFiltro != null
         ? fotosGeneralesRaw.filter((e) => (e.id_orden_equipo ?? e.idOrdenEquipo ?? null) === idOrdenEquipoFiltro)
         : fotosGeneralesRaw;
 
-    // ✅ FIX 06-AGO-2026: Filtrar la galería por fase seleccionada
-    // (GENERAL = fotos sin prefijo de fase; ANTES/DURANTE/DESPUES = con prefijo)
+    // ✅ FIX 20-AGO-2026: Separar fotos SIN lote (estándar) y fotos POR lote
+    const fotosSinLote = fotosGenerales.filter((e) => !getEvLote(e));
     const fotosFiltradas: Evidencia[] = useMemo(() => {
-        if (filtroFase === 'TODAS') return fotosGenerales;
-        return fotosGenerales.filter((e) => {
+        if (filtroFase === 'TODAS') return fotosSinLote;
+        return fotosSinLote.filter((e) => {
             const { subTipo } = getSubTipo(e);
             if (filtroFase === 'GENERAL') return !subTipo;
             return subTipo === filtroFase;
         });
-    }, [fotosGenerales, filtroFase]);
+    }, [fotosSinLote, filtroFase]);
 
-    // Delete mutation
+    // ============================================================
+    // SUBIDA (estándar o a lote)
+    // ============================================================
+    const uploadFiles = async (files: File[], idLote?: number) => {
+        setIsUploading(true);
+        setUploadLoteId(idLote ?? null);
+        setUploadTotal(files.length);
+        setUploadCount(0);
+        let uploaded = 0;
+        try {
+            const esLote = idLote != null;
+            // ✅ MISMO PATRÓN CLÁSICO: TODAS ⇒ se sube como GENERAL
+            const faseLote = esLote ? (faseLoteActiva[idLote!] ?? 'TODAS') : 'TODAS';
+            const faseSubida: FaseFoto = esLote
+                ? (faseLote === 'TODAS' ? 'GENERAL' : faseLote)
+                : (filtroFase === 'TODAS' ? 'GENERAL' : filtroFase);
+            const descripcionBase = esLote ? (descripcionLote[idLote!] ?? '').trim() : descripcionNueva.trim();
+            const descripcionFinal = faseSubida === 'GENERAL'
+                ? (descripcionBase || FASE_DESCRIPCION_DEFECTO.GENERAL)
+                : descripcionBase
+                    ? `${faseSubida}: ${descripcionBase}`
+                    : `${faseSubida}: ${FASE_DESCRIPCION_DEFECTO[faseSubida]}`;
+            for (const file of files) {
+                setUploadCount(uploaded + 1);
+                setUploadProgress(`${uploaded + 1}/${files.length}`);
+                const base64 = await fileToBase64(file);
+                await apiClient.post('/evidencias-fotograficas/upload-base64', {
+                    idOrdenServicio,
+                    tipoEvidencia: 'GENERAL',
+                    descripcion: descripcionFinal,
+                    nombreArchivo: file.name,
+                    base64,
+                    idLoteGaleria: esLote ? idLote : undefined,
+                });
+                uploaded++;
+            }
+            queryClient.invalidateQueries({ queryKey: ['evidencias-generales', idOrdenServicio] });
+            queryClient.invalidateQueries({ queryKey: ['galeria-lotes', idOrdenServicio] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+            if (esLote) setDescripcionLote((prev) => ({ ...prev, [idLote!]: '' }));
+            else setDescripcionNueva('');
+            toast.success(
+                esLote
+                    ? `${uploaded} foto${uploaded !== 1 ? 's' : ''} subida${uploaded !== 1 ? 's' : ''} al lote`
+                    : `${uploaded} foto${uploaded !== 1 ? 's' : ''} general${uploaded !== 1 ? 'es' : ''} subida${uploaded !== 1 ? 's' : ''}`,
+            );
+        } catch (error) {
+            console.error('Error uploading general photo:', error);
+            toast.error(`Error al subir foto${files.length > 1 ? 's' : ''} (${uploaded}/${files.length} completadas)`);
+        } finally {
+            setIsUploading(false);
+            setUploadLoteId(null);
+            setUploadProgress('');
+        }
+    };
+
+    const { setDropZoneRef, inputProps, openFilePicker, isDragging } = useImageDropPaste({
+        onFiles: (files) => uploadFiles(files),
+        multiple: true,
+        disabled: isUploading,
+        onInvalidType: (name) => toast.error(`"${name}" no es una imagen válida`),
+        onMaxSizeExceeded: (name) => toast.error(`"${name}" supera el límite de 10MB`),
+    });
+
+    // ============================================================
+    // MUTACIONES: LOTES
+    // ============================================================
+    const crearLoteMutation = useMutation({
+        mutationFn: async (nombreLote: string) => {
+            const res = await apiClient.post('/galeria-lotes', {
+                idOrdenServicio,
+                nombreLote,
+            });
+            return res.data;
+        },
+        onSuccess: (data: LoteGaleria) => {
+            queryClient.invalidateQueries({ queryKey: ['galeria-lotes', idOrdenServicio] });
+            toast.success(`Lote "${data.nombreLote}" creado`);
+            setDialogNuevoLote(false);
+            setNombreNuevoLote('');
+        },
+        onError: () => toast.error('Error al crear el lote'),
+    });
+
+    const renombrarLoteMutation = useMutation({
+        mutationFn: async ({ id, nombreLote }: { id: number; nombreLote: string }) => {
+            const res = await apiClient.put(`/galeria-lotes/${id}`, { nombreLote });
+            return res.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['galeria-lotes', idOrdenServicio] });
+            toast.success('Lote renombrado');
+            setRenombrandoLoteId(null);
+            setNombreRenombrar('');
+        },
+        onError: () => toast.error('Error al renombrar el lote'),
+    });
+
+    const eliminarLoteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            const res = await apiClient.delete(`/galeria-lotes/${id}`);
+            return res.data;
+        },
+        onSuccess: (data: { message?: string }) => {
+            queryClient.invalidateQueries({ queryKey: ['galeria-lotes', idOrdenServicio] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-generales', idOrdenServicio] });
+            queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
+            toast.success(data?.message || 'Lote eliminado');
+        },
+        onError: () => toast.error('Error al eliminar el lote'),
+    });
+
+    // Delete mutation (foto)
     const deleteMutation = useMutation({
         mutationFn: async (idEvidencia: number) => {
             const res = await apiClient.delete(`/evidencias-fotograficas/${idEvidencia}`);
@@ -442,6 +1015,7 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['evidencias-generales', idOrdenServicio] });
+            queryClient.invalidateQueries({ queryKey: ['galeria-lotes', idOrdenServicio] });
             queryClient.invalidateQueries({ queryKey: ['evidencias-orden'] });
             toast.success('Foto general eliminada');
         },
@@ -459,7 +1033,6 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
     // ✅ Edición inline de observación
     const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
     const [editDescripcion, setEditDescripcion] = useState('');
-    // ✅ FIX 06-AGO-2026: Fase seleccionada al editar (detectada del prefijo existente)
     const [editFase, setEditFase] = useState<FaseFoto>('GENERAL');
 
     const updateDescripcionMutation = useMutation({
@@ -481,7 +1054,6 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
     });
 
     const handleEditClick = (evidencia: Evidencia) => {
-        // ✅ FIX 06-AGO-2026: Detectar fase actual del prefijo y pre-seleccionarla
         const { subTipo, descripcionLimpia } = getSubTipo(evidencia);
         setEditingEvidenciaId(getEvId(evidencia));
         setEditFase(subTipo === 'ANTES' || subTipo === 'DURANTE' || subTipo === 'DESPUES' ? subTipo : 'GENERAL');
@@ -489,7 +1061,6 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
     };
 
     const handleSaveDescripcion = (idEvidencia: number) => {
-        // ✅ FIX 06-AGO-2026: Reconstruir descripción con prefijo de fase seleccionado
         const texto = editDescripcion.trim();
         const descripcionFinal = editFase === 'GENERAL'
             ? texto
@@ -505,14 +1076,29 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
         setEditFase('GENERAL');
     };
 
-    const handleViewLightbox = (evidencia: Evidencia) => {
+    // ✅ FIX 20-AGO-2026: Lightbox genérico (estándar o lote)
+    const [lightbox, setLightbox] = useState<{ fotos: Evidencia[]; index: number; titulo: string } | null>(null);
+
+    const handleViewLightbox = (evidencia: Evidencia, lista: Evidencia[], titulo: string) => {
         const evId = getEvId(evidencia);
-        const idx = fotosFiltradas.findIndex((e) => getEvId(e) === evId);
-        setLightboxIndex(idx >= 0 ? idx : 0);
+        const idx = lista.findIndex((e) => getEvId(e) === evId);
+        setLightbox({ fotos: lista, index: idx >= 0 ? idx : 0, titulo });
     };
 
-    // Abrir selector de archivos
     const handleUploadClick = () => openFilePicker();
+
+    const handleCrearLote = () => {
+        const nombre = nombreNuevoLote.trim();
+        if (!nombre) {
+            toast.error('Ingresa el nombre del lote');
+            return;
+        }
+        crearLoteMutation.mutate(nombre);
+    };
+
+    /** Helper: detecta archivos de imagen de un evento drop o paste */
+    const extraerImagenes = (dt: DataTransfer | null): File[] =>
+        Array.from(dt?.files || []).filter((f) => f.type.startsWith('image/'));
 
     return (
         <div ref={setDropZoneRef} className={cn(
@@ -529,7 +1115,7 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
             )}
 
             {/* Header */}
-            <div className="p-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 flex items-center justify-between">
+            <div className="p-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-sm">
                         <Camera className="h-5 w-5 text-white" />
@@ -537,39 +1123,51 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                     <div>
                         <h4 className="font-bold text-purple-900">Fotos Generales del Servicio</h4>
                         <p className="text-xs text-purple-600">
-                            Fotos no asociadas a actividades específicas
-                            {fotosGenerales.length > 0 && (
-                                <> · {filtroFase !== 'TODAS' ? `${fotosFiltradas.length} de ` : ''}{fotosGenerales.length} foto{fotosGenerales.length !== 1 ? 's' : ''}</>
-                            )}
+                            {fotosGenerales.length > 0
+                                ? `${fotosGenerales.length} foto${fotosGenerales.length !== 1 ? 's' : ''}${lotesGaleria.length > 0 ? ` · ${lotesGaleria.length} lote${lotesGaleria.length !== 1 ? 's' : ''}` : ''}`
+                                : 'Fotos no asociadas a actividades específicas'}
                         </p>
                     </div>
                 </div>
 
-                {/* Upload button */}
-                <button
-                    onClick={handleUploadClick}
-                    disabled={isUploading}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm",
-                        isUploading
-                            ? "bg-gray-100 text-gray-400 cursor-wait"
-                            : "bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200"
-                    )}
-                    title="Clic para seleccionar, arrastrar imágenes o pegar (Ctrl+V)"
-                >
-                    {isUploading ? (
-                        <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            {uploadProgress && <span>{uploadProgress}</span>}
-                        </>
-                    ) : (
-                        <Plus className="h-4 w-4" />
-                    )}
-                    {isUploading ? 'Subiendo...' : 'Agregar Foto'}
-                </button>
+                <div className="flex items-center gap-2">
+                    {/* ✅ FIX 20-AGO-2026: Botón Nuevo Lote */}
+                    <button
+                        onClick={() => setDialogNuevoLote(true)}
+                        disabled={isUploading}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 transition-all shadow-sm"
+                        title="Crear un nuevo lote de galería (ej. Fotos del 08/26)"
+                    >
+                        <FolderPlus className="h-4 w-4" />
+                        Nuevo Lote
+                    </button>
+
+                    {/* Upload button (estándar) */}
+                    <button
+                        onClick={handleUploadClick}
+                        disabled={isUploading}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm",
+                            isUploading
+                                ? "bg-gray-100 text-gray-400 cursor-wait"
+                                : "bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200"
+                        )}
+                        title="Clic para seleccionar, arrastrar imágenes o pegar (Ctrl+V)"
+                    >
+                        {isUploading ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                {uploadProgress && <span>{uploadProgress}</span>}
+                            </>
+                        ) : (
+                            <Plus className="h-4 w-4" />
+                        )}
+                        {isUploading ? 'Subiendo...' : 'Agregar Foto'}
+                    </button>
+                </div>
             </div>
 
-            {/* Hidden file input (multi-select habilitado) */}
+            {/* Hidden file input (estándar) */}
             <input {...inputProps} />
 
             {/* Optional description input */}
@@ -585,8 +1183,6 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
 
             {/* Grid de fotos */}
             <div className="p-4">
-                {/* ✅ FIX 06-AGO-2026: Selector único de fase — filtra la galería
-                    y define la fase de las fotos a subir (TODAS ⇒ GENERAL) */}
                 <div className="mb-3 flex items-center gap-2 flex-wrap border-b border-purple-50 pb-3">
                     <span className="text-[10px] font-bold uppercase tracking-wide text-purple-500 shrink-0">
                         Ver
@@ -617,81 +1213,165 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                         </div>
                     </div>
                 ) : fotosFiltradas.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 rounded-xl">
-                        <Camera className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                    <div className="text-center py-6 text-gray-400 rounded-xl">
+                        <Camera className="h-8 w-8 mx-auto mb-2 opacity-30" />
                         <p className="font-medium text-sm">Sin fotos en esta fase</p>
                         <p className="text-xs mt-1 text-gray-300">
                             Elige otra fase o selecciona "Todas"
                         </p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                        {fotosFiltradas.map((evidencia) => {
-                            const evId = getEvId(evidencia);
-                            const isEditing = editingEvidenciaId === evId;
-                            return (
-                                <div key={evId} className="relative">
-                                    {isEditing ? (
-                                        <div className="rounded-xl border-2 border-blue-400 bg-blue-50 p-2 flex flex-col gap-2 min-h-[170px]">
-                                            <SelectorFase
-                                                valor={editFase}
-                                                onChange={(v) => { if (v !== 'TODAS') setEditFase(v); }}
-                                            />
-                                            <textarea
-                                                value={editDescripcion}
-                                                onChange={(e) => setEditDescripcion(e.target.value)}
-                                                className="w-full flex-1 text-xs px-2 py-1 border border-blue-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[60px]"
-                                                placeholder="Observación..."
-                                                autoFocus
-                                            />
-                                            <div className="flex gap-1 justify-end">
-                                                <button
-                                                    onClick={handleCancelEdit}
-                                                    className="p-1.5 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
-                                                    title="Cancelar"
-                                                >
-                                                    <X className="h-3.5 w-3.5 text-gray-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleSaveDescripcion(evId)}
-                                                    disabled={updateDescripcionMutation.isPending}
-                                                    className="p-1.5 bg-blue-500 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
-                                                    title="Guardar"
-                                                >
-                                                    {updateDescripcionMutation.isPending ? (
-                                                        <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
-                                                    ) : (
-                                                        <Save className="h-3.5 w-3.5 text-white" />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <FotoThumbnail
-                                            evidencia={evidencia}
-                                            onView={() => handleViewLightbox(evidencia)}
-                                            onDelete={() => handleDelete(evId)}
-                                            onEdit={() => handleEditClick(evidencia)}
-                                        />
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <GridFotosPorFase
+                        fotos={fotosFiltradas}
+                        onEdit={handleEditClick}
+                        onView={(ev) => handleViewLightbox(ev, fotosFiltradas, '📷 Foto General')}
+                        onDelete={handleDelete}
+                        editingEvidenciaId={editingEvidenciaId}
+                        editFase={editFase}
+                        editDescripcion={editDescripcion}
+                        setEditFase={setEditFase}
+                        setEditDescripcion={setEditDescripcion}
+                        onCancelEdit={handleCancelEdit}
+                        onSaveDescripcion={handleSaveDescripcion}
+                        isSavingEdit={updateDescripcionMutation.isPending}
+                    />
                 )}
             </div>
 
+            {/* ============================================================ */}
+            {/* ✅ FIX 20-AGO-2026: SECCIONES POR LOTE                        */}
+            {/* ============================================================ */}
+            {lotesGaleria.length > 0 && (
+                <div className="px-4 pb-4 space-y-3">
+                    <div className="flex items-center gap-2 pt-1">
+                        <Package className="h-4 w-4 text-violet-600" />
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-violet-700">
+                            Lotes de Galería ({lotesGaleria.length})
+                        </span>
+                        <div className="flex-1 border-t border-violet-100" />
+                    </div>
+
+                    {lotesGaleria.map((lote) => {
+                        const colorAdmin = getColorLoteAdmin(lote.ordenLote);
+                        const fotosDelLote = fotosGenerales.filter((e) => getEvLote(e) === lote.idLoteGaleria);
+                        const isRenombrando = renombrandoLoteId === lote.idLoteGaleria;
+                        const faseLoteVista = faseLoteActiva[lote.idLoteGaleria] ?? 'TODAS';
+                        const descripcionLoteActual = descripcionLote[lote.idLoteGaleria] ?? '';
+
+                        return (
+                            <TarjetaLoteGaleria
+                            key={lote.idLoteGaleria}
+                            lote={lote}
+                            fotosDelLote={fotosDelLote}
+                            colorAdmin={colorAdmin}
+                            faseLoteVista={faseLoteVista}
+                            setFaseLote={(v) => setFaseLoteActiva((prev) => ({ ...prev, [lote.idLoteGaleria]: v }))}
+                            descripcionLote={descripcionLoteActual}
+                            setDescripcionLote={(d) => setDescripcionLote((prev) => ({ ...prev, [lote.idLoteGaleria]: d }))}
+                            isRenombrando={isRenombrando}
+                            nombreRenombrar={nombreRenombrar}
+                            setNombreRenombrar={setNombreRenombrar}
+                            onGuardarNombre={(n) => renombrarLoteMutation.mutate({ id: lote.idLoteGaleria, nombreLote: n })}
+                            onCancelarRenombrar={() => { setRenombrandoLoteId(null); setNombreRenombrar(''); }}
+                            onRenombrarClick={() => { setRenombrandoLoteId(lote.idLoteGaleria); setNombreRenombrar(lote.nombreLote); }}
+                            onEliminarLote={() => {
+                                if (confirm(`¿Eliminar el lote "${lote.nombreLote}"? Sus ${fotosDelLote.length} foto(s) volverán al grupo estándar de fotos generales (no se pierden).`)) {
+                                    eliminarLoteMutation.mutate(lote.idLoteGaleria);
+                                }
+                            }}
+                            renombrarPending={renombrarLoteMutation.isPending}
+                            isUploading={isUploading}
+                            subiendoEsteLote={uploadLoteId === lote.idLoteGaleria}
+                            uploadCount={uploadCount}
+                            uploadTotal={uploadTotal}
+                            onUploadFiles={(files, idLote) => uploadFiles(files, idLote)}
+                            onEditClick={handleEditClick}
+                            onViewLightbox={(ev) => handleViewLightbox(ev, fotosDelLote, `📦 ${lote.nombreLote}`)}
+                            onDeleteFoto={handleDelete}
+                            editingEvidenciaId={editingEvidenciaId}
+                            editFase={editFase}
+                            editDescripcion={editDescripcion}
+                            setEditFase={setEditFase}
+                            setEditDescripcion={setEditDescripcion}
+                            onCancelEdit={handleCancelEdit}
+                            onSaveDescripcion={handleSaveDescripcion}
+                            isSavingEdit={updateDescripcionMutation.isPending}
+                            />
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* ✅ FIX 20-AGO-2026: Diálogo CREAR NUEVO LOTE                  */}
+            {/* ============================================================ */}
+            {dialogNuevoLote && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+                    onClick={() => setDialogNuevoLote(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-2.5 mb-4">
+                            <div className="p-2 bg-violet-100 rounded-xl">
+                                <FolderPlus className="h-5 w-5 text-violet-600" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 text-sm">Nuevo Lote de Galería</h3>
+                                <p className="text-[11px] text-gray-500">Ej: "Fotos del 08/26" — agrupa una secuencia de fotos</p>
+                            </div>
+                        </div>
+                        <input
+                            type="text"
+                            value={nombreNuevoLote}
+                            onChange={(e) => setNombreNuevoLote(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleCrearLote(); }}
+                            placeholder="Nombre de lote..."
+                            className="w-full px-3 py-2.5 border-2 border-violet-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400 mb-1"
+                            autoFocus
+                            maxLength={100}
+                        />
+                        <p className="text-[10px] text-gray-400 mb-4">
+                            El nombre será el título del contenedor de este lote en el PDF.
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => { setDialogNuevoLote(false); setNombreNuevoLote(''); }}
+                                className="flex-1 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCrearLote}
+                                disabled={crearLoteMutation.isPending}
+                                className="flex-1 py-2.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                            >
+                                {crearLoteMutation.isPending ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <FolderPlus className="h-3.5 w-3.5" />
+                                )}
+                                Crear Lote
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Lightbox */}
-            {lightboxIndex !== null && fotosFiltradas[lightboxIndex] && (
+            {lightbox && lightbox.fotos[lightbox.index] && (
                 <LightboxModal
-                    evidencia={fotosFiltradas[lightboxIndex]}
-                    onClose={() => setLightboxIndex(null)}
-                    onPrev={() => setLightboxIndex(Math.max(0, lightboxIndex - 1))}
-                    onNext={() => setLightboxIndex(Math.min(fotosFiltradas.length - 1, lightboxIndex + 1))}
-                    hasPrev={lightboxIndex > 0}
-                    hasNext={lightboxIndex < fotosFiltradas.length - 1}
-                    currentIndex={lightboxIndex}
-                    total={fotosFiltradas.length}
+                    evidencia={lightbox.fotos[lightbox.index]}
+                    titulo={lightbox.titulo}
+                    onClose={() => setLightbox(null)}
+                    onPrev={() => setLightbox((lb) => lb ? { ...lb, index: Math.max(0, lb.index - 1) } : lb)}
+                    onNext={() => setLightbox((lb) => lb ? { ...lb, index: Math.min(lb.fotos.length - 1, lb.index + 1) } : lb)}
+                    hasPrev={lightbox.index > 0}
+                    hasNext={lightbox.index < lightbox.fotos.length - 1}
+                    currentIndex={lightbox.index}
+                    total={lightbox.fotos.length}
                 />
             )}
         </div>

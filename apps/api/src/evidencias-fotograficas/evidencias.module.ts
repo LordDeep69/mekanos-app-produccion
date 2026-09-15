@@ -3,6 +3,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { PrismaModule } from '../database/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { EvidenciasController } from './evidencias.controller';
+import { GaleriaLotesController } from './galeria-lotes.controller';
 
 // Repository
 import { PrismaEvidenciasRepository } from './infrastructure/prisma-evidencias.repository';
@@ -41,7 +42,7 @@ const QueryHandlers = [
 
 @Module({
   imports: [CqrsModule, PrismaModule, StorageModule],
-  controllers: [EvidenciasController],
+  controllers: [EvidenciasController, GaleriaLotesController],
   providers: [
     {
       provide: 'IEvidenciasRepository',

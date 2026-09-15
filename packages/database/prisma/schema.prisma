@@ -1016,6 +1016,7 @@ model evidencias_fotograficas {
   tama_o_original_bytes  BigInt?                 @map("tamaño_original_bytes")
   fecha_registro         DateTime?               @default(now()) @db.Timestamp(6)
   id_orden_equipo        Int?
+  id_lote_galeria        Int?
   empleados              empleados?              @relation(fields: [capturada_por], references: [id_empleado])
   actividades_ejecutadas actividades_ejecutadas? @relation(fields: [id_actividad_ejecutada], references: [id_actividad_ejecutada])
   ordenes_equipos        ordenes_equipos?        @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
@@ -1026,6 +1027,22 @@ model evidencias_fotograficas {
   @@index([id_orden_servicio, orden_visualizacion], map: "idx_evidencias_orden_vis")
   @@index([capturada_por], map: "idx_evidencias_tecnico")
   @@index([id_orden_servicio, tipo_evidencia], map: "idx_evidencias_tipo")
+}
+
+/// Lotes de galería de fotos generales: agrupan evidencias generales de una
+/// orden en secciones independientes (ej. "Fotos del 08/26", "Fotos del 09/26").
+/// Cada lote se renderiza en un contenedor propio en el PDF, con su nombre
+/// como título. Las evidencias apuntan al lote vía evidencias_fotograficas.id_lote_galeria
+/// (FK física en BD; SetNull al eliminar el lote → la foto vuelve al grupo estándar).
+model lotes_galeria {
+  id_lote_galeria  Int        @id @default(autoincrement())
+  id_orden_servicio Int
+  nombre_lote      String     @db.VarChar(100)
+  orden_lote       Int?       @default(0)
+  fecha_creacion   DateTime?  @default(now()) @db.Timestamp(6)
+  creado_por       Int?
+
+  @@index([id_orden_servicio], map: "idx_lotes_galeria_orden")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

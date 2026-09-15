@@ -39,14 +39,48 @@ async function bootstrap(): Promise<void> {
     app.use('/uploads', express.static(uploadsDir));
     console.log('✅ [DEBUG 3.2] Static files: /uploads →', uploadsDir);
 
-    // ✅ AUDITORÍA DE TRÁFICO: Middleware de Logging Global (Después de body-parser)
+    // 🛡️ SEGURIDAD: Función de sanitización para evitar fuga de contraseñas y tokens en logs
+    const sanitizeLogData = (data: any): any => {
+      if (!data || typeof data !== 'object') return data;
+      if (Array.isArray(data)) return data.map(item => sanitizeLogData(item));
+
+      const sensitiveKeys = new Set([
+        'password',
+        'password_hash',
+        'contrasena',
+        'contraseña',
+        'newpassword',
+        'new_password',
+        'token',
+        'access_token',
+        'refresh_token',
+        'secret',
+        'authorization',
+      ]);
+
+      const sanitized: Record<string, any> = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (sensitiveKeys.has(key.toLowerCase())) {
+          sanitized[key] = '********';
+        } else if (typeof value === 'string' && value.startsWith('data:image/') && value.length > 100) {
+          sanitized[key] = `${value.substring(0, 30)}... [${value.length} bytes base64]`;
+        } else if (typeof value === 'object' && value !== null) {
+          sanitized[key] = sanitizeLogData(value);
+        } else {
+          sanitized[key] = value;
+        }
+      }
+      return sanitized;
+    };
+
+    // ✅ AUDITORÍA DE TRÁFICO: Middleware de Logging Global Sanitizado
     app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
       const { method, url, body } = req;
       const timestamp = new Date().toISOString();
 
       console.log(`[${timestamp}] [REQUEST] ${method} ${url}`);
       if (method !== 'GET' && body && Object.keys(body).length > 0) {
-        console.log(`[BODY]`, JSON.stringify(body, null, 2));
+        console.log(`[BODY]`, JSON.stringify(sanitizeLogData(body), null, 2));
       }
 
       // Capturar el final de la respuesta para loguear el status

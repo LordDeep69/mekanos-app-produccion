@@ -11,7 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import {
@@ -24,8 +24,8 @@ import { UsuariosGestionService } from './usuarios-gestion.service';
 import { UsuariosService } from './usuarios.service';
 
 @Controller('usuarios')
-@Public()
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class UsuariosController {
   constructor(
     private readonly usuariosService: UsuariosService,

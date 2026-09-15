@@ -23,6 +23,7 @@ export class EvidenciaMapper {
     dto.idOrdenServicio = entity.id_orden_servicio;
     dto.idActividadEjecutada = entity.id_actividad_ejecutada ?? null;
     dto.idOrdenEquipo = entity.id_orden_equipo ?? null;
+    dto.idLoteGaleria = entity.id_lote_galeria ?? null;
 
     // Clasificación
     dto.tipoEvidencia = entity.tipo_evidencia as TipoEvidenciaEnum;

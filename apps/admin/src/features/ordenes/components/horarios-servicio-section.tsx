@@ -16,6 +16,7 @@
 
 import type { Orden } from '@/types/ordenes';
 import {
+    AlertTriangle,
     Check,
     Clock,
     Edit2,
@@ -27,6 +28,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useUpdateHorariosServicio } from '../hooks/use-ordenes';
+
+/** Límite de duración razonable: 24 horas (1440 min) */
+const LIMITE_DURACION_MIN = 1440;
 
 interface HorariosServicioSectionProps {
     orden: Orden;
@@ -127,17 +131,56 @@ export function HorariosServicioSection({ orden }: HorariosServicioSectionProps)
         return Math.round(diffMs / 60000);
     })();
 
-    const handleGuardar = async () => {
+    // ✅ FIX 20-AGO-2026: Alert de confirmación cuando la duración excede 24h
+    const [confirmarDuracion, setConfirmarDuracion] = useState(false);
+
+    const calcularDuracionMinutos = (): number | null => {
+        if (!fechaInicio || !fechaFin) return null;
+        try {
+            const d1 = new Date(fechaInicio);
+            const d2 = new Date(fechaFin);
+            const diffMs = d2.getTime() - d1.getTime();
+            if (diffMs <= 0) return null;
+            return Math.round(diffMs / 60000);
+        } catch {
+            return null;
+        }
+    };
+
+    const duracionExcedeLimite = (() => {
+        const minutos = calcularDuracionMinutos();
+        return minutos !== null && minutos > LIMITE_DURACION_MIN;
+    })();
+
+    const handleGuardar = async (forzarParam?: boolean) => {
         if (updateHorarios.isPending) return;
 
+        // Blindaje: solo cuenta como confirmacion un booleano true explicito
+        // (evita que un evento de React u otro valor truthy se interprete como "forzar")
+        const forzar = forzarParam === true;
+
+        // FIX 20-AGO-2026: Si la duracion excede el limite, mostrar alert de
+        // confirmacion en vez de bloquear. Con "Estoy seguro" se permite guardar.
+        if (!forzar && duracionExcedeLimite) {
+            setConfirmarDuracion(true);
+            return;
+        }
+
         // Construir payload solo con campos modificados
-        const data: { fecha_inicio_real?: string; fecha_fin_real?: string } = {};
+        const data: {
+            fecha_inicio_real?: string;
+            fecha_fin_real?: string;
+            forzarDuracion?: boolean;
+        } = {};
 
         if (fechaInicio) {
             data.fecha_inicio_real = new Date(fechaInicio).toISOString();
         }
         if (fechaFin) {
             data.fecha_fin_real = new Date(fechaFin).toISOString();
+        }
+        if (forzar === true && duracionExcedeLimite) {
+            data.forzarDuracion = true;
         }
 
         if (!data.fecha_inicio_real && !data.fecha_fin_real) return;
@@ -148,6 +191,7 @@ export function HorariosServicioSection({ orden }: HorariosServicioSectionProps)
                 data,
             });
             setIsEditing(false);
+            setConfirmarDuracion(false);
         } catch (error) {
             console.error('Error al guardar horarios:', error);
         }
@@ -253,7 +297,7 @@ export function HorariosServicioSection({ orden }: HorariosServicioSectionProps)
                                 Cancelar
                             </button>
                             <button
-                                onClick={handleGuardar}
+                                onClick={() => handleGuardar()}
                                 disabled={updateHorarios.isPending || duracionPreview === 'Inválida'}
                                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all disabled:opacity-50"
                             >
@@ -317,6 +361,56 @@ export function HorariosServicioSection({ orden }: HorariosServicioSectionProps)
                     </div>
                 )}
             </div>
+
+            {/* ✅ FIX 20-AGO-2026: Alert de confirmación — duración excede 24h */}
+            {confirmarDuracion && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+                    onClick={() => setConfirmarDuracion(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-3 mb-4">
+                            <div className="p-2 bg-amber-100 rounded-xl shrink-0">
+                                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 text-sm">Duración excede las 24 horas</h3>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    La duración calculada es de <strong className="text-amber-700">{duracionPreview}</strong>, por encima del límite de 24 horas.
+                                    Verifique que las fechas sean correctas.
+                                </p>
+                                <p className="text-xs text-gray-600 mt-2 font-medium">
+                                    ¿Desea guardar de todos modos?
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setConfirmarDuracion(false)}
+                                className="flex-1 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                                Revisar fechas
+                            </button>
+                            <button
+                                onClick={() => handleGuardar(true)}
+                                disabled={updateHorarios.isPending}
+                                className="flex-1 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                            >
+                                {updateHorarios.isPending ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Check className="h-3.5 w-3.5" />
+                                )}
+                                Estoy seguro
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

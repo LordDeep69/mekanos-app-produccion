@@ -24,7 +24,7 @@ import { CreateEquipoGeneradorDto } from './dto/create-equipo-generador.dto';
 import { UpdateEquipoGeneradorDto } from './dto/update-equipo-generador.dto';
 
 @Controller('equipos-generador')
-@Public()
+// @Public() // DESHABILITADO - Se requiere JWT para creado_por
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EquiposGeneradorController {
   constructor(

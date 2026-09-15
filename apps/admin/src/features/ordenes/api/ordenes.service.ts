@@ -310,9 +310,11 @@ export async function getFirmasOrden(idOrden: number): Promise<{ success: boolea
 
 /**
  * ✅ 25-FEB-2026: Actualizar/crear firma de una orden
+ * ✅ 20-AGO-2026: Edición PARCIAL — firma_base64 ahora opcional para poder
+ * guardar SOLO el nombre y/o cargo del firmante sin redibujar la firma.
  */
 export interface UpdateFirmaOrdenDto {
-    firma_base64: string;
+    firma_base64?: string;
     nombre_firmante?: string;
     cargo_firmante?: string;
 }
@@ -507,6 +509,8 @@ export async function enviarPdfExistente(
 export interface UpdateHorariosServicioDto {
     fecha_inicio_real?: string;  // ISO 8601 DateTime string
     fecha_fin_real?: string;     // ISO 8601 DateTime string
+    // ✅ FIX 20-AGO-2026: Permite guardar duraciones > 24h tras confirmar "Estoy seguro"
+    forzarDuracion?: boolean;
 }
 
 export interface UpdateHorariosServicioResponse {

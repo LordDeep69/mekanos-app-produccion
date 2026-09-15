@@ -17,10 +17,12 @@ import {
   baseStyles,
   DatosOrdenPDF,
   EvidenciasPorEquipoPDF,
+  formatearFechaServicio,
   generarChecklistMultiEquipo,
   generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
+  LoteGaleriaPDF,
   MEKANOS_COLORS
 } from './mekanos-base.template';
 
@@ -176,8 +178,8 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
     <!-- EVIDENCIAS FOTOGRÁFICAS -->
     <!-- ✅ MULTI-EQUIPOS: Usar evidencias agrupadas por equipo si es multi-equipo -->
     ${esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
-      ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo)
-      : generarEvidencias(datos.evidencias)
+    ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo, datos.lotesGaleria)
+        : generarEvidencias(datos.evidencias, datos.lotesGaleria)
     }
     
     <!-- OBSERVACIONES -->
@@ -224,8 +226,8 @@ const generarDatosCliente = (datos: DatosOrdenPDF): string => `
     </div>
     <div class="info-grid info-grid-4" style="margin-top: 8px;">
       <div class="info-item">
-        <span class="info-label">Fecha</span>
-        <span class="info-value">${datos.fecha}</span>
+                <span class="info-label">Fecha</span>
+                <span class="info-value">${formatearFechaServicio(datos)}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Técnico</span>
@@ -525,7 +527,7 @@ const generarSimbologia = (): string => `
 `;
 
 // Soporte para evidencias como strings o objetos
-type EvidenciaInput = string | { url: string; caption?: string };
+type EvidenciaInput = string | { url: string; caption?: string; idLote?: number };
 
 // Extraer tipo de evidencia del caption (ANTES, DURANTE, DESPUÉS, GENERAL)
 const extraerTipoEvidencia = (caption: string): string => {
@@ -668,7 +670,74 @@ const generarSubSeccionesGenerales = (
     .join('');
 };
 
-const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
+// ============================================================================
+// ✅ FIX 20-AGO-2026: GALERÍA POR LOTES
+// ============================================================================
+// Cada lote de fotos generales se renderiza en un contenedor independiente
+// con su nombre como título, siguiendo la tendencia visual de los templates
+// (bordes sólidos + cabecera sólida + fondo suave, como los equipos
+// multi-equipo). El color del lote se alterna por su orden para distinguir
+// varios lotes entre sí y del contenedor estándar (que mantiene su estilo
+// sutil sin borde).
+
+const COLOR_LOTE = [
+  { bg: '#ede9fe', border: '#7c3aed', header: '#6d28d9' }, // violeta (distintivo de lotes)
+  { bg: '#e0f2fe', border: '#0284c7', header: '#0369a1' }, // azul cielo
+  { bg: '#dcfce7', border: '#16a34a', header: '#15803d' }, // verde
+  { bg: '#fef3c7', border: '#d97706', header: '#b45309' }, // ámbar
+  { bg: '#fce7f3', border: '#db2777', header: '#be185d' }, // rosa
+  { bg: '#ccfbf1', border: '#0d9488', header: '#0f766e' }, // teal
+];
+
+const generarLoteGaleriaHTML = (
+  lote: LoteGaleriaPDF,
+  fotos: Array<{ url: string; caption: string; fase?: string }>,
+  gridClass: string,
+  itemClass: string,
+  captionClass: string,
+): string => {
+  if (fotos.length === 0) return '';
+  const color = COLOR_LOTE[(lote.ordenLote || 0) % COLOR_LOTE.length];
+  const contenido = generarSubSeccionesGenerales(fotos, gridClass, itemClass, captionClass);
+
+  return `
+  <div style="border: 2px solid ${color.border}; border-radius: 8px; overflow: hidden; margin: 10px 0; background: #ffffff;">
+    <div style="display: flex; align-items: center; gap: 8px; background: ${color.header}; color: #ffffff; padding: 7px 12px; font-size: 10.5px; font-weight: bold; letter-spacing: 0.6px;">
+      <span>📦</span>
+      <span style="text-transform: uppercase;">LOTE: ${lote.nombreLote}</span>
+      <span style="margin-left: auto; background: rgba(255,255,255,0.25); color: #ffffff; border-radius: 999px; padding: 1px 8px; font-size: 8.5px; line-height: 14px;">${fotos.length} ${fotos.length === 1 ? 'foto' : 'fotos'}</span>
+    </div>
+    <div style="padding: 8px; background: ${color.bg};">
+      ${contenido}
+    </div>
+  </div>`;
+};
+
+const generarLotesGaleriaHTML = (
+  lotesGaleria: LoteGaleriaPDF[] | undefined,
+  evidenciasGeneral: Array<{ url: string; caption: string; fase?: string; idLote?: number }>,
+  gridClass: string,
+  itemClass: string,
+  captionClass: string,
+): string => {
+  if (!lotesGaleria || lotesGaleria.length === 0) return '';
+  const lotesOrdenados = [...lotesGaleria].sort(
+    (a, b) => (a.ordenLote || 0) - (b.ordenLote || 0),
+  );
+  return lotesOrdenados
+    .map((lote) => {
+      const fotosLote = evidenciasGeneral.filter(
+        (ev) => ev.idLote === lote.idLoteGaleria,
+      );
+      return generarLoteGaleriaHTML(lote, fotosLote, gridClass, itemClass, captionClass);
+    })
+    .join('');
+};
+
+const generarEvidencias = (
+  evidencias: EvidenciaInput[],
+  lotesGaleria?: LoteGaleriaPDF[],
+): string => {
   if (!evidencias || evidencias.length === 0) {
     return `
     <div class="section">
@@ -684,11 +753,11 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
   const normalizarEvidencia = (
     ev: EvidenciaInput,
     idx: number,
-  ): { url: string; caption: string } => {
+  ): { url: string; caption: string; idLote?: number } => {
     if (typeof ev === 'string') {
       return { url: ev, caption: `Evidencia ${idx + 1}` };
     }
-    return { url: ev.url, caption: ev.caption || `Evidencia ${idx + 1}` };
+    return { url: ev.url, caption: ev.caption || `Evidencia ${idx + 1}`, idLote: ev.idLote };
   };
 
   // Separar evidencias de INSUMOS (ya mostradas en sección propia)
@@ -698,14 +767,19 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
   );
 
   // Agrupar por tipo (ANTES, DURANTE, DESPUÉS)
-  const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+  const grupos: Record<string, Array<{ url: string; caption: string; fase?: string; idLote?: number }>> = {};
   const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
 
   evidenciasRegulares.forEach((ev) => {
     const tipo = extraerTipoEvidencia(ev.caption);
     if (!grupos[tipo]) grupos[tipo] = [];
     const captionLimpio = limpiarPrefijosCaption(ev.caption);
-    grupos[tipo].push({ url: ev.url, caption: captionLimpio, fase: detectarFaseFotoGeneral(ev.caption) });
+    grupos[tipo].push({
+      url: ev.url,
+      caption: captionLimpio,
+      fase: detectarFaseFotoGeneral(ev.caption),
+      idLote: ev.idLote,
+    });
   });
 
   // Generar HTML agrupado por secciones
@@ -721,11 +795,21 @@ const generarEvidencias = (evidencias: EvidenciaInput[]): string => {
       const tituloMostrar =
         tipo === 'GENERAL' ? '📷 FOTOS GENERALES DEL SERVICIO' : `${icono} ${titulo}`;
 
+      // ✅ FIX 20-AGO-2026: Galería por lotes — el contenedor estándar muestra
+      // solo las fotos SIN lote; cada lote va en su contenedor sólido propio
+      const fotosSinLote = tipo === 'GENERAL'
+        ? evidenciasTipo.filter((ev) => !ev.idLote)
+        : evidenciasTipo;
+      const lotesHTML = tipo === 'GENERAL'
+        ? generarLotesGaleriaHTML(lotesGaleria, evidenciasTipo, 'evidencias-grid-compacto', 'evidencia-item-compacto', 'evidencia-caption-compacto')
+        : '';
+      const conteoMostrar = tipo === 'GENERAL' ? fotosSinLote.length : evidenciasTipo.length;
+
       return `
       <div class="${claseGrupo}">
-        <div class="evidencias-grupo-titulo">${tituloMostrar} (${evidenciasTipo.length})</div>
+        <div class="evidencias-grupo-titulo">${tituloMostrar} (${conteoMostrar})</div>
         ${tipo === 'GENERAL'
-          ? generarSubSeccionesGenerales(evidenciasTipo, 'evidencias-grid-compacto', 'evidencia-item-compacto', 'evidencia-caption-compacto')
+          ? generarSubSeccionesGenerales(fotosSinLote, 'evidencias-grid-compacto', 'evidencia-item-compacto', 'evidencia-caption-compacto') + lotesHTML
           : `<div class="evidencias-grid-compacto">
           ${evidenciasTipo
           .map(
@@ -914,7 +998,10 @@ const generarSeccionInsumosMultiEquipo = (
  * ✅ MULTI-EQUIPOS: Genera sección de evidencias agrupadas por equipo
  * Cada equipo tiene su propia sección con fotos ANTES/DURANTE/DESPUÉS
  */
-const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPDF[]): string => {
+const generarEvidenciasMultiEquipo = (
+  evidenciasPorEquipo: EvidenciasPorEquipoPDF[],
+  lotesGaleria?: LoteGaleriaPDF[],
+): string => {
   if (!evidenciasPorEquipo || evidenciasPorEquipo.length === 0) {
     return `
     <div class="section">
@@ -934,7 +1021,7 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
 
       // Agrupar evidencias por tipo (ANTES, DURANTE, DESPUÉS)
       const ordenTipos = ['ANTES', 'DURANTE', 'DESPUES', 'MEDICION', 'GENERAL'];
-      const grupos: Record<string, Array<{ url: string; caption: string }>> = {};
+      const grupos: Record<string, Array<{ url: string; caption: string; fase?: string; idLote?: number }>> = {};
 
       evidencias.forEach((ev: any) => {
         const tipo = ev.momento || extraerTipoEvidenciaTipoB(ev.caption || '');
@@ -944,6 +1031,7 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
           url: ev.url,
           caption: captionLimpio || `Foto ${grupos[tipo].length + 1}`,
           fase: detectarFaseFotoGeneral(ev.caption || ''),
+          idLote: (ev as any).idLote,
         });
       });
 
@@ -954,13 +1042,22 @@ const generarEvidenciasMultiEquipo = (evidenciasPorEquipo: EvidenciasPorEquipoPD
           const { titulo, icono } = getTituloSeccionTipoB(tipo);
           const evidenciasTipo = grupos[tipo];
 
+          // ✅ FIX 20-AGO-2026: Galería por lotes en el grupo GENERAL
+          const fotosSinLote = tipo === 'GENERAL'
+            ? evidenciasTipo.filter((ev) => !ev.idLote)
+            : evidenciasTipo;
+          const lotesHTML = tipo === 'GENERAL'
+            ? generarLotesGaleriaHTML(lotesGaleria, evidenciasTipo, 'evidencias-grid', 'evidencia-item', 'evidencia-caption')
+            : '';
+          const conteoMostrar = tipo === 'GENERAL' ? fotosSinLote.length : evidenciasTipo.length;
+
           return `
         <div style="margin-bottom: 12px;">
           <div style="background: linear-gradient(135deg, ${MEKANOS_COLORS.secondary} 0%, ${MEKANOS_COLORS.primary} 100%); color: white; padding: 5px 12px; font-size: 10px; font-weight: bold; border-radius: 4px 4px 0 0;">
-            ${icono} ${titulo} (${evidenciasTipo.length})
+            ${icono} ${titulo} (${conteoMostrar})
           </div>
           ${tipo === 'GENERAL'
-            ? generarSubSeccionesGenerales(evidenciasTipo, 'evidencias-grid', 'evidencia-item', 'evidencia-caption')
+            ? generarSubSeccionesGenerales(fotosSinLote as any, 'evidencias-grid', 'evidencia-item', 'evidencia-caption') + lotesHTML
             : `<div class="evidencias-grid" style="padding: 8px; background: #f8f9fa; border-radius: 0 0 4px 4px;">
             ${evidenciasTipo
               .map(

@@ -30,8 +30,32 @@ export class RolesGuard implements CanActivate {
     // Obtener usuario del request (adjuntado por JwtAuthGuard)
     const { user } = context.switchToHttp().getRequest();
 
-    // Validar que el usuario tenga uno de los roles requeridos
-    const hasRole = requiredRoles.includes(user.rol);
+    if (!user) {
+      throw new ForbiddenException('Acceso denegado. Usuario no autenticado.');
+    }
+
+    // Si el usuario es superadmin o admin y se solicita ADMIN, permitir acceso
+    if (user.esAdmin && requiredRoles.includes('ADMIN')) {
+      return true;
+    }
+
+    // Extraer códigos de roles disponibles en el usuario
+    const userRoleCodes: string[] = [];
+    if (user.rol) {
+      userRoleCodes.push(String(user.rol).toUpperCase());
+    }
+    if (Array.isArray(user.roles)) {
+      user.roles.forEach((r: any) => {
+        if (typeof r === 'string') {
+          userRoleCodes.push(r.toUpperCase());
+        } else if (r?.codigo) {
+          userRoleCodes.push(String(r.codigo).toUpperCase());
+        }
+      });
+    }
+
+    // Validar si algún rol requerido coincide con los roles del usuario
+    const hasRole = requiredRoles.some(reqRole => userRoleCodes.includes(reqRole.toUpperCase()));
 
     if (!hasRole) {
       throw new ForbiddenException(`Acceso denegado. Se requiere uno de estos roles: ${requiredRoles.join(', ')}`);

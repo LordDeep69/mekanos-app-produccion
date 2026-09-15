@@ -11,9 +11,10 @@ import {
     Post,
     Put,
     Query,
+    UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Public } from '../auth/decorators/public.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
     AjusteInventarioDto,
     EntradaInventarioDto,
@@ -23,7 +24,8 @@ import {
 
 @ApiTags('Inventario')
 @Controller('inventario')
-@Public() // TODO: Quitar en producción y agregar guards apropiados
+// @Public() // DESHABILITADO - Requiere JWT
+@UseGuards(JwtAuthGuard)
 export class InventarioController {
     constructor(private readonly inventarioService: InventarioService) { }
 

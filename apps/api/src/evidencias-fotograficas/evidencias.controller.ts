@@ -211,6 +211,21 @@ export class EvidenciasController {
       );
     }
 
+    // ✅ FIX 20-AGO-2026: Validar lote de galería (si viene) pertenece a la orden
+    let idLoteGaleria: number | null = null;
+    if (dto.idLoteGaleria) {
+      const lote = await this.prisma.lotes_galeria.findUnique({
+        where: { id_lote_galeria: dto.idLoteGaleria },
+        select: { id_lote_galeria: true, id_orden_servicio: true },
+      });
+      if (!lote || lote.id_orden_servicio !== dto.idOrdenServicio) {
+        throw new BadRequestException(
+          `Lote ${dto.idLoteGaleria} no existe o no pertenece a la orden ${dto.idOrdenServicio}`,
+        );
+      }
+      idLoteGaleria = lote.id_lote_galeria;
+    }
+
     // 2. Extraer Base64 puro (remover prefijo data:image/... si existe)
     let base64Pure = dto.base64;
     if (base64Pure.includes(',')) {
@@ -260,6 +275,7 @@ export class EvidenciasController {
             id_orden_servicio: dto.idOrdenServicio,
             id_actividad_ejecutada: dto.idActividadEjecutada || null,
             id_orden_equipo: dto.idOrdenEquipo || null,
+            id_lote_galeria: idLoteGaleria,
             tipo_evidencia: dto.tipoEvidencia as any,
             descripcion: dto.descripcion || `Evidencia ${dto.tipoEvidencia} agregada desde Admin`,
             nombre_archivo: nombreArchivo,
@@ -301,6 +317,7 @@ export class EvidenciasController {
       idEvidencia: evidencia?.id_evidencia || 0,
       idOrdenServicio: dto.idOrdenServicio,
       idActividadEjecutada: dto.idActividadEjecutada ?? undefined,
+      idLoteGaleria: idLoteGaleria ?? undefined,
       tipoEvidencia: dto.tipoEvidencia as any,
       descripcion: dto.descripcion || `Evidencia ${dto.tipoEvidencia} agregada desde Admin`,
       nombreArchivo: nombreArchivo,

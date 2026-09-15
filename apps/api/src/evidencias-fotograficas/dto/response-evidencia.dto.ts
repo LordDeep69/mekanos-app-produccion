@@ -20,6 +20,9 @@ export class ResponseEvidenciaDto {
   @ApiPropertyOptional({ description: 'ID orden equipo (FK, multi-equipo)', example: 1 })
   idOrdenEquipo?: number | null;
 
+  @ApiPropertyOptional({ description: 'ID lote de galería (FK, null = grupo estándar)', example: 3 })
+  idLoteGaleria?: number | null;
+
   // Clasificación
   @ApiProperty({ enum: TipoEvidenciaEnum, description: 'Tipo evidencia' })
   tipoEvidencia!: TipoEvidenciaEnum;
