@@ -64,6 +64,7 @@ import {
     Clock,
     DollarSign,
     Edit,
+    ExternalLink,
     FileText,
     Loader2,
     MapPin,
@@ -157,24 +158,63 @@ function InfoCard({
     label,
     value,
     subvalue,
+    href,
+    isExternal = false,
 }: {
     icon: React.ElementType;
     label: string;
     value: React.ReactNode;
     subvalue?: string;
+    href?: string;
+    isExternal?: boolean;
 }) {
-    return (
-        <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
-            <div className="flex-shrink-0 w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                <Icon className="h-5 w-5 text-gray-600" />
+    const cardContent = (
+        <div className={cn(
+            "flex items-start gap-3 p-4 bg-gray-50 rounded-lg transition-all",
+            href && "hover:bg-blue-50/80 border border-transparent hover:border-blue-200 cursor-pointer group shadow-xs hover:shadow-sm"
+        )}>
+            <div className={cn(
+                "flex-shrink-0 w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm transition-colors",
+                href && "group-hover:bg-blue-600 group-hover:text-white"
+            )}>
+                <Icon className={cn("h-5 w-5 text-gray-600 transition-colors", href && "group-hover:text-white")} />
             </div>
-            <div className="min-w-0">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-                <p className="font-medium text-gray-900 truncate">{value || '-'}</p>
-                {subvalue && <p className="text-sm text-gray-500 truncate">{subvalue}</p>}
+            <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                    <p className={cn("text-xs text-gray-500 uppercase tracking-wide font-medium", href && "group-hover:text-blue-600 transition-colors")}>
+                        {label}
+                    </p>
+                    {href && isExternal && (
+                        <ExternalLink className="h-3 w-3 text-gray-400 group-hover:text-blue-600 opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    )}
+                </div>
+                <p className={cn("font-medium text-gray-900 truncate", href && "group-hover:text-blue-700 transition-colors")}>
+                    {value || '-'}
+                </p>
+                {subvalue && (
+                    <p className={cn("text-sm text-gray-500 truncate", href && "group-hover:text-gray-700")}>
+                        {subvalue}
+                    </p>
+                )}
             </div>
         </div>
     );
+
+    if (href) {
+        return (
+            <a
+                href={href}
+                target={isExternal ? '_blank' : undefined}
+                rel={isExternal ? 'noopener noreferrer' : undefined}
+                className="block focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg"
+                title={isExternal ? `Abrir ficha de ${label} en nueva pestaña` : undefined}
+            >
+                {cardContent}
+            </a>
+        );
+    }
+
+    return cardContent;
 }
 
 function ActionButton({
@@ -312,22 +352,74 @@ function TabGeneral({ orden }: { orden: Orden }) {
                 {/* MULTI-EQUIPOS: Mostrar lista o equipo principal */}
                 {orden.ordenes_equipos && orden.ordenes_equipos.length > 0 ? (
                     <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg border border-blue-100">
-                        <div className="flex-shrink-0 w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                            <Wrench className="h-5 w-5 text-blue-600" />
-                        </div>
+                        {orden.ordenes_equipos.length === 1 && (orden.ordenes_equipos[0].equipo?.id_equipo || (orden.ordenes_equipos[0] as any).id_equipo) ? (
+                            <a
+                                href={`/equipos/${orden.ordenes_equipos[0].equipo?.id_equipo || (orden.ordenes_equipos[0] as any).id_equipo}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Abrir ficha técnica en nueva pestaña"
+                                className="flex-shrink-0 w-10 h-10 bg-white hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg flex items-center justify-center shadow-sm transition-all group"
+                            >
+                                <Wrench className="h-5 w-5 transition-colors" />
+                            </a>
+                        ) : (
+                            <div className="flex-shrink-0 w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                                <Wrench className="h-5 w-5 text-blue-600" />
+                            </div>
+                        )}
                         <div className="min-w-0 flex-1">
-                            <p className="text-xs text-blue-600 uppercase tracking-wide font-bold">Equipos ({orden.ordenes_equipos.length})</p>
-                            <div className="mt-1 space-y-1 max-h-24 overflow-y-auto pr-2">
-                                {orden.ordenes_equipos.map((oe) => (
-                                    <div key={oe.id_orden_equipo} className="flex items-center justify-between gap-2 border-b border-blue-100 last:border-0 pb-1 last:pb-0">
-                                        <p className="text-sm font-medium text-gray-900 truncate">
-                                            {oe.equipo.codigo_equipo}
-                                        </p>
-                                        <p className="text-[10px] text-gray-500 truncate italic">
-                                            {oe.equipo.nombre_equipo}
-                                        </p>
-                                    </div>
-                                ))}
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs text-blue-600 uppercase tracking-wide font-bold">
+                                    Equipos ({orden.ordenes_equipos.length})
+                                </p>
+                                <span className="text-[10px] text-blue-500 font-medium flex items-center gap-0.5">
+                                    Ficha técnica <ExternalLink className="h-2.5 w-2.5" />
+                                </span>
+                            </div>
+                            <div className="mt-1 space-y-1 max-h-28 overflow-y-auto pr-2">
+                                {orden.ordenes_equipos.map((oe) => {
+                                    const idEquipo = oe.equipo?.id_equipo || (oe as any).id_equipo;
+                                    const codigo = oe.equipo?.codigo_equipo || `Equipo ${oe.orden_secuencia}`;
+                                    const nombre = oe.equipo?.nombre_equipo || oe.nombre_sistema;
+
+                                    if (idEquipo) {
+                                        return (
+                                            <a
+                                                key={oe.id_orden_equipo}
+                                                href={`/equipos/${idEquipo}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                title={`Abrir ficha técnica de ${codigo} en nueva pestaña`}
+                                                className="flex items-center justify-between gap-2 border-b border-blue-100 last:border-0 py-1.5 px-2 -mx-2 rounded-md hover:bg-blue-100/80 transition-all group cursor-pointer"
+                                            >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-700 truncate transition-colors">
+                                                        {codigo}
+                                                    </p>
+                                                    <ExternalLink className="h-3 w-3 text-blue-400 group-hover:text-blue-600 opacity-60 group-hover:opacity-100 transition-all flex-shrink-0" />
+                                                </div>
+                                                {nombre && (
+                                                    <p className="text-[10px] text-gray-500 group-hover:text-gray-700 truncate italic transition-colors">
+                                                        {nombre}
+                                                    </p>
+                                                )}
+                                            </a>
+                                        );
+                                    }
+
+                                    return (
+                                        <div key={oe.id_orden_equipo} className="flex items-center justify-between gap-2 border-b border-blue-100 last:border-0 py-1">
+                                            <p className="text-sm font-medium text-gray-900 truncate">
+                                                {codigo}
+                                            </p>
+                                            {nombre && (
+                                                <p className="text-[10px] text-gray-500 truncate italic">
+                                                    {nombre}
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
@@ -337,6 +429,8 @@ function TabGeneral({ orden }: { orden: Orden }) {
                         label="Equipo"
                         value={orden.equipos?.codigo_equipo}
                         subvalue={orden.equipos?.nombre_equipo}
+                        href={(orden.equipos?.id_equipo || (orden as any).id_equipo) ? `/equipos/${orden.equipos?.id_equipo || (orden as any).id_equipo}` : undefined}
+                        isExternal={true}
                     />
                 )}
 
@@ -386,6 +480,7 @@ function TabGeneral({ orden }: { orden: Orden }) {
 
 interface EquipoGroup {
     idOrdenEquipo: number;
+    idEquipo?: number;
     ordenSecuencia: number;
     codigoEquipo: string;
     nombreEquipo: string;
@@ -411,6 +506,7 @@ function agruparActividadesPorEquipo(
 
     const mapEquipos = equipos.map((oe): EquipoGroup => ({
         idOrdenEquipo: oe.id_orden_equipo,
+        idEquipo: oe.equipo?.id_equipo || (oe as any).id_equipo,
         ordenSecuencia: oe.orden_secuencia || 1,
         codigoEquipo: oe.equipo?.codigo_equipo || 'N/A',
         nombreEquipo: oe.equipo?.nombre_equipo || 'Equipo',
@@ -456,6 +552,7 @@ function agruparMedicionesPorEquipo(
 
     const mapEquipos = equipos.map((oe): EquipoGroup => ({
         idOrdenEquipo: oe.id_orden_equipo,
+        idEquipo: oe.equipo?.id_equipo || (oe as any).id_equipo,
         ordenSecuencia: oe.orden_secuencia || 1,
         codigoEquipo: oe.equipo?.codigo_equipo || 'N/A',
         nombreEquipo: oe.equipo?.nombre_equipo || 'Equipo',
@@ -520,6 +617,18 @@ function EquipoHeader({ equipo, index, count }: { equipo: EquipoGroup; index: nu
                 <p className={`font-bold text-sm ${color.text} truncate`}>{label}</p>
                 <p className="text-[10px] text-gray-500 font-mono">{equipo.codigoEquipo}</p>
             </div>
+            {equipo.idEquipo && (
+                <a
+                    href={`/equipos/${equipo.idEquipo}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Abrir ficha técnica de ${equipo.codigoEquipo} en nueva pestaña`}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-white/90 hover:bg-white text-gray-700 hover:text-blue-700 rounded-lg border border-gray-200 text-xs font-semibold transition-all shadow-xs hover:shadow-sm"
+                >
+                    <span>Ficha técnica</span>
+                    <ExternalLink className="h-3 w-3" />
+                </a>
+            )}
             <span className={`text-[10px] font-bold ${color.text} uppercase tracking-wider`}>
                 EQ{equipo.ordenSecuencia}/{count}
             </span>
@@ -1704,15 +1813,92 @@ export default function OrdenDetallePage() {
                         <PrioridadBadge prioridad={orden.prioridad} />
                     </div>
 
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                         <span className="flex items-center gap-1">
                             <Building2 className="h-4 w-4" />
                             {getClienteNombre(orden)}
                         </span>
-                        <span className="flex items-center gap-1">
-                            <Wrench className="h-4 w-4" />
-                            {orden.equipos?.codigo_equipo}
-                        </span>
+
+                        {/* Equipos: Enlace a ficha técnica en nueva pestaña */}
+                        {orden.ordenes_equipos && orden.ordenes_equipos.length > 0 ? (
+                            orden.ordenes_equipos.length === 1 ? (
+                                (() => {
+                                    const oe = orden.ordenes_equipos[0];
+                                    const idEq = oe.equipo?.id_equipo || (oe as any).id_equipo || orden.equipos?.id_equipo || (orden as any).id_equipo;
+                                    const cod = oe.equipo?.codigo_equipo || orden.equipos?.codigo_equipo || 'Equipo';
+                                    return idEq ? (
+                                        <a
+                                            href={`/equipos/${idEq}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title={`Abrir ficha técnica de ${cod} en nueva pestaña`}
+                                            className="flex items-center gap-1 text-gray-600 hover:text-blue-600 font-medium transition-colors group"
+                                        >
+                                            <Wrench className="h-4 w-4 text-blue-600" />
+                                            <span className="group-hover:underline">{cod}</span>
+                                            <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                                        </a>
+                                    ) : (
+                                        <span className="flex items-center gap-1">
+                                            <Wrench className="h-4 w-4" />
+                                            {cod}
+                                        </span>
+                                    );
+                                })()
+                            ) : (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <Wrench className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                                    <span className="text-gray-500 font-medium text-xs">Equipos:</span>
+                                    {orden.ordenes_equipos.map((oe, idx) => {
+                                        const idEq = oe.equipo?.id_equipo || (oe as any).id_equipo;
+                                        const cod = oe.equipo?.codigo_equipo || `EQ-${oe.orden_secuencia}`;
+                                        return (
+                                            <span key={oe.id_orden_equipo} className="flex items-center">
+                                                {idEq ? (
+                                                    <a
+                                                        href={`/equipos/${idEq}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        title={`Abrir ficha técnica de ${cod} en nueva pestaña`}
+                                                        className="text-blue-600 hover:text-blue-800 hover:underline font-mono text-xs flex items-center gap-0.5"
+                                                    >
+                                                        {cod}
+                                                        <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                                                    </a>
+                                                ) : (
+                                                    <span className="font-mono text-xs text-gray-700">{cod}</span>
+                                                )}
+                                                {idx < (orden.ordenes_equipos?.length || 0) - 1 && (
+                                                    <span className="text-gray-300 mx-1">,</span>
+                                                )}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )
+                        ) : orden.equipos?.codigo_equipo ? (
+                            (() => {
+                                const idEq = orden.equipos?.id_equipo || (orden as any).id_equipo;
+                                return idEq ? (
+                                    <a
+                                        href={`/equipos/${idEq}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title={`Abrir ficha técnica de ${orden.equipos.codigo_equipo} en nueva pestaña`}
+                                        className="flex items-center gap-1 text-gray-600 hover:text-blue-600 font-medium transition-colors group"
+                                    >
+                                        <Wrench className="h-4 w-4 text-blue-600" />
+                                        <span className="group-hover:underline">{orden.equipos.codigo_equipo}</span>
+                                        <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                                    </a>
+                                ) : (
+                                    <span className="flex items-center gap-1">
+                                        <Wrench className="h-4 w-4" />
+                                        {orden.equipos.codigo_equipo}
+                                    </span>
+                                );
+                            })()
+                        ) : null}
                     </div>
                 </div>
 
