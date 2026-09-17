@@ -332,6 +332,8 @@ function TabGeneral({ orden }: { orden: Orden }) {
                     label="Cliente"
                     value={getClienteNombre(orden)}
                     subvalue={orden.clientes?.persona?.numero_identificacion}
+                    href={(orden.clientes?.id_cliente || (orden as any).id_cliente) ? `/clientes/${orden.clientes?.id_cliente || (orden as any).id_cliente}` : undefined}
+                    isExternal={true}
                 />
                 {/* ✅ FIX 18-FEB-2026: Dirección - Priorizar sede sobre cliente padre */}
                 <InfoCard
@@ -1814,10 +1816,28 @@ export default function OrdenDetallePage() {
                     </div>
 
                     <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
-                        <span className="flex items-center gap-1">
-                            <Building2 className="h-4 w-4" />
-                            {getClienteNombre(orden)}
-                        </span>
+                        {(() => {
+                            const idCli = orden.clientes?.id_cliente || (orden as any).id_cliente;
+                            const clienteNombre = getClienteNombre(orden);
+                            return idCli ? (
+                                <a
+                                    href={`/clientes/${idCli}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title={`Abrir ficha de ${clienteNombre} en nueva pestaña`}
+                                    className="flex items-center gap-1 text-gray-600 hover:text-blue-600 font-medium transition-colors group"
+                                >
+                                    <Building2 className="h-4 w-4 text-blue-600" />
+                                    <span className="group-hover:underline">{clienteNombre}</span>
+                                    <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                                </a>
+                            ) : (
+                                <span className="flex items-center gap-1">
+                                    <Building2 className="h-4 w-4" />
+                                    {clienteNombre}
+                                </span>
+                            );
+                        })()}
 
                         {/* Equipos: Enlace a ficha técnica en nueva pestaña */}
                         {orden.ordenes_equipos && orden.ordenes_equipos.length > 0 ? (
