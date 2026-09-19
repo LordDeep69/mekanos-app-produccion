@@ -110,7 +110,7 @@ const TABS: TabConfig[] = [
 function EstadoBadge({ estado, size = 'md' }: { estado?: string; size?: 'sm' | 'md' | 'lg' }) {
     const labels: Record<string, string> = {
         PROGRAMADA: 'Programada',
-        ASIGNADA: 'Asignada',
+        ASIGNADA: 'Asignada sin ejecutar',
         EN_PROCESO: 'En Proceso',
         EN_ESPERA_REPUESTO: 'Espera Repuesto',
         COMPLETADA: 'Completada',

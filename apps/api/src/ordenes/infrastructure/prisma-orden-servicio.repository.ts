@@ -497,20 +497,119 @@ export class PrismaOrdenServicioRepository {
   }): Promise<{ items: any[]; total: number }> {
     const where: any = {};
 
-    // ✅ BÚSQUEDA: Filtro por texto libre (numero_orden, cliente, sede, equipo)
+    // ✅ BÚSQUEDA INTELIGENTE MULTI-CRITERIO:
+    // Soporta NIT formateado/sin formatear, multi-tokens para razón social y nombre comercial, sedes, equipos y nombre del técnico.
     if (filters?.busqueda) {
       const s = filters.busqueda.trim();
-      where.OR = [
+      const cleanDigits = s.replace(/[^0-9]/g, '');
+      const tokens = s.split(/\s+/).filter(t => t.length > 0);
+
+      const orConditions: any[] = [
+        // Búsqueda directa por número de orden y descripción
         { numero_orden: { contains: s, mode: 'insensitive' } },
         { descripcion_inicial: { contains: s, mode: 'insensitive' } },
+        // Equipos
+        { equipos: { codigo_equipo: { contains: s, mode: 'insensitive' } } },
+        { equipos: { nombre_equipo: { contains: s, mode: 'insensitive' } } },
+        { sedes_cliente: { nombre_sede: { contains: s, mode: 'insensitive' } } },
+      ];
+
+      // Búsqueda de cliente por cadena completa
+      orConditions.push(
         { clientes: { nombre_sede: { contains: s, mode: 'insensitive' } } },
         { clientes: { persona: { nombre_comercial: { contains: s, mode: 'insensitive' } } } },
         { clientes: { persona: { razon_social: { contains: s, mode: 'insensitive' } } } },
+        { clientes: { cliente_principal: { persona: { nombre_comercial: { contains: s, mode: 'insensitive' } } } } },
+        { clientes: { cliente_principal: { persona: { razon_social: { contains: s, mode: 'insensitive' } } } } }
+      );
+
+      // Búsqueda en NIT / Identificación:
+      // 1. Cadena tal cual
+      orConditions.push(
         { clientes: { persona: { numero_identificacion: { contains: s, mode: 'insensitive' } } } },
-        { sedes_cliente: { nombre_sede: { contains: s, mode: 'insensitive' } } },
-        { equipos: { codigo_equipo: { contains: s, mode: 'insensitive' } } },
-        { equipos: { nombre_equipo: { contains: s, mode: 'insensitive' } } },
-      ];
+        { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: s, mode: 'insensitive' } } } } }
+      );
+
+      // 2. Dígitos limpios si tiene al menos 3 dígitos
+      if (cleanDigits.length >= 3) {
+        orConditions.push(
+          { clientes: { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } } },
+          { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } } } }
+        );
+
+        // Si tiene 8+ dígitos (base de NIT o NIT con DV)
+        if (cleanDigits.length >= 8) {
+          const nitBase = cleanDigits.length === 10 ? cleanDigits.slice(0, 9) : cleanDigits.slice(0, -1);
+          const nitConGuion = cleanDigits.slice(0, -1) + '-' + cleanDigits.slice(-1);
+          orConditions.push(
+            { clientes: { persona: { numero_identificacion: { contains: nitBase, mode: 'insensitive' } } } },
+            { clientes: { persona: { numero_identificacion: { contains: nitConGuion, mode: 'insensitive' } } } },
+            { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: nitBase, mode: 'insensitive' } } } } },
+            { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: nitConGuion, mode: 'insensitive' } } } } }
+          );
+        }
+      }
+
+      // 3. Si la búsqueda original contenía guión (ej: "900.771.919-5"), extraer la parte antes del guión limpia
+      if (s.includes('-')) {
+        const parteAntesGuion = s.split('-')[0].replace(/[^0-9]/g, '');
+        if (parteAntesGuion.length >= 4) {
+          orConditions.push(
+            { clientes: { persona: { numero_identificacion: { contains: parteAntesGuion, mode: 'insensitive' } } } },
+            { clientes: { cliente_principal: { persona: { numero_identificacion: { contains: parteAntesGuion, mode: 'insensitive' } } } } }
+          );
+        }
+      }
+
+      // Búsqueda por técnico asignado (cadena completa)
+      orConditions.push(
+        {
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+            persona: {
+              OR: [
+                { primer_nombre: { contains: s, mode: 'insensitive' } },
+                { segundo_nombre: { contains: s, mode: 'insensitive' } },
+                { primer_apellido: { contains: s, mode: 'insensitive' } },
+                { segundo_apellido: { contains: s, mode: 'insensitive' } },
+              ]
+            }
+          }
+        }
+      );
+
+      // Si hay más de un token (ej. "Centro San Lazaro" o "Luis Torres" o "COMFENALCO JARDIN"), buscar por combinación cruzada de tokens
+      if (tokens.length > 1) {
+        // Cliente contiene todos los tokens entre razon_social, nombre_comercial y nombre_sede
+        orConditions.push({
+          AND: tokens.map(token => ({
+            OR: [
+              { clientes: { persona: { razon_social: { contains: token, mode: 'insensitive' } } } },
+              { clientes: { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } } },
+              { clientes: { nombre_sede: { contains: token, mode: 'insensitive' } } },
+              { clientes: { cliente_principal: { persona: { razon_social: { contains: token, mode: 'insensitive' } } } } },
+              { clientes: { cliente_principal: { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } } } },
+            ]
+          }))
+        });
+
+        // Técnico contiene todos los tokens en sus nombres/apellidos
+        orConditions.push({
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+            persona: {
+              AND: tokens.map(token => ({
+                OR: [
+                  { primer_nombre: { contains: token, mode: 'insensitive' } },
+                  { segundo_nombre: { contains: token, mode: 'insensitive' } },
+                  { primer_apellido: { contains: token, mode: 'insensitive' } },
+                  { segundo_apellido: { contains: token, mode: 'insensitive' } },
+                ]
+              }))
+            }
+          }
+        });
+      }
+
+      where.OR = orConditions;
     }
 
     // Filtros opcionales

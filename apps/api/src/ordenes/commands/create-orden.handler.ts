@@ -73,8 +73,15 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
     });
 
     // Mapear datos para persistencia
-    // Si hay técnico, el estado inicial es ASIGNADA (ID 2), de lo contrario PROGRAMADA (ID 3)
-    const idEstadoInicial = tecnicoId ? 2 : 3;
+    // Si hay técnico, el estado inicial es ASIGNADA (ID 1), de lo contrario PROGRAMADA (ID 3)
+    let idEstadoInicial = 3;
+    if (tecnicoId) {
+      const estadoAsignada = await (this.ordenRepository as any).findEstadoByCodigo?.('ASIGNADA');
+      idEstadoInicial = estadoAsignada?.id_estado ?? 1;
+    } else {
+      const estadoProgramada = await (this.ordenRepository as any).findEstadoByCodigo?.('PROGRAMADA');
+      idEstadoInicial = estadoProgramada?.id_estado ?? 3;
+    }
 
     const ordenData = {
       numero_orden: orden.numeroOrden.getValue(),

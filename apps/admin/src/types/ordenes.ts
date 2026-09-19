@@ -207,7 +207,7 @@ export function getTecnicoLabel(tecnico: TecnicoOrden): string {
 export function getEstadoColor(estado?: string): string {
     const colores: Record<string, string> = {
         PROGRAMADA: 'bg-blue-100 text-blue-800',
-        ASIGNADA: 'bg-indigo-100 text-indigo-800',
+        ASIGNADA: 'bg-violet-100 text-violet-800 border border-violet-200',
         EN_PROCESO: 'bg-yellow-100 text-yellow-800',
         EN_ESPERA_REPUESTO: 'bg-orange-100 text-orange-800',
         COMPLETADA: 'bg-green-100 text-green-800',

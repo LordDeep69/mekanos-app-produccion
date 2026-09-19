@@ -215,8 +215,8 @@ async function main() {
       update: {},
       create: {
         codigo_estado: 'ASIGNADA',
-        nombre_estado: 'Asignada',
-        descripcion: 'Técnico asignado, pendiente de ejecución en campo',
+        nombre_estado: 'Asignada sin ejecutar',
+        descripcion: 'Técnico asignado a la orden, pendiente de inicio de ejecución en campo',
         permite_edicion: true,
         permite_eliminacion: false,
         es_estado_final: false,

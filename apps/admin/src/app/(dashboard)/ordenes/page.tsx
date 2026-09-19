@@ -19,7 +19,7 @@ import {
     getTecnicoNombre,
     useOrdenes,
 } from '@/features/ordenes';
-import { useTiposServicio } from '@/features/ordenes/hooks/use-catalogos';
+import { useTiposServicio, useTecnicosSelector } from '@/features/ordenes/hooks/use-catalogos';
 import { cn, formatDateSafe } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
 import {
@@ -55,7 +55,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 function EstadoBadge({ estado }: { estado?: string }) {
     const labels: Record<string, string> = {
         PROGRAMADA: 'Programada',
-        ASIGNADA: 'Asignada',
+        ASIGNADA: 'Asignada sin ejecutar',
         EN_PROCESO: 'En Proceso',
         EN_ESPERA_REPUESTO: 'Espera Repuesto',
         COMPLETADA: 'Completada',
@@ -220,6 +220,7 @@ function OrdenesPageContent() {
     const [busquedaDebounced, setBusquedaDebounced] = useState(searchParams.get('busqueda') || '');
     const [filtroEstado, setFiltroEstado] = useState<string>(searchParams.get('estado') || '');
     const [filtroPrioridad, setFiltroPrioridad] = useState<string>(searchParams.get('prioridad') || '');
+    const [filtroTecnico, setFiltroTecnico] = useState<string>(searchParams.get('tecnico') || '');
     // ENTERPRISE: Nuevos filtros avanzados
     const [sortBy, setSortBy] = useState<'fecha_creacion' | 'fecha_programada' | 'numero_orden'>((searchParams.get('sortBy') as any) || 'fecha_creacion');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sortOrder') as any) || 'desc');
@@ -250,6 +251,7 @@ function OrdenesPageContent() {
         if (busqueda) params.set('busqueda', busqueda);
         if (filtroEstado) params.set('estado', filtroEstado);
         if (filtroPrioridad) params.set('prioridad', filtroPrioridad);
+        if (filtroTecnico) params.set('tecnico', filtroTecnico);
         if (sortBy !== 'fecha_creacion') params.set('sortBy', sortBy);
         if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
         if (filtroTipoServicio) params.set('tipoServicio', filtroTipoServicio);
@@ -258,19 +260,21 @@ function OrdenesPageContent() {
         const queryString = params.toString();
         const newPath = queryString ? `/ordenes?${queryString}` : '/ordenes';
         router.replace(newPath);
-    }, [page, busqueda, filtroEstado, filtroPrioridad, sortBy, sortOrder, filtroTipoServicio, showAdvancedFilters, router]);
+    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, sortBy, sortOrder, filtroTipoServicio, showAdvancedFilters, router]);
 
     const pageSize = 12;
 
-    // Cargar tipos de servicio para el filtro
+    // Cargar catálogos para filtros
     const { data: tiposServicio } = useTiposServicio({ activo: true });
+    const { data: tecnicos } = useTecnicosSelector();
 
-    // ✅ BÚSQUEDA SERVER-SIDE: Enviar busqueda al backend
+    // ✅ BÚSQUEDA SERVER-SIDE: Enviar busqueda y filtros al backend
     const { data, isLoading, isError, refetch } = useOrdenes({
         page,
         limit: pageSize,
         estado: filtroEstado || undefined,
         prioridad: filtroPrioridad || undefined,
+        idTecnico: filtroTecnico ? parseInt(filtroTecnico) : undefined,
         sortBy,
         sortOrder,
         tipoServicioId: filtroTipoServicio ? parseInt(filtroTipoServicio) : undefined,
@@ -345,12 +349,31 @@ function OrdenesPageContent() {
                         >
                             <option value="">Todos los estados</option>
                             <option value="PROGRAMADA">Programada</option>
-                            <option value="ASIGNADA">Asignada</option>
+                            <option value="ASIGNADA">Asignada sin ejecutar</option>
                             <option value="EN_PROCESO">En Proceso</option>
                             <option value="EN_ESPERA_REPUESTO">Espera Repuesto</option>
                             <option value="COMPLETADA">Completada</option>
                             <option value="APROBADA">Aprobada</option>
                             <option value="CANCELADA">Cancelada</option>
+                        </select>
+
+                        {/* Filtro por Técnico Asignado */}
+                        <select
+                            value={filtroTecnico}
+                            onChange={(e) => { setFiltroTecnico(e.target.value); setPage(1); }}
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                            <option value="">Todos los técnicos</option>
+                            {tecnicos?.map((tec) => {
+                                const nombre = tec.persona
+                                    ? `${tec.persona.primer_nombre || ''} ${tec.persona.primer_apellido || ''}`.trim()
+                                    : `Técnico #${tec.id_empleado}`;
+                                return (
+                                    <option key={tec.id_empleado} value={tec.id_empleado}>
+                                        {nombre}
+                                    </option>
+                                );
+                            })}
                         </select>
 
                         <select
@@ -433,12 +456,14 @@ function OrdenesPageContent() {
                             </div>
 
                             {/* Limpiar filtros */}
-                            {(filtroEstado || filtroPrioridad || filtroTipoServicio) && (
+                            {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || busqueda) && (
                                 <button
                                     onClick={() => {
                                         setFiltroEstado('');
+                                        setFiltroTecnico('');
                                         setFiltroPrioridad('');
                                         setFiltroTipoServicio('');
+                                        setBusqueda('');
                                         setPage(1);
                                     }}
                                     className="flex items-center gap-1 px-3 py-2 text-sm text-red-600 hover:text-red-800"
@@ -452,7 +477,7 @@ function OrdenesPageContent() {
                 )}
 
                 {/* Indicadores de filtros activos */}
-                {(filtroEstado || filtroPrioridad || filtroTipoServicio || busquedaDebounced) && (
+                {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || busquedaDebounced) && (
                     <div className="flex items-center gap-2 text-sm flex-wrap">
                         <Filter className="h-4 w-4 text-gray-400" />
                         <span className="text-gray-500">Filtros activos:</span>
@@ -463,7 +488,17 @@ function OrdenesPageContent() {
                         )}
                         {filtroEstado && (
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
-                                Estado: {filtroEstado}
+                                Estado: {filtroEstado === 'ASIGNADA' ? 'Asignada sin ejecutar' : filtroEstado}
+                            </span>
+                        )}
+                        {filtroTecnico && (
+                            <span className="px-2 py-0.5 bg-violet-100 text-violet-800 rounded-full text-xs">
+                                Técnico: {(() => {
+                                    const tec = tecnicos?.find(t => t.id_empleado === parseInt(filtroTecnico));
+                                    return tec?.persona
+                                        ? `${tec.persona.primer_nombre || ''} ${tec.persona.primer_apellido || ''}`.trim()
+                                        : `Técnico #${filtroTecnico}`;
+                                })()}
                             </span>
                         )}
                         {filtroPrioridad && (
