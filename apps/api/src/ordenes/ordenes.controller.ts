@@ -1527,7 +1527,21 @@ export class OrdenesController {
         console.log(`  ├─ firmas_digitales: ${deletedFirmas.count}`);
       }
 
-      // 3. Finalmente, eliminar la orden
+      // 3. Registrar lápida (tombstone) para sincronización con app móvil
+      try {
+        await (tx as any).$executeRawUnsafe(
+          `INSERT INTO ordenes_eliminadas (id_orden_servicio, numero_orden, id_tecnico_asignado, fecha_eliminacion)
+           VALUES ($1, $2, $3, NOW())`,
+          id,
+          orden.numero_orden,
+          orden.id_tecnico_asignado ?? null,
+        );
+        console.log(`  ├─ ordenes_eliminadas: Lápida (tombstone) registrada`);
+      } catch (tombError) {
+        console.warn(`  ├─ ⚠️ Error registrando tombstone:`, tombError);
+      }
+
+      // 4. Finalmente, eliminar la orden
       await tx.ordenes_servicio.delete({ where: { id_orden_servicio: id } });
       console.log(`  └─ ✅ ordenes_servicio: ELIMINADA`);
     }, {

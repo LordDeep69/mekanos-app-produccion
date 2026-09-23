@@ -544,5 +544,17 @@ export class SyncDownloadResponseDto {
 
   @ApiPropertyOptional({ type: () => [SyncPendienteCatalogoDto], description: 'Catálogo de pendientes frecuentes (vacío en DELTA si no hubo cambios)' })
   catalogoPendientes?: SyncPendienteCatalogoDto[];
+
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'IDs de órdenes de servicio eliminadas en el servidor desde sinceTimestamp (en DELTA)',
+  })
+  ordenesEliminadas?: number[];
+
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'Conjunto de IDs de órdenes válidas y vigentes asignadas al técnico en el servidor (en FULL)',
+  })
+  idsOrdenesValidas?: number[];
 }
 

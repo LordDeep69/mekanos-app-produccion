@@ -518,13 +518,6 @@ class SyncUploadService {
 
       // 9. CON CONEXIÓN - Intentar sync con streaming de progreso
       try {
-        // Asegurar que la orden esté en EN_PROCESO en el backend
-        try {
-          await _apiClient.put('/ordenes/$idOrdenBackend/iniciar');
-        } on DioException {
-          // Ignorar - puede ya estar en proceso
-        }
-
         // ✅ 19-DIC-2025: Usar endpoint con SSE para progreso en tiempo real
         final response = await _enviarConProgresoSSE(
           idOrdenBackend: idOrdenBackend,

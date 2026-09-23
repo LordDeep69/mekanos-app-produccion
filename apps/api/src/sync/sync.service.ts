@@ -425,6 +425,8 @@ export class SyncService {
     }
 
     let baseFilter: any;
+    let ordenesEliminadasIds: number[] = [];
+    let idsOrdenesValidas: number[] | undefined = undefined;
 
     if (since) {
       // ========================================================================
@@ -433,20 +435,34 @@ export class SyncService {
       // cuando se usa `timestamp without time zone` + objetos Date de JavaScript
       // ========================================================================
       const sinceIsoString = since.toISOString();
-      this.logger.log(`[Sync Delta] Filtrando órdenes ACTIVAS modificadas desde ${sinceIsoString}`);
+      this.logger.log(`[Sync Delta] Consultando órdenes modificadas y eliminadas desde ${sinceIsoString}`);
 
-      // 🚨 POLÍTICA: Solo órdenes ACTIVAS modificadas (NUNCA completadas)
-      // JOIN con estados_orden para filtrar solo es_estado_final = false
+      // 1. Consultar órdenes modificadas SIN filtrar por es_estado_final
+      // (así viajan órdenes que pasaron a COMPLETADA o CANCELADA en Admin Portal)
       const ordenesModificadas = await this.prisma.$queryRaw<{ id_orden_servicio: number }[]>`
         SELECT os.id_orden_servicio 
         FROM ordenes_servicio os
-        INNER JOIN estados_orden eo ON os.id_estado_actual = eo.id_estado
         WHERE os.id_tecnico_asignado = ${tecnicoId}
           AND os.fecha_modificacion >= ${sinceIsoString}::timestamp
-          AND eo.es_estado_final = false
       `;
 
-      this.logger.log(`[🔬 DIAGNÓSTICO] Query raw encontró ${ordenesModificadas.length} órdenes modificadas`);
+      // 2. Consultar lápidas (tombstones) de órdenes eliminadas desde sinceTimestamp
+      try {
+        const eliminadasRaw = await this.prisma.$queryRaw<{ id_orden_servicio: number }[]>`
+          SELECT id_orden_servicio
+          FROM ordenes_eliminadas
+          WHERE (id_tecnico_asignado = ${tecnicoId} OR id_tecnico_asignado IS NULL)
+            AND fecha_eliminacion >= ${sinceIsoString}::timestamp
+        `;
+        ordenesEliminadasIds = eliminadasRaw.map(e => e.id_orden_servicio);
+        if (ordenesEliminadasIds.length > 0) {
+          this.logger.log(`[Sync Delta] Encontradas ${ordenesEliminadasIds.length} órdenes eliminadas para técnico ${tecnicoId}`);
+        }
+      } catch (errTomb) {
+        this.logger.warn(`[Sync Delta] Error consultando ordenes_eliminadas:`, errTomb);
+      }
+
+      this.logger.log(`[🔬 DIAGNÓSTICO] Query raw encontró ${ordenesModificadas.length} órdenes modificadas y ${ordenesEliminadasIds.length} eliminadas`);
 
       if (ordenesModificadas.length === 0) {
         // No hay órdenes modificadas.
@@ -484,6 +500,7 @@ export class SyncService {
             syncType: 'DELTA',
             sinceTimestamp: sinceIsoString,
             ordenes: [],
+            ordenesEliminadas: ordenesEliminadasIds,
             parametrosMedicion: parametros.map((p) => ({
               idParametroMedicion: p.id_parametro_medicion,
               codigoParametro: p.codigo_parametro,
@@ -542,6 +559,7 @@ export class SyncService {
           syncType: 'DELTA',
           sinceTimestamp: sinceIsoString,
           ordenes: [],
+          ordenesEliminadas: ordenesEliminadasIds,
           parametrosMedicion: [],
           actividadesCatalogo: [],
           estadosOrden: [],
@@ -557,11 +575,31 @@ export class SyncService {
         id_orden_servicio: { in: ordenesIds },
       };
     } else {
-      // FULL SYNC: Solo órdenes ACTIVAS (NUNCA completadas)
+      // FULL SYNC: Órdenes ACTIVAS o completadas recientemente (últimos 14 días)
+      const hace14Dias = new Date();
+      hace14Dias.setDate(hace14Dias.getDate() - 14);
+
       baseFilter = {
         id_tecnico_asignado: tecnicoId,
-        estados_orden: { es_estado_final: false },
+        OR: [
+          { estados_orden: { es_estado_final: false } },
+          {
+            estados_orden: { es_estado_final: true },
+            fecha_cambio_estado: { gte: hace14Dias },
+          },
+        ],
       };
+
+      try {
+        const validasRaw = await this.prisma.ordenes_servicio.findMany({
+          where: baseFilter,
+          select: { id_orden_servicio: true },
+        });
+        idsOrdenesValidas = validasRaw.map(v => v.id_orden_servicio);
+        this.logger.log(`[Sync Full] ${idsOrdenesValidas.length} órdenes válidas asignadas al técnico ${tecnicoId}`);
+      } catch (errValidas) {
+        this.logger.warn('[Sync Full] Error obteniendo idsOrdenesValidas:', errValidas);
+      }
     }
 
     // ========================================================================
@@ -1035,6 +1073,8 @@ export class SyncService {
       estadosOrden: estadosDownload,
       tiposServicio: tiposServicioDownload,
       catalogoPendientes: includeCatalogs ? pendientesDownload : undefined,
+      ordenesEliminadas: since ? ordenesEliminadasIds : undefined,
+      idsOrdenesValidas: since ? undefined : idsOrdenesValidas,
     };
   }
 

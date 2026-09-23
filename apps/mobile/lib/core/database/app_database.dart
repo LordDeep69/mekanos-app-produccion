@@ -1497,16 +1497,79 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ============================================================================
+  // ELIMINACIÓN Y RECONCILIACIÓN EN CASCADA
+  // ============================================================================
+
+  /// Elimina una orden y todas sus entidades dependientes en cascada por idBackend
+  Future<void> eliminarOrdenCompletaPorIdBackend(int idBackend) async {
+    final ordenLocal = await (select(ordenes)..where((o) => o.idBackend.equals(idBackend))).getSingleOrNull();
+    if (ordenLocal != null) {
+      await eliminarOrdenCompletaPorIdLocal(ordenLocal.idLocal, idBackend: idBackend);
+    } else {
+      // Limpieza defensiva por si quedaron registros huérfanos con ese idBackend
+      await (delete(ordenesPendientesSync)..where((s) => s.idOrdenBackend.equals(idBackend))).go();
+      await (delete(ordenesEquipos)..where((oe) => oe.idOrdenServicio.equals(idBackend))).go();
+      await (delete(ordenesPendientes)..where((p) => p.idOrdenBackend.equals(idBackend))).go();
+    }
+  }
+
+  /// Elimina una orden y todas sus entidades dependientes en cascada por idLocal
+  Future<void> eliminarOrdenCompletaPorIdLocal(int idLocal, {int? idBackend}) async {
+    await transaction(() async {
+      final backendId = idBackend ??
+          (await (select(ordenes)..where((o) => o.idLocal.equals(idLocal))).getSingleOrNull())?.idBackend;
+
+      // 1. Eliminar pendientes técnicos
+      await (delete(ordenesPendientes)..where((p) => p.idOrden.equals(idLocal))).go();
+      if (backendId != null) {
+        await (delete(ordenesPendientes)..where((p) => p.idOrdenBackend.equals(backendId))).go();
+      }
+
+      // 2. Eliminar firmas
+      await (delete(firmas)..where((f) => f.idOrden.equals(idLocal))).go();
+
+      // 3. Eliminar evidencias fotográficas
+      await (delete(evidencias)..where((e) => e.idOrden.equals(idLocal))).go();
+
+      // 4. Eliminar mediciones
+      await (delete(mediciones)..where((m) => m.idOrden.equals(idLocal))).go();
+
+      // 5. Eliminar actividades ejecutadas
+      await (delete(actividadesEjecutadas)..where((a) => a.idOrden.equals(idLocal))).go();
+
+      // 6. Eliminar plan de actividades
+      await (delete(actividadesPlan)..where((ap) => ap.idOrden.equals(idLocal))).go();
+
+      // 7. Eliminar de cola offline de sincronización
+      await (delete(ordenesPendientesSync)..where((s) => s.idOrdenLocal.equals(idLocal))).go();
+      if (backendId != null) {
+        await (delete(ordenesPendientesSync)..where((s) => s.idOrdenBackend.equals(backendId))).go();
+      }
+
+      // 8. Eliminar relación multi-equipos
+      if (backendId != null) {
+        await (delete(ordenesEquipos)..where((oe) => oe.idOrdenServicio.equals(backendId))).go();
+      }
+
+      // 9. Finalmente, eliminar la orden
+      await (delete(ordenes)..where((o) => o.idLocal.equals(idLocal))).go();
+    });
+  }
+
+  // ============================================================================
   // UTILIDADES
   // ============================================================================
 
   /// Limpiar toda la base de datos (para logout o reset)
   Future<void> clearAllData() async {
+    await delete(ordenesPendientesSync).go();
     await delete(ordenesPendientes).go();
     await delete(firmas).go();
     await delete(evidencias).go();
     await delete(mediciones).go();
     await delete(actividadesEjecutadas).go();
+    await delete(actividadesPlan).go();
+    await delete(ordenesEquipos).go();
     await delete(ordenes).go();
     await delete(equipos).go();
     await delete(clientes).go();

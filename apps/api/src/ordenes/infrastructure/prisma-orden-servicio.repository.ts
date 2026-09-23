@@ -1013,8 +1013,9 @@ export class PrismaOrdenServicioRepository {
     id_orden_servicio: number,
     id_estado_en_proceso: number,
     modificado_por: number,
+    id_estado_anterior?: number,
   ): Promise<any> {
-    return this.prisma.ordenes_servicio.update({
+    const ordenActualizada = await this.prisma.ordenes_servicio.update({
       where: { id_orden_servicio },
       data: {
         fecha_inicio_real: new Date(),
@@ -1028,6 +1029,26 @@ export class PrismaOrdenServicioRepository {
         empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } }, // ✅ FIX
       },
     });
+
+    // ✅ Asentar formalmente en historial_estados_orden
+    try {
+      await this.prisma.historial_estados_orden.create({
+        data: {
+          id_orden_servicio,
+          id_estado_anterior: id_estado_anterior || null,
+          id_estado_nuevo: id_estado_en_proceso,
+          motivo_cambio: 'Inicio de ejecución en campo',
+          observaciones: 'Técnico inició la ejecución de la orden',
+          accion: 'INICIAR',
+          realizado_por: modificado_por,
+          fecha_cambio: new Date(),
+        },
+      });
+    } catch (histError) {
+      console.warn(`[iniciar] No se pudo asentar en historial_estados_orden:`, histError);
+    }
+
+    return ordenActualizada;
   }
 
   /**
@@ -1287,5 +1308,40 @@ export class PrismaOrdenServicioRepository {
       where: { id_orden_servicio },
     });
     return count > 0;
+  }
+
+  /**
+   * ✅ ZERO TRUST: Obtener estado actual de la orden de forma ultraligera
+   * Evita cargar 15+ relaciones y permite validar la FSM con Cero Confianza
+   */
+  async findEstadoActualById(id_orden_servicio: number): Promise<{
+    id_orden_servicio: number;
+    numero_orden: string;
+    id_estado_actual: number;
+    id_tecnico_asignado: number | null;
+    estados_orden: {
+      id_estado: number;
+      codigo_estado: string;
+      nombre_estado: string;
+      es_estado_final: boolean;
+    } | null;
+  } | null> {
+    return this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio },
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        id_estado_actual: true,
+        id_tecnico_asignado: true,
+        estados_orden: {
+          select: {
+            id_estado: true,
+            codigo_estado: true,
+            nombre_estado: true,
+            es_estado_final: true,
+          },
+        },
+      },
+    });
   }
 }

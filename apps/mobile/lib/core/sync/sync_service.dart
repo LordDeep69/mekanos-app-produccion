@@ -191,6 +191,47 @@ class SyncService {
         equiposGuardados = ordenesResult['equipos'] ?? 0;
       }
 
+      // 6.5. Procesar órdenes eliminadas (Lápidas/Tombstones en Delta Sync)
+      if (data['ordenesEliminadas'] != null &&
+          (data['ordenesEliminadas'] as List).isNotEmpty) {
+        final eliminadasList = data['ordenesEliminadas'] as List;
+        debugPrint(
+          '🗑️ [SYNC] Eliminando ${eliminadasList.length} órdenes eliminadas reportadas por el backend...',
+        );
+        for (final idElim in eliminadasList) {
+          final idBackend =
+              idElim is int ? idElim : int.tryParse(idElim.toString());
+          if (idBackend != null) {
+            await _db.eliminarOrdenCompletaPorIdBackend(idBackend);
+          }
+        }
+      }
+
+      // 6.6. Reconciliación / Poda en Full Sync (Purgar órdenes locales que ya no existen en el servidor)
+      final isFullSync = data['syncType'] == 'FULL' || since == null;
+      if (isFullSync && data['idsOrdenesValidas'] != null) {
+        final idsValidosServidor = (data['idsOrdenesValidas'] as List)
+            .map((e) => e is int ? e : int.tryParse(e.toString()))
+            .whereType<int>()
+            .toSet();
+
+        final todasLocales = await _db.getAllOrdenes();
+        for (final ordLocal in todasLocales) {
+          final idBackend = ordLocal.idBackend;
+          if (idBackend != null && !ordLocal.isDirty) {
+            if (!idsValidosServidor.contains(idBackend)) {
+              debugPrint(
+                '🧹 [SYNC] Purgando orden local huérfana/eliminada/desasignada: ${ordLocal.numeroOrden} (ID Backend: $idBackend)',
+              );
+              await _db.eliminarOrdenCompletaPorIdLocal(
+                ordLocal.idLocal,
+                idBackend: idBackend,
+              );
+            }
+          }
+        }
+      }
+
       // 7. Actualizar estado de sincronización
       await _db.updateSyncStatus(
         'download',
@@ -597,18 +638,20 @@ class SyncService {
             // ✅ FIX CRÍTICO: SIEMPRE actualizar si:
             // 1. La versión del servidor es mayor, O
             // 2. El estado del servidor es FINALIZADO (COMPLETADA, etc.) y el local NO lo es
-            final estadoLocalFinalizado = estadosFinalizados.any((e) {
-              final estadoLocal = estadosMap.entries
-                  .firstWhere(
-                    (entry) => entry.value == existingOrden.idEstado,
-                    orElse: () => MapEntry('', -1),
-                  )
-                  .key;
-              return estadoLocal.toUpperCase() == e;
-            });
+            final estadoLocalCodigo = estadosMap.entries
+                .firstWhere(
+                  (entry) => entry.value == existingOrden.idEstado,
+                  orElse: () => const MapEntry('', -1),
+                )
+                .key
+                .toUpperCase();
+
+            final estadoLocalFinalizado =
+                estadosFinalizados.contains(estadoLocalCodigo);
 
             final debeActualizar =
                 serverVersion > existingOrden.version ||
+                codigoEstadoServer != estadoLocalCodigo ||
                 (estadosFinalizados.contains(codigoEstadoServer) &&
                     !estadoLocalFinalizado);
 
