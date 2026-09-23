@@ -47,6 +47,7 @@ import { HistorialEstados } from '@/features/ordenes/components/historial-estado
 import { HorariosServicioSection } from '@/features/ordenes/components/horarios-servicio-section';
 import { MedicionCardAdvanced, ResumenMediciones } from '@/features/ordenes/components/medicion-card-advanced';
 import { ObservacionesCierreSection } from '@/features/ordenes/components/observaciones-section';
+import { PendientesSection } from '@/features/ordenes/components/pendientes-section';
 import { OrdenEditModal } from '@/features/ordenes/components/orden-edit-modal';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { cn } from '@/lib/utils';
@@ -468,6 +469,9 @@ function TabGeneral({ orden }: { orden: Orden }) {
 
             {/* Observaciones de Cierre - Editables por Admin */}
             <ObservacionesCierreSection orden={orden} />
+
+            {/* Pendientes Técnicos por Orden de Servicio */}
+            <PendientesSection orden={orden} />
 
             {/* Historial de Estados */}
             <HistorialEstados idOrden={orden.id_orden_servicio} />

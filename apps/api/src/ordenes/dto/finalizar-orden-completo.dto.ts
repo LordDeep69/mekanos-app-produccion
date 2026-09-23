@@ -257,6 +257,47 @@ export class DatosModuloDto {
     corriente?: number;
 }
 
+/**
+ * Pendiente registrado durante la orden
+ */
+export class PendienteFinalizacionDto {
+    @ApiProperty({ description: 'Descripción detallada del pendiente' })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(1000)
+    descripcion: string;
+
+    @ApiPropertyOptional({ description: 'ID de la sugerencia en catalogo_pendientes si proviene de catálogo' })
+    @IsOptional()
+    @IsNumber()
+    idPendienteCatalogo?: number;
+
+    @ApiPropertyOptional({ description: 'ID del equipo puntual al que corresponde el pendiente' })
+    @IsOptional()
+    @IsNumber()
+    idEquipo?: number;
+
+    @ApiPropertyOptional({ description: 'ID de orden-equipo para trazabilidad en multi-equipo' })
+    @IsOptional()
+    @IsNumber()
+    idOrdenEquipo?: number;
+
+    @ApiPropertyOptional({ description: 'Origen: CATALOGO o PERSONALIZADO', default: 'CATALOGO' })
+    @IsOptional()
+    @IsString()
+    origen?: string;
+
+    @ApiPropertyOptional({ description: 'Prioridad: NORMAL, ALTA, URGENTE, EMERGENCIA', default: 'NORMAL' })
+    @IsOptional()
+    @IsString()
+    prioridad?: string;
+
+    @ApiPropertyOptional({ description: 'Observaciones técnicas adicionales' })
+    @IsOptional()
+    @IsString()
+    observaciones?: string;
+}
+
 // ============================================================================
 // DTO PRINCIPAL
 // ============================================================================
@@ -320,6 +361,17 @@ export class FinalizarOrdenCompletoDto {
     @IsNotEmpty()
     @MaxLength(2000)
     observaciones: string;
+
+    @ApiPropertyOptional({
+        type: [PendienteFinalizacionDto],
+        description: 'Pendientes o compromisos técnicos post-servicio para seguimiento',
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => PendienteFinalizacionDto)
+    pendientes?: PendienteFinalizacionDto[];
+
 
     @ApiPropertyOptional({
         type: DatosModuloDto,

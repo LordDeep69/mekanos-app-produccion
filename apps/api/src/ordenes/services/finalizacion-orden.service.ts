@@ -41,6 +41,7 @@ import { buildInformeFilename } from '../../pdf/pdf-naming.helper';
 import { PdfService, TipoInforme } from '../../pdf/pdf.service';
 import { CloudinaryService } from '../../storage/cloudinary.service';
 import { R2StorageService } from '../../storage/r2-storage.service';
+import { PendienteFinalizacionDto } from '../dto/finalizar-orden-completo.dto';
 
 // ============================================================================
 // INTERFACES Y TIPOS
@@ -203,6 +204,9 @@ export interface FinalizarOrdenDto {
     /** ID del usuario que finaliza (técnico) */
     usuarioId: number;
 
+    /** ✅ PENDIENTES TÉCNICOS: Pendientes registrados por el técnico */
+    pendientes?: PendienteFinalizacionDto[];
+
     /** 
      * Modo de finalización:
      * - 'COMPLETO': Genera PDF y envía email (flujo tradicional)
@@ -231,6 +235,7 @@ export type FinalizacionStep =
     | 'firmas'              // Paso 3: Registrando firmas digitales
     | 'actividades'         // Paso 3.5: Registrando actividades
     | 'mediciones'          // Paso 3.6: Registrando mediciones
+    | 'pendientes'          // Paso 3.7: Registrando pendientes técnicos
     | 'generando_pdf'       // Paso 4: Generando PDF
     | 'subiendo_pdf'        // Paso 5: Subiendo PDF a R2
     | 'registrando_doc'     // Paso 6: Registrando documento en BD
@@ -502,7 +507,18 @@ export class FinalizacionOrdenService {
                         this.logger.log(`   🗑️ Eliminadas ${medicionesResExist} mediciones residuales`);
                     }
 
-                    const totalResidual = evidenciasExistentes + actividadesResExist + medicionesResExist;
+                    // Limpiar pendientes técnicos residuales
+                    const pendientesResExist = await this.prisma.ordenes_pendientes.count({
+                        where: { id_orden_servicio: orden.id_orden_servicio },
+                    });
+                    if (pendientesResExist > 0) {
+                        await this.prisma.ordenes_pendientes.deleteMany({
+                            where: { id_orden_servicio: orden.id_orden_servicio },
+                        });
+                        this.logger.log(`   🗑️ Eliminados ${pendientesResExist} pendientes residuales`);
+                    }
+
+                    const totalResidual = evidenciasExistentes + actividadesResExist + medicionesResExist + pendientesResExist;
                     emitProgress('limpieza_residuales', 'completed', `Limpieza completada (${totalResidual} registros residuales eliminados)`, 17);
                 } catch (cleanupError) {
                     // La limpieza es best-effort, no debe bloquear la finalización
@@ -584,6 +600,21 @@ export class FinalizacionOrdenService {
                 );
                 this.logger.log(`   ✓ ${medicionesGuardadas} mediciones registradas`);
                 emitProgress('mediciones', 'completed', `${medicionesGuardadas} mediciones registradas`, 58);
+            }
+
+            // ========================================================================
+            // PASO 3.7: Persistir pendientes técnicos en BD
+            // ========================================================================
+            if (dto.pendientes && dto.pendientes.length > 0) {
+                emitProgress('pendientes', 'in_progress', `Registrando ${dto.pendientes.length} pendientes...`, 59);
+                this.logger.log('📌 Paso 3.7: Registrando pendientes técnicos...');
+                const pendientesGuardados = await this.persistirPendientes(
+                    orden,
+                    dto.pendientes,
+                    idEmpleadoTecnico,
+                );
+                this.logger.log(`   ✓ ${pendientesGuardados} pendientes registrados`);
+                emitProgress('pendientes', 'completed', `${pendientesGuardados} pendientes registrados`, 60);
             }
 
             // Mapear mediciones del array a datosModulo (necesario para horómetro)
@@ -2234,4 +2265,77 @@ export class FinalizacionOrdenService {
         if (r === 'REGULAR' || r === 'R') return 'R';
         return 'B'; // Default
     }
+
+    /**
+     * Persiste los pendientes técnicos registrados durante la orden de servicio
+     * Soporta items de catálogo y manuales/personalizados con vinculación a equipos
+     */
+    private async persistirPendientes(
+        orden: any,
+        pendientes: PendienteFinalizacionDto[],
+        idEmpleadoTecnico: number | null,
+    ): Promise<number> {
+        if (!pendientes || pendientes.length === 0) return 0;
+
+        // Idempotencia: Verificar si ya existen pendientes para esta orden
+        const pendientesExistentes = await this.prisma.ordenes_pendientes.count({
+            where: { id_orden_servicio: orden.id_orden_servicio },
+        });
+
+        if (pendientesExistentes > 0) {
+            this.logger.warn(`⚠️ IDEMPOTENCIA: Ya existen ${pendientesExistentes} pendientes para orden ${orden.id_orden_servicio}. Saltando inserción.`);
+            return 0;
+        }
+
+        const ahora = new Date();
+        const PRIORIDADES_VALIDAS = ['NORMAL', 'ALTA', 'URGENTE', 'EMERGENCIA'] as const;
+
+        const datosParaInsertar = pendientes.map((p) => {
+            // Resolver id_equipo:
+            let idEquipo = p.idEquipo;
+            if (!idEquipo && p.idOrdenEquipo && orden.ordenes_equipos) {
+                const ordenEq = orden.ordenes_equipos.find((oe: any) => oe.id_orden_equipo === p.idOrdenEquipo);
+                if (ordenEq?.id_equipo) {
+                    idEquipo = ordenEq.id_equipo;
+                }
+            }
+            if (!idEquipo) {
+                idEquipo = orden.id_equipo;
+            }
+
+            // Normalizar origen: CATALOGO o MANUAL
+            const origenVal = (p.origen === 'MANUAL' || p.origen === 'PERSONALIZADO') ? 'MANUAL' : 'CATALOGO';
+
+            // Normalizar prioridad
+            let prioridadVal: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA' = 'NORMAL';
+            if (p.prioridad && PRIORIDADES_VALIDAS.includes(p.prioridad.toUpperCase() as any)) {
+                prioridadVal = p.prioridad.toUpperCase() as any;
+            } else if (p.prioridad?.toUpperCase() === 'MEDIA' || p.prioridad?.toUpperCase() === 'BAJA') {
+                prioridadVal = 'NORMAL';
+            }
+
+            return {
+                id_orden_servicio: orden.id_orden_servicio,
+                id_cliente: orden.id_cliente,
+                id_equipo: idEquipo,
+                id_orden_equipo: p.idOrdenEquipo || null,
+                id_pendiente_catalogo: p.idPendienteCatalogo || null,
+                descripcion: p.descripcion.trim(),
+                origen: origenVal as any,
+                prioridad: prioridadVal,
+                estado: 'PENDIENTE' as const,
+                observaciones: p.observaciones?.trim() || null,
+                creado_por: idEmpleadoTecnico || null,
+                fecha_creacion: ahora,
+            };
+        });
+
+        const resultado = await this.prisma.ordenes_pendientes.createMany({
+            data: datosParaInsertar,
+            skipDuplicates: true,
+        });
+
+        return resultado.count;
+    }
 }
+

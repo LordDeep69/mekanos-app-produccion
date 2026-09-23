@@ -27,6 +27,7 @@ class SyncResult {
   final int parametrosGuardados;
   final int estadosGuardados;
   final int tiposServicioGuardados;
+  final int pendientesCatalogoGuardados;
   final String? error;
   // ✅ FIX: Timestamp del SERVIDOR para delta sync (evita problemas de hora local)
   final DateTime? serverTimestamp;
@@ -41,6 +42,7 @@ class SyncResult {
     this.parametrosGuardados = 0,
     this.estadosGuardados = 0,
     this.tiposServicioGuardados = 0,
+    this.pendientesCatalogoGuardados = 0,
     this.error,
     this.serverTimestamp,
   });
@@ -169,6 +171,14 @@ class SyncService {
         );
       }
 
+      // 5.5 Procesar catálogo de pendientes técnicos
+      int pendientesCatalogoGuardados = 0;
+      if (data['catalogoPendientes'] != null) {
+        pendientesCatalogoGuardados = await _processPendientesCatalogo(
+          data['catalogoPendientes'] as List,
+        );
+      }
+
       // 6. Procesar órdenes (esto extrae clientes y equipos automáticamente)
       int ordenesDescargadas = 0;
       int clientesGuardados = 0;
@@ -198,6 +208,7 @@ class SyncService {
         parametrosGuardados: parametrosGuardados,
         estadosGuardados: estadosGuardados,
         tiposServicioGuardados: tiposServicioGuardados,
+        pendientesCatalogoGuardados: pendientesCatalogoGuardados,
         // ✅ FIX: Pasar timestamp del servidor para delta sync confiable
         serverTimestamp: serverTimestamp,
       );
@@ -355,6 +366,33 @@ class SyncService {
             idParametroMedicion: Value(act['idParametroMedicion'] as int?),
             sistema: Value(act['sistema'] as String?),
             idTipoServicio: Value(act['idTipoServicio'] as int?),
+            lastSyncedAt: Value(DateTime.now()),
+          ),
+        );
+        count++;
+      }
+    });
+
+    return count;
+  }
+
+  /// Procesar catálogo de pendientes técnicos
+  /// ✅ FIX RENDIMIENTO: Usar transacción batch
+  Future<int> _processPendientesCatalogo(List items) async {
+    if (items.isEmpty) return 0;
+
+    int count = 0;
+    await _db.transaction(() async {
+      for (final item in items) {
+        await _db.upsertPendienteCatalogo(
+          PendientesCatalogoCompanion(
+            id: Value(item['id'] as int),
+            codigo: Value(item['codigo'] as String?),
+            descripcion: Value(item['descripcion'] as String? ?? ''),
+            categoria: Value(item['categoria'] as String? ?? 'GENERAL'),
+            idTipoEquipo: Value(item['idTipoEquipo'] as int?),
+            activo: Value(item['activo'] as bool? ?? true),
+            ordenVisual: Value(item['ordenVisual'] as int? ?? 0),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );

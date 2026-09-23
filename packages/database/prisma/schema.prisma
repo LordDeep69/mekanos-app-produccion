@@ -350,6 +350,7 @@ model clientes {
   cotizaciones               cotizaciones[]
   equipos                    equipos[]
   ordenes_servicio           ordenes_servicio[]
+  ordenes_pendientes         ordenes_pendientes[]
   propuestas_correctivo      propuestas_correctivo[]
   sedes_cliente              sedes_cliente[]
 
@@ -696,6 +697,8 @@ model empleados {
   ordenes_servicio_ordenes_servicio_id_supervisorToempleados       ordenes_servicio[]           @relation("ordenes_servicio_id_supervisorToempleados")
   ordenes_servicio_ordenes_servicio_id_tecnico_asignadoToempleados ordenes_servicio[]           @relation("ordenes_servicio_id_tecnico_asignadoToempleados")
   propuestas_correctivo                                            propuestas_correctivo[]
+  ordenes_pendientes_creados                                       ordenes_pendientes[]         @relation("ordenes_pendientes_creado_porToempleados")
+  ordenes_pendientes_resueltos                                     ordenes_pendientes[]         @relation("ordenes_pendientes_resuelto_porToempleados")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -759,6 +762,7 @@ model equipos {
   lecturas_horometro              lecturas_horometro[]
   ordenes_equipos                 ordenes_equipos[]
   ordenes_servicio                ordenes_servicio[]
+  ordenes_pendientes              ordenes_pendientes[]
   propuestas_correctivo           propuestas_correctivo[]
 
   @@index([id_cliente, id_sede], map: "idx_equipos_cliente_sede")
@@ -1604,6 +1608,7 @@ model ordenes_servicio {
   movimientos_inventario                                                                   movimientos_inventario[]
   ordenes_actividades_plan                                                                 ordenes_actividades_plan[]
   ordenes_equipos                                                                          ordenes_equipos[]
+  ordenes_pendientes                                                                       ordenes_pendientes[]
   firmas_digitales_ordenes_servicio_id_firma_tecnicoTofirmas_digitales                     firmas_digitales?           @relation("ordenes_servicio_id_firma_tecnicoTofirmas_digitales", fields: [id_firma_tecnico], references: [id_firma_digital], map: "fk_orden_firma_tecnico")
   clientes                                                                                 clientes                    @relation(fields: [id_cliente], references: [id_cliente], onDelete: SetNull)
   equipos                                                                                  equipos                     @relation(fields: [id_equipo], references: [id_equipo], onDelete: SetNull)
@@ -2055,6 +2060,7 @@ model tipos_equipo {
   parametros_medicion          parametros_medicion[]
   plantillas_parametros        plantillas_parametros[]
   tipos_servicio               tipos_servicio[]
+  catalogo_pendientes          catalogo_pendientes[]
 
   @@index([codigo_tipo], map: "idx_tipos_equipo_codigo")
 }
@@ -2202,6 +2208,7 @@ model ordenes_equipos {
   mediciones_servicio     mediciones_servicio[]
   equipos                 equipos                       @relation(fields: [id_equipo], references: [id_equipo], onDelete: SetNull)
   ordenes_servicio        ordenes_servicio              @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: SetNull)
+  ordenes_pendientes      ordenes_pendientes[]
 
   @@index([id_equipo], map: "idx_oe_equipo")
   @@index([id_orden_servicio], map: "idx_oe_orden")
@@ -2905,3 +2912,65 @@ enum estado_envio_email_enum {
   EXITOSO
   FALLIDO
 }
+
+enum origen_pendiente_enum {
+  CATALOGO
+  PERSONALIZADO
+}
+
+enum estado_pendiente_orden_enum {
+  PENDIENTE
+  EN_GESTION
+  RESUELTO
+  CANCELADO
+}
+
+model catalogo_pendientes {
+  id_pendiente_catalogo Int                  @id @default(autoincrement())
+  codigo                String?              @db.VarChar(50)
+  descripcion           String               @db.VarChar(300)
+  categoria             String?              @default("GENERAL") @db.VarChar(100)
+  id_tipo_equipo        Int?
+  activo                Boolean              @default(true)
+  orden_visual          Int?                 @default(0)
+  fecha_creacion        DateTime             @default(now()) @db.Timestamp(6)
+  ordenes_pendientes    ordenes_pendientes[]
+  tipos_equipo          tipos_equipo?        @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo])
+
+  @@index([categoria], map: "idx_catalogo_pendientes_categoria")
+  @@index([activo], map: "idx_catalogo_pendientes_activo")
+  @@index([id_tipo_equipo], map: "idx_catalogo_pendientes_tipo_equipo")
+}
+
+model ordenes_pendientes {
+  id_orden_pendiente                                          Int                          @id @default(autoincrement())
+  id_orden_servicio                                           Int
+  id_cliente                                                  Int
+  id_equipo                                                   Int
+  id_orden_equipo                                             Int?
+  id_pendiente_catalogo                                       Int?
+  descripcion                                                 String                       @db.VarChar(1000)
+  origen                                                      origen_pendiente_enum?       @default(CATALOGO)
+  prioridad                                                   prioridad_enum?              @default(NORMAL)
+  estado                                                      estado_pendiente_orden_enum  @default(PENDIENTE)
+  observaciones                                               String?
+  creado_por                                                  Int?
+  fecha_creacion                                              DateTime                     @default(now()) @db.Timestamp(6)
+  fecha_resolucion                                            DateTime?                    @db.Timestamp(6)
+  resuelto_por                                                Int?
+  observaciones_resolucion                                    String?
+  catalogo_pendientes                                         catalogo_pendientes?         @relation(fields: [id_pendiente_catalogo], references: [id_pendiente_catalogo])
+  clientes                                                    clientes                     @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
+  equipos                                                     equipos                      @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  ordenes_equipos                                             ordenes_equipos?             @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
+  ordenes_servicio                                            ordenes_servicio             @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  empleados_ordenes_pendientes_creado_porToempleados          empleados?                   @relation("ordenes_pendientes_creado_porToempleados", fields: [creado_por], references: [id_empleado])
+  empleados_ordenes_pendientes_resuelto_porToempleados        empleados?                   @relation("ordenes_pendientes_resuelto_porToempleados", fields: [resuelto_por], references: [id_empleado])
+
+  @@index([id_orden_servicio], map: "idx_op_orden")
+  @@index([id_cliente, estado], map: "idx_op_cliente_estado")
+  @@index([id_equipo, estado], map: "idx_op_equipo_estado")
+  @@index([id_orden_equipo], map: "idx_op_orden_equipo")
+  @@index([fecha_creacion(sort: Desc)], map: "idx_op_fecha_creacion")
+}
+

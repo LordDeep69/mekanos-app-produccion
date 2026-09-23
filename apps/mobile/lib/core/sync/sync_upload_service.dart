@@ -428,6 +428,18 @@ class SyncUploadService {
 
       // ✅ 20-DIC-2025: Ya no marcamos completado aquí, el SSE lo hará
 
+      // 5.5 Recopilar pendientes técnicos registrados para esta orden
+      final pendientes = await _db.getPendientesByOrden(idOrdenLocal);
+      final pendientesPayload = pendientes.map((p) => <String, dynamic>{
+        'descripcion': p.descripcion,
+        'idPendienteCatalogo': p.idPendienteCatalogo,
+        'idEquipo': p.idEquipo,
+        'idOrdenEquipo': p.idOrdenEquipo,
+        'origen': p.origen,
+        'prioridad': p.prioridad,
+        'observaciones': p.observaciones,
+      }).toList();
+
       // 6. Construir payload completo
       // ✅ MULTI-EQUIPOS: Incluir estructura agrupada por equipo
       final payload = {
@@ -436,6 +448,8 @@ class SyncUploadService {
         'firmas': firmasPayload,
         'actividades': actividadesPayload,
         'mediciones': medicionesPayload,
+        if (pendientesPayload.isNotEmpty)
+          'pendientes': pendientesPayload,
         'observaciones': observaciones,
         'horaEntrada': horaEntrada,
         'horaSalida': horaSalida,

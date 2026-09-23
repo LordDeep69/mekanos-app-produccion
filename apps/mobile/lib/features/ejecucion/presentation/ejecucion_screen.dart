@@ -16,6 +16,7 @@ import '../../firmas/presentation/firmas_section.dart';
 import '../../settings/presentation/configuracion_screen.dart'
     show formatoHora24Provider;
 import '../data/ejecucion_service.dart';
+import 'pendientes_orden_widget.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
 /// TabBar: Checklist | Mediciones | Resumen
@@ -65,6 +66,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
   // ✅ MULTI-EQUIPOS: Nombre del equipo actual
   String? _nombreEquipoActual;
+  int? _idEquipoActual;
+  Ordene? _orden;
+  List<OrdenesEquipo> _equipos = [];
 
   // ✅ FIX 17-DIC-2025: Flag para saber si es orden de un solo equipo (necesita tab Resumen)
   bool get _esOrdenSimple => widget.idOrdenEquipo == null;
@@ -97,6 +101,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       // ✅ MULTI-EQUIPOS: Si hay idOrdenEquipo, cargar nombre del equipo
       if (widget.idOrdenEquipo != null) {
         final equipoInfo = await db.getOrdenEquipoById(widget.idOrdenEquipo!);
+        _idEquipoActual = equipoInfo?.idEquipo;
         _nombreEquipoActual =
             equipoInfo?.nombreSistema ??
             equipoInfo?.nombreEquipo ??
@@ -157,11 +162,15 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       final orden = await (db.select(
         db.ordenes,
       )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
+      _orden = orden;
       _numeroOrden = orden?.numeroOrden ?? 'Sin número';
       _razonFallaActual = orden?.razonFalla;
       _observacionesController.text = orden?.observacionesTecnico ?? '';
 
       if (orden != null) {
+        if (orden.idBackend != null) {
+          _equipos = await db.getEquiposByOrdenServicio(orden.idBackend!);
+        }
         final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
         final codigoTipo = tipoServicio?.codigo ?? '';
         final nombreTipo = (tipoServicio?.nombre ?? '').toUpperCase();
@@ -1429,7 +1438,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       case 'CORR_TEXTO_SINTOMAS':
       case 'CORR_TEXTO_DIAGNOSTICO':
       case 'CORR_TEXTO_TRABAJOS':
+        return _buildCorrTextoLibreInput(actividad, tipo!);
       case 'CORR_TEXTO_PENDIENTES':
+        return _buildPendientesActividadInput(actividad);
       case 'CORR_TEXTO_RECOMENDACIONES':
         return _buildCorrTextoLibreInput(actividad, tipo!);
       case 'CORR_LISTA_REPUESTOS':
@@ -2842,6 +2853,28 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     );
   }
 
+  /// Widget interactivo para Trabajos/Repuestos Pendientes con catálogo y trazabilidad
+  Widget _buildPendientesActividadInput(ActividadesEjecutada actividad) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: PendientesOrdenWidget(
+        idOrdenLocal: widget.idOrdenLocal,
+        idOrdenBackend: _orden?.idBackend,
+        idCliente: _orden?.idCliente,
+        idEquipo: _idEquipoActual ?? _orden?.idEquipo,
+        idOrdenEquipo: widget.idOrdenEquipo,
+        equipos: _equipos.isNotEmpty ? _equipos : null,
+        onResumenActualizado: (resumenTexto) {
+          _marcarActividadEspecial(
+            actividad.idLocal,
+            resumenTexto,
+            resumenTexto.contains('Sin pendientes') ? 'NA' : 'B',
+          );
+        },
+      ),
+    );
+  }
+
   /// Diálogo para ingresar texto libre en correctivo
   Future<void> _mostrarDialogoTextoLibre(
     ActividadesEjecutada actividad,
@@ -3624,6 +3657,17 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 ),
               ),
             ),
+          ),
+          const SizedBox(height: 16),
+
+          // ✅ PENDIENTES TÉCNICOS POR ORDEN (Registro y Seguimiento)
+          PendientesOrdenWidget(
+            idOrdenLocal: widget.idOrdenLocal,
+            idOrdenBackend: _orden?.idBackend,
+            idCliente: _orden?.idCliente,
+            idEquipo: _idEquipoActual ?? _orden?.idEquipo,
+            idOrdenEquipo: widget.idOrdenEquipo,
+            equipos: _equipos.isNotEmpty ? _equipos : null,
           ),
           const SizedBox(height: 16),
 

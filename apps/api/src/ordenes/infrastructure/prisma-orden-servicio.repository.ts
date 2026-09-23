@@ -207,9 +207,11 @@ export class PrismaOrdenServicioRepository {
       },
     },
     // ✅ FIX 03-MAR-2026: Incluir conteo de emails enviados para badge en lista
+    // ✅ FIX 23-SEP-2026: Incluir conteo de ordenes_pendientes para badge en lista
     _count: {
       select: {
         historial_emails_enviados: true,
+        ordenes_pendientes: true,
       },
     },
   };
@@ -219,6 +221,7 @@ export class PrismaOrdenServicioRepository {
    * Incluye todas las relaciones necesarias para ver/editar una orden
    * 
    * ✅ FIX 15-DIC-2025: Corregidos nombres de relaciones Prisma
+   * ✅ FIX 23-SEP-2026: Incluir ordenes_pendientes con relaciones
    */
   private readonly INCLUDE_RELATIONS = {
     clientes: { include: { persona: true } },
@@ -247,6 +250,32 @@ export class PrismaOrdenServicioRepository {
     detalle_servicios_orden: {
       include: {
         catalogo_servicios: true,
+      },
+    },
+    ordenes_pendientes: {
+      include: {
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+          },
+        },
+        catalogo_pendientes: true,
+        empleados_ordenes_pendientes_creado_porToempleados: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        id_orden_pendiente: 'asc' as const,
       },
     },
   };
@@ -589,6 +618,33 @@ export class PrismaOrdenServicioRepository {
             documentos_generados: true,
           },
         },
+        // ✅ PENDIENTES TÉCNICOS: Incluir pendientes registrados
+        ordenes_pendientes: {
+          include: {
+            equipos: {
+              select: {
+                id_equipo: true,
+                codigo_equipo: true,
+                nombre_equipo: true,
+              },
+            },
+            catalogo_pendientes: true,
+            empleados_ordenes_pendientes_creado_porToempleados: {
+              include: {
+                persona: {
+                  select: {
+                    nombre_completo: true,
+                    primer_nombre: true,
+                    primer_apellido: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            id_orden_pendiente: 'asc' as const,
+          },
+        },
         // ❌ NO incluir: actividades, mediciones, evidencias, servicios
         // Se cargan bajo demanda con sus propios endpoints
       },
@@ -845,12 +901,14 @@ export class PrismaOrdenServicioRepository {
 
     // ✅ FIX 03-MAR-2026: Transformar _count a total_emails_enviados
     // ✅ FIX 06-MAY-2026: Agregar total_documentos_pdf desde query de documentos
+    // ✅ FIX 23-SEP-2026: Agregar total_pendientes desde _count.ordenes_pendientes
     const items = itemsRaw.map((orden: any) => {
       const { _count, ...rest } = orden;
       return {
         ...rest,
         total_emails_enviados: _count?.historial_emails_enviados || 0,
         total_documentos_pdf: pdfCountMap.get(orden.id_orden_servicio) || 0,
+        total_pendientes: _count?.ordenes_pendientes || 0,
       };
     });
 

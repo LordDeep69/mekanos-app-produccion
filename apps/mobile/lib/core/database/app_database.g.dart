@@ -2373,6 +2373,532 @@ class ActividadesCatalogoCompanion
   }
 }
 
+class $PendientesCatalogoTable extends PendientesCatalogo
+    with TableInfo<$PendientesCatalogoTable, PendientesCatalogoData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendientesCatalogoTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _codigoMeta = const VerificationMeta('codigo');
+  @override
+  late final GeneratedColumn<String> codigo = GeneratedColumn<String>(
+    'codigo',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 50),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _descripcionMeta = const VerificationMeta(
+    'descripcion',
+  );
+  @override
+  late final GeneratedColumn<String> descripcion = GeneratedColumn<String>(
+    'descripcion',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 300),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoriaMeta = const VerificationMeta(
+    'categoria',
+  );
+  @override
+  late final GeneratedColumn<String> categoria = GeneratedColumn<String>(
+    'categoria',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 100),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _idTipoEquipoMeta = const VerificationMeta(
+    'idTipoEquipo',
+  );
+  @override
+  late final GeneratedColumn<int> idTipoEquipo = GeneratedColumn<int>(
+    'id_tipo_equipo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _activoMeta = const VerificationMeta('activo');
+  @override
+  late final GeneratedColumn<bool> activo = GeneratedColumn<bool>(
+    'activo',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("activo" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _ordenVisualMeta = const VerificationMeta(
+    'ordenVisual',
+  );
+  @override
+  late final GeneratedColumn<int> ordenVisual = GeneratedColumn<int>(
+    'orden_visual',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastSyncedAtMeta = const VerificationMeta(
+    'lastSyncedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSyncedAt = GeneratedColumn<DateTime>(
+    'last_synced_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    codigo,
+    descripcion,
+    categoria,
+    idTipoEquipo,
+    activo,
+    ordenVisual,
+    lastSyncedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pendientes_catalogo';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendientesCatalogoData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('codigo')) {
+      context.handle(
+        _codigoMeta,
+        codigo.isAcceptableOrUnknown(data['codigo']!, _codigoMeta),
+      );
+    }
+    if (data.containsKey('descripcion')) {
+      context.handle(
+        _descripcionMeta,
+        descripcion.isAcceptableOrUnknown(
+          data['descripcion']!,
+          _descripcionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descripcionMeta);
+    }
+    if (data.containsKey('categoria')) {
+      context.handle(
+        _categoriaMeta,
+        categoria.isAcceptableOrUnknown(data['categoria']!, _categoriaMeta),
+      );
+    }
+    if (data.containsKey('id_tipo_equipo')) {
+      context.handle(
+        _idTipoEquipoMeta,
+        idTipoEquipo.isAcceptableOrUnknown(
+          data['id_tipo_equipo']!,
+          _idTipoEquipoMeta,
+        ),
+      );
+    }
+    if (data.containsKey('activo')) {
+      context.handle(
+        _activoMeta,
+        activo.isAcceptableOrUnknown(data['activo']!, _activoMeta),
+      );
+    }
+    if (data.containsKey('orden_visual')) {
+      context.handle(
+        _ordenVisualMeta,
+        ordenVisual.isAcceptableOrUnknown(
+          data['orden_visual']!,
+          _ordenVisualMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_synced_at')) {
+      context.handle(
+        _lastSyncedAtMeta,
+        lastSyncedAt.isAcceptableOrUnknown(
+          data['last_synced_at']!,
+          _lastSyncedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PendientesCatalogoData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendientesCatalogoData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      codigo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}codigo'],
+      ),
+      descripcion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}descripcion'],
+      )!,
+      categoria: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}categoria'],
+      ),
+      idTipoEquipo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_tipo_equipo'],
+      ),
+      activo: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}activo'],
+      )!,
+      ordenVisual: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}orden_visual'],
+      ),
+      lastSyncedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_synced_at'],
+      ),
+    );
+  }
+
+  @override
+  $PendientesCatalogoTable createAlias(String alias) {
+    return $PendientesCatalogoTable(attachedDatabase, alias);
+  }
+}
+
+class PendientesCatalogoData extends DataClass
+    implements Insertable<PendientesCatalogoData> {
+  final int id;
+  final String? codigo;
+  final String descripcion;
+  final String? categoria;
+  final int? idTipoEquipo;
+  final bool activo;
+  final int? ordenVisual;
+  final DateTime? lastSyncedAt;
+  const PendientesCatalogoData({
+    required this.id,
+    this.codigo,
+    required this.descripcion,
+    this.categoria,
+    this.idTipoEquipo,
+    required this.activo,
+    this.ordenVisual,
+    this.lastSyncedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || codigo != null) {
+      map['codigo'] = Variable<String>(codigo);
+    }
+    map['descripcion'] = Variable<String>(descripcion);
+    if (!nullToAbsent || categoria != null) {
+      map['categoria'] = Variable<String>(categoria);
+    }
+    if (!nullToAbsent || idTipoEquipo != null) {
+      map['id_tipo_equipo'] = Variable<int>(idTipoEquipo);
+    }
+    map['activo'] = Variable<bool>(activo);
+    if (!nullToAbsent || ordenVisual != null) {
+      map['orden_visual'] = Variable<int>(ordenVisual);
+    }
+    if (!nullToAbsent || lastSyncedAt != null) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
+    }
+    return map;
+  }
+
+  PendientesCatalogoCompanion toCompanion(bool nullToAbsent) {
+    return PendientesCatalogoCompanion(
+      id: Value(id),
+      codigo: codigo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(codigo),
+      descripcion: Value(descripcion),
+      categoria: categoria == null && nullToAbsent
+          ? const Value.absent()
+          : Value(categoria),
+      idTipoEquipo: idTipoEquipo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idTipoEquipo),
+      activo: Value(activo),
+      ordenVisual: ordenVisual == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ordenVisual),
+      lastSyncedAt: lastSyncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncedAt),
+    );
+  }
+
+  factory PendientesCatalogoData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendientesCatalogoData(
+      id: serializer.fromJson<int>(json['id']),
+      codigo: serializer.fromJson<String?>(json['codigo']),
+      descripcion: serializer.fromJson<String>(json['descripcion']),
+      categoria: serializer.fromJson<String?>(json['categoria']),
+      idTipoEquipo: serializer.fromJson<int?>(json['idTipoEquipo']),
+      activo: serializer.fromJson<bool>(json['activo']),
+      ordenVisual: serializer.fromJson<int?>(json['ordenVisual']),
+      lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'codigo': serializer.toJson<String?>(codigo),
+      'descripcion': serializer.toJson<String>(descripcion),
+      'categoria': serializer.toJson<String?>(categoria),
+      'idTipoEquipo': serializer.toJson<int?>(idTipoEquipo),
+      'activo': serializer.toJson<bool>(activo),
+      'ordenVisual': serializer.toJson<int?>(ordenVisual),
+      'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
+    };
+  }
+
+  PendientesCatalogoData copyWith({
+    int? id,
+    Value<String?> codigo = const Value.absent(),
+    String? descripcion,
+    Value<String?> categoria = const Value.absent(),
+    Value<int?> idTipoEquipo = const Value.absent(),
+    bool? activo,
+    Value<int?> ordenVisual = const Value.absent(),
+    Value<DateTime?> lastSyncedAt = const Value.absent(),
+  }) => PendientesCatalogoData(
+    id: id ?? this.id,
+    codigo: codigo.present ? codigo.value : this.codigo,
+    descripcion: descripcion ?? this.descripcion,
+    categoria: categoria.present ? categoria.value : this.categoria,
+    idTipoEquipo: idTipoEquipo.present ? idTipoEquipo.value : this.idTipoEquipo,
+    activo: activo ?? this.activo,
+    ordenVisual: ordenVisual.present ? ordenVisual.value : this.ordenVisual,
+    lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
+  );
+  PendientesCatalogoData copyWithCompanion(PendientesCatalogoCompanion data) {
+    return PendientesCatalogoData(
+      id: data.id.present ? data.id.value : this.id,
+      codigo: data.codigo.present ? data.codigo.value : this.codigo,
+      descripcion: data.descripcion.present
+          ? data.descripcion.value
+          : this.descripcion,
+      categoria: data.categoria.present ? data.categoria.value : this.categoria,
+      idTipoEquipo: data.idTipoEquipo.present
+          ? data.idTipoEquipo.value
+          : this.idTipoEquipo,
+      activo: data.activo.present ? data.activo.value : this.activo,
+      ordenVisual: data.ordenVisual.present
+          ? data.ordenVisual.value
+          : this.ordenVisual,
+      lastSyncedAt: data.lastSyncedAt.present
+          ? data.lastSyncedAt.value
+          : this.lastSyncedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendientesCatalogoData(')
+          ..write('id: $id, ')
+          ..write('codigo: $codigo, ')
+          ..write('descripcion: $descripcion, ')
+          ..write('categoria: $categoria, ')
+          ..write('idTipoEquipo: $idTipoEquipo, ')
+          ..write('activo: $activo, ')
+          ..write('ordenVisual: $ordenVisual, ')
+          ..write('lastSyncedAt: $lastSyncedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    codigo,
+    descripcion,
+    categoria,
+    idTipoEquipo,
+    activo,
+    ordenVisual,
+    lastSyncedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendientesCatalogoData &&
+          other.id == this.id &&
+          other.codigo == this.codigo &&
+          other.descripcion == this.descripcion &&
+          other.categoria == this.categoria &&
+          other.idTipoEquipo == this.idTipoEquipo &&
+          other.activo == this.activo &&
+          other.ordenVisual == this.ordenVisual &&
+          other.lastSyncedAt == this.lastSyncedAt);
+}
+
+class PendientesCatalogoCompanion
+    extends UpdateCompanion<PendientesCatalogoData> {
+  final Value<int> id;
+  final Value<String?> codigo;
+  final Value<String> descripcion;
+  final Value<String?> categoria;
+  final Value<int?> idTipoEquipo;
+  final Value<bool> activo;
+  final Value<int?> ordenVisual;
+  final Value<DateTime?> lastSyncedAt;
+  const PendientesCatalogoCompanion({
+    this.id = const Value.absent(),
+    this.codigo = const Value.absent(),
+    this.descripcion = const Value.absent(),
+    this.categoria = const Value.absent(),
+    this.idTipoEquipo = const Value.absent(),
+    this.activo = const Value.absent(),
+    this.ordenVisual = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+  });
+  PendientesCatalogoCompanion.insert({
+    this.id = const Value.absent(),
+    this.codigo = const Value.absent(),
+    required String descripcion,
+    this.categoria = const Value.absent(),
+    this.idTipoEquipo = const Value.absent(),
+    this.activo = const Value.absent(),
+    this.ordenVisual = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+  }) : descripcion = Value(descripcion);
+  static Insertable<PendientesCatalogoData> custom({
+    Expression<int>? id,
+    Expression<String>? codigo,
+    Expression<String>? descripcion,
+    Expression<String>? categoria,
+    Expression<int>? idTipoEquipo,
+    Expression<bool>? activo,
+    Expression<int>? ordenVisual,
+    Expression<DateTime>? lastSyncedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (codigo != null) 'codigo': codigo,
+      if (descripcion != null) 'descripcion': descripcion,
+      if (categoria != null) 'categoria': categoria,
+      if (idTipoEquipo != null) 'id_tipo_equipo': idTipoEquipo,
+      if (activo != null) 'activo': activo,
+      if (ordenVisual != null) 'orden_visual': ordenVisual,
+      if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
+    });
+  }
+
+  PendientesCatalogoCompanion copyWith({
+    Value<int>? id,
+    Value<String?>? codigo,
+    Value<String>? descripcion,
+    Value<String?>? categoria,
+    Value<int?>? idTipoEquipo,
+    Value<bool>? activo,
+    Value<int?>? ordenVisual,
+    Value<DateTime?>? lastSyncedAt,
+  }) {
+    return PendientesCatalogoCompanion(
+      id: id ?? this.id,
+      codigo: codigo ?? this.codigo,
+      descripcion: descripcion ?? this.descripcion,
+      categoria: categoria ?? this.categoria,
+      idTipoEquipo: idTipoEquipo ?? this.idTipoEquipo,
+      activo: activo ?? this.activo,
+      ordenVisual: ordenVisual ?? this.ordenVisual,
+      lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (codigo.present) {
+      map['codigo'] = Variable<String>(codigo.value);
+    }
+    if (descripcion.present) {
+      map['descripcion'] = Variable<String>(descripcion.value);
+    }
+    if (categoria.present) {
+      map['categoria'] = Variable<String>(categoria.value);
+    }
+    if (idTipoEquipo.present) {
+      map['id_tipo_equipo'] = Variable<int>(idTipoEquipo.value);
+    }
+    if (activo.present) {
+      map['activo'] = Variable<bool>(activo.value);
+    }
+    if (ordenVisual.present) {
+      map['orden_visual'] = Variable<int>(ordenVisual.value);
+    }
+    if (lastSyncedAt.present) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendientesCatalogoCompanion(')
+          ..write('id: $id, ')
+          ..write('codigo: $codigo, ')
+          ..write('descripcion: $descripcion, ')
+          ..write('categoria: $categoria, ')
+          ..write('idTipoEquipo: $idTipoEquipo, ')
+          ..write('activo: $activo, ')
+          ..write('ordenVisual: $ordenVisual, ')
+          ..write('lastSyncedAt: $lastSyncedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ClientesTable extends Clientes with TableInfo<$ClientesTable, Cliente> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -10459,6 +10985,948 @@ class FirmasCompanion extends UpdateCompanion<Firma> {
   }
 }
 
+class $OrdenesPendientesTable extends OrdenesPendientes
+    with TableInfo<$OrdenesPendientesTable, OrdenesPendiente> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OrdenesPendientesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idLocalMeta = const VerificationMeta(
+    'idLocal',
+  );
+  @override
+  late final GeneratedColumn<int> idLocal = GeneratedColumn<int>(
+    'id_local',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _idBackendMeta = const VerificationMeta(
+    'idBackend',
+  );
+  @override
+  late final GeneratedColumn<int> idBackend = GeneratedColumn<int>(
+    'id_backend',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _idOrdenMeta = const VerificationMeta(
+    'idOrden',
+  );
+  @override
+  late final GeneratedColumn<int> idOrden = GeneratedColumn<int>(
+    'id_orden',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES ordenes (id_local)',
+    ),
+  );
+  static const VerificationMeta _idOrdenBackendMeta = const VerificationMeta(
+    'idOrdenBackend',
+  );
+  @override
+  late final GeneratedColumn<int> idOrdenBackend = GeneratedColumn<int>(
+    'id_orden_backend',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _idClienteMeta = const VerificationMeta(
+    'idCliente',
+  );
+  @override
+  late final GeneratedColumn<int> idCliente = GeneratedColumn<int>(
+    'id_cliente',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _idEquipoMeta = const VerificationMeta(
+    'idEquipo',
+  );
+  @override
+  late final GeneratedColumn<int> idEquipo = GeneratedColumn<int>(
+    'id_equipo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _idOrdenEquipoMeta = const VerificationMeta(
+    'idOrdenEquipo',
+  );
+  @override
+  late final GeneratedColumn<int> idOrdenEquipo = GeneratedColumn<int>(
+    'id_orden_equipo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _idPendienteCatalogoMeta =
+      const VerificationMeta('idPendienteCatalogo');
+  @override
+  late final GeneratedColumn<int> idPendienteCatalogo = GeneratedColumn<int>(
+    'id_pendiente_catalogo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _descripcionMeta = const VerificationMeta(
+    'descripcion',
+  );
+  @override
+  late final GeneratedColumn<String> descripcion = GeneratedColumn<String>(
+    'descripcion',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 1000),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _origenMeta = const VerificationMeta('origen');
+  @override
+  late final GeneratedColumn<String> origen = GeneratedColumn<String>(
+    'origen',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 20),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('CATALOGO'),
+  );
+  static const VerificationMeta _prioridadMeta = const VerificationMeta(
+    'prioridad',
+  );
+  @override
+  late final GeneratedColumn<String> prioridad = GeneratedColumn<String>(
+    'prioridad',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 20),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('NORMAL'),
+  );
+  static const VerificationMeta _estadoMeta = const VerificationMeta('estado');
+  @override
+  late final GeneratedColumn<String> estado = GeneratedColumn<String>(
+    'estado',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 20),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('PENDIENTE'),
+  );
+  static const VerificationMeta _observacionesMeta = const VerificationMeta(
+    'observaciones',
+  );
+  @override
+  late final GeneratedColumn<String> observaciones = GeneratedColumn<String>(
+    'observaciones',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fechaCreacionMeta = const VerificationMeta(
+    'fechaCreacion',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fechaCreacion =
+      GeneratedColumn<DateTime>(
+        'fecha_creacion',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  static const VerificationMeta _isDirtyMeta = const VerificationMeta(
+    'isDirty',
+  );
+  @override
+  late final GeneratedColumn<bool> isDirty = GeneratedColumn<bool>(
+    'is_dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_dirty" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _lastSyncedAtMeta = const VerificationMeta(
+    'lastSyncedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSyncedAt = GeneratedColumn<DateTime>(
+    'last_synced_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    idLocal,
+    idBackend,
+    idOrden,
+    idOrdenBackend,
+    idCliente,
+    idEquipo,
+    idOrdenEquipo,
+    idPendienteCatalogo,
+    descripcion,
+    origen,
+    prioridad,
+    estado,
+    observaciones,
+    fechaCreacion,
+    isDirty,
+    lastSyncedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ordenes_pendientes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OrdenesPendiente> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id_local')) {
+      context.handle(
+        _idLocalMeta,
+        idLocal.isAcceptableOrUnknown(data['id_local']!, _idLocalMeta),
+      );
+    }
+    if (data.containsKey('id_backend')) {
+      context.handle(
+        _idBackendMeta,
+        idBackend.isAcceptableOrUnknown(data['id_backend']!, _idBackendMeta),
+      );
+    }
+    if (data.containsKey('id_orden')) {
+      context.handle(
+        _idOrdenMeta,
+        idOrden.isAcceptableOrUnknown(data['id_orden']!, _idOrdenMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_idOrdenMeta);
+    }
+    if (data.containsKey('id_orden_backend')) {
+      context.handle(
+        _idOrdenBackendMeta,
+        idOrdenBackend.isAcceptableOrUnknown(
+          data['id_orden_backend']!,
+          _idOrdenBackendMeta,
+        ),
+      );
+    }
+    if (data.containsKey('id_cliente')) {
+      context.handle(
+        _idClienteMeta,
+        idCliente.isAcceptableOrUnknown(data['id_cliente']!, _idClienteMeta),
+      );
+    }
+    if (data.containsKey('id_equipo')) {
+      context.handle(
+        _idEquipoMeta,
+        idEquipo.isAcceptableOrUnknown(data['id_equipo']!, _idEquipoMeta),
+      );
+    }
+    if (data.containsKey('id_orden_equipo')) {
+      context.handle(
+        _idOrdenEquipoMeta,
+        idOrdenEquipo.isAcceptableOrUnknown(
+          data['id_orden_equipo']!,
+          _idOrdenEquipoMeta,
+        ),
+      );
+    }
+    if (data.containsKey('id_pendiente_catalogo')) {
+      context.handle(
+        _idPendienteCatalogoMeta,
+        idPendienteCatalogo.isAcceptableOrUnknown(
+          data['id_pendiente_catalogo']!,
+          _idPendienteCatalogoMeta,
+        ),
+      );
+    }
+    if (data.containsKey('descripcion')) {
+      context.handle(
+        _descripcionMeta,
+        descripcion.isAcceptableOrUnknown(
+          data['descripcion']!,
+          _descripcionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descripcionMeta);
+    }
+    if (data.containsKey('origen')) {
+      context.handle(
+        _origenMeta,
+        origen.isAcceptableOrUnknown(data['origen']!, _origenMeta),
+      );
+    }
+    if (data.containsKey('prioridad')) {
+      context.handle(
+        _prioridadMeta,
+        prioridad.isAcceptableOrUnknown(data['prioridad']!, _prioridadMeta),
+      );
+    }
+    if (data.containsKey('estado')) {
+      context.handle(
+        _estadoMeta,
+        estado.isAcceptableOrUnknown(data['estado']!, _estadoMeta),
+      );
+    }
+    if (data.containsKey('observaciones')) {
+      context.handle(
+        _observacionesMeta,
+        observaciones.isAcceptableOrUnknown(
+          data['observaciones']!,
+          _observacionesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fecha_creacion')) {
+      context.handle(
+        _fechaCreacionMeta,
+        fechaCreacion.isAcceptableOrUnknown(
+          data['fecha_creacion']!,
+          _fechaCreacionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_dirty')) {
+      context.handle(
+        _isDirtyMeta,
+        isDirty.isAcceptableOrUnknown(data['is_dirty']!, _isDirtyMeta),
+      );
+    }
+    if (data.containsKey('last_synced_at')) {
+      context.handle(
+        _lastSyncedAtMeta,
+        lastSyncedAt.isAcceptableOrUnknown(
+          data['last_synced_at']!,
+          _lastSyncedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {idLocal};
+  @override
+  OrdenesPendiente map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OrdenesPendiente(
+      idLocal: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_local'],
+      )!,
+      idBackend: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_backend'],
+      ),
+      idOrden: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_orden'],
+      )!,
+      idOrdenBackend: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_orden_backend'],
+      ),
+      idCliente: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_cliente'],
+      ),
+      idEquipo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_equipo'],
+      ),
+      idOrdenEquipo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_orden_equipo'],
+      ),
+      idPendienteCatalogo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id_pendiente_catalogo'],
+      ),
+      descripcion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}descripcion'],
+      )!,
+      origen: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origen'],
+      )!,
+      prioridad: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prioridad'],
+      )!,
+      estado: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}estado'],
+      )!,
+      observaciones: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}observaciones'],
+      ),
+      fechaCreacion: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fecha_creacion'],
+      )!,
+      isDirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_dirty'],
+      )!,
+      lastSyncedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_synced_at'],
+      ),
+    );
+  }
+
+  @override
+  $OrdenesPendientesTable createAlias(String alias) {
+    return $OrdenesPendientesTable(attachedDatabase, alias);
+  }
+}
+
+class OrdenesPendiente extends DataClass
+    implements Insertable<OrdenesPendiente> {
+  final int idLocal;
+  final int? idBackend;
+  final int idOrden;
+  final int? idOrdenBackend;
+  final int? idCliente;
+  final int? idEquipo;
+  final int? idOrdenEquipo;
+  final int? idPendienteCatalogo;
+  final String descripcion;
+  final String origen;
+  final String prioridad;
+  final String estado;
+  final String? observaciones;
+  final DateTime fechaCreacion;
+  final bool isDirty;
+  final DateTime? lastSyncedAt;
+  const OrdenesPendiente({
+    required this.idLocal,
+    this.idBackend,
+    required this.idOrden,
+    this.idOrdenBackend,
+    this.idCliente,
+    this.idEquipo,
+    this.idOrdenEquipo,
+    this.idPendienteCatalogo,
+    required this.descripcion,
+    required this.origen,
+    required this.prioridad,
+    required this.estado,
+    this.observaciones,
+    required this.fechaCreacion,
+    required this.isDirty,
+    this.lastSyncedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id_local'] = Variable<int>(idLocal);
+    if (!nullToAbsent || idBackend != null) {
+      map['id_backend'] = Variable<int>(idBackend);
+    }
+    map['id_orden'] = Variable<int>(idOrden);
+    if (!nullToAbsent || idOrdenBackend != null) {
+      map['id_orden_backend'] = Variable<int>(idOrdenBackend);
+    }
+    if (!nullToAbsent || idCliente != null) {
+      map['id_cliente'] = Variable<int>(idCliente);
+    }
+    if (!nullToAbsent || idEquipo != null) {
+      map['id_equipo'] = Variable<int>(idEquipo);
+    }
+    if (!nullToAbsent || idOrdenEquipo != null) {
+      map['id_orden_equipo'] = Variable<int>(idOrdenEquipo);
+    }
+    if (!nullToAbsent || idPendienteCatalogo != null) {
+      map['id_pendiente_catalogo'] = Variable<int>(idPendienteCatalogo);
+    }
+    map['descripcion'] = Variable<String>(descripcion);
+    map['origen'] = Variable<String>(origen);
+    map['prioridad'] = Variable<String>(prioridad);
+    map['estado'] = Variable<String>(estado);
+    if (!nullToAbsent || observaciones != null) {
+      map['observaciones'] = Variable<String>(observaciones);
+    }
+    map['fecha_creacion'] = Variable<DateTime>(fechaCreacion);
+    map['is_dirty'] = Variable<bool>(isDirty);
+    if (!nullToAbsent || lastSyncedAt != null) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
+    }
+    return map;
+  }
+
+  OrdenesPendientesCompanion toCompanion(bool nullToAbsent) {
+    return OrdenesPendientesCompanion(
+      idLocal: Value(idLocal),
+      idBackend: idBackend == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idBackend),
+      idOrden: Value(idOrden),
+      idOrdenBackend: idOrdenBackend == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idOrdenBackend),
+      idCliente: idCliente == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idCliente),
+      idEquipo: idEquipo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idEquipo),
+      idOrdenEquipo: idOrdenEquipo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idOrdenEquipo),
+      idPendienteCatalogo: idPendienteCatalogo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idPendienteCatalogo),
+      descripcion: Value(descripcion),
+      origen: Value(origen),
+      prioridad: Value(prioridad),
+      estado: Value(estado),
+      observaciones: observaciones == null && nullToAbsent
+          ? const Value.absent()
+          : Value(observaciones),
+      fechaCreacion: Value(fechaCreacion),
+      isDirty: Value(isDirty),
+      lastSyncedAt: lastSyncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncedAt),
+    );
+  }
+
+  factory OrdenesPendiente.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OrdenesPendiente(
+      idLocal: serializer.fromJson<int>(json['idLocal']),
+      idBackend: serializer.fromJson<int?>(json['idBackend']),
+      idOrden: serializer.fromJson<int>(json['idOrden']),
+      idOrdenBackend: serializer.fromJson<int?>(json['idOrdenBackend']),
+      idCliente: serializer.fromJson<int?>(json['idCliente']),
+      idEquipo: serializer.fromJson<int?>(json['idEquipo']),
+      idOrdenEquipo: serializer.fromJson<int?>(json['idOrdenEquipo']),
+      idPendienteCatalogo: serializer.fromJson<int?>(
+        json['idPendienteCatalogo'],
+      ),
+      descripcion: serializer.fromJson<String>(json['descripcion']),
+      origen: serializer.fromJson<String>(json['origen']),
+      prioridad: serializer.fromJson<String>(json['prioridad']),
+      estado: serializer.fromJson<String>(json['estado']),
+      observaciones: serializer.fromJson<String?>(json['observaciones']),
+      fechaCreacion: serializer.fromJson<DateTime>(json['fechaCreacion']),
+      isDirty: serializer.fromJson<bool>(json['isDirty']),
+      lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'idLocal': serializer.toJson<int>(idLocal),
+      'idBackend': serializer.toJson<int?>(idBackend),
+      'idOrden': serializer.toJson<int>(idOrden),
+      'idOrdenBackend': serializer.toJson<int?>(idOrdenBackend),
+      'idCliente': serializer.toJson<int?>(idCliente),
+      'idEquipo': serializer.toJson<int?>(idEquipo),
+      'idOrdenEquipo': serializer.toJson<int?>(idOrdenEquipo),
+      'idPendienteCatalogo': serializer.toJson<int?>(idPendienteCatalogo),
+      'descripcion': serializer.toJson<String>(descripcion),
+      'origen': serializer.toJson<String>(origen),
+      'prioridad': serializer.toJson<String>(prioridad),
+      'estado': serializer.toJson<String>(estado),
+      'observaciones': serializer.toJson<String?>(observaciones),
+      'fechaCreacion': serializer.toJson<DateTime>(fechaCreacion),
+      'isDirty': serializer.toJson<bool>(isDirty),
+      'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
+    };
+  }
+
+  OrdenesPendiente copyWith({
+    int? idLocal,
+    Value<int?> idBackend = const Value.absent(),
+    int? idOrden,
+    Value<int?> idOrdenBackend = const Value.absent(),
+    Value<int?> idCliente = const Value.absent(),
+    Value<int?> idEquipo = const Value.absent(),
+    Value<int?> idOrdenEquipo = const Value.absent(),
+    Value<int?> idPendienteCatalogo = const Value.absent(),
+    String? descripcion,
+    String? origen,
+    String? prioridad,
+    String? estado,
+    Value<String?> observaciones = const Value.absent(),
+    DateTime? fechaCreacion,
+    bool? isDirty,
+    Value<DateTime?> lastSyncedAt = const Value.absent(),
+  }) => OrdenesPendiente(
+    idLocal: idLocal ?? this.idLocal,
+    idBackend: idBackend.present ? idBackend.value : this.idBackend,
+    idOrden: idOrden ?? this.idOrden,
+    idOrdenBackend: idOrdenBackend.present
+        ? idOrdenBackend.value
+        : this.idOrdenBackend,
+    idCliente: idCliente.present ? idCliente.value : this.idCliente,
+    idEquipo: idEquipo.present ? idEquipo.value : this.idEquipo,
+    idOrdenEquipo: idOrdenEquipo.present
+        ? idOrdenEquipo.value
+        : this.idOrdenEquipo,
+    idPendienteCatalogo: idPendienteCatalogo.present
+        ? idPendienteCatalogo.value
+        : this.idPendienteCatalogo,
+    descripcion: descripcion ?? this.descripcion,
+    origen: origen ?? this.origen,
+    prioridad: prioridad ?? this.prioridad,
+    estado: estado ?? this.estado,
+    observaciones: observaciones.present
+        ? observaciones.value
+        : this.observaciones,
+    fechaCreacion: fechaCreacion ?? this.fechaCreacion,
+    isDirty: isDirty ?? this.isDirty,
+    lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
+  );
+  OrdenesPendiente copyWithCompanion(OrdenesPendientesCompanion data) {
+    return OrdenesPendiente(
+      idLocal: data.idLocal.present ? data.idLocal.value : this.idLocal,
+      idBackend: data.idBackend.present ? data.idBackend.value : this.idBackend,
+      idOrden: data.idOrden.present ? data.idOrden.value : this.idOrden,
+      idOrdenBackend: data.idOrdenBackend.present
+          ? data.idOrdenBackend.value
+          : this.idOrdenBackend,
+      idCliente: data.idCliente.present ? data.idCliente.value : this.idCliente,
+      idEquipo: data.idEquipo.present ? data.idEquipo.value : this.idEquipo,
+      idOrdenEquipo: data.idOrdenEquipo.present
+          ? data.idOrdenEquipo.value
+          : this.idOrdenEquipo,
+      idPendienteCatalogo: data.idPendienteCatalogo.present
+          ? data.idPendienteCatalogo.value
+          : this.idPendienteCatalogo,
+      descripcion: data.descripcion.present
+          ? data.descripcion.value
+          : this.descripcion,
+      origen: data.origen.present ? data.origen.value : this.origen,
+      prioridad: data.prioridad.present ? data.prioridad.value : this.prioridad,
+      estado: data.estado.present ? data.estado.value : this.estado,
+      observaciones: data.observaciones.present
+          ? data.observaciones.value
+          : this.observaciones,
+      fechaCreacion: data.fechaCreacion.present
+          ? data.fechaCreacion.value
+          : this.fechaCreacion,
+      isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
+      lastSyncedAt: data.lastSyncedAt.present
+          ? data.lastSyncedAt.value
+          : this.lastSyncedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OrdenesPendiente(')
+          ..write('idLocal: $idLocal, ')
+          ..write('idBackend: $idBackend, ')
+          ..write('idOrden: $idOrden, ')
+          ..write('idOrdenBackend: $idOrdenBackend, ')
+          ..write('idCliente: $idCliente, ')
+          ..write('idEquipo: $idEquipo, ')
+          ..write('idOrdenEquipo: $idOrdenEquipo, ')
+          ..write('idPendienteCatalogo: $idPendienteCatalogo, ')
+          ..write('descripcion: $descripcion, ')
+          ..write('origen: $origen, ')
+          ..write('prioridad: $prioridad, ')
+          ..write('estado: $estado, ')
+          ..write('observaciones: $observaciones, ')
+          ..write('fechaCreacion: $fechaCreacion, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('lastSyncedAt: $lastSyncedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    idLocal,
+    idBackend,
+    idOrden,
+    idOrdenBackend,
+    idCliente,
+    idEquipo,
+    idOrdenEquipo,
+    idPendienteCatalogo,
+    descripcion,
+    origen,
+    prioridad,
+    estado,
+    observaciones,
+    fechaCreacion,
+    isDirty,
+    lastSyncedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OrdenesPendiente &&
+          other.idLocal == this.idLocal &&
+          other.idBackend == this.idBackend &&
+          other.idOrden == this.idOrden &&
+          other.idOrdenBackend == this.idOrdenBackend &&
+          other.idCliente == this.idCliente &&
+          other.idEquipo == this.idEquipo &&
+          other.idOrdenEquipo == this.idOrdenEquipo &&
+          other.idPendienteCatalogo == this.idPendienteCatalogo &&
+          other.descripcion == this.descripcion &&
+          other.origen == this.origen &&
+          other.prioridad == this.prioridad &&
+          other.estado == this.estado &&
+          other.observaciones == this.observaciones &&
+          other.fechaCreacion == this.fechaCreacion &&
+          other.isDirty == this.isDirty &&
+          other.lastSyncedAt == this.lastSyncedAt);
+}
+
+class OrdenesPendientesCompanion extends UpdateCompanion<OrdenesPendiente> {
+  final Value<int> idLocal;
+  final Value<int?> idBackend;
+  final Value<int> idOrden;
+  final Value<int?> idOrdenBackend;
+  final Value<int?> idCliente;
+  final Value<int?> idEquipo;
+  final Value<int?> idOrdenEquipo;
+  final Value<int?> idPendienteCatalogo;
+  final Value<String> descripcion;
+  final Value<String> origen;
+  final Value<String> prioridad;
+  final Value<String> estado;
+  final Value<String?> observaciones;
+  final Value<DateTime> fechaCreacion;
+  final Value<bool> isDirty;
+  final Value<DateTime?> lastSyncedAt;
+  const OrdenesPendientesCompanion({
+    this.idLocal = const Value.absent(),
+    this.idBackend = const Value.absent(),
+    this.idOrden = const Value.absent(),
+    this.idOrdenBackend = const Value.absent(),
+    this.idCliente = const Value.absent(),
+    this.idEquipo = const Value.absent(),
+    this.idOrdenEquipo = const Value.absent(),
+    this.idPendienteCatalogo = const Value.absent(),
+    this.descripcion = const Value.absent(),
+    this.origen = const Value.absent(),
+    this.prioridad = const Value.absent(),
+    this.estado = const Value.absent(),
+    this.observaciones = const Value.absent(),
+    this.fechaCreacion = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+  });
+  OrdenesPendientesCompanion.insert({
+    this.idLocal = const Value.absent(),
+    this.idBackend = const Value.absent(),
+    required int idOrden,
+    this.idOrdenBackend = const Value.absent(),
+    this.idCliente = const Value.absent(),
+    this.idEquipo = const Value.absent(),
+    this.idOrdenEquipo = const Value.absent(),
+    this.idPendienteCatalogo = const Value.absent(),
+    required String descripcion,
+    this.origen = const Value.absent(),
+    this.prioridad = const Value.absent(),
+    this.estado = const Value.absent(),
+    this.observaciones = const Value.absent(),
+    this.fechaCreacion = const Value.absent(),
+    this.isDirty = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+  }) : idOrden = Value(idOrden),
+       descripcion = Value(descripcion);
+  static Insertable<OrdenesPendiente> custom({
+    Expression<int>? idLocal,
+    Expression<int>? idBackend,
+    Expression<int>? idOrden,
+    Expression<int>? idOrdenBackend,
+    Expression<int>? idCliente,
+    Expression<int>? idEquipo,
+    Expression<int>? idOrdenEquipo,
+    Expression<int>? idPendienteCatalogo,
+    Expression<String>? descripcion,
+    Expression<String>? origen,
+    Expression<String>? prioridad,
+    Expression<String>? estado,
+    Expression<String>? observaciones,
+    Expression<DateTime>? fechaCreacion,
+    Expression<bool>? isDirty,
+    Expression<DateTime>? lastSyncedAt,
+  }) {
+    return RawValuesInsertable({
+      if (idLocal != null) 'id_local': idLocal,
+      if (idBackend != null) 'id_backend': idBackend,
+      if (idOrden != null) 'id_orden': idOrden,
+      if (idOrdenBackend != null) 'id_orden_backend': idOrdenBackend,
+      if (idCliente != null) 'id_cliente': idCliente,
+      if (idEquipo != null) 'id_equipo': idEquipo,
+      if (idOrdenEquipo != null) 'id_orden_equipo': idOrdenEquipo,
+      if (idPendienteCatalogo != null)
+        'id_pendiente_catalogo': idPendienteCatalogo,
+      if (descripcion != null) 'descripcion': descripcion,
+      if (origen != null) 'origen': origen,
+      if (prioridad != null) 'prioridad': prioridad,
+      if (estado != null) 'estado': estado,
+      if (observaciones != null) 'observaciones': observaciones,
+      if (fechaCreacion != null) 'fecha_creacion': fechaCreacion,
+      if (isDirty != null) 'is_dirty': isDirty,
+      if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
+    });
+  }
+
+  OrdenesPendientesCompanion copyWith({
+    Value<int>? idLocal,
+    Value<int?>? idBackend,
+    Value<int>? idOrden,
+    Value<int?>? idOrdenBackend,
+    Value<int?>? idCliente,
+    Value<int?>? idEquipo,
+    Value<int?>? idOrdenEquipo,
+    Value<int?>? idPendienteCatalogo,
+    Value<String>? descripcion,
+    Value<String>? origen,
+    Value<String>? prioridad,
+    Value<String>? estado,
+    Value<String?>? observaciones,
+    Value<DateTime>? fechaCreacion,
+    Value<bool>? isDirty,
+    Value<DateTime?>? lastSyncedAt,
+  }) {
+    return OrdenesPendientesCompanion(
+      idLocal: idLocal ?? this.idLocal,
+      idBackend: idBackend ?? this.idBackend,
+      idOrden: idOrden ?? this.idOrden,
+      idOrdenBackend: idOrdenBackend ?? this.idOrdenBackend,
+      idCliente: idCliente ?? this.idCliente,
+      idEquipo: idEquipo ?? this.idEquipo,
+      idOrdenEquipo: idOrdenEquipo ?? this.idOrdenEquipo,
+      idPendienteCatalogo: idPendienteCatalogo ?? this.idPendienteCatalogo,
+      descripcion: descripcion ?? this.descripcion,
+      origen: origen ?? this.origen,
+      prioridad: prioridad ?? this.prioridad,
+      estado: estado ?? this.estado,
+      observaciones: observaciones ?? this.observaciones,
+      fechaCreacion: fechaCreacion ?? this.fechaCreacion,
+      isDirty: isDirty ?? this.isDirty,
+      lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (idLocal.present) {
+      map['id_local'] = Variable<int>(idLocal.value);
+    }
+    if (idBackend.present) {
+      map['id_backend'] = Variable<int>(idBackend.value);
+    }
+    if (idOrden.present) {
+      map['id_orden'] = Variable<int>(idOrden.value);
+    }
+    if (idOrdenBackend.present) {
+      map['id_orden_backend'] = Variable<int>(idOrdenBackend.value);
+    }
+    if (idCliente.present) {
+      map['id_cliente'] = Variable<int>(idCliente.value);
+    }
+    if (idEquipo.present) {
+      map['id_equipo'] = Variable<int>(idEquipo.value);
+    }
+    if (idOrdenEquipo.present) {
+      map['id_orden_equipo'] = Variable<int>(idOrdenEquipo.value);
+    }
+    if (idPendienteCatalogo.present) {
+      map['id_pendiente_catalogo'] = Variable<int>(idPendienteCatalogo.value);
+    }
+    if (descripcion.present) {
+      map['descripcion'] = Variable<String>(descripcion.value);
+    }
+    if (origen.present) {
+      map['origen'] = Variable<String>(origen.value);
+    }
+    if (prioridad.present) {
+      map['prioridad'] = Variable<String>(prioridad.value);
+    }
+    if (estado.present) {
+      map['estado'] = Variable<String>(estado.value);
+    }
+    if (observaciones.present) {
+      map['observaciones'] = Variable<String>(observaciones.value);
+    }
+    if (fechaCreacion.present) {
+      map['fecha_creacion'] = Variable<DateTime>(fechaCreacion.value);
+    }
+    if (isDirty.present) {
+      map['is_dirty'] = Variable<bool>(isDirty.value);
+    }
+    if (lastSyncedAt.present) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OrdenesPendientesCompanion(')
+          ..write('idLocal: $idLocal, ')
+          ..write('idBackend: $idBackend, ')
+          ..write('idOrden: $idOrden, ')
+          ..write('idOrdenBackend: $idOrdenBackend, ')
+          ..write('idCliente: $idCliente, ')
+          ..write('idEquipo: $idEquipo, ')
+          ..write('idOrdenEquipo: $idOrdenEquipo, ')
+          ..write('idPendienteCatalogo: $idPendienteCatalogo, ')
+          ..write('descripcion: $descripcion, ')
+          ..write('origen: $origen, ')
+          ..write('prioridad: $prioridad, ')
+          ..write('estado: $estado, ')
+          ..write('observaciones: $observaciones, ')
+          ..write('fechaCreacion: $fechaCreacion, ')
+          ..write('isDirty: $isDirty, ')
+          ..write('lastSyncedAt: $lastSyncedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncStatusEntriesTable extends SyncStatusEntries
     with TableInfo<$SyncStatusEntriesTable, SyncStatusEntry> {
   @override
@@ -11494,6 +12962,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $ParametrosCatalogoTable(this);
   late final $ActividadesCatalogoTable actividadesCatalogo =
       $ActividadesCatalogoTable(this);
+  late final $PendientesCatalogoTable pendientesCatalogo =
+      $PendientesCatalogoTable(this);
   late final $ClientesTable clientes = $ClientesTable(this);
   late final $EquiposTable equipos = $EquiposTable(this);
   late final $OrdenesEquiposTable ordenesEquipos = $OrdenesEquiposTable(this);
@@ -11506,6 +12976,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MedicionesTable mediciones = $MedicionesTable(this);
   late final $EvidenciasTable evidencias = $EvidenciasTable(this);
   late final $FirmasTable firmas = $FirmasTable(this);
+  late final $OrdenesPendientesTable ordenesPendientes =
+      $OrdenesPendientesTable(this);
   late final $SyncStatusEntriesTable syncStatusEntries =
       $SyncStatusEntriesTable(this);
   late final $OrdenesPendientesSyncTable ordenesPendientesSync =
@@ -11519,6 +12991,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     tiposServicio,
     parametrosCatalogo,
     actividadesCatalogo,
+    pendientesCatalogo,
     clientes,
     equipos,
     ordenesEquipos,
@@ -11528,6 +13001,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     mediciones,
     evidencias,
     firmas,
+    ordenesPendientes,
     syncStatusEntries,
     ordenesPendientesSync,
   ];
@@ -13659,6 +15133,278 @@ typedef $$ActividadesCatalogoTableProcessedTableManager =
         bool actividadesEjecutadasRefs,
       })
     >;
+typedef $$PendientesCatalogoTableCreateCompanionBuilder =
+    PendientesCatalogoCompanion Function({
+      Value<int> id,
+      Value<String?> codigo,
+      required String descripcion,
+      Value<String?> categoria,
+      Value<int?> idTipoEquipo,
+      Value<bool> activo,
+      Value<int?> ordenVisual,
+      Value<DateTime?> lastSyncedAt,
+    });
+typedef $$PendientesCatalogoTableUpdateCompanionBuilder =
+    PendientesCatalogoCompanion Function({
+      Value<int> id,
+      Value<String?> codigo,
+      Value<String> descripcion,
+      Value<String?> categoria,
+      Value<int?> idTipoEquipo,
+      Value<bool> activo,
+      Value<int?> ordenVisual,
+      Value<DateTime?> lastSyncedAt,
+    });
+
+class $$PendientesCatalogoTableFilterComposer
+    extends Composer<_$AppDatabase, $PendientesCatalogoTable> {
+  $$PendientesCatalogoTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get codigo => $composableBuilder(
+    column: $table.codigo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get descripcion => $composableBuilder(
+    column: $table.descripcion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get categoria => $composableBuilder(
+    column: $table.categoria,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idTipoEquipo => $composableBuilder(
+    column: $table.idTipoEquipo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get activo => $composableBuilder(
+    column: $table.activo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ordenVisual => $composableBuilder(
+    column: $table.ordenVisual,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendientesCatalogoTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendientesCatalogoTable> {
+  $$PendientesCatalogoTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get codigo => $composableBuilder(
+    column: $table.codigo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get descripcion => $composableBuilder(
+    column: $table.descripcion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get categoria => $composableBuilder(
+    column: $table.categoria,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idTipoEquipo => $composableBuilder(
+    column: $table.idTipoEquipo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get activo => $composableBuilder(
+    column: $table.activo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ordenVisual => $composableBuilder(
+    column: $table.ordenVisual,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendientesCatalogoTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendientesCatalogoTable> {
+  $$PendientesCatalogoTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get codigo =>
+      $composableBuilder(column: $table.codigo, builder: (column) => column);
+
+  GeneratedColumn<String> get descripcion => $composableBuilder(
+    column: $table.descripcion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get categoria =>
+      $composableBuilder(column: $table.categoria, builder: (column) => column);
+
+  GeneratedColumn<int> get idTipoEquipo => $composableBuilder(
+    column: $table.idTipoEquipo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get activo =>
+      $composableBuilder(column: $table.activo, builder: (column) => column);
+
+  GeneratedColumn<int> get ordenVisual => $composableBuilder(
+    column: $table.ordenVisual,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PendientesCatalogoTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendientesCatalogoTable,
+          PendientesCatalogoData,
+          $$PendientesCatalogoTableFilterComposer,
+          $$PendientesCatalogoTableOrderingComposer,
+          $$PendientesCatalogoTableAnnotationComposer,
+          $$PendientesCatalogoTableCreateCompanionBuilder,
+          $$PendientesCatalogoTableUpdateCompanionBuilder,
+          (
+            PendientesCatalogoData,
+            BaseReferences<
+              _$AppDatabase,
+              $PendientesCatalogoTable,
+              PendientesCatalogoData
+            >,
+          ),
+          PendientesCatalogoData,
+          PrefetchHooks Function()
+        > {
+  $$PendientesCatalogoTableTableManager(
+    _$AppDatabase db,
+    $PendientesCatalogoTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendientesCatalogoTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PendientesCatalogoTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PendientesCatalogoTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> codigo = const Value.absent(),
+                Value<String> descripcion = const Value.absent(),
+                Value<String?> categoria = const Value.absent(),
+                Value<int?> idTipoEquipo = const Value.absent(),
+                Value<bool> activo = const Value.absent(),
+                Value<int?> ordenVisual = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+              }) => PendientesCatalogoCompanion(
+                id: id,
+                codigo: codigo,
+                descripcion: descripcion,
+                categoria: categoria,
+                idTipoEquipo: idTipoEquipo,
+                activo: activo,
+                ordenVisual: ordenVisual,
+                lastSyncedAt: lastSyncedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> codigo = const Value.absent(),
+                required String descripcion,
+                Value<String?> categoria = const Value.absent(),
+                Value<int?> idTipoEquipo = const Value.absent(),
+                Value<bool> activo = const Value.absent(),
+                Value<int?> ordenVisual = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+              }) => PendientesCatalogoCompanion.insert(
+                id: id,
+                codigo: codigo,
+                descripcion: descripcion,
+                categoria: categoria,
+                idTipoEquipo: idTipoEquipo,
+                activo: activo,
+                ordenVisual: ordenVisual,
+                lastSyncedAt: lastSyncedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendientesCatalogoTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendientesCatalogoTable,
+      PendientesCatalogoData,
+      $$PendientesCatalogoTableFilterComposer,
+      $$PendientesCatalogoTableOrderingComposer,
+      $$PendientesCatalogoTableAnnotationComposer,
+      $$PendientesCatalogoTableCreateCompanionBuilder,
+      $$PendientesCatalogoTableUpdateCompanionBuilder,
+      (
+        PendientesCatalogoData,
+        BaseReferences<
+          _$AppDatabase,
+          $PendientesCatalogoTable,
+          PendientesCatalogoData
+        >,
+      ),
+      PendientesCatalogoData,
+      PrefetchHooks Function()
+    >;
 typedef $$ClientesTableCreateCompanionBuilder =
     ClientesCompanion Function({
       Value<int> id,
@@ -15550,6 +17296,33 @@ final class $$OrdenesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$OrdenesPendientesTable, List<OrdenesPendiente>>
+  _ordenesPendientesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.ordenesPendientes,
+        aliasName: $_aliasNameGenerator(
+          db.ordenes.idLocal,
+          db.ordenesPendientes.idOrden,
+        ),
+      );
+
+  $$OrdenesPendientesTableProcessedTableManager get ordenesPendientesRefs {
+    final manager =
+        $$OrdenesPendientesTableTableManager(
+          $_db,
+          $_db.ordenesPendientes,
+        ).filter(
+          (f) => f.idOrden.idLocal.sqlEquals($_itemColumn<int>('id_local')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _ordenesPendientesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$OrdenesTableFilterComposer
@@ -15920,6 +17693,31 @@ class $$OrdenesTableFilterComposer
           }) => $$FirmasTableFilterComposer(
             $db: $db,
             $table: $db.firmas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> ordenesPendientesRefs(
+    Expression<bool> Function($$OrdenesPendientesTableFilterComposer f) f,
+  ) {
+    final $$OrdenesPendientesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idLocal,
+      referencedTable: $db.ordenesPendientes,
+      getReferencedColumn: (t) => t.idOrden,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdenesPendientesTableFilterComposer(
+            $db: $db,
+            $table: $db.ordenesPendientes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -16540,6 +18338,32 @@ class $$OrdenesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> ordenesPendientesRefs<T extends Object>(
+    Expression<T> Function($$OrdenesPendientesTableAnnotationComposer a) f,
+  ) {
+    final $$OrdenesPendientesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.idLocal,
+          referencedTable: $db.ordenesPendientes,
+          getReferencedColumn: (t) => t.idOrden,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OrdenesPendientesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.ordenesPendientes,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$OrdenesTableTableManager
@@ -16565,6 +18389,7 @@ class $$OrdenesTableTableManager
             bool medicionesRefs,
             bool evidenciasRefs,
             bool firmasRefs,
+            bool ordenesPendientesRefs,
           })
         > {
   $$OrdenesTableTableManager(_$AppDatabase db, $OrdenesTable table)
@@ -16741,6 +18566,7 @@ class $$OrdenesTableTableManager
                 medicionesRefs = false,
                 evidenciasRefs = false,
                 firmasRefs = false,
+                ordenesPendientesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -16750,6 +18576,7 @@ class $$OrdenesTableTableManager
                     if (medicionesRefs) db.mediciones,
                     if (evidenciasRefs) db.evidencias,
                     if (firmasRefs) db.firmas,
+                    if (ordenesPendientesRefs) db.ordenesPendientes,
                   ],
                   addJoins:
                       <
@@ -16925,6 +18752,27 @@ class $$OrdenesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (ordenesPendientesRefs)
+                        await $_getPrefetchedData<
+                          Ordene,
+                          $OrdenesTable,
+                          OrdenesPendiente
+                        >(
+                          currentTable: table,
+                          referencedTable: $$OrdenesTableReferences
+                              ._ordenesPendientesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$OrdenesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ordenesPendientesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.idOrden == item.idLocal,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -16955,6 +18803,7 @@ typedef $$OrdenesTableProcessedTableManager =
         bool medicionesRefs,
         bool evidenciasRefs,
         bool firmasRefs,
+        bool ordenesPendientesRefs,
       })
     >;
 typedef $$ActividadesPlanTableCreateCompanionBuilder =
@@ -20457,6 +22306,558 @@ typedef $$FirmasTableProcessedTableManager =
       Firma,
       PrefetchHooks Function({bool idOrden})
     >;
+typedef $$OrdenesPendientesTableCreateCompanionBuilder =
+    OrdenesPendientesCompanion Function({
+      Value<int> idLocal,
+      Value<int?> idBackend,
+      required int idOrden,
+      Value<int?> idOrdenBackend,
+      Value<int?> idCliente,
+      Value<int?> idEquipo,
+      Value<int?> idOrdenEquipo,
+      Value<int?> idPendienteCatalogo,
+      required String descripcion,
+      Value<String> origen,
+      Value<String> prioridad,
+      Value<String> estado,
+      Value<String?> observaciones,
+      Value<DateTime> fechaCreacion,
+      Value<bool> isDirty,
+      Value<DateTime?> lastSyncedAt,
+    });
+typedef $$OrdenesPendientesTableUpdateCompanionBuilder =
+    OrdenesPendientesCompanion Function({
+      Value<int> idLocal,
+      Value<int?> idBackend,
+      Value<int> idOrden,
+      Value<int?> idOrdenBackend,
+      Value<int?> idCliente,
+      Value<int?> idEquipo,
+      Value<int?> idOrdenEquipo,
+      Value<int?> idPendienteCatalogo,
+      Value<String> descripcion,
+      Value<String> origen,
+      Value<String> prioridad,
+      Value<String> estado,
+      Value<String?> observaciones,
+      Value<DateTime> fechaCreacion,
+      Value<bool> isDirty,
+      Value<DateTime?> lastSyncedAt,
+    });
+
+final class $$OrdenesPendientesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $OrdenesPendientesTable,
+          OrdenesPendiente
+        > {
+  $$OrdenesPendientesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $OrdenesTable _idOrdenTable(_$AppDatabase db) =>
+      db.ordenes.createAlias(
+        $_aliasNameGenerator(db.ordenesPendientes.idOrden, db.ordenes.idLocal),
+      );
+
+  $$OrdenesTableProcessedTableManager get idOrden {
+    final $_column = $_itemColumn<int>('id_orden')!;
+
+    final manager = $$OrdenesTableTableManager(
+      $_db,
+      $_db.ordenes,
+    ).filter((f) => f.idLocal.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_idOrdenTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$OrdenesPendientesTableFilterComposer
+    extends Composer<_$AppDatabase, $OrdenesPendientesTable> {
+  $$OrdenesPendientesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get idLocal => $composableBuilder(
+    column: $table.idLocal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idBackend => $composableBuilder(
+    column: $table.idBackend,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idOrdenBackend => $composableBuilder(
+    column: $table.idOrdenBackend,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idCliente => $composableBuilder(
+    column: $table.idCliente,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idEquipo => $composableBuilder(
+    column: $table.idEquipo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idOrdenEquipo => $composableBuilder(
+    column: $table.idOrdenEquipo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get idPendienteCatalogo => $composableBuilder(
+    column: $table.idPendienteCatalogo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get descripcion => $composableBuilder(
+    column: $table.descripcion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origen => $composableBuilder(
+    column: $table.origen,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prioridad => $composableBuilder(
+    column: $table.prioridad,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get estado => $composableBuilder(
+    column: $table.estado,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get observaciones => $composableBuilder(
+    column: $table.observaciones,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fechaCreacion => $composableBuilder(
+    column: $table.fechaCreacion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$OrdenesTableFilterComposer get idOrden {
+    final $$OrdenesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idOrden,
+      referencedTable: $db.ordenes,
+      getReferencedColumn: (t) => t.idLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdenesTableFilterComposer(
+            $db: $db,
+            $table: $db.ordenes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OrdenesPendientesTableOrderingComposer
+    extends Composer<_$AppDatabase, $OrdenesPendientesTable> {
+  $$OrdenesPendientesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get idLocal => $composableBuilder(
+    column: $table.idLocal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idBackend => $composableBuilder(
+    column: $table.idBackend,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idOrdenBackend => $composableBuilder(
+    column: $table.idOrdenBackend,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idCliente => $composableBuilder(
+    column: $table.idCliente,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idEquipo => $composableBuilder(
+    column: $table.idEquipo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idOrdenEquipo => $composableBuilder(
+    column: $table.idOrdenEquipo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get idPendienteCatalogo => $composableBuilder(
+    column: $table.idPendienteCatalogo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get descripcion => $composableBuilder(
+    column: $table.descripcion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get origen => $composableBuilder(
+    column: $table.origen,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prioridad => $composableBuilder(
+    column: $table.prioridad,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get estado => $composableBuilder(
+    column: $table.estado,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get observaciones => $composableBuilder(
+    column: $table.observaciones,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fechaCreacion => $composableBuilder(
+    column: $table.fechaCreacion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDirty => $composableBuilder(
+    column: $table.isDirty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$OrdenesTableOrderingComposer get idOrden {
+    final $$OrdenesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idOrden,
+      referencedTable: $db.ordenes,
+      getReferencedColumn: (t) => t.idLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdenesTableOrderingComposer(
+            $db: $db,
+            $table: $db.ordenes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OrdenesPendientesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $OrdenesPendientesTable> {
+  $$OrdenesPendientesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get idLocal =>
+      $composableBuilder(column: $table.idLocal, builder: (column) => column);
+
+  GeneratedColumn<int> get idBackend =>
+      $composableBuilder(column: $table.idBackend, builder: (column) => column);
+
+  GeneratedColumn<int> get idOrdenBackend => $composableBuilder(
+    column: $table.idOrdenBackend,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get idCliente =>
+      $composableBuilder(column: $table.idCliente, builder: (column) => column);
+
+  GeneratedColumn<int> get idEquipo =>
+      $composableBuilder(column: $table.idEquipo, builder: (column) => column);
+
+  GeneratedColumn<int> get idOrdenEquipo => $composableBuilder(
+    column: $table.idOrdenEquipo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get idPendienteCatalogo => $composableBuilder(
+    column: $table.idPendienteCatalogo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get descripcion => $composableBuilder(
+    column: $table.descripcion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get origen =>
+      $composableBuilder(column: $table.origen, builder: (column) => column);
+
+  GeneratedColumn<String> get prioridad =>
+      $composableBuilder(column: $table.prioridad, builder: (column) => column);
+
+  GeneratedColumn<String> get estado =>
+      $composableBuilder(column: $table.estado, builder: (column) => column);
+
+  GeneratedColumn<String> get observaciones => $composableBuilder(
+    column: $table.observaciones,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fechaCreacion => $composableBuilder(
+    column: $table.fechaCreacion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isDirty =>
+      $composableBuilder(column: $table.isDirty, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => column,
+  );
+
+  $$OrdenesTableAnnotationComposer get idOrden {
+    final $$OrdenesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.idOrden,
+      referencedTable: $db.ordenes,
+      getReferencedColumn: (t) => t.idLocal,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdenesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.ordenes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OrdenesPendientesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $OrdenesPendientesTable,
+          OrdenesPendiente,
+          $$OrdenesPendientesTableFilterComposer,
+          $$OrdenesPendientesTableOrderingComposer,
+          $$OrdenesPendientesTableAnnotationComposer,
+          $$OrdenesPendientesTableCreateCompanionBuilder,
+          $$OrdenesPendientesTableUpdateCompanionBuilder,
+          (OrdenesPendiente, $$OrdenesPendientesTableReferences),
+          OrdenesPendiente,
+          PrefetchHooks Function({bool idOrden})
+        > {
+  $$OrdenesPendientesTableTableManager(
+    _$AppDatabase db,
+    $OrdenesPendientesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OrdenesPendientesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$OrdenesPendientesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$OrdenesPendientesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> idLocal = const Value.absent(),
+                Value<int?> idBackend = const Value.absent(),
+                Value<int> idOrden = const Value.absent(),
+                Value<int?> idOrdenBackend = const Value.absent(),
+                Value<int?> idCliente = const Value.absent(),
+                Value<int?> idEquipo = const Value.absent(),
+                Value<int?> idOrdenEquipo = const Value.absent(),
+                Value<int?> idPendienteCatalogo = const Value.absent(),
+                Value<String> descripcion = const Value.absent(),
+                Value<String> origen = const Value.absent(),
+                Value<String> prioridad = const Value.absent(),
+                Value<String> estado = const Value.absent(),
+                Value<String?> observaciones = const Value.absent(),
+                Value<DateTime> fechaCreacion = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+              }) => OrdenesPendientesCompanion(
+                idLocal: idLocal,
+                idBackend: idBackend,
+                idOrden: idOrden,
+                idOrdenBackend: idOrdenBackend,
+                idCliente: idCliente,
+                idEquipo: idEquipo,
+                idOrdenEquipo: idOrdenEquipo,
+                idPendienteCatalogo: idPendienteCatalogo,
+                descripcion: descripcion,
+                origen: origen,
+                prioridad: prioridad,
+                estado: estado,
+                observaciones: observaciones,
+                fechaCreacion: fechaCreacion,
+                isDirty: isDirty,
+                lastSyncedAt: lastSyncedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> idLocal = const Value.absent(),
+                Value<int?> idBackend = const Value.absent(),
+                required int idOrden,
+                Value<int?> idOrdenBackend = const Value.absent(),
+                Value<int?> idCliente = const Value.absent(),
+                Value<int?> idEquipo = const Value.absent(),
+                Value<int?> idOrdenEquipo = const Value.absent(),
+                Value<int?> idPendienteCatalogo = const Value.absent(),
+                required String descripcion,
+                Value<String> origen = const Value.absent(),
+                Value<String> prioridad = const Value.absent(),
+                Value<String> estado = const Value.absent(),
+                Value<String?> observaciones = const Value.absent(),
+                Value<DateTime> fechaCreacion = const Value.absent(),
+                Value<bool> isDirty = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+              }) => OrdenesPendientesCompanion.insert(
+                idLocal: idLocal,
+                idBackend: idBackend,
+                idOrden: idOrden,
+                idOrdenBackend: idOrdenBackend,
+                idCliente: idCliente,
+                idEquipo: idEquipo,
+                idOrdenEquipo: idOrdenEquipo,
+                idPendienteCatalogo: idPendienteCatalogo,
+                descripcion: descripcion,
+                origen: origen,
+                prioridad: prioridad,
+                estado: estado,
+                observaciones: observaciones,
+                fechaCreacion: fechaCreacion,
+                isDirty: isDirty,
+                lastSyncedAt: lastSyncedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$OrdenesPendientesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({idOrden = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (idOrden) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.idOrden,
+                                referencedTable:
+                                    $$OrdenesPendientesTableReferences
+                                        ._idOrdenTable(db),
+                                referencedColumn:
+                                    $$OrdenesPendientesTableReferences
+                                        ._idOrdenTable(db)
+                                        .idLocal,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$OrdenesPendientesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $OrdenesPendientesTable,
+      OrdenesPendiente,
+      $$OrdenesPendientesTableFilterComposer,
+      $$OrdenesPendientesTableOrderingComposer,
+      $$OrdenesPendientesTableAnnotationComposer,
+      $$OrdenesPendientesTableCreateCompanionBuilder,
+      $$OrdenesPendientesTableUpdateCompanionBuilder,
+      (OrdenesPendiente, $$OrdenesPendientesTableReferences),
+      OrdenesPendiente,
+      PrefetchHooks Function({bool idOrden})
+    >;
 typedef $$SyncStatusEntriesTableCreateCompanionBuilder =
     SyncStatusEntriesCompanion Function({
       Value<int> id,
@@ -21002,6 +23403,8 @@ class $AppDatabaseManager {
       $$ParametrosCatalogoTableTableManager(_db, _db.parametrosCatalogo);
   $$ActividadesCatalogoTableTableManager get actividadesCatalogo =>
       $$ActividadesCatalogoTableTableManager(_db, _db.actividadesCatalogo);
+  $$PendientesCatalogoTableTableManager get pendientesCatalogo =>
+      $$PendientesCatalogoTableTableManager(_db, _db.pendientesCatalogo);
   $$ClientesTableTableManager get clientes =>
       $$ClientesTableTableManager(_db, _db.clientes);
   $$EquiposTableTableManager get equipos =>
@@ -21020,6 +23423,8 @@ class $AppDatabaseManager {
       $$EvidenciasTableTableManager(_db, _db.evidencias);
   $$FirmasTableTableManager get firmas =>
       $$FirmasTableTableManager(_db, _db.firmas);
+  $$OrdenesPendientesTableTableManager get ordenesPendientes =>
+      $$OrdenesPendientesTableTableManager(_db, _db.ordenesPendientes);
   $$SyncStatusEntriesTableTableManager get syncStatusEntries =>
       $$SyncStatusEntriesTableTableManager(_db, _db.syncStatusEntries);
   $$OrdenesPendientesSyncTableTableManager get ordenesPendientesSync =>

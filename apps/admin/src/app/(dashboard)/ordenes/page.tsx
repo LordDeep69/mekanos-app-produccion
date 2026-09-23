@@ -143,6 +143,24 @@ function OrdenCard({ orden }: { orden: Orden }) {
                                 -
                             </span>
                         )}
+                        {/* ✅ FIX 23-SEP-2026: Indicador de pendientes técnicos */}
+                        {Boolean(orden.total_pendientes && orden.total_pendientes > 0) ? (
+                            <span
+                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 shadow-sm"
+                                title={`${orden.total_pendientes} pendiente(s) técnico(s) registrado(s)`}
+                            >
+                                <ClipboardList className="h-3 w-3 text-amber-700" />
+                                {orden.total_pendientes}
+                            </span>
+                        ) : (
+                            <span
+                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-400"
+                                title="Sin pendientes técnicos"
+                            >
+                                <ClipboardList className="h-3 w-3" />
+                                -
+                            </span>
+                        )}
                     </div>
                 </div>
             </div>

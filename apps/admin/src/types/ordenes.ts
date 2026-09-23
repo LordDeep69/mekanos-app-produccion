@@ -100,6 +100,10 @@ export interface Orden {
     // ✅ FIX 06-MAY-2026: Total de documentos PDF generados para mostrar badge en lista
     total_documentos_pdf?: number;
 
+    // ✅ FIX 23-SEP-2026: Total de pendientes técnicos para badge en lista
+    total_pendientes?: number;
+    ordenes_pendientes?: OrdenPendiente[];
+
     // Relaciones
     estados_orden?: EstadoOrden;
     tipos_servicio?: TipoServicio;
@@ -227,3 +231,55 @@ export function getPrioridadColor(prioridad?: string): string {
     };
     return colores[prioridad || ''] || 'bg-gray-100 text-gray-800';
 }
+
+// ============================================================================
+// PENDIENTES TÉCNICOS
+// ============================================================================
+
+export interface OrdenPendiente {
+    id_orden_pendiente: number;
+    id_orden_servicio: number;
+    id_cliente: number;
+    id_equipo: number;
+    id_orden_equipo?: number | null;
+    id_pendiente_catalogo?: number | null;
+    descripcion: string;
+    origen: 'CATALOGO' | 'MANUAL';
+    prioridad: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+    estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO';
+    observaciones?: string | null;
+    creado_por?: number | null;
+    fecha_creacion: string;
+    fecha_resolucion?: string | null;
+    resuelto_por?: number | null;
+    observaciones_resolucion?: string | null;
+    equipos?: {
+        id_equipo: number;
+        codigo_equipo?: string;
+        nombre_equipo?: string;
+    };
+    catalogo_pendientes?: {
+        id_pendiente_catalogo: number;
+        codigo?: string;
+        descripcion: string;
+        categoria?: string;
+    };
+    empleados_ordenes_pendientes_creado_porToempleados?: {
+        persona?: {
+            nombre_completo?: string;
+            primer_nombre?: string;
+            primer_apellido?: string;
+        };
+    };
+}
+
+export function getPendienteEstadoColor(estado: string): string {
+    const colores: Record<string, string> = {
+        PENDIENTE: 'bg-amber-100 text-amber-800 border-amber-300',
+        EN_GESTION: 'bg-blue-100 text-blue-800 border-blue-300',
+        RESUELTO: 'bg-green-100 text-green-800 border-green-300',
+        CANCELADO: 'bg-gray-100 text-gray-600 border-gray-300',
+    };
+    return colores[estado] || 'bg-gray-100 text-gray-800';
+}
+

@@ -13,6 +13,7 @@ import {
   SyncOrdenDownloadDto,
   SyncOrdenResultDto,
   SyncParametroMedicionDto,
+  SyncPendienteCatalogoDto,
 } from './dto/sync-response.dto';
 import {
   SyncBatchUploadDto,
@@ -918,6 +919,7 @@ export class SyncService {
     let actividadesDownload: SyncActividadCatalogoDto[] = [];
     let estadosDownload: { id: number; codigo: string; nombre: string; esEstadoFinal: boolean }[] = [];
     let tiposServicioDownload: { id: number; codigo: string; nombre: string; descripcion?: string }[] = [];
+    let pendientesDownload: SyncPendienteCatalogoDto[] = [];
 
     if (includeCatalogs) {
       this.logger.log('[Sync] Incluyendo catálogos completos');
@@ -999,12 +1001,27 @@ export class SyncService {
         nombre: t.nombre_tipo,
         descripcion: t.descripcion ?? undefined,
       }));
+
+      // 7. Obtener catálogo de pendientes frecuentes activos
+      const pendientes = await this.prisma.catalogo_pendientes.findMany({
+        where: { activo: true },
+        orderBy: [{ orden_visual: 'asc' }, { id_pendiente_catalogo: 'asc' }],
+      });
+
+      pendientesDownload = pendientes.map((p) => ({
+        idPendienteCatalogo: p.id_pendiente_catalogo,
+        codigo: p.codigo ?? undefined,
+        descripcion: p.descripcion,
+        categoria: p.categoria ?? undefined,
+        idTipoEquipo: p.id_tipo_equipo ?? undefined,
+        ordenVisual: p.orden_visual ?? 0,
+      }));
     } else {
       this.logger.log('[Sync Delta] Omitiendo catálogos (ya sincronizados)');
     }
 
     // Log resumen de sync
-    this.logger.log(`[Sync] Resultado: ${ordenesDownload.length} órdenes, ${parametrosDownload.length} params, ${actividadesDownload.length} actividades`);
+    this.logger.log(`[Sync] Resultado: ${ordenesDownload.length} órdenes, ${parametrosDownload.length} params, ${actividadesDownload.length} actividades, ${pendientesDownload.length} pendientes`);
 
     return {
       serverTimestamp: new Date().toISOString(),
@@ -1017,6 +1034,7 @@ export class SyncService {
       actividadesCatalogo: actividadesDownload,
       estadosOrden: estadosDownload,
       tiposServicio: tiposServicioDownload,
+      catalogoPendientes: includeCatalogs ? pendientesDownload : undefined,
     };
   }
 

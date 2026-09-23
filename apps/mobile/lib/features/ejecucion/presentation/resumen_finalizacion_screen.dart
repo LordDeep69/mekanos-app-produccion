@@ -11,6 +11,7 @@ import '../../evidencias/presentation/evidencias_screen.dart';
 import '../../firmas/data/firma_service.dart';
 import '../../firmas/presentation/firmas_section.dart';
 import '../data/ejecucion_service.dart';
+import 'pendientes_orden_widget.dart';
 
 /// Pantalla de Resumen y Finalización de Orden - NIVEL ORDEN (no equipo)
 ///
@@ -39,6 +40,7 @@ class ResumenFinalizacionScreen extends ConsumerStatefulWidget {
 class _ResumenFinalizacionScreenState
     extends ConsumerState<ResumenFinalizacionScreen> {
   bool _isLoading = true;
+  Ordene? _orden;
   List<OrdenesEquipo> _equipos = [];
   final Map<int, _EstadoEquipo> _estadosPorEquipo = {};
   bool _esMultiEquipo = false;
@@ -81,6 +83,7 @@ class _ResumenFinalizacionScreenState
       final orden = await (db.select(
         db.ordenes,
       )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
+      _orden = orden;
 
       if (orden != null) {
         final tipoServicio = await db.getTipoServicioById(orden.idTipoServicio);
@@ -94,8 +97,9 @@ class _ResumenFinalizacionScreenState
       }
 
       // Cargar equipos de la orden (si es multi-equipo)
-      if (widget.idBackend != null) {
-        _equipos = await db.getEquiposByOrdenServicio(widget.idBackend!);
+      final backendId = widget.idBackend ?? orden?.idBackend;
+      if (backendId != null) {
+        _equipos = await db.getEquiposByOrdenServicio(backendId);
         _esMultiEquipo = _equipos.length > 1;
       }
 
@@ -407,6 +411,16 @@ class _ResumenFinalizacionScreenState
                           ],
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ✅ PENDIENTES TÉCNICOS POR ORDEN
+                    PendientesOrdenWidget(
+                      idOrdenLocal: widget.idOrdenLocal,
+                      idOrdenBackend: widget.idBackend ?? _orden?.idBackend,
+                      idCliente: _orden?.idCliente,
+                      idEquipo: _orden?.idEquipo,
+                      equipos: _equipos.isNotEmpty ? _equipos : null,
                     ),
                     const SizedBox(height: 16),
 

@@ -126,6 +126,24 @@ class ActividadesCatalogo extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Catálogo de pendientes técnicos sugeridos desde el servidor
+class PendientesCatalogo extends Table {
+  IntColumn get id => integer()();
+  TextColumn get codigo => text().withLength(max: 50).nullable()();
+  TextColumn get descripcion => text().withLength(max: 300)();
+  TextColumn get categoria => text().withLength(max: 100).nullable()();
+  IntColumn get idTipoEquipo => integer().nullable()();
+  BoolColumn get activo => boolean().withDefault(const Constant(true))();
+  IntColumn get ordenVisual =>
+      integer().nullable().withDefault(const Constant(0))();
+
+  // Sync control
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ============================================================================
 // PLAN DE ACTIVIDADES POR ORDEN (para correctivos)
 // ============================================================================
@@ -465,6 +483,36 @@ class Firmas extends Table {
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
 }
 
+/// Pendientes técnicos registrados por el técnico para una orden
+class OrdenesPendientes extends Table {
+  IntColumn get idLocal => integer().autoIncrement()();
+  IntColumn get idBackend => integer().nullable()();
+
+  // Foreign Keys
+  IntColumn get idOrden => integer().references(Ordenes, #idLocal)();
+  IntColumn get idOrdenBackend => integer().nullable()();
+  IntColumn get idCliente => integer().nullable()();
+  IntColumn get idEquipo => integer().nullable()();
+  IntColumn get idOrdenEquipo => integer().nullable()();
+  IntColumn get idPendienteCatalogo => integer().nullable()();
+
+  // Datos del pendiente
+  TextColumn get descripcion => text().withLength(max: 1000)();
+  TextColumn get origen =>
+      text().withLength(max: 20).withDefault(const Constant('CATALOGO'))(); // CATALOGO, MANUAL
+  TextColumn get prioridad =>
+      text().withLength(max: 20).withDefault(const Constant('NORMAL'))(); // NORMAL, ALTA, URGENTE, EMERGENCIA
+  TextColumn get estado =>
+      text().withLength(max: 20).withDefault(const Constant('PENDIENTE'))(); // PENDIENTE, EN_GESTION, RESUELTO, CANCELADO
+  TextColumn get observaciones => text().nullable()();
+
+  // Timestamps y sincronización
+  DateTimeColumn get fechaCreacion =>
+      dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isDirty => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+}
+
 // ============================================================================
 // TABLA DE CONTROL DE SINCRONIZACIÓN
 // ============================================================================
@@ -526,6 +574,7 @@ class OrdenesPendientesSync extends Table {
     TiposServicio,
     ParametrosCatalogo,
     ActividadesCatalogo,
+    PendientesCatalogo,
     Clientes,
     Equipos,
     // Multi-Equipos (relación N:M orden-equipos)
@@ -537,6 +586,7 @@ class OrdenesPendientesSync extends Table {
     Mediciones,
     Evidencias,
     Firmas,
+    OrdenesPendientes,
     // Control
     SyncStatusEntries,
     OrdenesPendientesSync,
@@ -546,7 +596,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 16; // v16: Unique index on idBackend + dedup cleanup
+  int get schemaVersion => 17; // v17: Sistema Inteligente de Pendientes Técnicos
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -697,6 +747,11 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_ordenes_id_backend_unique ON ordenes(id_backend)',
         );
+      }
+      if (from < 17) {
+        // v17: Sistema Inteligente de Pendientes Técnicos
+        await m.createTable(pendientesCatalogo);
+        await m.createTable(ordenesPendientes);
       }
     },
     beforeOpen: (details) async {
@@ -1387,11 +1442,67 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ============================================================================
+  // MÉTODOS DE ACCESO - PENDIENTES TÉCNICOS
+  // ============================================================================
+
+  /// Insertar o actualizar item de catálogo de pendientes
+  Future<void> upsertPendienteCatalogo(PendientesCatalogoCompanion item) async {
+    await into(pendientesCatalogo).insertOnConflictUpdate(item);
+  }
+
+  /// Obtener catálogo de pendientes (con filtro opcional de tipo de equipo y categoría)
+  Future<List<PendientesCatalogoData>> getPendientesCatalogo({
+    int? idTipoEquipo,
+    String? categoria,
+  }) {
+    final query = select(pendientesCatalogo)
+      ..where((p) => p.activo.equals(true));
+
+    if (idTipoEquipo != null) {
+      query.where((p) => p.idTipoEquipo.isNull() | p.idTipoEquipo.equals(idTipoEquipo));
+    }
+    if (categoria != null && categoria.isNotEmpty) {
+      query.where((p) => p.categoria.equals(categoria));
+    }
+
+    query.orderBy([
+      (p) => OrderingTerm.asc(p.ordenVisual),
+      (p) => OrderingTerm.asc(p.descripcion),
+    ]);
+
+    return query.get();
+  }
+
+  /// Obtener pendientes técnicos registrados para una orden local
+  Future<List<OrdenesPendiente>> getPendientesByOrden(int idOrdenLocal) {
+    return (select(ordenesPendientes)
+          ..where((p) => p.idOrden.equals(idOrdenLocal))
+          ..orderBy([(p) => OrderingTerm.asc(p.idLocal)]))
+        .get();
+  }
+
+  /// Insertar pendiente técnico para una orden
+  Future<int> insertOrdenPendiente(OrdenesPendientesCompanion item) {
+    return into(ordenesPendientes).insert(item);
+  }
+
+  /// Eliminar pendiente técnico por idLocal
+  Future<int> deleteOrdenPendiente(int idLocal) {
+    return (delete(ordenesPendientes)..where((p) => p.idLocal.equals(idLocal))).go();
+  }
+
+  /// Limpiar pendientes técnicos de una orden local
+  Future<int> clearPendientesByOrden(int idOrdenLocal) {
+    return (delete(ordenesPendientes)..where((p) => p.idOrden.equals(idOrdenLocal))).go();
+  }
+
+  // ============================================================================
   // UTILIDADES
   // ============================================================================
 
   /// Limpiar toda la base de datos (para logout o reset)
   Future<void> clearAllData() async {
+    await delete(ordenesPendientes).go();
     await delete(firmas).go();
     await delete(evidencias).go();
     await delete(mediciones).go();
@@ -1399,6 +1510,7 @@ class AppDatabase extends _$AppDatabase {
     await delete(ordenes).go();
     await delete(equipos).go();
     await delete(clientes).go();
+    await delete(pendientesCatalogo).go();
     await delete(actividadesCatalogo).go();
     await delete(parametrosCatalogo).go();
     await delete(tiposServicio).go();
