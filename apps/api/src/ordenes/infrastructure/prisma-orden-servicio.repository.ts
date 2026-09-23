@@ -15,6 +15,133 @@ import { Injectable } from '@nestjs/common';
 export class PrismaOrdenServicioRepository {
   constructor(private prisma: PrismaService) { }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔤 NORMALIZACIÓN DE TEXTO PARA BÚSQUEDAS (19-SEP-2026)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Convierte homóglifos griegos/cirílicos a sus equivalentes latinos
+  // y elimina diacríticos (tildes, acentos) para búsquedas tolerantes.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Mapa de homóglifos: caracteres griegos/cirílicos que parecen letras latinas.
+   * Ej: 'Α' (Alpha griega U+0391) → 'A', 'Ν' (Nu griega U+039D) → 'N'
+   */
+  private static readonly HOMOGLYPH_MAP: Record<string, string> = {
+    // Mayúsculas griegas → Latinas
+    '\u0391': 'A', // Α → A
+    '\u0392': 'B', // Β → B
+    '\u0395': 'E', // Ε → E
+    '\u0396': 'Z', // Ζ → Z
+    '\u0397': 'H', // Η → H
+    '\u0399': 'I', // Ι → I
+    '\u039A': 'K', // Κ → K
+    '\u039C': 'M', // Μ → M
+    '\u039D': 'N', // Ν → N
+    '\u039F': 'O', // Ο → O
+    '\u03A1': 'P', // Ρ → P
+    '\u03A4': 'T', // Τ → T
+    '\u03A5': 'Y', // Υ → Y
+    '\u03A7': 'X', // Χ → X
+    // Minúsculas griegas → Latinas
+    '\u03BF': 'o', // ο → o
+    '\u03B1': 'a', // α → a
+    '\u03B5': 'e', // ε → e
+    '\u03B9': 'i', // ι → i
+    '\u03BA': 'k', // κ → k
+    '\u03BD': 'n', // ν → n
+    '\u03C1': 'p', // ρ → p (rho)
+    '\u03C4': 't', // τ → t
+    '\u03C5': 'u', // υ → u
+    '\u03C7': 'x', // χ → x
+    // Cirílicos → Latinas
+    '\u0410': 'A', // А → A
+    '\u0412': 'B', // В → B
+    '\u0415': 'E', // Е → E
+    '\u041A': 'K', // К → K
+    '\u041C': 'M', // М → M
+    '\u041D': 'H', // Н → H
+    '\u041E': 'O', // О → O
+    '\u0420': 'P', // Р → P
+    '\u0421': 'C', // С → C
+    '\u0422': 'T', // Т → T
+    '\u0425': 'X', // Х → X
+    '\u0430': 'a', // а → a
+    '\u0435': 'e', // е → e
+    '\u043E': 'o', // о → o
+    '\u0440': 'p', // р → p
+    '\u0441': 'c', // с → c
+    '\u0445': 'x', // х → x
+  };
+
+  /**
+   * Normaliza una cadena de texto para búsquedas:
+   * 1. Reemplaza homóglifos griegos/cirílicos por sus equivalentes latinos
+   * 2. Elimina diacríticos (tildes, acentos) usando NFD + regex
+   * @param text Texto a normalizar
+   * @returns Texto normalizado (puro ASCII latino)
+   */
+  private normalizeSearchText(text: string): string {
+    if (!text) return text;
+    // 1. Reemplazar homóglifos
+    let normalized = text;
+    for (const [homoglyph, latin] of Object.entries(PrismaOrdenServicioRepository.HOMOGLYPH_MAP)) {
+      normalized = normalized.replaceAll(homoglyph, latin);
+    }
+    // 2. Eliminar diacríticos (tildes, acentos) 
+    // NFD descompone: é → e + ´, luego removemos los combining marks
+    normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return normalized;
+  }
+
+  /**
+   * Busca IDs de órdenes usando SQL raw con unaccent() de PostgreSQL.
+   * Esto permite encontrar resultados cuando los datos almacenados tienen
+   * acentos/tildes que la búsqueda ILIKE estándar no matchea.
+   * @param searchText Texto de búsqueda (ya normalizado)
+   * @param limit Límite de resultados
+   * @returns Array de IDs de órdenes_servicio que matchean
+   */
+  private async findOrdenIdsByUnaccentSearch(searchText: string, limit: number = 200): Promise<number[]> {
+    try {
+      const tokens = searchText.split(/\s+/).filter(t => t.length > 0);
+      if (tokens.length === 0) return [];
+
+      // Construir condiciones para cada token (todos deben coincidir - AND)
+      // Cada token puede estar en cualquier campo del cliente (OR)
+      const tokenConditions = tokens.map((_token, i) => `(
+        unaccent(COALESCE(p.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.nombre_completo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(c.nombre_sede, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(pp.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(pp.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(pt.primer_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(pt.primer_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR os.numero_orden ILIKE '%' || $${i + 1} || '%'
+      )`).join(' AND ');
+
+      const sql = `
+        SELECT DISTINCT os.id_orden_servicio
+        FROM ordenes_servicio os
+        LEFT JOIN clientes c ON os.id_cliente = c.id_cliente
+        LEFT JOIN personas p ON c.id_persona = p.id_persona
+        LEFT JOIN clientes cp ON c.id_cliente_principal = cp.id_cliente
+        LEFT JOIN personas pp ON cp.id_persona = pp.id_persona
+        LEFT JOIN empleados e ON os.id_tecnico_asignado = e.id_empleado
+        LEFT JOIN personas pt ON e.id_persona = pt.id_persona
+        WHERE ${tokenConditions}
+        LIMIT ${limit}
+      `;
+
+      const results: any[] = await this.prisma.$queryRawUnsafe(sql, ...tokens);
+      return results.map(r => r.id_orden_servicio);
+    } catch (error) {
+      // Si falla (ej: unaccent no disponible), retornar vacío sin romper la búsqueda
+      console.warn('⚠️ Búsqueda con unaccent no disponible, usando solo Prisma ILIKE:', error);
+      return [];
+    }
+  }
+
   /**
    * ═══════════════════════════════════════════════════════════════════════════
    * 🚀 OPTIMIZACIÓN ENTERPRISE 05-ENE-2026: INCLUDE STRATEGIES
@@ -497,12 +624,22 @@ export class PrismaOrdenServicioRepository {
   }): Promise<{ items: any[]; total: number }> {
     const where: any = {};
 
-    // ✅ BÚSQUEDA INTELIGENTE MULTI-CRITERIO:
-    // Soporta NIT formateado/sin formatear, multi-tokens para razón social y nombre comercial, sedes, equipos y nombre del técnico.
+    // ✅ BÚSQUEDA INTELIGENTE MULTI-CRITERIO (MEJORADA 19-SEP-2026):
+    // Soporta NIT formateado/sin formatear, multi-tokens, búsqueda tolerante a tildes/acentos/homóglifos,
+    // razón social, nombre comercial, sedes, equipos y nombre del técnico.
+    // ESTRATEGIA DUAL:
+    //   1. Prisma ILIKE: Búsqueda estándar con cadena original + normalizada
+    //   2. SQL raw con unaccent(): Búsqueda complementaria para acentos en datos almacenados
     if (filters?.busqueda) {
-      const s = filters.busqueda.trim();
+      const rawSearch = filters.busqueda.trim();
+      const s = this.normalizeSearchText(rawSearch); // Normalizar: quitar tildes y homóglifos
       const cleanDigits = s.replace(/[^0-9]/g, '');
       const tokens = s.split(/\s+/).filter(t => t.length > 0);
+
+      // === BÚSQUEDA COMPLEMENTARIA CON SQL RAW (unaccent) ===
+      // Buscar IDs adicionales que la búsqueda Prisma podría no encontrar
+      // (ej: datos con tildes que no matchean con búsqueda sin tildes)
+      const unaccentIds = await this.findOrdenIdsByUnaccentSearch(s);
 
       const orConditions: any[] = [
         // Búsqueda directa por número de orden y descripción
@@ -514,14 +651,25 @@ export class PrismaOrdenServicioRepository {
         { sedes_cliente: { nombre_sede: { contains: s, mode: 'insensitive' } } },
       ];
 
-      // Búsqueda de cliente por cadena completa
-      orConditions.push(
-        { clientes: { nombre_sede: { contains: s, mode: 'insensitive' } } },
-        { clientes: { persona: { nombre_comercial: { contains: s, mode: 'insensitive' } } } },
-        { clientes: { persona: { razon_social: { contains: s, mode: 'insensitive' } } } },
-        { clientes: { cliente_principal: { persona: { nombre_comercial: { contains: s, mode: 'insensitive' } } } } },
-        { clientes: { cliente_principal: { persona: { razon_social: { contains: s, mode: 'insensitive' } } } } }
-      );
+      // Si la cadena normalizada difiere de la original, buscar con ambas versiones
+      if (rawSearch !== s) {
+        orConditions.push(
+          { numero_orden: { contains: rawSearch, mode: 'insensitive' } },
+          { descripcion_inicial: { contains: rawSearch, mode: 'insensitive' } },
+        );
+      }
+
+      // Búsqueda de cliente por cadena completa (normalizada + original)
+      const searchTerms = rawSearch !== s ? [s, rawSearch] : [s];
+      for (const term of searchTerms) {
+        orConditions.push(
+          { clientes: { nombre_sede: { contains: term, mode: 'insensitive' } } },
+          { clientes: { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } } },
+          { clientes: { persona: { razon_social: { contains: term, mode: 'insensitive' } } } },
+          { clientes: { cliente_principal: { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } } } },
+          { clientes: { cliente_principal: { persona: { razon_social: { contains: term, mode: 'insensitive' } } } } }
+        );
+      }
 
       // Búsqueda en NIT / Identificación:
       // 1. Cadena tal cual
@@ -561,7 +709,7 @@ export class PrismaOrdenServicioRepository {
         }
       }
 
-      // Búsqueda por técnico asignado (cadena completa)
+      // Búsqueda por técnico asignado (cadena completa normalizada)
       orConditions.push(
         {
           empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
@@ -609,8 +757,17 @@ export class PrismaOrdenServicioRepository {
         });
       }
 
+      // === COMBINAR RESULTADOS: Prisma ILIKE + SQL raw unaccent ===
+      // Si la búsqueda con unaccent encontró IDs adicionales, incluirlos en el OR
+      if (unaccentIds.length > 0) {
+        orConditions.push({
+          id_orden_servicio: { in: unaccentIds }
+        });
+      }
+
       where.OR = orConditions;
     }
+
 
     // Filtros opcionales
     if (filters?.id_cliente) where.id_cliente = filters.id_cliente;
