@@ -478,6 +478,29 @@ export class SyncTipoServicioDto {
 }
 
 /**
+ * Pendiente del catálogo sugerido para download
+ */
+export class SyncPendienteCatalogoDto {
+  @ApiProperty()
+  idPendienteCatalogo: number;
+
+  @ApiPropertyOptional()
+  codigo?: string;
+
+  @ApiProperty()
+  descripcion: string;
+
+  @ApiPropertyOptional()
+  categoria?: string;
+
+  @ApiPropertyOptional()
+  idTipoEquipo?: number;
+
+  @ApiProperty()
+  ordenVisual: number;
+}
+
+/**
  * Respuesta de download de datos para técnico
  * 
  * Soporta dos modos:
@@ -519,30 +542,7 @@ export class SyncDownloadResponseDto {
   @ApiProperty({ type: [SyncTipoServicioDto], description: 'Tipos de servicio disponibles (vacío en DELTA si no hubo cambios)' })
   tiposServicio: SyncTipoServicioDto[];
 
-  @ApiPropertyOptional({ type: [SyncPendienteCatalogoDto], description: 'Catálogo de pendientes frecuentes (vacío en DELTA si no hubo cambios)' })
+  @ApiPropertyOptional({ type: () => [SyncPendienteCatalogoDto], description: 'Catálogo de pendientes frecuentes (vacío en DELTA si no hubo cambios)' })
   catalogoPendientes?: SyncPendienteCatalogoDto[];
-}
-
-/**
- * Pendiente del catálogo sugerido para download
- */
-export class SyncPendienteCatalogoDto {
-  @ApiProperty()
-  idPendienteCatalogo: number;
-
-  @ApiPropertyOptional()
-  codigo?: string;
-
-  @ApiProperty()
-  descripcion: string;
-
-  @ApiPropertyOptional()
-  categoria?: string;
-
-  @ApiPropertyOptional()
-  idTipoEquipo?: number;
-
-  @ApiProperty()
-  ordenVisual: number;
 }
 

@@ -363,7 +363,7 @@ export class FinalizarOrdenCompletoDto {
     observaciones: string;
 
     @ApiPropertyOptional({
-        type: [PendienteFinalizacionDto],
+        type: () => [PendienteFinalizacionDto],
         description: 'Pendientes o compromisos técnicos post-servicio para seguimiento',
     })
     @IsOptional()
