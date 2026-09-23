@@ -2303,8 +2303,17 @@ export class FinalizacionOrdenService {
                 idEquipo = orden.id_equipo;
             }
 
-            // Normalizar origen: CATALOGO o MANUAL
-            const origenVal = (p.origen === 'MANUAL' || p.origen === 'PERSONALIZADO') ? 'MANUAL' : 'CATALOGO';
+            // Normalizar origen: CATALOGO, MANUAL o PERSONALIZADO
+            let origenVal: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO' = 'CATALOGO';
+            if (p.origen === 'PERSONALIZADO') {
+                origenVal = 'PERSONALIZADO';
+            } else if (p.origen === 'MANUAL') {
+                origenVal = 'MANUAL';
+            } else if (p.idPendienteCatalogo) {
+                origenVal = 'CATALOGO';
+            } else {
+                origenVal = 'MANUAL';
+            }
 
             // Normalizar prioridad
             let prioridadVal: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA' = 'NORMAL';

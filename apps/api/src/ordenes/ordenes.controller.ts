@@ -2951,6 +2951,15 @@ export class OrdenesController {
       idEmpleado = emp?.id_empleado || null;
     }
 
+    let origenVal: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO' = 'CATALOGO';
+    if (body.origen === 'PERSONALIZADO') {
+      origenVal = 'PERSONALIZADO';
+    } else if (body.origen === 'MANUAL') {
+      origenVal = 'MANUAL';
+    } else if (!body.idPendienteCatalogo) {
+      origenVal = 'MANUAL';
+    }
+
     const created = await this.prisma.ordenes_pendientes.create({
       data: {
         id_orden_servicio: idOrden,
@@ -2959,7 +2968,7 @@ export class OrdenesController {
         id_orden_equipo: body.idOrdenEquipo || null,
         id_pendiente_catalogo: body.idPendienteCatalogo || null,
         descripcion: body.descripcion.trim(),
-        origen: body.origen || (body.idPendienteCatalogo ? 'CATALOGO' : 'MANUAL'),
+        origen: origenVal,
         prioridad: body.prioridad || 'NORMAL',
         estado: 'PENDIENTE',
         observaciones: body.observaciones?.trim() || null,

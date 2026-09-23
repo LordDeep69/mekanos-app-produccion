@@ -2916,6 +2916,7 @@ enum estado_envio_email_enum {
 enum origen_pendiente_enum {
   CATALOGO
   PERSONALIZADO
+  MANUAL
 }
 
 enum estado_pendiente_orden_enum {
