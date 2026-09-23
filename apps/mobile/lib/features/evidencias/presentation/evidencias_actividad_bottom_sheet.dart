@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../data/evidencia_service.dart';
+import 'evidencias_gallery_viewer.dart';
 
 /// ============================================================================
 /// EVIDENCIAS ACTIVIDAD BOTTOM SHEET - RUTA 7.5
@@ -494,7 +495,7 @@ class _EvidenciasActividadBottomSheetState
                   itemCount: evidencias.length,
                   itemBuilder: (context, index) {
                     final evidencia = evidencias[index];
-                    return _buildFotoCard(evidencia, color);
+                    return _buildFotoCard(evidencia, color, evidencias, tipo.name);
                   },
                 ),
         ),
@@ -502,12 +503,17 @@ class _EvidenciasActividadBottomSheetState
     );
   }
 
-  Widget _buildFotoCard(Evidencia evidencia, Color color) {
+  Widget _buildFotoCard(
+    Evidencia evidencia,
+    Color color,
+    List<Evidencia> listaEvidencias,
+    String nombreTipo,
+  ) {
     final archivo = File(evidencia.rutaLocal);
     final existe = archivo.existsSync();
 
     return GestureDetector(
-      onTap: () => _verFoto(evidencia),
+      onTap: () => _verFoto(evidencia, listaEvidencias, nombreTipo),
       onLongPress: () => _eliminarFoto(evidencia),
       child: Stack(
         children: [
@@ -524,7 +530,7 @@ class _EvidenciasActividadBottomSheetState
                       fit: BoxFit.cover,
                       width: double.infinity,
                       height: double.infinity,
-                      errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                      errorBuilder: (_, _, _) => _buildPlaceholder(),
                     )
                   : _buildPlaceholder(),
             ),
@@ -557,62 +563,19 @@ class _EvidenciasActividadBottomSheetState
     );
   }
 
-  void _verFoto(Evidencia evidencia) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Stack(
-          children: [
-            // Imagen
-            Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(evidencia.rutaLocal),
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-            // Cerrar
-            Positioned(
-              top: 0,
-              right: 0,
-              child: IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.close, color: Colors.white),
-                ),
-              ),
-            ),
-            // Descripción
-            if (evidencia.descripcion != null)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.black87, Colors.transparent],
-                    ),
-                  ),
-                  child: Text(
-                    evidencia.descripcion!,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-          ],
+  void _verFoto(
+    Evidencia evidencia,
+    List<Evidencia> listaEvidencias,
+    String nombreTipo,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EvidenciasGalleryViewer(
+          evidencias: listaEvidencias,
+          initialIndex: listaEvidencias.indexOf(evidencia),
+          titulo: '${widget.nombreActividad} ($nombreTipo)',
+          onEvidenciasModificadas: _cargarEvidencias,
         ),
       ),
     );

@@ -139,11 +139,17 @@ class AuthService {
             ? json['sub'] as int
             : int.parse(json['sub'].toString()),
         email: (json['email'] as String?) ?? '',
+        nombre: json['nombre'] as String?,
         rol: (json['rol'] as String?) ?? '',
         personaId: json['personaId'] is int
             ? json['personaId'] as int
             : (json['personaId'] != null
                 ? int.parse(json['personaId'].toString())
+                : null),
+        idEmpleado: json['idEmpleado'] is int
+            ? json['idEmpleado'] as int
+            : (json['idEmpleado'] != null
+                ? int.parse(json['idEmpleado'].toString())
                 : null),
       );
     } catch (e) {

@@ -67,30 +67,46 @@ export class AuthService {
         throw new UnauthorizedException('Usuario inactivo o credenciales inválidas');
       }
 
-      // 4. Generar tokens JWT
-      console.log('🎫 [DEBUG] Generando tokens JWT...');
-      const tokens = await this.generateTokens(usuario);
-      console.log('✅ [DEBUG] Tokens generados exitosamente');
-
-      // 4.5 Buscar empleado asociado al usuario (por id_persona)
+      // 4. Buscar empleado asociado al usuario (por id_persona)
       const empleado = await this.prisma.empleados.findFirst({
         where: { id_persona: usuario.id_persona },
       });
       console.log('👷 [DEBUG] Empleado encontrado:', empleado?.id_empleado || 'NO');
 
-      // 5. Retornar respuesta (usar nombre_completo de persona)
+      // 4.5 Generar tokens JWT con nombre embebido
+      console.log('🎫 [DEBUG] Generando tokens JWT...');
+      const tokens = await this.generateTokens(usuario, empleado);
+      console.log('✅ [DEBUG] Tokens generados exitosamente');
+
+      const partes = [
+        usuario.persona?.primer_nombre,
+        usuario.persona?.segundo_nombre,
+        usuario.persona?.primer_apellido,
+        usuario.persona?.segundo_apellido,
+      ]
+        .map((p: any) => (typeof p === 'string' ? p.trim() : ''))
+        .filter(Boolean);
+
+      const nombrePersona =
+        usuario.persona?.nombre_completo?.trim() ||
+        (partes.length > 0 ? partes.join(' ') : null) ||
+        usuario.persona?.razon_social?.trim() ||
+        usuario.username ||
+        'Técnico';
+
+      // 5. Retornar respuesta (usar nombre real de persona o técnico)
       const response = {
         ...tokens,
         user: {
           id: usuario.id_usuario,
           email: usuario.email,
-          nombre: usuario.persona?.nombre_completo || 'Usuario',
+          nombre: nombrePersona,
           rol: 'USER', // TODO: Implementar sistema de roles desde usuarios_roles
           idEmpleado: empleado?.id_empleado, // Para sincronización móvil
         },
       };
 
-      console.log('🎉 [DEBUG] Login exitoso:', { userId: usuario.id_usuario, email: usuario.email, idEmpleado: empleado?.id_empleado });
+      console.log('🎉 [DEBUG] Login exitoso:', { userId: usuario.id_usuario, email: usuario.email, nombre: nombrePersona, idEmpleado: empleado?.id_empleado });
       return response;
     } catch (error) {
       console.error('💥 [DEBUG] Error en login:', error instanceof Error ? error.message : String(error));
@@ -111,14 +127,19 @@ export class AuthService {
       // 2. Buscar usuario (PK real: id_usuario)
       const usuario = await this.prisma.usuarios.findUnique({
         where: { id_usuario: payload.sub },
+        include: { persona: true },
       });
 
       if (!usuario || usuario.estado !== 'ACTIVO') {
         throw new UnauthorizedException('Usuario no encontrado o inactivo');
       }
 
+      const empleado = await this.prisma.empleados.findFirst({
+        where: { id_persona: usuario.id_persona },
+      });
+
       // 3. Generar nuevos tokens
-      return this.generateTokens(usuario);
+      return this.generateTokens(usuario, empleado);
     } catch (error) {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
@@ -205,12 +226,30 @@ export class AuthService {
   /**
    * Genera access y refresh tokens
    */
-  private async generateTokens(usuario: any): Promise<{ access_token: string; refresh_token: string }> {
+  private async generateTokens(usuario: any, empleado?: any): Promise<{ access_token: string; refresh_token: string }> {
+    const partes = [
+      usuario.persona?.primer_nombre,
+      usuario.persona?.segundo_nombre,
+      usuario.persona?.primer_apellido,
+      usuario.persona?.segundo_apellido,
+    ]
+      .map((p: any) => (typeof p === 'string' ? p.trim() : ''))
+      .filter(Boolean);
+
+    const nombrePersona =
+      usuario.persona?.nombre_completo?.trim() ||
+      (partes.length > 0 ? partes.join(' ') : null) ||
+      usuario.persona?.razon_social?.trim() ||
+      usuario.username ||
+      'Técnico';
+
     const payload = {
       sub: usuario.id_usuario,
       email: usuario.email,
+      nombre: nombrePersona,
       rol: 'USER', // TODO: Implementar roles
       personaId: usuario.id_persona,
+      idEmpleado: empleado?.id_empleado,
     };
 
     const [access_token, refresh_token] = await Promise.all([

@@ -191,10 +191,14 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user?.email ?? '',
+                      _getDisplayName(user),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    Text(
+                      user?.email ?? '',
+                      style: theme.textTheme.bodySmall,
                     ),
                     Text(
                       'Rol: ${user?.rol ?? ''}',
@@ -258,6 +262,27 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
     );
   }
 
+  String _getDisplayName(dynamic user) {
+    final rawNombre = user?.nombre?.toString().trim();
+    if (rawNombre != null &&
+        rawNombre.isNotEmpty &&
+        rawNombre.toLowerCase() != 'usuario') {
+      return rawNombre;
+    }
+    final email = user?.email?.toString();
+    if (email != null && email.contains('@')) {
+      final emailPrefix = email.split('@').first;
+      final parts = emailPrefix.split(RegExp(r'[._]'));
+      final formatted = parts
+          .where((p) => p.isNotEmpty)
+          .map((p) => p[0].toUpperCase() + p.substring(1))
+          .join(' ')
+          .trim();
+      if (formatted.isNotEmpty) return formatted;
+    }
+    return 'Técnico';
+  }
+
   Widget _buildGreetingCard(dynamic user, ThemeData theme) {
     final hour = DateTime.now().hour;
     String greeting;
@@ -273,6 +298,8 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
       greeting = 'Buenas noches';
       icon = Icons.nightlight_round;
     }
+
+    final displayName = _getDisplayName(user);
 
     return Card(
       child: Padding(
@@ -303,7 +330,7 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
                     ),
                   ),
                   Text(
-                    user?.nombre ?? user?.email?.split('@').first ?? 'Técnico',
+                    displayName,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../data/evidencia_service.dart';
+import 'evidencias_gallery_viewer.dart';
 
 /// ============================================================================
 /// EVIDENCIAS SCREEN - RUTA 7
@@ -56,7 +57,7 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
         widget.idOrdenLocal,
       );
     } catch (e) {
-      print('❌ Error cargando evidencias generales: $e');
+      debugPrint('❌ Error cargando evidencias generales: $e');
     }
 
     if (mounted) {
@@ -336,9 +337,12 @@ class _EvidenciasScreenState extends ConsumerState<EvidenciasScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => _VisorImagenScreen(
-          evidencia: evidencia,
-          onDescripcionActualizada: _cargarEvidencias,
+        builder: (context) => EvidenciasGalleryViewer(
+          evidencias: _evidencias,
+          initialIndex: _evidencias.indexOf(evidencia),
+          titulo:
+              '${widget.numeroOrden ?? 'Evidencias'} (${_tipoSeleccionado.name})',
+          onEvidenciasModificadas: _cargarEvidencias,
         ),
       ),
     );
@@ -499,7 +503,8 @@ class _EvidenciaCard extends StatelessWidget {
                   return Image.file(
                     archivo,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                    errorBuilder: (context, error, stackTrace) =>
+                        _buildPlaceholder(),
                   );
                 }
                 return _buildPlaceholder();
@@ -564,7 +569,7 @@ class _EvidenciaCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.85),
+                    color: Colors.red.withValues(alpha: 0.85),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.close, color: Colors.white, size: 16),
@@ -602,170 +607,3 @@ class _EvidenciaCard extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// VISOR DE IMAGEN COMPLETA
-// ============================================================================
-
-class _VisorImagenScreen extends ConsumerStatefulWidget {
-  final Evidencia evidencia;
-  final VoidCallback onDescripcionActualizada;
-
-  const _VisorImagenScreen({
-    required this.evidencia,
-    required this.onDescripcionActualizada,
-  });
-
-  @override
-  ConsumerState<_VisorImagenScreen> createState() => _VisorImagenScreenState();
-}
-
-class _VisorImagenScreenState extends ConsumerState<_VisorImagenScreen> {
-  late TextEditingController _descripcionController;
-  bool _editando = false;
-  late String _descripcionActual; // Estado local para UI reactiva
-
-  @override
-  void initState() {
-    super.initState();
-    _descripcionActual = widget.evidencia.descripcion ?? '';
-    _descripcionController = TextEditingController(text: _descripcionActual);
-  }
-
-  @override
-  void dispose() {
-    _descripcionController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _guardarDescripcion() async {
-    final nuevaDescripcion = _descripcionController.text.trim();
-    final service = ref.read(evidenciaServiceProvider);
-    final exito = await service.actualizarDescripcion(
-      widget.evidencia.idLocal,
-      nuevaDescripcion,
-    );
-
-    if (exito) {
-      setState(() {
-        _editando = false;
-        _descripcionActual = nuevaDescripcion; // ✅ Actualizar estado local
-      });
-      widget.onDescripcionActualizada();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Descripción guardada'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Error al guardar'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final archivo = File(widget.evidencia.rutaLocal);
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(widget.evidencia.tipoEvidencia),
-        actions: [
-          IconButton(
-            icon: Icon(_editando ? Icons.save : Icons.edit),
-            onPressed: () {
-              if (_editando) {
-                _guardarDescripcion();
-              } else {
-                setState(() => _editando = true);
-              }
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Imagen
-          Expanded(
-            child: InteractiveViewer(
-              child: Center(
-                child: FutureBuilder<bool>(
-                  future: archivo.exists(),
-                  builder: (context, snapshot) {
-                    if (snapshot.data == true) {
-                      return Image.file(archivo);
-                    }
-                    return const Icon(
-                      Icons.broken_image,
-                      size: 100,
-                      color: Colors.grey,
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-
-          // Descripción
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey.shade900,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Fecha: ${_formatFecha(widget.evidencia.fechaCaptura)}',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                ),
-                const SizedBox(height: 8),
-                if (_editando)
-                  TextField(
-                    controller: _descripcionController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText: 'Agregar descripción...',
-                      hintStyle: TextStyle(color: Colors.grey),
-                      border: OutlineInputBorder(),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey),
-                      ),
-                    ),
-                    maxLines: 3,
-                    autofocus: true,
-                  )
-                else
-                  Text(
-                    _descripcionActual.isNotEmpty
-                        ? _descripcionActual
-                        : 'Sin descripción (toca ✏️ para agregar)',
-                    style: TextStyle(
-                      color: _descripcionActual.isNotEmpty
-                          ? Colors.white
-                          : Colors.grey,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatFecha(DateTime fecha) {
-    return '${fecha.day}/${fecha.month}/${fecha.year} ${fecha.hour}:${fecha.minute.toString().padLeft(2, '0')}';
-  }
-}

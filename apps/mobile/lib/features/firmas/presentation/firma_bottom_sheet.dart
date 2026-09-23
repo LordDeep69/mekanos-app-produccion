@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -38,6 +39,7 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _cargoController = TextEditingController();
 
+  Uint8List? _firmaBytes;
   bool _firmaDibujada = false;
   bool _guardando = false;
 
@@ -52,6 +54,7 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
     _signaturePadKey.currentState?.clear();
     setState(() {
       _firmaDibujada = false;
+      _firmaBytes = null;
     });
   }
 
@@ -75,17 +78,21 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
     setState(() => _guardando = true);
 
     try {
-      // Obtener imagen del canvas
-      final ui.Image image = await _signaturePadKey.currentState!.toImage();
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      Uint8List pngBytes;
+      if (_firmaBytes != null) {
+        pngBytes = _firmaBytes!;
+      } else {
+        // Obtener imagen del canvas
+        final ui.Image image = await _signaturePadKey.currentState!.toImage();
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
-      if (byteData == null) {
-        _mostrarError('Error al procesar la firma');
-        setState(() => _guardando = false);
-        return;
+        if (byteData == null) {
+          _mostrarError('Error al procesar la firma');
+          setState(() => _guardando = false);
+          return;
+        }
+        pngBytes = byteData.buffer.asUint8List();
       }
-
-      final pngBytes = byteData.buffer.asUint8List();
 
       // Guardar firma
       final service = ref.read(firmaServiceProvider);
@@ -172,7 +179,7 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
                       Text(
                         'Orden #${widget.idOrden}',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 14,
                         ),
                       ),
@@ -245,7 +252,7 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: colorPrimario.withOpacity(0.1),
+                            color: colorPrimario.withValues(alpha: 0.1),
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(10),
                             ),
@@ -261,24 +268,93 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
+                              const Spacer(),
+                              // ✅ BOTÓN EXPANDIR (Pantalla Completa)
+                              InkWell(
+                                onTap: _abrirFirmaFullscreen,
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: colorPrimario,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.open_in_full,
+                                        size: 14,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'EXPANDIR',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         SizedBox(
                           height: 200,
-                          child: SfSignaturePad(
-                            key: _signaturePadKey,
-                            backgroundColor: Colors.white,
-                            strokeColor: Colors.black,
-                            minimumStrokeWidth: 1.5,
-                            maximumStrokeWidth: 4.0,
-                            onDrawStart: () {
-                              setState(() {
-                                _firmaDibujada = true;
-                              });
-                              return false;
-                            },
-                          ),
+                          child: _firmaBytes != null
+                              ? Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      color: Colors.white,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      padding: const EdgeInsets.all(8),
+                                      child: Image.memory(
+                                        _firmaBytes!,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 8,
+                                      right: 8,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _abrirFirmaFullscreen,
+                                        style: OutlinedButton.styleFrom(
+                                          backgroundColor: Colors.white
+                                              .withValues(alpha: 0.9),
+                                          foregroundColor: colorPrimario,
+                                        ),
+                                        icon: const Icon(Icons.edit, size: 14),
+                                        label: const Text(
+                                          'Volver a firmar',
+                                          style: TextStyle(fontSize: 11),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : SfSignaturePad(
+                                  key: _signaturePadKey,
+                                  backgroundColor: Colors.white,
+                                  strokeColor: Colors.black,
+                                  minimumStrokeWidth: 1.5,
+                                  maximumStrokeWidth: 4.0,
+                                  onDrawStart: () {
+                                    setState(() {
+                                      _firmaDibujada = true;
+                                    });
+                                    return false;
+                                  },
+                                ),
                         ),
                       ],
                     ),
@@ -371,4 +447,173 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
       ),
     );
   }
+
+  Future<void> _abrirFirmaFullscreen() async {
+    final colorPrimario = widget.tipoFirma == 'CLIENTE'
+        ? Colors.purple.shade700
+        : Colors.blue.shade700;
+
+    final bytes = await Navigator.push<Uint8List>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => FirmaFullscreenScreen(
+          titulo:
+              'Firma ${widget.tipoFirma == "CLIENTE" ? "del Cliente" : "del Técnico"} - Pantalla Completa',
+          colorPrimario: colorPrimario,
+        ),
+      ),
+    );
+
+    if (bytes != null) {
+      setState(() {
+        _firmaBytes = bytes;
+        _firmaDibujada = true;
+      });
+    }
+  }
 }
+
+/// Pantalla completa para capturar firma con canvas maximizado
+class FirmaFullscreenScreen extends StatefulWidget {
+  final String titulo;
+  final Color colorPrimario;
+
+  const FirmaFullscreenScreen({
+    super.key,
+    required this.titulo,
+    required this.colorPrimario,
+  });
+
+  @override
+  State<FirmaFullscreenScreen> createState() => _FirmaFullscreenScreenState();
+}
+
+class _FirmaFullscreenScreenState extends State<FirmaFullscreenScreen> {
+  final GlobalKey<SfSignaturePadState> _padKey = GlobalKey();
+  bool _tieneTrazo = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      appBar: AppBar(
+        backgroundColor: widget.colorPrimario,
+        foregroundColor: Colors.white,
+        title: Text(
+          widget.titulo,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              _padKey.currentState?.clear();
+              setState(() => _tieneTrazo = false);
+            },
+            icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
+            label: const Text('Limpiar', style: TextStyle(color: Colors.white)),
+          ),
+          const SizedBox(width: 4),
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: ElevatedButton.icon(
+              onPressed: _tieneTrazo
+                  ? () async {
+                      try {
+                        final ui.Image img =
+                            await _padKey.currentState!.toImage();
+                        final byteData =
+                            await img.toByteData(format: ui.ImageByteFormat.png);
+                        if (!mounted) return;
+                        if (byteData != null) {
+                          Navigator.pop(context, byteData.buffer.asUint8List());
+                        }
+                      } catch (e) {
+                        debugPrint('Error capturando firma expandida: $e');
+                      }
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: widget.colorPrimario,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text(
+                'Listo',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: widget.colorPrimario.withValues(alpha: 0.08),
+              child: Row(
+                children: [
+                  Icon(Icons.touch_app, color: widget.colorPrimario, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Use toda el área de la pantalla para realizar una firma clara.',
+                      style: TextStyle(
+                        color: widget.colorPrimario,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: widget.colorPrimario.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SfSignaturePad(
+                    key: _padKey,
+                    backgroundColor: Colors.white,
+                    strokeColor: Colors.black,
+                    minimumStrokeWidth: 2.0,
+                    maximumStrokeWidth: 5.0,
+                    onDrawStart: () {
+                      if (!_tieneTrazo) {
+                        setState(() => _tieneTrazo = true);
+                      }
+                      return false;
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
