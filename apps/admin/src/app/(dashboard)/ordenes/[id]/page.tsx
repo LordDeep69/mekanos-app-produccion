@@ -1977,7 +1977,8 @@ export default function OrdenDetallePage() {
                     )}
                     {/* ✅ FIX 13-MAR-2026: Botón de transferencia de datos */}
                     {/* ✅ FIX 09-ABR-2026: Habilitado también para APROBADA (no solo EN_PROCESO) */}
-                    {(['EN_PROCESO', 'APROBADA'].includes(estadoActual || '')) && (
+                    {/* ✅ FIX 22-SEP-2026: Habilitado también para ASIGNADA (Asignada sin ejecutar) */}
+                    {(['ASIGNADA', 'EN_PROCESO', 'APROBADA'].includes(estadoActual || '')) && (
                         <ActionButton
                             icon={ArrowRightLeft}
                             label="Transferir Datos"
