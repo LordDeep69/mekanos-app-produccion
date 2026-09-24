@@ -219,8 +219,10 @@ export class InformesService {
 
       // ── Transform rows to clean response ─────────────────────────────────
       const reportes = data.map((row: any) => {
-        const nombreCliente = row.razon_social
-          || [row.primer_nombre, row.primer_apellido].filter(Boolean).join(' ').trim()
+        const nombrePersonaCliente = [row.primer_nombre, row.primer_apellido]
+          .filter(Boolean).join(' ').trim();
+        const nombreCliente = nombrePersonaCliente
+          || row.razon_social
           || 'Sin cliente';
 
         const nombreTecnico = [row.tecnico_nombre, row.tecnico_apellido]
