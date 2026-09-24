@@ -127,7 +127,7 @@ function ReporteRow({ reporte }: { reporte: ReporteItem }) {
             nombreTipoServicio: reporte.tipo_servicio?.nombre,
             // El campo `tipo` del equipo es la categoría (Generador / Bomba / Motor)
             nombreTipoEquipo: reporte.equipo?.tipo,
-            nombreCliente: reporte.sede.nombre,
+            nombreCliente: reporte.cliente.nombre || reporte.sede.nombre,
             nombreEquipo: reporte.equipo?.nombre,
             numeroOrden: reporte.orden?.numero_orden,
         });
