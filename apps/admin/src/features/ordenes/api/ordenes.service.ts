@@ -12,6 +12,7 @@ import type {
     Orden,
     OrdenesQueryParams,
     OrdenesResponse,
+    ProgresoRegistroDetallado,
 } from '@/types/ordenes';
 
 const ORDENES_BASE = '/ordenes';
@@ -633,3 +634,36 @@ export function getPdfUrl(idOrden: number): string {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
     return `${baseUrl}${ORDENES_BASE}/${idOrden}/pdf`;
 }
+
+/**
+ * ✅ 25-SEP-2026: FEATURE LECTURA EN TIEMPO REAL (ESTILO SYTEX)
+ * Obtiene métricas y desglose de avance de registro en vivo
+ */
+export async function getProgresoRegistro(idOrden: number): Promise<ProgresoRegistroDetallado> {
+    const response = await apiClient.get<ProgresoRegistroDetallado>(
+        `${ORDENES_BASE}/${idOrden}/progreso-registro`
+    );
+    return response.data;
+}
+
+/**
+ * ✅ 25-SEP-2026: FEATURE LECTURA EN TIEMPO REAL (ESTILO SYTEX)
+ * Envía latido/heartbeat de telemetría a la orden
+ */
+export async function sendHeartbeat(
+    idOrden: number,
+    data: {
+        actividad_actual?: string;
+        bateria?: number;
+        latitud?: number;
+        longitud?: number;
+        observacion?: string;
+    }
+): Promise<{ success: boolean; timestamp: string }> {
+    const response = await apiClient.post<{ success: boolean; timestamp: string }>(
+        `${ORDENES_BASE}/${idOrden}/heartbeat`,
+        data
+    );
+    return response.data;
+}
+

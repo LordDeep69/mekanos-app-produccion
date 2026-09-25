@@ -208,10 +208,15 @@ export class PrismaOrdenServicioRepository {
     },
     // ✅ FIX 03-MAR-2026: Incluir conteo de emails enviados para badge en lista
     // ✅ FIX 23-SEP-2026: Incluir conteo de ordenes_pendientes para badge en lista
+    // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
     _count: {
       select: {
         historial_emails_enviados: true,
         ordenes_pendientes: true,
+        actividades_ejecutadas: true,
+        mediciones_servicio: true,
+        evidencias_fotograficas: true,
+        ordenes_actividades_plan: true,
       },
     },
   };
@@ -902,13 +907,82 @@ export class PrismaOrdenServicioRepository {
     // ✅ FIX 03-MAR-2026: Transformar _count a total_emails_enviados
     // ✅ FIX 06-MAY-2026: Agregar total_documentos_pdf desde query de documentos
     // ✅ FIX 23-SEP-2026: Agregar total_pendientes desde _count.ordenes_pendientes
+    // ✅ FIX 25-SEP-2026: Calcular telemetría y avance en tiempo real (Estilo Sytex)
     const items = itemsRaw.map((orden: any) => {
       const { _count, ...rest } = orden;
+
+      const actsEjecutadas = _count?.actividades_ejecutadas || 0;
+      const actsPlan = _count?.ordenes_actividades_plan || 0;
+      const medicionesCount = _count?.mediciones_servicio || 0;
+      const fotosCount = _count?.evidencias_fotograficas || 0;
+      const totalActs = actsPlan > 0 ? actsPlan : Math.max(actsEjecutadas, 10);
+      const pctActs = totalActs > 0 ? Math.min(100, Math.round((actsEjecutadas / totalActs) * 100)) : 0;
+      const tieneFirmaTecnico = Boolean(orden.id_firma_tecnico);
+      const tieneFirmaCliente = Boolean(orden.id_firma_cliente);
+      const totalFirmas = (tieneFirmaTecnico ? 1 : 0) + (tieneFirmaCliente ? 1 : 0);
+
+      const codigoEstado = orden.estados_orden?.codigo_estado || '';
+      const esFinalizada = codigoEstado === 'COMPLETADA' || codigoEstado === 'APROBADA';
+
+      let pctGlobal = 0;
+      if (esFinalizada) {
+        pctGlobal = 100;
+      } else {
+        const pctMeds = medicionesCount > 0 ? Math.min(100, medicionesCount * 12.5) : 0;
+        const pctFotos = Math.min(100, Math.round((fotosCount / 3) * 100));
+        const pctFirmas = totalFirmas * 50;
+        pctGlobal = Math.min(99, Math.round(pctActs * 0.40 + pctMeds * 0.25 + pctFotos * 0.15 + pctFirmas * 0.20));
+      }
+
+      // Telemetría última actividad
+      const dateRef = orden.fecha_modificacion
+        ? new Date(orden.fecha_modificacion)
+        : orden.fecha_cambio_estado
+        ? new Date(orden.fecha_cambio_estado)
+        : null;
+      const now = new Date();
+      const minutosInactividad = dateRef
+        ? Math.max(0, Math.floor((now.getTime() - dateRef.getTime()) / (1000 * 60)))
+        : null;
+
+      let estadoConexion = 'SIN_INICIAR';
+      if (esFinalizada) {
+        estadoConexion = 'COMPLETADO';
+      } else if (minutosInactividad !== null) {
+        if (minutosInactividad <= 10) estadoConexion = 'EN_VIVO';
+        else if (minutosInactividad <= 60) estadoConexion = 'RECIENTE';
+        else estadoConexion = 'INACTIVO';
+      } else if (codigoEstado === 'EN_PROCESO') {
+        estadoConexion = 'EN_VIVO';
+      }
+
+      const progreso_registro = {
+        porcentaje_global: pctGlobal,
+        estado_conexion: estadoConexion,
+        minutos_inactividad: minutosInactividad,
+        ultima_actividad: dateRef ? dateRef.toISOString() : null,
+        actividades: {
+          completadas: actsEjecutadas,
+          total: totalActs,
+          porcentaje: pctActs,
+        },
+        mediciones: {
+          registradas: medicionesCount,
+        },
+        evidencias_fotos: fotosCount,
+        firmas: {
+          tecnico: tieneFirmaTecnico,
+          cliente: tieneFirmaCliente,
+          total: totalFirmas,
+        },
+      };
+
       return {
         ...rest,
         total_emails_enviados: _count?.historial_emails_enviados || 0,
         total_documentos_pdf: pdfCountMap.get(orden.id_orden_servicio) || 0,
         total_pendientes: _count?.ordenes_pendientes || 0,
+        progreso_registro,
       };
     });
 

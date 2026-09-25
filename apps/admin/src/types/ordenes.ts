@@ -129,6 +129,102 @@ export interface Orden {
         url_pdf: string;
         fecha_generacion: string;
     }>;
+
+    // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
+    progreso_registro?: ProgresoRegistroResumen;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TELEMETRÍA Y AVANCE EN TIEMPO REAL (ESTILO SYTEX)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type EstadoConexionTecnico =
+    | 'EN_VIVO'
+    | 'RECIENTE'
+    | 'INACTIVO'
+    | 'COMPLETADO'
+    | 'SIN_INICIAR';
+
+export interface ProgresoRegistroResumen {
+    porcentaje_global: number;
+    estado_conexion: EstadoConexionTecnico;
+    minutos_inactividad: number | null;
+    ultima_actividad: string | null;
+    actividades: {
+        completadas: number;
+        total: number;
+        porcentaje: number;
+    };
+    mediciones: {
+        registradas: number;
+        con_alerta?: number;
+    };
+    evidencias_fotos: number;
+    firmas: {
+        tecnico: boolean;
+        cliente: boolean;
+        total: number;
+    };
+    tiempo?: {
+        inicio_real: string | null;
+        fin_real: string | null;
+        duracion_minutos: number | null;
+    };
+}
+
+export interface ProgresoRegistroDetallado extends ProgresoRegistroResumen {
+    id_orden_servicio: number;
+    numero_orden: string;
+    estado_actual: {
+        id_estado: number;
+        codigo_estado: string;
+        nombre_estado: string;
+    };
+    tecnico: {
+        id_empleado: number | null;
+        nombre_completo: string;
+    } | null;
+    cliente: {
+        id_cliente: number;
+        nombre: string;
+        nombre_sede?: string | null;
+    };
+    equipo: {
+        id_equipo: number;
+        codigo_equipo: string;
+        nombre_equipo?: string | null;
+    };
+    checklist_items: Array<{
+        id_actividad_ejecutada: number;
+        id_actividad_catalogo: number | null;
+        descripcion: string;
+        estado: string | null;
+        ejecutada: boolean;
+        fecha_ejecucion: string | null;
+        fecha_registro: string | null;
+        tiempo_ejecucion_minutos?: number | null;
+        requiere_evidencia: boolean;
+        evidencia_capturada: boolean;
+        observaciones?: string | null;
+    }>;
+    mediciones_items: Array<{
+        id_medicion: number;
+        parametro_codigo?: string;
+        parametro_nombre: string;
+        unidad_medida?: string | null;
+        valor_numerico?: number | null;
+        valor_texto?: string | null;
+        fuera_de_rango: boolean;
+        nivel_alerta?: string | null;
+        fecha_medicion: string | null;
+        observaciones?: string | null;
+    }>;
+    ultimos_eventos: Array<{
+        tipo: 'ACTIVIDAD' | 'MEDICION' | 'FOTO' | 'FIRMA' | 'ESTADO' | 'HEARTBEAT';
+        descripcion: string;
+        timestamp: string;
+    }>;
+    telemetria_en_vivo?: any;
 }
 
 // Respuesta paginada

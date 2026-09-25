@@ -17,7 +17,10 @@ export type {
     CreateOrdenDto,
     Orden,
     OrdenesQueryParams,
-    OrdenesResponse
+    OrdenesResponse,
+    EstadoConexionTecnico,
+    ProgresoRegistroResumen,
+    ProgresoRegistroDetallado,
 } from '@/types/ordenes';
 
 export {

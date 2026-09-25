@@ -16,9 +16,9 @@ import {
     getClienteNombre,
     getEstadoColor,
     getPrioridadColor,
-    getTecnicoNombre,
     useOrdenes,
 } from '@/features/ordenes';
+import { ProgresoRegistroBadge } from '@/features/ordenes/components/progreso-registro-badge';
 import { useTiposServicio, useTecnicosSelector } from '@/features/ordenes/hooks/use-catalogos';
 import { cn, formatDateSafe } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
@@ -37,6 +37,7 @@ import {
     Loader2,
     Mail,
     Plus,
+    Radio,
     RefreshCw,
     Search,
     SlidersHorizontal,
@@ -47,6 +48,7 @@ import {
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -172,6 +174,16 @@ function OrdenCard({ orden }: { orden: Orden }) {
                 </p>
             )}
 
+            {/* ✅ FEATURE ESTILO SYTEX: Barra de Avance y Telemetría en Tiempo Real */}
+            {orden.progreso_registro && (
+                <div className="mb-3">
+                    <ProgresoRegistroBadge
+                        progreso={orden.progreso_registro}
+                        estadoOrden={orden.estados_orden?.codigo_estado}
+                    />
+                </div>
+            )}
+
             {/* Info Grid */}
             <div className="space-y-2 text-sm">
                 {/* Cliente */}
@@ -244,6 +256,7 @@ function OrdenesPageContent() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sortOrder') as any) || 'desc');
     const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>(searchParams.get('tipoServicio') || '');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(searchParams.get('advanced') === 'true');
+    const [enVivoAutoRefresh, setEnVivoAutoRefresh] = useState(false);
 
     // ✅ DEBOUNCE: Esperar 400ms después de que el usuario deje de escribir
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -305,6 +318,15 @@ function OrdenesPageContent() {
 
     // ✅ Server-side search: no need for local filtering
     const ordenesFiltradas = ordenes;
+
+    // ✅ FEATURE ESTILO SYTEX: Auto-refresco en vivo
+    useEffect(() => {
+        if (!enVivoAutoRefresh) return;
+        const interval = setInterval(() => {
+            refetch();
+        }, 20000);
+        return () => clearInterval(interval);
+    }, [enVivoAutoRefresh, refetch]);
 
     return (
         <div className="space-y-6">
@@ -441,6 +463,31 @@ function OrdenesPageContent() {
                         >
                             <SlidersHorizontal className="h-4 w-4" />
                             Avanzados
+                        </button>
+
+                        {/* ✅ FEATURE ESTILO SYTEX: Botón Modo En Vivo con Auto-Refresco */}
+                        <button
+                            onClick={() => {
+                                const next = !enVivoAutoRefresh;
+                                setEnVivoAutoRefresh(next);
+                                toast.info(next ? 'Modo Sytex En Vivo activado (refresco cada 20s)' : 'Modo En Vivo pausado');
+                            }}
+                            className={cn(
+                                'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-semibold transition-all',
+                                enVivoAutoRefresh
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
+                                    : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                            )}
+                            title={enVivoAutoRefresh ? 'Pausar modo en vivo' : 'Activar lectura y auto-refresco en vivo estilo Sytex'}
+                        >
+                            <span className="relative flex h-2 w-2">
+                                {enVivoAutoRefresh && (
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                )}
+                                <span className={cn('relative inline-flex rounded-full h-2 w-2', enVivoAutoRefresh ? 'bg-emerald-500' : 'bg-gray-400')} />
+                            </span>
+                            <Radio className="h-4 w-4" />
+                            <span className="hidden sm:inline">En Vivo</span>
                         </button>
 
                         <button

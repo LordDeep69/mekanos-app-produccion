@@ -51,6 +51,7 @@ import { UpdateOrdenDto } from './dto/update-orden.dto';
 import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
+import { ProgresoRegistroService, HeartbeatProgresoDto } from './services/progreso-registro.service';
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
@@ -81,6 +82,7 @@ export class OrdenesController {
     private readonly prisma: PrismaService,
     private readonly finalizacionService: FinalizacionOrdenService,
     private readonly r2Service: R2StorageService,
+    private readonly progresoService: ProgresoRegistroService,
   ) { }
 
   /**
@@ -121,6 +123,38 @@ export class OrdenesController {
       console.error(`❌ [HISTORIAL-EMAILS] Error al buscar historial:`, error);
       throw error;
     }
+  }
+
+  /**
+   * GET /api/ordenes/:id/progreso-registro
+   * FEATURE ESTILO SYTEX: Lectura en tiempo real del avance del registro de la orden
+   */
+  @Get(':id/progreso-registro')
+  @ApiOperation({
+    summary: 'Lectura en tiempo real de avance de registro (Estilo Sytex)',
+    description: 'Calcula el porcentaje de avance, estado de conexión del técnico, desglose de checklist, mediciones, fotos y firmas.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
+  async getProgresoRegistro(@Param('id', ParseIntPipe) id: number) {
+    return await this.progresoService.getProgresoDetallado(id);
+  }
+
+  /**
+   * POST /api/ordenes/:id/heartbeat
+   * FEATURE ESTILO SYTEX: Reporte de latido/telemetría en tiempo real desde la app móvil
+   */
+  @Post(':id/heartbeat')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Registrar latido/telemetría en tiempo real desde móvil (Estilo Sytex)',
+    description: 'Registra un ping de presencia con latitud, batería, estado y actividad actual durante la ejecución.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
+  async registrarHeartbeat(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: HeartbeatProgresoDto,
+  ) {
+    return await this.progresoService.registrarHeartbeat(id, dto);
   }
 
   @Get(':id/plan-actividades')

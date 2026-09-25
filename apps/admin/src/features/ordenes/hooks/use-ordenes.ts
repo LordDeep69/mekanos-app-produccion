@@ -43,8 +43,9 @@ import {
     updateOrden,
     type AddServicioDetalleDto,
     type UpdateActividadDto,
-    type UpdateFirmaOrdenDto,
     getFirmasHistorialTecnico,
+    getProgresoRegistro,
+    sendHeartbeat,
     type UpdateHorariosServicioDto,
     type UpdateMedicionDto,
     type UpdateOrdenDto
@@ -59,6 +60,7 @@ const EVIDENCIAS_ORDEN_KEY = ['ordenes', 'evidencias'];
 const FIRMAS_ORDEN_KEY = ['ordenes', 'firmas'];
 const FIRMAS_HISTORIAL_TECNICO_KEY = ['ordenes', 'firmas', 'historial-tecnico'];
 const HISTORIAL_EMAILS_KEY = ['ordenes', 'historial-emails'];
+const PROGRESO_REGISTRO_KEY = ['ordenes', 'progreso-registro'];
 
 // ... (existing hooks) ...
 
@@ -521,6 +523,43 @@ export function useDeleteOrden() {
             const message = err.response?.data?.message;
             const errorText = Array.isArray(message) ? message.join(', ') : message;
             toast.error(errorText || 'Error al eliminar la orden');
+        },
+    });
+}
+
+/**
+ * ✅ 25-SEP-2026: FEATURE LECTURA EN TIEMPO REAL (ESTILO SYTEX)
+ * Hook para monitorear el avance y telemetría de una orden en vivo
+ * Soporta refetchInterval (ej. 15s o 30s) para auto-refresh sin recargar
+ */
+export function useProgresoRegistro(
+    idOrden: number,
+    options?: {
+        refetchInterval?: number | false;
+        enabled?: boolean;
+    }
+) {
+    return useQuery({
+        queryKey: [...PROGRESO_REGISTRO_KEY, idOrden],
+        queryFn: () => getProgresoRegistro(idOrden),
+        enabled: (options?.enabled ?? true) && Boolean(idOrden),
+        refetchInterval: options?.refetchInterval ?? false,
+        staleTime: 5000, // 5 segundos
+    });
+}
+
+/**
+ * Hook para registrar heartbeat/latido desde UI o testing
+ */
+export function useSendHeartbeat() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ idOrden, data }: { idOrden: number; data: any }) =>
+            sendHeartbeat(idOrden, data),
+        onSuccess: (_result, { idOrden }) => {
+            queryClient.invalidateQueries({ queryKey: [...PROGRESO_REGISTRO_KEY, idOrden] });
+            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
         },
     });
 }

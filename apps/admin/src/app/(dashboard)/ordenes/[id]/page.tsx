@@ -50,6 +50,7 @@ import { ObservacionesCierreSection } from '@/features/ordenes/components/observ
 import { PendientesSection } from '@/features/ordenes/components/pendientes-section';
 import { OrdenEditModal } from '@/features/ordenes/components/orden-edit-modal';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
+import { ProgresoRegistroTelemetria } from '@/features/ordenes/components/progreso-registro-telemetria';
 import { cn } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
 import { useQuery } from '@tanstack/react-query';
@@ -2274,6 +2275,14 @@ export default function OrdenDetallePage() {
                     </div>
                 </div>
             )}
+
+            {/* ✅ FEATURE ESTILO SYTEX: Panel de Telemetría y Lectura en Tiempo Real */}
+            <ProgresoRegistroTelemetria
+                idOrden={orden.id_orden_servicio}
+                onVerChecklistTab={() => setActiveTab('ejecucion')}
+                onVerMedicionesTab={() => setActiveTab('ejecucion')}
+                onVerDocumentosTab={() => setActiveTab('documentos')}
+            />
 
             {/* Tabs */}
             <div className="border-b border-gray-200">
