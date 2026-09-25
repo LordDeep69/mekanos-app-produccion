@@ -16,6 +16,7 @@ import {
     getClienteNombre,
     getEstadoColor,
     getPrioridadColor,
+    getTecnicoNombre,
     useOrdenes,
 } from '@/features/ordenes';
 import { ProgresoRegistroBadge } from '@/features/ordenes/components/progreso-registro-badge';
