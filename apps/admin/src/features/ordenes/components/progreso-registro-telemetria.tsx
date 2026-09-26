@@ -78,18 +78,18 @@ export function ProgresoRegistroTelemetria({
     }
 
     const {
-        porcentaje_global,
-        estado_conexion,
-        minutos_inactividad,
-        ultima_actividad,
-        actividades,
-        mediciones,
-        evidencias_fotos,
-        firmas,
-        tiempo,
+        porcentaje_global = 0,
+        estado_conexion = 'DESCONOCIDO',
+        minutos_inactividad = null,
+        ultima_actividad = null,
+        actividades = { total: 0, completadas: 0, obligatorias_total: 0, obligatorias_completadas: 0, porcentaje: 0 },
+        mediciones = { registradas: 0, con_alerta: 0 },
+        evidencias_fotos = 0,
+        firmas = { tecnico: false, cliente: false, total: 0 },
+        tiempo = { tiempo_transcurrido_minutos: 0, tiempo_transcurrido_formateado: '0m', inicio_real: null, fin_real: null },
         tecnico,
-        ultimos_eventos = [],
-    } = progreso;
+        ultimos_eventos: ultimosEventos = [],
+    } = (progreso || {}) as any;
 
     const esFinalizada =
         progreso.estado_actual?.codigo_estado === 'COMPLETADA' ||
