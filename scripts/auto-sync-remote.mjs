@@ -1,13 +1,13 @@
 /**
- * MEKANOS - Daemon de Sincronización Automática con Repositorio Remoto
+ * MEKANOS - Daemon de Sincronización Automática con Repositorio Remoto y Auto-Reload API
  * 
  * Monitorea continuamente el repositorio remoto en GitHub.
  * Cuando detecta que se hizo push desde otra máquina:
  * 1. Hace git pull automático (Fast-Forward).
  * 2. Si detecta cambios en packages/database/prisma/schema.prisma -> ejecuta prisma:generate.
  * 3. Si detecta cambios en package.json / pnpm-lock.yaml -> ejecuta pnpm install.
- * 4. Si detecta cambios en apps/api -> NestJS en watch mode recarga automáticamente.
- * 5. Monitorea la salud de la API (http://localhost:3000/api/health).
+ * 4. Si detecta cambios en apps/api -> compila y reinicia el servicio limpiamente.
+ * 5. Monitorea la salud de la API (http://localhost:3000/api/health) y la revive si cae.
  */
 
 import { execSync, spawn } from 'child_process';
@@ -59,6 +59,45 @@ async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let apiProcess = null;
+
+function killProcessOnPort(port) {
+  try {
+    const out = runCmd(`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"`);
+    const pids = out.split('\n').map(p => p.trim()).filter(Boolean);
+    for (const pid of pids) {
+      if (pid && pid !== '0' && pid !== `${process.pid}`) {
+        log(`Deteniendo proceso previo en puerto ${port} (PID: ${pid})...`, colors.gray);
+        runCmd(`powershell -NoProfile -Command "Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue"`);
+      }
+    }
+  } catch (err) {
+    // Silencioso si no hay nadie escuchando
+  }
+}
+
+function startApiServer() {
+  log('🚀 Iniciando API NestJS (apps/api/dist/main)...', colors.cyan);
+  killProcessOnPort(3000);
+
+  const mainPath = path.join(ROOT_DIR, 'apps', 'api', 'dist', 'main.js');
+  apiProcess = spawn('node', ['--enable-source-maps', mainPath], {
+    cwd: ROOT_DIR,
+    stdio: 'inherit',
+    env: process.env,
+    detached: false,
+  });
+
+  apiProcess.on('error', (err) => {
+    log(`❌ Error al ejecutar API: ${err.message}`, colors.red);
+  });
+
+  apiProcess.on('exit', (code, signal) => {
+    log(`ℹ️ Proceso API finalizó (code: ${code}, signal: ${signal})`, colors.yellow);
+    apiProcess = null;
+  });
+}
+
 let isSyncing = false;
 
 async function syncLoop() {
@@ -69,7 +108,6 @@ async function syncLoop() {
     // 1. Obtener rama actual
     const currentBranch = runCmd('git rev-parse --abbrev-ref HEAD');
     if (!currentBranch || currentBranch === 'HEAD') {
-      log('⚠️ No se encuentra en una rama válida de Git.', colors.yellow);
       isSyncing = false;
       return;
     }
@@ -77,8 +115,8 @@ async function syncLoop() {
     // 2. Fetch silencioso al remoto origin
     try {
       runCmd(`git fetch origin ${currentBranch} --quiet`);
-    } catch (fetchErr) {
-      log(`⚠️ No se pudo conectar al remoto (verifique conexión a Internet): ${fetchErr.message}`, colors.yellow);
+    } catch {
+      // Problema de red temporal
       isSyncing = false;
       return;
     }
@@ -89,18 +127,22 @@ async function syncLoop() {
     try {
       remoteCommit = runCmd(`git rev-parse origin/${currentBranch}`);
     } catch {
-      // Rama remota no existe aún
       isSyncing = false;
       return;
     }
 
     if (localCommit === remoteCommit) {
-      // Todo al día
+      // Todo al día en Git. Verificar salud de la API.
+      const isAlive = await checkApiHealth();
+      if (!isAlive && !apiProcess) {
+        log('⚠️ API caída o no iniciada. Auto-recuperando...', colors.yellow);
+        startApiServer();
+      }
       isSyncing = false;
       return;
     }
 
-    // 4. Verificar si es fast-forward (el local es ancestro del remoto)
+    // 4. Verificar si es fast-forward
     let isAncestor = false;
     try {
       runCmd(`git merge-base --is-ancestor HEAD origin/${currentBranch}`);
@@ -118,20 +160,22 @@ async function syncLoop() {
     // 5. Verificar si hay cambios locales sin commit
     const localDirty = runCmd('git status --porcelain');
     if (localDirty.length > 0) {
-      log(`⚠️ Hay archivos modificados sin guardar localmente en esta PC. Se pospone pull para evitar conflictos:`, colors.yellow);
+      log(`⚠️ Hay archivos modificados sin guardar en esta PC. Se pospone pull para evitar conflictos:`, colors.yellow);
       console.log(localDirty);
       isSyncing = false;
       return;
     }
 
-    // 6. ¡Nuevos commits detectados!
+    // 6. ¡Nuevos commits detectados desde otra máquina!
     const newCommits = runCmd(`git log HEAD..origin/${currentBranch} --oneline`);
-    const changedFiles = runCmd(`git diff --name-only HEAD origin/${currentBranch}`).split('\n').filter(Boolean);
+    const changedFiles = runCmd(`git diff --name-only HEAD origin/${currentBranch}`).split('\n').map(s => s.trim()).filter(Boolean);
 
-    log(`\n🚀 ${colors.bright}Nuevos commits detectados desde otra máquina en 'origin/${currentBranch}':${colors.reset}`, colors.cyan);
+    log(`\n======================================================`, colors.cyan);
+    log(`🚀 NUEVOS COMMITS DETECTADOS DESDE OTRA MÁQUINA EN origin/${currentBranch}:`, colors.bright + colors.cyan);
     console.log(colors.magenta + newCommits + colors.reset);
+    log(`------------------------------------------------------`, colors.cyan);
 
-    log(`📥 Aplicando 'git pull origin ${currentBranch}'...`, colors.cyan);
+    log(`📥 Aplicando git pull origin ${currentBranch}...`, colors.cyan);
     const pullOutput = runCmd(`git pull origin ${currentBranch}`);
     log(`✅ Git Pull completado: ${pullOutput.split('\n')[0]}`, colors.green);
 
@@ -161,18 +205,31 @@ async function syncLoop() {
     }
 
     if (apiChanged) {
-      log('⚡ Se detectaron cambios en el código de la API (apps/api).', colors.cyan);
-      log('   El compilador de NestJS (watch mode) está recompilando en caliente...', colors.gray);
+      log('🔨 Compilando nueva versión de la API con NestJS...', colors.cyan);
+      try {
+        runCmd('pnpm --filter @mekanos/api build');
+        log('✅ Compilación exitosa.', colors.green);
+        log('🔄 Reiniciando servidor API con el código actualizado...', colors.cyan);
+        startApiServer();
+      } catch (err) {
+        log(`❌ Error en compilación de la API: ${err.message}`, colors.red);
+      }
     }
 
-    // 8. Verificar salud de la API después de recompilar
+    // 8. Verificar salud de la API después de actualizar
     log('⏳ Verificando disponibilidad de la API...', colors.gray);
-    await sleep(6000);
-    const healthy = await checkApiHealth();
+    let attempts = 0;
+    let healthy = false;
+    while (attempts < 10 && !healthy) {
+      await sleep(2000);
+      healthy = await checkApiHealth();
+      attempts++;
+    }
+
     if (healthy) {
-      log(`🎉 [AUTO-SYNC] API 100% OPERATIVA Y ACTUALIZADA en http://localhost:3000`, colors.green + colors.bright);
+      log(`🎉 [AUTO-SYNC] API 100% OPERATIVA Y ACTUALIZADA en http://localhost:3000`, colors.bright + colors.green);
     } else {
-      log(`⚠️ [AUTO-SYNC] La API aún no responde en ${HEALTH_URL}. Puede estar terminando de compilar.`, colors.yellow);
+      log(`⚠️ [AUTO-SYNC] La API aún no responde en ${HEALTH_URL}.`, colors.yellow);
     }
 
   } catch (error) {
@@ -184,24 +241,21 @@ async function syncLoop() {
 
 async function main() {
   console.log(`\n======================================================`);
-  console.log(`🤖 MEKANOS REMOTE AUTO-SYNC DAEMON`);
+  console.log(`🤖 MEKANOS REMOTE AUTO-SYNC & AUTO-RELOAD DAEMON`);
   console.log(`======================================================`);
-  log(`Iniciando monitor de Git Remote...`, colors.cyan);
   log(`Directorio raíz: ${ROOT_DIR}`, colors.gray);
   log(`Intervalo de chequeo: cada ${INTERVAL_MS / 1000} segundos`, colors.gray);
   log(`Endpoint de salud: ${HEALTH_URL}`, colors.gray);
   console.log(`------------------------------------------------------\n`);
 
-  // Chequeo inicial de salud
+  // Chequeo inicial
   const initHealth = await checkApiHealth();
   if (initHealth) {
-    log(`✅ API detectada y respondiendo en ${HEALTH_URL}`, colors.green);
+    log(`✅ API detectada y respondiendo activamente en ${HEALTH_URL}`, colors.green);
   } else {
-    log(`ℹ️ La API no parece estar escuchando en ${HEALTH_URL}. Asegúrate de tener corriendo 'pnpm dev:api'`, colors.yellow);
+    log(`ℹ️ Iniciando API por primera vez...`, colors.yellow);
+    startApiServer();
   }
-
-  // Primer ciclo
-  await syncLoop();
 
   // Ciclo periódico
   setInterval(syncLoop, INTERVAL_MS);
