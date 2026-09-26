@@ -8,6 +8,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "dev:api": "cd apps/api && pnpm dev",
+    "sync:remote": "node scripts/auto-sync-remote.mjs",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "test": "turbo run test",
