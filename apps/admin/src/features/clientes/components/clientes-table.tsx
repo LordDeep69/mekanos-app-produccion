@@ -52,6 +52,7 @@ import {
   Search,
   Trash2,
   UserCheck,
+  X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -70,12 +71,12 @@ export function ClientesTable() {
   const refreshClientes = useRefreshClientes();
   const deleteMutation = useDeleteCliente();
 
-  // ✅ FIX 30-ENE-2026: Debounce para búsqueda (evita refresh en cada letra)
+  // ✅ FIX 28-MAR-2026: Debounce optimizado a 300ms para búsqueda más ágil y responsiva
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearch(searchInput);
       setPage(0);
-    }, 500); // 500ms de delay
+    }, 300); // 300ms de delay
 
     return () => clearTimeout(timer);
   }, [searchInput]);
@@ -190,11 +191,25 @@ export function ClientesTable() {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nombre, NIT..."
+              placeholder="Buscar por nombre, NIT, sede, ciudad..."
               value={searchInput}
               onChange={(e) => handleSearch(e.target.value)}
-              className="pl-10"
+              className="pl-10 pr-8"
             />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput('');
+                  setSearch('');
+                  setPage(0);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-sm"
+                title="Limpiar búsqueda"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           {/* Filtro tipo */}

@@ -12,6 +12,170 @@ export class ClientesService {
     private readonly pdfService: PdfService,
   ) { }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔤 NORMALIZACIÓN Y BÚSQUEDA INTELIGENTE DE CLIENTES (28-SEP-2026)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Soporta: multi-tokens en cualquier orden (ej: 'lazaro comercial'),
+  // tolerancia a tildes/acentos vía PostgreSQL unaccent(),
+  // normalización NFD, homóglifos y NIT con/sin formateo.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  private static readonly HOMOGLYPH_MAP: Record<string, string> = {
+    // Mayúsculas griegas → Latinas
+    '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u0396': 'Z',
+    '\u0397': 'H', '\u0399': 'I', '\u039A': 'K', '\u039C': 'M',
+    '\u039D': 'N', '\u039F': 'O', '\u03A1': 'P', '\u03A4': 'T',
+    '\u03A5': 'Y', '\u03A7': 'X',
+    // Minúsculas griegas → Latinas
+    '\u03BF': 'o', '\u03B1': 'a', '\u03B5': 'e', '\u03B9': 'i',
+    '\u03BA': 'k', '\u03BD': 'n', '\u03C1': 'p', '\u03C4': 't',
+    '\u03C5': 'u', '\u03C7': 'x',
+    // Cirílicos → Latinas
+    '\u0410': 'A', '\u0412': 'B', '\u0415': 'E', '\u041A': 'K',
+    '\u041C': 'M', '\u041D': 'H', '\u041E': 'O', '\u0420': 'P',
+    '\u0421': 'C', '\u0422': 'T', '\u0425': 'X', '\u0430': 'a',
+    '\u0435': 'e', '\u043E': 'o', '\u0440': 'p', '\u0441': 'c',
+    '\u0445': 'x',
+  };
+
+  /**
+   * Normaliza una cadena de texto para búsquedas:
+   * 1. Reemplaza homóglifos griegos/cirílicos por sus equivalentes latinos
+   * 2. Elimina diacríticos (tildes, acentos) usando NFD + regex
+   */
+  private normalizeSearchText(text: string): string {
+    if (!text) return text;
+    let normalized = text;
+    for (const [homoglyph, latin] of Object.entries(ClientesService.HOMOGLYPH_MAP)) {
+      normalized = normalized.replaceAll(homoglyph, latin);
+    }
+    return normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  /**
+   * Busca IDs de clientes usando SQL raw con unaccent() de PostgreSQL.
+   * Permite encontrar resultados con acentos en la base de datos o en la consulta,
+   * y garantiza coincidencias multi-token en orden arbitrario.
+   */
+  private async findClienteIdsByUnaccentSearch(searchText: string, limit: number = 200): Promise<number[]> {
+    try {
+      const tokens = searchText.split(/\s+/).filter(t => t.length > 0);
+      if (tokens.length === 0) return [];
+
+      const tokenConditions = tokens.map((_token, i) => `(
+        unaccent(COALESCE(p.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.nombre_completo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.primer_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.primer_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.segundo_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.segundo_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(c.nombre_sede, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(c.codigo_cliente, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.numero_identificacion, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.ciudad, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(p.direccion_principal, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(cpp.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(cpp.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(sc.nombre_sede, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+      )`).join(' AND ');
+
+      const sql = `
+        SELECT DISTINCT c.id_cliente
+        FROM clientes c
+        LEFT JOIN personas p ON c.id_persona = p.id_persona
+        LEFT JOIN clientes cp ON c.id_cliente_principal = cp.id_cliente
+        LEFT JOIN personas cpp ON cp.id_persona = cpp.id_persona
+        LEFT JOIN sedes_cliente sc ON c.id_cliente = sc.id_cliente
+        WHERE ${tokenConditions}
+        LIMIT ${limit}
+      `;
+
+      const results: any[] = await this.prisma.$queryRawUnsafe(sql, ...tokens);
+      return results.map(r => r.id_cliente);
+    } catch (error) {
+      console.warn('⚠️ Búsqueda unaccent en clientes no disponible, fallback a Prisma ILIKE:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Construye el filtro inteligente multi-criterio y multi-token para clientes.
+   */
+  private async buildSmartSearchWhere(search: string): Promise<any> {
+    const rawSearch = search.trim();
+    if (!rawSearch) return {};
+
+    const s = this.normalizeSearchText(rawSearch);
+    const tokens = s.split(/\s+/).filter(t => t.length > 0);
+    const cleanDigits = s.replace(/[^0-9]/g, '');
+
+    // 1. Búsqueda complementaria con unaccent() en PostgreSQL
+    const unaccentIds = await this.findClienteIdsByUnaccentSearch(s);
+
+    const orConditions: any[] = [];
+
+    // Búsqueda por frase completa (original y normalizada si difieren)
+    const searchTerms = rawSearch !== s ? [s, rawSearch] : [s];
+    for (const term of searchTerms) {
+      orConditions.push(
+        { nombre_sede: { contains: term, mode: 'insensitive' } },
+        { codigo_cliente: { contains: term, mode: 'insensitive' } },
+        { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } },
+        { persona: { razon_social: { contains: term, mode: 'insensitive' } } },
+        { persona: { nombre_completo: { contains: term, mode: 'insensitive' } } },
+        { persona: { primer_nombre: { contains: term, mode: 'insensitive' } } },
+        { persona: { primer_apellido: { contains: term, mode: 'insensitive' } } },
+        { persona: { numero_identificacion: { contains: term, mode: 'insensitive' } } },
+        { persona: { ciudad: { contains: term, mode: 'insensitive' } } },
+        { cliente_principal: { nombre_sede: { contains: term, mode: 'insensitive' } } },
+        { cliente_principal: { persona: { razon_social: { contains: term, mode: 'insensitive' } } } },
+        { cliente_principal: { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } } },
+        { sedes_cliente: { some: { nombre_sede: { contains: term, mode: 'insensitive' } } } },
+      );
+    }
+
+    // Búsqueda por NIT / dígitos limpios
+    if (cleanDigits.length >= 4) {
+      orConditions.push(
+        { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } },
+        { cliente_principal: { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } } }
+      );
+    }
+
+    // Búsqueda multi-token en Prisma: CADA token debe coincidir en AL MENOS un campo (AND de ORs)
+    if (tokens.length > 1) {
+      orConditions.push({
+        AND: tokens.map(token => ({
+          OR: [
+            { nombre_sede: { contains: token, mode: 'insensitive' } },
+            { codigo_cliente: { contains: token, mode: 'insensitive' } },
+            { persona: { razon_social: { contains: token, mode: 'insensitive' } } },
+            { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } },
+            { persona: { nombre_completo: { contains: token, mode: 'insensitive' } } },
+            { persona: { primer_nombre: { contains: token, mode: 'insensitive' } } },
+            { persona: { primer_apellido: { contains: token, mode: 'insensitive' } } },
+            { persona: { numero_identificacion: { contains: token, mode: 'insensitive' } } },
+            { persona: { ciudad: { contains: token, mode: 'insensitive' } } },
+            { cliente_principal: { nombre_sede: { contains: token, mode: 'insensitive' } } },
+            { cliente_principal: { persona: { razon_social: { contains: token, mode: 'insensitive' } } } },
+            { cliente_principal: { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } } },
+            { sedes_cliente: { some: { nombre_sede: { contains: token, mode: 'insensitive' } } } },
+          ],
+        })),
+      });
+    }
+
+    // Combinar IDs de la búsqueda unaccent()
+    if (unaccentIds.length > 0) {
+      orConditions.push({
+        id_cliente: { in: unaccentIds },
+      });
+    }
+
+    return { OR: orConditions };
+  }
+
   async create(createDto: CreateClientesDto, userId: number) {
     // ✅ MULTI-SEDE: toda sede debe pasar por flujo especializado
     // para garantizar persona/dirección independiente.
@@ -258,17 +422,12 @@ export class ClientesService {
    */
   async findPrincipales(search?: string, limit: number = 20) {
     const safeLimit = Math.min(Math.max(limit || 20, 1), 500);
+    const searchFilter = search?.trim() ? await this.buildSmartSearchWhere(search) : {};
 
     const where: any = {
       es_cliente_principal: true,
       cliente_activo: true,
-      ...(search && {
-        OR: [
-          { persona: { razon_social: { contains: search, mode: 'insensitive' } } },
-          { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
-          { persona: { numero_identificacion: { contains: search, mode: 'insensitive' } } },
-        ],
-      }),
+      ...searchFilter,
     };
 
     const clientes = await this.prisma.clientes.findMany({
@@ -345,21 +504,13 @@ export class ClientesService {
    */
   async findForSelector(search?: string, limit: number = 100, idAsesorAsignado?: number) {
     const safeLimit = Math.min(Math.max(limit || 100, 1), 500);
+    const searchFilter = search?.trim() ? await this.buildSmartSearchWhere(search) : {};
 
     const where: any = {
       cliente_activo: true,
       // ✅ MULTI-ASESOR: Filtrar por asesor si se especifica
       ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
-      ...(search && {
-        OR: [
-          { nombre_sede: { contains: search, mode: 'insensitive' } },
-          { codigo_cliente: { contains: search, mode: 'insensitive' } },
-          { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
-          { persona: { razon_social: { contains: search, mode: 'insensitive' } } },
-          { persona: { nombre_completo: { contains: search, mode: 'insensitive' } } },
-          { persona: { numero_identificacion: { contains: search, mode: 'insensitive' } } },
-        ],
-      }),
+      ...searchFilter,
     };
 
     const clientes = await this.prisma.clientes.findMany({
@@ -405,21 +556,14 @@ export class ClientesService {
     idAsesorAsignado?: number;
   }) {
     const { tipo_cliente, cliente_activo, search, skip = 0, take = 50, idAsesorAsignado } = params || {};
+    const searchFilter = search?.trim() ? await this.buildSmartSearchWhere(search) : {};
 
     const where: any = {
       ...(tipo_cliente && { tipo_cliente: tipo_cliente as any }),
       ...(cliente_activo !== undefined && { cliente_activo }),
       // ✅ MULTI-ASESOR: Filtrar por asesor asignado
       ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
-      ...(search && {
-        OR: [
-          { nombre_sede: { contains: search, mode: 'insensitive' } },
-          { persona: { nombre_comercial: { contains: search, mode: 'insensitive' } } },
-          { persona: { razon_social: { contains: search, mode: 'insensitive' } } },
-          { persona: { numero_identificacion: { contains: search, mode: 'insensitive' } } },
-          { codigo_cliente: { contains: search, mode: 'insensitive' } },
-        ],
-      }),
+      ...searchFilter,
     };
 
     const [items, total] = await Promise.all([
