@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MEKANOS S.A.S - Portal Admin
  * Editor de Texto Rico (TipTap) - Componente Compartido
  *
@@ -216,6 +216,7 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
  */
 export function useRichEditor(initialContent: string) {
     return useEditor({
+        immediatelyRender: false,
         extensions: [
             StarterKit.configure({
                 heading: { levels: [2, 3] },

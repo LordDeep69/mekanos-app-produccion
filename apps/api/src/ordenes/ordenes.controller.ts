@@ -136,6 +136,7 @@ export class OrdenesController {
   })
   @ApiParam({ name: 'id', description: 'ID de la orden de servicio', type: Number })
   async getProgresoRegistro(@Param('id', ParseIntPipe) id: number) {
+    console.log(`🚀 [TELEMETRIA] HOLA, SINCRONIZACIÓN REMOTA - Progreso Orden #${id}`);
     return await this.progresoService.getProgresoDetallado(id);
   }
 
@@ -1709,6 +1710,9 @@ export class OrdenesController {
    */
   @Get(':id')
   async findOne(@Param('id') id: string) {
+    console.log(`\n========================================`);
+    console.log(`🚀 HOLA, SINCRONIZACIÓN REMOTA - Orden ID: ${id}`);
+    console.log(`========================================\n`);
     const result = await this.queryBus.execute(new GetOrdenByIdQuery(parseInt(id, 10)));
 
     return {
