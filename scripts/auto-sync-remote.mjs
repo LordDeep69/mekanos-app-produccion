@@ -157,10 +157,10 @@ async function syncLoop() {
       return;
     }
 
-    // 5. Verificar si hay cambios locales sin commit
-    const localDirty = runCmd('git status --porcelain');
+    // 5. Verificar si hay cambios locales sin commit (ignorando archivos sin seguimiento/untracked)
+    const localDirty = runCmd('git status --porcelain -uno');
     if (localDirty.length > 0) {
-      log(`⚠️ Hay archivos modificados sin guardar en esta PC. Se pospone pull para evitar conflictos:`, colors.yellow);
+      log(`⚠️ Hay archivos modificados trackeados sin guardar en esta PC. Se pospone pull para evitar conflictos:`, colors.yellow);
       console.log(localDirty);
       isSyncing = false;
       return;
@@ -205,14 +205,20 @@ async function syncLoop() {
     }
 
     if (apiChanged) {
+      log('🛑 Deteniendo proceso previo en puerto 3000 antes de compilar para evitar bloqueo de archivos en Windows (EBUSY)...', colors.yellow);
+      killProcessOnPort(3000);
+      await sleep(1000);
+
       log('🔨 Compilando nueva versión de la API con NestJS...', colors.cyan);
       try {
         runCmd('pnpm --filter @mekanos/api build');
         log('✅ Compilación exitosa.', colors.green);
-        log('🔄 Reiniciando servidor API con el código actualizado...', colors.cyan);
+        log('🔄 Iniciando servidor API con el código actualizado...', colors.cyan);
         startApiServer();
       } catch (err) {
         log(`❌ Error en compilación de la API: ${err.message}`, colors.red);
+        log('🔄 Intentando levantar API previa...', colors.yellow);
+        startApiServer();
       }
     }
 
