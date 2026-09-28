@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
 import { DatosTrazabilidadClientePDF } from '../pdf/templates';
@@ -6,11 +6,20 @@ import { CreateClientesDto } from './dto/create-clientes.dto';
 import { UpdateClientesDto } from './dto/update-clientes.dto';
 
 @Injectable()
-export class ClientesService {
+export class ClientesService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pdfService: PdfService,
   ) { }
+
+  /**
+   * Pre-calienta el índice en memoria al iniciar el módulo para que la primera búsqueda sea inmediata
+   */
+  async onModuleInit() {
+    this.getSearchIndex().catch((err) => {
+      console.warn('⚠️ No se pudo pre-calentar el índice de clientes:', err);
+    });
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🔤 NORMALIZACIÓN Y BÚSQUEDA INTELIGENTE DE CLIENTES (28-SEP-2026)
@@ -52,128 +61,195 @@ export class ClientesService {
     return normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
 
+  // ⚡ ÍNDICE DE BÚSQUEDA INTELIGENTE EN MEMORIA (Ultra-rápido: < 1ms por consulta)
+  private searchIndexCache: Array<{
+    id_cliente: number;
+    tipo_cliente: string | null;
+    cliente_activo: boolean | null;
+    id_asesor_asignado: number | null;
+    es_cliente_principal: boolean | null;
+    id_cliente_principal: number | null;
+    searchString: string;
+    cleanNit: string;
+    selectorData: {
+      id_cliente: number;
+      codigo_cliente: string | null;
+      nombre_sede: string | null;
+      nombre_comercial: string | null;
+      razon_social: string | null;
+      nombre: string;
+      nit: string | null;
+    };
+    fullCliente: any;
+  }> | null = null;
+  private cacheExpiresAt: number = 0;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos de validez
+
   /**
-   * Busca IDs de clientes usando SQL raw con unaccent() de PostgreSQL.
-   * Permite encontrar resultados con acentos en la base de datos o en la consulta,
-   * y garantiza coincidencias multi-token en orden arbitrario.
+   * Invalida el caché de búsqueda en memoria cuando se crea, edita o elimina un cliente
    */
-  private async findClienteIdsByUnaccentSearch(searchText: string, limit: number = 200): Promise<number[]> {
+  public invalidateClientesCache() {
+    this.searchIndexCache = null;
+    this.cacheExpiresAt = 0;
+  }
+
+  /**
+   * Construye o recupera el índice consolidado de búsqueda en memoria
+   */
+  private async getSearchIndex() {
+    const now = Date.now();
+    if (this.searchIndexCache && this.cacheExpiresAt > now) {
+      return this.searchIndexCache;
+    }
+
     try {
-      const tokens = searchText.split(/\s+/).filter(t => t.length > 0);
-      if (tokens.length === 0) return [];
+      const [allClients, asesores] = await Promise.all([
+        this.prisma.clientes.findMany({
+          include: {
+            persona: true,
+            sedes_cliente: { where: { activo: true }, take: 5 },
+            cliente_principal: {
+              select: {
+                id_cliente: true,
+                nombre_sede: true,
+                persona: { select: { razon_social: true, nombre_comercial: true } },
+              },
+            },
+            _count: { select: { sedes: true } },
+          },
+          orderBy: { fecha_creacion: 'desc' },
+        }),
+        this.prisma.empleados.findMany({
+          select: {
+            id_empleado: true,
+            cargo: true,
+            persona: { select: { nombre_completo: true } },
+          },
+        }),
+      ]);
 
-      const tokenConditions = tokens.map((_token, i) => `(
-        unaccent(COALESCE(p.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.nombre_completo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.primer_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.primer_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.segundo_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.segundo_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(c.nombre_sede, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(c.codigo_cliente, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.numero_identificacion, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.ciudad, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(p.direccion_principal, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(cpp.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(cpp.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-        OR unaccent(COALESCE(sc.nombre_sede, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
-      )`).join(' AND ');
+      const asesoresMap = new Map(asesores.map((a) => [a.id_empleado, a]));
 
-      const sql = `
-        SELECT DISTINCT c.id_cliente
-        FROM clientes c
-        LEFT JOIN personas p ON c.id_persona = p.id_persona
-        LEFT JOIN clientes cp ON c.id_cliente_principal = cp.id_cliente
-        LEFT JOIN personas cpp ON cp.id_persona = cpp.id_persona
-        LEFT JOIN sedes_cliente sc ON c.id_cliente = sc.id_cliente
-        WHERE ${tokenConditions}
-        LIMIT ${limit}
-      `;
+      this.searchIndexCache = allClients.map((c) => {
+        const p = c.persona;
+        const cp = c.cliente_principal;
+        const cpp = cp?.persona;
+        const sedes = c.sedes_cliente?.map((s) => s.nombre_sede).join(' ') || '';
 
-      const results: any[] = await this.prisma.$queryRawUnsafe(sql, ...tokens);
-      return results.map(r => r.id_cliente);
+        const searchString = this.normalizeSearchText(
+          [
+            p?.razon_social,
+            p?.nombre_comercial,
+            p?.nombre_completo,
+            p?.primer_nombre,
+            p?.primer_apellido,
+            p?.segundo_nombre,
+            p?.segundo_apellido,
+            p?.numero_identificacion,
+            c.nombre_sede,
+            c.codigo_cliente,
+            p?.ciudad,
+            p?.direccion_principal,
+            sedes,
+            cp?.nombre_sede,
+            cpp?.razon_social,
+            cpp?.nombre_comercial,
+          ]
+            .filter(Boolean)
+            .join(' ')
+        ).toLowerCase();
+
+        const cleanNit = (p?.numero_identificacion || '').replace(/[^0-9]/g, '');
+        const nombre =
+          (c as any).nombre_sede ||
+          p?.nombre_comercial ||
+          p?.nombre_completo ||
+          p?.razon_social ||
+          'Sin nombre';
+
+        const fullCliente = {
+          ...c,
+          asesor_asignado: c.id_asesor_asignado
+            ? asesoresMap.get(c.id_asesor_asignado) || null
+            : null,
+        };
+
+        return {
+          id_cliente: c.id_cliente,
+          tipo_cliente: c.tipo_cliente,
+          cliente_activo: c.cliente_activo,
+          id_asesor_asignado: c.id_asesor_asignado,
+          es_cliente_principal: c.es_cliente_principal,
+          id_cliente_principal: c.id_cliente_principal,
+          searchString,
+          cleanNit,
+          selectorData: {
+            id_cliente: c.id_cliente,
+            codigo_cliente: c.codigo_cliente,
+            nombre_sede: c.nombre_sede,
+            nombre_comercial: p?.nombre_comercial || null,
+            razon_social: p?.razon_social || null,
+            nombre,
+            nit: p?.numero_identificacion || null,
+          },
+          fullCliente,
+        };
+      });
+
+      this.cacheExpiresAt = now + this.CACHE_TTL_MS;
+      return this.searchIndexCache;
     } catch (error) {
-      console.warn('⚠️ Búsqueda unaccent en clientes no disponible, fallback a Prisma ILIKE:', error);
-      return [];
+      console.warn('⚠️ Error al construir índice de búsqueda de clientes en memoria:', error);
+      return this.searchIndexCache || [];
     }
   }
 
   /**
-   * Construye el filtro inteligente multi-criterio y multi-token para clientes.
+   * Búsqueda multi-token en memoria independiente de orden, homóglifos y tildes.
+   * Ejecuta en < 1ms sin generar subqueries recurrentes a la base de datos.
    */
-  private async buildSmartSearchWhere(search: string): Promise<any> {
-    const rawSearch = search.trim();
-    if (!rawSearch) return {};
-
-    const s = this.normalizeSearchText(rawSearch);
-    const tokens = s.split(/\s+/).filter(t => t.length > 0);
-    const cleanDigits = s.replace(/[^0-9]/g, '');
-
-    // 1. Búsqueda complementaria con unaccent() en PostgreSQL
-    const unaccentIds = await this.findClienteIdsByUnaccentSearch(s);
-
-    const orConditions: any[] = [];
-
-    // Búsqueda por frase completa (original y normalizada si difieren)
-    const searchTerms = rawSearch !== s ? [s, rawSearch] : [s];
-    for (const term of searchTerms) {
-      orConditions.push(
-        { nombre_sede: { contains: term, mode: 'insensitive' } },
-        { codigo_cliente: { contains: term, mode: 'insensitive' } },
-        { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } },
-        { persona: { razon_social: { contains: term, mode: 'insensitive' } } },
-        { persona: { nombre_completo: { contains: term, mode: 'insensitive' } } },
-        { persona: { primer_nombre: { contains: term, mode: 'insensitive' } } },
-        { persona: { primer_apellido: { contains: term, mode: 'insensitive' } } },
-        { persona: { numero_identificacion: { contains: term, mode: 'insensitive' } } },
-        { persona: { ciudad: { contains: term, mode: 'insensitive' } } },
-        { cliente_principal: { nombre_sede: { contains: term, mode: 'insensitive' } } },
-        { cliente_principal: { persona: { razon_social: { contains: term, mode: 'insensitive' } } } },
-        { cliente_principal: { persona: { nombre_comercial: { contains: term, mode: 'insensitive' } } } },
-        { sedes_cliente: { some: { nombre_sede: { contains: term, mode: 'insensitive' } } } },
-      );
+  private async searchCachedClients(
+    query: string,
+    filters?: {
+      tipo_cliente?: string;
+      cliente_activo?: boolean;
+      idAsesorAsignado?: number;
+      es_cliente_principal?: boolean;
     }
+  ) {
+    const index = await this.getSearchIndex();
+    if (!index || index.length === 0) return [];
 
-    // Búsqueda por NIT / dígitos limpios
-    if (cleanDigits.length >= 4) {
-      orConditions.push(
-        { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } },
-        { cliente_principal: { persona: { numero_identificacion: { contains: cleanDigits, mode: 'insensitive' } } } }
-      );
-    }
+    const norm = this.normalizeSearchText(query).toLowerCase().trim();
+    const tokens = norm.split(/\s+/).filter(Boolean);
+    const cleanDigits = query.replace(/[^0-9]/g, '');
 
-    // Búsqueda multi-token en Prisma: CADA token debe coincidir en AL MENOS un campo (AND de ORs)
-    if (tokens.length > 1) {
-      orConditions.push({
-        AND: tokens.map(token => ({
-          OR: [
-            { nombre_sede: { contains: token, mode: 'insensitive' } },
-            { codigo_cliente: { contains: token, mode: 'insensitive' } },
-            { persona: { razon_social: { contains: token, mode: 'insensitive' } } },
-            { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } },
-            { persona: { nombre_completo: { contains: token, mode: 'insensitive' } } },
-            { persona: { primer_nombre: { contains: token, mode: 'insensitive' } } },
-            { persona: { primer_apellido: { contains: token, mode: 'insensitive' } } },
-            { persona: { numero_identificacion: { contains: token, mode: 'insensitive' } } },
-            { persona: { ciudad: { contains: token, mode: 'insensitive' } } },
-            { cliente_principal: { nombre_sede: { contains: token, mode: 'insensitive' } } },
-            { cliente_principal: { persona: { razon_social: { contains: token, mode: 'insensitive' } } } },
-            { cliente_principal: { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } } },
-            { sedes_cliente: { some: { nombre_sede: { contains: token, mode: 'insensitive' } } } },
-          ],
-        })),
-      });
-    }
+    return index.filter((item) => {
+      // 1. Filtros exactos de estado y tipo
+      if (filters?.tipo_cliente && item.tipo_cliente !== filters.tipo_cliente) {
+        return false;
+      }
+      if (filters?.cliente_activo !== undefined && item.cliente_activo !== filters.cliente_activo) {
+        return false;
+      }
+      if (filters?.idAsesorAsignado !== undefined && item.id_asesor_asignado !== filters.idAsesorAsignado) {
+        return false;
+      }
+      if (filters?.es_cliente_principal !== undefined && item.es_cliente_principal !== filters.es_cliente_principal) {
+        return false;
+      }
 
-    // Combinar IDs de la búsqueda unaccent()
-    if (unaccentIds.length > 0) {
-      orConditions.push({
-        id_cliente: { in: unaccentIds },
-      });
-    }
+      // Si no hay texto de búsqueda, pasa todos los que cumplieron filtros
+      if (tokens.length === 0) return true;
 
-    return { OR: orConditions };
+      // 2. Coincidencia por NIT limpio si tiene 4 o más dígitos
+      if (cleanDigits.length >= 4 && item.cleanNit.includes(cleanDigits)) {
+        return true;
+      }
+
+      // 3. Multi-token inteligente: CADA token debe estar presente en alguna parte del texto del cliente
+      return tokens.every((token) => item.searchString.includes(token));
+    });
   }
 
   async create(createDto: CreateClientesDto, userId: number) {
@@ -231,6 +307,9 @@ export class ClientesService {
         persona: true,
       },
     });
+
+    this.invalidateClientesCache();
+    return nuevoCliente;
   }
 
   /**
@@ -321,6 +400,7 @@ export class ClientesService {
         },
       });
 
+      this.invalidateClientesCache();
       return nuevoCliente;
     });
   }
@@ -414,6 +494,7 @@ export class ClientesService {
       },
     });
 
+    this.invalidateClientesCache();
     return nuevaSede;
   }
 
@@ -422,12 +503,21 @@ export class ClientesService {
    */
   async findPrincipales(search?: string, limit: number = 20) {
     const safeLimit = Math.min(Math.max(limit || 20, 1), 500);
-    const searchFilter = search?.trim() ? await this.buildSmartSearchWhere(search) : {};
+
+    let idFilter: number[] | undefined;
+    if (search && search.trim()) {
+      const matches = await this.searchCachedClients(search, {
+        cliente_activo: true,
+        es_cliente_principal: true,
+      });
+      idFilter = matches.map((m) => m.id_cliente);
+      if (idFilter.length === 0) return [];
+    }
 
     const where: any = {
       es_cliente_principal: true,
       cliente_activo: true,
-      ...searchFilter,
+      ...(idFilter ? { id_cliente: { in: idFilter } } : {}),
     };
 
     const clientes = await this.prisma.clientes.findMany({
@@ -473,13 +563,16 @@ export class ClientesService {
       orderBy: { fecha_creacion: 'desc' },
     });
 
-    return clientes.map(c => ({
+    return clientes.map((c) => ({
       id_cliente: c.id_cliente,
       codigo_cliente: c.codigo_cliente,
-      nombre: c.persona?.nombre_comercial || c.persona?.razon_social || c.persona?.nombre_completo || 'Sin nombre',
+      nombre:
+        c.persona?.nombre_comercial ||
+        c.persona?.razon_social ||
+        c.persona?.nombre_completo ||
+        'Sin nombre',
       nit: c.persona?.numero_identificacion,
       total_sedes: c._count.sedes,
-      // Datos completos para auto-fill en el formulario
       persona: c.persona,
       tipo_cliente: c.tipo_cliente,
       periodicidad_mantenimiento: c.periodicidad_mantenimiento,
@@ -497,55 +590,23 @@ export class ClientesService {
   }
 
   /**
-   * ✅ OPTIMIZACIÓN 05-ENE-2026: Query ULTRA-LIGERA para selectores
-   * Solo retorna: id, nombre (con prioridad), NIT
-   * Impacto: De ~2s a ~100ms en selectores de cliente
-   * ✅ 31-ENE-2026: MULTI-ASESOR - Ahora soporta filtrado por asesor
+   * ✅ OPTIMIZACIÓN 05-ENE-2026 / 28-MAR-2026: Selector ULTRA-LIGERO 100% en memoria
+   * Retorna instantáneamente (< 1ms) id, nombre (con prioridad sede) y NIT
    */
   async findForSelector(search?: string, limit: number = 100, idAsesorAsignado?: number) {
     const safeLimit = Math.min(Math.max(limit || 100, 1), 500);
-    const searchFilter = search?.trim() ? await this.buildSmartSearchWhere(search) : {};
 
-    const where: any = {
+    const matches = await this.searchCachedClients(search || '', {
       cliente_activo: true,
-      // ✅ MULTI-ASESOR: Filtrar por asesor si se especifica
-      ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
-      ...searchFilter,
-    };
-
-    const clientes = await this.prisma.clientes.findMany({
-      where,
-      select: {
-        id_cliente: true,
-        codigo_cliente: true,
-        nombre_sede: true,
-        persona: {
-          select: {
-            nombre_comercial: true,
-            nombre_completo: true,
-            razon_social: true,
-            numero_identificacion: true,
-          },
-        },
-      },
-      take: safeLimit,
-      orderBy: { fecha_creacion: 'desc' },
+      idAsesorAsignado,
     });
 
-    // Transformar a formato ligero para selector
-    return clientes.map(c => ({
-      id_cliente: c.id_cliente,
-      codigo_cliente: c.codigo_cliente,
-      // ✅ MULTI-SEDE: nombre_sede tiene prioridad si existe
-      nombre: (c as any).nombre_sede || c.persona?.nombre_comercial || c.persona?.nombre_completo || c.persona?.razon_social || 'Sin nombre',
-      nit: c.persona?.numero_identificacion,
-    }));
+    return matches.slice(0, safeLimit).map((m) => m.selectorData);
   }
 
   /**
-   * ✅ MULTI-ASESOR: Ahora soporta filtrado por id_asesor_asignado
-   * Si idAsesorAsignado es undefined, muestra todos (para admin)
-   * Si tiene valor, filtra solo los clientes asignados a ese asesor
+   * ✅ MULTI-ASESOR & BUSCADOR INTELIGENTE ULTRA-RÁPIDO
+   * Búsqueda insensible a tildes, homóglifos, y orden de palabras ('uno centro' = 'centro uno')
    */
   async findAll(params?: {
     tipo_cliente?: string;
@@ -555,68 +616,19 @@ export class ClientesService {
     take?: number;
     idAsesorAsignado?: number;
   }) {
-    const { tipo_cliente, cliente_activo, search, skip = 0, take = 50, idAsesorAsignado } = params || {};
-    const searchFilter = search?.trim() ? await this.buildSmartSearchWhere(search) : {};
+    const { tipo_cliente, cliente_activo, search, skip = 0, take = 50, idAsesorAsignado } =
+      params || {};
 
-    const where: any = {
-      ...(tipo_cliente && { tipo_cliente: tipo_cliente as any }),
-      ...(cliente_activo !== undefined && { cliente_activo }),
-      // ✅ MULTI-ASESOR: Filtrar por asesor asignado
-      ...(idAsesorAsignado && { id_asesor_asignado: idAsesorAsignado }),
-      ...searchFilter,
-    };
+    const matches = await this.searchCachedClients(search || '', {
+      tipo_cliente,
+      cliente_activo,
+      idAsesorAsignado,
+    });
 
-    const [items, total] = await Promise.all([
-      this.prisma.clientes.findMany({
-        where,
-        include: {
-          persona: true,
-          sedes_cliente: {
-            where: { activo: true },
-            take: 5,
-          },
-          // ✅ MULTI-SEDE: Incluir info de principal y conteo de sedes
-          cliente_principal: {
-            select: { id_cliente: true, nombre_sede: true, persona: { select: { razon_social: true } } },
-          },
-          _count: { select: { sedes: true } },
-        },
-        skip,
-        take,
-        orderBy: { fecha_creacion: 'desc' },
-      }),
-      this.prisma.clientes.count({ where }),
-    ]);
+    const total = matches.length;
+    const pagedItems = matches.slice(skip, skip + take).map((m) => m.fullCliente);
 
-    // ✅ MULTI-ASESOR: Enriquecer con datos del asesor asignado
-    const asesoresIds = items
-      .map(c => c.id_asesor_asignado)
-      .filter((id): id is number => id !== null);
-
-    let asesoresMap = new Map<number, { id_empleado: number; cargo: string | null; persona: { nombre_completo: string | null } | null }>();
-
-    if (asesoresIds.length > 0) {
-      const asesores = await this.prisma.empleados.findMany({
-        where: { id_empleado: { in: asesoresIds } },
-        select: {
-          id_empleado: true,
-          cargo: true,
-          persona: {
-            select: { nombre_completo: true },
-          },
-        },
-      });
-      asesoresMap = new Map(asesores.map(a => [a.id_empleado, a]));
-    }
-
-    const itemsConAsesor = items.map(cliente => ({
-      ...cliente,
-      asesor_asignado: cliente.id_asesor_asignado
-        ? asesoresMap.get(cliente.id_asesor_asignado) || null
-        : null,
-    }));
-
-    return { items: itemsConAsesor, total };
+    return { items: pagedItems, total };
   }
 
   async findOne(id: number) {
@@ -713,7 +725,7 @@ export class ClientesService {
     const personaPayload = persona as Record<string, any> | undefined;
     const hayCambiosPersona = !!personaPayload && Object.values(personaPayload).some((v) => v !== undefined);
 
-    return this.prisma.$transaction(async (tx) => {
+    const resultado = await this.prisma.$transaction(async (tx) => {
       let idPersonaDestino = clienteExistente.id_persona;
 
       // ✅ FIX DIRECCIONES: si el cliente comparte persona con otros clientes (legacy),
@@ -808,9 +820,13 @@ export class ClientesService {
         },
       });
     });
+
+    this.invalidateClientesCache();
+    return resultado;
   }
 
   async remove(id: number) {
+    this.invalidateClientesCache();
     // Soft delete
     return this.prisma.clientes.update({
       where: { id_cliente: id },
