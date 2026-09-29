@@ -17,7 +17,7 @@
 
 'use client';
 
-import { PhotoLightbox, type LightboxImageItem } from '@/components/ui/photo-lightbox';
+import { PhotoLightbox, cleanDirectImageUrl, type LightboxImageItem } from '@/components/ui/photo-lightbox';
 import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -85,8 +85,16 @@ function getEvId(e: Evidencia): number {
 function getEvTipo(e: Evidencia): string {
     return e.tipo_evidencia ?? e.tipoEvidencia ?? '';
 }
-function getEvUrl(e: Evidencia): string | undefined {
-    return e.ruta_archivo ?? e.rutaArchivo;
+function getEvUrl(e: any): string | undefined {
+    const raw = e?.ruta_archivo ?? e?.rutaArchivo ?? e?.url_foto ?? e?.urlFoto ?? e?.url;
+    if (raw && typeof raw === 'string') {
+        return cleanDirectImageUrl(raw);
+    }
+    const b64 = e?.foto_base64 ?? e?.fotoBase64;
+    if (b64 && typeof b64 === 'string') {
+        return b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+    }
+    return undefined;
 }
 function getEvFecha(e: Evidencia): string | undefined {
     return e.fecha_captura ?? e.fechaCaptura;
@@ -209,20 +217,20 @@ function FotoThumbnail({
                         src={fotoUrl}
                         alt={descripcionLimpia || 'Foto general'}
                         fill
-                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-auto"
                         unoptimized
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
                         <button
                             onClick={(e) => { e.stopPropagation(); onView(); }}
-                            className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+                            className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors pointer-events-auto"
                         >
                             <ZoomIn className="h-4 w-4 text-gray-700" />
                         </button>
                         {onEdit && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                                className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+                                className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors pointer-events-auto"
                                 title="Editar observación"
                             >
                                 <Edit2 className="h-4 w-4 text-white" />
@@ -230,7 +238,7 @@ function FotoThumbnail({
                         )}
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                            className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors"
+                            className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
                         >
                             <Trash2 className="h-4 w-4 text-white" />
                         </button>

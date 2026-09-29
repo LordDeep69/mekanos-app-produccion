@@ -22,12 +22,14 @@ import Image from 'next/image';
 import {
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Edit2,
   ExternalLink,
   FlipHorizontal,
   Info,
   Keyboard,
+  Link2,
   Maximize2,
   Minimize2,
   RotateCcw,
@@ -67,6 +69,21 @@ export interface PhotoLightboxProps {
   onDelete?: (image: LightboxImageItem) => void;
   canEdit?: boolean;
   canDelete?: boolean;
+}
+
+/**
+ * Limpia y normaliza una URL de imagen para visualización directa en navegador.
+ * Remueve flags que obligan a descargar (como fl_attachment de Cloudinary o ?download=true).
+ */
+export function cleanDirectImageUrl(url: string | undefined | null): string {
+  if (!url || typeof url !== 'string') return '';
+  let clean = url.trim();
+  // Quitar flags de descarga forzada de Cloudinary (ej: fl_attachment, fl_attachment:filename)
+  clean = clean.replace(/\/fl_attachment:[^/]+\//g, '/').replace(/\/fl_attachment\//g, '/');
+  // Quitar query params de forzar descarga
+  clean = clean.replace(/([?&])download=true&?/gi, '$1').replace(/[?&]$/, '');
+  clean = clean.replace(/response-content-disposition=attachment/gi, 'response-content-disposition=inline');
+  return clean;
 }
 
 const BADGE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -162,7 +179,8 @@ export function PhotoLightbox({
   }, []);
 
   // Doble clic para alternar zoom (Fit <-> 2x)
-  const handleDoubleClick = useCallback(() => {
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
     if (zoom > 1) {
       setZoom(1);
       setPan({ x: 0, y: 0 });
@@ -184,7 +202,11 @@ export function PhotoLightbox({
 
   // Paneo (Mouse Drag)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // IMPORTANTE: Solo permitir drag con el botón izquierdo principal (button === 0)
+    // El botón derecho (button === 2) pasa directamente para el menú contextual nativo del navegador
+    if (e.button !== 0) return;
     if (zoom <= 1) return;
+    e.preventDefault();
     setIsDragging(true);
     setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   }, [pan.x, pan.y, zoom]);
@@ -200,6 +222,42 @@ export function PhotoLightbox({
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
+
+  // Preparar URL directa visualizable para la etiqueta <img> (convierte base64 a ObjectURL si es necesario)
+  const [displayUrl, setDisplayUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!currentImage?.url) {
+      setDisplayUrl('');
+      return;
+    }
+
+    const rawUrl = currentImage.url;
+
+    if (rawUrl.startsWith('data:')) {
+      try {
+        const arr = rawUrl.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const objectUrl = URL.createObjectURL(blob);
+        setDisplayUrl(objectUrl);
+        return () => {
+          URL.revokeObjectURL(objectUrl);
+        };
+      } catch {
+        setDisplayUrl(rawUrl);
+      }
+    } else {
+      setDisplayUrl(cleanDirectImageUrl(rawUrl));
+    }
+  }, [currentImage?.url]);
 
   // Pantalla Completa
   const toggleFullscreen = useCallback(async () => {
@@ -220,17 +278,53 @@ export function PhotoLightbox({
     }
   }, []);
 
+  // Abrir imagen directamente en una nueva pestaña (SIN forzar descarga)
+  const handleOpenNewTab = useCallback(() => {
+    if (!currentImage?.url) return;
+    const url = currentImage.url;
+
+    if (url.startsWith('data:')) {
+      try {
+        const arr = url.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        const win = window.open(blobUrl, '_blank');
+        if (!win) {
+          toast.error('La ventana emergente fue bloqueada por el navegador');
+        }
+        return;
+      } catch (e) {
+        console.error('Error al abrir imagen base64:', e);
+      }
+    }
+
+    const cleanUrl = cleanDirectImageUrl(url);
+    const win = window.open(cleanUrl, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      toast.error('La ventana emergente fue bloqueada por el navegador');
+    }
+  }, [currentImage]);
+
   // Descargar imagen
   const handleDownload = useCallback(async () => {
     if (!currentImage?.url) return;
     try {
       toast.info('Descargando imagen...');
-      const response = await fetch(currentImage.url);
+      const cleanUrl = cleanDirectImageUrl(currentImage.url);
+      const response = await fetch(cleanUrl);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      const ext = currentImage.url.split('.').pop()?.split('?')[0] || 'jpg';
+      const ext = cleanUrl.split('.').pop()?.split('?')[0] || 'jpg';
       a.download = `mekanos-foto-${currentImage.id || Date.now()}.${ext}`;
       document.body.appendChild(a);
       a.click();
@@ -238,15 +332,67 @@ export function PhotoLightbox({
       window.URL.revokeObjectURL(blobUrl);
       toast.success('Imagen descargada exitosamente');
     } catch {
-      window.open(currentImage.url, '_blank');
+      window.open(cleanDirectImageUrl(currentImage.url), '_blank');
     }
   }, [currentImage]);
 
-  // Copiar enlace de la imagen
+  // Copiar enlace directo de la imagen
   const handleCopyLink = useCallback(() => {
     if (!currentImage?.url) return;
-    navigator.clipboard.writeText(currentImage.url);
-    toast.success('Enlace de la imagen copiado al portapapeles');
+    const cleanUrl = cleanDirectImageUrl(currentImage.url);
+    navigator.clipboard.writeText(cleanUrl);
+    toast.success('Enlace directo de la imagen copiado al portapapeles');
+  }, [currentImage]);
+
+  // Copiar imagen directamente al portapapeles (igual que 'Copiar Imagen' nativo)
+  const handleCopyImage = useCallback(async () => {
+    if (!currentImage?.url) return;
+    try {
+      toast.info('Copiando imagen al portapapeles...');
+      let blob: Blob;
+      if (currentImage.url.startsWith('data:')) {
+        const arr = currentImage.url.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        blob = new Blob([u8arr], { type: mime });
+      } else {
+        const cleanUrl = cleanDirectImageUrl(currentImage.url);
+        const res = await fetch(cleanUrl);
+        blob = await res.blob();
+      }
+
+      if (blob.type === 'image/png') {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      } else {
+        const img = document.createElement('img');
+        img.crossOrigin = 'anonymous';
+        img.src = currentImage.url;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0);
+        const pngBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (pngBlob) {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+        }
+      }
+      toast.success('Imagen copiada al portapapeles');
+    } catch {
+      const cleanUrl = cleanDirectImageUrl(currentImage.url);
+      navigator.clipboard.writeText(cleanUrl);
+      toast.success('Enlace de la imagen copiado al portapapeles');
+    }
   }, [currentImage]);
 
   // Auto-scroll del filmstrip para que la miniatura activa sea visible
@@ -316,6 +462,25 @@ export function PhotoLightbox({
           e.preventDefault();
           setShowThumbnails((prev) => !prev);
           break;
+        case 'o':
+        case 'O':
+          e.preventDefault();
+          handleOpenNewTab();
+          break;
+        case 'c':
+        case 'C':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            handleCopyImage();
+          }
+          break;
+        case 'd':
+        case 'D':
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            handleDownload();
+          }
+          break;
         case 'i':
         case 'I':
           e.preventDefault();
@@ -345,6 +510,9 @@ export function PhotoLightbox({
     goNext,
     goPrev,
     goToIndex,
+    handleCopyImage,
+    handleDownload,
+    handleOpenNewTab,
     handleRotateCcw,
     handleRotateCw,
     handleZoomIn,
@@ -497,19 +665,35 @@ export function PhotoLightbox({
           </button>
 
           <button
-            onClick={handleDownload}
+            onClick={handleOpenNewTab}
             className="p-2 hover:bg-white/15 rounded-xl transition-all text-white/80 hover:text-white"
-            title="Descargar imagen"
+            title="Abrir imagen en nueva pestaña (O)"
           >
-            <Download className="h-4 w-4" />
+            <ExternalLink className="h-4 w-4" />
+          </button>
+
+          <button
+            onClick={handleCopyImage}
+            className="p-2 hover:bg-white/15 rounded-xl transition-all text-white/80 hover:text-white"
+            title="Copiar imagen al portapapeles (C)"
+          >
+            <Copy className="h-4 w-4" />
           </button>
 
           <button
             onClick={handleCopyLink}
             className="p-2 hover:bg-white/15 rounded-xl transition-all text-white/80 hover:text-white"
-            title="Copiar enlace"
+            title="Copiar enlace directo"
           >
-            <ExternalLink className="h-4 w-4" />
+            <Link2 className="h-4 w-4" />
+          </button>
+
+          <button
+            onClick={handleDownload}
+            className="p-2 hover:bg-white/15 rounded-xl transition-all text-white/80 hover:text-white"
+            title="Descargar imagen (D)"
+          >
+            <Download className="h-4 w-4" />
           </button>
 
           <button
@@ -599,9 +783,9 @@ export function PhotoLightbox({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={currentImage.url}
-            alt={currentImage.description || currentImage.title || 'Foto'}
-            className="max-h-[82vh] max-w-[92vw] object-contain pointer-events-none drop-shadow-2xl rounded-sm"
+            src={displayUrl || currentImage?.url}
+            alt={currentImage?.description || currentImage?.title || 'Foto'}
+            className="max-h-[82vh] max-w-[92vw] object-contain drop-shadow-2xl rounded-sm pointer-events-auto select-none"
             onLoad={() => setIsLoadingImage(false)}
             draggable={false}
           />
@@ -643,13 +827,16 @@ export function PhotoLightbox({
               <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">+</kbd> / <kbd className="px-1.5 py-0.5 bg-white/10 rounded">-</kbd> Zoom In / Out</div>
               <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">R</kbd> Rotar 90° horario</div>
               <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">L</kbd> Rotar antihorario</div>
+              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">O</kbd> Abrir en pestaña</div>
+              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">C</kbd> Copiar imagen</div>
+              <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">D</kbd> Descargar foto</div>
               <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">0</kbd> Restablecer zoom</div>
               <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">F</kbd> Pantalla completa</div>
               <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">T</kbd> Ver / Ocultar tirilla</div>
               <div><kbd className="px-1.5 py-0.5 bg-white/10 rounded">Esc</kbd> Salir del visor</div>
             </div>
             <p className="text-[10px] text-white/50 pt-1 border-t border-white/10">
-              💡 Tip: Rueda de ratón para zoom, doble clic para 200%, arrastra para moverte.
+              💡 Tip: Click derecho sobre la foto permite &apos;Copiar imagen&apos; y &apos;Abrir en nueva pestaña&apos; nativamente.
             </p>
           </div>
         )}

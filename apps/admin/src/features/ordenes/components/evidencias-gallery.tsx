@@ -7,7 +7,7 @@
 
 'use client';
 
-import { PhotoLightbox, type LightboxImageItem } from '@/components/ui/photo-lightbox';
+import { PhotoLightbox, cleanDirectImageUrl, type LightboxImageItem } from '@/components/ui/photo-lightbox';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -101,8 +101,9 @@ function EvidenciaThumbnail({
     onClick: () => void;
     onEdit?: () => void;
 }) {
-    const fotoUrl = evidencia.ruta_archivo || evidencia.url_foto ||
+    const rawUrl = evidencia.ruta_archivo || evidencia.url_foto ||
         (evidencia.foto_base64 ? `data:image/jpeg;base64,${evidencia.foto_base64}` : null);
+    const fotoUrl = rawUrl ? cleanDirectImageUrl(rawUrl) : null;
 
     return (
         <div
@@ -114,7 +115,7 @@ function EvidenciaThumbnail({
                     src={fotoUrl}
                     alt={evidencia.descripcion || 'Evidencia'}
                     fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-auto"
                     unoptimized={fotoUrl.startsWith('data:')}
                 />
             ) : (
@@ -123,9 +124,9 @@ function EvidenciaThumbnail({
                 </div>
             )}
 
-            {/* Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="absolute bottom-0 left-0 right-0 p-2">
+            {/* Overlay: pointer-events-none para que el click derecho nativo sobre la foto funcione */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="absolute bottom-0 left-0 right-0 p-2 pointer-events-none">
                     {evidencia.actividad_asociada?.descripcion_actividad && (
                         <p className="text-white/80 text-[10px] font-medium truncate mb-0.5">
                             📋 {evidencia.actividad_asociada.descripcion_actividad}
@@ -135,7 +136,7 @@ function EvidenciaThumbnail({
                         {evidencia.tipo_evidencia} - {evidencia.descripcion || 'Sin descripción'}
                     </p>
                 </div>
-                <div className="absolute top-2 right-2 flex gap-1">
+                <div className="absolute top-2 right-2 flex gap-1 pointer-events-auto">
                     {onEdit && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(); }}
@@ -213,7 +214,8 @@ export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro =
 
     const lightboxImages: LightboxImageItem[] = useMemo(() => {
         return evidenciasSinGeneral.map((e) => {
-            const fotoUrl = e.ruta_archivo || e.url_foto || (e.foto_base64 ? `data:image/jpeg;base64,${e.foto_base64}` : '');
+            const rawUrl = e.ruta_archivo || e.url_foto || (e.foto_base64 ? `data:image/jpeg;base64,${e.foto_base64}` : '');
+            const fotoUrl = cleanDirectImageUrl(rawUrl);
             return {
                 id: e.id_evidencia,
                 url: fotoUrl,

@@ -7,7 +7,7 @@
 
 'use client';
 
-import { PhotoLightbox, type LightboxImageItem } from '@/components/ui/photo-lightbox';
+import { PhotoLightbox, cleanDirectImageUrl, type LightboxImageItem } from '@/components/ui/photo-lightbox';
 import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -68,8 +68,16 @@ function getEvidenciaId(e: Evidencia): number {
 function getEvidenciaTipo(e: Evidencia): string {
     return e.tipo_evidencia ?? e.tipoEvidencia ?? 'ANTES';
 }
-function getEvidenciaUrl(e: Evidencia): string | undefined {
-    return e.ruta_archivo ?? e.rutaArchivo;
+function getEvidenciaUrl(e: any): string | undefined {
+    const raw = e?.ruta_archivo ?? e?.rutaArchivo ?? e?.url_foto ?? e?.urlFoto ?? e?.url;
+    if (raw && typeof raw === 'string') {
+        return cleanDirectImageUrl(raw);
+    }
+    const b64 = e?.foto_base64 ?? e?.fotoBase64;
+    if (b64 && typeof b64 === 'string') {
+        return b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+    }
+    return undefined;
 }
 function getEvidenciaFecha(e: Evidencia): string | undefined {
     return e.fecha_captura ?? e.fechaCaptura;
@@ -102,20 +110,20 @@ function FotoThumbnail({
                         src={fotoUrl}
                         alt={evidencia.descripcion || 'Evidencia'}
                         fill
-                        className="object-cover"
+                        className="object-cover pointer-events-auto"
                         unoptimized
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
                         <button
                             onClick={onView}
-                            className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors"
+                            className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors pointer-events-auto"
                             title="Ver en grande"
                         >
                             <ZoomIn className="h-4 w-4 text-gray-700" />
                         </button>
                         <button
                             onClick={onEdit}
-                            className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+                            className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors pointer-events-auto"
                             title="Editar observación"
                         >
                             <Edit2 className="h-4 w-4 text-white" />
@@ -123,7 +131,7 @@ function FotoThumbnail({
                         {canDelete && (
                             <button
                                 onClick={onDelete}
-                                className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors"
+                                className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
                                 title="Eliminar"
                             >
                                 <Trash2 className="h-4 w-4 text-white" />
