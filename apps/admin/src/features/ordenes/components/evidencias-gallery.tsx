@@ -53,6 +53,10 @@ interface EvidenciasGalleryProps {
     isLoading?: boolean;
     /** Si se establece, solo se muestran evidencias asignadas a este id_orden_equipo */
     idOrdenEquipoFiltro?: number | null;
+    orden?: any;
+    nombreServicio?: string;
+    nombreCliente?: string;
+    fechaServicio?: string;
 }
 
 const TIPO_CONFIG: Record<string, { label: string; color: string; bgColor: string; borderColor: string }> = {
@@ -158,7 +162,16 @@ function EvidenciaThumbnail({
 // El antiguo Lightbox ha sido reemplazado por el componente PhotoLightbox unificado.
 
 
-export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro = null, numeroOrden }: EvidenciasGalleryProps) {
+export function EvidenciasGallery({
+    evidencias,
+    isLoading,
+    idOrdenEquipoFiltro = null,
+    numeroOrden,
+    orden,
+    nombreServicio,
+    nombreCliente,
+    fechaServicio,
+}: EvidenciasGalleryProps) {
     const queryClient = useQueryClient();
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
@@ -254,6 +267,10 @@ export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro =
                     <BotonDescargaEvidenciasActividades
                         numeroOrden={numeroOrden || 'ORDEN'}
                         evidencias={evidenciasSinGeneral}
+                        orden={orden}
+                        nombreServicio={nombreServicio}
+                        nombreCliente={nombreCliente}
+                        fechaServicio={fechaServicio}
                     />
                     {tiposEvidencia.map((tipo) => {
                         const config = TIPO_CONFIG[tipo];

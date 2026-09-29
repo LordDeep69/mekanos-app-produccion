@@ -1434,6 +1434,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                 numeroOrden={orden.numero_orden || `OS-${orden.id_orden_servicio}`}
                 evidencias={evidencias}
                 idOrdenServicio={orden.id_orden_servicio}
+                orden={orden}
             />
 
             {/* Fotos Generales del Servicio - CRUD */}
@@ -1441,6 +1442,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                 idOrdenServicio={orden.id_orden_servicio}
                 numeroOrden={orden.numero_orden || `OS-${orden.id_orden_servicio}`}
                 idOrdenEquipoFiltro={esMultiEquipo && equipoFiltro !== 'todos' ? equipoFiltro : null}
+                orden={orden}
             />
 
             {/* Evidencias Fotográficas - Componente Avanzado con Lightbox */}
@@ -1449,6 +1451,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                 numeroOrden={orden.numero_orden || `OS-${orden.id_orden_servicio}`}
                 isLoading={isLoadingEv}
                 idOrdenEquipoFiltro={esMultiEquipo && equipoFiltro !== 'todos' ? equipoFiltro : null}
+                orden={orden}
             />
 
             {/* Documentos Generados (Informe PDF) - Legacy */}

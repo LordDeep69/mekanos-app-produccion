@@ -79,6 +79,10 @@ interface GaleriaFotosGeneralesProps {
     numeroOrden?: string;
     /** Si se establece, solo se muestran fotos asignadas a este id_orden_equipo */
     idOrdenEquipoFiltro?: number | null;
+    orden?: any;
+    nombreServicio?: string;
+    nombreCliente?: string;
+    fechaServicio?: string;
 }
 
 function getEvId(e: Evidencia): number {
@@ -722,7 +726,15 @@ function TarjetaLoteGaleria({
         );
 }
 
-export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = null, numeroOrden }: GaleriaFotosGeneralesProps) {
+export function GaleriaFotosGenerales({
+    idOrdenServicio,
+    idOrdenEquipoFiltro = null,
+    numeroOrden,
+    orden,
+    nombreServicio,
+    nombreCliente,
+    fechaServicio,
+}: GaleriaFotosGeneralesProps) {
     const queryClient = useQueryClient();
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState('');
@@ -1071,6 +1083,10 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                         evidencias={fotosGenerales}
                         idOrdenServicio={idOrdenServicio}
                         lotes={lotesGaleria}
+                        orden={orden}
+                        nombreServicio={nombreServicio}
+                        nombreCliente={nombreCliente}
+                        fechaServicio={fechaServicio}
                     />
 
                     {/* ✅ FIX 20-AGO-2026: Botón Nuevo Lote */}

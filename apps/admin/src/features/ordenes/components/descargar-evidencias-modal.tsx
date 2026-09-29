@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import {
     descargarEvidenciasZip,
     esEvidenciaGeneral,
+    construirNombreZip,
     type ModoDescargaEvidencias,
     type EvidenciaParaDescarga,
     type ProgresoDescargaZip,
@@ -41,6 +42,10 @@ interface DescargarEvidenciasModalProps {
     numeroOrden: string;
     evidencias: EvidenciaParaDescarga[];
     idOrdenServicio?: number;
+    orden?: any;
+    nombreServicio?: string;
+    nombreCliente?: string;
+    fechaServicio?: string;
     lotes?: Array<{ idLoteGaleria: number; nombreLote: string }>;
     isOpen: boolean;
     onClose: () => void;
@@ -51,6 +56,10 @@ export function DescargarEvidenciasModal({
     numeroOrden,
     evidencias,
     idOrdenServicio,
+    orden,
+    nombreServicio,
+    nombreCliente,
+    fechaServicio,
     lotes = [],
     isOpen,
     onClose,
@@ -89,6 +98,17 @@ export function DescargarEvidenciasModal({
                 ? fotosActividades.length
                 : totalFotos;
 
+    const nombreZipPrevio = useMemo(() => {
+        return construirNombreZip({
+            numeroOrden,
+            nombreServicio,
+            nombreCliente,
+            fechaServicio,
+            orden,
+            modo,
+        });
+    }, [numeroOrden, nombreServicio, nombreCliente, fechaServicio, orden, modo]);
+
     const handleIniciarDescarga = async () => {
         if (conteoActual === 0) {
             toast.error('No hay imágenes disponibles para descargar en la opción seleccionada.');
@@ -105,6 +125,10 @@ export function DescargarEvidenciasModal({
                 evidencias,
                 modo,
                 lotes: lotesEfectivos,
+                nombreServicio,
+                nombreCliente,
+                fechaServicio,
+                orden,
                 abortSignal: abortController.signal,
                 onProgress: (p) => {
                     setProgreso(p);
@@ -180,11 +204,7 @@ export function DescargarEvidenciasModal({
                     {!isDownloading ? (
                         <>
                             <p className="text-xs text-gray-600 leading-relaxed">
-                                Seleccione qué grupo de imágenes desea exportar. Cada archivo se nombrará automáticamente con su fase y descripción registrada (ejemplo:{' '}
-                                <code className="bg-gray-100 px-1 py-0.5 rounded text-[11px] font-mono text-indigo-700">
-                                    DURANTE_Inspeccion_bomba.jpg
-                                </code>
-                                ) dentro de una carpeta con el número de la orden.
+                                Seleccione qué grupo de imágenes desea exportar. Las fotos se organizarán en carpetas separadas para <strong className="text-gray-800">Antes</strong>, <strong className="text-gray-800">Durante</strong> y <strong className="text-gray-800">Después</strong>, y cada archivo se nombrará automáticamente con su descripción registrada.
                             </p>
 
                             {/* Opciones de descarga */}
@@ -290,24 +310,29 @@ export function DescargarEvidenciasModal({
                             </div>
 
                             {/* Resumen de estructura resultante */}
-                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-xs text-gray-600 flex items-start gap-2.5">
-                                <FileArchive className="h-4 w-4 text-gray-500 shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="font-semibold text-gray-800">
-                                        Archivo de salida:{' '}
-                                        <span className="font-mono text-indigo-600 font-bold">
-                                            {numeroOrden}_
-                                            {modo === 'GENERALES'
-                                                ? 'Fotos_Generales'
-                                                : modo === 'ACTIVIDADES'
-                                                    ? 'Evidencias_Actividades'
-                                                    : 'Todas_Las_Evidencias'}
-                                            .zip
+                            <div className="bg-indigo-50/50 rounded-xl p-3.5 border border-indigo-100 text-xs text-gray-700 flex items-start gap-2.5">
+                                <FileArchive className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-semibold text-gray-900">
+                                        Archivo ZIP de salida:{' '}
+                                        <span className="font-mono text-indigo-700 font-bold block truncate mt-0.5" title={nombreZipPrevio}>
+                                            {nombreZipPrevio}
                                         </span>
                                     </p>
-                                    <p className="text-[11px] text-gray-500 mt-0.5">
-                                        Al abrirse el archivo ZIP se descomprime una carpeta organizada con el nombre exacto de la orden.
+                                    <p className="text-[11px] text-gray-500 mt-1.5">
+                                        Estructura con carpetas separadas para diferenciar cada fase:
                                     </p>
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">
+                                            📁 01_Antes
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">
+                                            📁 02_Durante
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                            📁 03_Despues
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </>
@@ -405,11 +430,19 @@ export function BarraSutilDescargaEvidencias({
     numeroOrden,
     evidencias,
     idOrdenServicio,
+    orden,
+    nombreServicio,
+    nombreCliente,
+    fechaServicio,
     lotes = [],
 }: {
     numeroOrden: string;
     evidencias: EvidenciaParaDescarga[];
     idOrdenServicio?: number;
+    orden?: any;
+    nombreServicio?: string;
+    nombreCliente?: string;
+    fechaServicio?: string;
     lotes?: Array<{ idLoteGaleria: number; nombreLote: string }>;
 }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -467,6 +500,10 @@ export function BarraSutilDescargaEvidencias({
                 onClose={() => setIsModalOpen(false)}
                 numeroOrden={numeroOrden}
                 idOrdenServicio={idOrdenServicio}
+                orden={orden}
+                nombreServicio={nombreServicio}
+                nombreCliente={nombreCliente}
+                fechaServicio={fechaServicio}
                 evidencias={evidencias}
                 lotes={lotes}
                 initialMode={initialMode}
@@ -483,11 +520,19 @@ export function BotonDescargaFotosGenerales({
     evidencias,
     idOrdenServicio,
     lotes = [],
+    orden,
+    nombreServicio,
+    nombreCliente,
+    fechaServicio,
 }: {
     numeroOrden: string;
     evidencias: EvidenciaParaDescarga[];
     idOrdenServicio?: number;
     lotes?: Array<{ idLoteGaleria: number; nombreLote: string }>;
+    orden?: any;
+    nombreServicio?: string;
+    nombreCliente?: string;
+    fechaServicio?: string;
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const fotosGenerales = useMemo(() => evidencias.filter(esEvidenciaGeneral), [evidencias]);
@@ -510,6 +555,10 @@ export function BotonDescargaFotosGenerales({
                 onClose={() => setIsOpen(false)}
                 numeroOrden={numeroOrden}
                 idOrdenServicio={idOrdenServicio}
+                orden={orden}
+                nombreServicio={nombreServicio}
+                nombreCliente={nombreCliente}
+                fechaServicio={fechaServicio}
                 evidencias={evidencias}
                 lotes={lotes}
                 initialMode="GENERALES"
@@ -525,10 +574,18 @@ export function BotonDescargaEvidenciasActividades({
     numeroOrden,
     evidencias,
     idOrdenServicio,
+    orden,
+    nombreServicio,
+    nombreCliente,
+    fechaServicio,
 }: {
     numeroOrden: string;
     evidencias: EvidenciaParaDescarga[];
     idOrdenServicio?: number;
+    orden?: any;
+    nombreServicio?: string;
+    nombreCliente?: string;
+    fechaServicio?: string;
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const fotosActividades = useMemo(() => evidencias.filter((e) => !esEvidenciaGeneral(e)), [evidencias]);
@@ -551,6 +608,10 @@ export function BotonDescargaEvidenciasActividades({
                 onClose={() => setIsOpen(false)}
                 numeroOrden={numeroOrden}
                 idOrdenServicio={idOrdenServicio}
+                orden={orden}
+                nombreServicio={nombreServicio}
+                nombreCliente={nombreCliente}
+                fechaServicio={fechaServicio}
                 evidencias={evidencias}
                 initialMode="ACTIVIDADES"
             />
