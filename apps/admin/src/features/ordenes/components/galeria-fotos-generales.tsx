@@ -210,7 +210,10 @@ function FotoThumbnail({
     const { subTipo, descripcionLimpia } = getSubTipo(evidencia);
 
     return (
-        <div className="group relative aspect-square rounded-xl overflow-hidden border-2 border-purple-200 bg-purple-50/30 hover:border-purple-400 transition-all hover:shadow-lg">
+        <div
+            className="group relative aspect-square rounded-xl overflow-hidden border-2 border-purple-200 bg-purple-50/30 hover:border-purple-400 transition-all hover:shadow-lg cursor-pointer"
+            onClick={onView}
+        >
             {fotoUrl ? (
                 <>
                     <Image
@@ -224,6 +227,7 @@ function FotoThumbnail({
                         <button
                             onClick={(e) => { e.stopPropagation(); onView(); }}
                             className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors pointer-events-auto"
+                            title="Ver en grande"
                         >
                             <ZoomIn className="h-4 w-4 text-gray-700" />
                         </button>
@@ -239,6 +243,7 @@ function FotoThumbnail({
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(); }}
                             className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
+                            title="Eliminar"
                         >
                             <Trash2 className="h-4 w-4 text-white" />
                         </button>
@@ -246,14 +251,14 @@ function FotoThumbnail({
                     {/* Sub-tipo badge (ANTES/DURANTE/DESPUES) */}
                     {subTipo && (
                         <div className={cn(
-                            "absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-white shadow-sm",
+                            "absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-white shadow-sm pointer-events-none",
                             SUB_TIPO_COLORS[subTipo] || 'bg-gray-500'
                         )}>
                             {subTipo}
                         </div>
                     )}
                     {descripcionLimpia && (
-                        <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent">
+                        <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent pointer-events-none">
                             <p className="text-white text-[10px] truncate">{descripcionLimpia}</p>
                         </div>
                     )}

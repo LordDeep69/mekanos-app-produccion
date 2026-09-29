@@ -74,15 +74,29 @@ export interface PhotoLightboxProps {
 /**
  * Limpia y normaliza una URL de imagen para visualización directa en navegador.
  * Remueve flags que obligan a descargar (como fl_attachment de Cloudinary o ?download=true).
+ * Garantiza que al abrir en otra pestaña o copiar la URL, el navegador renderice la imagen directamente.
  */
 export function cleanDirectImageUrl(url: string | undefined | null): string {
   if (!url || typeof url !== 'string') return '';
   let clean = url.trim();
-  // Quitar flags de descarga forzada de Cloudinary (ej: fl_attachment, fl_attachment:filename)
-  clean = clean.replace(/\/fl_attachment:[^/]+\//g, '/').replace(/\/fl_attachment\//g, '/');
+
+  // Quitar transformaciones de descarga forzada de Cloudinary (todas sus variantes)
+  clean = clean.replace(/\/fl_attachment:[^/,\/]+/gi, '');
+  clean = clean.replace(/,fl_attachment:[^/,\/]+/gi, '');
+  clean = clean.replace(/fl_attachment:[^/,\/]+,?/gi, '');
+  clean = clean.replace(/\/fl_attachment\//gi, '/');
+  clean = clean.replace(/,fl_attachment(?=[,\/])/gi, '');
+  clean = clean.replace(/\/fl_attachment,/gi, '/');
+
   // Quitar query params de forzar descarga
-  clean = clean.replace(/([?&])download=true&?/gi, '$1').replace(/[?&]$/, '');
-  clean = clean.replace(/response-content-disposition=attachment/gi, 'response-content-disposition=inline');
+  clean = clean.replace(/([?&])(download|dl)=(true|1|yes)&?/gi, '$1');
+
+  // Asegurar que Content-Disposition sea inline en CDNs compatibles (S3 / R2)
+  clean = clean.replace(/response-content-disposition=attachment[^&]*/gi, 'response-content-disposition=inline');
+
+  // Limpiar caracteres huérfanos al final de la URL
+  clean = clean.replace(/[?&]$/, '').replace(/(\?|&)($|&)/g, '$1');
+
   return clean;
 }
 
@@ -545,14 +559,14 @@ export function PhotoLightbox({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col select-none text-white overflow-hidden animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col text-white overflow-hidden animate-in fade-in duration-200"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* 1. BARRA SUPERIOR FLOTANTE (TOOLBAR)                                  */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      <header className="relative z-30 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+      <header className="relative z-30 flex items-center justify-between px-4 py-3 select-none bg-gradient-to-b from-black/80 via-black/40 to-transparent">
         {/* Izquierda: Contador y Título */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15 text-xs font-semibold">
@@ -785,9 +799,8 @@ export function PhotoLightbox({
           <img
             src={displayUrl || currentImage?.url}
             alt={currentImage?.description || currentImage?.title || 'Foto'}
-            className="max-h-[82vh] max-w-[92vw] object-contain drop-shadow-2xl rounded-sm pointer-events-auto select-none"
+            className="max-h-[82vh] max-w-[92vw] object-contain drop-shadow-2xl rounded-sm pointer-events-auto select-auto"
             onLoad={() => setIsLoadingImage(false)}
-            draggable={false}
           />
         </div>
 

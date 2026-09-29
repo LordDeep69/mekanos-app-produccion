@@ -116,7 +116,7 @@ function EvidenciaThumbnail({
                     alt={evidencia.descripcion || 'Evidencia'}
                     fill
                     className="object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-auto"
-                    unoptimized={fotoUrl.startsWith('data:')}
+                    unoptimized
                 />
             ) : (
                 <div className="w-full h-full bg-gray-100 flex items-center justify-center">

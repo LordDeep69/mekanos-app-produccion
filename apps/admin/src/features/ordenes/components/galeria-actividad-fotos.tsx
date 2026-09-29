@@ -103,7 +103,10 @@ function FotoThumbnail({
     const hasDescripcion = evidencia.descripcion && evidencia.descripcion.trim();
 
     return (
-        <div className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+        <div
+            className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-pointer"
+            onClick={onView}
+        >
             {fotoUrl ? (
                 <>
                     <Image
@@ -115,14 +118,14 @@ function FotoThumbnail({
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
                         <button
-                            onClick={onView}
+                            onClick={(e) => { e.stopPropagation(); onView(); }}
                             className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors pointer-events-auto"
                             title="Ver en grande"
                         >
                             <ZoomIn className="h-4 w-4 text-gray-700" />
                         </button>
                         <button
-                            onClick={onEdit}
+                            onClick={(e) => { e.stopPropagation(); onEdit(); }}
                             className="p-2 bg-blue-500 rounded-full shadow-lg hover:bg-blue-600 transition-colors pointer-events-auto"
                             title="Editar observación"
                         >
@@ -130,7 +133,7 @@ function FotoThumbnail({
                         </button>
                         {canDelete && (
                             <button
-                                onClick={onDelete}
+                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
                                 className="p-2 bg-red-500 rounded-full shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
                                 title="Eliminar"
                             >
@@ -139,7 +142,7 @@ function FotoThumbnail({
                         )}
                     </div>
                     {hasDescripcion && (
-                        <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent">
+                        <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/60 to-transparent pointer-events-none">
                             <p className="text-white text-[10px] truncate">{evidencia.descripcion}</p>
                         </div>
                     )}

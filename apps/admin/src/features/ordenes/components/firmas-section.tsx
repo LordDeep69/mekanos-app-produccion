@@ -727,11 +727,11 @@ function FirmaCard({ firma, onEdit }: { firma: Firma; onEdit?: () => void }) {
                                     src={firmaUrl}
                                     alt={`Firma de ${firma.nombre_firmante || config.label}`}
                                     fill
-                                    className="object-contain"
-                                    unoptimized={firmaUrl.startsWith('data:')}
+                                    className="object-contain pointer-events-auto"
+                                    unoptimized
                                 />
                             </div>
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-all flex items-center justify-center">
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-all flex items-center justify-center pointer-events-none">
                                 <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-all drop-shadow-lg" />
                             </div>
                         </div>
@@ -795,8 +795,8 @@ function FirmaCard({ firma, onEdit }: { firma: Firma; onEdit?: () => void }) {
                                     src={firmaUrl}
                                     alt={`Firma de ${firma.nombre_firmante || config.label}`}
                                     fill
-                                    className="object-contain"
-                                    unoptimized={firmaUrl.startsWith('data:')}
+                                    className="object-contain pointer-events-auto"
+                                    unoptimized
                                 />
                             </div>
                         </div>
