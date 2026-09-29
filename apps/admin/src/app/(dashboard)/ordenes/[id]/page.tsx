@@ -41,6 +41,7 @@ import { ActividadCardAdvanced, ResumenEstados } from '@/features/ordenes/compon
 import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gallery';
 import { FirmasSection } from '@/features/ordenes/components/firmas-section';
 import { GaleriaFotosGenerales } from '@/features/ordenes/components/galeria-fotos-generales';
+import { BarraSutilDescargaEvidencias } from '@/features/ordenes/components/descargar-evidencias-modal';
 import { GestionInformeSection } from '@/features/ordenes/components/gestion-informe-section';
 import { HistorialEmailsSection } from '@/features/ordenes/components/historial-emails-section';
 import { HistorialEstados } from '@/features/ordenes/components/historial-estados';
@@ -1428,15 +1429,24 @@ function TabDocumentos({ orden }: { orden: Orden }) {
             {/* Firmas Digitales - Componente Avanzado */}
             <FirmasSection firmas={firmas} isLoading={isLoadingFi} idOrdenServicio={orden.id_orden_servicio} orden={orden} />
 
+            {/* ✅ Barra Sutil de Descarga de Evidencias Fotográficas */}
+            <BarraSutilDescargaEvidencias
+                numeroOrden={orden.numero_orden || `OS-${orden.id_orden_servicio}`}
+                evidencias={evidencias}
+                idOrdenServicio={orden.id_orden_servicio}
+            />
+
             {/* Fotos Generales del Servicio - CRUD */}
             <GaleriaFotosGenerales
                 idOrdenServicio={orden.id_orden_servicio}
+                numeroOrden={orden.numero_orden || `OS-${orden.id_orden_servicio}`}
                 idOrdenEquipoFiltro={esMultiEquipo && equipoFiltro !== 'todos' ? equipoFiltro : null}
             />
 
             {/* Evidencias Fotográficas - Componente Avanzado con Lightbox */}
             <EvidenciasGallery
                 evidencias={evidencias}
+                numeroOrden={orden.numero_orden || `OS-${orden.id_orden_servicio}`}
                 isLoading={isLoadingEv}
                 idOrdenEquipoFiltro={esMultiEquipo && equipoFiltro !== 'todos' ? equipoFiltro : null}
             />

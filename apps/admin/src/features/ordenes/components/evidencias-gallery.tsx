@@ -8,6 +8,7 @@
 'use client';
 
 import { PhotoLightbox, cleanDirectImageUrl, type LightboxImageItem } from '@/components/ui/photo-lightbox';
+import { BotonDescargaEvidenciasActividades } from './descargar-evidencias-modal';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -48,6 +49,7 @@ interface Evidencia {
 
 interface EvidenciasGalleryProps {
     evidencias: Evidencia[];
+    numeroOrden?: string;
     isLoading?: boolean;
     /** Si se establece, solo se muestran evidencias asignadas a este id_orden_equipo */
     idOrdenEquipoFiltro?: number | null;
@@ -156,7 +158,7 @@ function EvidenciaThumbnail({
 // El antiguo Lightbox ha sido reemplazado por el componente PhotoLightbox unificado.
 
 
-export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro = null }: EvidenciasGalleryProps) {
+export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro = null, numeroOrden }: EvidenciasGalleryProps) {
     const queryClient = useQueryClient();
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [editingEvidenciaId, setEditingEvidenciaId] = useState<number | null>(null);
@@ -247,8 +249,12 @@ export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro =
                     </div>
                 </div>
 
-                {/* Contadores por tipo */}
+                {/* Contadores por tipo y botón de descarga */}
                 <div className="flex items-center gap-2">
+                    <BotonDescargaEvidenciasActividades
+                        numeroOrden={numeroOrden || 'ORDEN'}
+                        evidencias={evidenciasSinGeneral}
+                    />
                     {tiposEvidencia.map((tipo) => {
                         const config = TIPO_CONFIG[tipo];
                         const count = evidenciasPorTipo[tipo].length;

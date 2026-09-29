@@ -18,6 +18,7 @@
 'use client';
 
 import { PhotoLightbox, cleanDirectImageUrl, type LightboxImageItem } from '@/components/ui/photo-lightbox';
+import { BotonDescargaFotosGenerales } from './descargar-evidencias-modal';
 import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -75,6 +76,7 @@ interface LoteGaleria {
 
 interface GaleriaFotosGeneralesProps {
     idOrdenServicio: number;
+    numeroOrden?: string;
     /** Si se establece, solo se muestran fotos asignadas a este id_orden_equipo */
     idOrdenEquipoFiltro?: number | null;
 }
@@ -720,7 +722,7 @@ function TarjetaLoteGaleria({
         );
 }
 
-export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = null }: GaleriaFotosGeneralesProps) {
+export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = null, numeroOrden }: GaleriaFotosGeneralesProps) {
     const queryClient = useQueryClient();
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState('');
@@ -1063,6 +1065,14 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Botón sutil de descarga ZIP de fotos generales */}
+                    <BotonDescargaFotosGenerales
+                        numeroOrden={numeroOrden || `OS-${idOrdenServicio}`}
+                        evidencias={fotosGenerales}
+                        idOrdenServicio={idOrdenServicio}
+                        lotes={lotesGaleria}
+                    />
+
                     {/* ✅ FIX 20-AGO-2026: Botón Nuevo Lote */}
                     <button
                         onClick={() => setDialogNuevoLote(true)}
