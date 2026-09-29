@@ -99,6 +99,7 @@ function startApiServer() {
 }
 
 let isSyncing = false;
+let heartbeatCount = 0;
 
 async function syncLoop() {
   if (isSyncing) return;
@@ -133,6 +134,10 @@ async function syncLoop() {
 
     if (localCommit === remoteCommit) {
       // Todo al día en Git. Verificar salud de la API.
+      if (heartbeatCount++ % 6 === 0) {
+        const shortCommit = localCommit.substring(0, 7);
+        log(`🔍 [SYNC] origin/${currentBranch} verificado (Commit: ${shortCommit}) - Todo al día`, colors.gray);
+      }
       const isAlive = await checkApiHealth();
       if (!isAlive && !apiProcess) {
         log('⚠️ API caída o no iniciada. Auto-recuperando...', colors.yellow);
