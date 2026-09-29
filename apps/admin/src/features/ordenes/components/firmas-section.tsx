@@ -477,7 +477,7 @@ function EditFirmaModal({ tipo, idOrdenServicio, firma, onClose, orden }: {
                                         alt="Firma actual registrada"
                                         fill
                                         className="object-contain"
-                                        unoptimized={existingFirmaUrl!.startsWith('data:')}
+                                        unoptimized
                                     />
                                 </div>
                                 <div className="flex items-center justify-between w-full max-w-sm pt-1">

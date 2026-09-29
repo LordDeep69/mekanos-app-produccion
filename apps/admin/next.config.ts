@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
 
   // Configuración de imágenes
   images: {
+    // ✅ Permite que las imágenes se abran directamente en el navegador sin forzar descarga (Content-Disposition: inline)
+    contentDispositionType: 'inline',
+    // ✅ Desactiva el proxy interno /_next/image para que la etiqueta <img> siempre tenga la URL directa nativa
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
@@ -18,7 +22,7 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
-    // Optimización de imágenes en Vercel
+    // Optimización de formatos
     formats: ['image/avif', 'image/webp'],
   },
 

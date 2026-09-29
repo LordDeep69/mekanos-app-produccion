@@ -80,6 +80,19 @@ export function cleanDirectImageUrl(url: string | undefined | null): string {
   if (!url || typeof url !== 'string') return '';
   let clean = url.trim();
 
+  // Si la URL viene encapsulada por el optimizador de Next.js (_next/image?url=...)
+  if (clean.includes('_next/image')) {
+    try {
+      const parsed = new URL(clean, 'http://localhost');
+      const innerUrl = parsed.searchParams.get('url');
+      if (innerUrl) {
+        clean = decodeURIComponent(innerUrl);
+      }
+    } catch {
+      // Continuar con clean
+    }
+  }
+
   // Quitar transformaciones de descarga forzada de Cloudinary (todas sus variantes)
   clean = clean.replace(/\/fl_attachment:[^/,\/]+/gi, '');
   clean = clean.replace(/,fl_attachment:[^/,\/]+/gi, '');
