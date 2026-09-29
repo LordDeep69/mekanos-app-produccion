@@ -7,6 +7,7 @@
 
 'use client';
 
+import { PhotoLightbox, type LightboxImageItem } from '@/components/ui/photo-lightbox';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -25,7 +26,7 @@ import {
     ZoomIn
 } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface Evidencia {
@@ -151,157 +152,8 @@ function EvidenciaThumbnail({
     );
 }
 
-function Lightbox({
-    evidencias,
-    currentIndex,
-    onClose,
-    onPrev,
-    onNext
-}: {
-    evidencias: Evidencia[];
-    currentIndex: number;
-    onClose: () => void;
-    onPrev: () => void;
-    onNext: () => void;
-}) {
-    const evidencia = evidencias[currentIndex];
-    const fotoUrl = evidencia.ruta_archivo || evidencia.url_foto ||
-        (evidencia.foto_base64 ? `data:image/jpeg;base64,${evidencia.foto_base64}` : null);
+// El antiguo Lightbox ha sido reemplazado por el componente PhotoLightbox unificado.
 
-    const tipoConfig = TIPO_CONFIG[evidencia.tipo_evidencia] || TIPO_CONFIG.ANTES;
-    const fechaCaptura = evidencia.fecha_captura
-        ? new Date(evidencia.fecha_captura).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
-        : null;
-
-    return (
-        <div
-            className="fixed inset-0 z-50 bg-black/95 flex flex-col"
-            onClick={onClose}
-        >
-            {/* Header */}
-            <div
-                className="flex items-center justify-between p-4 bg-black/50"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="flex items-center gap-3">
-                    <span className={cn(
-                        "px-3 py-1 rounded-full text-xs font-bold border",
-                        tipoConfig.bgColor,
-                        tipoConfig.color,
-                        tipoConfig.borderColor
-                    )}>
-                        {tipoConfig.label}
-                    </span>
-                    <span className="text-white/60 text-sm">
-                        {currentIndex + 1} / {evidencias.length}
-                    </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    {evidencia.url_foto && (
-                        <>
-                            <a
-                                href={evidencia.url_foto}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <ExternalLink className="h-5 w-5" />
-                            </a>
-                            <a
-                                href={evidencia.url_foto}
-                                download
-                                className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <Download className="h-5 w-5" />
-                            </a>
-                        </>
-                    )}
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                    >
-                        <X className="h-6 w-6" />
-                    </button>
-                </div>
-            </div>
-
-            {/* Imagen */}
-            <div
-                className="flex-1 flex items-center justify-center p-4 relative"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* Botón anterior */}
-                {evidencias.length > 1 && (
-                    <button
-                        onClick={onPrev}
-                        className="absolute left-4 p-3 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors z-10"
-                    >
-                        <ChevronLeft className="h-6 w-6" />
-                    </button>
-                )}
-
-                {/* Imagen principal */}
-                {fotoUrl && (
-                    <div className="relative max-w-5xl max-h-[70vh] w-full h-full">
-                        <Image
-                            src={fotoUrl}
-                            alt={evidencia.descripcion || 'Evidencia'}
-                            fill
-                            className="object-contain"
-                            unoptimized={fotoUrl.startsWith('data:')}
-                        />
-                    </div>
-                )}
-
-                {/* Botón siguiente */}
-                {evidencias.length > 1 && (
-                    <button
-                        onClick={onNext}
-                        className="absolute right-4 p-3 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors z-10"
-                    >
-                        <ChevronRight className="h-6 w-6" />
-                    </button>
-                )}
-            </div>
-
-            {/* Footer con metadata */}
-            <div
-                className="p-4 bg-black/50"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="max-w-3xl mx-auto space-y-2">
-                    {/* Actividad asociada (leyenda principal) */}
-                    {evidencia.actividad_asociada?.descripcion_actividad && (
-                        <div className="text-center">
-                            <span className="text-white/50 text-xs uppercase tracking-wider">Actividad:</span>
-                            <p className="text-white font-bold text-sm">
-                                📋 {evidencia.actividad_asociada.descripcion_actividad}
-                            </p>
-                        </div>
-                    )}
-                    {/* Descripción de la foto */}
-                    {evidencia.descripcion && (
-                        <p className="text-white/80 text-center text-sm">
-                            {evidencia.tipo_evidencia} - {evidencia.descripcion}
-                        </p>
-                    )}
-                    {/* Metadata */}
-                    <div className="flex items-center justify-center gap-4 text-white/60 text-xs">
-                        {fechaCaptura && (
-                            <span className="flex items-center gap-1.5">
-                                <Clock className="h-3.5 w-3.5" />
-                                {fechaCaptura}
-                            </span>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro = null }: EvidenciasGalleryProps) {
     const queryClient = useQueryClient();
@@ -359,21 +211,24 @@ export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro =
         (ev) => !tiposEvidencia.includes(ev.tipo_evidencia as any)
     );
 
+    const lightboxImages: LightboxImageItem[] = useMemo(() => {
+        return evidenciasSinGeneral.map((e) => {
+            const fotoUrl = e.ruta_archivo || e.url_foto || (e.foto_base64 ? `data:image/jpeg;base64,${e.foto_base64}` : '');
+            return {
+                id: e.id_evidencia,
+                url: fotoUrl,
+                title: e.actividad_asociada?.descripcion_actividad || `Evidencia #${e.id_evidencia}`,
+                actividad: e.actividad_asociada?.descripcion_actividad,
+                badge: e.tipo_evidencia,
+                description: e.descripcion,
+                date: e.fecha_captura,
+            };
+        });
+    }, [evidenciasSinGeneral]);
+
     const handleOpenLightbox = (evidencia: Evidencia) => {
         const index = evidenciasSinGeneral.findIndex((ev) => ev.id_evidencia === evidencia.id_evidencia);
-        setLightboxIndex(index);
-    };
-
-    const handlePrev = () => {
-        if (lightboxIndex !== null) {
-            setLightboxIndex((lightboxIndex - 1 + evidenciasSinGeneral.length) % evidenciasSinGeneral.length);
-        }
-    };
-
-    const handleNext = () => {
-        if (lightboxIndex !== null) {
-            setLightboxIndex((lightboxIndex + 1) % evidenciasSinGeneral.length);
-        }
+        setLightboxIndex(index >= 0 ? index : null);
     };
 
     return (
@@ -561,14 +416,22 @@ export function EvidenciasGallery({ evidencias, isLoading, idOrdenEquipoFiltro =
                 )}
             </div>
 
-            {/* Lightbox */}
-            {lightboxIndex !== null && (
-                <Lightbox
-                    evidencias={evidenciasSinGeneral}
+            {/* Visor Profesional PhotoLightbox */}
+            {lightboxIndex !== null && lightboxImages.length > 0 && (
+                <PhotoLightbox
+                    isOpen={lightboxIndex !== null}
+                    images={lightboxImages}
                     currentIndex={lightboxIndex}
                     onClose={() => setLightboxIndex(null)}
-                    onPrev={handlePrev}
-                    onNext={handleNext}
+                    onNavigate={(newIdx) => setLightboxIndex(newIdx)}
+                    canEdit={true}
+                    onEdit={(img) => {
+                        const target = evidenciasSinGeneral.find(e => e.id_evidencia === Number(img.id));
+                        if (target) {
+                            setLightboxIndex(null);
+                            handleEditClick(target);
+                        }
+                    }}
                 />
             )}
         </div>

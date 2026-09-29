@@ -7,6 +7,7 @@
 
 'use client';
 
+import { PhotoLightbox, type LightboxImageItem } from '@/components/ui/photo-lightbox';
 import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -28,7 +29,7 @@ import {
     ZoomIn
 } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface Evidencia {
@@ -144,94 +145,8 @@ function FotoThumbnail({
     );
 }
 
-function LightboxModal({
-    evidencia,
-    onClose,
-    onPrev,
-    onNext,
-    hasPrev,
-    hasNext
-}: {
-    evidencia: Evidencia;
-    onClose: () => void;
-    onPrev: () => void;
-    onNext: () => void;
-    hasPrev: boolean;
-    hasNext: boolean;
-}) {
-    const fotoUrl = getEvidenciaUrl(evidencia);
-    const tipoEv = getEvidenciaTipo(evidencia);
-    const fechaEv = getEvidenciaFecha(evidencia);
+// El antiguo LightboxModal ha sido reemplazado por el componente PhotoLightbox unificado.
 
-    return (
-        <div
-            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-            onClick={onClose}
-        >
-            <div
-                className="relative max-w-4xl max-h-[85vh] w-full"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent z-10 flex justify-between items-center">
-                    <div className="text-white">
-                        <p className="text-sm font-bold">{tipoEv}</p>
-                        {evidencia.descripcion && (
-                            <p className="text-xs text-white/70">{evidencia.descripcion}</p>
-                        )}
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                    >
-                        <X className="h-5 w-5 text-white" />
-                    </button>
-                </div>
-
-                {/* Imagen */}
-                {fotoUrl && (
-                    <div className="relative w-full h-[70vh]">
-                        <Image
-                            src={fotoUrl}
-                            alt={evidencia.descripcion || 'Evidencia'}
-                            fill
-                            className="object-contain"
-                            unoptimized
-                        />
-                    </div>
-                )}
-
-                {/* Navegación */}
-                {hasPrev && (
-                    <button
-                        onClick={onPrev}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-                    >
-                        <ChevronLeft className="h-6 w-6" />
-                    </button>
-                )}
-                {hasNext && (
-                    <button
-                        onClick={onNext}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-                    >
-                        <ChevronRight className="h-6 w-6" />
-                    </button>
-                )}
-
-                {/* Footer */}
-                {fechaEv && (
-                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
-                        <div className="flex items-center gap-2 text-white/70 text-xs">
-                            <Clock className="h-3 w-3" />
-                            {new Date(fechaEv).toLocaleString('es-CO')}
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
 
 export function GaleriaActividadFotos({
     idOrdenServicio,
@@ -422,6 +337,18 @@ export function GaleriaActividadFotos({
     const evidenciasActivas = evidenciasPorTipo[tipoActivo] || [];
     const todasLasEvidencias = evidencias;
 
+    const lightboxImages: LightboxImageItem[] = useMemo(() => {
+        return todasLasEvidencias.map((e) => ({
+            id: getEvidenciaId(e),
+            url: getEvidenciaUrl(e) || '',
+            title: nombreActividad,
+            actividad: nombreActividad,
+            badge: getEvidenciaTipo(e),
+            description: e.descripcion,
+            date: getEvidenciaFecha(e),
+        }));
+    }, [todasLasEvidencias, nombreActividad]);
+
     // Mutación para eliminar
     const deleteMutation = useMutation({
         mutationFn: async (idEvidencia: number) => {
@@ -609,15 +536,22 @@ export function GaleriaActividadFotos({
                 )}
             </div>
 
-            {/* Lightbox */}
-            {lightboxIndex !== null && todasLasEvidencias[lightboxIndex] && (
-                <LightboxModal
-                    evidencia={todasLasEvidencias[lightboxIndex]}
+            {/* Visor Profesional PhotoLightbox */}
+            {lightboxIndex !== null && lightboxImages.length > 0 && (
+                <PhotoLightbox
+                    isOpen={lightboxIndex !== null}
+                    images={lightboxImages}
+                    currentIndex={lightboxIndex}
                     onClose={() => setLightboxIndex(null)}
-                    onPrev={() => setLightboxIndex(Math.max(0, lightboxIndex - 1))}
-                    onNext={() => setLightboxIndex(Math.min(todasLasEvidencias.length - 1, lightboxIndex + 1))}
-                    hasPrev={lightboxIndex > 0}
-                    hasNext={lightboxIndex < todasLasEvidencias.length - 1}
+                    onNavigate={(newIdx) => setLightboxIndex(newIdx)}
+                    canDelete={true}
+                    onDelete={(img) => {
+                        const evId = Number(img.id);
+                        if (evId) {
+                            setLightboxIndex(null);
+                            handleDelete(evId);
+                        }
+                    }}
                 />
             )}
         </div>

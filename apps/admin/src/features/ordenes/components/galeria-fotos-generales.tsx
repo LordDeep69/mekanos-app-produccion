@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MEKANOS S.A.S - Portal Admin
  * Galería de Fotos Generales del Servicio
  *
@@ -17,6 +17,7 @@
 
 'use client';
 
+import { PhotoLightbox, type LightboxImageItem } from '@/components/ui/photo-lightbox';
 import { fileToBase64, useImageDropPaste } from '@/hooks/use-image-drop-paste';
 import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -258,105 +259,8 @@ function FotoThumbnail({
     );
 }
 
-function LightboxModal({
-    evidencia,
-    titulo,
-    onClose,
-    onPrev,
-    onNext,
-    hasPrev,
-    hasNext,
-    currentIndex,
-    total,
-}: {
-    evidencia: Evidencia;
-    titulo?: string;
-    onClose: () => void;
-    onPrev: () => void;
-    onNext: () => void;
-    hasPrev: boolean;
-    hasNext: boolean;
-    currentIndex: number;
-    total: number;
-}) {
-    const fotoUrl = getEvUrl(evidencia);
-    const fechaEv = getEvFecha(evidencia);
+// El antiguo LightboxModal ha sido reemplazado por el componente PhotoLightbox unificado.
 
-    return (
-        <div
-            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-            onClick={onClose}
-        >
-            <div
-                className="relative max-w-4xl max-h-[85vh] w-full"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent z-10 flex justify-between items-center">
-                    <div className="text-white">
-                        <p className="text-sm font-bold">{titulo || '📷 Foto General'}</p>
-                        {(() => {
-                            const { descripcionLimpia } = getSubTipo(evidencia);
-                            return descripcionLimpia && (
-                                <p className="text-xs text-white/70">{descripcionLimpia}</p>
-                            );
-                        })()}
-                        <p className="text-xs text-white/50 mt-0.5">
-                            {currentIndex + 1} / {total}
-                        </p>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                    >
-                        <X className="h-5 w-5 text-white" />
-                    </button>
-                </div>
-
-                {/* Imagen */}
-                {fotoUrl && (
-                    <div className="relative w-full h-[70vh]">
-                        <Image
-                            src={fotoUrl}
-                            alt={evidencia.descripcion || 'Foto general'}
-                            fill
-                            className="object-contain"
-                            unoptimized
-                        />
-                    </div>
-                )}
-
-                {/* Navegación */}
-                {hasPrev && (
-                    <button
-                        onClick={onPrev}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-                    >
-                        <ChevronLeft className="h-6 w-6" />
-                    </button>
-                )}
-                {hasNext && (
-                    <button
-                        onClick={onNext}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-                    >
-                        <ChevronRight className="h-6 w-6" />
-                    </button>
-                )}
-
-                {/* Footer */}
-                {fechaEv && (
-                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
-                        <div className="flex items-center gap-2 text-white/70 text-xs">
-                            <Clock className="h-3 w-3" />
-                            {new Date(fechaEv).toLocaleString('es-CO')}
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
 
 /** ✅ FIX 20-AGO-2026: Grid de fotos agrupado por fase (ANTES/DURANTE/DESPUÉS/GENERAL) */
 function GridFotosPorFase({
@@ -1079,6 +983,21 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
     // ✅ FIX 20-AGO-2026: Lightbox genérico (estándar o lote)
     const [lightbox, setLightbox] = useState<{ fotos: Evidencia[]; index: number; titulo: string } | null>(null);
 
+    const lightboxImages: LightboxImageItem[] = useMemo(() => {
+        if (!lightbox?.fotos) return [];
+        return lightbox.fotos.map((e) => {
+            const { subTipo, descripcionLimpia } = getSubTipo(e);
+            return {
+                id: getEvId(e),
+                url: getEvUrl(e) || '',
+                title: lightbox.titulo,
+                badge: subTipo || 'GENERAL',
+                description: descripcionLimpia,
+                date: getEvFecha(e),
+            };
+        });
+    }, [lightbox]);
+
     const handleViewLightbox = (evidencia: Evidencia, lista: Evidencia[], titulo: string) => {
         const evId = getEvId(evidencia);
         const idx = lista.findIndex((e) => getEvId(e) === evId);
@@ -1360,18 +1279,14 @@ export function GaleriaFotosGenerales({ idOrdenServicio, idOrdenEquipoFiltro = n
                 </div>
             )}
 
-            {/* Lightbox */}
-            {lightbox && lightbox.fotos[lightbox.index] && (
-                <LightboxModal
-                    evidencia={lightbox.fotos[lightbox.index]}
-                    titulo={lightbox.titulo}
-                    onClose={() => setLightbox(null)}
-                    onPrev={() => setLightbox((lb) => lb ? { ...lb, index: Math.max(0, lb.index - 1) } : lb)}
-                    onNext={() => setLightbox((lb) => lb ? { ...lb, index: Math.min(lb.fotos.length - 1, lb.index + 1) } : lb)}
-                    hasPrev={lightbox.index > 0}
-                    hasNext={lightbox.index < lightbox.fotos.length - 1}
+            {/* Visor Profesional PhotoLightbox */}
+            {lightbox && lightboxImages.length > 0 && (
+                <PhotoLightbox
+                    isOpen={Boolean(lightbox)}
+                    images={lightboxImages}
                     currentIndex={lightbox.index}
-                    total={lightbox.fotos.length}
+                    onClose={() => setLightbox(null)}
+                    onNavigate={(newIdx) => setLightbox((lb) => lb ? { ...lb, index: newIdx } : null)}
                 />
             )}
         </div>
