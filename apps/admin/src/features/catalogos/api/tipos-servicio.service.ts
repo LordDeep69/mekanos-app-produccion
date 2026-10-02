@@ -43,6 +43,7 @@ export interface TipoServicio {
     color_hex?: string;
     activo: boolean;
     observaciones?: string;
+    plantilla_observacion?: string;
     fecha_creacion?: string;
     tipos_equipo?: {
         id_tipo_equipo: number;
@@ -87,6 +88,8 @@ export interface CreateTipoServicioDto {
     colorHex?: string;
     activo?: boolean;
     observaciones?: string;
+    plantillaObservacion?: string;
+    plantilla_observacion?: string;
 }
 
 export interface UpdateTipoServicioDto extends Partial<CreateTipoServicioDto> { }

@@ -20,6 +20,7 @@ export interface TipoServicio {
     codigo_tipo: string;
     nombre_tipo: string;
     descripcion?: string;
+    plantilla_observacion?: string;
 }
 
 // Sede de cliente

@@ -76,6 +76,7 @@ export class TiposServicioController {
       dto.activo !== undefined ? dto.activo : true,
       dto.observaciones || null,
       userId,
+      dto.plantillaObservacion !== undefined ? dto.plantillaObservacion : (dto.plantilla_observacion || null),
     );
 
     const result = await this.commandBus.execute(command);
@@ -190,6 +191,7 @@ export class TiposServicioController {
         colorHex: dto.colorHex,
         activo: dto.activo,
         observaciones: dto.observaciones,
+        plantillaObservacion: dto.plantillaObservacion !== undefined ? dto.plantillaObservacion : dto.plantilla_observacion,
       },
       userId,
     );

@@ -6,15 +6,18 @@ import {
     CheckSquare,
     Clock,
     Edit,
+    FileText,
+    Info,
     Loader2,
     Palette,
     Plus,
     Search,
+    Sparkles,
     Trash2,
     Wrench,
     X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     CATEGORIAS_SERVICIO,
     useCreateTipoServicio,
@@ -23,6 +26,13 @@ import {
     useUpdateTipoServicio
 } from '../../../../../features/catalogos';
 import { TipoServicioDetailDrawer } from '../../../../../features/catalogos/components/tipo-servicio-detail-drawer';
+import {
+    EditorContent,
+    EditorToolbar,
+    EDITOR_STYLES,
+    plainTextToHtml,
+    useRichEditor
+} from '@/features/ordenes/components/rich-text-editor';
 import { cn } from '../../../../../lib/utils';
 
 // Helpers para colores y labels
@@ -162,7 +172,18 @@ export default function TiposServicioPage() {
                                                     <Wrench className="h-5 w-5" />
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{tipo.nombre_tipo}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{tipo.nombre_tipo}</p>
+                                                        {tipo.plantilla_observacion && (
+                                                            <span
+                                                                title="Tiene plantilla de observación configurada"
+                                                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded-md"
+                                                            >
+                                                                <FileText className="h-3 w-3 text-emerald-600" />
+                                                                Plantilla
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-xs font-mono text-gray-400">{tipo.codigo_tipo}</p>
                                                 </div>
                                             </div>
@@ -237,6 +258,8 @@ export default function TiposServicioPage() {
                                     tieneChecklist: formData.tiene_checklist,
                                     duracionEstimadaHoras: formData.duracion_estimada_horas,
                                     colorHex: formData.color_hex,
+                                    plantillaObservacion: formData.plantilla_observacion,
+                                    plantilla_observacion: formData.plantilla_observacion,
                                 }
                             });
                         } else {
@@ -248,6 +271,8 @@ export default function TiposServicioPage() {
                                 tieneChecklist: formData.tiene_checklist,
                                 duracionEstimadaHoras: formData.duracion_estimada_horas,
                                 colorHex: formData.color_hex,
+                                plantillaObservacion: formData.plantilla_observacion,
+                                plantilla_observacion: formData.plantilla_observacion,
                             });
                         }
                         setIsModalOpen(false);
@@ -267,7 +292,92 @@ export default function TiposServicioPage() {
     );
 }
 
+function PlantillaObservacionEditor({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (val: string) => void;
+}) {
+    const editor = useRichEditor(plainTextToHtml(value || ''));
+
+    useEffect(() => {
+        if (!editor) return;
+        const handleUpdate = () => {
+            const html = editor.getHTML();
+            onChange(html === '<p></p>' ? '' : html);
+        };
+        editor.on('update', handleUpdate);
+        return () => {
+            editor.off('update', handleUpdate);
+        };
+    }, [editor, onChange]);
+
+    // Opciones rápidas de plantillas predefinidas
+    const handleInsertSnippet = (snippetHtml: string) => {
+        if (!editor) return;
+        const currentHtml = editor.getHTML();
+        if (!currentHtml || currentHtml === '<p></p>') {
+            editor.commands.setContent(snippetHtml);
+        } else {
+            editor.commands.setContent(currentHtml + snippetHtml);
+        }
+    };
+
+    return (
+        <div className="space-y-3">
+            <style dangerouslySetInnerHTML={{ __html: EDITOR_STYLES }} />
+
+            <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3.5 flex items-start gap-3">
+                <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-xs text-blue-900 leading-relaxed">
+                    <p className="font-bold">Plantilla de Observación de Cierre para Órdenes de Servicio</p>
+                    <p className="text-blue-700 mt-0.5">
+                        Define el texto base que tendrá este tipo de servicio. Al gestionar una orden finalizada en el portal admin, podrás insertar esta plantilla en las Observaciones de Cierre con un solo clic, sin borrar el texto previo que el técnico haya ingresado.
+                    </p>
+                </div>
+            </div>
+
+            {/* Snippets rápidos sugeridos */}
+            <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                    Estructuras sugeridas:
+                </span>
+                <button
+                    type="button"
+                    onClick={() => handleInsertSnippet('<h2>Mantenimiento Preventivo Estandarizado</h2><p>Se realizó el protocolo de mantenimiento preventivo al equipo, verificando su óptima operatividad y condiciones de seguridad.</p><h3>Actividades Principales Realizadas:</h3><ul><li>Inspección visual y limpieza general del equipo y subsistemas.</li><li>Revisión de conexiones eléctricas, cableado y terminales.</li><li>Verificación de parámetros de presión, temperatura, voltaje y corriente.</li><li>Pruebas de funcionamiento en régimen continuo y validación de protecciones.</li></ul><h3>Recomendaciones Técnicas:</h3><ul><li>Mantener el área despejada y libre de humedad.</li><li>Programar la siguiente rutina de mantenimiento preventivo de acuerdo al cronograma.</li></ul>')}
+                    className="px-2.5 py-1 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
+                >
+                    + Preventivo Estándar
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleInsertSnippet('<h2>Diagnóstico y Corrección de Falla</h2><p>Se atendió solicitud correctiva en el equipo por reporte de anomalía operativa.</p><h3>Diagnóstico Técnico:</h3><p>Se evaluó el estado del equipo y se identificó la causa raíz de la falla.</p><h3>Correcciones y Acciones Realizadas:</h3><ul><li>Ajuste, calibración y corrección de subsistemas afectados.</li><li>Pruebas operativas confirmando solución de la anomalía.</li></ul><h3>Observaciones y Recomendaciones:</h3><p>El equipo queda operativo y entregado a satisfacción del cliente.</p>')}
+                    className="px-2.5 py-1 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
+                >
+                    + Correctivo / Diagnóstico
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleInsertSnippet('<h3>Puntos de Control Verificados:</h3><ul><li><strong>Nivel y Estado de Fluidos:</strong> Conforme.</li><li><strong>Fugas / Filtraciones:</strong> No se evidencian fugas activas.</li><li><strong>Ruido y Vibración:</strong> Dentro de límites admisibles.</li><li><strong>Alineación y Fijación:</strong> Pernos y anclajes en orden.</li></ul>')}
+                    className="px-2.5 py-1 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
+                >
+                    + Puntos de Control
+                </button>
+            </div>
+
+            {/* Editor TipTap con estilo y toolbar idéntico a Observaciones de Cierre */}
+            <div className="obs-editor border-2 border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 bg-white">
+                <EditorToolbar editor={editor} />
+                <EditorContent editor={editor} />
+            </div>
+        </div>
+    );
+}
+
 function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) {
+    const [activeTab, setActiveTab] = useState<'general' | 'plantilla'>('general');
     const [formData, setFormData] = useState({
         nombre_tipo: tipo?.nombre_tipo || '',
         codigo_tipo: tipo?.codigo_tipo || '',
@@ -276,6 +386,7 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
         tiene_checklist: tipo?.tiene_checklist ?? true,
         duracion_estimada_horas: tipo?.duracion_estimada_horas || '',
         color_hex: tipo?.color_hex || '#3b82f6',
+        plantilla_observacion: tipo?.plantilla_observacion || '',
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -286,10 +397,17 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
         });
     };
 
+    const tienePlantilla = Boolean(
+        formData.plantilla_observacion &&
+        formData.plantilla_observacion.trim() !== '' &&
+        formData.plantilla_observacion !== '<p></p>'
+    );
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
                     <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                         {tipo ? <Edit className="h-5 w-5 text-blue-600" /> : <Plus className="h-5 w-5 text-blue-600" />}
                         {tipo ? 'Editar Tipo de Servicio' : 'Nuevo Tipo de Servicio'}
@@ -299,106 +417,154 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Nombre del Servicio *</label>
-                            <input
-                                required
-                                type="text"
-                                value={formData.nombre_tipo}
-                                onChange={(e) => setFormData({ ...formData, nombre_tipo: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
-                                placeholder="Ej: Preventivo Tipo A"
-                            />
-                        </div>
-                        <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Código Único *</label>
-                            <input
-                                required
-                                type="text"
-                                value={formData.codigo_tipo}
-                                onChange={(e) => setFormData({ ...formData, codigo_tipo: e.target.value.toUpperCase().trim() })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-all"
-                                placeholder="PREV_A"
-                                disabled={!!tipo}
-                            />
-                        </div>
-                    </div>
+                {/* Tabs */}
+                <div className="flex border-b border-gray-200 bg-gray-50/80 px-6 pt-2 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('general')}
+                        className={cn(
+                            'flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all',
+                            activeTab === 'general'
+                                ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/50'
+                        )}
+                    >
+                        <Wrench className="h-4 w-4" />
+                        Datos Generales
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('plantilla')}
+                        className={cn(
+                            'flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all',
+                            activeTab === 'plantilla'
+                                ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/50'
+                        )}
+                    >
+                        <FileText className="h-4 w-4" />
+                        Plantilla de Observación
+                        {tienePlantilla && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                                Configurada
+                            </span>
+                        )}
+                    </button>
+                </div>
 
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Categoría de Negocio *</label>
-                        <select
-                            required
-                            value={formData.categoria}
-                            onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
-                        >
-                            {CATEGORIAS_SERVICIO.map(cat => (
-                                <option key={cat.value} value={cat.value}>{cat.label}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Descripción</label>
-                        <textarea
-                            rows={3}
-                            value={formData.descripcion}
-                            onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
-                            placeholder="Detalles sobre este tipo de servicio..."
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
-                                <Clock className="h-4 w-4" />
-                                Duración Est. (h)
-                            </label>
-                            <input
-                                type="number"
-                                step="0.5"
-                                value={formData.duracion_estimada_horas}
-                                onChange={(e) => setFormData({ ...formData, duracion_estimada_horas: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                placeholder="2.5"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
-                                <Palette className="h-4 w-4" />
-                                Color UI
-                            </label>
-                            <div className="flex items-center gap-2">
+                {/* Form Body */}
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+                    {/* Tab 1: Datos Generales */}
+                    <div className={cn('space-y-4', activeTab === 'general' ? 'block' : 'hidden')}>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="col-span-2 sm:col-span-1">
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Nombre del Servicio *</label>
                                 <input
-                                    type="color"
-                                    value={formData.color_hex}
-                                    onChange={(e) => setFormData({ ...formData, color_hex: e.target.value })}
-                                    className="w-10 h-10 border-none bg-transparent cursor-pointer"
+                                    required
+                                    type="text"
+                                    value={formData.nombre_tipo}
+                                    onChange={(e) => setFormData({ ...formData, nombre_tipo: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                    placeholder="Ej: Preventivo Tipo A"
                                 />
-                                <span className="text-xs font-mono text-gray-500">{formData.color_hex}</span>
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Código Único *</label>
+                                <input
+                                    required
+                                    type="text"
+                                    value={formData.codigo_tipo}
+                                    onChange={(e) => setFormData({ ...formData, codigo_tipo: e.target.value.toUpperCase().trim() })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-all"
+                                    placeholder="PREV_A"
+                                    disabled={!!tipo}
+                                />
                             </div>
                         </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Categoría de Negocio *</label>
+                            <select
+                                required
+                                value={formData.categoria}
+                                onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                            >
+                                {CATEGORIAS_SERVICIO.map(cat => (
+                                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Descripción</label>
+                            <textarea
+                                rows={3}
+                                value={formData.descripcion}
+                                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
+                                placeholder="Detalles sobre este tipo de servicio..."
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                                    <Clock className="h-4 w-4" />
+                                    Duración Est. (h)
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.5"
+                                    value={formData.duracion_estimada_horas}
+                                    onChange={(e) => setFormData({ ...formData, duracion_estimada_horas: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                    placeholder="2.5"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                                    <Palette className="h-4 w-4" />
+                                    Color UI
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="color"
+                                        value={formData.color_hex}
+                                        onChange={(e) => setFormData({ ...formData, color_hex: e.target.value })}
+                                        className="w-10 h-10 border-none bg-transparent cursor-pointer"
+                                    />
+                                    <span className="text-xs font-mono text-gray-500">{formData.color_hex}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                            <input
+                                type="checkbox"
+                                id="tiene_checklist"
+                                checked={formData.tiene_checklist}
+                                onChange={(e) => setFormData({ ...formData, tiene_checklist: e.target.checked })}
+                                className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label htmlFor="tiene_checklist" className="text-sm font-semibold text-blue-900 cursor-pointer flex items-center gap-2">
+                                <CheckSquare className="h-4 w-4" />
+                                ¿Requiere Checklist Técnico?
+                            </label>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                        <input
-                            type="checkbox"
-                            id="tiene_checklist"
-                            checked={formData.tiene_checklist}
-                            onChange={(e) => setFormData({ ...formData, tiene_checklist: e.target.checked })}
-                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    {/* Tab 2: Plantilla de Observación */}
+                    <div className={cn('space-y-4', activeTab === 'plantilla' ? 'block' : 'hidden')}>
+                        <PlantillaObservacionEditor
+                            value={formData.plantilla_observacion}
+                            onChange={(val) => setFormData(prev => ({ ...prev, plantilla_observacion: val }))}
                         />
-                        <label htmlFor="tiene_checklist" className="text-sm font-semibold text-blue-900 cursor-pointer flex items-center gap-2">
-                            <CheckSquare className="h-4 w-4" />
-                            ¿Requiere Checklist Técnico?
-                        </label>
                     </div>
                 </form>
 
-                <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+                {/* Footer */}
+                <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3 shrink-0">
                     <button
                         type="button"
                         onClick={onClose}

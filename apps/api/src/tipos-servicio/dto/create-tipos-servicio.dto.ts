@@ -160,4 +160,18 @@ export class CreateTiposServicioDto {
   @IsString()
   @IsOptional()
   observaciones?: string;
+
+  @ApiPropertyOptional({
+    description: 'Plantilla base de observación de servicio (HTML enriquecido o texto predeterminado)',
+  })
+  @IsString()
+  @IsOptional()
+  plantillaObservacion?: string;
+
+  @ApiPropertyOptional({
+    description: 'Alias snake_case para plantillaObservacion',
+  })
+  @IsString()
+  @IsOptional()
+  plantilla_observacion?: string;
 }

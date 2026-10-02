@@ -21,5 +21,6 @@ export class CreateTiposServicioCommand {
     public readonly activo: boolean,
     public readonly observaciones: string | null,
     public readonly userId: number | null,
+    public readonly plantillaObservacion: string | null = null,
   ) {}
 }

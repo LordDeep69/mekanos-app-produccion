@@ -20,12 +20,16 @@ import {
 import {
     Check,
     Edit2,
+    FileText,
     Loader2,
     MessageSquareText,
+    Sparkles,
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useUpdateObservacionesCierre } from '../hooks/use-ordenes';
+import { useTiposServicio } from '@/features/catalogos';
+import { toast } from 'sonner';
 
 interface ObservacionesCierreSectionProps {
     orden: Orden;
@@ -35,10 +39,22 @@ interface ObservacionesCierreSectionProps {
 /**
  * Sección de Observaciones de Cierre - EDITABLE con Editor Rico
  * Usa endpoint ATÓMICO dedicado: PATCH /ordenes/:id/observaciones-cierre
+ * Permite insertar opcionalmente la plantilla base del tipo de servicio sin sobreescribir texto existente.
  */
 export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCierreSectionProps) {
     const updateObservaciones = useUpdateObservacionesCierre();
     const [isEditing, setIsEditing] = useState(false);
+
+    // Consulta de tipos de servicio para tener acceso a plantillas
+    const { data: tiposServicioResp } = useTiposServicio({ activo: true, limit: 100 });
+    const listaTipos = tiposServicioResp?.data || [];
+
+    const idTipoActual = orden.tipos_servicio?.id_tipo_servicio || (orden as any).id_tipo_servicio;
+    const tipoActualCatalog = listaTipos.find(t => t.id_tipo_servicio === idTipoActual);
+    const plantillaActual = orden.tipos_servicio?.plantilla_observacion || tipoActualCatalog?.plantilla_observacion || null;
+    const nombreTipoActual = orden.tipos_servicio?.nombre_tipo || tipoActualCatalog?.nombre_tipo || 'Servicio';
+
+    const tiposConPlantilla = listaTipos.filter(t => t.plantilla_observacion && t.plantilla_observacion.trim() !== '');
 
     const editor = useRichEditor(plainTextToHtml(orden.observaciones_cierre || ''));
 
@@ -52,6 +68,22 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
             }
         }
     }, [orden.observaciones_cierre, editor, isEditing]);
+
+    const handleInsertarPlantilla = (plantillaHtml: string, nombreTipo?: string) => {
+        if (!editor || !plantillaHtml) return;
+        const currentHtml = editor.getHTML();
+        const isEmpty = !currentHtml || currentHtml === '<p></p>' || currentHtml === '<p><br></p>' || currentHtml.trim() === '';
+
+        if (isEmpty) {
+            editor.commands.setContent(plantillaHtml);
+            toast.success(`Plantilla "${nombreTipo || 'Servicio'}" insertada`);
+        } else {
+            // Anexar sin borrar el texto previo que ingresó el técnico o admin
+            const separator = '<p></p><hr/><p><strong>--- Plantilla: ' + (nombreTipo || 'Servicio') + ' ---</strong></p>';
+            editor.commands.setContent(currentHtml + separator + plantillaHtml);
+            toast.success('Plantilla anexada al texto existente sin sobrescribir');
+        }
+    };
 
     const handleGuardar = async () => {
         if (!editor || updateObservaciones.isPending) return;
@@ -105,6 +137,58 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
             <div className="p-4">
                 {isEditing ? (
                     <div className="obs-editor space-y-3 border-2 border-green-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500">
+                        {/* Barra de plantilla de servicio opcional */}
+                        <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border-b border-emerald-100 p-2.5 px-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="flex items-center gap-1 font-bold text-emerald-800">
+                                    <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                                    Plantilla de Servicio:
+                                </span>
+                                {plantillaActual ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleInsertarPlantilla(plantillaActual, nombreTipoActual)}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-2xs transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                                        title="Inserta el texto predeterminado sin borrar lo que ya está escrito"
+                                    >
+                                        <Sparkles className="h-3 w-3" />
+                                        Insertar plantilla de "{nombreTipoActual}"
+                                    </button>
+                                ) : (
+                                    <span className="text-gray-500 italic text-[11px]">
+                                        "{nombreTipoActual}" no tiene plantilla configurada
+                                    </span>
+                                )}
+                            </div>
+
+                            {tiposConPlantilla.length > 0 && (
+                                <div className="flex items-center gap-1.5 ml-auto">
+                                    <span className="text-gray-500 text-[11px]">Otras plantillas:</span>
+                                    <select
+                                        onChange={(e) => {
+                                            const id = Number(e.target.value);
+                                            if (id) {
+                                                const sel = tiposConPlantilla.find(t => t.id_tipo_servicio === id);
+                                                if (sel?.plantilla_observacion) {
+                                                    handleInsertarPlantilla(sel.plantilla_observacion, sel.nombre_tipo);
+                                                }
+                                            }
+                                            e.target.value = '';
+                                        }}
+                                        defaultValue=""
+                                        className="bg-white border border-emerald-200 text-gray-700 text-xs rounded-md px-2 py-1 focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
+                                    >
+                                        <option value="" disabled>Seleccionar de catálogo...</option>
+                                        {tiposConPlantilla.map(t => (
+                                            <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>
+                                                {t.nombre_tipo}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
                         <EditorToolbar editor={editor} />
                         <EditorContent editor={editor} />
                         <div className="flex gap-2 justify-end px-4 pb-3">
@@ -140,12 +224,31 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                             <div className="text-center py-6 text-gray-400">
                                 <MessageSquareText className="h-10 w-10 mx-auto mb-2 opacity-30" />
                                 <p className="text-sm font-medium">Sin observaciones de cierre</p>
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="mt-2 text-green-600 hover:text-green-700 text-xs font-bold underline"
-                                >
-                                    Agregar observación
-                                </button>
+                                <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
+                                    <button
+                                        onClick={() => setIsEditing(true)}
+                                        className="text-green-600 hover:text-green-700 text-xs font-bold underline"
+                                    >
+                                        Agregar observación
+                                    </button>
+                                    {plantillaActual && (
+                                        <>
+                                            <span className="text-gray-300">•</span>
+                                            <button
+                                                onClick={() => {
+                                                    setIsEditing(true);
+                                                    setTimeout(() => {
+                                                        handleInsertarPlantilla(plantillaActual, nombreTipoActual);
+                                                    }, 60);
+                                                }}
+                                                className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                                            >
+                                                <Sparkles className="h-3 w-3 text-emerald-600" />
+                                                Iniciar con plantilla de {nombreTipoActual}
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>

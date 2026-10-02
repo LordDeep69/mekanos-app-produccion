@@ -33,6 +33,7 @@ export class CreateTiposServicioHandler
       color_hex: command.colorHex,
       activo: command.activo,
       observaciones: command.observaciones,
+      plantilla_observacion: command.plantillaObservacion,
       creado_por: command.userId,
     };
 

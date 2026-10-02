@@ -21,6 +21,7 @@ export class UpdateTiposServicioCommand {
       colorHex?: string | null;
       activo?: boolean;
       observaciones?: string | null;
+      plantillaObservacion?: string | null;
     },
     public readonly userId: number | null,
   ) {}

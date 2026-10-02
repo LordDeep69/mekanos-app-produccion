@@ -8,6 +8,7 @@ import {
     CheckSquare,
     ChevronDown, ChevronRight,
     Clock,
+    FileText,
     Gauge,
     Layers,
     Loader2,
@@ -156,6 +157,19 @@ export function TipoServicioDetailDrawer({ tipoServicioId, onClose }: Props) {
                                 <p className="text-gray-600 text-sm bg-gray-50 p-4 rounded-xl">
                                     {detalle.descripcion}
                                 </p>
+                            )}
+
+                            {detalle.plantilla_observacion && (
+                                <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-4 space-y-2">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                                        <FileText className="h-4 w-4 text-emerald-600" />
+                                        Plantilla de Observación de Cierre
+                                    </h4>
+                                    <div
+                                        className="prose prose-sm max-w-none text-gray-700 bg-white p-3.5 rounded-lg border border-emerald-100 shadow-2xs font-normal"
+                                        dangerouslySetInnerHTML={{ __html: detalle.plantilla_observacion }}
+                                    />
+                                </div>
                             )}
 
                             {/* Servicios Específicos del Catálogo vinculados a este tipo */}

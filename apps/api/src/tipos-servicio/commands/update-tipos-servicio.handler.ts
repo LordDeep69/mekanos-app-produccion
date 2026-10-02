@@ -62,6 +62,9 @@ export class UpdateTiposServicioHandler
     if (command.data.observaciones !== undefined) {
       dbData.observaciones = command.data.observaciones;
     }
+    if (command.data.plantillaObservacion !== undefined) {
+      dbData.plantilla_observacion = command.data.plantillaObservacion;
+    }
 
     // Agregar campo de auditoría
     dbData.modificado_por = command.userId;
