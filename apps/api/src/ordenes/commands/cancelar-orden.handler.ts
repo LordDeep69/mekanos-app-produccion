@@ -29,7 +29,7 @@ export class CancelarOrdenHandler implements ICommandHandler<CancelarOrdenComman
     }
 
     // 2. Validar que permite cancelación
-    const estadoCodigo = ordenExistente.estado.codigo_estado;
+    const estadoCodigo = ordenExistente.estados_orden?.codigo_estado || ordenExistente.estado?.codigo_estado || '';
     if (!permiteCancelacion(estadoCodigo)) {
       throw new BadRequestException(
         `No se puede cancelar la orden en estado ${estadoCodigo}. ` +

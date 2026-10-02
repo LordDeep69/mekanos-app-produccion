@@ -431,8 +431,8 @@ export class CotizacionesFacadeService {
       const cotizacion = await this.prisma.cotizaciones.findUnique({
         where: { id_cotizacion: input.idCotizacion },
         include: {
-          estado: true,
-          cliente: { include: { persona: true } },
+          estados_cotizacion: true, // ✅ FIX: relación real es `estados_cotizacion`
+          clientes: { include: { persona: true } },
           empleados: { include: { persona: true } },
           items_servicios: { include: { servicio: true } },
           items_componentes: { include: { catalogo_componentes: true } },
@@ -557,7 +557,7 @@ export class CotizacionesFacadeService {
     try {
       const cotizacion = await this.prisma.cotizaciones.findUnique({
         where: { id_cotizacion: idCotizacion },
-        include: { estado: true },
+        include: { estados_cotizacion: true }, // ✅ FIX: relación real es `estados_cotizacion` (FK id_estado)
       });
 
       if (!cotizacion) {
@@ -610,7 +610,7 @@ export class CotizacionesFacadeService {
     try {
       const cotizacion = await this.prisma.cotizaciones.findUnique({
         where: { id_cotizacion: idCotizacion },
-        include: { estado: true },
+        include: { estados_cotizacion: true }, // ✅ FIX: relación real es `estados_cotizacion` (FK id_estado)
       });
 
       if (!cotizacion) {
@@ -667,9 +667,9 @@ export class CotizacionesFacadeService {
       const orden = await this.prisma.ordenes_servicio.findUnique({
         where: { id_orden_servicio: input.idOrdenServicio },
         include: {
-          cliente: { include: { persona: true } },
-          equipo: true,
-          estado: true,
+          clientes: { include: { persona: true } },
+          equipos: true,
+          estados_orden: true, // ✅ FIX: relación real de ordenes_servicio es `estados_orden`
         },
       });
 
@@ -753,8 +753,10 @@ export class CotizacionesFacadeService {
       const propuesta = await this.prisma.propuestas_correctivo.findUnique({
         where: { id_propuesta: idPropuesta },
         include: {
-          orden_servicio: { include: { cliente: { include: { persona: true } }, sede: true } },
-          estado: true,
+          orden_servicio_propuestas_correctivo_id_orden_servicioToordenes_servicio: {
+            include: { clientes: { include: { persona: true } }, sedes_cliente: true },
+          },
+          estados_cotizacion: true, // ✅ FIX: relación real es `estados_cotizacion`
         },
       });
 
@@ -834,11 +836,11 @@ export class CotizacionesFacadeService {
     const cotizacion = await this.prisma.cotizaciones.findUnique({
       where: { id_cotizacion: idCotizacion },
       include: {
-        cliente: { include: { persona: true } },
-        sede: true,
-        equipo: true,
-        estado: true,
-        items_servicios: { include: { servicio: true } },
+        clientes: { include: { persona: true } },
+        sedes_cliente: true,
+        equipos: true,
+        estados_cotizacion: true, // ✅ FIX: relación real es `estados_cotizacion`
+        items_servicios: { include: { catalogo_servicios: true } },
         items_componentes: { include: { catalogo_componentes: true } },
         aprobaciones: true,
       },
@@ -874,7 +876,7 @@ export class CotizacionesFacadeService {
   private async verificarCotizacionEditable(idCotizacion: number): Promise<any> {
     const cotizacion = await this.prisma.cotizaciones.findUnique({
       where: { id_cotizacion: idCotizacion },
-      include: { estado: true },
+      include: { estados_cotizacion: true }, // ✅ FIX: relación real es `estados_cotizacion` (FK id_estado)
     });
 
     if (!cotizacion) {

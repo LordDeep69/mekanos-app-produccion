@@ -303,11 +303,12 @@ class SmartSyncService {
 
         for (final orden in candidatasVerificacion) {
           try {
-            final existeEnServidor = await _verificarOrdenExisteEnServidor(
+            final sigueAsignada = await _verificarOrdenAsignadaATecnico(
               orden.idBackend!,
+              tecnicoId,
             );
-            if (!existeEnServidor) {
-              // Servidor confirmó 404 → orden eliminada, purgar todo
+            if (!sigueAsignada) {
+              // Servidor confirmó 404 (orden eliminada) O la orden ya no está asignada a este técnico (reasignada)
               // Primero limpiar cola de sync pendiente (si existe)
               await (_db.delete(
                 _db.ordenesPendientesSync,
@@ -317,12 +318,7 @@ class SmartSyncService {
               ordenesEliminadasCount++;
               debugPrint(
                 '   🗑️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
-                'purgada localmente (isDirty=${orden.isDirty})',
-              );
-            } else {
-              debugPrint(
-                '   ⚠️ ${orden.numeroOrden} existe en servidor pero no en compare '
-                '(posible reasignación a otro técnico)',
+                'purgada localmente (eliminada o reasignada a otro técnico)',
               );
             }
           } catch (e) {
@@ -669,21 +665,51 @@ class SmartSyncService {
     );
   }
 
-  /// ✅ FIX 26-FEB-2026: Verifica si una orden aún existe en el servidor
-  /// Retorna false si el servidor responde 404 (orden eliminada)
-  Future<bool> _verificarOrdenExisteEnServidor(int idBackend) async {
+  /// ✅ FIX 29-SEP-2026: Verifica si una orden aún existe en el servidor Y sigue asignada a este técnico
+  /// Retorna false si:
+  /// - Servidor responde 404 (orden eliminada)
+  /// - Servidor responde 200 pero `id_tecnico_asignado != tecnicoId` (orden reasignada o desasignada)
+  /// Retorna true si sigue asignada al técnico, o en caso de error transitorio de red.
+  Future<bool> _verificarOrdenAsignadaATecnico(
+    int idBackend,
+    int tecnicoId,
+  ) async {
     try {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
         '/ordenes/$idBackend',
       );
-      return response.statusCode == 200;
+      if (response.statusCode == 404) {
+        return false;
+      }
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data!;
+        final ordenMap = (data['data'] is Map<String, dynamic>)
+            ? data['data'] as Map<String, dynamic>
+            : data;
+
+        final dynamic tecnicoObj =
+            ordenMap['empleados_ordenes_servicio_id_tecnico_asignadoToempleados'];
+        final int? tecnicoAsignadoId = ordenMap['id_tecnico_asignado'] is int
+            ? ordenMap['id_tecnico_asignado'] as int
+            : (tecnicoObj is Map ? tecnicoObj['id_empleado'] as int? : null);
+
+        if (tecnicoAsignadoId == null || tecnicoAsignadoId != tecnicoId) {
+          debugPrint(
+            '🔄 [SMART SYNC] Orden $idBackend ya NO está asignada al técnico $tecnicoId '
+            '(técnico en servidor: $tecnicoAsignadoId) → purgar localmente',
+          );
+          return false;
+        }
+        return true;
+      }
+      return true;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         return false; // Orden no existe en servidor
       }
-      // Otro error de red → asumir que existe (no purgar por error de red)
+      // Otro error de red → asumir que existe (no purgar por error transitorio de red)
       debugPrint(
-        '⚠️ [SMART SYNC] Error verificando orden $idBackend: ${e.message}',
+        '⚠️ [SMART SYNC] Error de red verificando orden $idBackend: ${e.message}',
       );
       return true;
     } catch (e) {

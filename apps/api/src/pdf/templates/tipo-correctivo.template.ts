@@ -375,12 +375,17 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
     datos.esMultiEquipo || (datos.actividadesPorEquipo && datos.actividadesPorEquipo.length > 1);
 
   // Determinar si hay contenido en secciones condicionales
-  const tieneProblemaODiagnostico = datos.problemaReportado || datos.fallasObservadas ||
-    datos.diagnosticoTecnico || (datos.sistemasAfectados && datos.sistemasAfectados.length > 0);
+  const tieneProblemaODiagnostico = !esTextoVacioOSinContenido(datos.problemaReportado) ||
+    !esTextoVacioOSinContenido(datos.fallasObservadas) ||
+    !esTextoVacioOSinContenido(datos.diagnosticoTecnico) ||
+    (datos.sistemasAfectados && datos.sistemasAfectados.length > 0);
   const tieneRepuestosOMateriales =
     (datos.repuestosUtilizados && datos.repuestosUtilizados.length > 0) ||
     (datos.materialesUtilizados && datos.materialesUtilizados.length > 0);
-  const tieneResultado = datos.estadoFinal || datos.trabajosPendientes || datos.recomendaciones;
+  const tieneTrabajosRealizados = !esTextoVacioOSinContenido(datos.trabajosRealizados);
+  const tieneResultado = !esTextoVacioOSinContenido(datos.estadoFinal) ||
+    !esTextoVacioOSinContenido(datos.trabajosPendientes) ||
+    !esTextoVacioOSinContenido(datos.recomendaciones);
 
   return `
 <!DOCTYPE html>
@@ -418,7 +423,7 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         ${tieneProblemaODiagnostico ? generarProblemaYDiagnostico(datos) : ''}
         
         <!-- 5. TRABAJOS REALIZADOS (narrativo) -->
-        ${datos.trabajosRealizados ? generarTrabajosRealizados(datos) : ''}
+        ${tieneTrabajosRealizados ? generarTrabajosRealizados(datos) : ''}
         
         <!-- 6. REPUESTOS Y MATERIALES -->
         ${tieneRepuestosOMateriales ? generarRepuestosYMateriales(datos) : ''}
@@ -563,8 +568,70 @@ const generarDatosModulo = (datos: DatosCorrectivoOrdenPDF): string => {
 // ═══════════════════════════════════════════════════════════════════════════
 // ✅ FIX 06-FEB-2026: Helper para renderizar observación auxiliar del técnico
 // ═══════════════════════════════════════════════════════════════════════════
+// ✅ Helper para determinar si un texto está vacío o es un placeholder
+// ═══════════════════════════════════════════════════════════════════════════
+export function esTextoVacioOSinContenido(texto?: string | null): boolean {
+  if (!texto) return true;
+
+  let plano = String(texto).replace(/<[^>]*>/g, ' ');
+  plano = plano
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+
+  let limpio = plano.trim();
+  if (!limpio) return true;
+
+  const prefijos = [
+    'PENDIENTES:',
+    'RECOMENDACIONES:',
+    'TRABAJOS:',
+    'DIAGNOSTICO:',
+    'DIAGNÓSTICO:',
+    'PROBLEMA:',
+    'SINTOMAS:',
+    'SÍNTOMAS:',
+    'FALLAS:',
+    'SISTEMAS:',
+    'ESTADO_INICIAL:',
+    'ESTADO_FINAL:',
+    'REPUESTOS:',
+    'MATERIALES:',
+  ];
+
+  const limpioUpper = limpio.toUpperCase();
+  for (const p of prefijos) {
+    if (limpioUpper.startsWith(p)) {
+      limpio = limpio.substring(p.length).trim();
+      break;
+    }
+  }
+
+  if (!limpio) return true;
+
+  const upperFinal = limpio.toUpperCase();
+  const placeholders = [
+    '.', '..', '...', '-', '--', '---', '/',
+    'N/A', 'NA', 'NO APLICA', 'S/N', 'S.N.',
+    '(SIN INFORMACIÓN)', '(SIN INFORMACION)', 'SIN INFORMACION', 'SIN INFORMACIÓN',
+    '(NINGUNO)', '(NINGUNA)', 'NINGUNO', 'NINGUNA', 'NINGUN',
+    'SIN PENDIENTES', 'NO PRESENTA PENDIENTES', 'NO HAY PENDIENTES', 'SIN TRABAJOS PENDIENTES',
+    'SIN RECOMENDACIONES', 'NO PRESENTA RECOMENDACIONES', 'NO HAY RECOMENDACIONES',
+    'SIN NOVEDAD', 'SIN NOVEDADES',
+    'NULL', 'UNDEFINED',
+  ];
+
+  if (placeholders.includes(upperFinal)) return true;
+  if (/^[\.\-_\s\*\/\\]+$/.test(limpio)) return true;
+
+  return false;
+}
+
 const renderObsAux = (obs?: string): string =>
-  obs ? `<div class="corr-obs-aux">${obs}</div>` : '';
+  (obs && !esTextoVacioOSinContenido(obs)) ? `<div class="corr-obs-aux">${obs}</div>` : '';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ✅ REDISEÑO 06-FEB-2026: Secciones dedicadas por naturaleza de actividad
@@ -573,7 +640,7 @@ const renderObsAux = (obs?: string): string =>
 const generarProblemaYDiagnostico = (datos: DatosCorrectivoOrdenPDF): string => {
   const items: string[] = [];
 
-  if (datos.problemaReportado) {
+  if (!esTextoVacioOSinContenido(datos.problemaReportado)) {
     items.push(`
       <div class="corr-field">
         <div class="corr-field-label">⚠️ Problema Reportado</div>
@@ -583,7 +650,7 @@ const generarProblemaYDiagnostico = (datos: DatosCorrectivoOrdenPDF): string => 
     `);
   }
 
-  if (datos.fallasObservadas) {
+  if (!esTextoVacioOSinContenido(datos.fallasObservadas)) {
     items.push(`
       <div class="corr-field">
         <div class="corr-field-label">🔍 Fallas Observadas</div>
@@ -605,7 +672,7 @@ const generarProblemaYDiagnostico = (datos: DatosCorrectivoOrdenPDF): string => 
     `);
   }
 
-  if (datos.diagnosticoTecnico) {
+  if (!esTextoVacioOSinContenido(datos.diagnosticoTecnico)) {
     items.push(`
       <div class="corr-field">
         <div class="corr-field-label">🔧 Diagnóstico Técnico</div>
@@ -614,6 +681,8 @@ const generarProblemaYDiagnostico = (datos: DatosCorrectivoOrdenPDF): string => 
       </div>
     `);
   }
+
+  if (items.length === 0) return '';
 
   return `
     <div class="section">
@@ -625,19 +694,22 @@ const generarProblemaYDiagnostico = (datos: DatosCorrectivoOrdenPDF): string => 
   `;
 };
 
-const generarTrabajosRealizados = (datos: DatosCorrectivoOrdenPDF): string => `
+const generarTrabajosRealizados = (datos: DatosCorrectivoOrdenPDF): string => {
+  if (esTextoVacioOSinContenido(datos.trabajosRealizados)) return '';
+  return `
     <div class="section">
         <div class="section-title">TRABAJOS REALIZADOS</div>
         <div class="corr-narrative-box">
-            ${datos.trabajosRealizados || 'Sin información de trabajos realizados.'}
+            ${datos.trabajosRealizados}
         </div>
         ${renderObsAux(datos.obsTrabajos)}
     </div>
-`;
+  `;
+};
 
 const generarRepuestosYMateriales = (datos: DatosCorrectivoOrdenPDF): string => {
-  const repuestos = datos.repuestosUtilizados || [];
-  const materiales = datos.materialesUtilizados || [];
+  const repuestos = (datos.repuestosUtilizados || []).filter(r => !esTextoVacioOSinContenido(r));
+  const materiales = (datos.materialesUtilizados || []).filter(m => !esTextoVacioOSinContenido(m));
   const rows: string[] = [];
 
   repuestos.forEach((r, i) => {
@@ -646,6 +718,8 @@ const generarRepuestosYMateriales = (datos: DatosCorrectivoOrdenPDF): string => 
   materiales.forEach((m, i) => {
     rows.push(`<tr><td style="text-align:center;">${repuestos.length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`);
   });
+
+  if (rows.length === 0) return '';
 
   return `
     <div class="section">
@@ -671,7 +745,7 @@ const generarRepuestosYMateriales = (datos: DatosCorrectivoOrdenPDF): string => 
 const generarResultadoServicio = (datos: DatosCorrectivoOrdenPDF): string => {
   const items: string[] = [];
 
-  if (datos.estadoFinal) {
+  if (!esTextoVacioOSinContenido(datos.estadoFinal)) {
     items.push(`
       <div class="corr-resultado-estado">
         <span class="corr-estado-label">ESTADO FINAL DEL EQUIPO:</span>
@@ -681,7 +755,7 @@ const generarResultadoServicio = (datos: DatosCorrectivoOrdenPDF): string => {
     `);
   }
 
-  if (datos.trabajosPendientes) {
+  if (!esTextoVacioOSinContenido(datos.trabajosPendientes)) {
     items.push(`
       <div class="corr-field">
         <div class="corr-field-label">⚠️ Trabajos Pendientes</div>
@@ -691,7 +765,7 @@ const generarResultadoServicio = (datos: DatosCorrectivoOrdenPDF): string => {
     `);
   }
 
-  if (datos.recomendaciones) {
+  if (!esTextoVacioOSinContenido(datos.recomendaciones)) {
     items.push(`
       <div class="corr-field">
         <div class="corr-field-label">💡 Recomendaciones</div>
@@ -700,6 +774,8 @@ const generarResultadoServicio = (datos: DatosCorrectivoOrdenPDF): string => {
       </div>
     `);
   }
+
+  if (items.length === 0) return '';
 
   return `
     <div class="section">
@@ -730,24 +806,24 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
     const sections: string[] = [];
 
     // --- ESTADO INICIAL ---
-    if (eq.estadoInicial) {
+    if (!esTextoVacioOSinContenido(eq.estadoInicial)) {
       sections.push(`
         <div style="margin-bottom: 10px;">
           <div class="corr-field-label" style="color: ${color.header};">📋 Estado Inicial</div>
           <div class="corr-field-value">${eq.estadoInicial}</div>
-          ${eq.obsEstadoInicial ? `<div style="font-size:9px; color:#6b7280; margin-top:3px; font-style:italic;">📝 ${eq.obsEstadoInicial}</div>` : ''}
+          ${eq.obsEstadoInicial && !esTextoVacioOSinContenido(eq.obsEstadoInicial) ? `<div style="font-size:9px; color:#6b7280; margin-top:3px; font-style:italic;">📝 ${eq.obsEstadoInicial}</div>` : ''}
         </div>
       `);
     }
 
     // --- PROBLEMA Y DIAGNÓSTICO ---
     const problemas: string[] = [];
-    if (eq.problemaReportado) problemas.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Problema Reportado</div><div class="corr-field-value">${eq.problemaReportado}</div>${eq.obsProblema ? renderObsAux(eq.obsProblema) : ''}</div>`);
-    if (eq.fallasObservadas) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔍 Fallas Observadas</div><div class="corr-field-value">${eq.fallasObservadas}</div>${eq.obsFallas ? renderObsAux(eq.obsFallas) : ''}</div>`);
+    if (!esTextoVacioOSinContenido(eq.problemaReportado)) problemas.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Problema Reportado</div><div class="corr-field-value">${eq.problemaReportado}</div>${eq.obsProblema ? renderObsAux(eq.obsProblema) : ''}</div>`);
+    if (!esTextoVacioOSinContenido(eq.fallasObservadas)) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔍 Fallas Observadas</div><div class="corr-field-value">${eq.fallasObservadas}</div>${eq.obsFallas ? renderObsAux(eq.obsFallas) : ''}</div>`);
     if (eq.sistemasAfectados && eq.sistemasAfectados.length > 0) {
       problemas.push(`<div class="corr-field"><div class="corr-field-label">⚙️ Sistemas Afectados</div><div class="corr-chips">${eq.sistemasAfectados.map(s => `<span class="corr-chip">${s}</span>`).join('')}</div>${eq.obsSistemas ? renderObsAux(eq.obsSistemas) : ''}</div>`);
     }
-    if (eq.diagnosticoTecnico) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔧 Diagnóstico Técnico</div><div class="corr-field-value">${eq.diagnosticoTecnico}</div>${eq.obsDiagnostico ? renderObsAux(eq.obsDiagnostico) : ''}</div>`);
+    if (!esTextoVacioOSinContenido(eq.diagnosticoTecnico)) problemas.push(`<div class="corr-field"><div class="corr-field-label">🔧 Diagnóstico Técnico</div><div class="corr-field-value">${eq.diagnosticoTecnico}</div>${eq.obsDiagnostico ? renderObsAux(eq.obsDiagnostico) : ''}</div>`);
     if (problemas.length > 0) {
       sections.push(`
         <div style="margin-bottom: 10px;">
@@ -758,7 +834,7 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
     }
 
     // --- TRABAJOS REALIZADOS ---
-    if (eq.trabajosRealizados) {
+    if (!esTextoVacioOSinContenido(eq.trabajosRealizados)) {
       sections.push(`
         <div style="margin-bottom: 10px;">
           <div class="corr-field-label" style="color: ${color.header};">🛠️ Trabajos Realizados</div>
@@ -770,8 +846,8 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
 
     // --- REPUESTOS Y MATERIALES ---
     const repRows: string[] = [];
-    (eq.repuestosUtilizados || []).forEach((r: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`));
-    (eq.materialesUtilizados || []).forEach((m: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${(eq.repuestosUtilizados || []).length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`));
+    (eq.repuestosUtilizados || []).filter(r => !esTextoVacioOSinContenido(r)).forEach((r: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${i + 1}</td><td>${r}</td><td style="text-align:center;">Repuesto</td></tr>`));
+    (eq.materialesUtilizados || []).filter(m => !esTextoVacioOSinContenido(m)).forEach((m: string, i: number) => repRows.push(`<tr><td style="text-align:center;">${(eq.repuestosUtilizados || []).length + i + 1}</td><td>${m}</td><td style="text-align:center;">Material</td></tr>`));
     if (repRows.length > 0) {
       sections.push(`
         <div style="margin-bottom: 10px;">
@@ -788,7 +864,7 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
 
     // --- RESULTADO ---
     const resultadoItems: string[] = [];
-    if (eq.estadoFinal) {
+    if (!esTextoVacioOSinContenido(eq.estadoFinal)) {
       resultadoItems.push(`
         <div class="corr-resultado-estado">
           <span class="corr-estado-label">ESTADO FINAL:</span>
@@ -797,8 +873,8 @@ const generarNarrativaCorrectivoPorEquipo = (datosPorEquipo: DatosEstructuradosC
         ${eq.obsEstadoFinal ? renderObsAux(eq.obsEstadoFinal) : ''}
       `);
     }
-    if (eq.trabajosPendientes) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Trabajos Pendientes</div><div class="corr-field-value corr-pendientes">${eq.trabajosPendientes}</div>${eq.obsPendientes ? renderObsAux(eq.obsPendientes) : ''}</div>`);
-    if (eq.recomendaciones) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">💡 Recomendaciones</div><div class="corr-field-value">${eq.recomendaciones}</div>${eq.obsRecomendaciones ? renderObsAux(eq.obsRecomendaciones) : ''}</div>`);
+    if (!esTextoVacioOSinContenido(eq.trabajosPendientes)) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">⚠️ Trabajos Pendientes</div><div class="corr-field-value corr-pendientes">${eq.trabajosPendientes}</div>${eq.obsPendientes ? renderObsAux(eq.obsPendientes) : ''}</div>`);
+    if (!esTextoVacioOSinContenido(eq.recomendaciones)) resultadoItems.push(`<div class="corr-field"><div class="corr-field-label">💡 Recomendaciones</div><div class="corr-field-value">${eq.recomendaciones}</div>${eq.obsRecomendaciones ? renderObsAux(eq.obsRecomendaciones) : ''}</div>`);
     if (resultadoItems.length > 0) {
       sections.push(`
         <div style="margin-bottom: 10px;">

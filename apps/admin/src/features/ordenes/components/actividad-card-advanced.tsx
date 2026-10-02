@@ -200,6 +200,14 @@ interface PrefijoResultado {
     contenido: string;
 }
 
+function tieneContenidoReal(texto?: string | null): boolean {
+    if (!texto) return false;
+    const limpio = texto.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').trim();
+    if (!limpio) return false;
+    if (limpio === '.' || limpio === '..' || limpio === '...' || limpio === '-' || limpio === '--') return false;
+    return true;
+}
+
 function separarPrefijo(texto: string): PrefijoResultado {
     if (!texto) return { prefijo: '', contenido: '' };
 
@@ -208,13 +216,22 @@ function separarPrefijo(texto: string): PrefijoResultado {
         const upper = texto.toUpperCase();
         for (const p of PREFIJOS_CORRECTIVO) {
             if (upper.startsWith(p)) {
+                const resto = texto.substring(p.length);
                 return {
                     prefijo: texto.substring(0, p.length),
-                    contenido: texto.substring(p.length),
+                    contenido: tieneContenidoReal(resto) ? resto : '',
+                };
+            }
+            const pTrim = p.trim();
+            if (upper.startsWith(pTrim)) {
+                const resto = texto.substring(pTrim.length);
+                return {
+                    prefijo: p,
+                    contenido: tieneContenidoReal(resto) ? resto : '',
                 };
             }
         }
-        return { prefijo: '', contenido: texto };
+        return { prefijo: '', contenido: tieneContenidoReal(texto) ? texto : '' };
     }
 
     // Caso HTML: el prefijo, si existe, aparece como texto literal al inicio del HTML
@@ -225,14 +242,23 @@ function separarPrefijo(texto: string): PrefijoResultado {
         const upperHead = head.toUpperCase();
         for (const p of PREFIJOS_CORRECTIVO) {
             if (upperHead.startsWith(p)) {
+                const resto = texto.substring(p.length);
                 return {
                     prefijo: head.substring(0, p.length),
-                    contenido: texto.substring(p.length),
+                    contenido: tieneContenidoReal(resto) ? resto : '',
+                };
+            }
+            const pTrim = p.trim();
+            if (upperHead.startsWith(pTrim)) {
+                const resto = texto.substring(pTrim.length);
+                return {
+                    prefijo: p,
+                    contenido: tieneContenidoReal(resto) ? resto : '',
                 };
             }
         }
     }
-    return { prefijo: '', contenido: texto };
+    return { prefijo: '', contenido: tieneContenidoReal(texto) ? texto : '' };
 }
 
 export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: ActividadCardAdvancedProps) {
@@ -285,15 +311,24 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
         if (updateActividad.isPending) return;
 
         try {
-            let valorAGuardar: string;
+            let valorAGuardar: string | null;
 
             if (esRico && editor) {
                 const html = editor.getHTML();
-                const contenidoHtml = html === '<p></p>' ? '' : html;
-                // Reconstruir observación final = PREFIJO + contenido
-                valorAGuardar = (separado.prefijo + contenidoHtml) || null;
+                const textoLimpio = editor.getText().trim();
+                const tieneContenido = tieneContenidoReal(textoLimpio);
+
+                if (!tieneContenido) {
+                    // Si se borró el contenido o solo se dejó '.', guardar solo el prefijo formateado
+                    // para que Portal Admin mantenga la cabecera del prefijo + 'Sin contenido'
+                    valorAGuardar = separado.prefijo ? separado.prefijo : null;
+                } else {
+                    // Reconstruir observación final = PREFIJO + contenido
+                    valorAGuardar = (separado.prefijo + html) || null;
+                }
             } else {
-                valorAGuardar = observaciones || null;
+                const tieneContenido = tieneContenidoReal(observaciones || '');
+                valorAGuardar = tieneContenido ? observaciones : null;
             }
 
             await updateActividad.mutateAsync({

@@ -207,6 +207,75 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * ✅ Determina si un valor de texto/HTML está vacío, es placeholder o solo contiene prefijo/puntuación
+   * Evita renderizar secciones o campos vacíos en el PDF (p.ej. "PENDIENTES: ", ".", "N/A", "(Ninguno)")
+   */
+  public esTextoVacioOSinContenido(texto?: string | null): boolean {
+    if (!texto) return true;
+
+    // 1. Quitar tags HTML y decodificar entidades comunes
+    let plano = String(texto).replace(/<[^>]*>/g, ' ');
+    plano = plano
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'");
+
+    let limpio = plano.trim();
+    if (!limpio) return true;
+
+    // 2. Quitar prefijos conocidos si los tiene al inicio
+    const prefijos = [
+      'PENDIENTES:',
+      'RECOMENDACIONES:',
+      'TRABAJOS:',
+      'DIAGNOSTICO:',
+      'DIAGNÓSTICO:',
+      'PROBLEMA:',
+      'SINTOMAS:',
+      'SÍNTOMAS:',
+      'FALLAS:',
+      'SISTEMAS:',
+      'ESTADO_INICIAL:',
+      'ESTADO_FINAL:',
+      'REPUESTOS:',
+      'MATERIALES:',
+    ];
+
+    const limpioUpper = limpio.toUpperCase();
+    for (const p of prefijos) {
+      if (limpioUpper.startsWith(p)) {
+        limpio = limpio.substring(p.length).trim();
+        break;
+      }
+    }
+
+    if (!limpio) return true;
+
+    // 3. Placeholders o cadenas sin significado real
+    const upperFinal = limpio.toUpperCase();
+    const placeholders = [
+      '.', '..', '...', '-', '--', '---', '/',
+      'N/A', 'NA', 'NO APLICA', 'S/N', 'S.N.',
+      '(SIN INFORMACIÓN)', '(SIN INFORMACION)', 'SIN INFORMACION', 'SIN INFORMACIÓN',
+      '(NINGUNO)', '(NINGUNA)', 'NINGUNO', 'NINGUNA', 'NINGUN',
+      'SIN PENDIENTES', 'NO PRESENTA PENDIENTES', 'NO HAY PENDIENTES', 'SIN TRABAJOS PENDIENTES',
+      'SIN RECOMENDACIONES', 'NO PRESENTA RECOMENDACIONES', 'NO HAY RECOMENDACIONES',
+      'SIN NOVEDAD', 'SIN NOVEDADES',
+      'NULL', 'UNDEFINED',
+    ];
+
+    if (placeholders.includes(upperFinal)) return true;
+
+    // Si solo contiene puntos, guiones, asteriscos, barras o espacios
+    if (/^[\.\-_\s\*\/\\]+$/.test(limpio)) return true;
+
+    return false;
+  }
+
+  /**
    * Adapta los datos genéricos de orden al formato específico de correctivo
    * ✅ REDISEÑO 06-FEB-2026: Cada campo estructurado va directo al template como campo dedicado
    * Ya no se usa tabla checklist B/M/C/NA ni blob HTML de observaciones
@@ -218,9 +287,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     // ═══════════════════════════════════════════════════════════════════════════
     const obsParaParsear = [datos.observaciones, datos.observaciones_tecnico].filter(Boolean).join('\n') || undefined;
     const ext = this.extraerDatosEstructuradosCorrectivo(datos.actividades || [], obsParaParsear);
-
-    // Helper para detectar valores "sin información"
-    const sinInfo = (v: string) => !v || v === '(Sin información)' || v === '(Ninguno)';
 
     // ✅ MULTI-EQUIPO: Extraer datos estructurados POR equipo
     // Cuando es multi-equipo, extraerDatosEstructuradosCorrectivo sobre el array plano
@@ -235,28 +301,28 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         );
         return {
           equipo: grupo.equipo,
-          estadoInicial: extEquipo.estadoInicial || undefined,
-          estadoFinal: extEquipo.estadoFinal || undefined,
-          problemaReportado: sinInfo(extEquipo.problema) ? undefined : extEquipo.problema,
-          fallasObservadas: sinInfo(extEquipo.sintomas) ? undefined : extEquipo.sintomas,
-          diagnosticoTecnico: sinInfo(extEquipo.diagnostico) ? undefined : extEquipo.diagnostico,
-          trabajosRealizados: sinInfo(extEquipo.trabajos) ? undefined : extEquipo.trabajos,
-          trabajosPendientes: sinInfo(extEquipo.pendientes) ? undefined : extEquipo.pendientes,
-          recomendaciones: sinInfo(extEquipo.recomendaciones) ? undefined : extEquipo.recomendaciones,
+          estadoInicial: this.esTextoVacioOSinContenido(extEquipo.estadoInicial) ? undefined : extEquipo.estadoInicial,
+          estadoFinal: this.esTextoVacioOSinContenido(extEquipo.estadoFinal) ? undefined : extEquipo.estadoFinal,
+          problemaReportado: this.esTextoVacioOSinContenido(extEquipo.problema) ? undefined : extEquipo.problema,
+          fallasObservadas: this.esTextoVacioOSinContenido(extEquipo.sintomas) ? undefined : extEquipo.sintomas,
+          diagnosticoTecnico: this.esTextoVacioOSinContenido(extEquipo.diagnostico) ? undefined : extEquipo.diagnostico,
+          trabajosRealizados: this.esTextoVacioOSinContenido(extEquipo.trabajos) ? undefined : extEquipo.trabajos,
+          trabajosPendientes: this.esTextoVacioOSinContenido(extEquipo.pendientes) ? undefined : extEquipo.pendientes,
+          recomendaciones: this.esTextoVacioOSinContenido(extEquipo.recomendaciones) ? undefined : extEquipo.recomendaciones,
           sistemasAfectados: extEquipo.sistemasAfectados.length > 0 ? extEquipo.sistemasAfectados : undefined,
           repuestosUtilizados: extEquipo.repuestos.length > 0 ? extEquipo.repuestos : undefined,
           materialesUtilizados: extEquipo.materiales.length > 0 ? extEquipo.materiales : undefined,
-          obsEstadoInicial: extEquipo.obsEstadoInicial || undefined,
-          obsEstadoFinal: extEquipo.obsEstadoFinal || undefined,
-          obsProblema: extEquipo.obsProblema || undefined,
-          obsFallas: extEquipo.obsFallas || undefined,
-          obsDiagnostico: extEquipo.obsDiagnostico || undefined,
-          obsTrabajos: extEquipo.obsTrabajos || undefined,
-          obsPendientes: extEquipo.obsPendientes || undefined,
-          obsRecomendaciones: extEquipo.obsRecomendaciones || undefined,
-          obsRepuestos: extEquipo.obsRepuestos || undefined,
-          obsMateriales: extEquipo.obsMateriales || undefined,
-          obsSistemas: extEquipo.obsSistemas || undefined,
+          obsEstadoInicial: this.esTextoVacioOSinContenido(extEquipo.obsEstadoInicial) ? undefined : extEquipo.obsEstadoInicial,
+          obsEstadoFinal: this.esTextoVacioOSinContenido(extEquipo.obsEstadoFinal) ? undefined : extEquipo.obsEstadoFinal,
+          obsProblema: this.esTextoVacioOSinContenido(extEquipo.obsProblema) ? undefined : extEquipo.obsProblema,
+          obsFallas: this.esTextoVacioOSinContenido(extEquipo.obsFallas) ? undefined : extEquipo.obsFallas,
+          obsDiagnostico: this.esTextoVacioOSinContenido(extEquipo.obsDiagnostico) ? undefined : extEquipo.obsDiagnostico,
+          obsTrabajos: this.esTextoVacioOSinContenido(extEquipo.obsTrabajos) ? undefined : extEquipo.obsTrabajos,
+          obsPendientes: this.esTextoVacioOSinContenido(extEquipo.obsPendientes) ? undefined : extEquipo.obsPendientes,
+          obsRecomendaciones: this.esTextoVacioOSinContenido(extEquipo.obsRecomendaciones) ? undefined : extEquipo.obsRecomendaciones,
+          obsRepuestos: this.esTextoVacioOSinContenido(extEquipo.obsRepuestos) ? undefined : extEquipo.obsRepuestos,
+          obsMateriales: this.esTextoVacioOSinContenido(extEquipo.obsMateriales) ? undefined : extEquipo.obsMateriales,
+          obsSistemas: this.esTextoVacioOSinContenido(extEquipo.obsSistemas) ? undefined : extEquipo.obsSistemas,
         };
       });
     }
@@ -302,37 +368,37 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       tecnico: datos.tecnico,
 
       // --- Campos dedicados por naturaleza de actividad ---
-      estadoInicial: ext.estadoInicial || undefined,
-      estadoFinal: ext.estadoFinal || undefined,
-      problemaReportado: sinInfo(ext.problema) ? undefined : ext.problema,
-      fallasObservadas: sinInfo(ext.sintomas) ? undefined : ext.sintomas,
-      diagnosticoTecnico: sinInfo(ext.diagnostico) ? undefined : ext.diagnostico,
-      trabajosRealizados: sinInfo(ext.trabajos) ? undefined : ext.trabajos,
-      trabajosPendientes: sinInfo(ext.pendientes) ? undefined : ext.pendientes,
-      recomendaciones: sinInfo(ext.recomendaciones) ? undefined : ext.recomendaciones,
+      estadoInicial: this.esTextoVacioOSinContenido(ext.estadoInicial) ? undefined : ext.estadoInicial,
+      estadoFinal: this.esTextoVacioOSinContenido(ext.estadoFinal) ? undefined : ext.estadoFinal,
+      problemaReportado: this.esTextoVacioOSinContenido(ext.problema) ? undefined : ext.problema,
+      fallasObservadas: this.esTextoVacioOSinContenido(ext.sintomas) ? undefined : ext.sintomas,
+      diagnosticoTecnico: this.esTextoVacioOSinContenido(ext.diagnostico) ? undefined : ext.diagnostico,
+      trabajosRealizados: this.esTextoVacioOSinContenido(ext.trabajos) ? undefined : ext.trabajos,
+      trabajosPendientes: this.esTextoVacioOSinContenido(ext.pendientes) ? undefined : ext.pendientes,
+      recomendaciones: this.esTextoVacioOSinContenido(ext.recomendaciones) ? undefined : ext.recomendaciones,
       sistemasAfectados: ext.sistemasAfectados.length > 0 ? ext.sistemasAfectados : undefined,
       repuestosUtilizados: ext.repuestos.length > 0 ? ext.repuestos : undefined,
       materialesUtilizados: ext.materiales.length > 0 ? ext.materiales : undefined,
 
       // ✅ FIX 06-FEB-2026: Observaciones auxiliares del técnico por actividad
-      obsEstadoInicial: ext.obsEstadoInicial || undefined,
-      obsEstadoFinal: ext.obsEstadoFinal || undefined,
-      obsProblema: ext.obsProblema || undefined,
-      obsFallas: ext.obsFallas || undefined,
-      obsDiagnostico: ext.obsDiagnostico || undefined,
-      obsTrabajos: ext.obsTrabajos || undefined,
-      obsPendientes: ext.obsPendientes || undefined,
-      obsRecomendaciones: ext.obsRecomendaciones || undefined,
-      obsRepuestos: ext.obsRepuestos || undefined,
-      obsMateriales: ext.obsMateriales || undefined,
-      obsSistemas: ext.obsSistemas || undefined,
+      obsEstadoInicial: this.esTextoVacioOSinContenido(ext.obsEstadoInicial) ? undefined : ext.obsEstadoInicial,
+      obsEstadoFinal: this.esTextoVacioOSinContenido(ext.obsEstadoFinal) ? undefined : ext.obsEstadoFinal,
+      obsProblema: this.esTextoVacioOSinContenido(ext.obsProblema) ? undefined : ext.obsProblema,
+      obsFallas: this.esTextoVacioOSinContenido(ext.obsFallas) ? undefined : ext.obsFallas,
+      obsDiagnostico: this.esTextoVacioOSinContenido(ext.obsDiagnostico) ? undefined : ext.obsDiagnostico,
+      obsTrabajos: this.esTextoVacioOSinContenido(ext.obsTrabajos) ? undefined : ext.obsTrabajos,
+      obsPendientes: this.esTextoVacioOSinContenido(ext.obsPendientes) ? undefined : ext.obsPendientes,
+      obsRecomendaciones: this.esTextoVacioOSinContenido(ext.obsRecomendaciones) ? undefined : ext.obsRecomendaciones,
+      obsRepuestos: this.esTextoVacioOSinContenido(ext.obsRepuestos) ? undefined : ext.obsRepuestos,
+      obsMateriales: this.esTextoVacioOSinContenido(ext.obsMateriales) ? undefined : ext.obsMateriales,
+      obsSistemas: this.esTextoVacioOSinContenido(ext.obsSistemas) ? undefined : ext.obsSistemas,
 
       // --- Mediciones y módulo ---
       mediciones: medicionesConValor.length > 0 ? medicionesConValor : undefined,
       datosModulo,
 
       // --- Observaciones generales (solo textarea del técnico, sin duplicar campos) ---
-      observacionesGenerales: datos.observaciones || undefined,
+      observacionesGenerales: this.esTextoVacioOSinContenido(datos.observaciones) ? undefined : datos.observaciones,
 
       // --- Multi-equipos ---
       esMultiEquipo: datos.esMultiEquipo,
@@ -459,75 +525,88 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
       let matched = false;
 
-      if (obs.startsWith('ESTADO_INICIAL: ')) {
-        resultado.estadoInicial = this.mapearEstadoInicial(obs.substring(16).trim());
-        if (obsAux) resultado.obsEstadoInicial = obsAux;
+      if (/^ESTADO_INICIAL:\s*/i.test(obs)) {
+        const val = obs.replace(/^ESTADO_INICIAL:\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.estadoInicial = this.mapearEstadoInicial(val);
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsEstadoInicial = obsAux;
         matched = true;
-      } else if (obs.startsWith('ESTADO_FINAL: ')) {
-        resultado.estadoFinal = this.mapearEstadoFinal(obs.substring(14).trim());
-        if (obsAux) resultado.obsEstadoFinal = obsAux;
+      } else if (/^ESTADO_FINAL:\s*/i.test(obs)) {
+        const val = obs.replace(/^ESTADO_FINAL:\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.estadoFinal = this.mapearEstadoFinal(val);
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsEstadoFinal = obsAux;
         matched = true;
-      } else if (obs.startsWith('SISTEMAS: ')) {
-        const sistemas = obs.substring(10).split(',').map(s => s.trim()).filter(s => s);
+      } else if (/^SISTEMAS:\s*/i.test(obs)) {
+        const val = obs.replace(/^SISTEMAS:\s*/i, '').trim();
+        const sistemas = val.split(',').map(s => s.trim()).filter(s => s && !this.esTextoVacioOSinContenido(s));
         resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
-        if (obsAux) resultado.obsSistemas = obsAux;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsSistemas = obsAux;
         matched = true;
-      } else if (obs.startsWith('PROBLEMA: ')) {
-        resultado.problema = obs.substring(10).trim();
-        if (obsAux) resultado.obsProblema = obsAux;
+      } else if (/^PROBLEMA:\s*/i.test(obs)) {
+        const val = obs.replace(/^PROBLEMA:\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.problema = val;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsProblema = obsAux;
         matched = true;
-      } else if (obs.startsWith('SINTOMAS: ') || obs.startsWith('FALLAS: ')) {
-        const prefijo = obs.startsWith('FALLAS: ') ? 'FALLAS: ' : 'SINTOMAS: ';
-        resultado.sintomas = obs.substring(prefijo.length).trim();
-        if (obsAux) resultado.obsFallas = obsAux;
+      } else if (/^(SINTOMAS|FALLAS):\s*/i.test(obs)) {
+        const val = obs.replace(/^(SINTOMAS|FALLAS):\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.sintomas = val;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsFallas = obsAux;
         matched = true;
-      } else if (obs.startsWith('DIAGNOSTICO: ')) {
-        resultado.diagnostico = obs.substring(13).trim();
-        if (obsAux) resultado.obsDiagnostico = obsAux;
+      } else if (/^DIAGNOSTICO:\s*/i.test(obs)) {
+        const val = obs.replace(/^DIAGNOSTICO:\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.diagnostico = val;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsDiagnostico = obsAux;
         matched = true;
-      } else if (obs.startsWith('TRABAJOS: ')) {
-        resultado.trabajos = obs.substring(10).trim();
-        if (obsAux) resultado.obsTrabajos = obsAux;
+      } else if (/^TRABAJOS:\s*/i.test(obs)) {
+        const val = obs.replace(/^TRABAJOS:\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.trabajos = val;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsTrabajos = obsAux;
         matched = true;
-      } else if (obs.startsWith('PENDIENTES: ')) {
-        resultado.pendientes = obs.substring(12).trim();
-        if (obsAux) resultado.obsPendientes = obsAux;
+      } else if (/^PENDIENTES:\s*/i.test(obs)) {
+        const val = obs.replace(/^PENDIENTES:\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.pendientes = val;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsPendientes = obsAux;
         matched = true;
-      } else if (obs.startsWith('RECOMENDACIONES: ')) {
-        resultado.recomendaciones = obs.substring(17).trim();
-        if (obsAux) resultado.obsRecomendaciones = obsAux;
+      } else if (/^RECOMENDACIONES:\s*/i.test(obs)) {
+        const val = obs.replace(/^RECOMENDACIONES:\s*/i, '').trim();
+        if (!this.esTextoVacioOSinContenido(val)) resultado.recomendaciones = val;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsRecomendaciones = obsAux;
         matched = true;
-      } else if (obs.startsWith('REPUESTOS: ')) {
-        const items = obs.substring(11).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
+      } else if (/^REPUESTOS:\s*/i.test(obs)) {
+        const val = obs.replace(/^REPUESTOS:\s*/i, '').trim();
+        const items = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
         resultado.repuestos = items;
-        if (obsAux) resultado.obsRepuestos = obsAux;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsRepuestos = obsAux;
         matched = true;
-      } else if (obs.startsWith('MATERIALES: ')) {
-        const items = obs.substring(12).split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
+      } else if (/^MATERIALES:\s*/i.test(obs)) {
+        const val = obs.replace(/^MATERIALES:\s*/i, '').trim();
+        const items = val.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
         resultado.materiales = items;
-        if (obsAux) resultado.obsMateriales = obsAux;
+        if (obsAux && !this.esTextoVacioOSinContenido(obsAux)) resultado.obsMateriales = obsAux;
         matched = true;
       }
 
       if (!matched && obs && actividad.descripcion) {
-        const descUpper = actividad.descripcion.toUpperCase().trim();
-        const campo = mapaDescripcionCampo[descUpper];
-        if (campo && obs) {
-          if (campo === 'sistemasAfectados') {
-            const sistemas = obs.split(',').map(s => s.trim()).filter(s => s);
-            resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
-          } else if (campo === 'repuestos') {
-            const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
-            resultado.repuestos = items;
-          } else if (campo === 'materiales') {
-            const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)');
-            resultado.materiales = items;
-          } else if (campo === 'estadoInicial') {
-            resultado.estadoInicial = this.mapearEstadoInicial(obs);
-          } else if (campo === 'estadoFinal') {
-            resultado.estadoFinal = this.mapearEstadoFinal(obs);
-          } else {
-            (resultado as any)[campo] = obs;
+        // ✅ Evitar asignar texto vacío o placeholder
+        if (!this.esTextoVacioOSinContenido(obs)) {
+          const descUpper = actividad.descripcion.toUpperCase().trim();
+          const campo = mapaDescripcionCampo[descUpper];
+          if (campo) {
+            if (campo === 'sistemasAfectados') {
+              const sistemas = obs.split(',').map(s => s.trim()).filter(s => s && !this.esTextoVacioOSinContenido(s));
+              resultado.sistemasAfectados = sistemas.map(s => this.mapearSistema(s));
+            } else if (campo === 'repuestos') {
+              const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+              resultado.repuestos = items;
+            } else if (campo === 'materiales') {
+              const items = obs.split('; ').map(s => s.trim()).filter(s => s && s !== '(Ninguno)' && !this.esTextoVacioOSinContenido(s));
+              resultado.materiales = items;
+            } else if (campo === 'estadoInicial') {
+              resultado.estadoInicial = this.mapearEstadoInicial(obs);
+            } else if (campo === 'estadoFinal') {
+              resultado.estadoFinal = this.mapearEstadoFinal(obs);
+            } else {
+              (resultado as any)[campo] = obs;
+            }
           }
         }
       }
@@ -536,10 +615,15 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     if (ordenObservaciones) {
       for (const linea of ordenObservaciones.split('\n')) {
         const trimLinea = linea.trim();
-        if (trimLinea.startsWith('DIAGNOSTICO: ') && !resultado.diagnostico) {
-          resultado.diagnostico = trimLinea.substring(13).trim();
-        } else if (trimLinea.startsWith('FALLAS: ') && !resultado.sintomas) {
-          resultado.sintomas = trimLinea.substring(7).trim();
+        if (/^DIAGNOSTICO:\s*/i.test(trimLinea) && !resultado.diagnostico) {
+          const val = trimLinea.replace(/^DIAGNOSTICO:\s*/i, '').trim();
+          if (!this.esTextoVacioOSinContenido(val)) resultado.diagnostico = val;
+        } else if (/^(SINTOMAS|FALLAS):\s*/i.test(trimLinea) && !resultado.sintomas) {
+          const val = trimLinea.replace(/^(SINTOMAS|FALLAS):\s*/i, '').trim();
+          if (!this.esTextoVacioOSinContenido(val)) resultado.sintomas = val;
+        } else if (/^TRABAJOS:\s*/i.test(trimLinea) && !resultado.trabajos) {
+          const val = trimLinea.replace(/^TRABAJOS:\s*/i, '').trim();
+          if (!this.esTextoVacioOSinContenido(val)) resultado.trabajos = val;
         }
       }
     }

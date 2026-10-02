@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { ClientesService } from '../../clientes/clientes.service';
 
 /**
  * PrismaEquipoRepository - Implementación con Prisma Client real
@@ -8,7 +9,10 @@ import { PrismaService } from '../../database/prisma.service';
  */
 @Injectable()
 export class PrismaEquipoRepository {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly clientesService?: ClientesService
+  ) { }
 
   /**
    * Guardar equipo (crear o actualizar)
@@ -46,9 +50,10 @@ export class PrismaEquipoRepository {
     creado_por: number;
     modificado_por?: number | null;
   }) {
+    let result: any;
     if (data.id_equipo) {
       // Update
-      return this.prisma.equipos.update({
+      result = await this.prisma.equipos.update({
         where: { id_equipo: data.id_equipo },
         data: {
           codigo_equipo: data.codigo_equipo,
@@ -84,7 +89,7 @@ export class PrismaEquipoRepository {
       });
     } else {
       // Create
-      return this.prisma.equipos.create({
+      result = await this.prisma.equipos.create({
         data: {
           codigo_equipo: data.codigo_equipo,
           id_cliente: data.id_cliente,
@@ -108,6 +113,9 @@ export class PrismaEquipoRepository {
         },
       });
     }
+
+    this.clientesService?.invalidateClientesCache();
+    return result;
   }
 
   /**
@@ -201,7 +209,7 @@ export class PrismaEquipoRepository {
    * Eliminar equipo (soft delete)
    */
   async delete(id_equipo: number, modificado_por: number) {
-    return this.prisma.equipos.update({
+    const res = await this.prisma.equipos.update({
       where: { id_equipo },
       data: {
         activo: false,
@@ -210,14 +218,18 @@ export class PrismaEquipoRepository {
         fecha_modificacion: new Date(),
       },
     });
+    this.clientesService?.invalidateClientesCache();
+    return res;
   }
 
   /**
    * Eliminar equipo físicamente (hard delete)
    */
   async hardDelete(id_equipo: number) {
-    return this.prisma.equipos.delete({
+    const res = await this.prisma.equipos.delete({
       where: { id_equipo },
     });
+    this.clientesService?.invalidateClientesCache();
+    return res;
   }
 }

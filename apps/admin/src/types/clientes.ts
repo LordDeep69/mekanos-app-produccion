@@ -138,6 +138,11 @@ export interface ClienteConPersona extends Cliente {
       nombre_completo: string | null;
     };
   };
+  // ✅ 01-OCT-2026: Detección y resumen de equipos
+  tiene_plantas?: boolean;
+  tiene_bombas?: boolean;
+  total_equipos_plantas?: number;
+  total_equipos_bombas?: number;
 }
 
 // ===== DTOs =====
@@ -151,6 +156,21 @@ export interface ClientesQueryParams {
   skip?: number;
   take?: number;
   search?: string;
+  tipo_equipo?: 'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS' | string;
+}
+
+/**
+ * Resumen KPI y métricas agregadas de clientes
+ */
+export interface ClientesSummary {
+  total: number;
+  con_plantas: number;
+  con_bombas: number;
+  con_ambos: number;
+  sin_equipos: number;
+  corporativos: number;
+  sedes: number;
+  activos: number;
 }
 
 /**
@@ -159,6 +179,7 @@ export interface ClientesQueryParams {
 export interface ClientesResponse {
   data: ClienteConPersona[];
   total: number;
+  summary?: ClientesSummary;
   page?: number;
   limit?: number;
 }

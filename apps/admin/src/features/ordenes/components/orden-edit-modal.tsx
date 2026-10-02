@@ -19,14 +19,44 @@ import {
     User,
     X
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTecnicosSelector } from '../hooks/use-catalogos';
-import { useAsignarTecnico, useUpdateOrden } from '../hooks/use-ordenes';
+import { useUpdateOrden } from '../hooks/use-ordenes';
+import { TecnicoCombobox } from './tecnico-combobox';
 
 interface OrdenEditModalProps {
     isOpen: boolean;
     onClose: () => void;
     orden: Orden;
+}
+
+/**
+ * Extrae el mensaje real de una respuesta de la API.
+ *
+ * El backend devuelve `{ statusCode, message, diagnostic?, prismaMessage? }`.
+ * Antes solo se veía `AxiosError: 500` en consola, sin ninguna pista accionable
+ * para el usuario ni para quien depura.
+ */
+function extractApiError(error: unknown): string | null {
+    const anyErr = error as {
+        response?: {
+            data?: {
+                message?: string | string[];
+                diagnostic?: string;
+                prismaMessage?: string;
+            };
+        };
+        message?: string;
+    } | null;
+
+    const data = anyErr?.response?.data;
+    if (!data) return anyErr?.message ?? null;
+
+    if (Array.isArray(data.message)) return data.message.join('. ');
+    if (typeof data.message === 'string' && data.message.trim()) {
+        return data.diagnostic ? `${data.message}` : data.message;
+    }
+    return null;
 }
 
 const PRIORIDADES = [
@@ -39,61 +69,63 @@ const PRIORIDADES = [
 export function OrdenEditModal({ isOpen, onClose, orden }: OrdenEditModalProps) {
     const { data: tecnicos = [], isLoading: isLoadingTecnicos } = useTecnicosSelector();
     const updateOrden = useUpdateOrden();
-    const asignarTecnico = useAsignarTecnico();
 
     // Obtener ID del técnico actual desde la relación
-    const tecnicoActualId = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_empleado;
+    const tecnicoActualId = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_empleado ?? null;
 
-    // Form state
-    const [formData, setFormData] = useState({
-        tecnicoId: tecnicoActualId?.toString() || '',
-        fechaProgramada: orden.fecha_programada?.split('T')[0] || '',
-        prioridad: orden.prioridad || 'NORMAL',
-        observaciones: orden.observaciones || '',
+    // ⚠️ `observaciones` no existe en ordenes_servicio: el campo real es
+    // `observaciones_tecnico`. Antes se leía `orden.observaciones`, que siempre
+    // venía undefined y por eso el textarea aparecía vacío.
+    const formDataInicial = (o: Orden) => ({
+        tecnicoId: o.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_empleado ?? null,
+        fechaProgramada: o.fecha_programada?.split('T')[0] || '',
+        prioridad: o.prioridad || 'NORMAL',
+        observaciones: o.observaciones_tecnico || '',
     });
 
-    // Reset form when orden changes
-    useEffect(() => {
-        const tecId = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.id_empleado;
-        setFormData({
-            tecnicoId: tecId?.toString() || '',
-            fechaProgramada: orden.fecha_programada?.split('T')[0] || '',
-            prioridad: orden.prioridad || 'NORMAL',
-            observaciones: orden.observaciones || '',
-        });
-    }, [orden]);
+    const [formData, setFormData] = useState(() => formDataInicial(orden));
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [ordenCargadaId, setOrdenCargadaId] = useState(orden.id_orden_servicio);
+
+    // Sincronización durante el render (patrón recomendado por React) en vez de
+    // un useEffect con setState, que provocaba renders en cascada.
+    if (ordenCargadaId !== orden.id_orden_servicio) {
+        setOrdenCargadaId(orden.id_orden_servicio);
+        setFormData(formDataInicial(orden));
+        setErrorMessage(null);
+    }
 
     const handleSave = async () => {
         try {
-            // 1. Actualizar campos generales de la orden
+            setErrorMessage(null);
+            const cambioTecnico = formData.tecnicoId !== tecnicoActualId;
+
+            // Actualizar campos de la orden atómicamente incluyendo la asignación/reasignación de técnico
             await updateOrden.mutateAsync({
                 id: orden.id_orden_servicio,
                 data: {
                     fecha_programada: formData.fechaProgramada || undefined,
                     prioridad: formData.prioridad as 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA',
                     observaciones_tecnico: formData.observaciones || undefined,
+                    id_tecnico_asignado: cambioTecnico ? formData.tecnicoId : undefined,
                 },
             });
 
-            // 2. Si cambió el técnico, asignarlo
-            const nuevoTecnicoId = formData.tecnicoId ? Number(formData.tecnicoId) : null;
-
-            if (nuevoTecnicoId && nuevoTecnicoId !== tecnicoActualId) {
-                await asignarTecnico.mutateAsync({
-                    id: orden.id_orden_servicio,
-                    tecnicoId: nuevoTecnicoId,
-                });
-            }
-
             onClose();
         } catch (error) {
+            // Antes solo se logueaba a consola y el modal se cerraba igual: el
+            // usuario veía un "éxito" aparente mientras la orden quedaba sin guardar.
             console.error('Error al actualizar orden:', error);
+            setErrorMessage(
+                extractApiError(error) ??
+                'No se pudo actualizar la orden. Revisa los datos e inténtalo de nuevo.'
+            );
         }
     };
 
-    const isLoading = updateOrden.isPending || asignarTecnico.isPending;
+    const isLoading = updateOrden.isPending;
     const estadoCodigo = orden.estados_orden?.codigo_estado || '';
-    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
+    // ✅ FIX: APROBADA NO es estado final, es el estado inicial
     const isEstadoFinal = ['CANCELADA'].includes(estadoCodigo);
 
     if (!isOpen) return null;
@@ -129,27 +161,34 @@ export function OrdenEditModal({ isOpen, onClose, orden }: OrdenEditModalProps) 
                     </div>
                 )}
 
+                {/* Error de la API (antes solo se veía en la consola del navegador) */}
+                {errorMessage && (
+                    <div className="px-6 py-3 bg-red-50 border-b border-red-100 flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                        <p className="text-sm text-red-800">{errorMessage}</p>
+                    </div>
+                )}
+
                 {/* Form */}
                 <div className="p-6 space-y-6">
-                    {/* Técnico Asignado */}
+                    {/* Técnico Asignado con Buscador y Estilos Modernos */}
                     <div>
-                        <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-                            <User className="h-4 w-4 text-blue-600" />
-                            Técnico Asignado
+                        <label className="flex items-center justify-between text-sm font-bold text-gray-700 mb-2">
+                            <span className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-blue-600" />
+                                Técnico Asignado
+                            </span>
+                            <span className="text-xs font-normal text-gray-400">
+                                Técnico responsable de la ejecución
+                            </span>
                         </label>
-                        <select
-                            value={formData.tecnicoId}
-                            onChange={(e) => setFormData({ ...formData, tecnicoId: e.target.value })}
-                            disabled={isEstadoFinal || isLoadingTecnicos}
-                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        >
-                            <option value="">Sin asignar</option>
-                            {tecnicos.map((t: any) => (
-                                <option key={t.id_empleado} value={t.id_empleado}>
-                                    {t.persona?.nombre_completo || t.persona?.primer_nombre} {t.persona?.primer_apellido || ''} - {t.cargo || 'Técnico'}
-                                </option>
-                            ))}
-                        </select>
+                        <TecnicoCombobox
+                            tecnicos={tecnicos}
+                            selectedId={formData.tecnicoId}
+                            onSelect={(id) => setFormData((prev) => ({ ...prev, tecnicoId: id }))}
+                            disabled={isEstadoFinal}
+                            isLoading={isLoadingTecnicos}
+                        />
                     </div>
 
                     {/* Fecha y Prioridad en grid */}

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { PrismaModule } from '../database/prisma.module';
+import { ClientesModule } from '../clientes/clientes.module';
 import { CreateEquipoHandler } from './commands/create-equipo.handler';
 import { DeleteEquipoHandler } from './commands/delete-equipo.handler';
 import { HardDeleteEquipoHandler } from './commands/hard-delete-equipo.handler';
@@ -32,7 +33,8 @@ const QueryHandlers = [
 @Module({
   imports: [
     CqrsModule,
-    PrismaModule // ← AGREGADO: Acceso a PrismaService
+    PrismaModule, // ← AGREGADO: Acceso a PrismaService
+    ClientesModule, // ← AGREGADO: Invalidation de caché reactiva
   ],
   controllers: [EquiposController],
   providers: [

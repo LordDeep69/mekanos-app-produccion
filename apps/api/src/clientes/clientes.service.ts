@@ -69,6 +69,10 @@ export class ClientesService implements OnModuleInit {
     id_asesor_asignado: number | null;
     es_cliente_principal: boolean | null;
     id_cliente_principal: number | null;
+    tiene_plantas: boolean;
+    tiene_bombas: boolean;
+    total_equipos_plantas: number;
+    total_equipos_bombas: number;
     searchString: string;
     cleanNit: string;
     selectorData: {
@@ -79,11 +83,39 @@ export class ClientesService implements OnModuleInit {
       razon_social: string | null;
       nombre: string;
       nit: string | null;
+      tiene_plantas?: boolean;
+      tiene_bombas?: boolean;
     };
     fullCliente: any;
   }> | null = null;
   private cacheExpiresAt: number = 0;
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos de validez
+
+  /**
+   * Determina si un equipo corresponde a una Planta Eléctrica / Generador
+   */
+  private esEquipoPlanta(e: any): boolean {
+    const t = e?.tipos_equipo;
+    if (!t) return false;
+    if (t.tiene_generador === true) return true;
+    const codigo = (t.codigo_tipo || '').toUpperCase();
+    if (['GENERADOR', 'PLANTA', 'GEN'].includes(codigo)) return true;
+    const nombre = (t.nombre_tipo || '').toUpperCase();
+    return nombre.includes('GENERADOR') || nombre.includes('PLANTA');
+  }
+
+  /**
+   * Determina si un equipo corresponde a un Sistema de Bombeo / Bomba
+   */
+  private esEquipoBomba(e: any): boolean {
+    const t = e?.tipos_equipo;
+    if (!t) return false;
+    if (t.tiene_bomba === true) return true;
+    const codigo = (t.codigo_tipo || '').toUpperCase();
+    if (['BOMBA', 'BOMBA_AGUA', 'BOM'].includes(codigo)) return true;
+    const nombre = (t.nombre_tipo || '').toUpperCase();
+    return nombre.includes('BOMBA');
+  }
 
   /**
    * Invalida el caché de búsqueda en memoria cuando se crea, edita o elimina un cliente
@@ -115,6 +147,42 @@ export class ClientesService implements OnModuleInit {
                 persona: { select: { razon_social: true, nombre_comercial: true } },
               },
             },
+            equipos: {
+              where: { activo: true },
+              select: {
+                id_equipo: true,
+                tipos_equipo: {
+                  select: {
+                    id_tipo_equipo: true,
+                    codigo_tipo: true,
+                    nombre_tipo: true,
+                    tiene_generador: true,
+                    tiene_bomba: true,
+                  },
+                },
+              },
+            },
+            sedes: {
+              where: { cliente_activo: true },
+              select: {
+                id_cliente: true,
+                equipos: {
+                  where: { activo: true },
+                  select: {
+                    id_equipo: true,
+                    tipos_equipo: {
+                      select: {
+                        id_tipo_equipo: true,
+                        codigo_tipo: true,
+                        nombre_tipo: true,
+                        tiene_generador: true,
+                        tiene_bomba: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
             _count: { select: { sedes: true } },
           },
           orderBy: { fecha_creacion: 'desc' },
@@ -135,6 +203,19 @@ export class ClientesService implements OnModuleInit {
         const cp = c.cliente_principal;
         const cpp = cp?.persona;
         const sedes = c.sedes_cliente?.map((s) => s.nombre_sede).join(' ') || '';
+
+        // Detección de equipos (propios + de sedes para clientes principales)
+        const equiposPropios = (c as any).equipos || [];
+        const equiposSedes = ((c as any).sedes || []).flatMap((s: any) => s.equipos || []);
+        const todosEquipos = [...equiposPropios, ...equiposSedes];
+
+        const equiposPlantas = todosEquipos.filter((e) => this.esEquipoPlanta(e));
+        const equiposBombas = todosEquipos.filter((e) => this.esEquipoBomba(e));
+
+        const tiene_plantas = equiposPlantas.length > 0;
+        const tiene_bombas = equiposBombas.length > 0;
+        const total_equipos_plantas = equiposPlantas.length;
+        const total_equipos_bombas = equiposBombas.length;
 
         const searchString = this.normalizeSearchText(
           [
@@ -169,6 +250,10 @@ export class ClientesService implements OnModuleInit {
 
         const fullCliente = {
           ...c,
+          tiene_plantas,
+          tiene_bombas,
+          total_equipos_plantas,
+          total_equipos_bombas,
           asesor_asignado: c.id_asesor_asignado
             ? asesoresMap.get(c.id_asesor_asignado) || null
             : null,
@@ -181,6 +266,10 @@ export class ClientesService implements OnModuleInit {
           id_asesor_asignado: c.id_asesor_asignado,
           es_cliente_principal: c.es_cliente_principal,
           id_cliente_principal: c.id_cliente_principal,
+          tiene_plantas,
+          tiene_bombas,
+          total_equipos_plantas,
+          total_equipos_bombas,
           searchString,
           cleanNit,
           selectorData: {
@@ -191,6 +280,8 @@ export class ClientesService implements OnModuleInit {
             razon_social: p?.razon_social || null,
             nombre,
             nit: p?.numero_identificacion || null,
+            tiene_plantas,
+            tiene_bombas,
           },
           fullCliente,
         };
@@ -215,6 +306,7 @@ export class ClientesService implements OnModuleInit {
       cliente_activo?: boolean;
       idAsesorAsignado?: number;
       es_cliente_principal?: boolean;
+      tipo_equipo?: string;
     }
   ) {
     const index = await this.getSearchIndex();
@@ -239,15 +331,29 @@ export class ClientesService implements OnModuleInit {
         return false;
       }
 
+      // 2. Filtro por tipo de equipo (Plantas / Bombas)
+      if (filters?.tipo_equipo && filters.tipo_equipo !== 'TODOS') {
+        const te = filters.tipo_equipo.toUpperCase().trim();
+        if (te === 'PLANTAS' || te === 'GENERADOR' || te === 'PLANTA' || te === 'GENERADORES') {
+          if (!item.tiene_plantas) return false;
+        } else if (te === 'BOMBAS' || te === 'BOMBA') {
+          if (!item.tiene_bombas) return false;
+        } else if (te === 'AMBOS') {
+          if (!item.tiene_plantas || !item.tiene_bombas) return false;
+        } else if (te === 'SIN_EQUIPOS') {
+          if (item.tiene_plantas || item.tiene_bombas) return false;
+        }
+      }
+
       // Si no hay texto de búsqueda, pasa todos los que cumplieron filtros
       if (tokens.length === 0) return true;
 
-      // 2. Coincidencia por NIT limpio si tiene 4 o más dígitos
+      // 3. Coincidencia por NIT limpio si tiene 4 o más dígitos
       if (cleanDigits.length >= 4 && item.cleanNit.includes(cleanDigits)) {
         return true;
       }
 
-      // 3. Multi-token inteligente: CADA token debe estar presente en alguna parte del texto del cliente
+      // 4. Multi-token inteligente: CADA token debe estar presente en alguna parte del texto del cliente
       return tokens.every((token) => item.searchString.includes(token));
     });
   }
@@ -593,12 +699,18 @@ export class ClientesService implements OnModuleInit {
    * ✅ OPTIMIZACIÓN 05-ENE-2026 / 28-MAR-2026: Selector ULTRA-LIGERO 100% en memoria
    * Retorna instantáneamente (< 1ms) id, nombre (con prioridad sede) y NIT
    */
-  async findForSelector(search?: string, limit: number = 100, idAsesorAsignado?: number) {
+  async findForSelector(
+    search?: string,
+    limit: number = 100,
+    idAsesorAsignado?: number,
+    tipo_equipo?: string,
+  ) {
     const safeLimit = Math.min(Math.max(limit || 100, 1), 500);
 
     const matches = await this.searchCachedClients(search || '', {
       cliente_activo: true,
       idAsesorAsignado,
+      tipo_equipo,
     });
 
     return matches.slice(0, safeLimit).map((m) => m.selectorData);
@@ -607,28 +719,54 @@ export class ClientesService implements OnModuleInit {
   /**
    * ✅ MULTI-ASESOR & BUSCADOR INTELIGENTE ULTRA-RÁPIDO
    * Búsqueda insensible a tildes, homóglifos, y orden de palabras ('uno centro' = 'centro uno')
+   * Soporta filtro por tipo de equipos: PLANTAS (generadores) y BOMBAS (sistemas de bombeo)
    */
   async findAll(params?: {
     tipo_cliente?: string;
     cliente_activo?: boolean;
     search?: string;
+    tipo_equipo?: string;
     skip?: number;
     take?: number;
     idAsesorAsignado?: number;
   }) {
-    const { tipo_cliente, cliente_activo, search, skip = 0, take = 50, idAsesorAsignado } =
-      params || {};
+    const {
+      tipo_cliente,
+      cliente_activo,
+      search,
+      tipo_equipo,
+      skip = 0,
+      take = 50,
+      idAsesorAsignado,
+    } = params || {};
+
+    const index = await this.getSearchIndex();
+    const scopedIndex = idAsesorAsignado
+      ? index.filter((i) => i.id_asesor_asignado === idAsesorAsignado)
+      : index;
+
+    const summary = {
+      total: scopedIndex.length,
+      con_plantas: scopedIndex.filter((i) => i.tiene_plantas).length,
+      con_bombas: scopedIndex.filter((i) => i.tiene_bombas).length,
+      con_ambos: scopedIndex.filter((i) => i.tiene_plantas && i.tiene_bombas).length,
+      sin_equipos: scopedIndex.filter((i) => !i.tiene_plantas && !i.tiene_bombas).length,
+      corporativos: scopedIndex.filter((i) => i.es_cliente_principal).length,
+      sedes: scopedIndex.filter((i) => !i.es_cliente_principal && i.id_cliente_principal).length,
+      activos: scopedIndex.filter((i) => i.cliente_activo).length,
+    };
 
     const matches = await this.searchCachedClients(search || '', {
       tipo_cliente,
       cliente_activo,
       idAsesorAsignado,
+      tipo_equipo,
     });
 
     const total = matches.length;
     const pagedItems = matches.slice(skip, skip + take).map((m) => m.fullCliente);
 
-    return { items: pagedItems, total };
+    return { items: pagedItems, total, summary };
   }
 
   async findOne(id: number) {
@@ -641,7 +779,10 @@ export class ClientesService implements OnModuleInit {
         },
         equipos: {
           where: { activo: true },
-          take: 10,
+          include: {
+            tipos_equipo: true,
+          },
+          take: 50,
         },
         // ✅ MULTI-SEDE
         cliente_principal: {
@@ -649,7 +790,15 @@ export class ClientesService implements OnModuleInit {
         },
         sedes: {
           where: { cliente_activo: true },
-          select: { id_cliente: true, nombre_sede: true, codigo_cliente: true },
+          select: {
+            id_cliente: true,
+            nombre_sede: true,
+            codigo_cliente: true,
+            equipos: {
+              where: { activo: true },
+              include: { tipos_equipo: true },
+            },
+          },
         },
       },
     });
@@ -658,7 +807,18 @@ export class ClientesService implements OnModuleInit {
       throw new Error(`Cliente con ID ${id} no encontrado`);
     }
 
-    return cliente;
+    const propios = cliente.equipos || [];
+    const deSedes = (cliente.sedes || []).flatMap((s: any) => s.equipos || []);
+    const todos = [...propios, ...deSedes];
+
+    const tiene_plantas = todos.some((e) => this.esEquipoPlanta(e));
+    const tiene_bombas = todos.some((e) => this.esEquipoBomba(e));
+
+    return {
+      ...cliente,
+      tiene_plantas,
+      tiene_bombas,
+    };
   }
 
   async update(id: number, updateDto: UpdateClientesDto, userId: number) {

@@ -11,6 +11,7 @@ import type {
   ClienteConPersona,
   ClientesQueryParams,
   ClientesResponse,
+  ClientesSummary,
   CreateClienteDto,
   UpdateClienteDto
 } from '@/types/clientes';
@@ -23,6 +24,7 @@ const CLIENTES_BASE = '/clientes';
 interface BackendClientesResponse {
   success: boolean;
   data: ClienteConPersona[];
+  summary?: ClientesSummary;
   pagination: {
     total: number;
     skip: number;
@@ -54,6 +56,9 @@ export async function getClientes(
   if (params?.search) {
     queryParams.append('search', params.search);
   }
+  if (params?.tipo_equipo && params.tipo_equipo !== 'TODOS') {
+    queryParams.append('tipo_equipo', params.tipo_equipo);
+  }
 
   const url = queryParams.toString()
     ? `${CLIENTES_BASE}?${queryParams.toString()}`
@@ -62,16 +67,17 @@ export async function getClientes(
   const response = await apiClient.get<BackendClientesResponse | ClienteConPersona[]>(url);
 
   // Normalizar respuesta del backend
-  // Caso 1: Respuesta paginada { success, data, pagination }
+  // Caso 1: Respuesta paginada { success, data, summary, pagination }
   if (response.data && typeof response.data === 'object' && 'pagination' in response.data) {
     const backendResponse = response.data as BackendClientesResponse;
     return {
       data: backendResponse.data,
       total: backendResponse.pagination.total,
+      summary: backendResponse.summary,
     };
   }
 
-  // Caso 2: Respuesta con data y total directos { data, total }
+  // Caso 2: Respuesta con data y total directos { data, total, summary }
   if (response.data && typeof response.data === 'object' && 'data' in response.data && 'total' in response.data) {
     return response.data as ClientesResponse;
   }

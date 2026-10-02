@@ -1,5 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
+import {
+    IsBoolean,
+    IsDateString,
+    IsEnum,
+    IsInt,
+    IsOptional,
+    IsString,
+    ValidateIf,
+} from 'class-validator';
 
 /**
  * DTO para actualizar orden de servicio
@@ -64,8 +72,14 @@ export class UpdateOrdenDto {
     @IsBoolean()
     requiere_firma_cliente?: boolean;
 
-    @ApiPropertyOptional({ description: 'ID del técnico asignado (cambiar técnico sin cambiar estado)' })
+    @ApiPropertyOptional({
+        description:
+            'ID del técnico asignado. Enviar `null` explícito para desasignar (la orden vuelve de ASIGNADA a PROGRAMADA).',
+        nullable: true,
+        type: Number,
+    })
     @IsOptional()
-    @IsInt()
-    id_tecnico_asignado?: number;
+    @ValidateIf((_obj, value) => value !== null)
+    @IsInt({ message: 'id_tecnico_asignado debe ser un entero o null' })
+    id_tecnico_asignado?: number | null;
 }

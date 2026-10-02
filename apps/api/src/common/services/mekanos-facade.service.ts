@@ -719,15 +719,22 @@ export class MekanosFacadeService implements OnModuleInit {
 
       // Obtener orden actual
       const orden = await prisma.ordenes_servicio.findUnique({
-        where: { id: idOrden },
-        include: { estado: true },
+        where: { id_orden_servicio: Number(idOrden) },
+        include: { estados_orden: true }, // ✅ FIX: PK real es `id_orden_servicio` y la relación es `estados_orden`
       });
 
       if (!orden) {
         return { success: false, error: `Orden ${input.idOrden} no encontrada` };
       }
 
-      const estadoActual = orden.estado?.codigo_estado;
+      const estadoActual = orden.estados_orden?.codigo_estado;
+
+      if (!estadoActual) {
+        return {
+          success: false,
+          error: `Orden ${input.idOrden} tiene id_estado_actual=${orden.id_estado_actual} sin relación válida en estados_orden. No se puede evaluar la transición FSM.`,
+        };
+      }
 
       // Validar transición FSM
       const { validarTransicion } = await import('../../ordenes/domain/workflow-estados');

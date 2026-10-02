@@ -17,7 +17,7 @@ export class AprobarOrdenHandler implements ICommandHandler<AprobarOrdenCommand>
     }
 
     // Validar transición
-    const estadoActual = ordenExistente.estado.codigo_estado;
+    const estadoActual = ordenExistente.estados_orden?.codigo_estado || ordenExistente.estado?.codigo_estado || '';
     validarTransicion(estadoActual, 'APROBADA');
 
     const estadoAprobada = await this.repository.findEstadoByCodigo('APROBADA');

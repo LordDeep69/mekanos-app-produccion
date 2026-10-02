@@ -6,7 +6,8 @@ import { BadRequestException } from '@nestjs/common';
  * Sistema de máquina de estados finitos (FSM) que define transiciones permitidas
  * entre estados de órdenes de servicio.
  * 
- * ESTADOS DISPONIBLES (7 estados):
+ * ESTADOS DISPONIBLES (8 estados):
+ * - BORRADOR: Orden en construcción por el admin, aún no programada
  * - PROGRAMADA: Orden creada, pendiente asignación
  * - ASIGNADA: Técnico asignado, pendiente ejecución
  * - EN_PROCESO: Técnico ejecutando en campo
@@ -16,7 +17,7 @@ import { BadRequestException } from '@nestjs/common';
  * - EN_ESPERA_REPUESTO: Bloqueada esperando componentes
  * 
  * FLUJO TÍPICO:
- * APROBADA → PROGRAMADA → ASIGNADA → EN_PROCESO → COMPLETADA
+ * APROBADA → BORRADOR → PROGRAMADA → ASIGNADA → EN_PROCESO → COMPLETADA
  * 
  * FLUJOS ALTERNATIVOS:
  * - Cancelación: CUALQUIER_ESTADO → CANCELADA
@@ -65,6 +66,7 @@ export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
 
   // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial (orden recién creada/aprobada)
   APROBADA: [
+    'BORRADOR',    // Devolver a borrador para edición
     'PROGRAMADA',  // Programar la orden aprobada
     'ASIGNADA',    // Asignar técnico directamente
     'CANCELADA',   // Cancelar orden aprobada
@@ -72,6 +74,14 @@ export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
 
   // Estado final: sin transiciones salida
   CANCELADA: [],
+
+  // 🛡️ BORRADOR: orden en construcción por el admin, aún no programada.
+  // Puede asignarse (-> ASIGNADA) o programarse (-> PROGRAMADA).
+  BORRADOR: [
+    'PROGRAMADA',  // Programar la orden en borrador
+    'ASIGNADA',    // Asignar técnico directamente
+    'CANCELADA',   // Descartar el borrador
+  ],
 };
 
 /**
@@ -92,6 +102,13 @@ export function validarTransicion(
   }
 
   const transicionesPermitidas = ALLOWED_TRANSITIONS[estadoActual];
+
+  // 🛡️ Idempotencia: una transición al mismo estado no es un cambio. Sin esta
+  // guarda, reenviar el mismo estado fallaba con "Transición no permitida",
+  // obligando a los clientes a conocer el estado actual antes de actuar.
+  if (nuevoEstado === estadoActual) {
+    return;
+  }
 
   // Validar si el nuevo estado está en la lista de permitidos
   if (!transicionesPermitidas.includes(nuevoEstado)) {
@@ -137,6 +154,10 @@ export const VALIDACIONES_POR_ESTADO: Record<string, {
   EN_ESPERA_REPUESTO: {
     campos_requeridos: ['observaciones_cierre'],
     descripcion: 'Requiere especificar qué repuesto se está esperando',
+  },
+  BORRADOR: {
+    campos_requeridos: ['id_cliente', 'id_equipo'],
+    descripcion: 'Requiere cliente y equipo para poder programarse',
   },
 };
 

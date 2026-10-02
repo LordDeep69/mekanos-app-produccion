@@ -62,13 +62,14 @@ export class ClientesController {
     @CurrentUser() user: any,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
+    @Query('tipo_equipo') tipo_equipo?: string,
   ) {
     const limitNum = Math.min(Math.max(parseInt(limit || '100', 10), 1), 500); // Max 500
 
     // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
 
-    const items = await this.clientesService.findForSelector(q, limitNum, idAsesorFiltro);
+    const items = await this.clientesService.findForSelector(q, limitNum, idAsesorFiltro, tipo_equipo);
 
     return {
       success: true,
@@ -80,6 +81,7 @@ export class ClientesController {
    * ✅ MULTI-ASESOR: Filtra clientes por asesor asignado si el usuario no es admin
    * Admin/Gerente/Supervisor ve todos los clientes
    * Asesor solo ve sus clientes asignados
+   * ✅ 01-OCT-2026: Filtro por tipo de equipo (PLANTAS / BOMBAS) y métricas KPI de resumen
    */
   @Get()
   async findAll(
@@ -87,6 +89,7 @@ export class ClientesController {
     @Query('tipo_cliente') tipo_cliente?: string,
     @Query('cliente_activo') cliente_activo?: string,
     @Query('search') search?: string,
+    @Query('tipo_equipo') tipo_equipo?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
@@ -96,13 +99,14 @@ export class ClientesController {
     // Filtrar por asesor si NO es admin
     const idAsesorFiltro = user.esAdmin ? undefined : user.idEmpleado;
 
-    const { items, total } = await this.clientesService.findAll({
+    const { items, total, summary } = await this.clientesService.findAll({
       tipo_cliente,
       cliente_activo:
         cliente_activo !== undefined
           ? cliente_activo === 'true'
           : undefined,
       search,
+      tipo_equipo,
       skip: skipNum,
       take: takeNum,
       idAsesorAsignado: idAsesorFiltro,
@@ -111,6 +115,7 @@ export class ClientesController {
     return {
       success: true,
       data: items,
+      summary,
       pagination: {
         total,
         skip: skipNum,

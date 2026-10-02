@@ -1,5 +1,6 @@
+import { createHash } from 'crypto';
 import { PrismaService } from '@mekanos/database';
-import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { EmailService } from '../../email/email.service';
 import { PdfService } from '../../pdf/pdf.service';
@@ -57,7 +58,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     const orden = await this.prisma.ordenes_servicio.findUnique({
       where: { id_orden_servicio: ordenId },
       include: {
-        estado: true, // Relación con tabla estados_orden via id_estado_actual
+        estados_orden: true, // ✅ FIX: la relación real es `estados_orden` (FK id_estado_actual). `estado` no existe -> PrismaClientValidationError -> 500
       },
     });
 
@@ -66,7 +67,16 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
     }
 
     // Obtener código del estado actual
-    const estadoActual = orden.estado?.codigo_estado || 'PROGRAMADA';
+    // ✅ FIX: leer desde `estados_orden`. Sin fallback silencioso a 'PROGRAMADA':
+    // un fallback inventaría el estado y corrompería la validación FSM.
+    const estadoActual = orden.estados_orden?.codigo_estado;
+
+    if (!estadoActual) {
+      throw new InternalServerErrorException(
+        `Orden ${ordenId} tiene id_estado_actual=${orden.id_estado_actual} sin relación válida en estados_orden. ` +
+        `No se puede evaluar la transición. Verifique integridad referencial de la orden.`,
+      );
+    }
 
     this.logger.log(`[CambiarEstado] Estado actual: ${estadoActual} → ${nuevoEstado}`);
 
@@ -169,26 +179,31 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
       const orden = await this.prisma.ordenes_servicio.findUnique({
         where: { id_orden_servicio: ordenId },
         include: {
-          equipo: {
+          // ✅ FIX 29-SEP-2026: nombres de relación reales según schema.prisma.
+          // Antes: equipo / cliente / estado / tecnico / tipo_servicio -> TODOS inválidos
+          // (ordenes_servicio declara `equipos`, `clientes`, `estados_orden`,
+          // `empleados_...id_tecnico_asignadoToempleados` y `tipos_servicio`).
+          // Cualquiera de ellos abortaba con PrismaClientValidationError -> 500.
+          equipos: {
             include: {
-              tipo_equipo: true,
+              tipos_equipo: true,
               equipos_generador: true,
               equipos_motor: true,
               equipos_bomba: true,
             },
           },
-          cliente: {
+          clientes: {
             include: {
               persona: true,
             },
           },
-          estado: true,
-          tecnico: {
+          estados_orden: true,
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
             include: {
               persona: true,
             },
           },
-          tipo_servicio: true,
+          tipos_servicio: true,
           actividades_ejecutadas: {
             include: {
               catalogo_actividades: {
@@ -212,46 +227,54 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
         throw new Error(`Orden ${ordenId} no encontrada`);
       }
 
-      // 2. Determinar tipo de template según tipo de equipo
+      // 2. Determinar tipo de template según tipo de equipo.
+      //    `tipos_equipo` no tiene columna `nombre`; la real es `nombre_tipo`.
       let tipoTemplate = 'GENERADOR_A';
-      if (orden.equipo?.tipo_equipo?.nombre) {
-        const tipoEquipo = orden.equipo.tipo_equipo.nombre.toLowerCase();
+      const nombreTipoEquipo = orden.equipos?.tipos_equipo?.nombre_tipo || '';
+      if (nombreTipoEquipo) {
+        const tipoEquipo = nombreTipoEquipo.toLowerCase();
         if (tipoEquipo.includes('bomba') || tipoEquipo.includes('motor')) {
           tipoTemplate = 'BOMBA_A';
         } else if (tipoEquipo.includes('generador')) {
-          tipoTemplate = orden.tipo_servicio?.nombre_tipo?.includes('B') ? 'GENERADOR_B' : 'GENERADOR_A';
+          tipoTemplate = this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo) === 'PREVENTIVO_B'
+            ? 'GENERADOR_B'
+            : 'GENERADOR_A';
         }
       }
 
       this.logger.log(`[ProcesarOrdenCompletada] Generando PDF con template ${tipoTemplate} para orden ${ordenId}`);
 
       // 3. Preparar datos para PDF (igual que PdfController)
-      const clientePersona = orden.cliente?.persona;
+      const clientePersona = orden.clientes?.persona;
       // ✅ FIX MULTI-SEDE: Priorizar nombre_sede del cliente-sede
       const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
-      const clienteNombre = (orden.cliente as any)?.nombre_sede
-        ? `${clienteNombreBase} - ${(orden.cliente as any).nombre_sede}`
+      const clienteNombre = (orden.clientes as any)?.nombre_sede
+        ? `${clienteNombreBase} - ${(orden.clientes as any).nombre_sede}`
         : clienteNombreBase;
-      // ✅ FIX MULTI-SEDE: Priorizar dirección de sede sobre persona
-      const clienteDireccion = (orden as any).sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || orden.direccion_servicio || 'N/A';
+      // ✅ FIX MULTI-SEDE: Priorizar dirección de sede sobre persona.
+      // `direccion_servicio` no existe en ordenes_servicio; se usa descripcion_inicial
+      // como respaldo para no inventar un campo inexistente.
+      const clienteDireccion = (orden as any).sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
 
       let marcaEquipo = 'N/A';
       let serieEquipo = 'N/A';
-      if (orden.equipo) {
-        if (orden.equipo.equipos_generador) {
-          marcaEquipo = orden.equipo.equipos_generador.marca_generador || 'N/A';
-          serieEquipo = orden.equipo.equipos_generador.numero_serie_generador || orden.equipo.numero_serie_equipo || 'N/A';
-        } else if (orden.equipo.equipos_motor) {
-          marcaEquipo = orden.equipo.equipos_motor.marca_motor || 'N/A';
-          serieEquipo = orden.equipo.equipos_motor.numero_serie_motor || orden.equipo.numero_serie_equipo || 'N/A';
-        } else if (orden.equipo.equipos_bomba) {
-          marcaEquipo = orden.equipo.equipos_bomba.marca_bomba || 'N/A';
-          serieEquipo = orden.equipo.equipos_bomba.numero_serie_bomba || orden.equipo.numero_serie_equipo || 'N/A';
+      if (orden.equipos) {
+        if (orden.equipos.equipos_generador) {
+          marcaEquipo = orden.equipos.equipos_generador.marca_generador || 'N/A';
+          serieEquipo = orden.equipos.equipos_generador.numero_serie_generador || orden.equipos.numero_serie_equipo || 'N/A';
+        } else if (orden.equipos.equipos_motor) {
+          marcaEquipo = orden.equipos.equipos_motor.marca_motor || 'N/A';
+          serieEquipo = orden.equipos.equipos_motor.numero_serie_motor || orden.equipos.numero_serie_equipo || 'N/A';
+        } else if (orden.equipos.equipos_bomba) {
+          marcaEquipo = orden.equipos.equipos_bomba.marca_bomba || 'N/A';
+          serieEquipo = orden.equipos.equipos_bomba.numero_serie_bomba || orden.equipos.numero_serie_equipo || 'N/A';
         } else {
-          marcaEquipo = orden.equipo.nombre_equipo || 'N/A';
-          serieEquipo = orden.equipo.numero_serie_equipo || 'N/A';
+          marcaEquipo = orden.equipos.nombre_equipo || 'N/A';
+          serieEquipo = orden.equipos.numero_serie_equipo || 'N/A';
         }
       }
+
+      const tecnicoRelacion = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados;
 
       // 4. Generar PDF usando el servicio directamente
       const resultado = await this.pdfService.generarPDF({
@@ -261,56 +284,70 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
           direccion: clienteDireccion,
           marcaEquipo,
           serieEquipo,
-          tipoEquipo: this.mapTipoEquipo(orden.equipo?.tipo_equipo?.nombre || ''),
+          tipoEquipo: this.mapTipoEquipo(nombreTipoEquipo),
           fecha: orden.fecha_programada
             ? new Date(orden.fecha_programada).toLocaleDateString('es-CO')
             : new Date().toLocaleDateString('es-CO'),
-          tecnico: orden.tecnico?.persona
-            ? `${orden.tecnico.persona.primer_nombre || ''} ${orden.tecnico.persona.primer_apellido || ''}`.trim() || 'N/A'
+          tecnico: tecnicoRelacion?.persona
+            ? `${tecnicoRelacion.persona.primer_nombre || ''} ${tecnicoRelacion.persona.primer_apellido || ''}`.trim() || 'N/A'
             : 'N/A',
           horaEntrada: orden.fecha_inicio_real ? new Date(orden.fecha_inicio_real).toLocaleTimeString('es-CO') : 'N/A',
           horaSalida: orden.fecha_fin_real ? new Date(orden.fecha_fin_real).toLocaleTimeString('es-CO') : 'N/A',
-          tipoServicio: orden.tipo_servicio?.nombre_tipo || 'PREVENTIVO_A',
+          tipoServicio: this.mapTipoServicio(orden.tipos_servicio?.nombre_tipo),
           numeroOrden: orden.numero_orden || `ORD-${ordenId}`,
           datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
           actividades: orden.actividades_ejecutadas?.map(act => ({
-            sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre || 'GENERAL',
-            descripcion: act.catalogo_actividades?.nombre_actividad || act.descripcion || 'N/A',
-            resultado: (act.estado_checklist as any) || 'NA',
+            // ✅ FIX: nombres reales -> catalogo_sistemas.nombre_sistema,
+            // catalogo_actividades.descripcion_actividad, actividades_ejecutadas.estado
+            sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
+            descripcion: act.catalogo_actividades?.descripcion_actividad || 'N/A',
+            resultado: act.estado || 'NA',
             observaciones: act.observaciones || '',
           })) || [],
           mediciones: orden.mediciones_servicio?.map(med => ({
+            // ✅ FIX: mediciones_servicio usa valor_numerico y su propia unidad_medida
             parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
-            valor: Number(med.valor_medido) || 0,
-            unidad: med.parametros_medicion?.unidad_medida || '',
+            valor: Number(med.valor_numerico ?? 0) || 0,
+            unidad: med.unidad_medida || med.parametros_medicion?.unidad_medida || '',
             nivelAlerta: (med.nivel_alerta as any) || 'OK',
           })) || [],
           evidencias: orden.evidencias_fotograficas?.map(ev => ev.ruta_archivo) || [],
-          observaciones: orden.observaciones_cierre || orden.observaciones || '',
+          observaciones: orden.observaciones_cierre || orden.observaciones_tecnico || '',
         },
       });
 
       const pdfBuffer = resultado.buffer;
       this.logger.log(`[ProcesarOrdenCompletada] PDF generado: ${pdfBuffer.length} bytes`);
 
-      // 5. Subir PDF a Cloudflare R2
+      // 5. Subir PDF a Cloudflare R2.
+      //    ✅ FIX: el método real es `uploadPDF(buffer, filename, options?)` y devuelve
+      //    un string (URL), no un objeto `{success,url}`. La llamada a `uploadFile`
+      //    lanzaba TypeError y abortaba el cierre de la orden.
       const nombreArchivo = resultado.filename || `MEKANOS_${orden.numero_orden}_${new Date().toISOString().split('T')[0]}.pdf`;
-      const r2Result = await this.r2StorageService.uploadFile(pdfBuffer, nombreArchivo, 'application/pdf');
+      const r2Url = await this.r2StorageService.uploadPDF(pdfBuffer, nombreArchivo, {
+        downloadFilename: nombreArchivo,
+      });
 
-      if (!r2Result.success || !r2Result.url) {
-        throw new Error(`Error subiendo PDF a R2: ${r2Result.error || 'URL no disponible'}`);
+      if (!r2Url) {
+        throw new Error(`Error subiendo PDF a R2: no se obtuvo URL para ${nombreArchivo}`);
       }
 
-      this.logger.log(`[ProcesarOrdenCompletada] PDF subido a R2: ${r2Result.url}`);
+      this.logger.log(`[ProcesarOrdenCompletada] PDF subido a R2: ${r2Url}`);
 
-      // 6. Guardar URL en documentos_generados
+      // 6. Guardar referencia en documentos_generados.
+      //    ✅ FIX: la tabla NO tiene `id_orden_servicio` ni `nombre_archivo`; el vínculo
+      //    polimórfico es `id_referencia`, y `hash_sha256` es obligatorio.
+      const hashSha256 = createHash('sha256').update(pdfBuffer).digest('hex');
       await this.prisma.documentos_generados.create({
         data: {
-          id_orden_servicio: ordenId,
-          tipo_documento: 'INFORME_TECNICO',
-          nombre_archivo: nombreArchivo,
-          ruta_archivo: r2Result.url,
-          tamano_bytes: BigInt(pdfBuffer.length),
+          // ✅ FIX: 'INFORME_TECNICO' no existe en tipo_documento_enum (INFORME_SERVICIO, BITACORA_MENSUAL, COTIZACION, PROPUESTA)
+          tipo_documento: 'INFORME_SERVICIO',
+          id_referencia: ordenId,
+          ruta_archivo: r2Url,
+          hash_sha256: hashSha256,
+          // ✅ El campo en Prisma es `tama_o_bytes` (la columna física usa @map)
+          tama_o_bytes: BigInt(pdfBuffer.length),
+          mime_type: 'application/pdf',
           fecha_generacion: new Date(),
           generado_por: orden.modificado_por || orden.creado_por || 1,
         },
@@ -319,7 +356,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
       this.logger.log(`[ProcesarOrdenCompletada] URL guardada en documentos_generados`);
 
       // 7. Obtener email del cliente
-      const emailCliente = orden.cliente?.persona?.email_principal || 'lorddeep3@gmail.com';
+      const emailCliente = clientePersona?.email_principal || 'lorddeep3@gmail.com';
 
       // 8. Enviar email con PDF adjunto
       await this.emailService.sendEmail({
@@ -329,7 +366,7 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
           <h2>Informe Técnico de Servicio</h2>
           <p>Estimado cliente,</p>
           <p>Adjunto encontrará el informe técnico de la orden de servicio <strong>${orden.numero_orden}</strong>.</p>
-          <p>El documento también está disponible en: <a href="${r2Result.url}">${r2Result.url}</a></p>
+          <p>El documento también está disponible en: <a href="${r2Url}">${r2Url}</a></p>
           <p>Saludos,<br>Equipo MEKANOS S.A.S</p>
         `,
         attachments: [
@@ -344,17 +381,65 @@ export class CambiarEstadoOrdenHandler implements ICommandHandler<CambiarEstadoO
       this.logger.log(`[ProcesarOrdenCompletada] ✅ Email enviado a ${emailCliente}`);
 
     } catch (error) {
-      this.logger.error(`[ProcesarOrdenCompletada] Error: ${error.message}`, error.stack);
+      const err = error as { message?: string; stack?: string };
+      this.logger.error(
+        `[ProcesarOrdenCompletada] Error en orden ${ordenId}: ${err?.message ?? String(error)}`,
+        err?.stack,
+      );
       throw error;
     }
   }
 
   /**
-   * Extrae datos del módulo desde mediciones (igual que PdfController)
+   * ✅ FIX 29-SEP-2026: este método era invocado (`this.mapTipoEquipo(...)`) pero NUNCA
+   * estuvo definido en la clase -> TypeError en tiempo de ejecución al finalizar una
+   * orden, lo que abortaba la generación del PDF y el envío del email.
    */
-  private extraerDatosModulo(mediciones: any[]): any {
-    // Implementación simplificada - puede mejorarse
-    return {};
+  private mapTipoEquipo(nombreTipoEquipo: string): 'GENERADOR' | 'BOMBA' | 'MOTOR' {
+    const n = (nombreTipoEquipo || '').toLowerCase();
+    if (n.includes('bomba')) return 'BOMBA';
+    if (n.includes('motor')) return 'MOTOR';
+    return 'GENERADOR';
+  }
+
+  /**
+   * ✅ FIX: el PDF solo acepta estos tres tipos de servicio. `nombre_tipo` viene de
+   * tipos_servicio con valores libres (PREVENTIVO, CORRECTIVO, EMERGENCIA...), así que
+   * se normaliza en vez de filtrar el valor crudo.
+   */
+  private mapTipoServicio(nombreTipo?: string | null): 'CORRECTIVO' | 'PREVENTIVO_A' | 'PREVENTIVO_B' {
+    const n = (nombreTipo || '').toUpperCase();
+    if (n.includes('CORRECTIV')) return 'CORRECTIVO';
+    if (n.endsWith('_B') || n === 'B' || n.includes(' TIPO B')) return 'PREVENTIVO_B';
+    return 'PREVENTIVO_A';
+  }
+
+  /**
+   * Agrupa las mediciones por parámetro para el bloque de datos del PDF.
+   * Antes ignoraba la entrada y devolvía `{}`; ahora devuelve el agrupado real.
+   */
+  private extraerDatosModulo(mediciones: any[]): Record<string, unknown> {
+    if (!Array.isArray(mediciones) || mediciones.length === 0) {
+      return {};
+    }
+
+    const porParametro: Record<string, { valores: number[]; unidad: string }> = {};
+
+    for (const med of mediciones) {
+      const nombre = med?.parametros_medicion?.nombre_parametro;
+      if (!nombre) continue;
+
+      const valor = Number(med?.valor_numerico);
+      if (Number.isNaN(valor)) continue;
+
+      const bucket = porParametro[nombre] ?? (porParametro[nombre] = {
+        valores: [],
+        unidad: med?.unidad_medida || med?.parametros_medicion?.unidad_medida || '',
+      });
+      bucket.valores.push(valor);
+    }
+
+    return porParametro;
   }
 
   /**

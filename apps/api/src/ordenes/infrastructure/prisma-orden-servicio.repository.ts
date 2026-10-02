@@ -1,5 +1,5 @@
 import { PrismaService } from '@mekanos/database';
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
 /**
  * Repository para ordenes_servicio
@@ -26,6 +26,8 @@ export class PrismaOrdenServicioRepository {
    * Mapa de homóglifos: caracteres griegos/cirílicos que parecen letras latinas.
    * Ej: 'Α' (Alpha griega U+0391) → 'A', 'Ν' (Nu griega U+039D) → 'N'
    */
+  private readonly logger = new Logger(PrismaOrdenServicioRepository.name);
+
   private static readonly HOMOGLYPH_MAP: Record<string, string> = {
     // Mayúsculas griegas → Latinas
     '\u0391': 'A', // Α → A
@@ -235,7 +237,11 @@ export class PrismaOrdenServicioRepository {
     tipos_servicio: true,
     empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } },
     estados_orden: true,
-    usuarios_ordenes_servicio_creado_porTousuarios: { include: { persona: true } },
+    // 🛡️ FIX 29-SEP-2026: `usuarios_ordenes_servicio_creado_porTousuarios` NO existe
+    // en el schema. `creado_por` es un entero SIN relación con `usuarios`, por lo que
+    // este include abortaba TODA lectura de orden con PrismaClientValidationError
+    // ("Unknown argument") -> HTTP 400/500. Se elimina; el creador se expone por
+    // `creado_por` (id de empleado) y, si se necesita el nombre, vía empleados.
     ordenes_equipos: {
       include: {
         equipos: {
@@ -507,7 +513,87 @@ export class PrismaOrdenServicioRepository {
 
     if (dbData.id_orden_servicio) {
       // UPDATE: Orden existente
-      const { id_orden_servicio, ...updateData } = dbData;
+      //
+      // 🛡️ ZERO TRUST — ALLOWLIST EXPLÍCITO (29-SEP-2026)
+      // Antes se hacía `const { id_orden_servicio, ...updateData } = dbData` y se
+      // volcaba el spread directamente en `data`. Eso es mass-assignment: cualquier
+      // clave no reconocida (incluidas anidadas de relaciones, ej. `estados_orden`)
+      // makes Prisma abortar con PrismaClientValidationError -> HTTP 500 opaco.
+      // Solo se permiten columnas reales de `ordenes_servicio`.
+      const { id_orden_servicio } = dbData;
+
+      const CAMPOS_EDITABLES_ORDEN = [
+        'id_sede',
+        'id_tipo_servicio',
+        'id_cronograma',
+        'fecha_programada',
+        'hora_programada',
+        'prioridad',
+        'origen_solicitud',
+        'descripcion_inicial',
+        'trabajo_realizado',
+        'observaciones_tecnico',
+        'observaciones_cierre',
+        'requiere_firma_cliente',
+        'id_tecnico_asignado',
+        'id_supervisor',
+        'fecha_asignacion',
+        'id_estado_actual',
+        'fecha_cambio_estado',
+        'fecha_inicio_real',
+        'fecha_fin_real',
+        'duracion_minutos',
+        'id_firma_cliente',
+        'nombre_quien_recibe',
+        'cargo_quien_recibe',
+        'cliente_conforme',
+        'calificacion_cliente',
+        'tiene_garantia',
+        'meses_garantia',
+        'fecha_vencimiento_garantia',
+        'observaciones_garantia',
+        'aprobada_por',
+        'fecha_aprobacion',
+        'total_servicios',
+        'total_gastos',
+        'total_componentes',
+        'total_general',
+        'id_firma_tecnico',
+        'modificado_por',
+      ] as const;
+
+      const updateData: Record<string, unknown> = {};
+      for (const campo of CAMPOS_EDITABLES_ORDEN) {
+        if (dbData[campo] !== undefined) {
+          updateData[campo] = dbData[campo];
+        }
+      }
+
+      // Invariante FSM: una orden ASIGNADA/EN_PROCESO exige técnico.
+      // Sin esto, un PUT parcial podía dejar la orden en estado inconsistente.
+      const estadoResultante = updateData.id_estado_actual ?? dbData.id_estado_actual;
+      const tecnicoResultante =
+        'id_tecnico_asignado' in updateData
+          ? updateData.id_tecnico_asignado
+          : dbData.id_tecnico_asignado;
+
+      if (tecnicoResultante === null || tecnicoResultante === undefined) {
+        const estadoRow = await this.prisma.estados_orden.findUnique({
+          where: { id_estado: estadoResultante },
+          select: { codigo_estado: true },
+        });
+        const codigo = estadoRow?.codigo_estado;
+        if (codigo === 'ASIGNADA' || codigo === 'EN_PROCESO' || codigo === 'EN_ESPERA_REPUESTO') {
+          throw new BadRequestException(
+            `No se puede dejar la orden en estado ${codigo} sin técnico asignado. ` +
+            `Desasigne el técnico solo si la orden está en PROGRAMADA.`,
+          );
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        throw new BadRequestException('No se detectaron campos editables en la solicitud.');
+      }
 
       return this.prisma.ordenes_servicio.update({
         where: { id_orden_servicio },
@@ -1053,6 +1139,76 @@ export class PrismaOrdenServicioRepository {
   }
 
   /**
+   * Registra una lápida (tombstone) cuando una orden es reasignada o desasignada
+   * para que la app móvil del técnico anterior la purgue de inmediato.
+   */
+  async registrarTombstoneReasignacion(
+    id_orden_servicio: number,
+    numero_orden: string,
+    id_tecnico_anterior: number,
+  ): Promise<void> {
+    // La tabla `ordenes_eliminadas` es un tombstone: NO es crítico para la
+    // transacción de negocio. Un fallo aquí se registra y se continúa, porque
+    // abortar la reasignación por una lápida faltante sería peor que la falta
+    // de la lápida (el técnico anterior simplemente sincroniza por delta).
+    // Antes se silenciaba con console.warn sin dejar rastro estructurado.
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `INSERT INTO ordenes_eliminadas (id_orden_servicio, numero_orden, id_tecnico_asignado, fecha_eliminacion)
+         VALUES ($1, $2, $3, NOW())`,
+        id_orden_servicio,
+        numero_orden,
+        id_tecnico_anterior,
+      );
+      this.logger.log(
+        `[Tombstone] Lápida registrada: orden ${numero_orden} (ID ${id_orden_servicio}), técnico anterior ${id_tecnico_anterior}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[Tombstone] No se pudo registrar la lápida de reasignación de la orden ${numero_orden} ` +
+        `(ID ${id_orden_servicio}). La reasignación continuará. ` +
+        `Causa probable: la tabla 'ordenes_eliminadas' no existe en la base de datos ` +
+        `(aplicar packages/database/prisma/migrations/20260929_ordenes_eliminadas_tombstones.sql). ` +
+        `Detalle: ${(err as Error)?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Registra un cambio en historial_estados_orden
+   */
+  async registrarHistorialCambio(data: {
+    id_orden_servicio: number;
+    id_estado_anterior?: number | null;
+    id_estado_nuevo: number;
+    motivo_cambio?: string;
+    observaciones?: string;
+    accion?: string;
+    realizado_por: number;
+  }): Promise<void> {
+    try {
+      await this.prisma.historial_estados_orden.create({
+        data: {
+          id_orden_servicio: data.id_orden_servicio,
+          id_estado_anterior: data.id_estado_anterior || null,
+          id_estado_nuevo: data.id_estado_nuevo,
+          motivo_cambio: data.motivo_cambio || null,
+          observaciones: data.observaciones || null,
+          accion: data.accion || 'ACTUALIZAR',
+          realizado_por: data.realizado_por,
+          fecha_cambio: new Date(),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `[Historial] No se pudo asentar el cambio de estado de la orden ${data.id_orden_servicio} ` +
+        `en historial_estados_orden. La actualización de la orden NO se revierte. ` +
+        `Detalle: ${(err as Error)?.message}`,
+      );
+    }
+  }
+
+  /**
    * Asignar técnico a la orden
    * Transición: PROGRAMADA → ASIGNADA
    */
@@ -1062,7 +1218,21 @@ export class PrismaOrdenServicioRepository {
     id_estado_asignada: number,
     modificado_por: number,
   ): Promise<any> {
-    return this.prisma.ordenes_servicio.update({
+    // Obtener orden actual para verificar si ya tenía otro técnico asignado
+    const ordenActual = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio },
+      select: { id_tecnico_asignado: true, numero_orden: true, id_estado_actual: true },
+    });
+
+    if (ordenActual?.id_tecnico_asignado && ordenActual.id_tecnico_asignado !== id_tecnico_asignado) {
+      await this.registrarTombstoneReasignacion(
+        id_orden_servicio,
+        ordenActual.numero_orden,
+        ordenActual.id_tecnico_asignado,
+      );
+    }
+
+    const updated = await this.prisma.ordenes_servicio.update({
       where: { id_orden_servicio },
       data: {
         id_tecnico_asignado,
@@ -1077,6 +1247,19 @@ export class PrismaOrdenServicioRepository {
         empleados_ordenes_servicio_id_tecnico_asignadoToempleados: { include: { persona: true } }, // ✅ FIX
       },
     });
+
+    // Registrar formalmente en historial_estados_orden
+    await this.registrarHistorialCambio({
+      id_orden_servicio,
+      id_estado_anterior: ordenActual?.id_estado_actual || null,
+      id_estado_nuevo: id_estado_asignada,
+      motivo_cambio: ordenActual?.id_tecnico_asignado ? 'Reasignación de técnico' : 'Asignación de técnico',
+      observaciones: `Técnico asignado ID: ${id_tecnico_asignado}`,
+      accion: 'ASIGNAR_TECNICO',
+      realizado_por: modificado_por,
+    });
+
+    return updated;
   }
 
   /**
@@ -1181,7 +1364,9 @@ export class PrismaOrdenServicioRepository {
       },
       include: {
         estados_orden: true, // ✅ REQUERIDO: Controller necesita estado.nombre_estado
-        usuarios_ordenes_servicio_aprobada_porTousuarios: { include: { persona: true } }, // ✅ REQUERIDO: Para script test
+        // ✅ FIX: `aprobada_por` no tiene relación con `usuarios` en el schema;
+        // este include abortaba con PrismaClientValidationError al aprobar una orden.
+        // Se omite: el aprobador se expone vía `aprobada_por` (id de empleado).
       },
     });
   }
@@ -1397,7 +1582,9 @@ export class PrismaOrdenServicioRepository {
       id_estado: number;
       codigo_estado: string;
       nombre_estado: string;
-      es_estado_final: boolean;
+      // ✅ El schema define `es_estado_final Boolean?` -> nullable. El tipo declarado
+      // como `boolean` (no-null) era incompatible con el valor real de Prisma.
+      es_estado_final: boolean | null;
     } | null;
   } | null> {
     return this.prisma.ordenes_servicio.findUnique({

@@ -48,7 +48,8 @@ import {
     sendHeartbeat,
     type UpdateHorariosServicioDto,
     type UpdateMedicionDto,
-    type UpdateOrdenDto
+    type UpdateOrdenDto,
+    type UpdateFirmaOrdenDto
 } from '../api/ordenes.service';
 
 // Query keys
