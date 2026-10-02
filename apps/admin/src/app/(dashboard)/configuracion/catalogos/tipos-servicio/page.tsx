@@ -2,6 +2,7 @@
 
 import {
     AlertCircle,
+    Bookmark,
     Check,
     CheckSquare,
     Clock,
@@ -12,7 +13,6 @@ import {
     Palette,
     Plus,
     Search,
-    Sparkles,
     Trash2,
     Wrench,
     X
@@ -248,32 +248,24 @@ export default function TiposServicioPage() {
                     onClose={() => setIsModalOpen(false)}
                     tipo={editingTipo}
                     onSubmit={async (formData: any) => {
+                        const payload = {
+                            nombreTipo: formData.nombre_tipo,
+                            codigoTipo: formData.codigo_tipo,
+                            categoria: formData.categoria,
+                            descripcion: formData.descripcion || undefined,
+                            tieneChecklist: Boolean(formData.tiene_checklist),
+                            duracionEstimadaHoras: formData.duracion_estimada_horas,
+                            colorHex: formData.color_hex,
+                            plantillaObservacion: formData.plantilla_observacion || null,
+                            plantilla_observacion: formData.plantilla_observacion || null,
+                        };
                         if (editingTipo) {
                             await actualizarTipo.mutateAsync({
-                                id: editingTipo.id_tipo_servicio, data: {
-                                    nombreTipo: formData.nombre_tipo,
-                                    codigoTipo: formData.codigo_tipo,
-                                    categoria: formData.categoria,
-                                    descripcion: formData.descripcion,
-                                    tieneChecklist: formData.tiene_checklist,
-                                    duracionEstimadaHoras: formData.duracion_estimada_horas,
-                                    colorHex: formData.color_hex,
-                                    plantillaObservacion: formData.plantilla_observacion,
-                                    plantilla_observacion: formData.plantilla_observacion,
-                                }
+                                id: editingTipo.id_tipo_servicio,
+                                data: payload,
                             });
                         } else {
-                            await crearTipo.mutateAsync({
-                                nombreTipo: formData.nombre_tipo,
-                                codigoTipo: formData.codigo_tipo,
-                                categoria: formData.categoria,
-                                descripcion: formData.descripcion,
-                                tieneChecklist: formData.tiene_checklist,
-                                duracionEstimadaHoras: formData.duracion_estimada_horas,
-                                colorHex: formData.color_hex,
-                                plantillaObservacion: formData.plantilla_observacion,
-                                plantilla_observacion: formData.plantilla_observacion,
-                            });
+                            await crearTipo.mutateAsync(payload);
                         }
                         setIsModalOpen(false);
                     }}
@@ -341,7 +333,7 @@ function PlantillaObservacionEditor({
             {/* Snippets rápidos sugeridos */}
             <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                    <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                    <Bookmark className="h-3.5 w-3.5 text-blue-600" />
                     Estructuras sugeridas:
                 </span>
                 <button
@@ -384,16 +376,25 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
         categoria: tipo?.categoria || 'PREVENTIVO',
         descripcion: tipo?.descripcion || '',
         tiene_checklist: tipo?.tiene_checklist ?? true,
-        duracion_estimada_horas: tipo?.duracion_estimada_horas || '',
+        duracion_estimada_horas: tipo?.duracion_estimada_horas ?? '',
         color_hex: tipo?.color_hex || '#3b82f6',
         plantilla_observacion: tipo?.plantilla_observacion || '',
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const rawDuracion = formData.duracion_estimada_horas;
+        let parsedDuracion: number | undefined = undefined;
+        if (rawDuracion !== '' && rawDuracion !== null && rawDuracion !== undefined) {
+            const num = Number(String(rawDuracion).replace(',', '.'));
+            if (!isNaN(num) && num > 0) {
+                parsedDuracion = num;
+            }
+        }
+
         onSubmit({
             ...formData,
-            duracion_estimada_horas: formData.duracion_estimada_horas ? Number(formData.duracion_estimada_horas) : undefined
+            duracion_estimada_horas: parsedDuracion
         });
     };
 

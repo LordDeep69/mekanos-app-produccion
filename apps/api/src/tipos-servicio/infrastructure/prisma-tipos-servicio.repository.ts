@@ -34,32 +34,6 @@ export class PrismaTiposServicioRepository {
         categoria: true,
       },
     },
-    usuarios_tipos_servicio_creado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        persona: {
-          select: {
-            id_persona: true,
-            primer_nombre: true,
-            primer_apellido: true,
-            nombre_completo: true,
-          },
-        },
-      },
-    },
-    usuarios_tipos_servicio_modificado_porTousuarios: {
-      select: {
-        id_usuario: true,
-        persona: {
-          select: {
-            id_persona: true,
-            primer_nombre: true,
-            primer_apellido: true,
-            nombre_completo: true,
-          },
-        },
-      },
-    },
   };
 
   /**

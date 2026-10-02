@@ -23,7 +23,6 @@ import {
     FileText,
     Loader2,
     MessageSquareText,
-    Sparkles,
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -151,7 +150,7 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                                         className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-2xs transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                                         title="Inserta el texto predeterminado sin borrar lo que ya está escrito"
                                     >
-                                        <Sparkles className="h-3 w-3" />
+                                        <FileText className="h-3 w-3" />
                                         Insertar plantilla de "{nombreTipoActual}"
                                     </button>
                                 ) : (
@@ -243,7 +242,7 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                                                 }}
                                                 className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
                                             >
-                                                <Sparkles className="h-3 w-3 text-emerald-600" />
+                                                <FileText className="h-3 w-3 text-emerald-600" />
                                                 Iniciar con plantilla de {nombreTipoActual}
                                             </button>
                                         </>
