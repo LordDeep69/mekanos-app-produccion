@@ -186,6 +186,33 @@ export class PrismaTiposServicioRepository {
     skip?: number;
     limit?: number;
   }): Promise<any[]> {
+    let compatibleTipoEquipoIds: number[] | null = null;
+    if (filters?.tipoEquipoId) {
+      compatibleTipoEquipoIds = [filters.tipoEquipoId];
+      try {
+        const te = await this.prisma.tipos_equipo.findUnique({
+          where: { id_tipo_equipo: filters.tipoEquipoId },
+          select: { codigo_tipo: true, nombre_tipo: true },
+        });
+        if (te) {
+          const code = (te.codigo_tipo || '').toUpperCase();
+          const name = (te.nombre_tipo || '').toUpperCase();
+          if (code.includes('GEN') || name.includes('GENERADOR') || name.includes('PLANTA')) {
+            compatibleTipoEquipoIds = [1, 3];
+          } else if (code.includes('BOM') || name.includes('BOMBA')) {
+            compatibleTipoEquipoIds = [2, 5];
+          } else if (code.includes('MOT') || name.includes('MOTOR')) {
+            compatibleTipoEquipoIds = [4, 6];
+          } else if (code.includes('COMP') || name.includes('COMPRESOR')) {
+            compatibleTipoEquipoIds = [20];
+          }
+        }
+      } catch (err) {
+        // Fallback al ID original si ocurre error
+        compatibleTipoEquipoIds = [filters.tipoEquipoId];
+      }
+    }
+
     return this.prisma.tipos_servicio.findMany({
       where: {
         // Filtro activo (default: solo activos)
@@ -194,10 +221,10 @@ export class PrismaTiposServicioRepository {
         // Filtro por categoría
         categoria: filters?.categoria as any,
 
-        // Filtro por tipo equipo: Incluir específicos + globales (null)
-        ...(filters?.tipoEquipoId && {
+        // Filtro por tipo equipo: Incluir específicos de la familia + globales (null)
+        ...(compatibleTipoEquipoIds && {
           OR: [
-            { id_tipo_equipo: filters.tipoEquipoId },
+            { id_tipo_equipo: { in: compatibleTipoEquipoIds } },
             { id_tipo_equipo: null },
           ],
         }),

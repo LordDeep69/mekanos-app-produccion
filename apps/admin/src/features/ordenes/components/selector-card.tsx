@@ -127,14 +127,20 @@ export function SelectorCard<T>({
                                     </div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                    <p className={cn(
-                                        'font-bold text-sm truncate transition-colors',
-                                        isSelected ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-600'
-                                    )}>
+                                    <p
+                                        className={cn(
+                                            'font-bold text-sm leading-snug break-words transition-colors',
+                                            isSelected ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-600'
+                                        )}
+                                        title={getLabel(item)}
+                                    >
                                         {getLabel(item)}
                                     </p>
                                     {getSubtitle && (
-                                        <p className="text-xs text-gray-500 truncate mt-0.5">
+                                        <p
+                                            className="text-xs text-gray-500 break-words mt-0.5"
+                                            title={typeof getSubtitle(item) === 'string' ? (getSubtitle(item) as string) : undefined}
+                                        >
                                             {getSubtitle(item)}
                                         </p>
                                     )}

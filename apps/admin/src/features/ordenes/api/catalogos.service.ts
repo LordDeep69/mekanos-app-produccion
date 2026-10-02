@@ -87,7 +87,11 @@ export interface TecnicoSelector {
     es_tecnico: boolean;
     persona?: {
         primer_nombre?: string;
+        segundo_nombre?: string;
         primer_apellido?: string;
+        segundo_apellido?: string;
+        nombre_completo?: string;
+        numero_identificacion?: string;
         celular?: string;
     };
     certificaciones_tecnicas?: Array<{
@@ -304,6 +308,12 @@ export async function getEquiposSelector(params?: {
             nombre: string;
             serie?: string;
             tipo?: string;
+            id_tipo_equipo?: number;
+            tipos_equipo?: {
+                id_tipo_equipo: number;
+                nombre_tipo?: string;
+                codigo_tipo?: string;
+            };
         }>
     }>(
         `/equipos/selector?${queryParams.toString()}`
@@ -315,7 +325,8 @@ export async function getEquiposSelector(params?: {
         codigo_equipo: e.codigo_equipo,
         nombre_equipo: e.nombre,
         serie: e.serie,
-        tipos_equipo: e.tipo ? { id_tipo_equipo: 0, nombre_tipo: e.tipo } : undefined,
+        id_tipo_equipo: e.id_tipo_equipo || e.tipos_equipo?.id_tipo_equipo,
+        tipos_equipo: e.tipos_equipo || (e.tipo ? { id_tipo_equipo: e.id_tipo_equipo || 0, nombre_tipo: e.tipo } : undefined),
     }));
 }
 

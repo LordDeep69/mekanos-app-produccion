@@ -5,6 +5,6 @@
  * Exporta todos los componentes de layout
  */
 
-// Próximamente: Sidebar, Header, MainLayout
-export { };
-
+export { Header } from './header';
+export { Sidebar } from './sidebar';
+export { SidebarProvider, useSidebar } from './sidebar-context';

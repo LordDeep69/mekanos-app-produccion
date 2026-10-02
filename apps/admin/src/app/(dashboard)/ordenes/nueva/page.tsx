@@ -55,7 +55,7 @@ import {
     X
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -86,6 +86,113 @@ const PRIORIDADES = [
     { value: 'ALTA', label: 'Alta', color: 'bg-orange-100 text-orange-700 border-orange-200' },
     { value: 'URGENTE', label: 'Urgente', color: 'bg-red-100 text-red-700 border-red-200' },
 ] as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CLASIFICACIÓN INTELIGENTE DE FAMILIAS DE EQUIPO Y SERVICIOS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type FamiliaEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | 'GLOBAL' | 'MIXTO';
+
+export function detectarFamiliaEquipo(equipo?: EquipoSelector | null): FamiliaEquipo {
+    if (!equipo) return 'GLOBAL';
+    const tipo = equipo.tipos_equipo;
+    const cod = ((tipo?.codigo_tipo || '') + ' ' + (equipo.codigo_equipo || '')).toUpperCase();
+    const nom = ((tipo?.nombre_tipo || '') + ' ' + (equipo.nombre_equipo || '')).toUpperCase();
+    const id = tipo?.id_tipo_equipo || equipo.id_tipo_equipo;
+
+    if (id === 1 || id === 3 || cod.includes('GEN') || nom.includes('GENERADOR') || nom.includes('PLANTA')) {
+        return 'GENERADOR';
+    }
+    if (id === 2 || id === 5 || cod.includes('BOM') || nom.includes('BOMBA') || nom.includes('HIDR')) {
+        return 'BOMBA';
+    }
+    if (id === 4 || id === 6 || cod.includes('MOT') || nom.includes('MOTOR')) {
+        return 'MOTOR';
+    }
+    if (id === 20 || cod.includes('COMP') || nom.includes('COMPRESOR')) {
+        return 'COMPRESOR';
+    }
+    return 'GLOBAL';
+}
+
+export function detectarFamiliaEquipos(equipos: EquipoSelector[]): FamiliaEquipo {
+    if (!equipos || equipos.length === 0) return 'GLOBAL';
+    const familias = Array.from(new Set(equipos.map(detectarFamiliaEquipo)));
+    if (familias.length === 1) return familias[0];
+    return 'MIXTO';
+}
+
+export function esServicioCompatibleConFamilia(
+    service: { codigo_tipo?: string; nombre_tipo?: string; id_tipo_equipo?: number | null; tipos_equipo?: { codigo_tipo?: string; nombre_tipo?: string } | null },
+    familia: FamiliaEquipo
+): boolean {
+    if (familia === 'GLOBAL' || familia === 'MIXTO') return true;
+
+    const cod = (service.codigo_tipo || '').toUpperCase();
+    const nom = (service.nombre_tipo || '').toUpperCase();
+    const codEq = (service.tipos_equipo?.codigo_tipo || '').toUpperCase();
+    const idEq = service.id_tipo_equipo;
+
+    const esGen = idEq === 1 || idEq === 3 || cod.startsWith('GEN') || codEq.includes('GEN') || nom.includes('GENERADOR') || nom.includes('PLANTA');
+    const esBom = idEq === 2 || idEq === 5 || cod.startsWith('BOM') || codEq.includes('BOM') || nom.includes('BOMBA');
+    const esMot = idEq === 4 || idEq === 6 || cod.startsWith('MOT') || codEq.includes('MOT') || nom.includes('MOTOR');
+    const esComp = idEq === 20 || cod.startsWith('COMP') || codEq.includes('COMP') || nom.includes('COMPRESOR');
+
+    if (familia === 'GENERADOR') {
+        if (esBom || esMot || esComp) return false;
+        return true;
+    }
+    if (familia === 'BOMBA') {
+        if (esGen || esMot || esComp) return false;
+        return true;
+    }
+    if (familia === 'MOTOR') {
+        if (esGen || esBom || esComp) return false;
+        return true;
+    }
+    if (familia === 'COMPRESOR') {
+        if (esGen || esBom || esMot) return false;
+        return true;
+    }
+    return true;
+}
+
+export function clasificarServicioCorrectivo(s: CatalogoServicio): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'GLOBAL' {
+    const cod = (s.codigo_servicio || '').toUpperCase();
+    const nom = (s.nombre_servicio || '').toUpperCase();
+    const codEq = (s.tipos_equipo?.codigo_tipo || '').toUpperCase();
+    const nomEq = (s.tipos_equipo?.nombre_tipo || '').toUpperCase();
+    const idEq = s.id_tipo_equipo;
+
+    if (
+        idEq === 1 || idEq === 3 ||
+        codEq.includes('GEN') || nomEq.includes('GENERADOR') ||
+        cod.startsWith('GEN-') || cod.includes('-GEN') ||
+        nom.includes('PLANTA') || nom.includes('GENERADOR') ||
+        nom.includes('RADIADOR') || nom.includes('BATERÍA') || nom.includes('BATERIA') || nom.includes('ALTERNADOR')
+    ) {
+        return 'GENERADOR';
+    }
+    if (
+        idEq === 2 || idEq === 5 ||
+        codEq.includes('BOM') || nomEq.includes('BOMBA') ||
+        cod.startsWith('BOM-') || cod.includes('-BOMB') ||
+        nom.includes('BOMBA') || nom.includes('BOMBEO') ||
+        nom.includes('HIDRONEUMÁTICO') || nom.includes('HIDRONEUMATICO') ||
+        nom.includes('PRESOSTATO') || nom.includes('IMPULSOR') || nom.includes('SELLO MECÁNICO')
+    ) {
+        return 'BOMBA';
+    }
+    if (
+        idEq === 4 || idEq === 6 ||
+        codEq.includes('MOT') || nomEq.includes('MOTOR') ||
+        cod.startsWith('MOT-') || nom.includes('MOTOR') ||
+        nom.includes('BOBINADO') || nom.includes('ESTATOR') || nom.includes('RODAMIENTO')
+    ) {
+        return 'MOTOR';
+    }
+    return 'GLOBAL';
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -191,15 +298,35 @@ function PasoContexto({
         });
 
     const agregarEquipo = (equipo: EquipoSelector) => {
-        onChange({
-            equiposSeleccionados: [...data.equiposSeleccionados, equipo],
-        });
+        const nuevosEquipos = [...data.equiposSeleccionados, equipo];
+        const updates: Partial<WizardData> = {
+            equiposSeleccionados: nuevosEquipos,
+        };
+        if (data.tipoServicioSeleccionado) {
+            const nuevaFamilia = detectarFamiliaEquipos(nuevosEquipos);
+            if (!esServicioCompatibleConFamilia(data.tipoServicioSeleccionado, nuevaFamilia)) {
+                updates.tipoServicioId = undefined;
+                updates.tipoServicioSeleccionado = undefined;
+                updates.serviciosCorrectivosSeleccionados = [];
+            }
+        }
+        onChange(updates);
     };
 
     const quitarEquipo = (idEquipo: number) => {
-        onChange({
-            equiposSeleccionados: data.equiposSeleccionados.filter((e) => e.id_equipo !== idEquipo),
-        });
+        const nuevosEquipos = data.equiposSeleccionados.filter((e) => e.id_equipo !== idEquipo);
+        const updates: Partial<WizardData> = {
+            equiposSeleccionados: nuevosEquipos,
+        };
+        if (data.tipoServicioSeleccionado) {
+            const nuevaFamilia = detectarFamiliaEquipos(nuevosEquipos);
+            if (!esServicioCompatibleConFamilia(data.tipoServicioSeleccionado, nuevaFamilia)) {
+                updates.tipoServicioId = undefined;
+                updates.tipoServicioSeleccionado = undefined;
+                updates.serviciosCorrectivosSeleccionados = [];
+            }
+        }
+        onChange(updates);
     };
 
     // ✅ FIX 06-AGO-2026: Aplicar una selección anterior (equipos + tipo de servicio)
@@ -443,23 +570,43 @@ function PasoAlcance({
 }) {
     const primerEquipo = data.equiposSeleccionados[0];
     const tipoEquipoId = primerEquipo?.tipos_equipo?.id_tipo_equipo || primerEquipo?.id_tipo_equipo;
+    const familiaEquipo = useMemo(() => detectarFamiliaEquipos(data.equiposSeleccionados), [data.equiposSeleccionados]);
 
-    const { tiposServicio, isLoading } = useWizardCatalogos({
-        tipoEquipoId: tipoEquipoId ? Number(tipoEquipoId) : undefined
-    });
+    const { tiposServicio, isLoading: isLoadingTipos } = useWizardCatalogos();
 
     const { data: serviciosComerciales, isLoading: isLoadingServicios } = useServiciosComerciales({ activo: true, limit: 100 });
     const [busquedaCorrectivo, setBusquedaCorrectivo] = useState('');
-    const [filtroTipoEquipo, setFiltroTipoEquipo] = useState<string>('TODOS');
 
-    if (isLoading) return <div className="flex justify-center p-20"><Loader2 className="h-10 w-10 animate-spin text-blue-500" /></div>;
+    // Estado del filtro de correctivos: por defecto "FAMILIA_Y_GLOBAL" para evitar errores de asignación cruzada
+    const defaultTab = (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR')
+        ? 'FAMILIA_Y_GLOBAL'
+        : 'TODOS';
+    const [filtroTab, setFiltroTab] = useState<string>(defaultTab);
 
-    const tiposPorCategoria = tiposServicio.reduce((acc, tipo) => {
-        const cat = tipo.categoria || 'OTRO';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(tipo);
-        return acc;
-    }, {} as Record<string, TipoServicio[]>);
+    // Sincronizar tab cuando cambia la familia del equipo
+    useEffect(() => {
+        if (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR') {
+            setFiltroTab('FAMILIA_Y_GLOBAL');
+        } else {
+            setFiltroTab('TODOS');
+        }
+    }, [familiaEquipo]);
+
+    // Filtrar servicios macro de acuerdo con la familia de los equipos seleccionados
+    const tiposServicioCompatibles = useMemo(() => {
+        return (tiposServicio || []).filter((tipo) =>
+            esServicioCompatibleConFamilia(tipo, familiaEquipo)
+        );
+    }, [tiposServicio, familiaEquipo]);
+
+    const tiposPorCategoria = useMemo(() => {
+        return tiposServicioCompatibles.reduce((acc, tipo) => {
+            const cat = tipo.categoria || 'OTRO';
+            if (!acc[cat]) acc[cat] = [];
+            acc[cat].push(tipo);
+            return acc;
+        }, {} as Record<string, TipoServicio[]>);
+    }, [tiposServicioCompatibles]);
 
     const esCorrectivoOEmergencia = 
         data.tipoServicioSeleccionado?.categoria === 'CORRECTIVO' ||
@@ -467,25 +614,53 @@ function PasoAlcance({
         data.tipoServicioSeleccionado?.categoria === 'ESPECIALIZADO' ||
         data.tipoServicioSeleccionado?.categoria === 'DIAGNOSTICO';
 
+    // Determinar la familia activa efectiva para correctivos (toma en cuenta el servicio macro si especifica familia)
+    const familiaEfectiva: FamiliaEquipo = useMemo(() => {
+        const codTipoServ = (data.tipoServicioSeleccionado?.codigo_tipo || '').toUpperCase();
+        if (codTipoServ.includes('GEN') || codTipoServ.includes('PLANTA')) return 'GENERADOR';
+        if (codTipoServ.includes('BOM')) return 'BOMBA';
+        if (codTipoServ.includes('MOT')) return 'MOTOR';
+        if (codTipoServ.includes('COMP')) return 'COMPRESOR';
+        return familiaEquipo;
+    }, [data.tipoServicioSeleccionado, familiaEquipo]);
+
     // Filtrar servicios comerciales correctivos/especializados
-    const serviciosFiltrados = (serviciosComerciales || []).filter((s) => {
-        // Filtrar por término de búsqueda
-        const matchSearch = busquedaCorrectivo.trim() === '' ||
-            s.nombre_servicio.toLowerCase().includes(busquedaCorrectivo.toLowerCase()) ||
-            s.codigo_servicio.toLowerCase().includes(busquedaCorrectivo.toLowerCase()) ||
-            (s.descripcion && s.descripcion.toLowerCase().includes(busquedaCorrectivo.toLowerCase()));
+    const serviciosFiltrados = useMemo(() => {
+        return (serviciosComerciales || []).filter((s) => {
+            // Filtrar por término de búsqueda
+            if (busquedaCorrectivo.trim() !== '') {
+                const query = busquedaCorrectivo.toLowerCase();
+                const matchSearch =
+                    s.nombre_servicio.toLowerCase().includes(query) ||
+                    s.codigo_servicio.toLowerCase().includes(query) ||
+                    (s.descripcion && s.descripcion.toLowerCase().includes(query));
+                if (!matchSearch) return false;
+            }
 
-        if (!matchSearch) return false;
+            const cat = clasificarServicioCorrectivo(s);
 
-        // Filtrar por tipo de equipo si se selecciona tab
-        if (filtroTipoEquipo !== 'TODOS') {
-            if (filtroTipoEquipo === 'GEN') return s.codigo_servicio.startsWith('GEN-') || !s.id_tipo_equipo;
-            if (filtroTipoEquipo === 'BOM') return s.codigo_servicio.startsWith('BOM-') || !s.id_tipo_equipo;
-            if (filtroTipoEquipo === 'MOT') return s.codigo_servicio.startsWith('MOT-') || !s.id_tipo_equipo;
-        }
-
-        return true;
-    });
+            if (filtroTab === 'FAMILIA_Y_GLOBAL') {
+                return cat === familiaEfectiva || cat === 'GLOBAL';
+            }
+            if (filtroTab === 'SOLO_FAMILIA') {
+                return cat === familiaEfectiva;
+            }
+            if (filtroTab === 'SOLO_GLOBAL') {
+                return cat === 'GLOBAL';
+            }
+            if (filtroTab === 'GEN') {
+                return cat === 'GENERADOR';
+            }
+            if (filtroTab === 'BOM') {
+                return cat === 'BOMBA';
+            }
+            if (filtroTab === 'MOT') {
+                return cat === 'MOTOR';
+            }
+            // filtroTab === 'TODOS'
+            return true;
+        });
+    }, [serviciosComerciales, busquedaCorrectivo, filtroTab, familiaEfectiva]);
 
     const toggleServicioCorrectivo = (servicio: CatalogoServicio) => {
         const actuales = data.serviciosCorrectivosSeleccionados || [];
@@ -516,41 +691,62 @@ function PasoAlcance({
             </div>
 
             <div className="space-y-6">
-                <label className="text-xs font-black text-slate-500 uppercase tracking-wider block">
-                    1. Seleccione el Tipo de Servicio Macro
-                </label>
-                {Object.entries(tiposPorCategoria).map(([categoria, tipos]) => (
-                    <div key={categoria} className="space-y-3">
-                        <h4 className={cn("text-[10px] font-black px-2 py-0.5 rounded uppercase inline-block", getCategoriaServicioColor(categoria))}>
-                            {getCategoriaServicioLabel(categoria)}
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {tipos.map((tipo) => {
-                                const isSelected = data.tipoServicioId === tipo.id_tipo_servicio;
-                                return (
-                                    <button
-                                        key={tipo.id_tipo_servicio}
-                                        type="button"
-                                        onClick={() => onChange({ tipoServicioId: tipo.id_tipo_servicio, tipoServicioSeleccionado: tipo })}
-                                        className={cn(
-                                            'flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all',
-                                            isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 bg-white hover:border-blue-200'
-                                        )}
-                                    >
-                                        <div className={cn("p-2 rounded-lg", isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}>
-                                            <Wrench className="h-5 w-5" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-slate-700 text-sm truncate">{tipo.nombre_tipo}</p>
-                                            {tipo.duracion_estimada_horas && <p className="text-[10px] text-slate-400 font-bold">{tipo.duracion_estimada_horas}h estimadas</p>}
-                                        </div>
-                                        {isSelected && <CheckCircle2 className="h-5 w-5 text-blue-600 shrink-0" />}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-xs font-black text-slate-500 uppercase tracking-wider block">
+                        1. Seleccione el Tipo de Servicio Macro
+                    </label>
+                </div>
+
+                {isLoadingTipos ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="h-20 bg-slate-100 animate-pulse rounded-xl" />
+                        ))}
                     </div>
-                ))}
+                ) : Object.keys(tiposPorCategoria).length === 0 ? (
+                    <div className="p-6 text-center bg-white rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">
+                        No hay servicios macro disponibles para este tipo de equipo.
+                    </div>
+                ) : (
+                    Object.entries(tiposPorCategoria).map(([categoria, tipos]) => (
+                        <div key={categoria} className="space-y-3">
+                            <h4 className={cn("text-[10px] font-black px-2 py-0.5 rounded uppercase inline-block", getCategoriaServicioColor(categoria))}>
+                                {getCategoriaServicioLabel(categoria)}
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {tipos.map((tipo) => {
+                                    const isSelected = data.tipoServicioId === tipo.id_tipo_servicio;
+                                    return (
+                                        <button
+                                            key={tipo.id_tipo_servicio}
+                                            type="button"
+                                            onClick={() => onChange({ tipoServicioId: tipo.id_tipo_servicio, tipoServicioSeleccionado: tipo })}
+                                            className={cn(
+                                                'flex items-start gap-3.5 p-4 rounded-xl border-2 text-left transition-all',
+                                                isSelected ? 'border-blue-600 bg-blue-50 shadow-sm ring-1 ring-blue-500' : 'border-slate-100 bg-white hover:border-blue-200'
+                                            )}
+                                        >
+                                            <div className={cn("p-2 rounded-lg shrink-0 mt-0.5", isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400")}>
+                                                <Wrench className="h-5 w-5" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-bold text-slate-800 text-sm leading-snug break-words" title={tipo.nombre_tipo}>
+                                                    {tipo.nombre_tipo}
+                                                </p>
+                                                {tipo.duracion_estimada_horas && (
+                                                    <p className="text-[10px] text-slate-400 font-bold mt-1">
+                                                        {tipo.duracion_estimada_horas}h estimadas
+                                                    </p>
+                                                )}
+                                            </div>
+                                            {isSelected && <CheckCircle2 className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
 
             {/* ✅ SECCIÓN DE SERVICIOS CORRECTIVOS ESPECÍFICOS (TRAZABILIDAD GRANULAR) */}
@@ -571,7 +767,7 @@ function PasoAlcance({
                         </Badge>
                     </div>
 
-                    {/* Filtros y buscador de correctivos */}
+                    {/* Filtros dinámicos y buscador de correctivos */}
                     <div className="flex flex-col sm:flex-row gap-2">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -584,21 +780,186 @@ function PasoAlcance({
                             />
                         </div>
                         <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0">
-                            {['TODOS', 'GEN', 'BOM', 'MOT'].map((cat) => (
-                                <button
-                                    key={cat}
-                                    type="button"
-                                    onClick={() => setFiltroTipoEquipo(cat)}
-                                    className={cn(
-                                        'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
-                                        filtroTipoEquipo === cat
-                                            ? 'bg-orange-600 text-white shadow-sm'
-                                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-                                    )}
-                                >
-                                    {cat === 'TODOS' ? 'Todos' : cat === 'GEN' ? 'Generador' : cat === 'BOM' ? 'Bomba' : 'Motor'}
-                                </button>
-                            ))}
+                            {familiaEfectiva === 'GENERADOR' ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('FAMILIA_Y_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'FAMILIA_Y_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Servicios propios de Generador y los que aplican a todos los equipos"
+                                    >
+                                        Generador + Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_FAMILIA')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_FAMILIA'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Solo intervenciones específicas de generadores eléctricos"
+                                    >
+                                        Solo Generador
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Solo servicios universales que aplican a cualquier equipo"
+                                    >
+                                        Solo Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('TODOS')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'TODOS'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Ver todo el catálogo sin restricciones"
+                                    >
+                                        Ver Todo
+                                    </button>
+                                </>
+                            ) : familiaEfectiva === 'BOMBA' ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('FAMILIA_Y_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'FAMILIA_Y_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Servicios propios de Bomba y los que aplican a todos los equipos"
+                                    >
+                                        Bomba + Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_FAMILIA')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_FAMILIA'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Solo intervenciones específicas de bombas hidráulicas"
+                                    >
+                                        Solo Bomba
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Solo servicios universales que aplican a cualquier equipo"
+                                    >
+                                        Solo Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('TODOS')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'TODOS'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Ver todo el catálogo sin restricciones"
+                                    >
+                                        Ver Todo
+                                    </button>
+                                </>
+                            ) : familiaEfectiva === 'MOTOR' ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('FAMILIA_Y_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'FAMILIA_Y_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                    >
+                                        Motor + Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_FAMILIA')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_FAMILIA'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                    >
+                                        Solo Motor
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                    >
+                                        Solo Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('TODOS')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'TODOS'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                    >
+                                        Ver Todo
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    {['TODOS', 'GEN', 'BOM', 'MOT', 'SOLO_GLOBAL'].map((cat) => (
+                                        <button
+                                            key={cat}
+                                            type="button"
+                                            onClick={() => setFiltroTab(cat)}
+                                            className={cn(
+                                                'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                                filtroTab === cat
+                                                    ? 'bg-orange-600 text-white shadow-sm'
+                                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                            )}
+                                        >
+                                            {cat === 'TODOS' ? 'Todos' : cat === 'GEN' ? 'Generador' : cat === 'BOM' ? 'Bomba' : cat === 'MOT' ? 'Motor' : 'Generales'}
+                                        </button>
+                                    ))}
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -609,7 +970,7 @@ function PasoAlcance({
                         </div>
                     ) : serviciosFiltrados.length === 0 ? (
                         <div className="p-4 text-center bg-white rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">
-                            No se encontraron servicios que coincidan con la búsqueda.
+                            No se encontraron servicios que coincidan con la búsqueda en esta sección.
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1">
@@ -617,6 +978,7 @@ function PasoAlcance({
                                 const isChecked = (data.serviciosCorrectivosSeleccionados || []).some(
                                     (item) => item.id_servicio === s.id_servicio
                                 );
+                                const esGlobal = clasificarServicioCorrectivo(s) === 'GLOBAL';
                                 return (
                                     <button
                                         key={s.id_servicio}
@@ -628,6 +990,7 @@ function PasoAlcance({
                                                 ? 'border-orange-500 bg-orange-50/50 ring-2 ring-orange-400/20 shadow-sm'
                                                 : 'border-slate-200 hover:border-orange-300'
                                         )}
+                                        title={s.nombre_servicio}
                                     >
                                         <div
                                             className={cn(
@@ -644,11 +1007,18 @@ function PasoAlcance({
                                                 <span className="font-mono text-[9px] font-black text-slate-500 bg-slate-100 px-1 py-0.5 rounded">
                                                     {s.codigo_servicio}
                                                 </span>
-                                                <span className="text-[9px] font-bold text-orange-700">
-                                                    {s.duracion_estimada_horas ? `${s.duracion_estimada_horas}h` : ''}
-                                                </span>
+                                                {s.duracion_estimada_horas && (
+                                                    <span className="text-[9px] font-bold text-orange-700">
+                                                        {s.duracion_estimada_horas}h
+                                                    </span>
+                                                )}
+                                                {esGlobal && (
+                                                    <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1 rounded">
+                                                        Todos los equipos
+                                                    </span>
+                                                )}
                                             </div>
-                                            <p className="text-xs font-bold text-slate-800 mt-1 line-clamp-2">
+                                            <p className="text-xs font-bold text-slate-800 mt-1 leading-snug break-words">
                                                 {s.nombre_servicio}
                                             </p>
                                         </div>
@@ -756,19 +1126,35 @@ function ResumenOrden({ data }: { data: WizardData }) {
             </h4>
             <div className="space-y-4 text-sm">
                 <div>
-                    <p className="text-slate-400 text-[10px] uppercase font-bold">Cliente</p>
-                    <p className="font-bold truncate">{data.clienteSeleccionado ? getClienteLabel(data.clienteSeleccionado) : 'N/A'}</p>
+                    <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Cliente</p>
+                    <p
+                        className="font-bold text-slate-100 text-xs leading-snug break-words mt-0.5"
+                        title={data.clienteSeleccionado ? getClienteLabel(data.clienteSeleccionado) : undefined}
+                    >
+                        {data.clienteSeleccionado ? getClienteLabel(data.clienteSeleccionado) : 'N/A'}
+                    </p>
                 </div>
                 <div>
-                    <p className="text-slate-400 text-[10px] uppercase font-bold">Servicio</p>
-                    <p className="font-bold truncate">{data.tipoServicioSeleccionado?.nombre_tipo || 'N/A'}</p>
+                    <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Servicio</p>
+                    <p
+                        className="font-bold text-slate-100 text-xs leading-snug break-words mt-0.5"
+                        title={data.tipoServicioSeleccionado?.nombre_tipo || undefined}
+                    >
+                        {data.tipoServicioSeleccionado?.nombre_tipo || 'N/A'}
+                    </p>
                 </div>
                 {data.serviciosCorrectivosSeleccionados && data.serviciosCorrectivosSeleccionados.length > 0 && (
                     <div>
-                        <p className="text-orange-400 text-[10px] uppercase font-bold">Correctivos Específicos ({data.serviciosCorrectivosSeleccionados.length})</p>
-                        <div className="flex flex-col gap-1 mt-1">
+                        <p className="text-orange-400 text-[10px] uppercase font-bold tracking-wider">
+                            Correctivos Específicos ({data.serviciosCorrectivosSeleccionados.length})
+                        </p>
+                        <div className="flex flex-col gap-1.5 mt-1.5">
                             {data.serviciosCorrectivosSeleccionados.map((s) => (
-                                <span key={s.id_servicio} className="text-[10px] bg-orange-950/80 text-orange-300 border border-orange-800 rounded px-1.5 py-0.5 truncate">
+                                <span
+                                    key={s.id_servicio}
+                                    className="text-[10px] bg-orange-950/80 text-orange-200 border border-orange-800/80 rounded-lg px-2 py-1 leading-snug break-words"
+                                    title={s.nombre_servicio}
+                                >
                                     • {s.nombre_servicio}
                                 </span>
                             ))}
@@ -777,14 +1163,25 @@ function ResumenOrden({ data }: { data: WizardData }) {
                 )}
                 {data.razonFalla && (
                     <div>
-                        <p className="text-amber-400 text-[10px] uppercase font-bold">Motivo de Falla</p>
-                        <p className="text-xs text-slate-300 line-clamp-2 italic">{data.razonFalla}</p>
+                        <p className="text-amber-400 text-[10px] uppercase font-bold tracking-wider">Motivo de Falla</p>
+                        <p className="text-xs text-slate-300 break-words italic mt-0.5">{data.razonFalla}</p>
                     </div>
                 )}
                 <div>
-                    <p className="text-slate-400 text-[10px] uppercase font-bold">Equipos ({data.equiposSeleccionados.length})</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                        {data.equiposSeleccionados.map(e => <Badge key={e.id_equipo} variant="secondary" className="bg-slate-800 text-slate-300 border-none text-[9px]">{e.codigo_equipo}</Badge>)}
+                    <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                        Equipos ({data.equiposSeleccionados.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {data.equiposSeleccionados.map((e) => (
+                            <Badge
+                                key={e.id_equipo}
+                                variant="secondary"
+                                className="bg-slate-800 text-slate-200 border border-slate-700 text-[10px] px-2 py-0.5 break-words whitespace-normal"
+                                title={e.nombre_equipo ? `${e.codigo_equipo} - ${e.nombre_equipo}` : e.codigo_equipo}
+                            >
+                                {e.codigo_equipo}
+                            </Badge>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -799,6 +1196,10 @@ export default function NuevaOrdenPage() {
         prioridad: 'NORMAL',
         equiposSeleccionados: [],
     });
+
+    // Pre-cargar catálogos de servicios en segundo plano para que al avanzar al Paso 2 la carga sea instantánea (0ms)
+    useWizardCatalogos();
+    useServiciosComerciales({ activo: true, limit: 100 });
 
     const crearOrden = useCrearOrden();
 
@@ -837,9 +1238,9 @@ export default function NuevaOrdenPage() {
     };
 
     return (
-        <div className="max-w-5xl mx-auto pb-20 px-4">
-            <div className="flex flex-col md:flex-row gap-8 mt-8">
-                <div className="flex-1 space-y-8">
+        <div className="max-w-6xl mx-auto pb-20 px-4">
+            <div className="flex flex-col lg:flex-row gap-8 mt-8">
+                <div className="flex-1 space-y-8 min-w-0">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-0 w-full max-w-md">
                             <StepIndicator paso={1} pasoActual={paso} label="Contexto" icon={Building2} />
@@ -865,7 +1266,7 @@ export default function NuevaOrdenPage() {
                         </div>
                     </div>
                 </div>
-                <div className="w-full md:w-80">
+                <div className="w-full lg:w-80 shrink-0">
                     <div className="sticky top-24 space-y-6">
                         <ResumenOrden data={data} />
                     </div>

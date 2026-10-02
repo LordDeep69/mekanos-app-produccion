@@ -7,7 +7,7 @@
  * 3. Todo en una transacción atómica
  */
 
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, NotFoundException, Optional } from '@nestjs/common';
 import {
   Prisma,
   aplicacion_bomba_enum,
@@ -21,6 +21,7 @@ import {
   tipo_motor_enum
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { ClientesService } from '../clientes/clientes.service';
 import {
   CreateEquipoCompletoDto,
   CreateEquipoCompletoResponse,
@@ -30,7 +31,10 @@ import {
 
 @Injectable()
 export class EquiposGestionService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly clientesService?: ClientesService
+  ) { }
 
   /**
    * Crear equipo completo con tabla padre + tabla hija en transacción
@@ -373,6 +377,9 @@ export class EquiposGestionService {
           datosEspecificos,
         };
       });
+
+      // Invalida caché de clientes para sincronizar badges de plantas y bombas en tiempo real
+      this.clientesService?.invalidateClientesCache();
 
       return {
         success: true,
@@ -728,10 +735,13 @@ export class EquiposGestionService {
         codigo_equipo: true,
         nombre_equipo: true,
         numero_serie_equipo: true,
+        id_tipo_equipo: true,
         tipos_equipo: {
           select: {
+            id_tipo_equipo: true,
             nombre_tipo: true,
             codigo_tipo: true,
+            categoria: true,
           },
         },
       },
@@ -745,7 +755,9 @@ export class EquiposGestionService {
       codigo_equipo: e.codigo_equipo,
       nombre: e.nombre_equipo || e.codigo_equipo,
       serie: e.numero_serie_equipo,
+      id_tipo_equipo: e.id_tipo_equipo,
       tipo: e.tipos_equipo?.nombre_tipo || e.tipos_equipo?.codigo_tipo,
+      tipos_equipo: e.tipos_equipo,
     }));
   }
 
@@ -1126,6 +1138,9 @@ export class EquiposGestionService {
 
       return updated;
     });
+
+    // Invalida caché de clientes para sincronizar badges de plantas y bombas en tiempo real
+    this.clientesService?.invalidateClientesCache();
 
     return {
       success: true,
