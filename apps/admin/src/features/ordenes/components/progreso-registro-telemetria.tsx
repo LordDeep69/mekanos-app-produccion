@@ -16,6 +16,8 @@ import {
     AlertTriangle,
     Camera,
     CheckCircle2,
+    ChevronDown,
+    ChevronUp,
     Clock,
     FileCheck2,
     HelpCircle,
@@ -49,6 +51,23 @@ export function ProgresoRegistroTelemetria({
 }: ProgresoRegistroTelemetriaProps) {
     const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
     const [refreshIntervalMs, setRefreshIntervalMs] = useState<number>(15000); // 15 segundos
+    const [isExpanded, setIsExpanded] = useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('mekanos_telemetria_desplegada');
+            return saved === 'true'; // Default false: compacta
+        }
+        return false;
+    });
+
+    const handleToggleExpand = () => {
+        setIsExpanded((prev) => {
+            const next = !prev;
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('mekanos_telemetria_desplegada', String(next));
+            }
+            return next;
+        });
+    };
 
     const {
         data: progreso,
@@ -173,13 +192,16 @@ export function ProgresoRegistroTelemetria({
             )}
         >
             {/* ═══════════════════════════════════════════════════════════════════════ */}
-            {/* CABECERA DE TELEMETRÍA (Estilo Sytex Console) */}
+            {/* CABECERA DE TELEMETRÍA (Estilo Sytex Console) - Plegable / Desplegable */}
             {/* ═══════════════════════════════════════════════════════════════════════ */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div
+                onClick={handleToggleExpand}
+                className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-3.5 cursor-pointer hover:bg-slate-800/90 transition-colors select-none"
+            >
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                     {/* Título + Estado en Vivo */}
                     <div className="flex items-center gap-3">
-                        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-white/10 backdrop-blur border border-white/20 shadow-inner">
+                        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-white/10 backdrop-blur border border-white/20 shadow-inner shrink-0">
                             <Radio className={cn('h-5 w-5', statusStyle.ping ? 'text-green-400 animate-pulse' : 'text-slate-300')} />
                             {statusStyle.ping && (
                                 <span className="absolute -top-1 -right-1 flex h-3 w-3">
@@ -198,7 +220,7 @@ export function ProgresoRegistroTelemetria({
                                     </span>
                                 </h3>
                             </div>
-                            <p className="text-xs text-slate-300 flex items-center gap-2 mt-0.5">
+                            <p className="text-xs text-slate-300 flex items-center gap-2 mt-0.5 flex-wrap">
                                 <span>{statusStyle.label}</span>
                                 <span className="text-slate-500">•</span>
                                 <span>{formatRelativo()}</span>
@@ -212,12 +234,48 @@ export function ProgresoRegistroTelemetria({
                         </div>
                     </div>
 
-                    {/* Controles: Auto-refresco + Refrescar Ahora */}
-                    <div className="flex items-center gap-2 self-end md:self-auto">
+                    {/* Resumen Compacto cuando está contraída (Visible en pantallas medianas/grandes) */}
+                    {!isExpanded && (
+                        <div className="hidden md:flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-white/10 backdrop-blur border border-white/15">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-semibold text-slate-300">Avance:</span>
+                                <span className="text-sm font-black text-white">{porcentaje_global}%</span>
+                            </div>
+                            <div className="w-16 h-2 bg-slate-700/80 rounded-full overflow-hidden">
+                                <div
+                                    className={cn(
+                                        'h-full rounded-full transition-all duration-500',
+                                        esFinalizada || porcentaje_global >= 100
+                                            ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
+                                            : porcentaje_global >= 70
+                                            ? 'bg-gradient-to-r from-blue-400 to-indigo-400'
+                                            : 'bg-gradient-to-r from-amber-400 to-orange-400'
+                                    )}
+                                    style={{ width: `${Math.min(100, Math.max(0, porcentaje_global))}%` }}
+                                />
+                            </div>
+                            <span className="text-slate-500 text-xs">•</span>
+                            <span className="text-xs text-slate-300">
+                                <strong className="text-white">{actividades.completadas}</strong>/{actividades.total} acts
+                            </span>
+                            <span className="text-slate-500 text-xs">•</span>
+                            <span className="text-xs text-slate-300">
+                                <strong className="text-white">{mediciones.registradas}</strong> meds
+                            </span>
+                            <span className="text-slate-500 text-xs">•</span>
+                            <span className="text-xs text-slate-300">
+                                <strong className="text-white">{evidencias_fotos}</strong> fotos
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Controles: Auto-refresco + Refrescar Ahora + Botón Desplegar/Contraer */}
+                    <div className="flex items-center gap-2 self-end lg:self-auto">
                         {/* Switch de Auto-refresh */}
                         <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                                e.stopPropagation();
                                 const nuevoEstado = !autoRefresh;
                                 setAutoRefresh(nuevoEstado);
                                 toast.info(nuevoEstado ? 'Auto-refresco activado (cada 15s)' : 'Auto-refresco pausado');
@@ -242,7 +300,8 @@ export function ProgresoRegistroTelemetria({
                         {/* Botón Refrescar */}
                         <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                                e.stopPropagation();
                                 refetch();
                                 toast.success('Telemetría actualizada');
                             }}
@@ -252,15 +311,30 @@ export function ProgresoRegistroTelemetria({
                         >
                             <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin text-indigo-300')} />
                         </button>
+
+                        {/* Botón Desplegar / Contraer */}
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleExpand();
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/25 hover:bg-indigo-500/40 text-indigo-100 hover:text-white border border-indigo-400/40 text-xs font-bold transition-all shadow-xs"
+                            title={isExpanded ? 'Contraer panel de telemetría' : 'Desplegar telemetría completa'}
+                        >
+                            <span>{isExpanded ? 'Contraer' : 'Desplegar'}</span>
+                            <ChevronDown className={cn('h-4 w-4 transition-transform duration-300', isExpanded && 'rotate-180')} />
+                        </button>
                     </div>
                 </div>
             </div>
 
             {/* ═══════════════════════════════════════════════════════════════════════ */}
-            {/* GRID DE MÉTRICAS KPI (Tarjetas Interactivas) */}
+            {/* GRID DE MÉTRICAS KPI (Tarjetas Interactivas) - PLEGABLE */}
             {/* ═══════════════════════════════════════════════════════════════════════ */}
-            <div className="p-5 space-y-5">
-                {/* Gran Barra de Progreso Ponderado */}
+            {isExpanded && (
+                <div className="p-5 space-y-5 border-t border-slate-200/80 animate-in fade-in slide-in-from-top-2 duration-300">
+                    {/* Gran Barra de Progreso Ponderado */}
                 <div className="bg-gradient-to-br from-slate-50 to-indigo-50/40 rounded-xl p-4 border border-slate-200/80">
                     <div className="flex items-center justify-between mb-2">
                         <div>
@@ -502,7 +576,23 @@ export function ProgresoRegistroTelemetria({
                         </div>
                     </div>
                 )}
+
+                {/* Botón de contraer al pie del panel */}
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs text-slate-500">
+                    <span className="text-[11px] text-slate-400">
+                        Telemetría de campo sincronizada en tiempo real (Modo Sytex)
+                    </span>
+                    <button
+                        type="button"
+                        onClick={handleToggleExpand}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 transition-colors border border-indigo-100 hover:border-indigo-200"
+                    >
+                        <ChevronUp className="h-4 w-4" />
+                        <span>Contraer panel</span>
+                    </button>
+                </div>
             </div>
+            )}
         </div>
     );
 }

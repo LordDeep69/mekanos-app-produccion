@@ -626,7 +626,7 @@ function EquipoHeader({ equipo, index, count }: { equipo: EquipoGroup; index: nu
                 {equipo.ordenSecuencia}
             </div>
             <div className="flex-1 min-w-0">
-                <p className={`font-bold text-sm ${color.text} truncate`}>{label}</p>
+                <p className={`font-bold text-sm ${color.text} break-words leading-tight`} title={label}>{label}</p>
                 <p className="text-[10px] text-gray-500 font-mono">{equipo.codigoEquipo}</p>
             </div>
             {equipo.idEquipo && (
@@ -789,6 +789,7 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                                 <button
                                     key={oe.id_orden_equipo}
                                     onClick={() => setEquipoFiltro(oe.id_orden_equipo)}
+                                    title={label}
                                     className={cn(
                                         'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5',
                                         isActive
@@ -797,14 +798,14 @@ function TabEjecucion({ orden }: { orden: Orden }) {
                                     )}
                                 >
                                     <span className={cn(
-                                        'w-5 h-5 rounded flex items-center justify-center text-[10px] font-black',
+                                        'w-5 h-5 rounded flex items-center justify-center text-[10px] font-black shrink-0',
                                         isActive ? 'bg-white/20' : color.light
                                     )}>
                                         {oe.orden_secuencia}
                                     </span>
-                                    <span className="truncate max-w-[120px]">{label}</span>
+                                    <span className="whitespace-nowrap">{label}</span>
                                     <span className={cn(
-                                        'text-[9px] px-1 py-0.5 rounded-full',
+                                        'text-[9px] px-1 py-0.5 rounded-full shrink-0',
                                         isActive ? 'bg-white/20' : 'bg-gray-100 text-gray-500'
                                     )}>
                                         {actDone}/{actCount}
@@ -1447,6 +1448,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                                 <button
                                     key={oe.id_orden_equipo}
                                     onClick={() => setEquipoFiltro(oe.id_orden_equipo)}
+                                    title={label}
                                     className={cn(
                                         'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5',
                                         isActive
@@ -1455,12 +1457,12 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                                     )}
                                 >
                                     <span className={cn(
-                                        'w-5 h-5 rounded flex items-center justify-center text-[10px] font-black',
+                                        'w-5 h-5 rounded flex items-center justify-center text-[10px] font-black shrink-0',
                                         isActive ? 'bg-white/20' : color.light
                                     )}>
                                         {oe.orden_secuencia}
                                     </span>
-                                    <span className="truncate max-w-[120px]">{label}</span>
+                                    <span className="whitespace-nowrap">{label}</span>
                                 </button>
                             );
                         })}
