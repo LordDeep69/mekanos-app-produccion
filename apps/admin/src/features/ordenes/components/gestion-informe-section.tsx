@@ -14,7 +14,15 @@
 'use client';
 
 import { apiClient } from '@/lib/api/client';
-import { buildInformeFilename, descargarInformeAutenticado, previsualizarInformeAutenticado } from '@/lib/pdf-naming';
+import {
+    buildInformeFilename,
+    descargarInformeAutenticado,
+    descargarInformePorOrdenAutenticado,
+    previsualizarInformeAutenticado,
+    previsualizarInformePorOrdenAutenticado,
+    registrarDescargaInformePorOrden,
+} from '@/lib/pdf-naming';
+import { useInvalidarReportes } from '@/features/reportes/hooks/use-reportes';
 import { cn } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,6 +55,7 @@ type EmailSendStatus = 'idle' | 'sending' | 'success' | 'error';
 
 export function GestionInformeSection({ orden, onUpdate }: GestionInformeSectionProps) {
     const queryClient = useQueryClient();
+    const invalidateReportes = useInvalidarReportes();
     const [showEmailModal, setShowEmailModal] = useState(false);
     const [emailsDestinatarios, setEmailsDestinatarios] = useState<string[]>([]);
     const [nuevoEmail, setNuevoEmail] = useState('');
@@ -122,6 +131,8 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     const urlPdfExistente = pdfExistenteData?.data?.url || null;
     const previewUrlExistente = pdfExistenteData?.data?.previewUrl || null;
     const idDocumentoExistente: number | null = pdfExistenteData?.data?.id_documento || null;
+    const vecesDescargado = pdfExistenteData?.data?.veces_descargado ?? 0;
+    const fechaUltimaDescarga = pdfExistenteData?.data?.fecha_ultima_descarga || null;
 
     // Obtener email del cliente (cast para acceder a campos adicionales)
     const clientePersona = orden.clientes?.persona as any;
@@ -148,6 +159,8 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                 const url = URL.createObjectURL(blob);
                 setPdfPreviewUrl(url);
             }
+            invalidateReportes();
+            void queryClient.invalidateQueries({ queryKey: ['orden-pdf-url', orden.id_orden_servicio] });
             onUpdate?.();
         },
     });
@@ -335,11 +348,10 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
     };
 
     /**
-     * ✅ FIX 29-ABR-2026: Descarga con nombre canónico
-     *  - Preview blob (regenerar): mismo origen → atributo `download` respetado.
-     *  - PDF existente en R2: descarga vía proxy backend autenticado, que aplica
-     *    Content-Disposition con el nombre canónico
-     *    (`INFORME - DDMM-YY - SERVICIO EQUIPO - CLIENTE - NOMBRE EQUIPO - MES YYYY.pdf`).
+     * ✅ FIX 29-ABR-2026 / 02-OCT-2026: Descarga con nombre canónico y registro garantizado
+     *  - Preview blob (regenerar): descarga el blob y registra el evento en el backend
+     *  - PDF existente en R2: descarga vía proxy backend autenticado que incrementa
+     *    veces_descargado e invalida caches de React Query inmediatamente.
      */
     const handleDescargarPdf = async () => {
         const filenameCanonico = buildInformeFilename({
@@ -357,35 +369,47 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             numeroOrden: orden.numero_orden,
         });
 
-        // 1) Si hay preview en memoria (regenerar), usarlo con el nombre canónico
+        // 1) Si hay preview en memoria (regenerar), usarlo y registrar descarga en BD
         if (pdfPreviewUrl) {
             const link = document.createElement('a');
             link.href = pdfPreviewUrl;
             link.download = filenameCanonico;
             link.click();
-            return;
-        }
-
-        // 2) Si hay un PDF persistido en R2 e ID conocido → proxy backend autenticado
-        if (idDocumentoExistente) {
             try {
-                await descargarInformeAutenticado(apiClient, idDocumentoExistente, filenameCanonico);
-            } catch (error) {
-                console.error('[Informe] Error descargando vía proxy:', error);
-                alert('No se pudo descargar el PDF. Verifique su sesión e intente nuevamente.');
+                await registrarDescargaInformePorOrden(apiClient, orden.id_orden_servicio);
+                invalidateReportes();
+                void queryClient.invalidateQueries({ queryKey: ['orden-pdf-url', orden.id_orden_servicio] });
+            } catch (err) {
+                console.warn('[Informe] Error registrando descarga en preview:', err);
             }
             return;
         }
 
-        // 3) Fallback: URL R2 directa (cross-origin, el download attr puede ser ignorado)
-        if (urlPdfExistente) {
-            const link = document.createElement('a');
-            link.href = urlPdfExistente;
-            link.download = filenameCanonico;
-            link.target = '_blank';
-            link.click();
-        } else {
-            alert('No hay PDF disponible. Regenere el informe primero.');
+        // 2) Descarga vía proxy backend autenticado (incrementa contador en BD automáticamente)
+        try {
+            if (idDocumentoExistente) {
+                await descargarInformeAutenticado(apiClient, idDocumentoExistente, filenameCanonico);
+            } else {
+                await descargarInformePorOrdenAutenticado(apiClient, orden.id_orden_servicio, filenameCanonico);
+            }
+            invalidateReportes();
+            void queryClient.invalidateQueries({ queryKey: ['orden-pdf-url', orden.id_orden_servicio] });
+        } catch (error) {
+            console.error('[Informe] Error descargando vía proxy:', error);
+            // Fallback si por alguna razón falla el proxy pero existe URL R2 directa:
+            if (urlPdfExistente) {
+                const link = document.createElement('a');
+                link.href = urlPdfExistente;
+                link.download = filenameCanonico;
+                link.target = '_blank';
+                link.click();
+                void registrarDescargaInformePorOrden(apiClient, orden.id_orden_servicio).then(() => {
+                    invalidateReportes();
+                    void queryClient.invalidateQueries({ queryKey: ['orden-pdf-url', orden.id_orden_servicio] });
+                });
+            } else {
+                alert('No se pudo descargar el PDF. Verifique su sesión e intente nuevamente.');
+            }
         }
     };
 
@@ -396,29 +420,26 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
             return;
         }
 
-        // 2) ✅ FIX 06-MAY-2026: URL firmada R2 con Content-Disposition=inline (instantáneo)
-        // El navegador se conecta directamente a R2, eliminando la latencia del proxy backend (~3-5s).
+        // 2) ✅ URL firmada R2 con Content-Disposition=inline (instantáneo)
         if (previewUrlExistente) {
             window.open(previewUrlExistente, '_blank');
             return;
         }
 
-        // 3) Fallback: proxy autenticado para previsualizar (más lento, solo si no hay previewUrl)
-        if (idDocumentoExistente) {
-            try {
+        // 3) Previsualizar autenticado inline
+        try {
+            if (idDocumentoExistente) {
                 await previsualizarInformeAutenticado(apiClient, idDocumentoExistente);
-            } catch (error) {
-                console.error('[Informe] Error previsualizando vía proxy:', error);
+            } else {
+                await previsualizarInformePorOrdenAutenticado(apiClient, orden.id_orden_servicio);
+            }
+        } catch (error) {
+            console.error('[Informe] Error previsualizando:', error);
+            if (urlPdfExistente) {
+                window.open(urlPdfExistente, '_blank');
+            } else {
                 alert('No se pudo previsualizar el PDF. Verifique su sesión e intente nuevamente.');
             }
-            return;
-        }
-
-        // 4) Último fallback: URL R2 directa sin inline (puede forzar descarga)
-        if (urlPdfExistente) {
-            window.open(urlPdfExistente, '_blank');
-        } else {
-            alert('No hay PDF disponible. Regenere el informe primero.');
         }
     };
 
@@ -456,12 +477,34 @@ export function GestionInformeSection({ orden, onUpdate }: GestionInformeSection
                                 Estado: {orden.estados_orden?.nombre_estado || 'N/A'}
                             </p>
                         </div>
-                        {regenerarMutation.isSuccess && (
-                            <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-2 py-1 rounded-lg">
-                                <Check className="h-3.5 w-3.5" />
-                                <span className="text-xs font-bold">PDF Actualizado</span>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                            {vecesDescargado > 0 && (
+                                <div
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    title={
+                                        `Descargado ${vecesDescargado} vez${vecesDescargado !== 1 ? 'es' : ''}` +
+                                        (fechaUltimaDescarga ? `\nÚltima descarga: ${new Date(fechaUltimaDescarga).toLocaleString('es-CO')}` : '')
+                                    }
+                                >
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                    <span className="font-semibold">
+                                        {vecesDescargado > 9 ? '9+' : vecesDescargado}
+                                    </span>
+                                    <span>
+                                        {`Descargado ${vecesDescargado} vez${vecesDescargado !== 1 ? 'es' : ''}`}
+                                    </span>
+                                </div>
+                            )}
+                            {regenerarMutation.isSuccess && (
+                                <div className="flex items-center gap-1.5 text-green-600 bg-green-50 px-2 py-1 rounded-lg">
+                                    <Check className="h-3.5 w-3.5" />
+                                    <span className="text-xs font-bold">PDF Actualizado</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 

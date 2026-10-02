@@ -29,6 +29,7 @@ import {
   Info,
   Layers,
   LayoutGrid,
+  Loader2,
   RotateCcw,
   Search,
   Table as TableIcon,
@@ -39,6 +40,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useMemo, useState } from 'react';
+import { apiClient } from '@/lib/api/client';
+import { buildInformeFilename, descargarInformePorOrdenAutenticado } from '@/lib/pdf-naming';
+import { useInvalidarReportes } from '@/features/reportes/hooks/use-reportes';
 import { TrazabilidadItem } from '../api/clientes.service';
 import { useTrazabilidadCliente } from '../hooks/use-clientes';
 import { ModalVistaPreviaTrazabilidadPdf } from './modal-vista-previa-trazabilidad-pdf';
@@ -144,6 +148,8 @@ export function TrazabilidadServiciosCliente({
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [modalOrden, setModalOrden] = useState<TrazabilidadItem | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
+  const [downloadingOrderId, setDownloadingOrderId] = useState<number | null>(null);
+  const invalidateReportes = useInvalidarReportes();
 
   // Consulta al backend
   const { data, isLoading, isError, error, refetch } = useTrazabilidadCliente(clienteId, {
@@ -1362,15 +1368,43 @@ export function TrazabilidadServiciosCliente({
               </span>
               <div className="flex items-center gap-2">
                 {getPdfUrl(modalOrden) && (
-                  <a
-                    href={getPdfUrl(modalOrden)!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors"
+                  <button
+                    type="button"
+                    disabled={downloadingOrderId === modalOrden.id_orden_servicio}
+                    onClick={async () => {
+                      try {
+                        setDownloadingOrderId(modalOrden.id_orden_servicio);
+                        const filenameCanonico = buildInformeFilename({
+                          fechaServicio: modalOrden.fecha_fin_real || modalOrden.fecha_inicio_real || modalOrden.fecha_programada,
+                          codigoTipoServicio: modalOrden.tipos_servicio?.codigo_tipo,
+                          nombreTipoServicio: modalOrden.tipos_servicio?.nombre_tipo,
+                          codigoTipoEquipo: (modalOrden.equipos as any)?.tipos_equipo?.codigo_tipo,
+                          nombreTipoEquipo: (modalOrden.equipos as any)?.tipos_equipo?.nombre_tipo,
+                          nombreCliente: clienteNombre,
+                          nombreEquipo: modalOrden.equipos?.nombre_equipo || (modalOrden.equipos as any)?.nombre,
+                          numeroOrden: modalOrden.numero_orden,
+                        });
+                        await descargarInformePorOrdenAutenticado(apiClient, modalOrden.id_orden_servicio, filenameCanonico);
+                        invalidateReportes();
+                      } catch (error) {
+                        console.error('[Trazabilidad] Error descargando informe:', error);
+                        const fallbackUrl = getPdfUrl(modalOrden);
+                        if (fallbackUrl) {
+                          window.open(fallbackUrl, '_blank');
+                        }
+                      } finally {
+                        setDownloadingOrderId(null);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors disabled:opacity-50"
                   >
-                    <Download className="h-4 w-4" />
-                    <span>Descargar PDF</span>
-                  </a>
+                    {downloadingOrderId === modalOrden.id_orden_servicio ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    <span>{downloadingOrderId === modalOrden.id_orden_servicio ? 'Descargando...' : 'Descargar PDF'}</span>
+                  </button>
                 )}
                 <Link
                   href={`/ordenes/${modalOrden.id_orden_servicio}`}

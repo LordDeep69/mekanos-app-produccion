@@ -7,6 +7,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   NotFoundException,
   Param,
   ParseIntPipe,
@@ -76,6 +77,8 @@ import { UserId } from './decorators/user-id.decorator';
 @ApiBearerAuth('JWT-auth')
 @Controller('ordenes')
 export class OrdenesController {
+  private readonly logger = new Logger(OrdenesController.name);
+
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
@@ -355,13 +358,14 @@ export class OrdenesController {
       throw new BadRequestException('La actividad no existe en el catálogo');
     }
 
-    // Evitar duplicados (UK en BD)
-    const existe = await this.prisma.ordenes_actividades_plan.findUnique({
+    // Evitar duplicados. `ordenes_actividades_plan` no tiene clave compuesta
+    // `id_orden_servicio_id_actividad_catalogo` (su PK es id_orden_actividad_plan),
+    // así que ese `where` abortaba con PrismaClientValidationError -> 500.
+    // Se consulta con findFirst por los dos campos reales.
+    const existe = await this.prisma.ordenes_actividades_plan.findFirst({
       where: {
-        id_orden_servicio_id_actividad_catalogo: {
-          id_orden_servicio: id,
-          id_actividad_catalogo: dto.idActividadCatalogo,
-        },
+        id_orden_servicio: id,
+        id_actividad_catalogo: dto.idActividadCatalogo,
       },
     });
 
@@ -1385,6 +1389,8 @@ export class OrdenesController {
         ruta_archivo: true,
         fecha_generacion: true,
         numero_documento: true,
+        veces_descargado: true,
+        fecha_ultima_descarga: true,
       },
     });
 
@@ -1413,6 +1419,8 @@ export class OrdenesController {
         previewUrl, // URL firmada R2 con inline (previsualización instantánea)
         fecha: documento.fecha_generacion,
         numero: documento.numero_documento,
+        veces_descargado: documento.veces_descargado ?? 0,
+        fecha_ultima_descarga: documento.fecha_ultima_descarga,
       } : null,
     };
   }
@@ -1462,6 +1470,8 @@ export class OrdenesController {
         numero_orden: true,
         id_firma_tecnico: true,
         id_firma_cliente: true,
+        // Necesario para la lápida: identifica al técnico que debe purgar la orden
+        id_tecnico_asignado: true,
       },
     });
 
@@ -1756,35 +1766,59 @@ export class OrdenesController {
     @Body() dto: UpdateOrdenDto,
     @UserId() userId: number,
   ) {
-    // Construir DTO con fechas parseadas
-    const commandDto: any = { ...dto };
+    try {
+      // Construir DTO con fechas parseadas
+      const commandDto: any = { ...dto };
 
-    if (dto.fecha_programada) {
-      // ✅ FIX TIMEZONE: Agregar T12:00:00 para evitar offset de día
-      commandDto.fecha_programada = new Date(`${dto.fecha_programada}T12:00:00`);
+      if (dto.fecha_programada) {
+        // ✅ FIX TIMEZONE: Formatear YYYY-MM-DD + T12:00:00 defensivamente
+        const dateStr = String(dto.fecha_programada).trim();
+        const datePart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+          commandDto.fecha_programada = new Date(`${datePart}T12:00:00`);
+        } else if (!isNaN(Date.parse(dateStr))) {
+          commandDto.fecha_programada = new Date(dateStr);
+        }
+      }
+
+      if (dto.id_tecnico_asignado !== undefined) {
+        commandDto.id_tecnico_asignado = dto.id_tecnico_asignado !== null ? Number(dto.id_tecnico_asignado) : null;
+      }
+
+      if (dto.hora_programada) {
+        // Parsear hora HH:mm a Date
+        const [hours, minutes] = dto.hora_programada.split(':').map(Number);
+        const horaDate = new Date();
+        horaDate.setHours(hours, minutes, 0, 0);
+        commandDto.hora_programada = horaDate;
+      }
+
+      const command = new UpdateOrdenCommand(
+        id,
+        commandDto,
+        userId || 1, // Fallback si JWT no disponible
+      );
+
+      const result = await this.commandBus.execute(command);
+
+      return {
+        success: true,
+        message: 'Orden actualizada exitosamente',
+        data: result,
+      };
+    } catch (error) {
+      // Log estructurado: el AllExceptionsFilter registra el stack completo, pero
+      // aquí dejamos el contexto de la operación para poder reconstruir el fallo
+      // desde el terminal del API sin depender del navegador.
+      const err = error as { name?: string; code?: string; message?: string; stack?: string };
+      this.logger.error(
+        `[UPDATE ORDEN] fallo al actualizar orden ${id} (userId=${userId}) | ` +
+        `error=${err?.name} code=${err?.code ?? 'n/a'} mensaje=${err?.message ?? String(error)} | ` +
+        `payload=${JSON.stringify(dto ?? {})}`,
+        err?.stack,
+      );
+      throw error; // Re-lanzar para que AllExceptionsFilter lo maneje
     }
-
-    if (dto.hora_programada) {
-      // Parsear hora HH:mm a Date
-      const [hours, minutes] = dto.hora_programada.split(':').map(Number);
-      const horaDate = new Date();
-      horaDate.setHours(hours, minutes, 0, 0);
-      commandDto.hora_programada = horaDate;
-    }
-
-    const command = new UpdateOrdenCommand(
-      id,
-      commandDto,
-      userId || 1, // Fallback si JWT no disponible
-    );
-
-    const result = await this.commandBus.execute(command);
-
-    return {
-      success: true,
-      message: 'Orden actualizada exitosamente',
-      data: result,
-    };
   }
 
   /**
@@ -2639,7 +2673,7 @@ export class OrdenesController {
       // ── PASO C: NO copiar ordenes_equipos (mantener equipo de orden destino)
       // ✅ FIX 14-ABR-2026: Si el técnico se equivocó de equipo, queremos mantener el equipo correcto de destino
       console.log(`📦 [TRANSFER] Equipos NO transferidos (manteniendo equipo de orden destino)`);
-      const mapEquipos = new Map<number, number>(); // Map vacío para compatibilidad con código posterior
+      // Sin usages posteriores: se eliminó el Map vacío para no mantener código muerto.
 
       // ── PASO D: Copiar actividades_ejecutadas ──
       const actividadesOrigen = await tx.actividades_ejecutadas.findMany({
@@ -3060,7 +3094,10 @@ export class OrdenesController {
       idPendienteCatalogo?: number;
       idEquipo?: number;
       idOrdenEquipo?: number;
-      origen?: 'CATALOGO' | 'MANUAL';
+      // ✅ origen_pendiente_enum = CATALOGO | PERSONALIZADO | MANUAL.
+      // La firma solo declaraba CATALOGO | MANUAL y luego comparaba contra
+      // 'PERSONALIZADO', un valor que TypeScript marcaba como imposible.
+      origen?: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
       prioridad?: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
       observaciones?: string;
     },

@@ -169,7 +169,7 @@ export interface UpdateOrdenDto {
     observaciones?: string;         // Observaciones generales
     observaciones_cierre?: string;  // Observaciones de cierre
     requiere_firma_cliente?: boolean;
-    id_tecnico_asignado?: number;   // ✅ 26-FEB-2026: Cambiar técnico sin cambiar estado
+    id_tecnico_asignado?: number | null;   // ✅ Cambiar o desasignar técnico
 }
 
 /**
@@ -445,6 +445,7 @@ export interface RegenerarPdfResponse {
     success: boolean;
     message: string;
     pdfUrl?: string;
+    idDocumento?: number;
     emailEnviado?: boolean;
     filename?: string;
     pdfBase64?: string;

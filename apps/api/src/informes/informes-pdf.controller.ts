@@ -91,11 +91,11 @@ export class InformesPdfController {
 
             this.logger.log(`📥 Descarga servida: ${filename} (${buffer.length} bytes)`);
 
-            // ✅ FIX 21-JUL-2026: Tracking de descargas (no bloquea el response)
-            // Se ejecuta en background; un fallo aquí no afecta la descarga.
-            const idUsuario = (req.user as { id?: number })?.id ?? null;
+            // ✅ FIX: Tracking de descargas con extracción robusta del ID de usuario
+            const rawId = (req.user as any)?.id_usuario ?? (req.user as any)?.id ?? (req.user as any)?.sub;
+            const idUsuario = rawId ? Number(rawId) : null;
             setImmediate(() => {
-                this.registrarDescarga(idDocumento, idUsuario).catch((err) => {
+                this.registrarDescarga(idDocumento, idUsuario !== null && !isNaN(idUsuario) ? idUsuario : null).catch((err) => {
                     this.logger.warn(`⚠️ No se pudo registrar descarga del documento ${idDocumento}: ${err instanceof Error ? err.message : err}`);
                 });
             });
@@ -107,11 +107,155 @@ export class InformesPdfController {
     }
 
     /**
-     * ✅ FIX 21-JUL-2026: Persiste una descarga exitosa en documentos_generados
+     * GET /api/informes/orden/:id/descargar
+     *
+     * Proxy que busca el informe PDF generado para la orden de servicio :id,
+     * sirve el archivo con Content-Disposition canónico y registra la descarga en BD.
+     */
+    @Get('orden/:id/descargar')
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({
+        summary: 'Descargar PDF de informe por ID de orden con nombre canónico',
+        description: 'Proxy que busca el informe de la orden, sirve el PDF desde R2 con Content-Disposition forzado y registra la descarga.',
+    })
+    async descargarInformePorOrden(
+        @Param('id', ParseIntPipe) idOrden: number,
+        @Req() req: Request,
+        @Res() res: Response,
+    ): Promise<void> {
+        const ctx = await this.cargarContextoDescargaPorOrden(idOrden);
+        if (!ctx) {
+            throw new NotFoundException(`No se encontró informe PDF generado para la orden ${idOrden}`);
+        }
+
+        const filename = buildInformeFilename(ctx.input);
+        const key = extractR2KeyFromUrl(ctx.rutaArchivo);
+        if (!key) {
+            throw new BadRequestException(`No se pudo extraer la R2 key desde la URL: ${ctx.rutaArchivo}`);
+        }
+
+        try {
+            const { buffer, contentType } = await this.r2Service.downloadPDF(key);
+
+            res.setHeader('Content-Type', contentType || 'application/pdf');
+            res.setHeader('Content-Disposition', buildContentDisposition(filename));
+            res.setHeader('Content-Length', buffer.length.toString());
+            res.setHeader('Cache-Control', 'private, max-age=300');
+            res.status(HttpStatus.OK).send(buffer);
+
+            this.logger.log(`📥 Descarga servida para orden ${idOrden} (doc ${ctx.idDocumento}): ${filename} (${buffer.length} bytes)`);
+
+            const rawId = (req.user as any)?.id_usuario ?? (req.user as any)?.id ?? (req.user as any)?.sub;
+            const idUsuario = rawId ? Number(rawId) : null;
+            setImmediate(() => {
+                this.registrarDescarga(ctx.idDocumento, idUsuario !== null && !isNaN(idUsuario) ? idUsuario : null).catch((err) => {
+                    this.logger.warn(`⚠️ No se pudo registrar descarga de la orden ${idOrden}: ${err instanceof Error ? err.message : err}`);
+                });
+            });
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`❌ Error sirviendo PDF por orden ${idOrden}: ${msg}`);
+            throw new NotFoundException(`No se pudo descargar el PDF: ${msg}`);
+        }
+    }
+
+    /**
+     * POST /api/informes/orden/:id/registrar-descarga
+     *
+     * Registra manualmente un evento de descarga para el informe de la orden dada.
+     * Útil cuando el frontend realiza la descarga vía blob en memoria o enlace directo.
+     */
+    @Post('orden/:id/registrar-descarga')
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({
+        summary: 'Registrar evento de descarga por ID de orden',
+    })
+    async registrarDescargaPorOrden(
+        @Param('id', ParseIntPipe) idOrden: number,
+        @Req() req: Request,
+    ): Promise<{ success: boolean; vecesDescargado: number; fechaUltimaDescarga: Date; idDocumento: number }> {
+        const doc = await this.prisma.documentos_generados.findFirst({
+            where: {
+                id_referencia: idOrden,
+                tipo_documento: 'INFORME_SERVICIO',
+            },
+            orderBy: { fecha_generacion: 'desc' },
+            select: { id_documento: true },
+        });
+
+        if (!doc) {
+            throw new NotFoundException(`No se encontró documento para la orden ${idOrden}`);
+        }
+
+        const rawId = (req.user as any)?.id_usuario ?? (req.user as any)?.id ?? (req.user as any)?.sub;
+        const idUsuario = rawId ? Number(rawId) : null;
+        const updated = await this.prisma.documentos_generados.update({
+            where: { id_documento: doc.id_documento },
+            data: {
+                veces_descargado: { increment: 1 },
+                fecha_ultima_descarga: new Date(),
+                ...(idUsuario !== null && !isNaN(idUsuario) ? { id_usuario_ultima_descarga: idUsuario } : {}),
+            },
+            select: {
+                id_documento: true,
+                veces_descargado: true,
+                fecha_ultima_descarga: true,
+            },
+        });
+
+        this.logger.log(`📊 Descarga registrada manualmente por orden ${idOrden} (doc ${doc.id_documento}, total: ${updated.veces_descargado})`);
+        return {
+            success: true,
+            idDocumento: updated.id_documento,
+            vecesDescargado: updated.veces_descargado ?? 1,
+            fechaUltimaDescarga: updated.fecha_ultima_descarga ?? new Date(),
+        };
+    }
+
+    /**
+     * POST /api/informes/documento/:id/registrar-descarga
+     *
+     * Registra manualmente un evento de descarga para un documento específico.
+     */
+    @Post('documento/:id/registrar-descarga')
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({
+        summary: 'Registrar evento de descarga por ID de documento',
+    })
+    async registrarDescargaPorDocumento(
+        @Param('id', ParseIntPipe) idDocumento: number,
+        @Req() req: Request,
+    ): Promise<{ success: boolean; vecesDescargado: number; fechaUltimaDescarga: Date; idDocumento: number }> {
+        const rawId = (req.user as any)?.id_usuario ?? (req.user as any)?.id ?? (req.user as any)?.sub;
+        const idUsuario = rawId ? Number(rawId) : null;
+        const updated = await this.prisma.documentos_generados.update({
+            where: { id_documento: idDocumento },
+            data: {
+                veces_descargado: { increment: 1 },
+                fecha_ultima_descarga: new Date(),
+                ...(idUsuario !== null && !isNaN(idUsuario) ? { id_usuario_ultima_descarga: idUsuario } : {}),
+            },
+            select: {
+                id_documento: true,
+                veces_descargado: true,
+                fecha_ultima_descarga: true,
+            },
+        });
+
+        this.logger.log(`📊 Descarga registrada manualmente por documento ${idDocumento} (total: ${updated.veces_descargado})`);
+        return {
+            success: true,
+            idDocumento: updated.id_documento,
+            vecesDescargado: updated.veces_descargado ?? 1,
+            fechaUltimaDescarga: updated.fecha_ultima_descarga ?? new Date(),
+        };
+    }
+
+    /**
+     * ✅ Persiste una descarga exitosa en documentos_generados
      *
      * Incrementa `veces_descargado` y actualiza `fecha_ultima_descarga` e
-     * `id_usuario_ultima_descarga`. Pensado para llamarse en background vía
-     * `setImmediate` desde `descargarInforme` para no bloquear la respuesta.
+     * `id_usuario_ultima_descarga`.
      */
     private async registrarDescarga(idDocumento: number, idUsuario: number | null): Promise<void> {
         await this.prisma.documentos_generados.update({
@@ -119,7 +263,7 @@ export class InformesPdfController {
             data: {
                 veces_descargado: { increment: 1 },
                 fecha_ultima_descarga: new Date(),
-                ...(idUsuario !== null ? { id_usuario_ultima_descarga: idUsuario } : {}),
+                ...(idUsuario !== null && !isNaN(idUsuario) ? { id_usuario_ultima_descarga: idUsuario } : {}),
             },
         });
         this.logger.log(`📊 Descarga registrada (doc ${idDocumento}, usuario ${idUsuario ?? 'N/A'})`);
@@ -169,6 +313,51 @@ export class InformesPdfController {
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`❌ Error en previsualización PDF: ${msg}`);
+            throw new NotFoundException(`No se pudo previsualizar el PDF: ${msg}`);
+        }
+    }
+
+    /**
+     * GET /api/informes/orden/:id/preview
+     *
+     * Previsualiza el PDF de la orden de servicio en el navegador vía streaming directo desde R2.
+     */
+    @Get('orden/:id/preview')
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({
+        summary: 'Previsualizar PDF de informe por ID de orden (streaming inline)',
+        description: 'Proxy que streammea el PDF de la orden desde R2 con Content-Disposition inline.',
+    })
+    async previsualizarInformePorOrden(
+        @Param('id', ParseIntPipe) idOrden: number,
+        @Res() res: Response,
+    ): Promise<void> {
+        const ctx = await this.cargarContextoDescargaPorOrden(idOrden);
+        if (!ctx) {
+            throw new NotFoundException(`No se encontró informe PDF generado para la orden ${idOrden}`);
+        }
+
+        const key = extractR2KeyFromUrl(ctx.rutaArchivo);
+        if (!key) {
+            throw new BadRequestException(`No se pudo extraer la R2 key desde la URL: ${ctx.rutaArchivo}`);
+        }
+
+        try {
+            const { stream, contentType, contentLength } = await this.r2Service.streamPDF(key);
+
+            res.setHeader('Content-Type', contentType || 'application/pdf');
+            res.setHeader('Content-Disposition', 'inline');
+            if (contentLength) {
+                res.setHeader('Content-Length', contentLength.toString());
+            }
+            res.setHeader('Cache-Control', 'private, max-age=300');
+            res.status(HttpStatus.OK);
+
+            stream.pipe(res);
+            this.logger.log(`👁️ Previsualización streaming por orden ${idOrden}: documento ${ctx.idDocumento} (${contentLength ?? 'unknown'} bytes)`);
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`❌ Error en previsualización PDF por orden ${idOrden}: ${msg}`);
             throw new NotFoundException(`No se pudo previsualizar el PDF: ${msg}`);
         }
     }
@@ -348,6 +537,61 @@ export class InformesPdfController {
         if (!row.ruta_archivo) return null;
 
         return {
+            rutaArchivo: row.ruta_archivo,
+            input: {
+                fechaServicio: row.fecha_servicio,
+                codigoTipoServicio: row.codigo_tipo_servicio,
+                nombreTipoServicio: row.nombre_tipo_servicio,
+                codigoTipoEquipo: row.codigo_tipo_equipo,
+                nombreTipoEquipo: row.nombre_tipo_equipo,
+                nombreCliente: row.nombre_cliente,
+                nombreEquipo: row.nombre_equipo,
+                numeroOrden: row.numero_orden,
+            },
+        };
+    }
+
+    /**
+     * Carga los datos necesarios para construir el nombre canónico y descargar
+     * el informe PDF de una orden a partir de su ID de orden.
+     */
+    private async cargarContextoDescargaPorOrden(idOrden: number): Promise<{
+        idDocumento: number;
+        rutaArchivo: string;
+        input: Parameters<typeof buildInformeFilename>[0];
+    } | null> {
+        const filas: any[] = await this.prisma.$queryRawUnsafe(`
+            SELECT
+                dg.id_documento,
+                dg.ruta_archivo,
+                os.numero_orden,
+                COALESCE(os.fecha_fin_real, os.fecha_inicio_real, os.fecha_programada, dg.fecha_generacion) AS fecha_servicio,
+                ts.codigo_tipo AS codigo_tipo_servicio,
+                ts.nombre_tipo AS nombre_tipo_servicio,
+                te.codigo_tipo AS codigo_tipo_equipo,
+                te.nombre_tipo AS nombre_tipo_equipo,
+                e.nombre_equipo AS nombre_equipo,
+                COALESCE(p.nombre_comercial, p.razon_social, p.nombre_completo,
+                         CONCAT_WS(' ', p.primer_nombre, p.primer_apellido), 'CLIENTE') AS nombre_cliente
+            FROM documentos_generados dg
+            LEFT JOIN ordenes_servicio os ON os.id_orden_servicio = dg.id_referencia
+            LEFT JOIN tipos_servicio ts ON ts.id_tipo_servicio = os.id_tipo_servicio
+            LEFT JOIN equipos e ON e.id_equipo = os.id_equipo
+            LEFT JOIN tipos_equipo te ON te.id_tipo_equipo = e.id_tipo_equipo
+            LEFT JOIN clientes c ON c.id_cliente = os.id_cliente
+            LEFT JOIN personas p ON p.id_persona = c.id_persona
+            WHERE dg.id_referencia = $1
+              AND dg.tipo_documento = 'INFORME_SERVICIO'
+            ORDER BY dg.fecha_generacion DESC
+            LIMIT 1
+        `, idOrden);
+
+        if (!filas || filas.length === 0) return null;
+        const row = filas[0];
+        if (!row.ruta_archivo) return null;
+
+        return {
+            idDocumento: row.id_documento,
             rutaArchivo: row.ruta_archivo,
             input: {
                 fechaServicio: row.fecha_servicio,

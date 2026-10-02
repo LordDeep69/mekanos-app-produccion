@@ -826,6 +826,25 @@ export class PdfController {
     res.setHeader('Content-Disposition', `attachment; filename="${resultado.filename}"`);
     res.setHeader('Content-Length', resultado.size);
     res.status(HttpStatus.OK).send(resultado.buffer);
+
+    // ✅ FIX: Registrar descarga en documentos_generados si existe
+    setImmediate(async () => {
+      try {
+        await this.prisma.documentos_generados.updateMany({
+          where: {
+            id_referencia: idNumerico,
+            tipo_documento: 'INFORME_SERVICIO',
+          },
+          data: {
+            veces_descargado: { increment: 1 },
+            fecha_ultima_descarga: new Date(),
+          },
+        });
+        this.logger.log(`📊 Descarga registrada para orden ${idNumerico} vía GET /ordenes/:id/pdf`);
+      } catch (err) {
+        this.logger.warn(`⚠️ No se pudo registrar descarga en ordenes/:id/pdf: ${err}`);
+      }
+    });
   }
 
   /**
@@ -1753,6 +1772,7 @@ export class PdfController {
     // SUBIR PDF A R2 Y REGISTRAR/ACTUALIZAR EN BD
     // ========================================================================
     let urlPdf: string | undefined;
+    let idDocumentoFinal: number | undefined;
     if (dto.guardarEnR2 !== false) {
       try {
         // ✅ FIX 29-ABR-2026: Subir con Content-Disposition canónico
@@ -1793,10 +1813,11 @@ export class PdfController {
               herramienta_generacion: 'MEKANOS-PDF-CONTROLLER-REGENERAR',
             },
           });
+          idDocumentoFinal = documentoExistente.id_documento;
           this.logger.log(`✅ Documento actualizado en BD (id: ${documentoExistente.id_documento})`);
         } else {
           // CREAR nuevo registro solo si no existe
-          await this.prisma.documentos_generados.create({
+          const docNuevo = await this.prisma.documentos_generados.create({
             data: {
               tipo_documento: 'INFORME_SERVICIO',
               id_referencia: idNumerico,
@@ -1810,7 +1831,8 @@ export class PdfController {
               herramienta_generacion: 'MEKANOS-PDF-CONTROLLER-REGENERAR',
             },
           });
-          this.logger.log(`✅ Documento creado en BD`);
+          idDocumentoFinal = docNuevo.id_documento;
+          this.logger.log(`✅ Documento creado en BD (id: ${docNuevo.id_documento})`);
         }
       } catch (error) {
         this.logger.error(`❌ Error subiendo PDF a R2: ${error}`);
@@ -1927,6 +1949,8 @@ export class PdfController {
       filename: resultado.filename,
       emailEnviado,
       pdfBase64: resultado.buffer.toString('base64'),
+      pdfUrl: urlPdf,
+      idDocumento: idDocumentoFinal,
     };
   }
 

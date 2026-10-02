@@ -202,3 +202,86 @@ export async function previsualizarInformeAutenticado(
     // Liberar memoria después de un tiempo (la nueva pestaña mantiene la referencia)
     setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
 }
+
+/**
+ * Descarga el informe PDF directamente por ID de orden de servicio
+ * (`GET /api/informes/orden/:id/descargar`), respetando el JWT, registrando
+ * la descarga en la base de datos e iniciando la descarga con el nombre canónico.
+ */
+export async function descargarInformePorOrdenAutenticado(
+    apiClient: { get: (url: string, config?: any) => Promise<{ data: any }> },
+    idOrden: number,
+    filenameCanonico?: string,
+): Promise<void> {
+    const response = await apiClient.get(
+        `/informes/orden/${idOrden}/descargar`,
+        { responseType: 'blob' },
+    );
+
+    const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: 'application/pdf' });
+
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        if (filenameCanonico) {
+            link.download = filenameCanonico;
+        }
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    } finally {
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    }
+}
+
+/**
+ * Previsualiza el informe PDF de una orden directamente por ID de orden.
+ */
+export async function previsualizarInformePorOrdenAutenticado(
+    apiClient: { get: (url: string, config?: any) => Promise<{ data: any; request?: any }> },
+    idOrden: number,
+): Promise<void> {
+    const response = await apiClient.get(
+        `/informes/orden/${idOrden}/preview`,
+        { responseType: 'blob' },
+    );
+
+    const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: 'application/pdf' });
+
+    const objectUrl = URL.createObjectURL(blob);
+    window.open(objectUrl, '_blank');
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
+/**
+ * Registra explícitamente una descarga en la base de datos para una orden.
+ */
+export async function registrarDescargaInformePorOrden(
+    apiClient: { post: (url: string, data?: any) => Promise<{ data: any }> },
+    idOrden: number,
+): Promise<void> {
+    try {
+        await apiClient.post(`/informes/orden/${idOrden}/registrar-descarga`);
+    } catch (err) {
+        console.warn(`[Descarga] No se pudo registrar descarga por orden ${idOrden}:`, err);
+    }
+}
+
+/**
+ * Registra explícitamente una descarga en la base de datos para un documento.
+ */
+export async function registrarDescargaInforme(
+    apiClient: { post: (url: string, data?: any) => Promise<{ data: any }> },
+    idDocumento: number,
+): Promise<void> {
+    try {
+        await apiClient.post(`/informes/documento/${idDocumento}/registrar-descarga`);
+    } catch (err) {
+        console.warn(`[Descarga] No se pudo registrar descarga para doc ${idDocumento}:`, err);
+    }
+}

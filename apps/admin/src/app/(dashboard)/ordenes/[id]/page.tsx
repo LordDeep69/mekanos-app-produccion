@@ -54,7 +54,7 @@ import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { ProgresoRegistroTelemetria } from '@/features/ordenes/components/progreso-registro-telemetria';
 import { cn } from '@/lib/utils';
 import type { Orden } from '@/types/ordenes';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertCircle,
     ArrowLeft,
@@ -66,6 +66,7 @@ import {
     CheckCircle2,
     Clock,
     DollarSign,
+    Download,
     Edit,
     ExternalLink,
     FileText,
@@ -86,6 +87,9 @@ import { getSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { apiClient } from '@/lib/api/client';
+import { buildInformeFilename, descargarInformePorOrdenAutenticado } from '@/lib/pdf-naming';
+import { useInvalidarReportes } from '@/features/reportes/hooks/use-reportes';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TIPOS
@@ -1336,6 +1340,10 @@ function ModalAddServicio({ isOpen, onClose, idOrden }: { isOpen: boolean; onClo
 }
 
 function TabDocumentos({ orden }: { orden: Orden }) {
+    const queryClient = useQueryClient();
+    const invalidateReportes = useInvalidarReportes();
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
     const { data: evidenciasData, isLoading: isLoadingEv } = useEvidenciasOrden(orden.id_orden_servicio);
     const { data: firmasData, isLoading: isLoadingFi } = useFirmasOrden(orden.id_orden_servicio);
 
@@ -1344,7 +1352,7 @@ function TabDocumentos({ orden }: { orden: Orden }) {
     const equipos = orden.ordenes_equipos || [];
     const [equipoFiltro, setEquipoFiltro] = useState<number | 'todos'>('todos');
 
-    // ✅ FIX 05-ENE-2026: Obtener URL del PDF desde documentos_generados
+    // ✅ FIX 05-ENE-2026 / 02-OCT-2026: Obtener URL y metadatos de descarga del PDF desde documentos_generados
     const { data: pdfData } = useQuery({
         queryKey: ['orden-pdf-url', orden.id_orden_servicio],
         queryFn: async () => {
@@ -1358,6 +1366,40 @@ function TabDocumentos({ orden }: { orden: Orden }) {
         enabled: orden.estados_orden?.codigo_estado === 'COMPLETADA' || orden.estados_orden?.codigo_estado === 'APROBADA',
     });
     const urlPdf = pdfData?.data?.url || null;
+    const vecesDescargado = pdfData?.data?.veces_descargado ?? 0;
+    const fechaUltimaDescarga = pdfData?.data?.fecha_ultima_descarga || null;
+
+    const handleDescargarInformeDesdeOrden = async () => {
+        try {
+            setIsDownloadingPdf(true);
+            const filenameCanonico = buildInformeFilename({
+                fechaServicio: orden.fecha_fin_real || orden.fecha_inicio_real || orden.fecha_programada,
+                codigoTipoServicio: orden.tipos_servicio?.codigo_tipo,
+                nombreTipoServicio: orden.tipos_servicio?.nombre_tipo,
+                codigoTipoEquipo: (orden.equipos as any)?.tipos_equipo?.codigo_tipo,
+                nombreTipoEquipo: (orden.equipos as any)?.tipos_equipo?.nombre_tipo,
+                nombreCliente: orden.clientes?.persona?.nombre_comercial
+                    || orden.clientes?.persona?.razon_social
+                    || (orden.clientes?.nombre_sede ? orden.clientes.nombre_sede : null),
+                nombreEquipo: orden.equipos?.nombre_equipo || (orden.equipos as any)?.nombre,
+                numeroOrden: orden.numero_orden,
+            });
+
+            await descargarInformePorOrdenAutenticado(apiClient, orden.id_orden_servicio, filenameCanonico);
+            invalidateReportes();
+            void queryClient.invalidateQueries({ queryKey: ['orden-pdf-url', orden.id_orden_servicio] });
+            toast.success('Informe PDF descargado correctamente');
+        } catch (error) {
+            console.error('[Orden] Error descargando informe:', error);
+            if (urlPdf) {
+                window.open(urlPdf, '_blank');
+            } else {
+                toast.error('No se pudo descargar el informe. Verifique su conexión.');
+            }
+        } finally {
+            setIsDownloadingPdf(false);
+        }
+    };
 
     const evidencias = evidenciasData?.data || [];
     const firmas = firmasData?.data || [];
@@ -1454,35 +1496,58 @@ function TabDocumentos({ orden }: { orden: Orden }) {
                 orden={orden}
             />
 
-            {/* Documentos Generados (Informe PDF) - Legacy */}
+            {/* Documentos Generados (Informe PDF) - Salida Oficial */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <FileText className="h-5 w-5 text-red-600" />
                     Documentos de Salida
                 </h4>
-                <div className="flex items-center gap-4 p-4 bg-red-50 rounded-2xl border border-red-100">
-                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                        <FileText className="h-6 w-6 text-red-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-red-900">Informe de Servicio Técnico (PDF)</p>
-                        <p className="text-xs text-red-700">Se genera automáticamente al marcar la orden como COMPLETADA</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-red-50 rounded-2xl border border-red-100">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0">
+                            <FileText className="h-6 w-6 text-red-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-bold text-red-900">Informe de Servicio Técnico (PDF)</p>
+                                {vecesDescargado > 0 && (
+                                    <span
+                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                        title={
+                                            `Descargado ${vecesDescargado} vez${vecesDescargado !== 1 ? 'es' : ''}` +
+                                            (fechaUltimaDescarga ? `\nÚltima descarga: ${new Date(fechaUltimaDescarga).toLocaleString('es-CO')}` : '')
+                                        }
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                        Descargado {vecesDescargado} vez{vecesDescargado !== 1 ? 'es' : ''}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-red-700 mt-0.5">
+                                {fechaUltimaDescarga
+                                    ? `Última descarga: ${new Date(fechaUltimaDescarga).toLocaleString('es-CO')}`
+                                    : 'Generado automáticamente al marcar la orden como COMPLETADA'}
+                            </p>
+                        </div>
                     </div>
                     {orden.estados_orden?.codigo_estado === 'COMPLETADA' || orden.estados_orden?.codigo_estado === 'APROBADA' ? (
-                        <a
-                            href={urlPdf || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        <button
+                            type="button"
+                            onClick={handleDescargarInformeDesdeOrden}
+                            disabled={isDownloadingPdf}
                             className={cn(
-                                "px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center gap-2",
-                                !urlPdf && "opacity-50 cursor-not-allowed pointer-events-none"
+                                "px-4 py-2.5 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all shadow-md shadow-red-200 flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
                             )}
                         >
-                            <FileText className="h-4 w-4" />
-                            {urlPdf ? 'Descargar PDF' : 'PDF no disponible'}
-                        </a>
+                            {isDownloadingPdf ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Download className="h-4 w-4" />
+                            )}
+                            {isDownloadingPdf ? 'Descargando...' : 'Descargar PDF'}
+                        </button>
                     ) : (
-                        <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">No generado aún</span>
+                        <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest self-center">No generado aún</span>
                     )}
                 </div>
             </div>
