@@ -126,18 +126,28 @@ export interface ClienteConPersona extends Cliente {
     id_firma_administrativa: number;
     nombre_de_firma: string | null;
     representante_legal: string | null;
-    contacto_de_representante_legal: string | null;
+    contacto_de_representante_legal: string | number | null;
     email_representante_legal: string | null;
     firma_activa: boolean;
-  };
+  } | null;
   // ✅ MULTI-ASESOR: Asesor asignado expandido
   asesor_asignado?: {
     id_empleado: number;
     cargo: string | null;
     persona?: {
       nombre_completo: string | null;
-    };
-  };
+      primer_nombre?: string | null;
+      primer_apellido?: string | null;
+      email_principal?: string | null;
+      celular?: string | null;
+    } | null;
+  } | null;
+  cuenta_email?: {
+    id_cuenta_email: number;
+    email: string;
+    nombre_remitente?: string | null;
+  } | null;
+  total_ordenes?: number;
   // ✅ 01-OCT-2026: Detección y resumen de equipos
   tiene_plantas?: boolean;
   tiene_bombas?: boolean;

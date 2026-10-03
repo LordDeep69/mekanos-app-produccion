@@ -29,7 +29,7 @@ import { useEquipos } from '@/features/equipos/lib/equipos.service';
 import { tiposEquipoService } from '@/features/equipos/lib/tipos-equipo.service';
 import type { EstadoEquipo } from '@/features/equipos/types';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Eye, Filter, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Filter, Plus, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -80,8 +80,8 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
     });
 
     const equipos = equiposData?.data || [];
-    const total = equiposData?.total || 0;
-    const totalPages = Math.ceil(total / limit);
+    const total = (equiposData as any)?.pagination?.total ?? (equiposData as any)?.total ?? equipos.length;
+    const totalPages = Math.ceil(total / limit) || 1;
 
     const handleVerEquipo = (idEquipo: number) => {
         router.push(`/equipos/${idEquipo}`);
@@ -95,17 +95,31 @@ export function EquiposClienteTable({ clienteId }: EquiposClienteTableProps) {
     };
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    Equipos Asociados
-                    <Badge variant="secondary">{total}</Badge>
-                </CardTitle>
-                <CardDescription>
-                    Listado de equipos registrados para este cliente
-                </CardDescription>
+        <Card className="border border-gray-200 shadow-sm">
+            <CardHeader className="p-5 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                        <CardTitle className="flex items-center gap-2 text-base font-bold text-gray-900">
+                            Equipos Asociados
+                            <Badge variant="secondary" className="font-bold text-xs bg-blue-100 text-blue-700 hover:bg-blue-100">
+                                {total}
+                            </Badge>
+                        </CardTitle>
+                        <CardDescription className="text-xs text-gray-500 mt-0.5">
+                            Listado de equipos y maquinaria registrados para este cliente
+                        </CardDescription>
+                    </div>
+                    <Button
+                        size="sm"
+                        onClick={() => router.push(`/equipos/nuevo?id_cliente=${clienteId}`)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 shadow-2xs text-xs cursor-pointer"
+                    >
+                        <Plus className="h-3.5 w-3.5" />
+                        Registrar Equipo
+                    </Button>
+                </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-5">
                 {/* Filtros */}
                 <div className="flex flex-col md:flex-row gap-3">
                     <div className="flex-1 relative">

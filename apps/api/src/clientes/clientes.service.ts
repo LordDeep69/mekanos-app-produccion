@@ -807,17 +807,66 @@ export class ClientesService implements OnModuleInit {
       throw new Error(`Cliente con ID ${id} no encontrado`);
     }
 
+    let asesor_asignado: any = null;
+    if (cliente.id_asesor_asignado) {
+      asesor_asignado = await this.prisma.empleados.findUnique({
+        where: { id_empleado: cliente.id_asesor_asignado },
+        include: {
+          persona: {
+            select: {
+              nombre_completo: true,
+              primer_nombre: true,
+              primer_apellido: true,
+              email_principal: true,
+              celular: true,
+            },
+          },
+        },
+      });
+    }
+
+    let firma_administrativa: any = null;
+    if (cliente.id_firma_administrativa) {
+      firma_administrativa = await this.prisma.firmas_administrativas.findUnique({
+        where: { id_firma_administrativa: cliente.id_firma_administrativa },
+      });
+    }
+
+    let cuenta_email: any = null;
+    if (cliente.id_cuenta_email_remitente) {
+      cuenta_email = await this.prisma.cuentas_email.findUnique({
+        where: { id_cuenta_email: cliente.id_cuenta_email_remitente },
+        select: {
+          id_cuenta_email: true,
+          email: true,
+          nombre_remitente: true,
+        },
+      });
+    }
+
+    const total_ordenes = await this.prisma.ordenes_servicio.count({
+      where: { id_cliente: id },
+    });
+
     const propios = cliente.equipos || [];
     const deSedes = (cliente.sedes || []).flatMap((s: any) => s.equipos || []);
     const todos = [...propios, ...deSedes];
 
     const tiene_plantas = todos.some((e) => this.esEquipoPlanta(e));
     const tiene_bombas = todos.some((e) => this.esEquipoBomba(e));
+    const total_equipos_plantas = todos.filter((e) => this.esEquipoPlanta(e)).length;
+    const total_equipos_bombas = todos.filter((e) => this.esEquipoBomba(e)).length;
 
     return {
       ...cliente,
+      asesor_asignado,
+      firma_administrativa,
+      cuenta_email,
+      total_ordenes,
       tiene_plantas,
       tiene_bombas,
+      total_equipos_plantas,
+      total_equipos_bombas,
     };
   }
 
