@@ -29,3 +29,6 @@ export {
     getPrioridadColor, getTecnicoLabel, getTecnicoNombre
 } from '@/types/ordenes';
 
+// Components
+export * from './components/servicio-especifico-combobox';
+

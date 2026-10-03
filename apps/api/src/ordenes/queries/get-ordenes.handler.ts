@@ -20,7 +20,7 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
   async execute(query: GetOrdenesQuery): Promise<PaginatedResponse> {
     const {
       page, limit, clienteId, equipoId, tecnicoId, estado, prioridad,
-      sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta, idAsesorAsignado, busqueda
+      sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta, idAsesorAsignado, busqueda, idServicio
     } = query;
 
     // Resolver estado string → id_estado_actual (ZERO TRUST: lookup en BD)
@@ -45,6 +45,7 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
       sortBy: sortBy || 'fecha_creacion',
       sortOrder: sortOrder || 'desc',
       id_tipo_servicio: tipoServicioId,
+      id_servicio: idServicio, // ✅ Filtro por servicio específico del catálogo
       fechaDesde,
       fechaHasta,
       idAsesorAsignado, // ✅ MULTI-ASESOR

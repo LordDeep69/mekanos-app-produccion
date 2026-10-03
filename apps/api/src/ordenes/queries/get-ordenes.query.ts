@@ -21,5 +21,6 @@ export class GetOrdenesQuery {
     public readonly fechaHasta?: string, // Filtro fecha hasta (ISO string)
     public readonly idAsesorAsignado?: number, // ✅ MULTI-ASESOR: Filtro por clientes del asesor
     public readonly busqueda?: string, // ✅ BÚSQUEDA: texto libre (numero_orden, cliente, técnico, equipo)
+    public readonly idServicio?: number, // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
   ) { }
 }

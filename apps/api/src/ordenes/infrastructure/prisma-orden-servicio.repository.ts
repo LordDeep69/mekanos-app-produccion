@@ -208,6 +208,19 @@ export class PrismaOrdenServicioRepository {
         },
       },
     },
+    // ✅ Relación lite con servicios específicos vinculados
+    detalle_servicios_orden: {
+      select: {
+        id_servicio: true,
+        catalogo_servicios: {
+          select: {
+            id_servicio: true,
+            codigo_servicio: true,
+            nombre_servicio: true,
+          },
+        },
+      },
+    },
     // ✅ FIX 03-MAR-2026: Incluir conteo de emails enviados para badge en lista
     // ✅ FIX 23-SEP-2026: Incluir conteo de ordenes_pendientes para badge en lista
     // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
@@ -756,6 +769,7 @@ export class PrismaOrdenServicioRepository {
     id_supervisor?: number;
     id_estado_actual?: number;
     id_tipo_servicio?: number;
+    id_servicio?: number; // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
     fecha_desde?: Date | string;
     fecha_hasta?: Date | string;
     fechaDesde?: Date | string;
@@ -796,6 +810,19 @@ export class PrismaOrdenServicioRepository {
         { equipos: { codigo_equipo: { contains: s, mode: 'insensitive' } } },
         { equipos: { nombre_equipo: { contains: s, mode: 'insensitive' } } },
         { sedes_cliente: { nombre_sede: { contains: s, mode: 'insensitive' } } },
+        // Servicios específicos asignados
+        {
+          detalle_servicios_orden: {
+            some: {
+              catalogo_servicios: {
+                OR: [
+                  { nombre_servicio: { contains: s, mode: 'insensitive' } },
+                  { codigo_servicio: { contains: s, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
       ];
 
       // Si la cadena normalizada difiere de la original, buscar con ambas versiones
@@ -928,6 +955,15 @@ export class PrismaOrdenServicioRepository {
 
     // ENTERPRISE: Filtro por tipo de servicio
     if (filters?.id_tipo_servicio) where.id_tipo_servicio = filters.id_tipo_servicio;
+
+    // ✅ Filtro por servicio específico del catálogo (catalogo_servicios / detalle_servicios_orden)
+    if (filters?.id_servicio) {
+      where.detalle_servicios_orden = {
+        some: {
+          id_servicio: filters.id_servicio,
+        },
+      };
+    }
 
     // ✅ MULTI-ASESOR: Filtrar órdenes por clientes asignados al asesor
     if (filters?.idAsesorAsignado) {

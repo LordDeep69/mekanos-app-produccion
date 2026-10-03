@@ -131,6 +131,17 @@ export interface Orden {
         fecha_generacion: string;
     }>;
 
+    // ✅ Relación con servicios específicos vinculados del catálogo
+    detalle_servicios_orden?: Array<{
+        id_detalle_servicio?: number;
+        id_servicio: number;
+        catalogo_servicios?: {
+            id_servicio: number;
+            codigo_servicio: string;
+            nombre_servicio: string;
+        };
+    }>;
+
     // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
     progreso_registro?: ProgresoRegistroResumen;
 }
@@ -257,6 +268,7 @@ export interface OrdenesQueryParams {
     fechaDesde?: string;  // ISO date string
     fechaHasta?: string;  // ISO date string
     busqueda?: string;    // ✅ Búsqueda por texto libre (numero_orden, cliente, técnico, equipo)
+    idServicio?: number;  // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
 }
 
 // DTO para crear orden - MULTI-EQUIPOS

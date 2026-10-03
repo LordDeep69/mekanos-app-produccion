@@ -65,6 +65,9 @@ export async function getOrdenes(
     if (params?.busqueda) {
         queryParams.append('busqueda', params.busqueda);
     }
+    if (params?.idServicio !== undefined) {
+        queryParams.append('idServicio', String(params.idServicio));
+    }
 
     const url = queryParams.toString()
         ? `${ORDENES_BASE}?${queryParams.toString()}`

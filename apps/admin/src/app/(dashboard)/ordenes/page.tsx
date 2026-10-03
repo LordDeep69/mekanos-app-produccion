@@ -18,6 +18,8 @@ import {
     getPrioridadColor,
     getTecnicoNombre,
     useOrdenes,
+    useServiciosComerciales,
+    ServicioEspecificoCombobox,
 } from '@/features/ordenes';
 import { ProgresoRegistroBadge } from '@/features/ordenes/components/progreso-registro-badge';
 import { useTiposServicio, useTecnicosSelector } from '@/features/ordenes/hooks/use-catalogos';
@@ -28,6 +30,8 @@ import {
     ArrowDownAZ,
     ArrowUpAZ,
     Calendar,
+    Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
     ClipboardList,
@@ -35,13 +39,16 @@ import {
     Eye,
     FileText,
     Filter,
+    Layers,
     Loader2,
     Mail,
     Plus,
     Radio,
     RefreshCw,
+    RotateCcw,
     Search,
     SlidersHorizontal,
+    Tag,
     User,
     Wrench,
     X
@@ -94,7 +101,7 @@ function PrioridadBadge({ prioridad }: { prioridad?: string }) {
     );
 }
 
-function OrdenCard({ orden }: { orden: Orden }) {
+function OrdenCard({ orden, filtroServicioEspecifico }: { orden: Orden; filtroServicioEspecifico?: string }) {
     const fechaProgramada = orden.fecha_programada
         ? formatDateSafe(orden.fecha_programada)
         : 'Sin programar';
@@ -214,7 +221,7 @@ function OrdenCard({ orden }: { orden: Orden }) {
                     <span>{fechaProgramada}</span>
                 </div>
 
-                {/* Tipo servicio */}
+                {/* Tipo servicio macro */}
                 {orden.tipos_servicio && (
                     <div className="flex items-center gap-2 text-gray-600">
                         <Clock className="h-4 w-4 text-gray-400 flex-shrink-0" />
@@ -222,6 +229,59 @@ function OrdenCard({ orden }: { orden: Orden }) {
                     </div>
                 )}
             </div>
+
+            {/* ✅ Servicios Específicos vinculados del catálogo */}
+            {orden.detalle_servicios_orden && orden.detalle_servicios_orden.length > 0 && (() => {
+                const serviciosOrdenados = [...orden.detalle_servicios_orden].sort((a, b) => {
+                    if (filtroServicioEspecifico) {
+                        const idFiltrado = parseInt(filtroServicioEspecifico);
+                        if (a.id_servicio === idFiltrado) return -1;
+                        if (b.id_servicio === idFiltrado) return 1;
+                    }
+                    return 0;
+                });
+                return (
+                    <div className="mt-3 pt-2.5 border-t border-gray-100 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] text-gray-400 font-semibold uppercase tracking-wider">
+                            <span className="flex items-center gap-1">
+                                <Tag className="h-3 w-3 text-blue-500" />
+                                Servicios ({orden.detalle_servicios_orden.length})
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {serviciosOrdenados.slice(0, 3).map((item, idx) => {
+                                const isMatch = Boolean(filtroServicioEspecifico && item.id_servicio === parseInt(filtroServicioEspecifico));
+                                return (
+                                    <span
+                                        key={idx}
+                                        className={cn(
+                                            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors',
+                                            isMatch
+                                                ? 'bg-blue-100 text-blue-900 font-bold border border-blue-300 ring-1 ring-blue-400/50 shadow-2xs'
+                                                : 'bg-slate-100 text-slate-700 border border-slate-200/70 hover:bg-slate-200/80'
+                                        )}
+                                        title={item.catalogo_servicios?.nombre_servicio}
+                                    >
+                                        {item.catalogo_servicios?.codigo_servicio && (
+                                            <span className="font-mono text-[10px] text-blue-700 font-semibold">
+                                                {item.catalogo_servicios.codigo_servicio}
+                                            </span>
+                                        )}
+                                        <span className="truncate max-w-[150px]">
+                                            {item.catalogo_servicios?.nombre_servicio || `Servicio #${item.id_servicio}`}
+                                        </span>
+                                    </span>
+                                );
+                            })}
+                            {orden.detalle_servicios_orden.length > 3 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500">
+                                    +{orden.detalle_servicios_orden.length - 3} más
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Footer */}
             <div className="flex justify-end mt-4 pt-3 border-t">
@@ -256,7 +316,12 @@ function OrdenesPageContent() {
     const [sortBy, setSortBy] = useState<'fecha_creacion' | 'fecha_programada' | 'numero_orden'>((searchParams.get('sortBy') as any) || 'fecha_creacion');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sortOrder') as any) || 'desc');
     const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>(searchParams.get('tipoServicio') || '');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(searchParams.get('advanced') === 'true');
+    const [filtroServicioEspecifico, setFiltroServicioEspecifico] = useState<string>(
+        searchParams.get('servicio') || searchParams.get('idServicio') || ''
+    );
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(
+        searchParams.get('advanced') === 'true' || Boolean(searchParams.get('servicio')) || Boolean(searchParams.get('idServicio'))
+    );
     const [enVivoAutoRefresh, setEnVivoAutoRefresh] = useState(false);
 
     // ✅ DEBOUNCE: Esperar 400ms después de que el usuario deje de escribir
@@ -287,18 +352,26 @@ function OrdenesPageContent() {
         if (sortBy !== 'fecha_creacion') params.set('sortBy', sortBy);
         if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
         if (filtroTipoServicio) params.set('tipoServicio', filtroTipoServicio);
+        if (filtroServicioEspecifico) params.set('servicio', filtroServicioEspecifico);
         if (showAdvancedFilters) params.set('advanced', 'true');
 
         const queryString = params.toString();
         const newPath = queryString ? `/ordenes?${queryString}` : '/ordenes';
         router.replace(newPath);
-    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, sortBy, sortOrder, filtroTipoServicio, showAdvancedFilters, router]);
+    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, showAdvancedFilters, router]);
 
     const pageSize = 12;
 
     // Cargar catálogos para filtros
     const { data: tiposServicio } = useTiposServicio({ activo: true });
     const { data: tecnicos } = useTecnicosSelector();
+    const { data: catalogoServicios } = useServiciosComerciales({ activo: true, limit: 250 });
+
+    // Contador de filtros avanzados activos
+    const activeAdvancedCount =
+        (filtroTipoServicio ? 1 : 0) +
+        (filtroServicioEspecifico ? 1 : 0) +
+        (sortBy !== 'fecha_creacion' || sortOrder !== 'desc' ? 1 : 0);
 
     // ✅ BÚSQUEDA SERVER-SIDE: Enviar busqueda y filtros al backend
     const { data, isLoading, isError, refetch } = useOrdenes({
@@ -310,6 +383,7 @@ function OrdenesPageContent() {
         sortBy,
         sortOrder,
         tipoServicioId: filtroTipoServicio ? parseInt(filtroTipoServicio) : undefined,
+        idServicio: filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : undefined,
         busqueda: busquedaDebounced || undefined,
     });
 
@@ -358,23 +432,25 @@ function OrdenesPageContent() {
                 </div>
             </div>
 
-            {/* Filtros Básicos */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+            {/* Filtros Básicos y Avanzados */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs space-y-4">
                 <div className="flex flex-col lg:flex-row gap-3">
                     {/* Búsqueda */}
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="Buscar por orden, cliente, NIT, técnico, equipo..."
+                            placeholder="Buscar por orden, cliente, NIT, técnico, equipo, servicio..."
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full pl-10 pr-9 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
                         />
                         {busqueda && (
                             <button
+                                type="button"
                                 onClick={() => setBusqueda('')}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                title="Limpiar búsqueda"
                             >
                                 <X className="h-4 w-4" />
                             </button>
@@ -382,11 +458,12 @@ function OrdenesPageContent() {
                     </div>
 
                     {/* Filtros principales */}
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Estado */}
                         <select
                             value={filtroEstado}
                             onChange={(e) => { setFiltroEstado(e.target.value); setPage(1); }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-700 font-medium"
                         >
                             <option value="">Todos los estados</option>
                             <option value="PROGRAMADA">Programada</option>
@@ -402,7 +479,7 @@ function OrdenesPageContent() {
                         <select
                             value={filtroTecnico}
                             onChange={(e) => { setFiltroTecnico(e.target.value); setPage(1); }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-700 font-medium"
                         >
                             <option value="">Todos los técnicos</option>
                             {tecnicos?.map((tec) => {
@@ -417,10 +494,11 @@ function OrdenesPageContent() {
                             })}
                         </select>
 
+                        {/* Prioridad */}
                         <select
                             value={filtroPrioridad}
                             onChange={(e) => { setFiltroPrioridad(e.target.value); setPage(1); }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-700 font-medium"
                         >
                             <option value="">Todas las prioridades</option>
                             <option value="BAJA">Baja</option>
@@ -429,54 +507,40 @@ function OrdenesPageContent() {
                             <option value="URGENTE">Urgente</option>
                         </select>
 
-                        {/* ENTERPRISE: Ordenamiento */}
-                        <select
-                            value={sortBy}
-                            onChange={(e) => { setSortBy(e.target.value as typeof sortBy); setPage(1); }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                        >
-                            <option value="fecha_creacion">Fecha creación</option>
-                            <option value="fecha_programada">Fecha programada</option>
-                            <option value="numero_orden">Número orden</option>
-                        </select>
-
-                        <button
-                            onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-                            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                            title={sortOrder === 'desc' ? 'Ordenar ascendente' : 'Ordenar descendente'}
-                        >
-                            {sortOrder === 'desc' ? (
-                                <ArrowDownAZ className="h-5 w-5 text-gray-600" />
-                            ) : (
-                                <ArrowUpAZ className="h-5 w-5 text-gray-600" />
-                            )}
-                        </button>
-
                         {/* Botón filtros avanzados */}
                         <button
+                            type="button"
                             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                             className={cn(
-                                'flex items-center gap-1 px-3 py-2 border rounded-lg text-sm',
-                                showAdvancedFilters
-                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                    : 'border-gray-300 hover:bg-gray-50'
+                                'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-semibold transition-all',
+                                showAdvancedFilters || activeAdvancedCount > 0
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-2xs'
+                                    : 'border-gray-300 hover:bg-gray-50 text-gray-700'
                             )}
+                            title="Filtros avanzados y por servicio específico"
                         >
-                            <SlidersHorizontal className="h-4 w-4" />
-                            Avanzados
+                            <SlidersHorizontal className="h-3.5 w-3.5" />
+                            <span>Avanzados</span>
+                            {activeAdvancedCount > 0 && (
+                                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-600 text-white">
+                                    {activeAdvancedCount}
+                                </span>
+                            )}
+                            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', showAdvancedFilters && 'rotate-180')} />
                         </button>
 
                         {/* ✅ FEATURE ESTILO SYTEX: Botón Modo En Vivo con Auto-Refresco */}
                         <button
+                            type="button"
                             onClick={() => {
                                 const next = !enVivoAutoRefresh;
                                 setEnVivoAutoRefresh(next);
                                 toast.info(next ? 'Modo Sytex En Vivo activado (refresco cada 20s)' : 'Modo En Vivo pausado');
                             }}
                             className={cn(
-                                'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-semibold transition-all',
+                                'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-semibold transition-all',
                                 enVivoAutoRefresh
-                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-xs'
                                     : 'border-gray-300 hover:bg-gray-50 text-gray-700'
                             )}
                             title={enVivoAutoRefresh ? 'Pausar modo en vivo' : 'Activar lectura y auto-refresco en vivo estilo Sytex'}
@@ -487,96 +551,269 @@ function OrdenesPageContent() {
                                 )}
                                 <span className={cn('relative inline-flex rounded-full h-2 w-2', enVivoAutoRefresh ? 'bg-emerald-500' : 'bg-gray-400')} />
                             </span>
-                            <Radio className="h-4 w-4" />
+                            <Radio className="h-3.5 w-3.5" />
                             <span className="hidden sm:inline">En Vivo</span>
                         </button>
 
+                        {/* Refrescar */}
                         <button
+                            type="button"
                             onClick={() => refetch()}
-                            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                            title="Refrescar"
+                            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
+                            title="Refrescar lista de órdenes"
                         >
-                            <RefreshCw className={cn('h-5 w-5 text-gray-600', isLoading && 'animate-spin')} />
+                            <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin text-blue-600')} />
                         </button>
                     </div>
                 </div>
 
-                {/* ENTERPRISE: Filtros Avanzados */}
+                {/* ENTERPRISE: Panel de Filtros Avanzados (con selector de servicio específico profesional) */}
                 {showAdvancedFilters && (
-                    <div className="pt-4 border-t border-gray-200">
-                        <div className="flex flex-wrap gap-3">
-                            <div className="flex-1 min-w-[200px]">
-                                <label className="block text-xs font-medium text-gray-500 mb-1">Tipo de Servicio</label>
-                                <select
-                                    value={filtroTipoServicio}
-                                    onChange={(e) => { setFiltroTipoServicio(e.target.value); setPage(1); }}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                                >
-                                    <option value="">Todos los tipos</option>
-                                    {tiposServicio?.map((tipo) => (
-                                        <option key={tipo.id_tipo_servicio} value={tipo.id_tipo_servicio}>
-                                            {tipo.nombre_tipo}
-                                        </option>
-                                    ))}
-                                </select>
+                    <div className="pt-4 border-t border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200/90 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                                        <SlidersHorizontal className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide">
+                                            Filtros Avanzados y Catálogos
+                                        </h4>
+                                        <p className="text-[11px] text-gray-500">
+                                            Filtra por catálogo de servicios específicos, tipo macro o ajusta el ordenamiento
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {(filtroTipoServicio || filtroServicioEspecifico || sortBy !== 'fecha_creacion' || sortOrder !== 'desc') && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFiltroTipoServicio('');
+                                            setFiltroServicioEspecifico('');
+                                            setSortBy('fecha_creacion');
+                                            setSortOrder('desc');
+                                            setPage(1);
+                                        }}
+                                        className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-medium hover:underline self-start sm:self-auto"
+                                    >
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                        Restablecer avanzados
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Limpiar filtros */}
-                            {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || busqueda) && (
-                                <button
-                                    onClick={() => {
-                                        setFiltroEstado('');
-                                        setFiltroTecnico('');
-                                        setFiltroPrioridad('');
-                                        setFiltroTipoServicio('');
-                                        setBusqueda('');
-                                        setPage(1);
-                                    }}
-                                    className="flex items-center gap-1 px-3 py-2 text-sm text-red-600 hover:text-red-800"
-                                >
-                                    <X className="h-4 w-4" />
-                                    Limpiar filtros
-                                </button>
-                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+                                {/* Columna 1: Tipo Macro de Servicio */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+                                        <Clock className="h-3.5 w-3.5 text-blue-600" />
+                                        Tipo Macro de Servicio
+                                    </label>
+                                    <select
+                                        value={filtroTipoServicio}
+                                        onChange={(e) => {
+                                            setFiltroTipoServicio(e.target.value);
+                                            setPage(1);
+                                        }}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-800 font-medium"
+                                    >
+                                        <option value="">Todos los tipos macro</option>
+                                        {tiposServicio?.map((tipo) => (
+                                            <option key={tipo.id_tipo_servicio} value={tipo.id_tipo_servicio}>
+                                                {tipo.nombre_tipo}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Columna 2: Servicio Específico del Catálogo (ServicioEspecificoCombobox) */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                                        <span className="flex items-center gap-1.5">
+                                            <Tag className="h-3.5 w-3.5 text-blue-600" />
+                                            Servicio Específico (Catálogo)
+                                        </span>
+                                        {filtroServicioEspecifico && (
+                                            <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+                                                Activo
+                                            </span>
+                                        )}
+                                    </label>
+                                    <ServicioEspecificoCombobox
+                                        selectedId={filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : null}
+                                        onSelect={(id) => {
+                                            setFiltroServicioEspecifico(id ? String(id) : '');
+                                            setPage(1);
+                                        }}
+                                        tipoServicioId={filtroTipoServicio ? parseInt(filtroTipoServicio, 10) : undefined}
+                                        placeholder="Buscar y deslizar servicio..."
+                                    />
+                                </div>
+
+                                {/* Columna 3: Criterio de Ordenamiento */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+                                        <ArrowDownAZ className="h-3.5 w-3.5 text-blue-600" />
+                                        Criterio de Ordenamiento
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            value={sortBy}
+                                            onChange={(e) => { setSortBy(e.target.value as typeof sortBy); setPage(1); }}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-800 font-medium"
+                                        >
+                                            <option value="fecha_creacion">Fecha creación</option>
+                                            <option value="fecha_programada">Fecha programada</option>
+                                            <option value="numero_orden">Número orden</option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                                            className="p-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-100 transition-colors shrink-0"
+                                            title={sortOrder === 'desc' ? 'Orden descendente (más reciente primero)' : 'Orden ascendente'}
+                                        >
+                                            {sortOrder === 'desc' ? (
+                                                <ArrowDownAZ className="h-4 w-4 text-gray-600" />
+                                            ) : (
+                                                <ArrowUpAZ className="h-4 w-4 text-gray-600" />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
 
                 {/* Indicadores de filtros activos */}
-                {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || busquedaDebounced) && (
-                    <div className="flex items-center gap-2 text-sm flex-wrap">
-                        <Filter className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-500">Filtros activos:</span>
-                        {busquedaDebounced && (
-                            <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs">
-                                Búsqueda: &quot;{busquedaDebounced}&quot;
-                            </span>
-                        )}
-                        {filtroEstado && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
-                                Estado: {filtroEstado === 'ASIGNADA' ? 'Asignada sin ejecutar' : filtroEstado}
-                            </span>
-                        )}
-                        {filtroTecnico && (
-                            <span className="px-2 py-0.5 bg-violet-100 text-violet-800 rounded-full text-xs">
-                                Técnico: {(() => {
-                                    const tec = tecnicos?.find(t => t.id_empleado === parseInt(filtroTecnico));
-                                    return tec?.persona
-                                        ? `${tec.persona.primer_nombre || ''} ${tec.persona.primer_apellido || ''}`.trim()
-                                        : `Técnico #${filtroTecnico}`;
-                                })()}
-                            </span>
-                        )}
-                        {filtroPrioridad && (
-                            <span className="px-2 py-0.5 bg-orange-100 text-orange-800 rounded-full text-xs">
-                                Prioridad: {filtroPrioridad}
-                            </span>
-                        )}
-                        {filtroTipoServicio && (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs">
-                                Tipo: {tiposServicio?.find(t => t.id_tipo_servicio === parseInt(filtroTipoServicio))?.nombre_tipo}
-                            </span>
-                        )}
+                {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || filtroServicioEspecifico || busquedaDebounced) && (
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 flex-wrap">
+                        <div className="flex items-center gap-2 text-xs flex-wrap">
+                            <div className="flex items-center gap-1 text-gray-500 font-semibold mr-1">
+                                <Filter className="h-3.5 w-3.5 text-blue-600" />
+                                <span>Filtros activos:</span>
+                            </div>
+
+                            {busquedaDebounced && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-green-50 text-green-800 border border-green-200 rounded-full text-xs font-medium">
+                                    <span>Búsqueda: &quot;{busquedaDebounced}&quot;</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setBusqueda(''); setBusquedaDebounced(''); setPage(1); }}
+                                        className="hover:bg-green-200/60 rounded-full p-0.5 text-green-700 transition-colors"
+                                        title="Quitar búsqueda"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
+
+                            {filtroEstado && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-full text-xs font-medium">
+                                    <span>Estado: {filtroEstado === 'ASIGNADA' ? 'Asignada sin ejecutar' : filtroEstado}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFiltroEstado(''); setPage(1); }}
+                                        className="hover:bg-blue-200/60 rounded-full p-0.5 text-blue-700 transition-colors"
+                                        title="Quitar filtro de estado"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
+
+                            {filtroTecnico && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-violet-50 text-violet-800 border border-violet-200 rounded-full text-xs font-medium">
+                                    <span>
+                                        Técnico: {(() => {
+                                            const tec = tecnicos?.find(t => t.id_empleado === parseInt(filtroTecnico));
+                                            return tec?.persona
+                                                ? `${tec.persona.primer_nombre || ''} ${tec.persona.primer_apellido || ''}`.trim()
+                                                : `Técnico #${filtroTecnico}`;
+                                        })()}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFiltroTecnico(''); setPage(1); }}
+                                        className="hover:bg-violet-200/60 rounded-full p-0.5 text-violet-700 transition-colors"
+                                        title="Quitar filtro de técnico"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
+
+                            {filtroPrioridad && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-orange-50 text-orange-800 border border-orange-200 rounded-full text-xs font-medium">
+                                    <span>Prioridad: {filtroPrioridad}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFiltroPrioridad(''); setPage(1); }}
+                                        className="hover:bg-orange-200/60 rounded-full p-0.5 text-orange-700 transition-colors"
+                                        title="Quitar filtro de prioridad"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
+
+                            {filtroTipoServicio && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-purple-50 text-purple-800 border border-purple-200 rounded-full text-xs font-medium">
+                                    <span>
+                                        Tipo: {tiposServicio?.find(t => t.id_tipo_servicio === parseInt(filtroTipoServicio))?.nombre_tipo || `Tipo #${filtroTipoServicio}`}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFiltroTipoServicio(''); setPage(1); }}
+                                        className="hover:bg-purple-200/60 rounded-full p-0.5 text-purple-700 transition-colors"
+                                        title="Quitar filtro de tipo macro"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
+
+                            {filtroServicioEspecifico && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-100 text-blue-900 border border-blue-300 rounded-full text-xs font-semibold shadow-2xs">
+                                    <Tag className="h-3 w-3 text-blue-600" />
+                                    <span>
+                                        Servicio: {(() => {
+                                            const s = catalogoServicios?.find(srv => srv.id_servicio === parseInt(filtroServicioEspecifico));
+                                            return s ? `[${s.codigo_servicio}] ${s.nombre_servicio}` : `Servicio #${filtroServicioEspecifico}`;
+                                        })()}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFiltroServicioEspecifico(''); setPage(1); }}
+                                        className="hover:bg-blue-200 rounded-full p-0.5 text-blue-800 transition-colors"
+                                        title="Quitar filtro de servicio específico"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Botón limpiar todos */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setFiltroEstado('');
+                                setFiltroTecnico('');
+                                setFiltroPrioridad('');
+                                setFiltroTipoServicio('');
+                                setFiltroServicioEspecifico('');
+                                setBusqueda('');
+                                setBusquedaDebounced('');
+                                setPage(1);
+                            }}
+                            className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-semibold hover:underline shrink-0 ml-auto"
+                        >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            Limpiar todos
+                        </button>
                     </div>
                 )}
             </div>
@@ -611,7 +848,11 @@ function OrdenesPageContent() {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {ordenesFiltradas.map((orden) => (
-                                <OrdenCard key={orden.id_orden_servicio} orden={orden} />
+                                <OrdenCard
+                                    key={orden.id_orden_servicio}
+                                    orden={orden}
+                                    filtroServicioEspecifico={filtroServicioEspecifico}
+                                />
                             ))}
                         </div>
                     )}
