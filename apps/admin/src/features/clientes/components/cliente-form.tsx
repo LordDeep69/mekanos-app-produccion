@@ -51,7 +51,7 @@ import {
 } from '@/types/clientes';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, Link, Loader2, Mail, Plus, Save, Star, Trash2, User } from 'lucide-react';
+import { ArrowLeft, Building2, ExternalLink, Link, Loader2, Mail, Plus, Save, Star, Trash2, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -489,7 +489,11 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           description: 'Los cambios se han guardado correctamente.',
         });
       }
-      router.push('/clientes');
+      if (clienteId) {
+        router.push(`/clientes/${clienteId}`);
+      } else {
+        router.push('/clientes');
+      }
     } catch (error: unknown) {
       // Extraer mensaje de error del backend (Axios error)
       let errorMessage = 'No se pudo guardar el cliente';
@@ -1190,13 +1194,28 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                 name="direccion_principal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Dirección</FormLabel>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Dirección</FormLabel>
+                      {field.value && /^https?:\/\//i.test(field.value.trim()) && (
+                        <a
+                          href={field.value.trim()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Probar enlace de mapa
+                        </a>
+                      )}
+                    </div>
                     <FormControl>
                       <Input
-                        placeholder="Calle/Carrera #00-00"
+                        placeholder="Calle/Carrera #00-00 o link de Google Maps"
                         {...field}
                       />
                     </FormControl>
+                    <FormDescription>
+                      Dirección física o enlace compartido de Google Maps / Waze.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1629,7 +1648,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push('/clientes')}
+            onClick={() => clienteId ? router.push(`/clientes/${clienteId}`) : router.push('/clientes')}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Cancelar

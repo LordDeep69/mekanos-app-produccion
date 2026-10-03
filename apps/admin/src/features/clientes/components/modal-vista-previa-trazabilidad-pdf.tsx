@@ -9,8 +9,7 @@ import {
   X,
   Loader2,
   AlertCircle,
-  RefreshCw,
-  Sparkles,
+  FileCheck2,
   Calendar,
   CheckCircle2,
 } from 'lucide-react';
@@ -220,7 +219,7 @@ export function ModalVistaPreviaTrazabilidadPdf({
             <div className="flex flex-col items-center justify-center gap-4 text-center p-6 text-slate-300 animate-in fade-in duration-150">
               <div className="relative">
                 <div className="w-16 h-16 rounded-3xl bg-blue-600/10 border border-blue-500/30 flex items-center justify-center animate-pulse">
-                  <Sparkles className="h-8 w-8 text-blue-400 animate-spin" style={{ animationDuration: '4s' }} />
+                  <FileCheck2 className="h-8 w-8 text-blue-400 animate-pulse" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 p-1 bg-blue-600 rounded-full text-white">
                   <Loader2 className="h-4 w-4 animate-spin" />
