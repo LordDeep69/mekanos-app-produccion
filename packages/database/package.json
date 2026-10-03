@@ -6,7 +6,9 @@
   "types": "./dist/src/index.d.ts",
   "scripts": {
     "db:pull": "prisma db pull --schema=./prisma/schema.prisma",
-    "db:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "pregenerate": "node scripts/pregenerate.js",
+    "db:generate": "node scripts/pregenerate.js && prisma generate --schema=./prisma/schema.prisma",
+    "prisma:generate": "node scripts/pregenerate.js && prisma generate --schema=./prisma/schema.prisma",
     "db:studio": "prisma studio --schema=./prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
     "db:seed": "tsx prisma/seed.ts",

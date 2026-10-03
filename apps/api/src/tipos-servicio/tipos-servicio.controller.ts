@@ -27,7 +27,7 @@ import { GetTiposServicioQuery } from './queries/get-tipos-servicio.query';
 /**
  * Controller: Tipos de Servicio
  * 
- * Gestiona tipos/formatos estandarizados de servicio
+ * Gestiona tipos/formatos estandarizados de servicio y plantillas enriquecidas de observación
  * Arquitectura: CQRS (Commands/Queries separados)
  * 
  * ENDPOINTS:

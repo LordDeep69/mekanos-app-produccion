@@ -188,8 +188,12 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                             )}
                         </div>
 
-                        <EditorToolbar editor={editor} />
-                        <EditorContent editor={editor} />
+                        {editor && (
+                            <>
+                                <EditorToolbar editor={editor} />
+                                <EditorContent editor={editor} />
+                            </>
+                        )}
                         <div className="flex gap-2 justify-end px-4 pb-3">
                             <button
                                 onClick={handleCancelar}

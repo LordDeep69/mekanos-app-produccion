@@ -260,7 +260,8 @@ export function useTiposServicio(params?: { activo?: boolean; categoria?: string
     return useQuery({
         queryKey: [...CATALOGOS_KEYS.tiposServicio, params],
         queryFn: () => getTiposServicio(params),
-        ...CacheStrategy.STATIC, // Catálogo estático - 30 min cache
+        ...CacheStrategy.SEMI_STATIC, // 15 min cache con refresco
+        refetchOnMount: true,
     });
 }
 
@@ -269,6 +270,8 @@ export function useTipoServicio(id: number) {
         queryKey: [...CATALOGOS_KEYS.tiposServicio, id],
         queryFn: () => getTipoServicio(id),
         enabled: !!id,
+        ...CacheStrategy.SEMI_STATIC,
+        refetchOnMount: true,
     });
 }
 
@@ -279,6 +282,7 @@ export function useCrearTipoServicio() {
         mutationFn: (data: Partial<TipoServicio>) => createTipoServicio(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: CATALOGOS_KEYS.tiposServicio });
+            queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
             toast.success('Tipo de servicio creado exitosamente');
         },
         onError: (error: unknown) => {
@@ -298,6 +302,7 @@ export function useActualizarTipoServicio() {
             updateTipoServicio(id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: CATALOGOS_KEYS.tiposServicio });
+            queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
             toast.success('Tipo de servicio actualizado');
         },
         onError: (error: unknown) => {
@@ -316,6 +321,7 @@ export function useEliminarTipoServicio() {
         mutationFn: (id: number) => deleteTipoServicio(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: CATALOGOS_KEYS.tiposServicio });
+            queryClient.invalidateQueries({ queryKey: ['catalogos', 'tipos-servicio'] });
             toast.success('Tipo de servicio desactivado');
         },
         onError: (error: unknown) => {

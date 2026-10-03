@@ -2083,7 +2083,7 @@ model tipos_servicio {
   color_hex               String?                 @db.VarChar(7)
   activo                  Boolean?                @default(true)
   observaciones           String?
-  plantilla_observacion   String?
+  plantilla_observacion   String?                 // Plantilla HTML enriquecida para reportes y observaciones de cierre
   creado_por              Int?
   fecha_creacion          DateTime?               @default(now()) @db.Timestamp(6)
   modificado_por          Int?

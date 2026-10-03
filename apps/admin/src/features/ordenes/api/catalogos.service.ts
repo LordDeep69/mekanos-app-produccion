@@ -28,6 +28,7 @@ export interface TipoServicio {
     color_hex?: string;
     icono?: string;
     activo: boolean;
+    plantilla_observacion?: string;
 }
 
 export interface EstadoOrden {
