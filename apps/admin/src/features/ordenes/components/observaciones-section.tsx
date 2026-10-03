@@ -53,8 +53,6 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
     const plantillaActual = orden.tipos_servicio?.plantilla_observacion || tipoActualCatalog?.plantilla_observacion || null;
     const nombreTipoActual = orden.tipos_servicio?.nombre_tipo || tipoActualCatalog?.nombre_tipo || 'Servicio';
 
-    const tiposConPlantilla = listaTipos.filter(t => t.plantilla_observacion && t.plantilla_observacion.trim() !== '');
-
     const editor = useRichEditor(plainTextToHtml(orden.observaciones_cierre || ''));
 
     // Sincronizar cuando cambie la orden (fuera del editor)
@@ -68,19 +66,23 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
         }
     }, [orden.observaciones_cierre, editor, isEditing]);
 
-    const handleInsertarPlantilla = (plantillaHtml: string, nombreTipo?: string) => {
+    const handleInsertarPlantilla = (plantillaHtml: string) => {
         if (!editor || !plantillaHtml) return;
-        const currentHtml = editor.getHTML();
-        const isEmpty = !currentHtml || currentHtml === '<p></p>' || currentHtml === '<p><br></p>' || currentHtml.trim() === '';
+        const isEmpty = editor.getText().trim() === '';
 
         if (isEmpty) {
-            editor.commands.setContent(plantillaHtml);
-            toast.success(`Plantilla "${nombreTipo || 'Servicio'}" insertada`);
+            // Reemplaza el párrafo vacío preservando el historial de deshacer/rehacer (Undo/Redo)
+            editor.chain().focus().selectAll().insertContent(plantillaHtml).run();
+            toast.success('Plantilla insertada');
         } else {
-            // Anexar sin borrar el texto previo que ingresó el técnico o admin
-            const separator = '<p></p><hr/><p><strong>--- Plantilla: ' + (nombreTipo || 'Servicio') + ' ---</strong></p>';
-            editor.commands.setContent(currentHtml + separator + plantillaHtml);
-            toast.success('Plantilla anexada al texto existente sin sobrescribir');
+            // Anexa al final del texto existente sin texto residual, separadores innecesarios ni cabeceras extrañas
+            editor
+                .chain()
+                .focus()
+                .setTextSelection(editor.state.doc.content.size)
+                .insertContent(`<p></p>${plantillaHtml}`)
+                .run();
+            toast.success('Plantilla anexada al texto existente');
         }
     };
 
@@ -146,9 +148,9 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                                 {plantillaActual ? (
                                     <button
                                         type="button"
-                                        onClick={() => handleInsertarPlantilla(plantillaActual, nombreTipoActual)}
+                                        onClick={() => handleInsertarPlantilla(plantillaActual)}
                                         className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-2xs transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                                        title="Inserta el texto predeterminado sin borrar lo que ya está escrito"
+                                        title="Inserta la plantilla base configurada para este tipo de servicio"
                                     >
                                         <FileText className="h-3 w-3" />
                                         Insertar plantilla de "{nombreTipoActual}"
@@ -159,33 +161,6 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                                     </span>
                                 )}
                             </div>
-
-                            {tiposConPlantilla.length > 0 && (
-                                <div className="flex items-center gap-1.5 ml-auto">
-                                    <span className="text-gray-500 text-[11px]">Otras plantillas:</span>
-                                    <select
-                                        onChange={(e) => {
-                                            const id = Number(e.target.value);
-                                            if (id) {
-                                                const sel = tiposConPlantilla.find(t => t.id_tipo_servicio === id);
-                                                if (sel?.plantilla_observacion) {
-                                                    handleInsertarPlantilla(sel.plantilla_observacion, sel.nombre_tipo);
-                                                }
-                                            }
-                                            e.target.value = '';
-                                        }}
-                                        defaultValue=""
-                                        className="bg-white border border-emerald-200 text-gray-700 text-xs rounded-md px-2 py-1 focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
-                                    >
-                                        <option value="" disabled>Seleccionar de catálogo...</option>
-                                        {tiposConPlantilla.map(t => (
-                                            <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>
-                                                {t.nombre_tipo}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
                         </div>
 
                         {editor && (
@@ -241,7 +216,7 @@ export function ObservacionesCierreSection({ orden, onUpdate }: ObservacionesCie
                                                 onClick={() => {
                                                     setIsEditing(true);
                                                     setTimeout(() => {
-                                                        handleInsertarPlantilla(plantillaActual, nombreTipoActual);
+                                                        handleInsertarPlantilla(plantillaActual);
                                                     }, 60);
                                                 }}
                                                 className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer"

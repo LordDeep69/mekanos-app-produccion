@@ -308,11 +308,16 @@ function PlantillaObservacionEditor({
     // Opciones rápidas de plantillas predefinidas
     const handleInsertSnippet = (snippetHtml: string) => {
         if (!editor) return;
-        const currentHtml = editor.getHTML();
-        if (!currentHtml || currentHtml === '<p></p>') {
-            editor.commands.setContent(snippetHtml);
+        const isEmpty = editor.getText().trim() === '';
+        if (isEmpty) {
+            editor.chain().focus().selectAll().insertContent(snippetHtml).run();
         } else {
-            editor.commands.setContent(currentHtml + snippetHtml);
+            editor
+                .chain()
+                .focus()
+                .setTextSelection(editor.state.doc.content.size)
+                .insertContent(`<p></p>${snippetHtml}`)
+                .run();
         }
     };
 

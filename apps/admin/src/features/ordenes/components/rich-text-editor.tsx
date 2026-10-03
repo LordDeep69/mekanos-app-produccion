@@ -12,6 +12,7 @@
 
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -95,10 +96,42 @@ export function isHtml(text: string): boolean {
 export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
     if (!editor) return null;
 
+    // Suscribir a transacciones y cambios de selección del editor
+    // para que todos los botones (activos, deshacer, rehacer) se actualicen en tiempo real.
+    const [, setTick] = useState(0);
+
+    useEffect(() => {
+        if (!editor) return;
+        const handleUpdate = () => {
+            setTick(t => t + 1);
+        };
+        editor.on('transaction', handleUpdate);
+        editor.on('selectionUpdate', handleUpdate);
+        return () => {
+            editor.off('transaction', handleUpdate);
+            editor.off('selectionUpdate', handleUpdate);
+        };
+    }, [editor]);
+
+    const canUndo = Boolean(editor.can().undo());
+    const canRedo = Boolean(editor.can().redo());
+
+    const handleUndo = () => {
+        if (editor.can().undo()) {
+            editor.chain().focus().undo().run();
+        }
+    };
+
+    const handleRedo = () => {
+        if (editor.can().redo()) {
+            editor.chain().focus().redo().run();
+        }
+    };
+
     const btnClass = (active: boolean) =>
-        `p-1.5 rounded-md transition-all ${
+        `p-1.5 rounded-md transition-all cursor-pointer ${
             active
-                ? 'bg-green-600 text-white shadow-sm'
+                ? 'bg-green-600 text-white shadow-2xs'
                 : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
         }`;
 
@@ -107,8 +140,9 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             {/* Texto */}
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().toggleBold().run()}
-                disabled={!editor.can().chain().focus().toggleBold().run()}
+                disabled={!editor.can().toggleBold()}
                 className={btnClass(editor.isActive('bold'))}
                 title="Negrita (Ctrl+B)"
             >
@@ -116,8 +150,9 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             </button>
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
-                disabled={!editor.can().chain().focus().toggleItalic().run()}
+                disabled={!editor.can().toggleItalic()}
                 className={btnClass(editor.isActive('italic'))}
                 title="Cursiva (Ctrl+I)"
             >
@@ -125,8 +160,9 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             </button>
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().toggleUnderline().run()}
-                disabled={!editor.can().chain().focus().toggleUnderline().run()}
+                disabled={!editor.can().toggleUnderline()}
                 className={btnClass(editor.isActive('underline'))}
                 title="Subrayado (Ctrl+U)"
             >
@@ -138,6 +174,7 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             {/* Títulos */}
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
                 className={btnClass(editor.isActive('heading', { level: 2 }))}
                 title="Título 2"
@@ -146,6 +183,7 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             </button>
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
                 className={btnClass(editor.isActive('heading', { level: 3 }))}
                 title="Título 3"
@@ -158,6 +196,7 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             {/* Listas */}
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
                 className={btnClass(editor.isActive('bulletList'))}
                 title="Lista con viñetas"
@@ -166,6 +205,7 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             </button>
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
                 className={btnClass(editor.isActive('orderedList'))}
                 title="Lista numerada"
@@ -178,6 +218,7 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             {/* Separador */}
             <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => editor.chain().focus().setHorizontalRule().run()}
                 className={btnClass(false)}
                 title="Línea separadora"
@@ -190,19 +231,29 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             {/* Undo / Redo */}
             <button
                 type="button"
-                onClick={() => editor.chain().focus().undo().run()}
-                disabled={!editor.can().chain().focus().undo().run()}
-                className={btnClass(false)}
-                title="Deshacer"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleUndo}
+                disabled={!canUndo}
+                className={`p-1.5 rounded-md transition-all ${
+                    canUndo
+                        ? 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 cursor-pointer'
+                        : 'text-gray-300 opacity-40 cursor-not-allowed pointer-events-none'
+                }`}
+                title="Deshacer (Ctrl+Z)"
             >
                 <Undo2 className="h-4 w-4" />
             </button>
             <button
                 type="button"
-                onClick={() => editor.chain().focus().redo().run()}
-                disabled={!editor.can().chain().focus().redo().run()}
-                className={btnClass(false)}
-                title="Rehacer"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleRedo}
+                disabled={!canRedo}
+                className={`p-1.5 rounded-md transition-all ${
+                    canRedo
+                        ? 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 cursor-pointer'
+                        : 'text-gray-300 opacity-40 cursor-not-allowed pointer-events-none'
+                }`}
+                title="Rehacer (Ctrl+Y)"
             >
                 <Redo2 className="h-4 w-4" />
             </button>

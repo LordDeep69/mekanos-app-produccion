@@ -334,7 +334,7 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
             await updateActividad.mutateAsync({
                 idActividad: actividad.id_actividad_ejecutada,
                 data: {
-                    observaciones: valorAGuardar,
+                    observaciones: valorAGuardar ?? undefined,
                 },
             });
             setShowObservaciones(false);
