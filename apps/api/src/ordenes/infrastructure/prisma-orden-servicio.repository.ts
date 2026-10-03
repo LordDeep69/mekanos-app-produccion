@@ -929,6 +929,34 @@ export class PrismaOrdenServicioRepository {
             }
           }
         });
+
+        // Servicios específicos asignados contienen todos los tokens en nombre o código
+        orConditions.push({
+          detalle_servicios_orden: {
+            some: {
+              catalogo_servicios: {
+                AND: tokens.map(token => ({
+                  OR: [
+                    { nombre_servicio: { contains: token, mode: 'insensitive' } },
+                    { codigo_servicio: { contains: token, mode: 'insensitive' } },
+                  ]
+                }))
+              }
+            }
+          }
+        });
+
+        // Equipos contienen todos los tokens en nombre o código
+        orConditions.push({
+          equipos: {
+            AND: tokens.map(token => ({
+              OR: [
+                { nombre_equipo: { contains: token, mode: 'insensitive' } },
+                { codigo_equipo: { contains: token, mode: 'insensitive' } },
+              ]
+            }))
+          }
+        });
       }
 
       // === COMBINAR RESULTADOS: Prisma ILIKE + SQL raw unaccent ===

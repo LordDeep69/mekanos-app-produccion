@@ -12,6 +12,7 @@
 import { useServiciosComerciales } from '@/features/ordenes';
 import type { CatalogoServicio } from '@/features/ordenes/api/catalogos.service';
 import { getCategoriaServicioColor, getCategoriaServicioLabel } from '@/features/ordenes/api/catalogos.service';
+import { calculateSmartMatchScore, SmartHighlight } from '@/lib/search-utils';
 import { cn } from '@/lib/utils';
 import {
     Check,
@@ -100,14 +101,7 @@ export function ServicioEspecificoCombobox({
         return Array.from(cats);
     }, [catalogoServicios]);
 
-    // Normalizar texto para búsqueda tolerante (sin tildes, minúsculas)
-    const normalize = (str: string) =>
-        str
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '');
-
-    // Filtrar servicios por búsqueda y categoría
+    // Filtrar y ordenar servicios inteligentemente (independiente del orden de palabras, acentos o combinación de caracteres)
     const serviciosFiltrados = useMemo(() => {
         if (!catalogoServicios) return [];
 
@@ -118,35 +112,48 @@ export function ServicioEspecificoCombobox({
             list = list.filter((s) => s.categoria === categoriaTab);
         }
 
-        // Si hay búsqueda por texto
-        const query = normalize(searchQuery.trim());
-        if (query) {
-            list = list.filter((s) => {
-                const nombre = normalize(s.nombre_servicio || '');
-                const codigo = normalize(s.codigo_servicio || '');
-                const desc = normalize(s.descripcion || '');
-                const cat = normalize(s.categoria || '');
-                const tipo = normalize(s.tipos_servicio?.nombre_tipo || '');
-                return (
-                    nombre.includes(query) ||
-                    codigo.includes(query) ||
-                    desc.includes(query) ||
-                    cat.includes(query) ||
-                    tipo.includes(query)
-                );
-            });
+        const query = searchQuery.trim();
+
+        // Si no hay búsqueda por texto, mantener orden o priorizar por tipo macro
+        if (!query) {
+            if (tipoServicioId) {
+                list.sort((a, b) => {
+                    const aMatch = a.id_tipo_servicio === tipoServicioId ? 1 : 0;
+                    const bMatch = b.id_tipo_servicio === tipoServicioId ? 1 : 0;
+                    return bMatch - aMatch;
+                });
+            }
+            return list;
         }
 
-        // Si se especificó un tipo de servicio macro, priorizar los de ese tipo arriba
-        if (tipoServicioId) {
-            list.sort((a, b) => {
-                const aMatch = a.id_tipo_servicio === tipoServicioId ? 1 : 0;
-                const bMatch = b.id_tipo_servicio === tipoServicioId ? 1 : 0;
-                return bMatch - aMatch;
+        // Búsqueda inteligente: evaluar coincidencia permutativa, sin acentos y clasificar por relevancia
+        const scoredItems: Array<{ servicio: CatalogoServicio; score: number }> = [];
+
+        for (const servicio of list) {
+            const score = calculateSmartMatchScore(query, {
+                primary: servicio.nombre_servicio,
+                secondary: servicio.codigo_servicio,
+                extra: [
+                    servicio.descripcion,
+                    servicio.categoria,
+                    servicio.tipos_servicio?.nombre_tipo,
+                ],
             });
+
+            if (score > 0) {
+                let finalScore = score;
+                // Bonificación si coincide con el tipo macro activo
+                if (tipoServicioId && servicio.id_tipo_servicio === tipoServicioId) {
+                    finalScore += 500;
+                }
+                scoredItems.push({ servicio, score: finalScore });
+            }
         }
 
-        return list;
+        // Ordenar de mayor a menor relevancia
+        scoredItems.sort((a, b) => b.score - a.score);
+
+        return scoredItems.map((item) => item.servicio);
     }, [catalogoServicios, searchQuery, categoriaTab, tipoServicioId]);
 
     const handleSelect = (servicio: CatalogoServicio | null) => {
@@ -347,7 +354,7 @@ export function ServicioEspecificoCombobox({
                                                         ? 'bg-blue-100 text-blue-800 border-blue-300'
                                                         : 'bg-gray-100 text-gray-700 border-gray-200 group-hover:bg-blue-50 group-hover:text-blue-700 group-hover:border-blue-200'
                                                 )}>
-                                                    {servicio.codigo_servicio}
+                                                    <SmartHighlight text={servicio.codigo_servicio} query={searchQuery} />
                                                 </span>
 
                                                 <span className={cn(
@@ -369,7 +376,7 @@ export function ServicioEspecificoCombobox({
                                                 'text-xs font-semibold leading-snug line-clamp-2',
                                                 isSelected ? 'text-blue-900 font-bold' : 'text-gray-900'
                                             )}>
-                                                {servicio.nombre_servicio}
+                                                <SmartHighlight text={servicio.nombre_servicio} query={searchQuery} />
                                             </p>
 
                                             {/* Info complementaria: descripción o tipo macro */}

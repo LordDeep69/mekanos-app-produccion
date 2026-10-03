@@ -19,12 +19,13 @@ import {
     Plus,
     Search,
     ShieldCheck,
-    Sparkles,
     Tag,
     Trash2,
+    Wrench,
     X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { calculateSmartMatchScore } from '@/lib/search-utils';
 
 export default function CatalogoServiciosComercialesPage() {
     const [busqueda, setBusqueda] = useState('');
@@ -54,12 +55,26 @@ export default function CatalogoServiciosComercialesPage() {
         }
     };
 
-    const filteredServicios = servicios?.filter(s => {
-        const nombre = s.nombre_servicio || '';
-        const codigo = s.codigo_servicio || '';
-        const term = busqueda.toLowerCase();
-        return nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
-    }) || [];
+    // Filtrado inteligente: insensible a tildes/mayúsculas, orden de palabras y combinaciones
+    const filteredServicios = useMemo(() => {
+        if (!servicios) return [];
+        const query = busqueda.trim();
+        if (!query) return servicios;
+
+        const scored = servicios
+            .map((s) => ({
+                servicio: s,
+                score: calculateSmartMatchScore(query, {
+                    primary: s.nombre_servicio,
+                    secondary: s.codigo_servicio,
+                    extra: [s.descripcion, s.categoria, s.tipos_servicio?.nombre_tipo],
+                }),
+            }))
+            .filter((item) => item.score > 0);
+
+        scored.sort((a, b) => b.score - a.score);
+        return scored.map((item) => item.servicio);
+    }, [servicios, busqueda]);
 
     return (
         <div className="space-y-6">
@@ -401,7 +416,7 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSu
                                         className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
                                         title="Generar código automático basado en palabras clave"
                                     >
-                                        <Sparkles className="h-3 w-3" />
+                                        <Wrench className="h-3 w-3" />
                                         <span>Auto-generar</span>
                                     </button>
                                 )}

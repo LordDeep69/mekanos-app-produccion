@@ -35,6 +35,7 @@ import {
     type TipoServicio,
 } from '@/features/ordenes';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
+import { calculateSmartMatchScore } from '@/lib/search-utils';
 import { cn } from '@/lib/utils';
 import {
     AlertTriangle,
@@ -624,42 +625,35 @@ function PasoAlcance({
         return familiaEquipo;
     }, [data.tipoServicioSeleccionado, familiaEquipo]);
 
-    // Filtrar servicios comerciales correctivos/especializados
+    // Filtrar servicios comerciales correctivos/especializados inteligentemente
     const serviciosFiltrados = useMemo(() => {
-        return (serviciosComerciales || []).filter((s) => {
-            // Filtrar por término de búsqueda
-            if (busquedaCorrectivo.trim() !== '') {
-                const query = busquedaCorrectivo.toLowerCase();
-                const matchSearch =
-                    s.nombre_servicio.toLowerCase().includes(query) ||
-                    s.codigo_servicio.toLowerCase().includes(query) ||
-                    (s.descripcion && s.descripcion.toLowerCase().includes(query));
-                if (!matchSearch) return false;
-            }
-
+        const list = (serviciosComerciales || []).filter((s) => {
             const cat = clasificarServicioCorrectivo(s);
-
-            if (filtroTab === 'FAMILIA_Y_GLOBAL') {
-                return cat === familiaEfectiva || cat === 'GLOBAL';
-            }
-            if (filtroTab === 'SOLO_FAMILIA') {
-                return cat === familiaEfectiva;
-            }
-            if (filtroTab === 'SOLO_GLOBAL') {
-                return cat === 'GLOBAL';
-            }
-            if (filtroTab === 'GEN') {
-                return cat === 'GENERADOR';
-            }
-            if (filtroTab === 'BOM') {
-                return cat === 'BOMBA';
-            }
-            if (filtroTab === 'MOT') {
-                return cat === 'MOTOR';
-            }
-            // filtroTab === 'TODOS'
+            if (filtroTab === 'FAMILIA_Y_GLOBAL') return cat === familiaEfectiva || cat === 'GLOBAL';
+            if (filtroTab === 'SOLO_FAMILIA') return cat === familiaEfectiva;
+            if (filtroTab === 'SOLO_GLOBAL') return cat === 'GLOBAL';
+            if (filtroTab === 'GEN') return cat === 'GENERADOR';
+            if (filtroTab === 'BOM') return cat === 'BOMBA';
+            if (filtroTab === 'MOT') return cat === 'MOTOR';
             return true;
         });
+
+        const query = busquedaCorrectivo.trim();
+        if (!query) return list;
+
+        const scored = list
+            .map((s) => ({
+                servicio: s,
+                score: calculateSmartMatchScore(query, {
+                    primary: s.nombre_servicio,
+                    secondary: s.codigo_servicio,
+                    extra: [s.descripcion, s.categoria],
+                }),
+            }))
+            .filter((item) => item.score > 0);
+
+        scored.sort((a, b) => b.score - a.score);
+        return scored.map((item) => item.servicio);
     }, [serviciosComerciales, busquedaCorrectivo, filtroTab, familiaEfectiva]);
 
     const toggleServicioCorrectivo = (servicio: CatalogoServicio) => {
