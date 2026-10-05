@@ -118,6 +118,10 @@ export class CreatePersonaNestedDto {
 
   @IsOptional()
   @IsString()
+  url_ubicacion?: string;
+
+  @IsOptional()
+  @IsString()
   ciudad?: string;
 
   @IsOptional()

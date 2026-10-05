@@ -66,6 +66,7 @@ export interface Persona {
   telefono_secundario?: string | null;
   celular?: string | null;
   direccion_principal?: string | null;
+  url_ubicacion?: string | null;
   barrio_zona?: string | null;
   ciudad: string;
   departamento?: string | null;
@@ -213,6 +214,7 @@ export interface CreatePersonaNestedDto {
   telefono_principal?: string;
   celular?: string;
   direccion_principal?: string;
+  url_ubicacion?: string;
   ciudad?: string;
   departamento?: string;
 }
@@ -295,6 +297,7 @@ export interface CreateClienteConPersonaDto {
   telefono_secundario?: string;
   celular?: string;
   direccion_principal?: string;
+  url_ubicacion?: string;
   barrio_zona?: string;
   ciudad?: string;
   departamento?: string;

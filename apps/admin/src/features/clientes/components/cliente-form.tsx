@@ -51,7 +51,7 @@ import {
 } from '@/types/clientes';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, ExternalLink, Link, Loader2, Mail, Plus, Save, Star, Trash2, User } from 'lucide-react';
+import { ArrowLeft, Building2, ExternalLink, Link, Loader2, Mail, MapPin, Navigation, Plus, Save, Star, Trash2, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -95,6 +95,7 @@ const clienteFormSchema = z.object({
   telefono_principal: z.string().optional(),
   celular: z.string().optional(),
   direccion_principal: z.string().optional(),
+  url_ubicacion: z.string().optional(),
   ciudad: z.string().optional(),
   departamento: z.string().optional(),
 
@@ -289,6 +290,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
     form.setValue('telefono_principal', p.telefono_principal || '');
     form.setValue('celular', p.celular || '');
     form.setValue('direccion_principal', p.direccion_principal || '');
+    form.setValue('url_ubicacion', (p as any).url_ubicacion || '');
     form.setValue('ciudad', p.ciudad || '');
     form.setValue('departamento', p.departamento || '');
     // Auto-fill client data
@@ -331,7 +333,10 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
         email_principal: persona?.email_principal || '',
         telefono_principal: persona?.telefono_principal || '',
         celular: persona?.celular || '',
-        direccion_principal: persona?.direccion_principal || '',
+        direccion_principal: persona?.direccion_principal && !persona.direccion_principal.startsWith('http')
+          ? persona.direccion_principal
+          : (persona?.direccion_principal && !(persona as any)?.url_ubicacion ? '' : persona?.direccion_principal || ''),
+        url_ubicacion: (persona as any)?.url_ubicacion || (persona?.direccion_principal?.startsWith('http') ? persona.direccion_principal : ''),
         ciudad: persona?.ciudad || 'Bogotá',
         departamento: persona?.departamento || '',
         // Cliente
@@ -387,6 +392,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
             telefono_principal: values.telefono_principal || undefined,
             celular: values.celular || undefined,
             direccion_principal: values.direccion_principal || undefined,
+            url_ubicacion: values.url_ubicacion && values.url_ubicacion.trim() !== '' ? values.url_ubicacion.trim() : undefined,
             ciudad: values.ciudad || 'Bogotá',
             departamento: values.departamento || undefined,
           },
@@ -458,6 +464,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
             telefono_principal: values.telefono_principal || undefined,
             celular: values.celular || undefined,
             direccion_principal: values.direccion_principal || undefined,
+            url_ubicacion: values.url_ubicacion && values.url_ubicacion.trim() !== '' ? values.url_ubicacion.trim() : undefined,
             ciudad: values.ciudad || undefined,
             departamento: values.departamento || undefined,
           },
@@ -1171,13 +1178,14 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            {/* Teléfonos y ciudad */}
+            <div className="grid md:grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="celular"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Celular</FormLabel>
+                    <FormLabel>Celular / WhatsApp</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="300 123 4567"
@@ -1191,47 +1199,13 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
 
               <FormField
                 control={form.control}
-                name="direccion_principal"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center justify-between">
-                      <FormLabel>Dirección</FormLabel>
-                      {field.value && /^https?:\/\//i.test(field.value.trim()) && (
-                        <a
-                          href={field.value.trim()}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1"
-                        >
-                          <ExternalLink className="h-3 w-3" /> Probar enlace de mapa
-                        </a>
-                      )}
-                    </div>
-                    <FormControl>
-                      <Input
-                        placeholder="Calle/Carrera #00-00 o link de Google Maps"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Dirección física o enlace compartido de Google Maps / Waze.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
                 name="ciudad"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Ciudad</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Bogotá"
+                        placeholder="Cartagena"
                         {...field}
                       />
                     </FormControl>
@@ -1248,7 +1222,7 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                     <FormLabel>Departamento</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Cundinamarca"
+                        placeholder="Bolívar"
                         {...field}
                       />
                     </FormControl>
@@ -1256,6 +1230,81 @@ export function ClienteForm({ clienteId, mode }: ClienteFormProps) {
                   </FormItem>
                 )}
               />
+            </div>
+
+            {/* ===== SECCIÓN ESPECÍFICA DE UBICACIÓN (2 APARTADOS) ===== */}
+            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-4">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm">
+                <MapPin className="h-4 w-4 text-blue-600" />
+                <span>Geolocalización y Ubicación Física</span>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* 1. Ubicación Descriptiva */}
+                <FormField
+                  control={form.control}
+                  name="direccion_principal"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5 text-slate-700 font-medium">
+                        <Navigation className="h-3.5 w-3.5 text-slate-500" />
+                        Ubicación Descriptiva (Dirección / Referencias)
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Ej: Cra. 1 #2-3, Barrio Bocagrande, Edificio Baracoa (Torre 1, Entrada frente al mar, cuarto de máquinas en sótano)"
+                          className="min-h-[85px] bg-white resize-none text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Dirección física, número de inmueble, indicaciones de llegada o referencias visuales para el equipo técnico.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* 2. Ubicación desde Google Maps / URL */}
+                <FormField
+                  control={form.control}
+                  name="url_ubicacion"
+                  render={({ field }) => {
+                    const hasValidUrl = !!field.value && /^https?:\/\//i.test(field.value.trim());
+                    return (
+                      <FormItem>
+                        <div className="flex items-center justify-between">
+                          <FormLabel className="flex items-center gap-1.5 text-slate-700 font-medium">
+                            <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                            Ubicación Google Maps / URL de Ubicación
+                          </FormLabel>
+                          {hasValidUrl && (
+                            <a
+                              href={field.value!.trim()}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center gap-1 bg-blue-100/70 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 transition-colors"
+                            >
+                              <ExternalLink className="h-3 w-3" /> Probar enlace
+                            </a>
+                          )}
+                        </div>
+                        <FormControl>
+                          <Input
+                            placeholder="https://maps.app.goo.gl/... o https://share.google/..."
+                            className="bg-white text-sm"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Enlace compartido de Google Maps, Waze, Apple Maps o coordenadas satelitales.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>

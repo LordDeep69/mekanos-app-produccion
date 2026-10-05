@@ -211,6 +211,15 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
   const totalPlantas = cliente.total_equipos_plantas ?? cliente.equipos?.filter(e => (e as any).tipo === 'GENERADOR' || (e as any).id_tipo_equipo === 3).length ?? 0;
   const totalBombas = cliente.total_equipos_bombas ?? cliente.equipos?.filter(e => (e as any).tipo === 'BOMBA').length ?? 0;
 
+  // Ubicación descriptiva y enlace de geolocalización satelital
+  const ubicacionDescriptiva = persona?.direccion_principal && !isMapsUrl(persona.direccion_principal)
+    ? persona.direccion_principal
+    : (persona?.direccion_principal && !persona.direccion_principal.startsWith('http') ? persona.direccion_principal : null);
+
+  const ubicacionUrl = (persona as any)?.url_ubicacion
+    ? (persona as any).url_ubicacion
+    : (isMapsUrl(persona?.direccion_principal) ? persona?.direccion_principal : null);
+
   return (
     <div className="space-y-6">
       {/* ── HEADER PRINCIPAL ── */}
@@ -641,63 +650,107 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
 
                     <Separator className="my-2" />
 
-                    {/* Dirección y Geolocalización */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">Ubicación y Sede:</p>
+                    {/* Ubicación y Geolocalización (Dos apartados independientes) */}
+                    <div className="space-y-3 pt-1">
+                      <p className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                        Ubicación y Geolocalización:
+                      </p>
 
-                      {/* Detección inteligente de URL de Google Maps */}
-                      {isMapsUrl(persona.direccion_principal) ? (
+                      {/* 1. Ubicación Descriptiva */}
+                      {ubicacionDescriptiva ? (
+                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-sm space-y-1">
+                          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                            Ubicación Descriptiva (Dirección / Acceso)
+                          </span>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2">
+                              <MapPin className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+                              <div>
+                                <span className="font-semibold text-gray-900 leading-snug block">
+                                  {ubicacionDescriptiva}
+                                </span>
+                                {persona.barrio_zona && (
+                                  <span className="text-xs text-gray-500 block mt-0.5">
+                                    Barrio / Zona: {persona.barrio_zona}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => copyText(ubicacionDescriptiva, 'Dirección')}
+                              className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded shrink-0 cursor-pointer"
+                              title="Copiar dirección"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 bg-gray-50/60 rounded-xl border border-dashed border-gray-200 text-xs text-gray-400 italic">
+                          Sin dirección descriptiva registrada
+                        </div>
+                      )}
+
+                      {/* 2. Ubicación desde Google Maps / URL */}
+                      {ubicacionUrl ? (
                         <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
                               <Compass className="h-4 w-4 text-emerald-600" />
-                              Ubicación Satelital GPS / Maps
+                              Ubicación Google Maps / Satelital
                             </div>
                             <span className="text-[10px] bg-emerald-200 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
-                              GPS Listo
+                              GPS Activo
                             </span>
                           </div>
-                          <p className="text-xs text-gray-600 break-all font-mono">
-                            {persona.direccion_principal}
+                          <p className="text-xs text-gray-600 break-all font-mono line-clamp-1">
+                            {ubicacionUrl}
                           </p>
-                          <a
-                            href={persona.direccion_principal!}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-all shadow-2xs cursor-pointer"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            Abrir en Google Maps / Waze
-                          </a>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <a
+                              href={ubicacionUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-all shadow-2xs cursor-pointer"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Abrir en Google Maps / Waze
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copyText(ubicacionUrl, 'Enlace de ubicación')}
+                              className="p-2 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                              title="Copiar enlace"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        persona.direccion_principal && (
-                          <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 text-sm flex items-start justify-between gap-2">
-                            <div className="flex items-start gap-2">
-                              <MapPin className="h-4 w-4 text-gray-500 mt-0.5 shrink-0" />
-                              <div>
-                                <span className="font-medium text-gray-900">{persona.direccion_principal}</span>
-                                {persona.barrio_zona && (
-                                  <span className="text-xs text-gray-500 block">Barrio / Zona: {persona.barrio_zona}</span>
-                                )}
-                              </div>
-                            </div>
+                        ubicacionDescriptiva && (
+                          <div className="flex items-center justify-between p-2.5 bg-blue-50/50 rounded-xl border border-blue-100 text-xs text-blue-800">
+                            <span className="flex items-center gap-1.5">
+                              <Compass className="h-3.5 w-3.5 text-blue-600" />
+                              Búsqueda satelital por dirección
+                            </span>
                             <a
                               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                `${persona.direccion_principal}, ${persona.ciudad}, Colombia`
+                                `${ubicacionDescriptiva}, ${persona.ciudad}, Colombia`
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-600 font-bold hover:underline shrink-0 flex items-center gap-1"
+                              className="text-xs text-blue-700 font-bold hover:underline inline-flex items-center gap-1"
                             >
-                              Maps
+                              Buscar en Maps
                               <ExternalLink className="h-3 w-3" />
                             </a>
                           </div>
                         )
                       )}
 
-                      <div className="flex items-center gap-2 text-xs text-gray-600 pl-1">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 pl-1 pt-0.5">
                         <Globe className="h-3.5 w-3.5 text-gray-400" />
                         <span>
                           {persona.ciudad}

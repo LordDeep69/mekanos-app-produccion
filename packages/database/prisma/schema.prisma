@@ -1721,6 +1721,7 @@ model personas {
   telefono_secundario   String?                  @db.VarChar(20)
   celular               String?                  @db.VarChar(20)
   direccion_principal   String?                  @db.VarChar(300)
+  url_ubicacion         String?                  @db.VarChar(500)
   barrio_zona           String?                  @db.VarChar(100)
   ciudad                String                   @default("CARTAGENA") @db.VarChar(100)
   departamento          String?                  @default("BOLÍVAR") @db.VarChar(100)

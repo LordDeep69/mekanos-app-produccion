@@ -1,0 +1,16 @@
+{
+  "generado_en": "2026-10-03T17:45:37.031Z",
+  "proveedor": "nominatim",
+  "sobrescribir": false,
+  "total": 1,
+  "items": [
+    {
+      "id_cliente": 45,
+      "id_persona": 109,
+      "nombre": "HOTELES KARTAXA SAS",
+      "accion": "SIN_RESULTADO",
+      "motivo": "Sin resultados",
+      "consulta": "HOTELES KARTAXA SAS, CENTRO CRA 129-70, Cartagena, Bolívar, COLOMBIA"
+    }
+  ]
+}
