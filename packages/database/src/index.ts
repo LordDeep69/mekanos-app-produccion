@@ -11,6 +11,7 @@ export { PrismaService } from './prisma.service';
 
 // Export Prisma enums
 export {
-    origen_movimiento_inventario_enum, tipo_movimiento_inventario_enum
+    origen_movimiento_inventario_enum, tipo_movimiento_inventario_enum,
+    destino_articulo_enum, origen_costo_enum
 } from '@prisma/client';
 

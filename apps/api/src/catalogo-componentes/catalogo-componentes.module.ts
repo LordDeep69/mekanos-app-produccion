@@ -4,6 +4,7 @@ import { PrismaModule } from '../database/prisma.module';
 import { CATALOGO_COMPONENTES_REPOSITORY } from './catalogo-componentes.constants';
 import { CatalogoComponentesController } from './catalogo-componentes.controller';
 import { PrismaCatalogoComponentesRepository } from './infrastructure/persistence/prisma-catalogo-componentes.repository';
+import { ArticulosService } from './articulos.service';
 
 // Command Handlers
 import { ActualizarCatalogoComponenteHandler } from './application/commands/actualizar-catalogo-componente.handler';
@@ -29,6 +30,7 @@ const queryHandlers = [
   imports: [CqrsModule, PrismaModule],
   controllers: [CatalogoComponentesController],
   providers: [
+    ArticulosService,
     {
       provide: CATALOGO_COMPONENTES_REPOSITORY,
       useClass: PrismaCatalogoComponentesRepository,
@@ -36,6 +38,6 @@ const queryHandlers = [
     ...commandHandlers,
     ...queryHandlers,
   ],
-  exports: [CATALOGO_COMPONENTES_REPOSITORY],
+  exports: [CATALOGO_COMPONENTES_REPOSITORY, ArticulosService],
 })
 export class CatalogoComponentesModule {}

@@ -189,7 +189,7 @@ model catalogo_actividades {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model catalogo_componentes {
-  id_componente                Int                             @id
+  id_componente                Int                             @id @default(autoincrement())
   id_tipo_componente           Int
   codigo_interno               String?                         @db.VarChar(50)
   referencia_fabricante        String                          @db.VarChar(100)
@@ -198,6 +198,14 @@ model catalogo_componentes {
   descripcion_detallada        String?
   especificaciones_tecnicas    Json?
   tipo_comercial               tipo_componente_comercial_enum? @default(ORIGINAL)
+  destino_articulo             destino_articulo_enum?          @default(INSUMO_SERVICIO)
+  es_comprable                 Boolean?                        @default(true)
+  es_facturable                Boolean?                        @default(true)
+  requiere_serializacion       Boolean?                        @default(false)
+  es_activo_fijo               Boolean?                        @default(false)
+  numero_serie_activo          String?                         @db.VarChar(100)
+  placa_inventario             String?                         @db.VarChar(100)
+  frecuencia_mantenimiento_meses Int?
   precio_compra                Decimal?                        @db.Decimal(12, 2)
   precio_venta                 Decimal?                        @db.Decimal(12, 2)
   ventana_costo_meses          Int?                            @default(3)
@@ -230,9 +238,13 @@ model catalogo_componentes {
   movimientos_inventario       movimientos_inventario[]
   ordenes_compra_detalle       ordenes_compra_detalle[]
   remisiones_detalle           remisiones_detalle[]
+  articulos_proveedores        articulos_proveedores[]
+  historial_costos_compra      historial_costos_compra[]
 
   @@index([referencia_fabricante], map: "idx_componente_referencia")
   @@index([id_tipo_componente], map: "idx_componente_tipo")
+  @@index([destino_articulo], map: "idx_componente_destino")
+  @@index([codigo_interno], map: "idx_componente_codigo_interno")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1846,6 +1858,8 @@ model proveedores {
   lotes_componentes     lotes_componentes[]
   ordenes_compra        ordenes_compra[]
   persona               personas                 @relation(fields: [id_persona], references: [id_persona], onDelete: SetNull, map: "fk_proveedores_persona")
+  articulos_proveedores articulos_proveedores[]
+  historial_costos_compra historial_costos_compra[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -2150,6 +2164,7 @@ model usuarios {
   cuentas_email_cuentas_email_modificado_porTousuarios cuentas_email[]      @relation("cuentas_email_modificado_porTousuarios")
   persona                                              personas             @relation(fields: [id_persona], references: [id_persona], onDelete: Cascade, onUpdate: NoAction, map: "fk_usuarios_persona")
   usuarios_roles                                       usuarios_roles[]
+  historial_costos_compra                              historial_costos_compra[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -2976,4 +2991,72 @@ model ordenes_pendientes {
   @@index([id_orden_equipo], map: "idx_op_orden_equipo")
   @@index([fecha_creacion(sort: Desc)], map: "idx_op_fecha_creacion")
 }
+
+model articulos_proveedores {
+  id_componente           Int
+  id_proveedor            Int
+  referencia_proveedor    String                @db.VarChar(100)
+  marca_ofrecida          String?               @db.VarChar(100)
+  nombre_segun_proveedor  String?               @db.VarChar(200)
+  costo_actual            Decimal               @default(0) @db.Decimal(12, 2)
+  moneda                  String                @default("COP") @db.VarChar(10)
+  tiempo_entrega_dias     Int?                  @default(1)
+  cantidad_minima_compra  Decimal?              @default(1) @db.Decimal(10, 2)
+  escalas_precios         Json?
+  es_proveedor_preferido  Boolean               @default(false)
+  url_producto_proveedor  String?               @db.VarChar(500)
+  activo                  Boolean               @default(true)
+  notas                   String?
+  fecha_registro          DateTime              @default(now()) @db.Timestamp(6)
+  fecha_actualizacion     DateTime?             @updatedAt @db.Timestamp(6)
+  registrado_por          Int?
+  modificado_por          Int?
+  catalogo_componentes    catalogo_componentes  @relation(fields: [id_componente], references: [id_componente], onDelete: Cascade)
+  proveedores             proveedores           @relation(fields: [id_proveedor], references: [id_proveedor], onUpdate: Restrict)
+
+  @@id([id_componente, id_proveedor])
+  @@index([referencia_proveedor], map: "idx_articulos_proveedores_ref")
+  @@index([id_proveedor], map: "idx_articulos_proveedores_prov")
+  @@index([id_componente, es_proveedor_preferido], map: "idx_articulos_proveedores_pref")
+}
+
+model historial_costos_compra {
+  id_historial_costo       Int                   @id @default(autoincrement())
+  id_componente            Int
+  id_proveedor             Int?
+  costo_unitario           Decimal               @db.Decimal(12, 2)
+  costo_unitario_anterior  Decimal?              @db.Decimal(12, 2)
+  moneda                   String                @default("COP") @db.VarChar(10)
+  porcentaje_variacion     Decimal?              @db.Decimal(6, 2)
+  cantidad_adquirida       Decimal?              @db.Decimal(10, 2)
+  numero_factura_oc        String?               @db.VarChar(100)
+  origen_cambio            origen_costo_enum     @default(REGISTRO_INICIAL)
+  observaciones            String?
+  id_usuario               Int?
+  fecha_registro           DateTime              @default(now()) @db.Timestamp(6)
+  catalogo_componentes     catalogo_componentes  @relation(fields: [id_componente], references: [id_componente], onDelete: Cascade)
+  proveedores              proveedores?          @relation(fields: [id_proveedor], references: [id_proveedor], onDelete: SetNull)
+  usuarios                 usuarios?             @relation(fields: [id_usuario], references: [id_usuario], onDelete: SetNull)
+
+  @@index([id_componente, fecha_registro(sort: Desc)], map: "idx_historial_costos_comp_fecha")
+  @@index([id_proveedor], map: "idx_historial_costos_prov")
+  @@index([fecha_registro], map: "idx_historial_costos_fecha")
+}
+
+enum destino_articulo_enum {
+  INSUMO_SERVICIO
+  REPUESTO_CORRECTIVO
+  HERRAMIENTA_ACTIVO
+  DOTACION_EPP
+  CONSUMIBLE_TALLER
+}
+
+enum origen_costo_enum {
+  REGISTRO_INICIAL
+  ACTUALIZACION_PROVEEDOR
+  ORDEN_COMPRA
+  RECEPCION_FACTURA
+  AJUSTE_AUDITORIA
+}
+
 
