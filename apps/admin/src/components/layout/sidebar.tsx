@@ -29,7 +29,9 @@ import {
   PanelLeftOpen,
   Settings2,
   Shield,
+  ShoppingCart,
   Tag,
+  Truck,
   Users2,
   Wrench,
   Zap,
@@ -64,6 +66,7 @@ const navSections: NavSection[] = [
     label: 'Gestión',
     items: [
       { title: 'Clientes', href: '/clientes', icon: Building2 },
+      { title: 'Compras y Catálogo', href: '/compras/catalogo', icon: ShoppingCart, badge: 'Nuevo' },
       { title: 'Equipos', href: '/equipos', icon: Wrench },
       { title: 'Empleados', href: '/empleados', icon: Users2 },
       { title: 'Inventario', href: '/inventario', icon: Package },
