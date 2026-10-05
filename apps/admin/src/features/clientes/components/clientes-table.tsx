@@ -233,7 +233,7 @@ export function ClientesTable() {
       const headers = [
         'Código',
         'Nombre / Razón Social',
-        'Estructura',
+        'Relación de Sedes',
         'Sede De',
         'Total Sedes',
         'NIT / Identificación',
@@ -658,23 +658,28 @@ export function ClientesTable() {
             </SelectContent>
           </Select>
 
-          {/* Filtro por estructura jerárquica (Principales / Sedes / Independientes) */}
+          {/* Filtro por relación de sedes (Matrices / Sedes / Independientes) */}
           <Select value={estructuraFilter} onValueChange={handleEstructuraChange}>
-            <SelectTrigger className="w-full sm:w-[185px] h-9 text-xs sm:text-sm">
-              <SelectValue placeholder="Estructura" />
+            <SelectTrigger
+              className="w-full sm:w-[210px] h-9 text-xs sm:text-sm"
+              title="Filtrar por Matrices, Sedes o Clientes Independientes"
+            >
+              <SelectValue placeholder="Matrices y Sedes" />
             </SelectTrigger>
             <SelectContent className="bg-white border border-slate-200 shadow-xl z-50">
-              <SelectItem value="TODOS">Todas las estructuras</SelectItem>
+              <SelectItem value="TODOS">
+                <span>Todos los clientes</span>
+              </SelectItem>
               <SelectItem value="PRINCIPALES">
                 <span className="flex items-center gap-1.5">
                   <span className="text-xs">🏢</span>
-                  <span>Matrices ({summary?.corporativos ?? 0})</span>
+                  <span>Clientes Principales ({summary?.corporativos ?? 0})</span>
                 </span>
               </SelectItem>
               <SelectItem value="SEDES">
                 <span className="flex items-center gap-1.5">
                   <span className="text-xs">📍</span>
-                  <span>Sedes ({summary?.sedes ?? 0})</span>
+                  <span>Sedes / Sucursales ({summary?.sedes ?? 0})</span>
                 </span>
               </SelectItem>
               <SelectItem value="INDEPENDIENTES">
