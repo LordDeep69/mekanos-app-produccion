@@ -836,14 +836,22 @@ export class ClientesService implements OnModuleInit {
 
     let cuenta_email: any = null;
     if (cliente.id_cuenta_email_remitente) {
-      cuenta_email = await this.prisma.cuentas_email.findUnique({
+      const cuenta = await this.prisma.cuentas_email.findUnique({
         where: { id_cuenta_email: cliente.id_cuenta_email_remitente },
         select: {
           id_cuenta_email: true,
           email: true,
-          nombre_remitente: true,
+          nombre: true,
         },
       });
+      if (cuenta) {
+        cuenta_email = {
+          id_cuenta_email: cuenta.id_cuenta_email,
+          email: cuenta.email,
+          nombre: cuenta.nombre,
+          nombre_remitente: cuenta.nombre,
+        };
+      }
     }
 
     const total_ordenes = await this.prisma.ordenes_servicio.count({
