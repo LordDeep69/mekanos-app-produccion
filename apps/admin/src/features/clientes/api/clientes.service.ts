@@ -59,6 +59,9 @@ export async function getClientes(
   if (params?.tipo_equipo && params.tipo_equipo !== 'TODOS') {
     queryParams.append('tipo_equipo', params.tipo_equipo);
   }
+  if (params?.estructura && params.estructura !== 'TODOS') {
+    queryParams.append('estructura', params.estructura);
+  }
 
   const url = queryParams.toString()
     ? `${CLIENTES_BASE}?${queryParams.toString()}`

@@ -90,6 +90,7 @@ export class ClientesController {
     @Query('cliente_activo') cliente_activo?: string,
     @Query('search') search?: string,
     @Query('tipo_equipo') tipo_equipo?: string,
+    @Query('estructura') estructura?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
@@ -107,6 +108,7 @@ export class ClientesController {
           : undefined,
       search,
       tipo_equipo,
+      estructura,
       skip: skipNum,
       take: takeNum,
       idAsesorAsignado: idAsesorFiltro,

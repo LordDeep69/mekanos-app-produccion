@@ -69,6 +69,7 @@ import {
   FileText,
   Layers,
   Mail,
+  MapPin,
   MoreVertical,
   Pencil,
   Phone,
@@ -98,6 +99,7 @@ export function ClientesTable() {
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoClienteEnum | 'TODOS'>('TODOS');
   const [tipoEquipoFilter, setTipoEquipoFilter] = useState<'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS'>('TODOS');
+  const [estructuraFilter, setEstructuraFilter] = useState<'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES'>('TODOS');
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   // Modal para inspección rápida de equipos
@@ -129,6 +131,7 @@ export function ClientesTable() {
     take: PAGE_SIZE,
     tipo_cliente: tipoFilter !== 'TODOS' ? tipoFilter : undefined,
     tipo_equipo: tipoEquipoFilter !== 'TODOS' ? tipoEquipoFilter : undefined,
+    estructura: estructuraFilter !== 'TODOS' ? estructuraFilter : undefined,
     search: search || undefined,
   });
 
@@ -149,6 +152,11 @@ export function ClientesTable() {
 
   const handleTipoEquipoChange = (value: string) => {
     setTipoEquipoFilter(value as any);
+    setPage(0);
+  };
+
+  const handleEstructuraChange = (value: string) => {
+    setEstructuraFilter(value as any);
     setPage(0);
   };
 
@@ -212,6 +220,7 @@ export function ClientesTable() {
         take: 1000,
         tipo_cliente: tipoFilter !== 'TODOS' ? tipoFilter : undefined,
         tipo_equipo: tipoEquipoFilter !== 'TODOS' ? tipoEquipoFilter : undefined,
+        estructura: estructuraFilter !== 'TODOS' ? estructuraFilter : undefined,
         search: search || undefined,
       });
 
@@ -224,6 +233,9 @@ export function ClientesTable() {
       const headers = [
         'Código',
         'Nombre / Razón Social',
+        'Estructura',
+        'Sede De',
+        'Total Sedes',
         'NIT / Identificación',
         'Tipo de Cliente',
         'Asesor Asignado',
@@ -231,6 +243,7 @@ export function ClientesTable() {
         'Correo',
         'Ciudad',
         'Dirección',
+        'Google Maps URL',
         'Tiene Plantas',
         'Total Plantas',
         'Tiene Bombas',
@@ -240,6 +253,13 @@ export function ClientesTable() {
 
       const csvRows = itemsToExport.map((c) => {
         const nombre = getClienteName(c);
+        const estructura = c.es_cliente_principal
+          ? 'Matriz / Principal'
+          : c.id_cliente_principal
+          ? 'Sede / Sucursal'
+          : 'Independiente';
+        const sedeDe = c.cliente_principal?.persona?.razon_social || c.cliente_principal?.persona?.nombre_comercial || '';
+        const totalSedes = (c as any).total_sedes || 0;
         const nit = getNit(c);
         const tipo = TIPO_CLIENTE_LABELS[c.tipo_cliente] || c.tipo_cliente;
         const asesor = c.asesor_asignado?.persona?.nombre_completo || 'Sin asignar';
@@ -247,6 +267,7 @@ export function ClientesTable() {
         const email = c.persona?.email_principal || '';
         const ciudad = c.persona?.ciudad || '';
         const dir = c.persona?.direccion_principal || '';
+        const mapsUrl = (c.persona as any)?.url_ubicacion || '';
         const tienePlantas = c.tiene_plantas ? 'SÍ' : 'NO';
         const totalPlantas = c.total_equipos_plantas || 0;
         const tieneBombas = c.tiene_bombas ? 'SÍ' : 'NO';
@@ -256,6 +277,9 @@ export function ClientesTable() {
         return [
           `"${(c.codigo_cliente || '').replace(/"/g, '""')}"`,
           `"${nombre.replace(/"/g, '""')}"`,
+          `"${estructura}"`,
+          `"${sedeDe.replace(/"/g, '""')}"`,
+          totalSedes,
           `"${nit.replace(/"/g, '""')}"`,
           `"${tipo.replace(/"/g, '""')}"`,
           `"${asesor.replace(/"/g, '""')}"`,
@@ -263,6 +287,7 @@ export function ClientesTable() {
           `"${email.replace(/"/g, '""')}"`,
           `"${ciudad.replace(/"/g, '""')}"`,
           `"${dir.replace(/"/g, '""')}"`,
+          `"${mapsUrl.replace(/"/g, '""')}"`,
           `"${tienePlantas}"`,
           totalPlantas,
           `"${tieneBombas}"`,
@@ -490,9 +515,41 @@ export function ClientesTable() {
                   mixtos
                 </span>
               </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground truncate hidden sm:block">
-                {summary?.corporativos ?? 0} corp · {summary?.sedes ?? 0} sedes
-              </p>
+              <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground truncate hidden sm:flex">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEstructuraFilter((prev) => (prev === 'PRINCIPALES' ? 'TODOS' : 'PRINCIPALES'));
+                    setPage(0);
+                  }}
+                  className={`hover:underline font-semibold transition-colors ${
+                    estructuraFilter === 'PRINCIPALES'
+                      ? 'text-indigo-800 font-bold underline bg-indigo-100/80 px-1 rounded'
+                      : 'text-purple-800 hover:text-purple-950'
+                  }`}
+                  title="Filtrar por Clientes Principales"
+                >
+                  {summary?.corporativos ?? 0} corp
+                </button>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEstructuraFilter((prev) => (prev === 'SEDES' ? 'TODOS' : 'SEDES'));
+                    setPage(0);
+                  }}
+                  className={`hover:underline font-semibold transition-colors ${
+                    estructuraFilter === 'SEDES'
+                      ? 'text-emerald-800 font-bold underline bg-emerald-100/80 px-1 rounded'
+                      : 'text-purple-800 hover:text-purple-950'
+                  }`}
+                  title="Filtrar por Sedes / Sucursales"
+                >
+                  {summary?.sedes ?? 0} sedes
+                </button>
+              </div>
             </div>
             <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
               <Layers className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -597,6 +654,34 @@ export function ClientesTable() {
               </SelectItem>
               <SelectItem value="SIN_EQUIPOS">
                 <span className="text-muted-foreground">Sin equipos</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Filtro por estructura jerárquica (Principales / Sedes / Independientes) */}
+          <Select value={estructuraFilter} onValueChange={handleEstructuraChange}>
+            <SelectTrigger className="w-full sm:w-[185px] h-9 text-xs sm:text-sm">
+              <SelectValue placeholder="Estructura" />
+            </SelectTrigger>
+            <SelectContent className="bg-white border border-slate-200 shadow-xl z-50">
+              <SelectItem value="TODOS">Todas las estructuras</SelectItem>
+              <SelectItem value="PRINCIPALES">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs">🏢</span>
+                  <span>Matrices ({summary?.corporativos ?? 0})</span>
+                </span>
+              </SelectItem>
+              <SelectItem value="SEDES">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs">📍</span>
+                  <span>Sedes ({summary?.sedes ?? 0})</span>
+                </span>
+              </SelectItem>
+              <SelectItem value="INDEPENDIENTES">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs">👤</span>
+                  <span>Independientes ({summary?.independientes ?? (summary ? summary.total - summary.corporativos - summary.sedes : 0)})</span>
+                </span>
               </SelectItem>
             </SelectContent>
           </Select>
@@ -711,10 +796,46 @@ export function ClientesTable() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <span className="font-medium text-foreground text-xs sm:text-sm">{getClienteName(cliente)}</span>
+                        {/* Badges de Jerarquía Estructural */}
+                        {cliente.es_cliente_principal && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0"
+                            title="Cliente Corporativo Matriz"
+                          >
+                            <span>🏢 Matriz</span>
+                            {Boolean((cliente as any).total_sedes && (cliente as any).total_sedes > 0) && (
+                              <span className="ml-0.5 px-1 py-0.2 bg-indigo-200/80 text-indigo-900 rounded text-[9px] font-bold">
+                                {(cliente as any).total_sedes} {(cliente as any).total_sedes === 1 ? 'sede' : 'sedes'}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {!cliente.es_cliente_principal && cliente.id_cliente_principal && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0"
+                            title="Sede Sucursal vinculada a un cliente matriz"
+                          >
+                            <span>📍 Sede</span>
+                          </span>
+                        )}
                       </div>
+
+                      {/* Sub-texto con enlace de matriz si es sede */}
+                      {!cliente.es_cliente_principal && cliente.cliente_principal && (
+                        <p className="text-[11px] text-muted-foreground pl-6 flex items-center gap-1 truncate">
+                          <span className="text-slate-400">↳ Matriz:</span>
+                          <span className="font-medium text-slate-700 truncate">
+                            {cliente.cliente_principal.persona?.razon_social ||
+                             cliente.cliente_principal.persona?.nombre_comercial ||
+                             cliente.cliente_principal.nombre_sede ||
+                             `Cliente #${cliente.id_cliente_principal}`}
+                          </span>
+                        </p>
+                      )}
+
                       {(cliente.tiene_plantas || cliente.tiene_bombas) && (
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {cliente.tiene_plantas && (
@@ -787,6 +908,27 @@ export function ClientesTable() {
                           <span className="truncate">{cliente.persona.email_principal}</span>
                         </span>
                       )}
+                      {/* Enlace directo a Google Maps si tiene URL registrada */}
+                      {cliente.persona?.url_ubicacion ? (
+                        <a
+                          href={cliente.persona.url_ubicacion}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline mt-0.5 w-fit"
+                          title="Abrir ubicación exacta en Google Maps"
+                        >
+                          <MapPin className="h-3 w-3 text-red-500 fill-red-500/20 flex-shrink-0" />
+                          <span className="truncate max-w-[140px]">
+                            {cliente.persona.ciudad ? `${cliente.persona.ciudad} (Mapa)` : 'Ver en Maps'}
+                          </span>
+                        </a>
+                      ) : cliente.persona?.direccion_principal ? (
+                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground truncate max-w-[150px]" title={cliente.persona.direccion_principal}>
+                          <MapPin className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                          <span className="truncate">{cliente.persona.direccion_principal}</span>
+                        </span>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell>

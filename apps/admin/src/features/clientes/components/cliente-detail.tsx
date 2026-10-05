@@ -990,37 +990,107 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             ) : null}
 
             {/* TARJETA 4: RED DE SEDES (Si es corporativo principal) */}
-            {esPrincipal && cliente.sedes && cliente.sedes.length > 0 && (
+            {esPrincipal && (
               <Card className="md:col-span-2 border border-gray-200 shadow-sm overflow-hidden">
-                <CardHeader className="bg-gray-50/70 border-b border-gray-100 p-4 px-5">
-                  <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-purple-600" />
-                    Sedes Vinculadas a este Corporativo ({cliente.sedes.length})
-                  </CardTitle>
-                  <CardDescription className="text-xs text-gray-500">
-                    Red de sucursales que dependen de esta cuenta principal
-                  </CardDescription>
+                <CardHeader className="bg-gray-50/70 border-b border-gray-100 p-4 px-5 flex flex-row items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-purple-600" />
+                      Sedes y Sucursales Vinculadas ({cliente.sedes?.length || 0})
+                    </CardTitle>
+                    <CardDescription className="text-xs text-gray-500">
+                      Red de sucursales operativas pertenecientes a esta cuenta matriz
+                    </CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push(`/clientes/nuevo?id_cliente_principal=${clienteId}`)}
+                    className="border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                    title="Registrar una nueva sede vinculada a este cliente matriz"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Registrar Sede
+                  </Button>
                 </CardHeader>
                 <CardContent className="p-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {cliente.sedes.map((sede: any) => (
-                      <button
-                        key={sede.id_cliente}
-                        onClick={() => router.push(`/clientes/${sede.id_cliente}`)}
-                        className="flex items-center justify-between p-3.5 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 transition-all text-left shadow-2xs group cursor-pointer"
+                  {cliente.sedes && cliente.sedes.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {cliente.sedes.map((sede: any) => {
+                        const totalEq = sede.equipos?.length || 0;
+                        const tieneMaps = Boolean(sede.persona?.url_ubicacion);
+                        const direccion = sede.persona?.direccion_principal || sede.persona?.ciudad;
+
+                        return (
+                          <div
+                            key={sede.id_cliente}
+                            onClick={() => router.push(`/clientes/${sede.id_cliente}`)}
+                            className="flex flex-col justify-between p-4 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50/40 transition-all text-left shadow-2xs group cursor-pointer bg-white"
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="font-bold text-sm text-gray-900 group-hover:text-purple-700 transition-colors leading-snug">
+                                  {sede.nombre_sede || 'Sede Sin Nombre'}
+                                </p>
+                                <span className="font-mono text-[11px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+                                  {sede.codigo_cliente || `#${sede.id_cliente}`}
+                                </span>
+                              </div>
+
+                              {direccion && (
+                                <p className="text-xs text-gray-600 flex items-center gap-1 truncate">
+                                  <MapPin className="h-3 w-3 text-gray-400 shrink-0" />
+                                  <span className="truncate">{direccion}</span>
+                                </p>
+                              )}
+
+                              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                                  <Wrench className="h-3 w-3 text-slate-500" />
+                                  {totalEq} {totalEq === 1 ? 'equipo' : 'equipos'}
+                                </span>
+
+                                {tieneMaps && (
+                                  <a
+                                    href={sede.persona.url_ubicacion}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded transition-colors"
+                                    title="Abrir ubicación de esta sede en Google Maps"
+                                  >
+                                    <Compass className="h-3 w-3 text-blue-600" />
+                                    <span>Maps</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs text-purple-700 font-semibold group-hover:text-purple-900">
+                              <span>Gestionar Sede</span>
+                              <ArrowLeft className="h-3.5 w-3.5 rotate-180 group-hover:translate-x-1 transition-all" />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 px-4 bg-gray-50/70 rounded-xl border border-dashed border-gray-200 space-y-2">
+                      <Building2 className="h-8 w-8 text-gray-400 mx-auto" />
+                      <p className="text-sm font-medium text-gray-700">
+                        Este cliente corporativo principal no tiene sedes o sucursales registradas aún.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => router.push(`/clientes/nuevo?id_cliente_principal=${clienteId}`)}
+                        className="mt-2 text-xs font-semibold text-purple-700 border-purple-200 hover:bg-purple-50"
                       >
-                        <div>
-                          <p className="font-bold text-sm text-gray-900 group-hover:text-purple-700 transition-colors">
-                            {sede.nombre_sede || 'Sede Sin Nombre'}
-                          </p>
-                          <p className="text-xs text-gray-500 font-mono mt-0.5">
-                            {sede.codigo_cliente || `Cliente #${sede.id_cliente}`}
-                          </p>
-                        </div>
-                        <ArrowLeft className="h-4 w-4 rotate-180 text-gray-400 group-hover:text-purple-600 group-hover:translate-x-1 transition-all" />
-                      </button>
-                    ))}
-                  </div>
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Registrar Primera Sede
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

@@ -250,6 +250,7 @@ export class ClientesService implements OnModuleInit {
 
         const fullCliente = {
           ...c,
+          total_sedes: (c as any)._count?.sedes || 0,
           tiene_plantas,
           tiene_bombas,
           total_equipos_plantas,
@@ -307,6 +308,7 @@ export class ClientesService implements OnModuleInit {
       idAsesorAsignado?: number;
       es_cliente_principal?: boolean;
       tipo_equipo?: string;
+      estructura?: string;
     }
   ) {
     const index = await this.getSearchIndex();
@@ -329,6 +331,18 @@ export class ClientesService implements OnModuleInit {
       }
       if (filters?.es_cliente_principal !== undefined && item.es_cliente_principal !== filters.es_cliente_principal) {
         return false;
+      }
+
+      // 1.1 Filtro de jerarquía estructural (Principales / Sedes / Independientes)
+      if (filters?.estructura && filters.estructura !== 'TODOS') {
+        const est = filters.estructura.toUpperCase().trim();
+        if (est === 'PRINCIPALES' || est === 'MATRICES' || est === 'MATRIZ') {
+          if (!item.es_cliente_principal) return false;
+        } else if (est === 'SEDES' || est === 'SUCURSALES') {
+          if (item.es_cliente_principal || !item.id_cliente_principal) return false;
+        } else if (est === 'INDEPENDIENTES' || est === 'INDIVIDUALES') {
+          if (item.es_cliente_principal || item.id_cliente_principal) return false;
+        }
       }
 
       // 2. Filtro por tipo de equipo (Plantas / Bombas)
@@ -728,6 +742,7 @@ export class ClientesService implements OnModuleInit {
     cliente_activo?: boolean;
     search?: string;
     tipo_equipo?: string;
+    estructura?: string;
     skip?: number;
     take?: number;
     idAsesorAsignado?: number;
@@ -737,6 +752,7 @@ export class ClientesService implements OnModuleInit {
       cliente_activo,
       search,
       tipo_equipo,
+      estructura,
       skip = 0,
       take = 50,
       idAsesorAsignado,
@@ -755,6 +771,7 @@ export class ClientesService implements OnModuleInit {
       sin_equipos: scopedIndex.filter((i) => !i.tiene_plantas && !i.tiene_bombas).length,
       corporativos: scopedIndex.filter((i) => i.es_cliente_principal).length,
       sedes: scopedIndex.filter((i) => !i.es_cliente_principal && i.id_cliente_principal).length,
+      independientes: scopedIndex.filter((i) => !i.es_cliente_principal && !i.id_cliente_principal).length,
       activos: scopedIndex.filter((i) => i.cliente_activo).length,
     };
 
@@ -763,6 +780,7 @@ export class ClientesService implements OnModuleInit {
       cliente_activo,
       idAsesorAsignado,
       tipo_equipo,
+      estructura,
     });
 
     const total = matches.length;
@@ -796,6 +814,17 @@ export class ClientesService implements OnModuleInit {
             id_cliente: true,
             nombre_sede: true,
             codigo_cliente: true,
+            persona: {
+              select: {
+                direccion_principal: true,
+                url_ubicacion: true,
+                ciudad: true,
+                departamento: true,
+                celular: true,
+                telefono_principal: true,
+                email_principal: true,
+              },
+            },
             equipos: {
               where: { activo: true },
               include: { tipos_equipo: true },

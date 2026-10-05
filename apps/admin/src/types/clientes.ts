@@ -115,7 +115,21 @@ export interface Cliente {
     nombre_sede?: string | null;
     persona?: { razon_social?: string | null; nombre_comercial?: string | null };
   } | null;
-  sedes?: Array<{ id_cliente: number; nombre_sede?: string | null; codigo_cliente?: string | null }>;
+  sedes?: Array<{
+    id_cliente: number;
+    nombre_sede?: string | null;
+    codigo_cliente?: string | null;
+    persona?: {
+      direccion_principal?: string | null;
+      url_ubicacion?: string | null;
+      ciudad?: string | null;
+      departamento?: string | null;
+      celular?: string | null;
+      telefono_principal?: string | null;
+      email_principal?: string | null;
+    };
+    equipos?: any[];
+  }>;
 }
 
 /**
@@ -123,6 +137,7 @@ export interface Cliente {
  */
 export interface ClienteConPersona extends Cliente {
   persona: Persona;
+  total_sedes?: number;
   firma_administrativa?: {
     id_firma_administrativa: number;
     nombre_de_firma: string | null;
@@ -168,6 +183,7 @@ export interface ClientesQueryParams {
   take?: number;
   search?: string;
   tipo_equipo?: 'TODOS' | 'PLANTAS' | 'BOMBAS' | 'AMBOS' | 'SIN_EQUIPOS' | string;
+  estructura?: 'TODOS' | 'PRINCIPALES' | 'SEDES' | 'INDEPENDIENTES' | string;
 }
 
 /**
@@ -181,6 +197,7 @@ export interface ClientesSummary {
   sin_equipos: number;
   corporativos: number;
   sedes: number;
+  independientes?: number;
   activos: number;
 }
 
