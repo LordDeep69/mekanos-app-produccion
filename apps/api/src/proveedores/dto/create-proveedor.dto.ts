@@ -70,8 +70,8 @@ export class CrearProveedorDto {
   ciudad?: string;
 
   @IsEnum(CategoriaProveedorEnum, { message: 'categoria_proveedor debe ser un valor válido' })
-  @IsNotEmpty({ message: 'categoria_proveedor es requerida' })
-  categoria_proveedor!: CategoriaProveedorEnum;
+  @IsOptional()
+  categoria_proveedor?: CategoriaProveedorEnum;
 
   @IsEnum(TipoProveedorEnum, { message: 'tipo_proveedor debe ser NACIONAL o INTERNACIONAL' })
   @IsOptional()
@@ -106,4 +106,35 @@ export class CrearProveedorDto {
   @IsString({ message: 'observaciones debe ser texto' })
   @IsOptional()
   observaciones?: string;
+
+  @IsString()
+  @IsOptional()
+  persona_contacto?: string;
+
+  @IsString()
+  @IsOptional()
+  email_facturacion?: string;
+
+  @IsString()
+  @IsOptional()
+  sitio_web?: string;
+
+  @IsString()
+  @IsOptional()
+  url_ubicacion?: string;
+
+  @IsString()
+  @IsOptional()
+  terminos_credito?: string;
+
+  @IsString()
+  @IsOptional()
+  observaciones_despacho?: string;
+
+  @IsString()
+  @IsOptional()
+  etiquetas_secundarias?: string;
+
+  @IsOptional()
+  rubros?: string[] | string;
 }

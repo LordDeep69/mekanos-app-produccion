@@ -98,19 +98,23 @@ export default function CategoriasTaxonomiaPage() {
   // Métricas calculadas recursivamente
   const metricas = useMemo(() => {
     let totalNodos = 0;
-    let familiasRaiz = arbol.length;
-    let totalArticulos = 0;
+    const familiasRaiz = arbol.length;
 
-    const contar = (nodos: CategoriaNodo[]) => {
+    const contarNodos = (nodos: CategoriaNodo[]) => {
       nodos.forEach((n) => {
         totalNodos++;
-        totalArticulos += n._count?.catalogo_componentes || 0;
         const hijos = n.hijos || n.subcategorias || [];
-        if (hijos.length > 0) contar(hijos);
+        if (hijos.length > 0) contarNodos(hijos);
       });
     };
+    contarNodos(arbol);
 
-    contar(arbol);
+    // Los artículos totales son la suma acumulada de las familias raíz (partición exhaustiva del árbol)
+    const totalArticulos = arbol.reduce(
+      (acc, raiz) => acc + (raiz.total_articulos ?? raiz._count?.catalogo_componentes ?? 0),
+      0,
+    );
+
     const subfamilias = totalNodos - familiasRaiz;
     return { totalNodos, familiasRaiz, subfamilias, totalArticulos };
   }, [arbol]);
@@ -301,9 +305,15 @@ export default function CategoriasTaxonomiaPage() {
 
             {/* Lado derecho: Contador artículos + Botones de acción */}
             <div className="flex items-center gap-2 shrink-0 ml-4">
-              {nodo._count?.catalogo_componentes !== undefined && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                  {nodo._count.catalogo_componentes} artículos
+              {((nodo.total_articulos ?? nodo._count?.catalogo_componentes) !== undefined) && (
+                <span
+                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full transition-colors ${
+                    (nodo.total_articulos ?? nodo._count?.catalogo_componentes ?? 0) > 0
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {nodo.total_articulos ?? nodo._count?.catalogo_componentes ?? 0} artículos
                 </span>
               )}
 

@@ -21,8 +21,8 @@ export class ProveedoresService {
         const nit = (createDto.numero_identificacion || '').trim();
         const razonSocial = (createDto.razon_social || createDto.nombre_comercial || '').trim();
 
-        if (!nit && !razonSocial) {
-          throw new BadRequestException('Se requiere id_persona o los datos fiscales de la empresa (NIT / Razón Social)');
+        if (!razonSocial) {
+          throw new BadRequestException('Se requiere la Razón Social o Nombre Comercial de la empresa');
         }
 
         // Buscar si ya existe la persona por identificación
@@ -42,21 +42,27 @@ export class ProveedoresService {
           personaId = personaExistente.id_persona;
           await this.prisma.personas.update({
             where: { id_persona: personaId },
-            data: { es_proveedor: true },
+            data: {
+              es_proveedor: true,
+              representante_legal: createDto.persona_contacto?.trim() || personaExistente.representante_legal,
+              url_ubicacion: createDto.url_ubicacion?.trim() || personaExistente.url_ubicacion,
+            },
           });
         } else {
           // Crear la persona jurídica
           const nuevaPersona = await this.prisma.personas.create({
             data: {
               tipo_identificacion: (createDto.tipo_identificacion as any) || 'NIT',
-              numero_identificacion: nit || `GEN-${Date.now()}`,
+              numero_identificacion: nit || `PROV-${Date.now().toString().slice(-8)}`,
               tipo_persona: 'JURIDICA',
-              nombre_completo: razonSocial || 'PROVEEDOR',
+              nombre_completo: razonSocial,
               razon_social: razonSocial,
               nombre_comercial: createDto.nombre_comercial?.trim() || razonSocial,
+              representante_legal: createDto.persona_contacto?.trim() || null,
               email_principal: createDto.email_principal?.trim() || null,
               telefono_principal: createDto.telefono_principal?.trim() || null,
               direccion_principal: createDto.direccion_principal?.trim() || null,
+              url_ubicacion: createDto.url_ubicacion?.trim() || null,
               ciudad: createDto.ciudad?.trim() || 'CARTAGENA',
               es_proveedor: true,
               activo: true,
@@ -88,20 +94,38 @@ export class ProveedoresService {
         codigo = `PROV-${String(total + 1).padStart(4, '0')}`;
       }
 
+      // Formatear rubros de suministro
+      let rubrosStr = '';
+      if (Array.isArray(createDto.rubros)) {
+        rubrosStr = createDto.rubros.filter(Boolean).join(', ');
+      } else if (createDto.rubros) {
+        rubrosStr = String(createDto.rubros);
+      }
+      const serviciosOfrecidosFinal = rubrosStr || createDto.servicios_ofrecidos || null;
+
+      // Formatear observaciones compuestas
+      const obsPartes: string[] = [];
+      if (createDto.terminos_credito) obsPartes.push(`Plazo de pago: ${createDto.terminos_credito}`);
+      if (createDto.email_facturacion) obsPartes.push(`Facturación: ${createDto.email_facturacion}`);
+      if (createDto.sitio_web) obsPartes.push(`Web: ${createDto.sitio_web}`);
+      if (createDto.observaciones_despacho) obsPartes.push(`Logística: ${createDto.observaciones_despacho}`);
+      if (createDto.observaciones) obsPartes.push(createDto.observaciones);
+      const observacionesFinal = obsPartes.join(' | ') || null;
+
       // Crear el proveedor
       return await this.prisma.proveedores.create({
         data: {
           id_persona: personaId,
           codigo_proveedor: codigo,
-          categoria_proveedor: createDto.categoria_proveedor,
+          categoria_proveedor: (createDto.categoria_proveedor as any) || 'REPUESTOS',
           tipo_proveedor: createDto.tipo_proveedor || 'NACIONAL',
           responsable_iva: createDto.responsable_iva ?? true,
           tiempo_entrega_dias: createDto.tiempo_entrega_dias || 1,
-          servicios_ofrecidos: createDto.servicios_ofrecidos,
+          servicios_ofrecidos: serviciosOfrecidosFinal,
           realiza_entregas: createDto.realiza_entregas ?? true,
-          zona_cobertura: createDto.zona_cobertura,
+          zona_cobertura: createDto.etiquetas_secundarias || createDto.zona_cobertura || null,
           proveedor_activo: createDto.proveedor_activo ?? true,
-          observaciones: createDto.observaciones,
+          observaciones: observacionesFinal,
           creado_por: userId || 1,
         },
         include: {

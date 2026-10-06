@@ -57,7 +57,7 @@ import { ProgresoRegistroService, HeartbeatProgresoDto } from './services/progre
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
-import { validarTransicion } from './domain/workflow-estados';
+import { VALIDACIONES_POR_ESTADO } from './domain/workflow-estados';
 
 /**
  * OrdenesController - FASE 3
@@ -2620,27 +2620,58 @@ export class OrdenesController {
 
     console.log(`🔄 [TRANSFER] Origen: ${ordenOrigen.numero_orden} (${estadoOrigen}) | Destino: ${ordenDestino.numero_orden} (${estadoDestino})`);
 
-    // 🛡️ COHERENCIA DE LA FSM (03-OCT-2026): la transferencia adopta el estado del
-    // origen (decisión explícita del negocio: así se recupera trabajo de campo ya
-    // registrado). Antes se escribía `id_estado_actual` directo, saltándose por
-    // completo la máquina de estados y dejando saltos inexplicables en el historial.
-    // Ahora la transición se valida y se registra con estado anterior y nuevo.
-    const estadoSeAdopta = estadoOrigen && estadoOrigen !== estadoDestino;
+    // ── ADOPCIÓN DE ESTADO (no "transición") ──
+    //
+    // La transferencia NO es un avance de una orden: es el reemplazo del cuerpo de
+    // trabajo de una orden por el de otra. Por eso NO se valida contra las aristas de
+    // la FSM. La FSM (`workflow-estados.ts`) modela el progreso de un técnico paso a
+    // paso — PROGRAMADA → ASIGNADA → EN_PROCESO → COMPLETADA — y exigir esa arista
+    // obligaría a recorrer estados intermedios que ya existen y son consistentes en la
+    // orden origen. Un fix previo aplicó `validarTransicion` aquí y bloqueó el caso
+    // de uso principal (ASIGNADA ← COMPLETADA), que es precisamente el escenario
+    // para el que existe esta función.
+    //
+    // Lo que sí debe cumplirse es que el estado adoptado sea VÁLIDO como estado final
+    // de una orden, es decir: que los campos que ese estado exige existan. Como esos
+    // campos viajan en la copia (PASO B), se valida un objeto compuesto.
+    const estadoSeAdopta = Boolean(estadoOrigen && estadoOrigen !== estadoDestino);
 
     if (estadoSeAdopta) {
-      validarTransicion(estadoDestino, estadoOrigen);
-    }
+      // CANCELADA no es adoptable: una orden cancelada representa una decisión
+      // operativa sobre ESA orden, no un cuerpo de trabajo reutilizable.
+      if (estadoOrigen === 'CANCELADA') {
+        throw new BadRequestException(
+          `No se puede transferir desde la orden ${ordenOrigen.numero_orden}: está CANCELADA. ` +
+          `Una orden cancelada no aporta datos de trabajo; use "Aprobar/Rechazar" sobre la orden destino.`,
+        );
+      }
 
-    // El técnico del destino se conserva siempre (decisión 03-OCT-2026): la
-    // transferencia mueve el trabajo de campo, no la asignación de personal.
-    // Invariante: si el estado adoptado exige técnico, el destino debe tenerlo.
-    const ESTADOS_QUE_EXIGEN_TECNICO = ['ASIGNADA', 'EN_PROCESO', 'EN_ESPERA_REPUESTO'];
-    if (estadoSeAdopta && ESTADOS_QUE_EXIGEN_TECNICO.includes(estadoOrigen) && !ordenDestino.id_tecnico_asignado) {
-      throw new BadRequestException(
-        `No se puede transferir: la orden destino ${ordenDestino.numero_orden} no tiene técnico asignado, ` +
-        `pero el estado de la orden origen es "${estadoOrigen}", que exige un técnico responsable. ` +
-        `Asigne un técnico a la orden destino antes de transferir.`,
-      );
+      // Estados que exigen un técnico responsable (invariante del dominio).
+      const ESTADOS_QUE_EXIGEN_TECNICO = ['ASIGNADA', 'EN_PROCESO', 'EN_ESPERA_REPUESTO'];
+      if (ESTADOS_QUE_EXIGEN_TECNICO.includes(estadoOrigen!) && !ordenDestino.id_tecnico_asignado) {
+        throw new BadRequestException(
+          `No se puede transferir: la orden destino ${ordenDestino.numero_orden} no tiene técnico asignado, ` +
+          `pero el estado de la orden origen es "${estadoOrigen}", que exige un técnico responsable. ` +
+          `Asigne un técnico a la orden destino antes de transferir.`,
+        );
+      }
+
+      // Los campos que el estado adoptado exige deben existir. Se evalúan sobre el
+      // objeto que la orden quedará tenga tras la copia, no sobre el estado actual del
+      // destino (que todavía no tiene los datos del origen).
+      const camposRequeridos = VALIDACIONES_POR_ESTADO[estadoOrigen!]?.campos_requeridos ?? [];
+      const datosTrasLaCopia: Record<string, unknown> = {
+        ...ordenOrigen,
+        id_tecnico_asignado: ordenDestino.id_tecnico_asignado,
+      };
+      const faltantes = camposRequeridos.filter((campo) => !datosTrasLaCopia[campo]);
+      if (faltantes.length > 0) {
+        throw new BadRequestException(
+          `No se puede adoptar el estado "${estadoOrigen}" en la orden ${ordenDestino.numero_orden}: ` +
+          `la orden origen ${ordenOrigen.numero_orden} no tiene ${faltantes.join(', ')}. ` +
+          `Un estado que exige esos campos no puede quedar incompleto.`,
+        );
+      }
     }
 
     // 3. Ejecutar transferencia en transacción atómica
@@ -2707,8 +2738,8 @@ export class OrdenesController {
       // ── TRAZABILIDAD INTERNA DE LA TRANSFERENCIA (03-OCT-2026) ──
       // Antes solo se escribía un historial con `id_estado_anterior` NULL y un texto
       // libre, lo que dejaba 1.430 de 1.521 registros de historial sin estado de
-      // partida (auditoría no reconstruible). Ahora la transición queda completa y el
-      // `metadata` registra el detalle forense de lo que se copió y lo que NO.
+      // partida (auditoría no reconstruible). Ahora se registran estado anterior y
+      // nuevo, y el `metadata` guarda el detalle forense de lo que se copió y lo que NO.
       const auditoria = {
         operacion: 'TRANSFERIR_DATOS_ENTRE_ORDENES',
         orden_origen_id: idOrdenOrigen,
@@ -2718,7 +2749,13 @@ export class OrdenesController {
         estado_origen: estadoOrigen ?? null,
         estado_destino_antes: estadoDestino,
         estado_destino_despues: estadoOrigen ?? estadoDestino,
-        transicion_validada: Boolean(estadoSeAdopta),
+        // La transferencia es una ADOPCIÓN de estado, no una transición por la FSM.
+        // Se deja explícito para que un auditor no interprete este salto como
+        // una transición saltada: el estado anterior y el nuevo quedan ambos
+        // registrados en las columnas propias del historial.
+        tipo_operacion: 'ADOPCION_ESTADO',
+        validado_contra_fsm: false,
+        validacion_aplicada: 'compatibilidad_de_destino',
         // Campos explícitos: la ausencia detransferencia de técnico y de equipo es
         // una decisión de negocio, no un olvido. Se hace auditable.
         tecnico_transferido: false,
@@ -2747,8 +2784,9 @@ export class OrdenesController {
           id_estado_nuevo: ordenOrigen.id_estado_actual,
           motivo_cambio: 'Transferencia de datos entre órdenes',
           observaciones:
-            `Estado ${estadoDestino} → ${estadoOrigen} por transferencia desde ` +
-            `${ordenOrigen.numero_orden} (ID ${idOrdenOrigen}). ` +
+            `ADOPCIÓN de estado por transferencia: ${estadoDestino} → ${estadoOrigen}, ` +
+            `tomando el cuerpo de trabajo de ${ordenOrigen.numero_orden} (ID ${idOrdenOrigen}). ` +
+            `No es una transición por la FSM: la transferencia reemplaza la orden, no la avanza. ` +
             `Técnico conservado: ${ordenDestino.id_tecnico_asignado ?? 'sin asignar'}. ` +
             `Equipos conservados (no se transfieren por diseño).`,
           accion: 'TRANSFERIR_DATOS',

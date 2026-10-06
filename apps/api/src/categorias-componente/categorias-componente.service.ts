@@ -22,6 +22,11 @@ export interface CategoriaNodo {
   slug_path: string;
   activo: boolean;
   total_articulos: number;
+  articulos_directos?: number;
+  _count?: {
+    catalogo_componentes?: number;
+    subcategorias?: number;
+  };
   subcategorias: CategoriaNodo[];
 }
 
@@ -63,8 +68,9 @@ export class CategoriasComponenteService {
     const mapaNodos = new Map<number, CategoriaNodo>();
     const raices: CategoriaNodo[] = [];
 
-    // 1. Inicializar mapa de nodos
+    // 1. Inicializar mapa de nodos con conteos directos
     for (const cat of categorias) {
+      const directos = cat._count?.catalogo_componentes || 0;
       mapaNodos.set(cat.id_categoria, {
         id_categoria: cat.id_categoria,
         codigo_categoria: cat.codigo_categoria,
@@ -75,7 +81,11 @@ export class CategoriasComponenteService {
         ruta_jerarquica: cat.ruta_jerarquica,
         slug_path: cat.slug_path,
         activo: cat.activo,
-        total_articulos: cat._count?.catalogo_componentes || 0,
+        articulos_directos: directos,
+        total_articulos: directos,
+        _count: {
+          catalogo_componentes: directos,
+        },
         subcategorias: [],
       });
     }
@@ -88,6 +98,23 @@ export class CategoriasComponenteService {
       } else {
         raices.push(nodo);
       }
+    }
+
+    // 3. Propagar acumulado de artículos recursivamente hacia los padres
+    const acumularArticulos = (nodo: CategoriaNodo): number => {
+      let sumaTotal = nodo.articulos_directos || 0;
+      for (const hijo of nodo.subcategorias) {
+        sumaTotal += acumularArticulos(hijo);
+      }
+      nodo.total_articulos = sumaTotal;
+      if (nodo._count) {
+        nodo._count.catalogo_componentes = sumaTotal;
+      }
+      return sumaTotal;
+    };
+
+    for (const raiz of raices) {
+      acumularArticulos(raiz);
     }
 
     return raices;

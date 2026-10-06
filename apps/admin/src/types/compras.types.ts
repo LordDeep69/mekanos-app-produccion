@@ -82,6 +82,8 @@ export interface CategoriaNodo {
     catalogo_componentes?: number;
     subcategorias?: number;
   };
+  total_articulos?: number;
+  articulos_directos?: number;
 }
 
 export interface CreateCategoriaPayload {
