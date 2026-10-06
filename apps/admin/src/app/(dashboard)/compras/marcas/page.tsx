@@ -76,7 +76,7 @@ export default function MarcasPage() {
       if (showToast) setRefreshing(true);
       else setLoading(true);
 
-      const data = await comprasService.getMarcas('', 200);
+      const data = await comprasService.getMarcas('', 100);
       setMarcas(data);
 
       if (showToast) toast.success('Directorio de marcas actualizado');

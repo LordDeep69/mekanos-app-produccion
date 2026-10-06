@@ -1,5 +1,6 @@
 import { PrismaService } from '@mekanos/database';
 import {
+    BadRequestException,
     ConflictException,
     Injectable,
     InternalServerErrorException,
@@ -14,41 +15,101 @@ export class ProveedoresService {
 
   async create(createDto: CrearProveedorDto, userId: number) {
     try {
-      // Verificar que la persona existe y no está asignada a otro proveedor
-      const persona = await this.prisma.personas.findUnique({
-        where: { id_persona: createDto.id_persona },
-        include: { proveedores: true },
-      });
+      let personaId = createDto.id_persona;
 
-      if (!persona) {
-        throw new NotFoundException(`Persona con ID ${createDto.id_persona} no encontrada`);
+      if (!personaId) {
+        const nit = (createDto.numero_identificacion || '').trim();
+        const razonSocial = (createDto.razon_social || createDto.nombre_comercial || '').trim();
+
+        if (!nit && !razonSocial) {
+          throw new BadRequestException('Se requiere id_persona o los datos fiscales de la empresa (NIT / Razón Social)');
+        }
+
+        // Buscar si ya existe la persona por identificación
+        const personaExistente = nit
+          ? await this.prisma.personas.findFirst({
+              where: { numero_identificacion: nit },
+              include: { proveedores: true },
+            })
+          : null;
+
+        if (personaExistente) {
+          if (personaExistente.proveedores) {
+            throw new ConflictException(
+              `La persona/empresa con identificación ${nit} ya está registrada como proveedor.`,
+            );
+          }
+          personaId = personaExistente.id_persona;
+          await this.prisma.personas.update({
+            where: { id_persona: personaId },
+            data: { es_proveedor: true },
+          });
+        } else {
+          // Crear la persona jurídica
+          const nuevaPersona = await this.prisma.personas.create({
+            data: {
+              tipo_identificacion: (createDto.tipo_identificacion as any) || 'NIT',
+              numero_identificacion: nit || `GEN-${Date.now()}`,
+              tipo_persona: 'JURIDICA',
+              nombre_completo: razonSocial || 'PROVEEDOR',
+              razon_social: razonSocial,
+              nombre_comercial: createDto.nombre_comercial?.trim() || razonSocial,
+              email_principal: createDto.email_principal?.trim() || null,
+              telefono_principal: createDto.telefono_principal?.trim() || null,
+              direccion_principal: createDto.direccion_principal?.trim() || null,
+              ciudad: createDto.ciudad?.trim() || 'CARTAGENA',
+              es_proveedor: true,
+              activo: true,
+              creado_por: userId || 1,
+            },
+          });
+          personaId = nuevaPersona.id_persona;
+        }
+      } else {
+        // Verificar que la persona existe y no está asignada a otro proveedor
+        const persona = await this.prisma.personas.findUnique({
+          where: { id_persona: personaId },
+          include: { proveedores: true },
+        });
+
+        if (!persona) {
+          throw new NotFoundException(`Persona con ID ${personaId} no encontrada`);
+        }
+
+        if (persona.proveedores) {
+          throw new ConflictException(`La persona ID ${personaId} ya está asignada como proveedor`);
+        }
       }
 
-      if (persona.proveedores) {
-        throw new ConflictException(`La persona ID ${createDto.id_persona} ya está asignada como proveedor`);
+      // Generar código de proveedor si no viene especificado
+      let codigo = createDto.codigo_proveedor;
+      if (!codigo) {
+        const total = await this.prisma.proveedores.count();
+        codigo = `PROV-${String(total + 1).padStart(4, '0')}`;
       }
 
       // Crear el proveedor
       return await this.prisma.proveedores.create({
         data: {
-          id_persona: createDto.id_persona,
+          id_persona: personaId,
+          codigo_proveedor: codigo,
           categoria_proveedor: createDto.categoria_proveedor,
           tipo_proveedor: createDto.tipo_proveedor || 'NACIONAL',
           responsable_iva: createDto.responsable_iva ?? true,
-          tiempo_entrega_dias: createDto.tiempo_entrega_dias,
+          tiempo_entrega_dias: createDto.tiempo_entrega_dias || 1,
           servicios_ofrecidos: createDto.servicios_ofrecidos,
           realiza_entregas: createDto.realiza_entregas ?? true,
           zona_cobertura: createDto.zona_cobertura,
           proveedor_activo: createDto.proveedor_activo ?? true,
           observaciones: createDto.observaciones,
-          creado_por: userId,
+          creado_por: userId || 1,
         },
         include: {
           persona: true,
         },
       });
     } catch (error: unknown) {
-      if (error instanceof NotFoundException || error instanceof ConflictException) {
+      if (error instanceof NotFoundException || error instanceof ConflictException || error instanceof BadRequestException) {
         throw error;
       }
       throw new InternalServerErrorException(

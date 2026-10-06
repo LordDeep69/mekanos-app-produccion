@@ -7,6 +7,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   Param,
@@ -56,6 +57,7 @@ import { ProgresoRegistroService, HeartbeatProgresoDto } from './services/progre
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
+import { validarTransicion } from './domain/workflow-estados';
 
 /**
  * OrdenesController - FASE 3
@@ -2590,17 +2592,56 @@ export class OrdenesController {
       throw new NotFoundException(`Orden destino #${idDestino} no encontrada`);
     }
 
-    // 2. Validar que destino NO esté en COMPLETADA o CANCELADA
-    // ✅ FIX 09-ABR-2026: APROBADA ya no es estado final, es el estado inicial de la orden
-    const estadoDestino = ordenDestino.estados_orden?.codigo_estado?.toUpperCase() || ordenDestino.estados_orden?.nombre_estado?.toUpperCase();
-    if (estadoDestino === 'COMPLETADA' || estadoDestino === 'CANCELADA') {
-      throw new BadRequestException(
-        `La orden destino #${idDestino} está en estado "${estadoDestino}" y no se puede sobrescribir. Solo se puede transferir a órdenes que no estén completadas o canceladas.`
+    // 2. Validar que el destino NO sea un estado final.
+    //
+    // 🛡️ FUENTE ÚNICA DE VERDAD (03-OCT-2026): antes esta comprobación mantenía su
+    // propia lista hardcodeada ['COMPLETADA','CANCELADA'] que ya divergía de tres
+    // definiciones distintas de "estado final" (FSM, columna es_estado_final, seed).
+    // Ahora se lee `es_estado_final` de la propia fila de estados_orden, de modo que
+    // el backend, el frontend y la base de datos no puedan discrepar.
+    const estadoDestinoRow = ordenDestino.estados_orden;
+    const estadoDestino = estadoDestinoRow?.codigo_estado?.toUpperCase();
+    const estadoOrigen = ordenOrigen.estados_orden?.codigo_estado?.toUpperCase();
+
+    if (!estadoDestinoRow || !estadoDestino) {
+      throw new InternalServerErrorException(
+        `La orden destino #${idDestino} tiene id_estado_actual=${ordenDestino.id_estado_actual} ` +
+        `sin relación válida en estados_orden. No se puede evaluar la transferencia.`,
       );
     }
 
-    console.log(`🔄 [TRANSFER] Orden origen: ${ordenOrigen.numero_orden} (estado: ${ordenOrigen.estados_orden?.nombre_estado})`);
-    console.log(`🔄 [TRANSFER] Orden destino: ${ordenDestino.numero_orden} (estado: ${estadoDestino})`);
+    if (estadoDestinoRow.es_estado_final) {
+      throw new BadRequestException(
+        `La orden destino #${idDestino} (${ordenDestino.numero_orden}) está en estado ` +
+        `"${estadoDestinoRow.nombre_estado}" y no se puede sobrescribir. ` +
+        `Solo se puede transferir a órdenes en estados no finales.`,
+      );
+    }
+
+    console.log(`🔄 [TRANSFER] Origen: ${ordenOrigen.numero_orden} (${estadoOrigen}) | Destino: ${ordenDestino.numero_orden} (${estadoDestino})`);
+
+    // 🛡️ COHERENCIA DE LA FSM (03-OCT-2026): la transferencia adopta el estado del
+    // origen (decisión explícita del negocio: así se recupera trabajo de campo ya
+    // registrado). Antes se escribía `id_estado_actual` directo, saltándose por
+    // completo la máquina de estados y dejando saltos inexplicables en el historial.
+    // Ahora la transición se valida y se registra con estado anterior y nuevo.
+    const estadoSeAdopta = estadoOrigen && estadoOrigen !== estadoDestino;
+
+    if (estadoSeAdopta) {
+      validarTransicion(estadoDestino, estadoOrigen);
+    }
+
+    // El técnico del destino se conserva siempre (decisión 03-OCT-2026): la
+    // transferencia mueve el trabajo de campo, no la asignación de personal.
+    // Invariante: si el estado adoptado exige técnico, el destino debe tenerlo.
+    const ESTADOS_QUE_EXIGEN_TECNICO = ['ASIGNADA', 'EN_PROCESO', 'EN_ESPERA_REPUESTO'];
+    if (estadoSeAdopta && ESTADOS_QUE_EXIGEN_TECNICO.includes(estadoOrigen) && !ordenDestino.id_tecnico_asignado) {
+      throw new BadRequestException(
+        `No se puede transferir: la orden destino ${ordenDestino.numero_orden} no tiene técnico asignado, ` +
+        `pero el estado de la orden origen es "${estadoOrigen}", que exige un técnico responsable. ` +
+        `Asigne un técnico a la orden destino antes de transferir.`,
+      );
+    }
 
     // 3. Ejecutar transferencia en transacción atómica
     const resultado = await this.prisma.$transaction(async (tx) => {
@@ -2618,12 +2659,12 @@ export class OrdenesController {
       console.log(`🗑️ [TRANSFER] Limpiando datos existentes en orden destino #${idDestino}...`);
 
       // ✅ FIX 14-ABR-2026: NO borrar ordenes_equipos - mantener equipo de orden destino
-      await tx.componentes_usados.deleteMany({ where: { id_orden_servicio: idDestino } });
-      await tx.evidencias_fotograficas.deleteMany({ where: { id_orden_servicio: idDestino } });
-      await tx.mediciones_servicio.deleteMany({ where: { id_orden_servicio: idDestino } });
-      await tx.actividades_ejecutadas.deleteMany({ where: { id_orden_servicio: idDestino } });
+      const delComponentes = await tx.componentes_usados.deleteMany({ where: { id_orden_servicio: idDestino } });
+      const delEvidencias = await tx.evidencias_fotograficas.deleteMany({ where: { id_orden_servicio: idDestino } });
+      const delMediciones = await tx.mediciones_servicio.deleteMany({ where: { id_orden_servicio: idDestino } });
+      const delActividades = await tx.actividades_ejecutadas.deleteMany({ where: { id_orden_servicio: idDestino } });
       // await tx.ordenes_equipos.deleteMany({ where: { id_orden_servicio: idDestino } }); // ❌ NO borrar equipos
-      await tx.ordenes_actividades_plan.deleteMany({ where: { id_orden_servicio: idDestino } });
+      const delPlan = await tx.ordenes_actividades_plan.deleteMany({ where: { id_orden_servicio: idDestino } });
 
       // ── PASO B: Copiar campos directos de la orden ──
       console.log(`📋 [TRANSFER] Copiando campos directos...`);
@@ -2631,7 +2672,10 @@ export class OrdenesController {
       await tx.ordenes_servicio.update({
         where: { id_orden_servicio: idDestino },
         data: {
-          id_estado_actual: ordenOrigen.id_estado_actual, // ✅ Transferir estado
+          // Adopta el estado del ORIGEN (decisión de negocio 03-OCT-2026), ya validado
+          // contra la FSM arriba. Si el estado no cambia, se envía el del destino para
+          // no generar un update redundante del campo.
+          id_estado_actual: estadoSeAdopta ? ordenOrigen.id_estado_actual : ordenDestino.id_estado_actual,
           trabajo_realizado: ordenOrigen.trabajo_realizado,
           observaciones_tecnico: ordenOrigen.observaciones_tecnico,
           observaciones_cierre: ordenOrigen.observaciones_cierre,
@@ -2660,17 +2704,60 @@ export class OrdenesController {
       });
       stats.camposDirectos = true;
 
-      // ✅ Crear registro en historial de estados
+      // ── TRAZABILIDAD INTERNA DE LA TRANSFERENCIA (03-OCT-2026) ──
+      // Antes solo se escribía un historial con `id_estado_anterior` NULL y un texto
+      // libre, lo que dejaba 1.430 de 1.521 registros de historial sin estado de
+      // partida (auditoría no reconstruible). Ahora la transición queda completa y el
+      // `metadata` registra el detalle forense de lo que se copió y lo que NO.
+      const auditoria = {
+        operacion: 'TRANSFERIR_DATOS_ENTRE_ORDENES',
+        orden_origen_id: idOrdenOrigen,
+        orden_origen_numero: ordenOrigen.numero_orden,
+        orden_destino_id: idDestino,
+        orden_destino_numero: ordenDestino.numero_orden,
+        estado_origen: estadoOrigen ?? null,
+        estado_destino_antes: estadoDestino,
+        estado_destino_despues: estadoOrigen ?? estadoDestino,
+        transicion_validada: Boolean(estadoSeAdopta),
+        // Campos explícitos: la ausencia detransferencia de técnico y de equipo es
+        // una decisión de negocio, no un olvido. Se hace auditable.
+        tecnico_transferido: false,
+        tecnico_conservado: ordenDestino.id_tecnico_asignado ?? null,
+        equipos_transferidos: false,
+        equipos_conservados: true,
+        campos_directos_sobrescritos: true,
+        // Conteo de lo SOBREESCRITO, tomado del `deleteMany` de PASO A (no de un
+        // `count` posterior, que siempre devolvería 0 al haber borrado ya).
+        sobrescrito_en_destino: {
+          componentes_usados: delComponentes,
+          evidencias_fotograficas: delEvidencias,
+          mediciones_servicio: delMediciones,
+          actividades_ejecutadas: delActividades,
+          ordenes_actividades_plan: delPlan,
+        },
+        usuario: userId ?? null,
+        timestamp: new Date().toISOString(),
+      };
+
       await tx.historial_estados_orden.create({
         data: {
           id_orden_servicio: idDestino,
+          // Estado anterior explícito: sin esto el salto queda huérfano en la auditoría.
+          id_estado_anterior: ordenDestino.id_estado_actual,
           id_estado_nuevo: ordenOrigen.id_estado_actual,
-          observaciones: `Estado transferido desde orden ${ordenOrigen.numero_orden} (ID: ${idOrdenOrigen})`,
+          motivo_cambio: 'Transferencia de datos entre órdenes',
+          observaciones:
+            `Estado ${estadoDestino} → ${estadoOrigen} por transferencia desde ` +
+            `${ordenOrigen.numero_orden} (ID ${idOrdenOrigen}). ` +
+            `Técnico conservado: ${ordenDestino.id_tecnico_asignado ?? 'sin asignar'}. ` +
+            `Equipos conservados (no se transfieren por diseño).`,
+          accion: 'TRANSFERIR_DATOS',
           fecha_cambio: new Date(),
-          realizado_por: userId || 1, // Usuario del sistema si no hay userId
+          realizado_por: userId || 1,
+          metadata: auditoria,
         },
       });
-      console.log(`🔄 [TRANSFER] Estado actualizado: ${ordenOrigen.estados_orden?.nombre_estado}`);
+      console.log(`🔄 [TRANSFER] Estado ${estadoDestino} → ${estadoOrigen} registrado en historial (auditado)`);
 
       // ── PASO C: NO copiar ordenes_equipos (mantener equipo de orden destino)
       // ✅ FIX 14-ABR-2026: Si el técnico se equivocó de equipo, queremos mantener el equipo correcto de destino

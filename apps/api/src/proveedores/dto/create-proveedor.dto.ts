@@ -30,8 +30,44 @@ enum CategoriaProveedorEnum {
 export class CrearProveedorDto {
   @IsInt({ message: 'id_persona debe ser un número entero' })
   @IsPositive({ message: 'id_persona debe ser positivo' })
-  @IsNotEmpty({ message: 'id_persona es requerido' })
-  id_persona!: number;
+  @IsOptional()
+  id_persona?: number;
+
+  @IsString()
+  @IsOptional()
+  codigo_proveedor?: string;
+
+  @IsString()
+  @IsOptional()
+  razon_social?: string;
+
+  @IsString()
+  @IsOptional()
+  nombre_comercial?: string;
+
+  @IsString()
+  @IsOptional()
+  tipo_identificacion?: string;
+
+  @IsString()
+  @IsOptional()
+  numero_identificacion?: string;
+
+  @IsString()
+  @IsOptional()
+  email_principal?: string;
+
+  @IsString()
+  @IsOptional()
+  telefono_principal?: string;
+
+  @IsString()
+  @IsOptional()
+  direccion_principal?: string;
+
+  @IsString()
+  @IsOptional()
+  ciudad?: string;
 
   @IsEnum(CategoriaProveedorEnum, { message: 'categoria_proveedor debe ser un valor válido' })
   @IsNotEmpty({ message: 'categoria_proveedor es requerida' })

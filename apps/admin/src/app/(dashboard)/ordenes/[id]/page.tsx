@@ -77,6 +77,7 @@ import {
     RefreshCw,
     Search,
     Settings,
+    ShieldCheck,
     Tag,
     Trash2,
     User,
@@ -1718,7 +1719,24 @@ export default function OrdenDetallePage() {
     const [transferSelectedOrder, setTransferSelectedOrder] = useState<any | null>(null);
     const [transferLoading, setTransferLoading] = useState(false);
     const [transferSearching, setTransferSearching] = useState(false);
-    const [transferResult, setTransferResult] = useState<{ success: boolean; message: string; stats?: any } | null>(null);
+    // 🛡️ 03-OCT-2026: la clave del payload es `estadisticas` (ver transferirDatosOrden
+    // en ordenes.service.ts). El tipo declaraba `stats`, así que el resumen de
+    // conteos que se muestra al usuario quedaba siempre en undefined aunque la
+    // transferencia hubiera copiado todo correctamente. Tipo explícito para que
+    // TypeScript detecte esta clase de desalineación en el futuro.
+    const [transferResult, setTransferResult] = useState<{
+        success: boolean;
+        message: string;
+        estadisticas?: {
+            camposDirectos: boolean;
+            ordenesEquipos: number;
+            actividadesEjecutadas: number;
+            evidenciasFotograficas: number;
+            medicionesServicio: number;
+            componentesUsados: number;
+            ordenesActividadesPlan: number;
+        };
+    } | null>(null);
 
     const router = useRouter();
     const { data, isLoading, isError, refetch } = useOrden(id);
@@ -1811,7 +1829,7 @@ export default function OrdenDetallePage() {
             setTransferResult({
                 success: true,
                 message: result.message,
-                stats: result.estadisticas,
+                estadisticas: result.estadisticas,
             });
             refetch();
         } catch (error: any) {
@@ -1876,8 +1894,14 @@ export default function OrdenDetallePage() {
     }
 
     const estadoActual = orden.estados_orden?.codigo_estado;
-    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial (orden recién creada/aprobada)
-    const esEstadoFinal = ['COMPLETADA', 'CANCELADA'].includes(estadoActual || '');
+    // 🛡️ FUENTE ÚNICA DE VERDAD (03-OCT-2026): antes era una lista hardcodeada
+    // ['COMPLETADA','CANCELADA'] que el backend no compartía. Esa divergencia era
+    // justamente lo que escondía el botón "Transferir Datos" en órdenes ASIGNADA.
+    // Ahora se lee `es_estado_final` de la fila de estados_orden: la misma fuente que
+    // usa el backend, de modo que UI y API no puedan discrepar.
+    // Fallback defensivo si la relación no viniera cargada.
+    const esEstadoFinal =
+        orden.estados_orden?.es_estado_final ?? ['COMPLETADA', 'CANCELADA'].includes(estadoActual || '');
 
     return (
         <div className="space-y-6">
@@ -2056,9 +2080,12 @@ export default function OrdenDetallePage() {
                             onClick={() => handleCambiarEstado('APROBADA')}
                         />
                     )}
-                    {/* ✅ FIX 13-MAR-2026: Botón de transferencia de datos */}
-                    {/* ✅ FIX 09-ABR-2026: Habilitado también para APROBADA (no solo EN_PROCESO) */}
-                    {(['EN_PROCESO', 'APROBADA'].includes(estadoActual || '')) && (
+                    {/* 🛡️ Transferencia de datos (03-OCT-2026).
+                        El gate anterior era una lista ['EN_PROCESO','APROBADA'] que
+                        contradecía al backend, que sí acepta cualquier estado no final.
+                        Por eso el botón NO aparecía en ASIGNADA pese a que la operación
+                        era válida. Ahora se usa la misma regla que el servidor. */}
+                    {!esEstadoFinal && (
                         <ActionButton
                             icon={ArrowRightLeft}
                             label="Transferir Datos"
@@ -2144,14 +2171,17 @@ export default function OrdenDetallePage() {
                                         <p className={cn("text-sm mt-1", transferResult.success ? "text-green-700" : "text-red-700")}>
                                             {transferResult.message}
                                         </p>
-                                        {transferResult.stats && (
+                                        {transferResult.estadisticas && (
                                             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                                <span className="text-green-700">Equipos: <strong>{transferResult.stats.ordenesEquipos}</strong></span>
-                                                <span className="text-green-700">Actividades: <strong>{transferResult.stats.actividadesEjecutadas}</strong></span>
-                                                <span className="text-green-700">Evidencias: <strong>{transferResult.stats.evidenciasFotograficas}</strong></span>
-                                                <span className="text-green-700">Mediciones: <strong>{transferResult.stats.medicionesServicio}</strong></span>
-                                                <span className="text-green-700">Componentes: <strong>{transferResult.stats.componentesUsados}</strong></span>
-                                                <span className="text-green-700">Plan Act.: <strong>{transferResult.stats.ordenesActividadesPlan}</strong></span>
+                                                {/* Nota: `ordenesEquipos` siempre es 0 por diseño —
+                                                    los equipos NO se transfieren. Se conserva la fila
+                                                    para no cambiar el layout, con el valor real. */}
+                                                <span className="text-green-700">Equipos: <strong>{transferResult.estadisticas.ordenesEquipos}</strong> <span className="text-green-500">(conservados)</span></span>
+                                                <span className="text-green-700">Actividades: <strong>{transferResult.estadisticas.actividadesEjecutadas}</strong></span>
+                                                <span className="text-green-700">Evidencias: <strong>{transferResult.estadisticas.evidenciasFotograficas}</strong></span>
+                                                <span className="text-green-700">Mediciones: <strong>{transferResult.estadisticas.medicionesServicio}</strong></span>
+                                                <span className="text-green-700">Componentes: <strong>{transferResult.estadisticas.componentesUsados}</strong></span>
+                                                <span className="text-green-700">Plan Act.: <strong>{transferResult.estadisticas.ordenesActividadesPlan}</strong></span>
                                             </div>
                                         )}
                                     </div>
@@ -2259,6 +2289,27 @@ export default function OrdenDetallePage() {
                                                 Esto incluye: actividades, evidencias, mediciones, firmas, componentes y observaciones.
                                                 Los datos existentes en la orden destino serán reemplazados.
                                             </p>
+                                            <div className="text-xs text-amber-700 bg-amber-100/60 rounded-lg p-2.5 space-y-1">
+                                                <p className="font-semibold flex items-center gap-1.5">
+                                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                                    Se conservan (no se transfieren):
+                                                </p>
+                                                <p>
+                                                    • <strong>Técnico asignado</strong> — sigue siendo {(() => {
+                                                        const p = orden.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
+                                                        const nombre = p
+                                                            ? [p.primer_nombre, p.primer_apellido].filter(Boolean).join(' ').trim()
+                                                            : '';
+                                                        return nombre || 'el de la orden destino';
+                                                    })()}
+                                                </p>
+                                                <p>
+                                                    • <strong>Equipos</strong> — se mantiene {orden.equipos?.codigo_equipo || 'el de la orden destino'}
+                                                </p>
+                                                <p className="text-amber-600">
+                                                    La operación queda registrada en el historial de estados para auditoría.
+                                                </p>
+                                            </div>
                                         </div>
                                     )}
                                 </div>

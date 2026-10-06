@@ -56,6 +56,49 @@ export default function ProveedoresPage() {
   const [selectedProveedor, setSelectedProveedor] = useState<ProveedorCompleto | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Modal de Creación
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createFormData, setCreateFormData] = useState({
+    razon_social: '',
+    nombre_comercial: '',
+    tipo_identificacion: 'NIT',
+    numero_identificacion: '',
+    email_principal: '',
+    telefono_principal: '',
+    ciudad: 'Cartagena',
+    direccion_principal: '',
+    categoria_proveedor: 'REPUESTOS',
+    tipo_proveedor: 'NACIONAL',
+    tiempo_entrega_dias: 1,
+    responsable_iva: true,
+    realiza_entregas: true,
+    proveedor_activo: true,
+    servicios_ofrecidos: '',
+    observaciones: '',
+  });
+
+  const resetCreateForm = () => {
+    setCreateFormData({
+      razon_social: '',
+      nombre_comercial: '',
+      tipo_identificacion: 'NIT',
+      numero_identificacion: '',
+      email_principal: '',
+      telefono_principal: '',
+      ciudad: 'Cartagena',
+      direccion_principal: '',
+      categoria_proveedor: 'REPUESTOS',
+      tipo_proveedor: 'NACIONAL',
+      tiempo_entrega_dias: 1,
+      responsable_iva: true,
+      realiza_entregas: true,
+      proveedor_activo: true,
+      servicios_ofrecidos: '',
+      observaciones: '',
+    });
+  };
+
   // Form State para edición
   const [formData, setFormData] = useState({
     categoria_proveedor: 'REPUESTOS',
@@ -152,6 +195,37 @@ export default function ProveedoresPage() {
     }
   };
 
+  // Crear nuevo proveedor
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createFormData.razon_social.trim()) {
+      toast.error('La Razón Social o Nombre de la Empresa es obligatoria');
+      return;
+    }
+    if (!createFormData.numero_identificacion.trim()) {
+      toast.error('El Número de Identificación / NIT es obligatorio');
+      return;
+    }
+
+    try {
+      setCreateSubmitting(true);
+      await comprasService.createProveedor({
+        ...createFormData,
+        tiempo_entrega_dias: Number(createFormData.tiempo_entrega_dias) || 1,
+      });
+      toast.success('Proveedor registrado exitosamente en el directorio');
+      setCreateModalOpen(false);
+      resetCreateForm();
+      cargarProveedores(true);
+    } catch (e: any) {
+      console.error('Error al registrar proveedor:', e);
+      const msg = e?.response?.data?.message || 'No se pudo registrar el proveedor';
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-20">
       {/* HEADER DE SECCIÓN */}
@@ -180,6 +254,18 @@ export default function ProveedoresPage() {
           >
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Actualizar
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => {
+              resetCreateForm();
+              setCreateModalOpen(true);
+            }}
+            className="h-10 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Registrar Proveedor
           </Button>
         </div>
       </div>
@@ -307,8 +393,21 @@ export default function ProveedoresPage() {
                     <Truck className="mx-auto h-8 w-8 text-gray-300 mb-2" />
                     <p className="text-sm font-semibold text-gray-700">No se encontraron proveedores</p>
                     <p className="text-xs text-gray-400 mt-1">
-                      {search ? 'Intenta con otro término de búsqueda' : 'No hay proveedores registrados.'}
+                      {search ? 'Intenta con otro término de búsqueda' : 'No hay proveedores registrados en el directorio.'}
                     </p>
+                    <div className="mt-4">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          resetCreateForm();
+                          setCreateModalOpen(true);
+                        }}
+                        className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        Registrar Proveedor Ahora
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -544,6 +643,304 @@ export default function ProveedoresPage() {
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {submitting ? 'Guardando...' : 'Guardar Cambios'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE CREACIÓN DE PROVEEDOR */}
+      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-gray-900">
+                  Registrar Nuevo Proveedor
+                </DialogTitle>
+                <DialogDescription className="text-xs text-gray-500">
+                  Alta en el directorio de la cadena de suministro y configuración comercial.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <form onSubmit={handleCreate} className="space-y-5 pt-3">
+            {/* SECCIÓN 1: DATOS FISCALES Y EMPRESA */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 space-y-3">
+              <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                Identidad Fiscal & Comercial
+              </h3>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="cr_razon_social" className="text-xs font-semibold text-gray-700">
+                    Razón Social / Nombre de Empresa <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="cr_razon_social"
+                    required
+                    placeholder="Ej: DISTRIBUIDORA DE FILTROS S.A.S"
+                    value={createFormData.razon_social}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, razon_social: e.target.value })
+                    }
+                    className="bg-white text-sm uppercase"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_nombre_comercial" className="text-xs font-semibold text-gray-700">
+                    Nombre Comercial (Opcional)
+                  </Label>
+                  <Input
+                    id="cr_nombre_comercial"
+                    placeholder="Ej: DISFILTROS DEL CARIBE"
+                    value={createFormData.nombre_comercial}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, nombre_comercial: e.target.value })
+                    }
+                    className="bg-white text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1.5 col-span-1">
+                    <Label htmlFor="cr_tipo_id" className="text-xs font-semibold text-gray-700">
+                      Tipo ID
+                    </Label>
+                    <select
+                      id="cr_tipo_id"
+                      value={createFormData.tipo_identificacion}
+                      onChange={(e) =>
+                        setCreateFormData({ ...createFormData, tipo_identificacion: e.target.value })
+                      }
+                      className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="NIT">NIT</option>
+                      <option value="CC">CC</option>
+                      <option value="CE">CE</option>
+                      <option value="PA">PA</option>
+                      <option value="DNI">DNI</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5 col-span-2">
+                    <Label htmlFor="cr_num_id" className="text-xs font-semibold text-gray-700">
+                      Identificación / NIT <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="cr_num_id"
+                      required
+                      placeholder="900.123.456-7"
+                      value={createFormData.numero_identificacion}
+                      onChange={(e) =>
+                        setCreateFormData({ ...createFormData, numero_identificacion: e.target.value })
+                      }
+                      className="bg-white text-sm font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_email" className="text-xs font-semibold text-gray-700">
+                    Correo Electrónico de Contacto
+                  </Label>
+                  <Input
+                    id="cr_email"
+                    type="email"
+                    placeholder="ventas@proveedor.com"
+                    value={createFormData.email_principal}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, email_principal: e.target.value })
+                    }
+                    className="bg-white text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_telefono" className="text-xs font-semibold text-gray-700">
+                    Teléfono / Celular
+                  </Label>
+                  <Input
+                    id="cr_telefono"
+                    placeholder="+57 300 123 4567"
+                    value={createFormData.telefono_principal}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, telefono_principal: e.target.value })
+                    }
+                    className="bg-white text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_ciudad" className="text-xs font-semibold text-gray-700">
+                    Ciudad Sede
+                  </Label>
+                  <Input
+                    id="cr_ciudad"
+                    placeholder="Cartagena"
+                    value={createFormData.ciudad}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, ciudad: e.target.value })
+                    }
+                    className="bg-white text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_direccion" className="text-xs font-semibold text-gray-700">
+                    Dirección Principal
+                  </Label>
+                  <Input
+                    id="cr_direccion"
+                    placeholder="Zona Industrial Mamonal Km 5"
+                    value={createFormData.direccion_principal}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, direccion_principal: e.target.value })
+                    }
+                    className="bg-white text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: CONDICIONES DE SUMINISTRO Y OPERACIÓN */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 space-y-3">
+              <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Truck className="h-4 w-4 text-emerald-600" />
+                Condiciones de Abastecimiento
+              </h3>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_categoria" className="text-xs font-semibold text-gray-700">
+                    Categoría Suministro <span className="text-red-500">*</span>
+                  </Label>
+                  <select
+                    id="cr_categoria"
+                    value={createFormData.categoria_proveedor}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, categoria_proveedor: e.target.value })
+                    }
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="REPUESTOS">REPUESTOS</option>
+                    <option value="SERVICIOS">SERVICIOS</option>
+                    <option value="SUMINISTROS">SUMINISTROS</option>
+                    <option value="EQUIPOS">EQUIPOS</option>
+                    <option value="CONTRATISTA">CONTRATISTA</option>
+                    <option value="MIXTO">MIXTO</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_tipo" className="text-xs font-semibold text-gray-700">
+                    Tipo de Proveedor
+                  </Label>
+                  <select
+                    id="cr_tipo"
+                    value={createFormData.tipo_proveedor}
+                    onChange={(e) =>
+                      setCreateFormData({ ...createFormData, tipo_proveedor: e.target.value })
+                    }
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="NACIONAL">NACIONAL</option>
+                    <option value="INTERNACIONAL">INTERNACIONAL</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cr_dias" className="text-xs font-semibold text-gray-700">
+                    Entrega Promedio (Días)
+                  </Label>
+                  <Input
+                    id="cr_dias"
+                    type="number"
+                    min="1"
+                    value={createFormData.tiempo_entrega_dias}
+                    onChange={(e) =>
+                      setCreateFormData({
+                        ...createFormData,
+                        tiempo_entrega_dias: Math.max(1, Number(e.target.value) || 1),
+                      })
+                    }
+                    className="bg-white text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 pt-1">
+                <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-2.5">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="cr_iva" className="text-xs font-bold text-gray-800 cursor-pointer">
+                      Responsable de IVA
+                    </Label>
+                    <p className="text-[11px] text-gray-400">Aplica impuestos en compras.</p>
+                  </div>
+                  <Switch
+                    id="cr_iva"
+                    checked={createFormData.responsable_iva}
+                    onCheckedChange={(c) =>
+                      setCreateFormData({ ...createFormData, responsable_iva: c })
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-2.5">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="cr_entregas" className="text-xs font-bold text-gray-800 cursor-pointer">
+                      Despacha a Domicilio
+                    </Label>
+                    <p className="text-[11px] text-gray-400">Entrega en taller MEKANOS.</p>
+                  </div>
+                  <Switch
+                    id="cr_entregas"
+                    checked={createFormData.realiza_entregas}
+                    onCheckedChange={(c) =>
+                      setCreateFormData({ ...createFormData, realiza_entregas: c })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <Label htmlFor="cr_servicios" className="text-xs font-semibold text-gray-700">
+                  Líneas de Suministro / Repuestos Ofrecidos
+                </Label>
+                <Input
+                  id="cr_servicios"
+                  placeholder="Ej: Filtros de combustible, lubricantes CAT, correas industriales"
+                  value={createFormData.servicios_ofrecidos}
+                  onChange={(e) =>
+                    setCreateFormData({ ...createFormData, servicios_ofrecidos: e.target.value })
+                  }
+                  className="bg-white text-sm"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateModalOpen(false)}
+                disabled={createSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={createSubmitting}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              >
+                {createSubmitting ? 'Registrando...' : 'Registrar Proveedor'}
               </Button>
             </DialogFooter>
           </form>

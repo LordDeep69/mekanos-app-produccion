@@ -20,17 +20,20 @@ export class QueryMarcaDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  limit?: number = 20;
+  @Max(1000)
+  limit?: number = 50;
 
   @ApiPropertyOptional({
-    description: 'Filtrar por estado activo/inactivo',
-    default: true,
+    description: 'Filtrar por estado activo/inactivo (si no se envía, retorna todos)',
   })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true || value === 1 || value === '1')
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true || value === 1 || value === '1') return true;
+    if (value === 'false' || value === false || value === 0 || value === '0') return false;
+    return undefined;
+  })
   @IsBoolean()
-  activo?: boolean = true;
+  activo?: boolean;
 
   @ApiPropertyOptional({
     description: 'Filtrar exclusivamente fabricantes OEM',
