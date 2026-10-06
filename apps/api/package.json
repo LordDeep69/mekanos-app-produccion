@@ -2,6 +2,7 @@
   "name": "@mekanos/api",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@8.11.0",
   "description": "Mekanos Backend API - NestJS + GraphQL",
   "scripts": {
     "postinstall": "npx puppeteer browsers install chrome || true",
