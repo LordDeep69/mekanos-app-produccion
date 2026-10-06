@@ -39,6 +39,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
+import { HierarchicalCategorySelect } from '@/components/compras/hierarchical-category-select';
 
 function CatalogoComprasContent() {
   const router = useRouter();
@@ -55,6 +57,8 @@ function CatalogoComprasContent() {
   const currentDestino = (searchParams.get('destino') as DestinoArticulo | null) || undefined;
   const currentSearch = searchParams.get('q') || '';
   const currentTipo = searchParams.get('tipo') ? Number(searchParams.get('tipo')) : undefined;
+  const currentMarca = searchParams.get('marca') ? Number(searchParams.get('marca')) : undefined;
+  const currentCategoria = searchParams.get('categoria') ? Number(searchParams.get('categoria')) : undefined;
 
   const [searchTerm, setSearchTerm] = useState(currentSearch);
 
@@ -69,6 +73,8 @@ function CatalogoComprasContent() {
           destino_articulo: currentDestino,
           q: currentSearch || undefined,
           id_tipo_componente: currentTipo,
+          id_marca: currentMarca,
+          id_categoria: currentCategoria,
           limit: 100,
         }),
         comprasService.getTiposComponente(),
@@ -90,10 +96,16 @@ function CatalogoComprasContent() {
 
   useEffect(() => {
     cargarArticulos();
-  }, [currentDestino, currentSearch, currentTipo]);
+  }, [currentDestino, currentSearch, currentTipo, currentMarca, currentCategoria]);
 
   // Actualizar filtros en URL
-  const actualizarFiltro = (params: { destino?: string; q?: string; tipo?: string }) => {
+  const actualizarFiltro = (params: {
+    destino?: string;
+    q?: string;
+    tipo?: string;
+    marca?: string | null;
+    categoria?: string | null;
+  }) => {
     const sp = new URLSearchParams(searchParams.toString());
 
     if (params.destino !== undefined) {
@@ -109,6 +121,16 @@ function CatalogoComprasContent() {
     if (params.tipo !== undefined) {
       if (params.tipo) sp.set('tipo', params.tipo);
       else sp.delete('tipo');
+    }
+
+    if (params.marca !== undefined) {
+      if (params.marca) sp.set('marca', params.marca);
+      else sp.delete('marca');
+    }
+
+    if (params.categoria !== undefined) {
+      if (params.categoria) sp.set('categoria', params.categoria);
+      else sp.delete('categoria');
     }
 
     router.replace(`/compras/catalogo?${sp.toString()}`, { scroll: false });
@@ -287,57 +309,113 @@ function CatalogoComprasContent() {
         </button>
       </div>
 
-      {/* BARRA DE BÚSQUEDA Y CATEGORÍAS */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Buscar por SKU, referencia de fabricante, nombre, marca o código de proveedor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                actualizarFiltro({ q: searchTerm.trim() });
-              }
-            }}
-            className="pl-9 pr-8 text-xs bg-white h-10"
-          />
-          {searchTerm && (
+      {/* BARRA DE BÚSQUEDA Y FILTROS AVANZADOS (MARCA + CATEGORÍA TAXONÓMICA) */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12 items-center">
+          {/* Búsqueda por texto */}
+          <div className="relative lg:col-span-5">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Buscar por SKU, referencia, nombre o marca..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  actualizarFiltro({ q: searchTerm.trim() });
+                }
+              }}
+              className="pl-9 pr-8 text-xs bg-white h-10"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  actualizarFiltro({ q: '' });
+                }}
+                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtro por Categoría Taxonómica Jerárquica */}
+          <div className="lg:col-span-4">
+            <HierarchicalCategorySelect
+              value={currentCategoria}
+              onChange={(idCat) => actualizarFiltro({ categoria: idCat ? String(idCat) : '' })}
+              placeholder="Filtrar por categoría..."
+              showClearButton={true}
+            />
+          </div>
+
+          {/* Filtro por Marca Normalizada */}
+          <div className="lg:col-span-3">
+            <ComboboxWithCreate
+              value={currentMarca}
+              onChange={(idMarca) => actualizarFiltro({ marca: idMarca ? String(idMarca) : '' })}
+              placeholder="Filtrar por marca..."
+            />
+          </div>
+        </div>
+
+        {/* Resumen de Filtros Activos y Limpieza Rápida */}
+        {(currentDestino || currentSearch || currentMarca || currentCategoria) && (
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-gray-500">
+            <span className="font-medium text-gray-600">Filtros aplicados:</span>
+            {currentSearch && (
+              <Badge variant="secondary" className="text-[11px] gap-1 bg-gray-100">
+                Texto: "{currentSearch}"
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    actualizarFiltro({ q: '' });
+                  }}
+                  className="hover:text-red-600 ml-1"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {currentCategoria && (
+              <Badge variant="secondary" className="text-[11px] gap-1 bg-blue-50 text-blue-700 border-blue-200">
+                Categoría #{currentCategoria}
+                <button
+                  onClick={() => actualizarFiltro({ categoria: '' })}
+                  className="hover:text-red-600 ml-1"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {currentMarca && (
+              <Badge variant="secondary" className="text-[11px] gap-1 bg-amber-50 text-amber-800 border-amber-200">
+                Marca #{currentMarca}
+                <button
+                  onClick={() => actualizarFiltro({ marca: '' })}
+                  className="hover:text-red-600 ml-1"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
             <button
               onClick={() => {
                 setSearchTerm('');
-                actualizarFiltro({ q: '' });
+                actualizarFiltro({
+                  destino: '',
+                  q: '',
+                  tipo: '',
+                  marca: '',
+                  categoria: '',
+                });
               }}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+              className="text-xs text-blue-600 hover:text-blue-800 underline font-medium ml-2"
             >
-              <X className="h-4 w-4" />
+              Limpiar todos los filtros
             </button>
-          )}
-        </div>
-
-        <div className="w-full sm:w-64">
-          <select
-            value={currentTipo || ''}
-            onChange={(e) => actualizarFiltro({ tipo: e.target.value })}
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 h-10"
-          >
-            <option value="">Todas las Categorías</option>
-            {tiposComponente.map((t) => (
-              <option key={t.id_tipo_componente} value={t.id_tipo_componente}>
-                {t.nombre_componente}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => actualizarFiltro({ q: searchTerm.trim() })}
-          className="h-10 text-xs px-4"
-        >
-          Buscar
-        </Button>
+          </div>
+        )}
       </div>
 
       {/* TABLA PRINCIPAL DE CATÁLOGO */}
@@ -401,15 +479,39 @@ function CatalogoComprasContent() {
                           )}
                         </td>
 
-                        {/* Descripción & Marca */}
-                        <td className="py-3 px-4 max-w-xs">
+                        {/* Descripción, Marca y Categoría Taxonómica */}
+                        <td className="py-3 px-4 max-w-sm">
                           <div className="font-bold text-gray-900 truncate">
                             {art.descripcion_corta || art.referencia_fabricante}
                           </div>
-                          <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                            {art.marca && <span className="font-medium text-gray-700">{art.marca}</span>}
-                            <span>•</span>
-                            <span>{art.tipos_componente?.nombre_componente || 'General'}</span>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500 mt-0.5">
+                            {art.marcas ? (
+                              <span className="flex items-center gap-1 font-semibold text-gray-800">
+                                {art.marcas.nombre}
+                                {art.marcas.es_fabricante_oem && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[8px] bg-blue-50 text-blue-700 border-blue-200 px-1 py-0 font-medium"
+                                  >
+                                    OEM
+                                  </Badge>
+                                )}
+                              </span>
+                            ) : art.marca ? (
+                              <span className="font-medium text-gray-700">{art.marca}</span>
+                            ) : null}
+
+                            {(art.marcas || art.marca) && <span>•</span>}
+
+                            <span className="truncate">
+                              {art.categorias_componente?.nombre || art.tipos_componente?.nombre_componente || 'General'}
+                            </span>
+
+                            {art.categorias_componente?.ruta_jerarquica && (
+                              <span className="text-[9px] text-gray-400 font-mono hidden md:inline truncate">
+                                ({art.categorias_componente.ruta_jerarquica})
+                              </span>
+                            )}
                           </div>
                         </td>
 

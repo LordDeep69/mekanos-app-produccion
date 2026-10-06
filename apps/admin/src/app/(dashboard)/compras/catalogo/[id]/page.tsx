@@ -69,6 +69,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
 
 export default function FichaArticulo360Page() {
   const params = useParams();
@@ -362,7 +363,7 @@ export default function FichaArticulo360Page() {
               <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight sm:text-3xl">
                 {articulo.descripcion_corta || articulo.referencia_fabricante}
               </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-500">
                 <span>
                   Ref. Fabricante: <strong className="font-mono text-gray-800">{articulo.referencia_fabricante}</strong>
                 </span>
@@ -371,13 +372,30 @@ export default function FichaArticulo360Page() {
                     SKU Interno: <strong className="font-mono text-blue-700">{articulo.codigo_interno}</strong>
                   </span>
                 )}
-                {articulo.marca && (
+                {articulo.marcas ? (
+                  <span className="flex items-center gap-1.5">
+                    Marca: <strong className="text-gray-900">{articulo.marcas.nombre}</strong>
+                    {articulo.marcas.es_fabricante_oem && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 font-semibold">
+                        OEM
+                      </Badge>
+                    )}
+                    {articulo.marcas.pais_origen && (
+                      <span className="text-[11px] text-gray-400">({articulo.marcas.pais_origen})</span>
+                    )}
+                  </span>
+                ) : articulo.marca ? (
                   <span>
                     Marca: <strong className="text-gray-800">{articulo.marca}</strong>
                   </span>
-                )}
-                <span>
-                  Categoría: <strong className="text-gray-800">{articulo.tipos_componente?.nombre_componente || 'General'}</strong>
+                ) : null}
+                <span className="flex items-center gap-1.5">
+                  Categoría: <strong className="text-gray-900">{articulo.categorias_componente?.nombre || articulo.tipos_componente?.nombre_componente || 'General'}</strong>
+                  {articulo.categorias_componente?.ruta_jerarquica && (
+                    <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 border-gray-200 font-mono">
+                      {articulo.categorias_componente.ruta_jerarquica}
+                    </Badge>
+                  )}
                 </span>
               </div>
             </div>
@@ -494,15 +512,42 @@ export default function FichaArticulo360Page() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 pt-4 border-t border-gray-100">
-                  <div>
-                    <span className="text-xs text-gray-400">Categoría Técnica</span>
+                  <div className="col-span-2 sm:col-span-1">
+                    <span className="text-xs text-gray-400">Categoría Taxonómica</span>
                     <p className="font-semibold text-sm text-gray-900">
-                      {articulo.tipos_componente?.nombre_componente || 'N/A'}
+                      {articulo.categorias_componente?.nombre || articulo.tipos_componente?.nombre_componente || 'N/A'}
                     </p>
+                    {articulo.categorias_componente?.ruta_jerarquica && (
+                      <p className="text-[11px] text-gray-500 font-mono mt-0.5">
+                        {articulo.categorias_componente.ruta_jerarquica}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-400">Marca del Fabricante</span>
+                    {articulo.marcas ? (
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="font-semibold text-sm text-gray-900">{articulo.marcas.nombre}</span>
+                        {articulo.marcas.es_fabricante_oem && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1 py-0 font-semibold">
+                            OEM
+                          </Badge>
+                        )}
+                        {articulo.marcas.pais_origen && (
+                          <span className="text-[10px] text-gray-400">({articulo.marcas.pais_origen})</span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="font-semibold text-sm text-gray-900">{articulo.marca || 'N/A'}</p>
+                    )}
                   </div>
                   <div>
                     <span className="text-xs text-gray-400">Unidad de Medida</span>
-                    <p className="font-semibold text-sm text-gray-900">{articulo.unidad_medida}</p>
+                    <p className="font-semibold text-sm text-gray-900">
+                      {articulo.unidades_medida
+                        ? `${articulo.unidades_medida.nombre} (${articulo.unidades_medida.simbolo})`
+                        : articulo.unidad_medida}
+                    </p>
                   </div>
                   <div>
                     <span className="text-xs text-gray-400">Clase Comercial</span>
@@ -697,7 +742,21 @@ export default function FichaArticulo360Page() {
                             </td>
 
                             <td className="py-3 px-4 text-gray-700">
-                              {f.marca_ofrecida || 'Original'}
+                              {f.marcas ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold text-gray-900">{f.marcas.nombre}</span>
+                                  {f.marcas.es_fabricante_oem && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 px-1 py-0 font-medium"
+                                    >
+                                      OEM
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                f.marca_ofrecida || 'Original'
+                              )}
                             </td>
 
                             <td className="py-3 px-4 text-right font-mono font-bold text-emerald-700 text-sm">
@@ -1123,13 +1182,16 @@ export default function FichaArticulo360Page() {
 
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold text-gray-700">Marca Ofrecida</Label>
-                  <Input
-                    placeholder="Ej: MANN-FILTER"
-                    value={nuevoProveedor.marca_ofrecida}
-                    onChange={(e) =>
-                      setNuevoProveedor({ ...nuevoProveedor, marca_ofrecida: e.target.value })
+                  <ComboboxWithCreate
+                    value={nuevoProveedor.id_marca_ofrecida}
+                    onChange={(idM, mObj) =>
+                      setNuevoProveedor({
+                        ...nuevoProveedor,
+                        id_marca_ofrecida: idM || undefined,
+                        marca_ofrecida: mObj ? mObj.nombre : '',
+                      })
                     }
-                    className="text-xs"
+                    placeholder="Marca suministrada..."
                   />
                 </div>
               </div>

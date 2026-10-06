@@ -42,6 +42,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
+import { HierarchicalCategorySelect } from '@/components/compras/hierarchical-category-select';
+import { UnidadesMedidaSelect } from '@/components/compras/unidades-medida-select';
 
 // ============================================================================
 // SCHEMA DE VALIDACIÓN CON ZOD
@@ -56,6 +59,7 @@ const proveedorInicialSchema = z.object({
   id_proveedor: z.coerce.number().min(1, 'Selecciona un proveedor válido'),
   referencia_proveedor: z.string().min(1, 'El SKU o referencia del proveedor es obligatorio'),
   marca_ofrecida: z.string().optional(),
+  id_marca_ofrecida: z.coerce.number().optional().nullable(),
   costo_actual: z.coerce.number().min(0, 'El costo debe ser mayor o igual a 0'),
   moneda: z.string().default('COP'),
   tiempo_entrega_dias: z.coerce.number().min(0).default(1),
@@ -69,12 +73,15 @@ const proveedorInicialSchema = z.object({
 const articuloFormSchema = z
   .object({
     id_tipo_componente: z.coerce.number().min(1, 'Selecciona una categoría técnica'),
+    id_categoria: z.coerce.number().optional().nullable(),
     codigo_interno: z.string().optional(),
     referencia_fabricante: z.string().min(2, 'La referencia neutral del fabricante es obligatoria'),
     marca: z.string().optional(),
+    id_marca: z.coerce.number().optional().nullable(),
     descripcion_corta: z.string().min(3, 'Ingresa una descripción corta o título comercial'),
     descripcion_detallada: z.string().optional(),
     unidad_medida: z.string().default('UNIDAD'),
+    codigo_unidad_medida: z.string().optional().nullable(),
     tipo_comercial: z.string().default('ORIGINAL'),
     destino_articulo: z.enum([
       'INSUMO_SERVICIO',
@@ -228,7 +235,7 @@ export default function NuevoArticuloPage() {
 
   // Form setup con valores por defecto
   const form = useForm<ArticuloFormValues>({
-    resolver: zodResolver(articuloFormSchema),
+    resolver: zodResolver(articuloFormSchema) as any,
     defaultValues: {
       destino_articulo: 'INSUMO_SERVICIO',
       es_comprable: true,
@@ -236,6 +243,9 @@ export default function NuevoArticuloPage() {
       es_facturable: true,
       requiere_serializacion: false,
       es_activo_fijo: false,
+      id_categoria: null,
+      id_marca: null,
+      codigo_unidad_medida: 'UND',
       unidad_medida: 'UNIDAD',
       tipo_comercial: 'ORIGINAL',
       stock_minimo: 0,
@@ -311,6 +321,9 @@ export default function NuevoArticuloPage() {
       // Sanitizar payloads
       const payload: any = {
         ...values,
+        id_marca: values.id_marca ? Number(values.id_marca) : undefined,
+        id_categoria: values.id_categoria ? Number(values.id_categoria) : undefined,
+        codigo_unidad_medida: values.codigo_unidad_medida || undefined,
         frecuencia_mantenimiento_meses: values.frecuencia_mantenimiento_meses || undefined,
         precio_compra: values.precio_compra ? Number(values.precio_compra) : undefined,
         precio_venta: values.precio_venta ? Number(values.precio_venta) : undefined,
@@ -319,6 +332,14 @@ export default function NuevoArticuloPage() {
           : undefined,
         stock_minimo: Number(values.stock_minimo || 0),
         stock_actual: Number(values.stock_actual || 0),
+        proveedores_iniciales: values.proveedores_iniciales?.map((p) => ({
+          ...p,
+          id_proveedor: Number(p.id_proveedor),
+          costo_actual: Number(p.costo_actual),
+          tiempo_entrega_dias: Number(p.tiempo_entrega_dias || 1),
+          cantidad_minima_compra: Number(p.cantidad_minima_compra || 1),
+          id_marca_ofrecida: p.id_marca_ofrecida ? Number(p.id_marca_ofrecida) : undefined,
+        })),
       };
 
       const creado = await comprasService.createArticulo(payload);
@@ -469,23 +490,22 @@ export default function NuevoArticuloPage() {
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-              {/* Categoría técnica */}
+              {/* Categoría Taxonómica del Catálogo */}
               <div className="space-y-1.5">
-                <Label htmlFor="id_tipo_componente" className="text-xs font-semibold text-gray-700">
-                  Categoría / Tipo de Componente <span className="text-red-500">*</span>
+                <Label htmlFor="id_categoria" className="text-xs font-semibold text-gray-700">
+                  Categoría Taxonómica <span className="text-red-500">*</span>
                 </Label>
-                <select
-                  id="id_tipo_componente"
-                  {...register('id_tipo_componente')}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="">Selecciona categoría...</option>
-                  {tiposComponente.map((t) => (
-                    <option key={t.id_tipo_componente} value={t.id_tipo_componente}>
-                      {t.nombre_componente} {t.codigo_tipo ? `(${t.codigo_tipo})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <HierarchicalCategorySelect
+                  id="id_categoria"
+                  value={watch('id_categoria')}
+                  onChange={(idCat, catObj) => {
+                    setValue('id_categoria', idCat);
+                    if (idCat) {
+                      setValue('id_tipo_componente', idCat);
+                    }
+                  }}
+                  placeholder="Seleccionar familia / subfamilia..."
+                />
                 {errors.id_tipo_componente && (
                   <p className="text-xs text-red-500">{errors.id_tipo_componente.message}</p>
                 )}
@@ -523,36 +543,37 @@ export default function NuevoArticuloPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-              {/* Marca Neutral */}
+              {/* Marca Neutral con Combobox y Creación In-Context */}
               <div className="space-y-1.5">
-                <Label htmlFor="marca" className="text-xs font-semibold text-gray-700">
+                <Label htmlFor="id_marca" className="text-xs font-semibold text-gray-700">
                   Marca del Fabricante
                 </Label>
-                <Input
-                  id="marca"
-                  placeholder="Ej: MANN-FILTER, GATES, BOSCH, FLUKE"
-                  {...register('marca')}
-                  className="bg-white text-sm"
+                <ComboboxWithCreate
+                  id="id_marca"
+                  value={watch('id_marca')}
+                  onChange={(idMarca, marcaObj) => {
+                    setValue('id_marca', idMarca);
+                    setValue('marca', marcaObj ? marcaObj.nombre : '');
+                  }}
+                  placeholder="Buscar o crear marca (ej: BOSCH)..."
                 />
               </div>
 
-              {/* Unidad de Medida */}
+              {/* Unidad de Medida Normalizada y Agrupada */}
               <div className="space-y-1.5">
-                <Label htmlFor="unidad_medida" className="text-xs font-semibold text-gray-700">
+                <Label htmlFor="codigo_unidad_medida" className="text-xs font-semibold text-gray-700">
                   Unidad de Medida
                 </Label>
-                <select
-                  id="unidad_medida"
-                  {...register('unidad_medida')}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="UNIDAD">UNIDAD (Uds)</option>
-                  <option value="JUEGO">JUEGO / KIT</option>
-                  <option value="GALON">GALÓN</option>
-                  <option value="LITRO">LITRO</option>
-                  <option value="METRO">METRO</option>
-                  <option value="KILO">KILOGRAMO</option>
-                </select>
+                <UnidadesMedidaSelect
+                  id="codigo_unidad_medida"
+                  value={watch('codigo_unidad_medida') || 'UND'}
+                  onChange={(cod, unidadObj) => {
+                    setValue('codigo_unidad_medida', cod);
+                    if (unidadObj) {
+                      setValue('unidad_medida', unidadObj.nombre);
+                    }
+                  }}
+                />
               </div>
 
               {/* Tipo Comercial */}
@@ -860,6 +881,7 @@ export default function NuevoArticuloPage() {
                       id_proveedor: proveedores[0]?.id_proveedor || 1,
                       referencia_proveedor: '',
                       marca_ofrecida: '',
+                      id_marca_ofrecida: null,
                       costo_actual: 0,
                       moneda: 'COP',
                       tiempo_entrega_dias: 1,
@@ -895,6 +917,7 @@ export default function NuevoArticuloPage() {
                         id_proveedor: proveedores[0]?.id_proveedor || 1,
                         referencia_proveedor: '',
                         marca_ofrecida: '',
+                        id_marca_ofrecida: null,
                         costo_actual: 0,
                         moneda: 'COP',
                         tiempo_entrega_dias: 1,
@@ -943,7 +966,7 @@ export default function NuevoArticuloPage() {
                         </Button>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                         {/* Selector de proveedor */}
                         <div className="space-y-1">
                           <Label className="text-xs font-semibold text-gray-700">
@@ -951,7 +974,7 @@ export default function NuevoArticuloPage() {
                           </Label>
                           <select
                             {...register(`proveedores_iniciales.${index}.id_proveedor`)}
-                            className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
+                            className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none h-10"
                           >
                             {proveedores.map((p) => (
                               <option key={p.id_proveedor} value={p.id_proveedor}>
@@ -959,6 +982,21 @@ export default function NuevoArticuloPage() {
                               </option>
                             ))}
                           </select>
+                        </div>
+
+                        {/* Marca ofrecida por el proveedor */}
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-gray-700">
+                            Marca Ofrecida
+                          </Label>
+                          <ComboboxWithCreate
+                            value={watch(`proveedores_iniciales.${index}.id_marca_ofrecida`)}
+                            onChange={(idM, mObj) => {
+                              setValue(`proveedores_iniciales.${index}.id_marca_ofrecida`, idM);
+                              setValue(`proveedores_iniciales.${index}.marca_ofrecida`, mObj ? mObj.nombre : '');
+                            }}
+                            placeholder="Marca provista..."
+                          />
                         </div>
 
                         {/* SKU del proveedor */}
@@ -969,21 +1007,21 @@ export default function NuevoArticuloPage() {
                           <Input
                             placeholder="Ej: FLT-MN-712"
                             {...register(`proveedores_iniciales.${index}.referencia_proveedor`)}
-                            className="bg-white font-mono text-xs h-8"
+                            className="bg-white font-mono text-xs h-10"
                           />
                         </div>
 
                         {/* Costo negociado */}
                         <div className="space-y-1">
                           <Label className="text-xs font-semibold text-gray-700">
-                            Costo de Compra ($ COP) <span className="text-red-500">*</span>
+                            Costo Compra ($ COP) <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             type="number"
                             min={0}
                             placeholder="Ej: 85000"
                             {...register(`proveedores_iniciales.${index}.costo_actual`)}
-                            className="bg-white font-mono font-bold text-xs h-8 text-emerald-700"
+                            className="bg-white font-mono font-bold text-xs h-10 text-emerald-700"
                           />
                         </div>
 
@@ -997,7 +1035,7 @@ export default function NuevoArticuloPage() {
                             min={0}
                             placeholder="Ej: 1"
                             {...register(`proveedores_iniciales.${index}.tiempo_entrega_dias`)}
-                            className="bg-white text-xs h-8"
+                            className="bg-white text-xs h-10"
                           />
                         </div>
                       </div>

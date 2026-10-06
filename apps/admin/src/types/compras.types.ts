@@ -23,6 +23,56 @@ export interface EscalaPrecio {
   descuento_porcentaje?: number;
 }
 
+export interface Marca {
+  id_marca: number;
+  nombre: string;
+  pais_origen?: string | null;
+  es_fabricante_oem: boolean;
+  sitio_web?: string | null;
+  activo: boolean;
+  fecha_creacion?: string;
+}
+
+export interface CreateMarcaPayload {
+  nombre: string;
+  pais_origen?: string;
+  es_fabricante_oem?: boolean;
+  sitio_web?: string;
+  notas?: string;
+}
+
+export type TipoMagnitud = 'CANTIDAD' | 'VOLUMEN' | 'LONGITUD' | 'MASA' | 'CONJUNTO';
+
+export interface UnidadMedida {
+  codigo_unidad: string;
+  nombre: string;
+  simbolo: string;
+  tipo_magnitud: TipoMagnitud;
+  factor_conversion_base: number;
+  activo: boolean;
+}
+
+export interface CategoriaNodo {
+  id_categoria: number;
+  codigo_categoria: string;
+  nombre: string;
+  slug: string;
+  id_padre: number | null;
+  nivel: number;
+  ruta_jerarquica: string;
+  slug_path: string;
+  descripcion?: string | null;
+  activo: boolean;
+  hijos?: CategoriaNodo[];
+}
+
+export interface CreateCategoriaPayload {
+  codigo_categoria: string;
+  nombre: string;
+  id_padre?: number | null;
+  descripcion?: string;
+}
+
 export interface PersonaProveedor {
   id_persona: number;
   razon_social?: string | null;
@@ -43,6 +93,7 @@ export interface ArticuloProveedor {
   id_proveedor: number;
   referencia_proveedor: string;
   marca_ofrecida?: string | null;
+  id_marca_ofrecida?: number | null;
   nombre_segun_proveedor?: string | null;
   costo_actual: number | string;
   moneda: string;
@@ -56,6 +107,7 @@ export interface ArticuloProveedor {
   fecha_registro: string;
   fecha_actualizacion?: string | null;
   proveedores?: ProveedorBasico;
+  marcas?: Marca | null;
 }
 
 export interface HistorialCostoCompra {
@@ -98,9 +150,13 @@ export interface ArticuloMaestro {
   codigo_interno?: string | null;
   referencia_fabricante: string;
   marca?: string | null;
+  id_marca?: number | null;
+  codigo_unidad_medida?: string | null;
+  id_categoria?: number | null;
   descripcion_corta?: string | null;
   descripcion_detallada?: string | null;
   especificaciones_tecnicas?: Record<string, any> | null;
+  notas_instalacion?: string | null;
   tipo_comercial?: string | null;
   destino_articulo: DestinoArticulo;
   es_comprable: boolean;
@@ -124,6 +180,9 @@ export interface ArticuloMaestro {
   fecha_modificacion?: string | null;
   tipos_componente?: TipoComponente;
   proveedores?: ProveedorBasico;
+  marcas?: Marca | null;
+  unidades_medida?: UnidadMedida | null;
+  categorias_componente?: CategoriaNodo | null;
   articulos_proveedores?: ArticuloProveedor[];
   historial_costos_compra?: HistorialCostoCompra[];
 }
@@ -139,6 +198,7 @@ export interface ArticuloProveedorInicialPayload {
   id_proveedor: number;
   referencia_proveedor: string;
   marca_ofrecida?: string;
+  id_marca_ofrecida?: number;
   nombre_segun_proveedor?: string;
   costo_actual: number;
   moneda?: string;
@@ -155,6 +215,9 @@ export interface CreateArticuloMaestroPayload {
   codigo_interno?: string;
   referencia_fabricante: string;
   marca?: string;
+  id_marca?: number;
+  codigo_unidad_medida?: string;
+  id_categoria?: number;
   descripcion_corta?: string;
   descripcion_detallada?: string;
   especificaciones_tecnicas?: Record<string, any>;
@@ -185,6 +248,7 @@ export interface VincularProveedorPayload {
   id_proveedor: number;
   referencia_proveedor: string;
   marca_ofrecida?: string;
+  id_marca_ofrecida?: number;
   nombre_segun_proveedor?: string;
   costo_actual: number;
   moneda?: string;
@@ -214,6 +278,9 @@ export interface FiltrosArticulos {
   id_tipo_componente?: number;
   id_proveedor?: number;
   marca?: string;
+  id_marca?: number;
+  id_categoria?: number;
+  codigo_unidad_medida?: string;
   es_comprable?: boolean;
   es_inventariable?: boolean;
   activo?: boolean;

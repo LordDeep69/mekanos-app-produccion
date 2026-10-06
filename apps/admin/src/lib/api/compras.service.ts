@@ -9,10 +9,15 @@ import {
   ArticuloMaestro,
   ArticuloProveedor,
   ArticulosResponse,
+  CategoriaNodo,
   CreateArticuloMaestroPayload,
+  CreateCategoriaPayload,
+  CreateMarcaPayload,
   FiltrosArticulos,
   HistorialCostoCompra,
+  Marca,
   TipoComponente,
+  UnidadMedida,
   VincularProveedorPayload,
 } from '@/types/compras.types';
 
@@ -27,6 +32,9 @@ export const comprasService = {
     if (filtros.id_tipo_componente) params.append('id_tipo_componente', String(filtros.id_tipo_componente));
     if (filtros.id_proveedor) params.append('id_proveedor', String(filtros.id_proveedor));
     if (filtros.marca) params.append('marca', filtros.marca);
+    if (filtros.id_marca) params.append('id_marca', String(filtros.id_marca));
+    if (filtros.id_categoria) params.append('id_categoria', String(filtros.id_categoria));
+    if (filtros.codigo_unidad_medida) params.append('codigo_unidad_medida', filtros.codigo_unidad_medida);
     if (filtros.es_comprable !== undefined) params.append('es_comprable', String(filtros.es_comprable));
     if (filtros.es_inventariable !== undefined) params.append('es_inventariable', String(filtros.es_inventariable));
     if (filtros.activo !== undefined) params.append('activo', String(filtros.activo));
@@ -188,6 +196,67 @@ export const comprasService = {
         // Ignorar
       }
       console.warn('No se pudo cargar tipos de componente:', e);
+      return [];
+    }
+  },
+
+  /**
+   * Obtener marcas (búsqueda rápida con ?q=...)
+   */
+  async getMarcas(q?: string, limit = 20): Promise<Marca[]> {
+    try {
+      const params = new URLSearchParams();
+      if (q && q.trim()) params.append('q', q.trim());
+      if (limit) params.append('limit', String(limit));
+
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+      const response = await apiClient.get<Marca[]>(`/marcas${queryStr}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (e) {
+      console.error('Error al obtener marcas:', e);
+      return [];
+    }
+  },
+
+  /**
+   * Crear marca al vuelo (in-context)
+   */
+  async createMarca(payload: CreateMarcaPayload): Promise<Marca> {
+    const response = await apiClient.post<Marca>('/marcas', payload);
+    return response.data;
+  },
+
+  /**
+   * Obtener árbol jerárquico de categorías taxonómicas
+   */
+  async getCategoriasArbol(): Promise<CategoriaNodo[]> {
+    try {
+      const response = await apiClient.get<CategoriaNodo[]>('/categorias-componente/arbol');
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (e) {
+      console.error('Error al obtener árbol de categorías:', e);
+      return [];
+    }
+  },
+
+  /**
+   * Crear categoría taxonómica in-context
+   */
+  async createCategoria(payload: CreateCategoriaPayload): Promise<CategoriaNodo> {
+    const response = await apiClient.post<CategoriaNodo>('/categorias-componente', payload);
+    return response.data;
+  },
+
+  /**
+   * Obtener unidades de medida normalizadas (opcionalmente filtradas por tipo de magnitud)
+   */
+  async getUnidadesMedida(tipo_magnitud?: string): Promise<UnidadMedida[]> {
+    try {
+      const params = tipo_magnitud ? `?tipo_magnitud=${tipo_magnitud}` : '';
+      const response = await apiClient.get<UnidadMedida[]>(`/unidades-medida${params}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (e) {
+      console.error('Error al obtener unidades de medida:', e);
       return [];
     }
   },
