@@ -53,4 +53,13 @@ export class CreateMarcaDto {
   @IsOptional()
   @IsBoolean({ message: 'es_fabricante_oem debe ser un valor booleano' })
   es_fabricante_oem?: boolean = false;
+
+  @ApiPropertyOptional({
+    description: 'Estado activo/inactivo de la marca en el catálogo',
+    default: true,
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  activo?: boolean = true;
 }

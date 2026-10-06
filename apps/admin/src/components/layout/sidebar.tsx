@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import {
   Activity,
   Building2,
+  Boxes,
   Calendar,
   CheckCircle2,
   ChevronLeft,
@@ -66,7 +67,18 @@ const navSections: NavSection[] = [
     label: 'Gestión',
     items: [
       { title: 'Clientes', href: '/clientes', icon: Building2 },
-      { title: 'Compras y Catálogo', href: '/compras/catalogo', icon: ShoppingCart, badge: 'Nuevo' },
+      {
+        title: 'Compras y Abastecimiento',
+        href: '/compras',
+        icon: ShoppingCart,
+        badge: 'Enterprise',
+        children: [
+          { title: 'Catálogo Maestro', href: '/compras/catalogo', icon: Boxes },
+          { title: 'Marcas y Fabricantes', href: '/compras/marcas', icon: Tag },
+          { title: 'Familias y Taxonomía', href: '/compras/categorias', icon: Layers },
+          { title: 'Directorio Proveedores', href: '/compras/proveedores', icon: Truck },
+        ],
+      },
       { title: 'Equipos', href: '/equipos', icon: Wrench },
       { title: 'Empleados', href: '/empleados', icon: Users2 },
       { title: 'Inventario', href: '/inventario', icon: Package },
@@ -111,6 +123,11 @@ export function Sidebar() {
     if (pathname?.includes('/configuracion/catalogos')) {
       setExpandedMenus((prev) =>
         prev.includes('/configuracion/catalogos') ? prev : [...prev, '/configuracion/catalogos']
+      );
+    }
+    if (pathname?.startsWith('/compras')) {
+      setExpandedMenus((prev) =>
+        prev.includes('/compras') ? prev : [...prev, '/compras']
       );
     }
   }, [pathname]);

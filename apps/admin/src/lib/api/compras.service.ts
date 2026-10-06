@@ -19,6 +19,7 @@ import {
   TipoComponente,
   UnidadMedida,
   VincularProveedorPayload,
+  ProveedorCompleto,
 } from '@/types/compras.types';
 
 export const comprasService = {
@@ -227,6 +228,22 @@ export const comprasService = {
   },
 
   /**
+   * Actualizar marca existente
+   */
+  async updateMarca(id: number, payload: Partial<CreateMarcaPayload>): Promise<Marca> {
+    const response = await apiClient.put<Marca>(`/marcas/${id}`, payload);
+    return response.data;
+  },
+
+  /**
+   * Obtener detalle de marca por ID
+   */
+  async getMarca(id: number): Promise<Marca> {
+    const response = await apiClient.get<Marca>(`/marcas/${id}`);
+    return response.data;
+  },
+
+  /**
    * Obtener árbol jerárquico de categorías taxonómicas
    */
   async getCategoriasArbol(): Promise<CategoriaNodo[]> {
@@ -240,10 +257,18 @@ export const comprasService = {
   },
 
   /**
-   * Crear categoría taxonómica in-context
+   * Crear categoría taxonómica in-context o desde vista dedicada
    */
   async createCategoria(payload: CreateCategoriaPayload): Promise<CategoriaNodo> {
     const response = await apiClient.post<CategoriaNodo>('/categorias-componente', payload);
+    return response.data;
+  },
+
+  /**
+   * Actualizar categoría taxonómica existente
+   */
+  async updateCategoria(id: number, payload: Partial<CreateCategoriaPayload>): Promise<CategoriaNodo> {
+    const response = await apiClient.put<CategoriaNodo>(`/categorias-componente/${id}`, payload);
     return response.data;
   },
 
@@ -259,5 +284,43 @@ export const comprasService = {
       console.error('Error al obtener unidades de medida:', e);
       return [];
     }
+  },
+
+  /**
+   * Directorio de Proveedores con paginación
+   */
+  async getProveedoresDirectorio(page = 1, limit = 50): Promise<{ data: ProveedorCompleto[]; meta: { total: number; page: number; limit: number; totalPages: number } }> {
+    try {
+      const response = await apiClient.get('/proveedores', {
+        params: { page, limit },
+      });
+      return response.data;
+    } catch (e) {
+      console.error('Error al obtener proveedores:', e);
+      return { data: [], meta: { total: 0, page: 1, limit, totalPages: 0 } };
+    }
+  },
+
+  /**
+   * Crear proveedor
+   */
+  async createProveedor(payload: any): Promise<ProveedorCompleto> {
+    const response = await apiClient.post<ProveedorCompleto>('/proveedores', payload);
+    return response.data;
+  },
+
+  /**
+   * Actualizar proveedor
+   */
+  async updateProveedor(id: number, payload: any): Promise<ProveedorCompleto> {
+    const response = await apiClient.put<ProveedorCompleto>(`/proveedores/${id}`, payload);
+    return response.data;
+  },
+
+  /**
+   * Eliminar proveedor
+   */
+  async deleteProveedor(id: number): Promise<void> {
+    await apiClient.delete(`/proveedores/${id}`);
   },
 };

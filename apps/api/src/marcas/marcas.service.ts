@@ -189,6 +189,7 @@ export class MarcasService {
     if (dto.sitio_web !== undefined) data.sitio_web = dto.sitio_web?.trim() || null;
     if (dto.logo_url !== undefined) data.logo_url = dto.logo_url?.trim() || null;
     if (dto.es_fabricante_oem !== undefined) data.es_fabricante_oem = dto.es_fabricante_oem;
+    if (dto.activo !== undefined) data.activo = dto.activo;
 
     return this.prisma.marcas.update({
       where: { id_marca: id },

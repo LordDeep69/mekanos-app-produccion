@@ -26,11 +26,18 @@ export interface EscalaPrecio {
 export interface Marca {
   id_marca: number;
   nombre: string;
+  slug?: string;
   pais_origen?: string | null;
   es_fabricante_oem: boolean;
   sitio_web?: string | null;
+  logo_url?: string | null;
   activo: boolean;
   fecha_creacion?: string;
+  fecha_modificacion?: string | null;
+  _count?: {
+    catalogo_componentes?: number;
+    articulos_proveedores?: number;
+  };
 }
 
 export interface CreateMarcaPayload {
@@ -39,6 +46,7 @@ export interface CreateMarcaPayload {
   es_fabricante_oem?: boolean;
   sitio_web?: string;
   notas?: string;
+  activo?: boolean;
 }
 
 export type TipoMagnitud = 'CANTIDAD' | 'VOLUMEN' | 'LONGITUD' | 'MASA' | 'CONJUNTO';
@@ -56,21 +64,49 @@ export interface CategoriaNodo {
   id_categoria: number;
   codigo_categoria: string;
   nombre: string;
-  slug: string;
+  slug?: string;
   id_padre: number | null;
   nivel: number;
   ruta_jerarquica: string;
-  slug_path: string;
+  slug_path?: string;
   descripcion?: string | null;
   activo: boolean;
   hijos?: CategoriaNodo[];
+  subcategorias?: CategoriaNodo[];
+  categoria_padre?: {
+    id_categoria: number;
+    nombre: string;
+    ruta_jerarquica: string;
+  } | null;
+  _count?: {
+    catalogo_componentes?: number;
+    subcategorias?: number;
+  };
 }
 
 export interface CreateCategoriaPayload {
-  codigo_categoria: string;
+  codigo_categoria?: string;
   nombre: string;
   id_padre?: number | null;
   descripcion?: string;
+  activo?: boolean;
+}
+
+export interface ProveedorCompleto {
+  id_proveedor: number;
+  id_persona: number;
+  codigo_proveedor?: string | null;
+  categoria_proveedor: string;
+  tipo_proveedor: string;
+  responsable_iva: boolean;
+  tiempo_entrega_dias?: number | null;
+  servicios_ofrecidos?: string | null;
+  realiza_entregas: boolean;
+  zona_cobertura?: string | null;
+  proveedor_activo: boolean;
+  observaciones?: string | null;
+  fecha_registro?: string;
+  persona?: PersonaProveedor;
 }
 
 export interface PersonaProveedor {

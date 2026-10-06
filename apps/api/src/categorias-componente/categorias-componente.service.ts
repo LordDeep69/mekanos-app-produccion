@@ -294,6 +294,14 @@ export class CategoriasComponenteService {
       data.descripcion = dto.descripcion?.trim() || null;
     }
 
+    if (dto.activo !== undefined) {
+      data.activo = dto.activo;
+    }
+
+    if (dto.codigo_categoria !== undefined && dto.codigo_categoria.trim() !== '') {
+      data.codigo_categoria = dto.codigo_categoria.trim().toUpperCase();
+    }
+
     if (dto.nombre !== undefined && dto.nombre.trim() !== '') {
       const nombreSanitizado = dto.nombre.trim();
       const idPadre = dto.id_padre !== undefined ? dto.id_padre : actual.id_padre;

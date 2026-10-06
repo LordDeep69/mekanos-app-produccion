@@ -37,4 +37,12 @@ export class CreateCategoriaComponenteDto {
   @IsOptional()
   @IsString()
   descripcion?: string;
+
+  @ApiPropertyOptional({
+    description: 'Estado activo/inactivo de la categoría',
+    default: true,
+    example: true,
+  })
+  @IsOptional()
+  activo?: boolean = true;
 }
