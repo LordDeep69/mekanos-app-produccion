@@ -7,7 +7,7 @@
  * Vista Principal de Navegación, Búsqueda, Filtrado por Arquetipos y Métricas
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -40,7 +40,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
-export default function CatalogoComprasPage() {
+function CatalogoComprasContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -508,5 +508,20 @@ export default function CatalogoComprasPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function CatalogoComprasPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-[400px] items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm font-medium">Cargando catálogo maestro de compras...</p>
+        </div>
+      </div>
+    }>
+      <CatalogoComprasContent />
+    </Suspense>
   );
 }
