@@ -57,6 +57,11 @@ export class ArticuloProveedorInicialDto {
   @MaxLength(100)
   marca_ofrecida?: string;
 
+  @ApiPropertyOptional({ description: 'ID de la marca normalizada ofrecida por el proveedor', example: 1 })
+  @IsOptional()
+  @IsInt()
+  id_marca_ofrecida?: number;
+
   @ApiPropertyOptional({ description: 'Denominación según la factura del proveedor' })
   @IsOptional()
   @IsString()
@@ -132,11 +137,21 @@ export class CreateArticuloMaestroDto {
   @MaxLength(100)
   referencia_fabricante: string;
 
-  @ApiPropertyOptional({ description: 'Marca del fabricante original', example: 'MANN-FILTER' })
+  @ApiPropertyOptional({ description: 'Marca del fabricante original (texto libre de respaldo)', example: 'MANN-FILTER' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   marca?: string;
+
+  @ApiPropertyOptional({ description: 'ID de la marca normalizada en la tabla marcas', example: 1 })
+  @IsOptional()
+  @IsInt()
+  id_marca?: number;
+
+  @ApiPropertyOptional({ description: 'ID de la categoría técnica taxonómica en categorias_componente', example: 10 })
+  @IsOptional()
+  @IsInt()
+  id_categoria?: number;
 
   @ApiPropertyOptional({ description: 'Descripción corta o título comercial', example: 'Filtro de Aceite Sintético de Cabina' })
   @IsOptional()
@@ -153,11 +168,17 @@ export class CreateArticuloMaestroDto {
   @IsOptional()
   especificaciones_tecnicas?: Record<string, any>;
 
-  @ApiPropertyOptional({ description: 'Unidad de medida', default: 'UNIDAD', example: 'UNIDAD' })
+  @ApiPropertyOptional({ description: 'Unidad de medida (texto libre de respaldo)', default: 'UNIDAD', example: 'UNIDAD' })
   @IsOptional()
   @IsString()
   @MaxLength(20)
   unidad_medida?: string = 'UNIDAD';
+
+  @ApiPropertyOptional({ description: 'Código de la unidad de medida normalizada en unidades_medida', example: 'UND' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  codigo_unidad_medida?: string;
 
   @ApiPropertyOptional({ description: 'Tipo comercial (ORIGINAL, GENERICO, HOMOLOGADO)', default: 'ORIGINAL' })
   @IsOptional()

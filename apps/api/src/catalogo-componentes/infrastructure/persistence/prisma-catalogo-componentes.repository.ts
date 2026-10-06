@@ -18,6 +18,9 @@ export interface CrearCatalogoComponenteData {
   stock_minimo?: number;
   stock_actual?: number;
   unidad_medida?: string;
+  id_marca?: number;
+  codigo_unidad_medida?: string;
+  id_categoria?: number;
   observaciones?: string;
   notas_instalacion?: string;
   creado_por?: number;
@@ -38,6 +41,9 @@ export interface ActualizarCatalogoComponenteData {
   stock_minimo?: number;
   stock_actual?: number;
   unidad_medida?: string;
+  id_marca?: number;
+  codigo_unidad_medida?: string;
+  id_categoria?: number;
   observaciones?: string;
   notas_instalacion?: string;
   activo?: boolean;
@@ -89,6 +95,9 @@ export class PrismaCatalogoComponentesRepository {
     if (data.stock_minimo !== undefined) createData.stock_minimo = data.stock_minimo;
     if (data.stock_actual !== undefined) createData.stock_actual = data.stock_actual;
     if (data.unidad_medida) createData.unidad_medida = data.unidad_medida;
+    if (data.id_marca !== undefined) createData.id_marca = data.id_marca;
+    if (data.codigo_unidad_medida !== undefined) createData.codigo_unidad_medida = data.codigo_unidad_medida;
+    if (data.id_categoria !== undefined) createData.id_categoria = data.id_categoria;
     if (data.observaciones) createData.observaciones = data.observaciones;
     if (data.notas_instalacion) createData.notas_instalacion = data.notas_instalacion;
 
@@ -96,6 +105,9 @@ export class PrismaCatalogoComponentesRepository {
       data: createData,
       include: {
         tipos_componente: true,
+        marcas: true,
+        unidades_medida: true,
+        categorias_componente: true,
         proveedores: true,
       },
     });
@@ -122,6 +134,9 @@ export class PrismaCatalogoComponentesRepository {
         where,
         include: {
           tipos_componente: true,
+          marcas: true,
+          unidades_medida: true,
+          categorias_componente: true,
           proveedores: true,
         },
         skip: filtros.skip || 0,
@@ -139,6 +154,9 @@ export class PrismaCatalogoComponentesRepository {
       where: { id_componente: id },
       include: {
         tipos_componente: true,
+        marcas: true,
+        unidades_medida: true,
+        categorias_componente: true,
         proveedores: true,
       },
     });
@@ -169,6 +187,9 @@ export class PrismaCatalogoComponentesRepository {
     if (data.stock_minimo !== undefined) updateData.stock_minimo = data.stock_minimo;
     if (data.stock_actual !== undefined) updateData.stock_actual = data.stock_actual;
     if (data.unidad_medida !== undefined) updateData.unidad_medida = data.unidad_medida;
+    if (data.id_marca !== undefined) updateData.id_marca = data.id_marca;
+    if (data.codigo_unidad_medida !== undefined) updateData.codigo_unidad_medida = data.codigo_unidad_medida;
+    if (data.id_categoria !== undefined) updateData.id_categoria = data.id_categoria;
     if (data.observaciones !== undefined) updateData.observaciones = data.observaciones;
     if (data.notas_instalacion !== undefined) updateData.notas_instalacion = data.notas_instalacion;
     if (data.activo !== undefined) updateData.activo = data.activo;
@@ -179,6 +200,9 @@ export class PrismaCatalogoComponentesRepository {
       data: updateData,
       include: {
         tipos_componente: true,
+        marcas: true,
+        unidades_medida: true,
+        categorias_componente: true,
         proveedores: true,
       },
     });

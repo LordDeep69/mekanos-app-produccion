@@ -92,9 +92,10 @@ export class CatalogoComponentesController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCatalogoComponenteDto,
+    @CurrentUser() user: any,
   ) {
-    const command = new ActualizarCatalogoComponenteCommand(id, dto);
-    return this.commandBus.execute(command);
+    const idUsuario = user?.id_usuario || user?.sub || 1;
+    return this.articulosService.update(id, dto, idUsuario);
   }
 
   /**

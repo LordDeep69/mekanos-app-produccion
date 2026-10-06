@@ -26,10 +26,27 @@ export class FiltrosArticulosDto {
   @IsInt()
   id_proveedor?: number;
 
-  @ApiPropertyOptional({ description: 'Filtrar por marca' })
+  @ApiPropertyOptional({ description: 'Filtrar por marca (texto)' })
   @IsOptional()
   @IsString()
   marca?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar por ID de marca normalizada' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_marca?: number;
+
+  @ApiPropertyOptional({ description: 'Filtrar por ID de categoría taxonómica' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_categoria?: number;
+
+  @ApiPropertyOptional({ description: 'Filtrar por código de unidad de medida normalizada' })
+  @IsOptional()
+  @IsString()
+  codigo_unidad_medida?: string;
 
   @ApiPropertyOptional({ description: 'Solo artículos comprables' })
   @IsOptional()

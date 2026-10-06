@@ -10,6 +10,7 @@ import {
   CreateArticuloMaestroDto,
   ArticuloProveedorInicialDto,
 } from './dto/create-articulo-maestro.dto';
+import { UpdateCatalogoComponenteDto } from './dto/update-catalogo-componente.dto';
 import {
   VincularProveedorDto,
   ActualizarPrecioProveedorDto,
@@ -54,7 +55,46 @@ export class ArticulosService {
       );
     }
 
-    // 2. Verificación previa de unicidad de código interno si fue suministrado
+    // 2. Verificación y resolución de llaves foráneas normalizadas
+    let marcaTexto = dto.marca?.trim() || null;
+    if (dto.id_marca) {
+      const marcaEntity = await this.prisma.marcas.findUnique({
+        where: { id_marca: dto.id_marca },
+      });
+      if (!marcaEntity) {
+        throw new NotFoundException(`La marca con ID ${dto.id_marca} no existe en el sistema.`);
+      }
+      if (!marcaTexto) {
+        marcaTexto = marcaEntity.nombre;
+      }
+    }
+
+    let unidadTexto = dto.unidad_medida?.trim() || 'UNIDAD';
+    if (dto.codigo_unidad_medida) {
+      const codigoUnidad = dto.codigo_unidad_medida.trim().toUpperCase();
+      const unidadEntity = await this.prisma.unidades_medida.findUnique({
+        where: { codigo: codigoUnidad },
+      });
+      if (!unidadEntity) {
+        throw new NotFoundException(`La unidad de medida '${dto.codigo_unidad_medida}' no existe.`);
+      }
+      if (!dto.unidad_medida || dto.unidad_medida === 'UNIDAD') {
+        unidadTexto = unidadEntity.nombre;
+      }
+    }
+
+    if (dto.id_categoria) {
+      const catEntity = await this.prisma.categorias_componente.findUnique({
+        where: { id_categoria: dto.id_categoria },
+      });
+      if (!catEntity) {
+        throw new NotFoundException(
+          `La categoría taxonómica con ID ${dto.id_categoria} no existe en el sistema.`,
+        );
+      }
+    }
+
+    // 3. Verificación previa de unicidad de código interno si fue suministrado
     if (dto.codigo_interno && dto.codigo_interno.trim() !== '') {
       const existeCodigo = await this.prisma.catalogo_componentes.findFirst({
         where: {
@@ -71,7 +111,7 @@ export class ArticulosService {
       }
     }
 
-    // 3. Preparación de proveedores iniciales a vincular
+    // 4. Preparación de proveedores iniciales a vincular
     const proveedoresIniciales: ArticuloProveedorInicialDto[] = [];
 
     if (dto.proveedores_iniciales && dto.proveedores_iniciales.length > 0) {
@@ -81,7 +121,8 @@ export class ArticulosService {
       proveedoresIniciales.push({
         id_proveedor: dto.id_proveedor_principal,
         referencia_proveedor: dto.referencia_fabricante,
-        marca_ofrecida: dto.marca,
+        marca_ofrecida: marcaTexto || dto.marca,
+        id_marca_ofrecida: dto.id_marca,
         costo_actual: Number(dto.precio_compra),
         moneda: dto.moneda || 'COP',
         tiempo_entrega_dias: 1,
@@ -105,16 +146,21 @@ export class ArticulosService {
       }
     }
 
-    // 4. Ejecución atómica en transacción Prisma
+    // 5. Ejecución atómica en transacción Prisma
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // PASO 1: Insertar Recurso Base en la Tabla Maestra
+        // PASO 1: Insertar Recurso Base en la Tabla Maestra con llaves foráneas normalizadas
         const componenteCreado = await tx.catalogo_componentes.create({
           data: {
             id_tipo_componente: dto.id_tipo_componente,
+            id_marca: dto.id_marca || null,
+            codigo_unidad_medida: dto.codigo_unidad_medida
+              ? dto.codigo_unidad_medida.trim().toUpperCase()
+              : null,
+            id_categoria: dto.id_categoria || null,
             codigo_interno: dto.codigo_interno?.trim() || null,
             referencia_fabricante: dto.referencia_fabricante.trim(),
-            marca: dto.marca?.trim() || null,
+            marca: marcaTexto,
             descripcion_corta: dto.descripcion_corta?.trim() || null,
             descripcion_detallada: dto.descripcion_detallada?.trim() || null,
             especificaciones_tecnicas: dto.especificaciones_tecnicas || undefined,
@@ -142,7 +188,7 @@ export class ArticulosService {
               null,
             stock_minimo: dto.stock_minimo ?? 0,
             stock_actual: dto.stock_actual ?? 0,
-            unidad_medida: dto.unidad_medida || 'UNIDAD',
+            unidad_medida: unidadTexto,
             observaciones: dto.observaciones?.trim() || null,
             notas_instalacion: dto.notas_instalacion?.trim() || null,
             activo: true,
@@ -160,7 +206,8 @@ export class ArticulosService {
               id_componente: idComponente,
               id_proveedor: prov.id_proveedor,
               referencia_proveedor: prov.referencia_proveedor.trim(),
-              marca_ofrecida: prov.marca_ofrecida?.trim() || dto.marca?.trim() || null,
+              marca_ofrecida: prov.marca_ofrecida?.trim() || marcaTexto || null,
+              id_marca_ofrecida: prov.id_marca_ofrecida || dto.id_marca || null,
               nombre_segun_proveedor: prov.nombre_segun_proveedor?.trim() || null,
               costo_actual: new Prisma.Decimal(prov.costo_actual),
               moneda: prov.moneda || 'COP',
@@ -196,13 +243,17 @@ export class ArticulosService {
           });
         }
 
-        // Recuperar y retornar la entidad completa con sus relaciones
+        // Recuperar y retornar la entidad completa con todas sus relaciones taxonómicas
         return await tx.catalogo_componentes.findUnique({
           where: { id_componente: idComponente },
           include: {
             tipos_componente: true,
+            marcas: true,
+            unidades_medida: true,
+            categorias_componente: true,
             articulos_proveedores: {
               include: {
+                marcas: true,
                 proveedores: {
                   include: {
                     persona: {
@@ -532,6 +583,242 @@ export class ArticulosService {
   }
 
   /**
+   * =========================================================================
+   * ACTUALIZACIÓN ATÓMICA DE ARTÍCULO MAESTRO (CON RELACIONES NORMALIZADAS)
+   * =========================================================================
+   * Modifica los atributos del recurso base, validando e inyectando las nuevas
+   * llaves foráneas (id_marca, codigo_unidad_medida, id_categoria) en una transacción.
+   */
+  async update(
+    id: number,
+    dto: UpdateCatalogoComponenteDto,
+    idUsuario?: number,
+  ) {
+    this.logger.log(`Iniciando actualización de artículo maestro ID ${id}`);
+
+    // 1. Verificar existencia del artículo
+    const articuloActual = await this.prisma.catalogo_componentes.findUnique({
+      where: { id_componente: id },
+    });
+    if (!articuloActual) {
+      throw new NotFoundException(`El artículo maestro ID ${id} no existe.`);
+    }
+
+    // 2. Validar tipo_componente si se modifica
+    if (dto.id_tipo_componente !== undefined) {
+      const tipo = await this.prisma.tipos_componente.findUnique({
+        where: { id_tipo_componente: dto.id_tipo_componente },
+      });
+      if (!tipo) {
+        throw new NotFoundException(
+          `El tipo de componente ID ${dto.id_tipo_componente} no existe.`,
+        );
+      }
+    }
+
+    // 3. Validar y sincronizar id_marca si se suministra
+    let marcaTexto: string | null | undefined =
+      dto.marca !== undefined ? dto.marca?.trim() || null : undefined;
+
+    if (dto.id_marca !== undefined) {
+      if (dto.id_marca) {
+        const marcaEntity = await this.prisma.marcas.findUnique({
+          where: { id_marca: dto.id_marca },
+        });
+        if (!marcaEntity) {
+          throw new NotFoundException(
+            `La marca con ID ${dto.id_marca} no existe en el sistema.`,
+          );
+        }
+        if (!marcaTexto) {
+          marcaTexto = marcaEntity.nombre;
+        }
+      } else {
+        marcaTexto = null;
+      }
+    }
+
+    // 4. Validar y sincronizar codigo_unidad_medida si se suministra
+    let unidadTexto: string | null | undefined =
+      dto.unidad_medida !== undefined ? dto.unidad_medida?.trim() || null : undefined;
+
+    if (dto.codigo_unidad_medida !== undefined) {
+      if (dto.codigo_unidad_medida) {
+        const cod = dto.codigo_unidad_medida.trim().toUpperCase();
+        const unidadEntity = await this.prisma.unidades_medida.findUnique({
+          where: { codigo: cod },
+        });
+        if (!unidadEntity) {
+          throw new NotFoundException(
+            `La unidad de medida '${dto.codigo_unidad_medida}' no existe en el sistema.`,
+          );
+        }
+        if (!unidadTexto || unidadTexto === 'UNIDAD') {
+          unidadTexto = unidadEntity.nombre;
+        }
+      }
+    }
+
+    // 5. Validar id_categoria si se suministra
+    if (dto.id_categoria !== undefined && dto.id_categoria) {
+      const catEntity = await this.prisma.categorias_componente.findUnique({
+        where: { id_categoria: dto.id_categoria },
+      });
+      if (!catEntity) {
+        throw new NotFoundException(
+          `La categoría taxonómica con ID ${dto.id_categoria} no existe en el sistema.`,
+        );
+      }
+    }
+
+    // 6. Validar unicidad de código interno si se modifica
+    if (
+      dto.codigo_interno !== undefined &&
+      dto.codigo_interno !== null &&
+      dto.codigo_interno.trim() !== ''
+    ) {
+      const duplicado = await this.prisma.catalogo_componentes.findFirst({
+        where: {
+          id_componente: { not: id },
+          codigo_interno: {
+            equals: dto.codigo_interno.trim(),
+            mode: 'insensitive',
+          },
+        },
+      });
+      if (duplicado) {
+        throw new ConflictException(
+          `Ya existe otro artículo registrado con el código interno '${dto.codigo_interno}'.`,
+        );
+      }
+    }
+
+    // 7. Ejecutar actualización atómica en transacción
+    return await this.prisma.$transaction(async (tx) => {
+      const data: Prisma.catalogo_componentesUpdateInput = {
+        fecha_modificacion: new Date(),
+        modificado_por: idUsuario || null,
+      };
+
+      if (dto.id_tipo_componente !== undefined) {
+        data.tipos_componente = { connect: { id_tipo_componente: dto.id_tipo_componente } };
+      }
+
+      if (dto.id_marca !== undefined) {
+        data.marcas = dto.id_marca
+          ? { connect: { id_marca: dto.id_marca } }
+          : { disconnect: true };
+      }
+
+      if (dto.codigo_unidad_medida !== undefined) {
+        data.unidades_medida = dto.codigo_unidad_medida
+          ? { connect: { codigo: dto.codigo_unidad_medida.trim().toUpperCase() } }
+          : { disconnect: true };
+      }
+
+      if (dto.id_categoria !== undefined) {
+        data.categorias_componente = dto.id_categoria
+          ? { connect: { id_categoria: dto.id_categoria } }
+          : { disconnect: true };
+      }
+
+      if (dto.codigo_interno !== undefined) {
+        data.codigo_interno = dto.codigo_interno?.trim() || null;
+      }
+
+      if (dto.referencia_fabricante !== undefined) {
+        data.referencia_fabricante = dto.referencia_fabricante.trim();
+      }
+
+      if (marcaTexto !== undefined) {
+        data.marca = marcaTexto;
+      }
+
+      if (dto.descripcion_corta !== undefined) {
+        data.descripcion_corta = dto.descripcion_corta?.trim() || null;
+      }
+
+      if (dto.descripcion_detallada !== undefined) {
+        data.descripcion_detallada = dto.descripcion_detallada?.trim() || null;
+      }
+
+      if (dto.especificaciones_tecnicas !== undefined) {
+        data.especificaciones_tecnicas = dto.especificaciones_tecnicas;
+      }
+
+      if (dto.tipo_comercial !== undefined) {
+        data.tipo_comercial = dto.tipo_comercial as any;
+      }
+
+      if (dto.destino_articulo !== undefined) {
+        data.destino_articulo = dto.destino_articulo;
+      }
+
+      if (dto.es_comprable !== undefined) data.es_comprable = dto.es_comprable;
+      if (dto.es_inventariable !== undefined) data.es_inventariable = dto.es_inventariable;
+      if (dto.es_facturable !== undefined) data.es_facturable = dto.es_facturable;
+      if (dto.requiere_serializacion !== undefined) data.requiere_serializacion = dto.requiere_serializacion;
+      if (dto.es_activo_fijo !== undefined) data.es_activo_fijo = dto.es_activo_fijo;
+      if (dto.numero_serie_activo !== undefined) data.numero_serie_activo = dto.numero_serie_activo?.trim() || null;
+      if (dto.placa_inventario !== undefined) data.placa_inventario = dto.placa_inventario?.trim() || null;
+      if (dto.frecuencia_mantenimiento_meses !== undefined) data.frecuencia_mantenimiento_meses = dto.frecuencia_mantenimiento_meses;
+
+      if (dto.precio_compra !== undefined) {
+        data.precio_compra = dto.precio_compra !== null ? new Prisma.Decimal(dto.precio_compra) : null;
+      }
+
+      if (dto.precio_venta !== undefined) {
+        data.precio_venta = dto.precio_venta !== null ? new Prisma.Decimal(dto.precio_venta) : null;
+      }
+
+      if (dto.margen_utilidad_porcentaje !== undefined) {
+        data.margen_utilidad_porcentaje = dto.margen_utilidad_porcentaje !== null
+          ? new Prisma.Decimal(dto.margen_utilidad_porcentaje)
+          : null;
+      }
+
+      if (dto.moneda !== undefined) data.moneda = dto.moneda || 'COP';
+      if (dto.id_proveedor_principal !== undefined) data.id_proveedor_principal = dto.id_proveedor_principal;
+      if (dto.stock_minimo !== undefined) data.stock_minimo = dto.stock_minimo;
+      if (dto.stock_actual !== undefined) data.stock_actual = dto.stock_actual;
+      if (unidadTexto !== undefined) data.unidad_medida = unidadTexto;
+      if (dto.observaciones !== undefined) data.observaciones = dto.observaciones?.trim() || null;
+      if (dto.notas_instalacion !== undefined) data.notas_instalacion = dto.notas_instalacion?.trim() || null;
+
+      await tx.catalogo_componentes.update({
+        where: { id_componente: id },
+        data,
+      });
+
+      return await tx.catalogo_componentes.findUnique({
+        where: { id_componente: id },
+        include: {
+          tipos_componente: true,
+          marcas: true,
+          unidades_medida: true,
+          categorias_componente: true,
+          proveedores: {
+            include: {
+              persona: true,
+            },
+          },
+          articulos_proveedores: {
+            where: { activo: true },
+            include: {
+              marcas: true,
+              proveedores: {
+                include: {
+                  persona: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+  }
+
+  /**
    * Búsqueda y listado general con filtros avanzados
    */
   async findAll(filtros: FiltrosArticulosDto) {
@@ -547,6 +834,18 @@ export class ArticulosService {
 
     if (filtros.id_tipo_componente) {
       where.id_tipo_componente = filtros.id_tipo_componente;
+    }
+
+    if (filtros.id_marca) {
+      where.id_marca = filtros.id_marca;
+    }
+
+    if (filtros.id_categoria) {
+      where.id_categoria = filtros.id_categoria;
+    }
+
+    if (filtros.codigo_unidad_medida) {
+      where.codigo_unidad_medida = filtros.codigo_unidad_medida;
     }
 
     if (filtros.marca) {
@@ -574,6 +873,8 @@ export class ArticulosService {
         { referencia_fabricante: { contains: q, mode: 'insensitive' } },
         { descripcion_corta: { contains: q, mode: 'insensitive' } },
         { marca: { contains: q, mode: 'insensitive' } },
+        { marcas: { nombre: { contains: q, mode: 'insensitive' } } },
+        { categorias_componente: { nombre: { contains: q, mode: 'insensitive' } } },
         {
           articulos_proveedores: {
             some: {
@@ -592,6 +893,9 @@ export class ArticulosService {
         orderBy: { id_componente: 'desc' },
         include: {
           tipos_componente: true,
+          marcas: true,
+          unidades_medida: true,
+          categorias_componente: true,
           proveedores: {
             include: {
               persona: {
@@ -602,6 +906,7 @@ export class ArticulosService {
           articulos_proveedores: {
             where: { activo: true },
             include: {
+              marcas: true,
               proveedores: {
                 include: {
                   persona: {
@@ -625,13 +930,16 @@ export class ArticulosService {
   }
 
   /**
-   * Obtener detalle completo de un artículo por su ID
+   * Obtener detalle completo de un artículo por su ID (Ficha 360°)
    */
   async findOne(idComponente: number) {
     const item = await this.prisma.catalogo_componentes.findUnique({
       where: { id_componente: idComponente },
       include: {
         tipos_componente: true,
+        marcas: true,
+        unidades_medida: true,
+        categorias_componente: true,
         proveedores: {
           include: {
             persona: true,
@@ -639,6 +947,7 @@ export class ArticulosService {
         },
         articulos_proveedores: {
           include: {
+            marcas: true,
             proveedores: {
               include: {
                 persona: true,
