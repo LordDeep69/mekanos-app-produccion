@@ -149,6 +149,13 @@ export const comprasService = {
       if (Array.isArray((response.data as any)?.items)) return (response.data as any).items;
       return [];
     } catch (e) {
+      // Fallback a /inventario/proveedores si /proveedores no está disponible
+      try {
+        const fallback = await apiClient.get('/inventario/proveedores');
+        if (Array.isArray(fallback.data)) return fallback.data;
+      } catch {
+        // Ignorar
+      }
       console.warn('No se pudo cargar la lista de proveedores:', e);
       return [];
     }
@@ -159,12 +166,27 @@ export const comprasService = {
    */
   async getTiposComponente(): Promise<TipoComponente[]> {
     try {
-      const response = await apiClient.get('/tipos-componente');
+      const response = await apiClient.get('/tipos-componente', {
+        params: { page: 1, limit: 100, activo: true },
+      });
       if (Array.isArray(response.data)) return response.data;
       if (Array.isArray((response.data as any)?.data)) return (response.data as any).data;
       if (Array.isArray((response.data as any)?.items)) return (response.data as any).items;
       return [];
     } catch (e) {
+      // Fallback a /inventario/tipos-componente para resiliencia total
+      try {
+        const fallback = await apiClient.get('/inventario/tipos-componente');
+        if (Array.isArray(fallback.data)) {
+          return fallback.data.map((t: any) => ({
+            id_tipo_componente: t.id,
+            codigo_tipo: t.codigo,
+            nombre_componente: t.nombre,
+          }));
+        }
+      } catch {
+        // Ignorar
+      }
       console.warn('No se pudo cargar tipos de componente:', e);
       return [];
     }

@@ -21,6 +21,7 @@ import { DesactivarTipoComponenteCommand } from './application/commands/desactiv
 import { GetTipoComponenteByIdQuery } from './application/queries/get-tipo-componente-by-id.query';
 import { GetTiposComponenteQuery } from './application/queries/get-tipos-componente.query';
 import { CreateTiposComponenteDto } from './dto/create-tipos-componente.dto';
+import { FiltrosTiposComponenteDto } from './dto/filtros-tipos-componente.dto';
 import { UpdateTiposComponenteDto } from './dto/update-tipos-componente.dto';
 
 @Controller('tipos-componente')
@@ -52,25 +53,15 @@ export class TiposComponenteController {
   }
 
   @Get()
-  findAll(
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-    @Query('categoria') categoria?: string,
-    @Query('aplica_a') aplica_a?: string,
-    @Query('es_consumible', new ParseBoolPipe({ optional: true }))
-    es_consumible?: boolean,
-    @Query('es_inventariable', new ParseBoolPipe({ optional: true }))
-    es_inventariable?: boolean,
-    @Query('activo', new ParseBoolPipe({ optional: true })) activo?: boolean,
-  ) {
+  findAll(@Query() filtros: FiltrosTiposComponenteDto) {
     const query = new GetTiposComponenteQuery(
-      categoria,
-      aplica_a,
-      es_consumible,
-      es_inventariable,
-      activo,
-      page,
-      limit,
+      filtros.categoria,
+      filtros.aplica_a,
+      filtros.es_consumible,
+      filtros.es_inventariable,
+      filtros.activo,
+      filtros.page,
+      filtros.limit,
     );
     return this.queryBus.execute(query);
   }
