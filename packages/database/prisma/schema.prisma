@@ -225,11 +225,17 @@ model catalogo_componentes {
   creado_por                   Int?
   fecha_modificacion           DateTime?                       @db.Timestamp(6)
   modificado_por               Int?
+  id_marca                     Int?
+  codigo_unidad_medida         String?                         @db.VarChar(10)
+  id_categoria                 Int?
   alertas_stock                alertas_stock[]
   proveedores                  proveedores?                    @relation(fields: [id_proveedor_principal], references: [id_proveedor], map: "fk_componente_proveedor")
   catalogo_componentes         catalogo_componentes?           @relation("catalogo_componentesTocatalogo_componentes", fields: [reemplazado_por], references: [id_componente], map: "fk_componente_reemplazado_por")
   other_catalogo_componentes   catalogo_componentes[]          @relation("catalogo_componentesTocatalogo_componentes")
   tipos_componente             tipos_componente                @relation(fields: [id_tipo_componente], references: [id_tipo_componente], onDelete: SetNull, map: "fk_componente_tipo")
+  marcas                       marcas?                         @relation(fields: [id_marca], references: [id_marca], map: "fk_componente_marca")
+  unidades_medida              unidades_medida?                @relation(fields: [codigo_unidad_medida], references: [codigo], map: "fk_componente_unidad_medida")
+  categorias_componente        categorias_componente?          @relation(fields: [id_categoria], references: [id_categoria], map: "fk_componente_categoria")
   componentes_equipo           componentes_equipo[]
   componentes_usados           componentes_usados[]
   items_cotizacion_componentes items_cotizacion_componentes[]
@@ -245,6 +251,9 @@ model catalogo_componentes {
   @@index([id_tipo_componente], map: "idx_componente_tipo")
   @@index([destino_articulo], map: "idx_componente_destino")
   @@index([codigo_interno], map: "idx_componente_codigo_interno")
+  @@index([id_marca], map: "idx_componente_marca")
+  @@index([codigo_unidad_medida], map: "idx_componente_unidad_medida")
+  @@index([id_categoria], map: "idx_componente_categoria")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -3007,17 +3016,20 @@ model articulos_proveedores {
   url_producto_proveedor  String?               @db.VarChar(500)
   activo                  Boolean               @default(true)
   notas                   String?
+  id_marca_ofrecida       Int?
   fecha_registro          DateTime              @default(now()) @db.Timestamp(6)
   fecha_actualizacion     DateTime?             @updatedAt @db.Timestamp(6)
   registrado_por          Int?
   modificado_por          Int?
   catalogo_componentes    catalogo_componentes  @relation(fields: [id_componente], references: [id_componente], onDelete: Cascade)
   proveedores             proveedores           @relation(fields: [id_proveedor], references: [id_proveedor], onUpdate: Restrict)
+  marcas                  marcas?               @relation(fields: [id_marca_ofrecida], references: [id_marca], map: "fk_articulos_proveedores_marca")
 
   @@id([id_componente, id_proveedor])
   @@index([referencia_proveedor], map: "idx_articulos_proveedores_ref")
   @@index([id_proveedor], map: "idx_articulos_proveedores_prov")
   @@index([id_componente, es_proveedor_preferido], map: "idx_articulos_proveedores_pref")
+  @@index([id_marca_ofrecida], map: "idx_articulos_proveedores_marca")
 }
 
 model historial_costos_compra {
@@ -3057,6 +3069,59 @@ enum origen_costo_enum {
   ORDEN_COMPRA
   RECEPCION_FACTURA
   AJUSTE_AUDITORIA
+}
+
+model marcas {
+  id_marca              Int                      @id @default(autoincrement())
+  nombre                String                   @unique @db.VarChar(100)
+  slug                  String                   @unique @db.VarChar(100)
+  descripcion           String?
+  pais_origen           String?                  @db.VarChar(50)
+  sitio_web             String?                  @db.VarChar(200)
+  logo_url              String?
+  es_fabricante_oem     Boolean                  @default(false)
+  activo                Boolean                  @default(true)
+  fecha_creacion        DateTime                 @default(now()) @db.Timestamp(6)
+  fecha_modificacion    DateTime?                @default(now()) @db.Timestamp(6)
+  catalogo_componentes  catalogo_componentes[]
+  articulos_proveedores articulos_proveedores[]
+
+  @@index([nombre], map: "idx_marcas_nombre")
+  @@index([slug], map: "idx_marcas_slug")
+}
+
+model unidades_medida {
+  codigo                String                   @id @db.VarChar(10)
+  nombre                String                   @db.VarChar(50)
+  simbolo               String                   @db.VarChar(10)
+  tipo_magnitud         String                   @default("CANTIDAD") @db.VarChar(20)
+  permite_decimales     Boolean                  @default(false)
+  activo                Boolean                  @default(true)
+  fecha_creacion        DateTime                 @default(now()) @db.Timestamp(6)
+  catalogo_componentes  catalogo_componentes[]
+
+  @@index([tipo_magnitud], map: "idx_unidades_medida_tipo")
+}
+
+model categorias_componente {
+  id_categoria          Int                      @id @default(autoincrement())
+  codigo_categoria      String                   @unique @db.VarChar(50)
+  nombre                String                   @db.VarChar(100)
+  descripcion           String?
+  id_padre              Int?
+  nivel                 Int                      @default(1)
+  ruta_jerarquica       String                   @db.VarChar(255)
+  slug_path             String                   @db.VarChar(255)
+  activo                Boolean                  @default(true)
+  fecha_creacion        DateTime                 @default(now()) @db.Timestamp(6)
+  fecha_modificacion    DateTime?                @default(now()) @db.Timestamp(6)
+  categoria_padre       categorias_componente?   @relation("JerarquiaCategorias", fields: [id_padre], references: [id_categoria], onDelete: Restrict, map: "fk_categoria_padre")
+  subcategorias         categorias_componente[]  @relation("JerarquiaCategorias")
+  catalogo_componentes  catalogo_componentes[]
+
+  @@index([id_padre], map: "idx_categorias_padre")
+  @@index([ruta_jerarquica], map: "idx_categorias_ruta")
+  @@index([nivel], map: "idx_categorias_nivel")
 }
 
 
