@@ -42,11 +42,20 @@ export interface Marca {
 
 export interface CreateMarcaPayload {
   nombre: string;
+  slug?: string;
+  descripcion?: string;
   pais_origen?: string;
   es_fabricante_oem?: boolean;
   sitio_web?: string;
+  logo_url?: string;
   notas?: string;
   activo?: boolean;
+}
+
+export interface FusionarMarcasPayload {
+  id_marca_origen: number;
+  id_marca_destino: number;
+  eliminar_origen?: boolean;
 }
 
 export type TipoMagnitud = 'CANTIDAD' | 'VOLUMEN' | 'LONGITUD' | 'MASA' | 'CONJUNTO';

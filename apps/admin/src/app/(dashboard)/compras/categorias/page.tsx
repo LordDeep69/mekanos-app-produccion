@@ -9,9 +9,12 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -303,18 +306,28 @@ export default function CategoriasTaxonomiaPage() {
               </div>
             </div>
 
-            {/* Lado derecho: Contador artículos + Botones de acción */}
+            {/* Lado derecho: Contador artículos con pluralización y navegación cruzada + Botones de acción */}
             <div className="flex items-center gap-2 shrink-0 ml-4">
               {((nodo.total_articulos ?? nodo._count?.catalogo_componentes) !== undefined) && (
-                <span
-                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full transition-colors ${
-                    (nodo.total_articulos ?? nodo._count?.catalogo_componentes ?? 0) > 0
-                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                      : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {nodo.total_articulos ?? nodo._count?.catalogo_componentes ?? 0} artículos
-                </span>
+                (() => {
+                  const cant = nodo.total_articulos ?? nodo._count?.catalogo_componentes ?? 0;
+                  const label = `${cant} ${cant === 1 ? 'artículo' : 'artículos'}`;
+
+                  return cant > 0 ? (
+                    <Link
+                      href={`/compras/catalogo?id_categoria=${nodo.id_categoria}`}
+                      title={`Ver ${label} en el Catálogo Maestro`}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full transition-all bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:text-blue-900 hover:border-blue-300 shadow-2xs group cursor-pointer"
+                    >
+                      <span>{label}</span>
+                      <ExternalLink className="h-3 w-3 text-blue-500 opacity-60 group-hover:opacity-100 transition-opacity" />
+                    </Link>
+                  ) : (
+                    <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-400">
+                      0 artículos
+                    </span>
+                  );
+                })()
               )}
 
               <Button
@@ -555,20 +568,79 @@ export default function CategoriasTaxonomiaPage() {
             </div>
 
             {isEditing && (
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
-                <div className="space-y-0.5">
-                  <Label htmlFor="cat_activo" className="text-xs font-bold text-gray-800 cursor-pointer">
-                    Rama Activa
-                  </Label>
-                  <p className="text-[11px] text-gray-500">
-                    Las ramas inactivas no se muestran en selectores de artículos.
-                  </p>
-                </div>
-                <Switch
-                  id="cat_activo"
-                  checked={formData.activo}
-                  onCheckedChange={(checked) => setFormData({ ...formData, activo: checked })}
-                />
+              <div className="space-y-2">
+                {(() => {
+                  const cantArticulos =
+                    selectedNode?.total_articulos ?? selectedNode?._count?.catalogo_componentes ?? 0;
+                  const hijos = selectedNode?.hijos || selectedNode?.subcategorias || [];
+                  const tieneHijosActivos = hijos.some((h) => h.activo);
+                  const bloqueado = cantArticulos > 0 || tieneHijosActivos;
+
+                  const handleToggleActivo = (checked: boolean) => {
+                    if (!checked) {
+                      if (cantArticulos > 0) {
+                        toast.warning(
+                          `No es posible desactivar '${selectedNode?.nombre}' porque contiene ${cantArticulos} artículo(s) activo(s). Reubique los artículos en otra categoría técnica primero.`,
+                          { duration: 5000 },
+                        );
+                        return;
+                      }
+                      if (tieneHijosActivos) {
+                        toast.warning(
+                          `No es posible desactivar '${selectedNode?.nombre}' porque contiene subcategorías hijas activas. Desactive o reubique las subfamilias primero.`,
+                          { duration: 5000 },
+                        );
+                        return;
+                      }
+                    }
+                    setFormData({ ...formData, activo: checked });
+                  };
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="cat_activo" className="text-xs font-bold text-gray-800 cursor-pointer">
+                            Rama Activa en Catálogo
+                          </Label>
+                          <p className="text-[11px] text-gray-500">
+                            Las ramas inactivas no se muestran en selectores de artículos.
+                          </p>
+                        </div>
+                        <Switch
+                          id="cat_activo"
+                          checked={formData.activo}
+                          onCheckedChange={handleToggleActivo}
+                          disabled={bloqueado}
+                        />
+                      </div>
+
+                      {cantArticulos > 0 && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                          <div className="space-y-0.5 text-[11px] leading-relaxed">
+                            <p className="font-bold text-amber-950">Protección de Integridad Referencial</p>
+                            <p className="text-amber-800">
+                              Esta rama agrupa <strong>{cantArticulos} {cantArticulos === 1 ? 'artículo activo' : 'artículos activos'}</strong> en el catálogo maestro. Para desactivarla, debe reubicar primero los artículos en otra categoría técnica.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {cantArticulos === 0 && tieneHijosActivos && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                          <div className="space-y-0.5 text-[11px] leading-relaxed">
+                            <p className="font-bold text-amber-950">Protección de Jerarquía Activa</p>
+                            <p className="text-amber-800">
+                              Esta rama contiene subcategorías hijas activas. Para desactivarla, desactive o reubique primero las subfamilias dependientes.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 

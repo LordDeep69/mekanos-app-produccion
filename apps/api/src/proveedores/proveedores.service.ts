@@ -151,7 +151,16 @@ export class ProveedoresService {
           skip,
           take: limit,
           orderBy: { id_proveedor: 'desc' },
-          include: { persona: true },
+          include: {
+            persona: true,
+            _count: {
+              select: {
+                catalogo_componentes: true,
+                articulos_proveedores: true,
+                ordenes_compra: true,
+              },
+            },
+          },
         }),
         this.prisma.proveedores.count(),
       ]);
@@ -176,7 +185,16 @@ export class ProveedoresService {
     try {
       const record = await this.prisma.proveedores.findUnique({
         where: { id_proveedor: id },
-        include: { persona: true },
+        include: {
+          persona: true,
+          _count: {
+            select: {
+              catalogo_componentes: true,
+              articulos_proveedores: true,
+              ordenes_compra: true,
+            },
+          },
+        },
       });
 
       if (!record) {

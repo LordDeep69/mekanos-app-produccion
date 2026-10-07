@@ -62,4 +62,13 @@ export class CreateMarcaDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean = true;
+
+  @ApiPropertyOptional({
+    description: 'Identificador URL o slug único (se autogenera si se omite)',
+    example: 'caterpillar',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120, { message: 'El slug no puede superar los 120 caracteres' })
+  slug?: string;
 }

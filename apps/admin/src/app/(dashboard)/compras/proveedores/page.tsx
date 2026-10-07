@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Building2,
   CheckCircle2,
@@ -18,6 +19,7 @@ import {
   Layers,
   Mail,
   MapPin,
+  Package,
   Pencil,
   Phone,
   Plus,
@@ -65,6 +67,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
+// Función determinista para avatar con iniciales y gradiente
+const getAvatarGradient = (nombre: string) => {
+  const gradients = [
+    'from-blue-600 to-indigo-700',
+    'from-emerald-600 to-teal-700',
+    'from-amber-500 to-orange-600',
+    'from-purple-600 to-violet-700',
+    'from-rose-500 to-pink-600',
+    'from-cyan-600 to-blue-700',
+    'from-indigo-500 to-purple-600',
+  ];
+  let hash = 0;
+  for (let i = 0; i < nombre.length; i++) {
+    hash = nombre.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const idx = Math.abs(hash) % gradients.length;
+  return gradients[idx];
+};
+
+const getInitials = (nombre: string) => {
+  const parts = nombre.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'PR';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+};
 
 export default function ProveedoresPage() {
   const [proveedores, setProveedores] = useState<ProveedorCompleto[]>([]);
@@ -180,13 +208,18 @@ export default function ProveedoresPage() {
     cargarProveedores();
   }, []);
 
-  // Métricas
+  // Métricas calculadas para flash KPIs y filtros
   const metricas = useMemo(() => {
     const total = proveedores.length;
     const nacionales = proveedores.filter((p) => p.tipo_proveedor === 'NACIONAL').length;
     const repuestos = proveedores.filter((p) => p.categoria_proveedor === 'REPUESTOS').length;
+    const servicios = proveedores.filter((p) => p.categoria_proveedor === 'SERVICIOS').length;
+    const suministros = proveedores.filter((p) => p.categoria_proveedor === 'SUMINISTROS').length;
+    const equipos = proveedores.filter((p) => p.categoria_proveedor === 'EQUIPOS').length;
+    const mixtos = proveedores.filter((p) => p.categoria_proveedor === 'MIXTO').length;
     const activos = proveedores.filter((p) => p.proveedor_activo).length;
-    return { total, nacionales, repuestos, activos };
+    const inactivos = total - activos;
+    return { total, nacionales, repuestos, servicios, suministros, equipos, mixtos, activos, inactivos };
   }, [proveedores]);
 
   // Filtrado reactivo
@@ -199,12 +232,31 @@ export default function ProveedoresPage() {
         nombre.includes(search.toLowerCase()) ||
         nit.includes(search.toLowerCase());
 
-      const matchCategoria =
-        filtroCategoria === 'TODOS' || p.categoria_proveedor === filtroCategoria;
+      let matchCategoria = true;
+      if (filtroCategoria === 'TODOS') matchCategoria = true;
+      else if (filtroCategoria === 'ACTIVOS') matchCategoria = !!p.proveedor_activo;
+      else if (filtroCategoria === 'INACTIVOS') matchCategoria = !p.proveedor_activo;
+      else matchCategoria = p.categoria_proveedor === filtroCategoria;
 
       return matchSearch && matchCategoria;
     });
   }, [proveedores, search, filtroCategoria]);
+
+  // Alternar estado activo rápidamente
+  const alternarEstado = async (prov: ProveedorCompleto) => {
+    const nuevoEstado = !prov.proveedor_activo;
+    try {
+      await comprasService.updateProveedor(prov.id_proveedor, {
+        proveedor_activo: nuevoEstado,
+      });
+      const nom = prov.persona?.razon_social || prov.persona?.nombre_comercial || `Proveedor #${prov.id_proveedor}`;
+      toast.success(`Proveedor "${nom}" marcado como ${nuevoEstado ? 'Activo' : 'Inactivo'}`);
+      cargarProveedores();
+    } catch (e: any) {
+      console.error('Error al alternar estado de proveedor:', e);
+      toast.error('No se pudo actualizar el estado del proveedor');
+    }
+  };
 
   // Abrir modal de edición
   const abrirEditarModal = (p: ProveedorCompleto) => {
@@ -392,29 +444,38 @@ export default function ProveedoresPage() {
               )}
             </div>
 
-            {/* Pestañas de Filtro */}
+            {/* Pestañas de Filtro con Micro-contadores */}
             <div className="flex flex-wrap items-center gap-1.5">
-              {(
-                [
-                  { id: 'TODOS', label: 'Todos' },
-                  { id: 'REPUESTOS', label: 'Repuestos' },
-                  { id: 'SERVICIOS', label: 'Servicios' },
-                  { id: 'SUMINISTROS', label: 'Suministros' },
-                  { id: 'EQUIPOS', label: 'Equipos' },
-                  { id: 'MIXTO', label: 'Mixtos' },
-                ] as const
-              ).map((f) => (
+              {[
+                { id: 'TODOS', label: 'Todos', count: metricas.total },
+                { id: 'REPUESTOS', label: 'Repuestos', count: metricas.repuestos },
+                { id: 'SERVICIOS', label: 'Servicios', count: metricas.servicios },
+                { id: 'SUMINISTROS', label: 'Suministros', count: metricas.suministros },
+                { id: 'EQUIPOS', label: 'Equipos', count: metricas.equipos },
+                { id: 'MIXTO', label: 'Mixtos', count: metricas.mixtos },
+                { id: 'ACTIVOS', label: 'Activos', count: metricas.activos },
+                { id: 'INACTIVOS', label: 'Inactivos', count: metricas.inactivos },
+              ].map((f) => (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => setFiltroCategoria(f.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
                     filtroCategoria === f.id
                       ? 'bg-gray-900 text-white shadow-sm'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {f.label}
+                  <span>{f.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      filtroCategoria === f.id
+                        ? 'bg-gray-700 text-white'
+                        : 'bg-gray-200/80 text-gray-700'
+                    }`}
+                  >
+                    {f.count}
+                  </span>
                 </button>
               ))}
             </div>
@@ -431,7 +492,8 @@ export default function ProveedoresPage() {
                 <th className="px-6 py-3.5">Proveedor / Razón Social</th>
                 <th className="px-6 py-3.5">Identificación / NIT</th>
                 <th className="px-6 py-3.5">Categoría & Tipo</th>
-                <th className="px-6 py-3.5">Contacto</th>
+                <th className="px-6 py-3.5 text-center">Artículos</th>
+                <th className="px-6 py-3.5">Contacto & Portales</th>
                 <th className="px-6 py-3.5">Entrega Promedio</th>
                 <th className="px-6 py-3.5">Estado</th>
                 <th className="px-6 py-3.5 text-right">Acciones</th>
@@ -477,22 +539,35 @@ export default function ProveedoresPage() {
                   const nit = prov.persona?.numero_identificacion || '--';
                   const tel = prov.persona?.telefono_principal;
                   const email = prov.persona?.email_principal;
+                  const web = prov.persona?.sitio_web;
+                  const ubicacion = prov.persona?.url_ubicacion;
+                  const articulosCount =
+                    (prov._count?.catalogo_componentes ?? 0) +
+                    (prov._count?.articulos_proveedores ?? 0);
 
                   return (
                     <tr key={prov.id_proveedor} className="hover:bg-slate-50/80 transition-colors">
-                      {/* Razón Social / Comercial */}
+                      {/* Razón Social con Avatar Determinista */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center font-bold text-xs text-emerald-700 uppercase">
-                            <Building2 className="h-4 w-4" />
+                          <div
+                            className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getAvatarGradient(
+                              nombre,
+                            )} text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0 tracking-wider`}
+                          >
+                            {getInitials(nombre)}
                           </div>
-                          <div>
-                            <p className="font-bold text-gray-900 text-sm">{nombre}</p>
-                            {prov.persona?.nombre_comercial && prov.persona.razon_social && (
-                              <span className="text-[11px] text-gray-400">
+                          <div className="min-w-0">
+                            <p className="font-bold text-gray-900 text-sm truncate max-w-xs">{nombre}</p>
+                            {prov.persona?.nombre_comercial && prov.persona.razon_social && prov.persona.nombre_comercial !== prov.persona.razon_social ? (
+                              <span className="text-[11px] text-gray-400 block truncate max-w-xs">
                                 {prov.persona.nombre_comercial}
                               </span>
-                            )}
+                            ) : prov.codigo_proveedor ? (
+                              <span className="text-[11px] font-mono text-gray-400">
+                                {prov.codigo_proveedor}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                       </td>
@@ -512,64 +587,120 @@ export default function ProveedoresPage() {
                         </span>
                       </td>
 
-                      {/* Contacto */}
-                      <td className="px-6 py-4 text-xs space-y-0.5">
+                      {/* Artículos Suministrados (Relación con Catálogo) */}
+                      <td className="px-6 py-4 text-center">
+                        {articulosCount > 0 ? (
+                          <Link
+                            href={`/compras/catalogo?id_proveedor=${prov.id_proveedor}`}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:text-blue-900 transition-colors shadow-2xs"
+                            title={`Ver ${articulosCount} artículo(s) suministrado(s) en Catálogo`}
+                          >
+                            <Package className="h-3 w-3 text-blue-600" />
+                            <span>
+                              {articulosCount} {articulosCount === 1 ? 'repuesto' : 'repuestos'}
+                            </span>
+                          </Link>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium text-gray-400 bg-gray-50 border border-gray-100">
+                            0 repuestos
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Contacto & Portales */}
+                      <td className="px-6 py-4 text-xs space-y-1">
                         {tel && (
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <Phone className="h-3 w-3 text-gray-400" />
-                            {tel}
-                          </div>
+                          <a
+                            href={`tel:${tel}`}
+                            className="flex items-center gap-1.5 text-gray-700 hover:text-blue-600 transition-colors"
+                          >
+                            <Phone className="h-3 w-3 text-gray-400 shrink-0" />
+                            <span>{tel}</span>
+                          </a>
                         )}
                         {email && (
-                          <div className="flex items-center gap-1.5 text-gray-500">
-                            <Mail className="h-3 w-3 text-gray-400" />
-                            {email}
-                          </div>
+                          <a
+                            href={`mailto:${email}`}
+                            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors truncate max-w-[200px]"
+                            title={email}
+                          >
+                            <Mail className="h-3 w-3 text-gray-400 shrink-0" />
+                            <span className="truncate">{email}</span>
+                          </a>
                         )}
-                        {!tel && !email && <span className="text-gray-400">Sin datos de contacto</span>}
+                        {web && (
+                          <a
+                            href={web.startsWith('http') ? web : `https://${web}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline"
+                          >
+                            <Globe className="h-3 w-3 text-blue-500" />
+                            <span>Sitio Web</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                        {ubicacion && (
+                          <a
+                            href={ubicacion}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-emerald-600 hover:underline ml-2"
+                            title="Ver ubicación en Google Maps"
+                          >
+                            <MapPin className="h-3 w-3 text-emerald-500" />
+                            <span>Mapa</span>
+                          </a>
+                        )}
+                        {!tel && !email && !web && <span className="text-gray-400">Sin datos de contacto</span>}
                       </td>
 
                       {/* Entrega */}
                       <td className="px-6 py-4 text-xs">
                         <span className="font-semibold text-gray-800">
-                          {prov.tiempo_entrega_dias || 1} días
+                          {prov.tiempo_entrega_dias || 1} {prov.tiempo_entrega_dias === 1 ? 'día' : 'días'}
                         </span>
                         {prov.realiza_entregas && (
-                          <span className="block text-[10px] text-emerald-600">
+                          <span className="block text-[10px] text-emerald-600 font-medium mt-0.5">
                             ✓ Entregas a domicilio
                           </span>
                         )}
                       </td>
 
-                      {/* Estado */}
+                      {/* Estado con Toggle Rápido */}
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        <button
+                          type="button"
+                          onClick={() => alternarEstado(prov)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all shadow-2xs ${
                             prov.proveedor_activo
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-gray-100 text-gray-600'
+                              ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200'
                           }`}
+                          title={`Proveedor ${prov.proveedor_activo ? 'Activo' : 'Inactivo'}. Haz clic para alternar estado`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              prov.proveedor_activo ? 'bg-emerald-600' : 'bg-gray-400'
+                              prov.proveedor_activo ? 'bg-emerald-500' : 'bg-gray-400'
                             }`}
                           />
                           {prov.proveedor_activo ? 'Activo' : 'Inactivo'}
-                        </span>
+                        </button>
                       </td>
 
                       {/* Acciones */}
                       <td className="px-6 py-4 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => abrirEditarModal(prov)}
-                          className="h-8 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                        >
-                          <Pencil className="h-3.5 w-3.5 mr-1" />
-                          Editar
-                        </Button>
+                        <div className="flex items-center justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => abrirEditarModal(prov)}
+                            className="h-8 px-2.5 text-xs text-gray-600 hover:text-blue-700 hover:bg-blue-50 font-medium"
+                          >
+                            <Pencil className="h-3.5 w-3.5 mr-1 text-gray-400 group-hover:text-blue-600" />
+                            Editar
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -10,6 +10,7 @@ import { PrismaService } from '../database/prisma.service';
 import { slugify } from '../common/utils/slug.util';
 import { CreateMarcaDto } from './dto/create-marca.dto';
 import { QueryMarcaDto } from './dto/query-marca.dto';
+import { FusionarMarcasDto } from './dto/fusionar-marcas.dto';
 
 @Injectable()
 export class MarcasService {
@@ -19,7 +20,7 @@ export class MarcasService {
 
   /**
    * Búsqueda rápida optimizada para Comboboxes y selectores de catálogo.
-   * Retorna una proyección ligera ordenada por relevancia (OEM primero, luego alfabético).
+   * Retorna una proyección completa ordenada por relevancia (OEM primero, luego alfabético).
    */
   async findAll(query: QueryMarcaDto) {
     const where: Prisma.marcasWhereInput = {};
@@ -40,7 +41,7 @@ export class MarcasService {
       ];
     }
 
-    const take = query.limit || 20;
+    const take = query.limit || 100;
 
     return this.prisma.marcas.findMany({
       where,
@@ -49,10 +50,20 @@ export class MarcasService {
         id_marca: true,
         nombre: true,
         slug: true,
+        descripcion: true,
         es_fabricante_oem: true,
         pais_origen: true,
+        sitio_web: true,
         logo_url: true,
         activo: true,
+        fecha_creacion: true,
+        fecha_modificacion: true,
+        _count: {
+          select: {
+            catalogo_componentes: true,
+            articulos_proveedores: true,
+          },
+        },
       },
       orderBy: [
         { es_fabricante_oem: 'desc' },
@@ -109,8 +120,8 @@ export class MarcasService {
       );
     }
 
-    // 2. Generación automática y blindaje de slug único
-    const baseSlug = slugify(nombreSanitizado) || 'marca';
+    // 2. Generación o validación de slug único
+    const baseSlug = dto.slug?.trim() ? slugify(dto.slug.trim()) : slugify(nombreSanitizado) || 'marca';
     let slugFinal = baseSlug;
     let contador = 1;
 
@@ -135,7 +146,7 @@ export class MarcasService {
         sitio_web: dto.sitio_web?.trim() || null,
         logo_url: dto.logo_url?.trim() || null,
         es_fabricante_oem: dto.es_fabricante_oem ?? false,
-        activo: true,
+        activo: dto.activo ?? true,
       },
       select: {
         id_marca: true,
@@ -184,6 +195,22 @@ export class MarcasService {
       data.nombre = nombreSanitizado.toUpperCase();
     }
 
+    if (dto.slug !== undefined) {
+      const slugSanitizado = slugify(dto.slug.trim());
+      if (slugSanitizado) {
+        const duplicadoSlug = await this.prisma.marcas.findFirst({
+          where: {
+            id_marca: { not: id },
+            slug: slugSanitizado,
+          },
+        });
+        if (duplicadoSlug) {
+          throw new ConflictException(`Ya existe una marca con el slug '${slugSanitizado}'.`);
+        }
+        data.slug = slugSanitizado;
+      }
+    }
+
     if (dto.descripcion !== undefined) data.descripcion = dto.descripcion?.trim() || null;
     if (dto.pais_origen !== undefined) data.pais_origen = dto.pais_origen?.trim() || null;
     if (dto.sitio_web !== undefined) data.sitio_web = dto.sitio_web?.trim() || null;
@@ -195,5 +222,98 @@ export class MarcasService {
       where: { id_marca: id },
       data,
     });
+  }
+
+  /**
+   * Fusión atómica de marcas (Merge Brands):
+   * Migra todos los repuestos (catalogo_componentes) y artículos de proveedores (articulos_proveedores)
+   * de la marca origen a la marca destino de forma transaccional, y desactiva o elimina la marca origen.
+   */
+  async fusionar(dto: FusionarMarcasDto) {
+    const { id_marca_origen, id_marca_destino, eliminar_origen = true } = dto;
+
+    if (id_marca_origen === id_marca_destino) {
+      throw new BadRequestException('La marca origen y la marca destino deben ser diferentes.');
+    }
+
+    const [marcaOrigen, marcaDestino] = await Promise.all([
+      this.prisma.marcas.findUnique({
+        where: { id_marca: id_marca_origen },
+        include: {
+          _count: {
+            select: {
+              catalogo_componentes: true,
+              articulos_proveedores: true,
+            },
+          },
+        },
+      }),
+      this.prisma.marcas.findUnique({
+        where: { id_marca: id_marca_destino },
+      }),
+    ]);
+
+    if (!marcaOrigen) {
+      throw new NotFoundException(`La marca origen con ID ${id_marca_origen} no existe.`);
+    }
+
+    if (!marcaDestino) {
+      throw new NotFoundException(`La marca destino con ID ${id_marca_destino} no existe.`);
+    }
+
+    const res = await this.prisma.$transaction(async (tx) => {
+      // 1. Migrar catalogo_componentes (id_marca y nombre de marca desnormalizado)
+      const articulosActualizados = await tx.catalogo_componentes.updateMany({
+        where: { id_marca: id_marca_origen },
+        data: {
+          id_marca: id_marca_destino,
+          marca: marcaDestino.nombre,
+        },
+      });
+
+      // 2. Migrar articulos_proveedores (id_marca_ofrecida y marca_ofrecida desnormalizado)
+      const proveedoresActualizados = await tx.articulos_proveedores.updateMany({
+        where: { id_marca_ofrecida: id_marca_origen },
+        data: {
+          id_marca_ofrecida: id_marca_destino,
+          marca_ofrecida: marcaDestino.nombre,
+        },
+      });
+
+      // 3. Eliminar o desactivar la marca origen
+      if (eliminar_origen) {
+        await tx.marcas.delete({
+          where: { id_marca: id_marca_origen },
+        });
+      } else {
+        await tx.marcas.update({
+          where: { id_marca: id_marca_origen },
+          data: {
+            activo: false,
+            descripcion: marcaOrigen.descripcion
+              ? `${marcaOrigen.descripcion} [Fusionada en ${marcaDestino.nombre}]`
+              : `[Fusionada en ${marcaDestino.nombre}]`,
+          },
+        });
+      }
+
+      return {
+        articulos_migrados: articulosActualizados.count,
+        proveedores_migrados: proveedoresActualizados.count,
+      };
+    });
+
+    this.logger.log(
+      `Fusión completada con éxito: '${marcaOrigen.nombre}' (ID ${id_marca_origen}) transferida a '${marcaDestino.nombre}' (ID ${id_marca_destino}). Repuestos migrados: ${res.articulos_migrados}`,
+    );
+
+    return {
+      success: true,
+      mensaje: `Fusión completada. Se migraron ${res.articulos_migrados} repuesto(s) de "${marcaOrigen.nombre}" a "${marcaDestino.nombre}".`,
+      marca_destino: marcaDestino,
+      articulos_migrados: res.articulos_migrados,
+      proveedores_migrados: res.proveedores_migrados,
+      origen_eliminado: eliminar_origen,
+    };
   }
 }

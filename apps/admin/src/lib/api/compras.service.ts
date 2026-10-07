@@ -13,6 +13,7 @@ import {
   CreateArticuloMaestroPayload,
   CreateCategoriaPayload,
   CreateMarcaPayload,
+  FusionarMarcasPayload,
   FiltrosArticulos,
   HistorialCostoCompra,
   Marca,
@@ -240,6 +241,19 @@ export const comprasService = {
    */
   async getMarca(id: number): Promise<Marca> {
     const response = await apiClient.get<Marca>(`/marcas/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Fusionar marcas redundantes (Merge Brands)
+   */
+  async fusionarMarcas(payload: FusionarMarcasPayload): Promise<{
+    success: boolean;
+    mensaje: string;
+    articulos_migrados: number;
+    proveedores_migrados: number;
+  }> {
+    const response = await apiClient.post('/marcas/fusionar', payload);
     return response.data;
   },
 

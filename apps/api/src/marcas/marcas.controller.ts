@@ -12,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateMarcaDto } from './dto/create-marca.dto';
+import { FusionarMarcasDto } from './dto/fusionar-marcas.dto';
 import { QueryMarcaDto } from './dto/query-marca.dto';
 import { MarcasService } from './marcas.service';
 
@@ -76,5 +77,21 @@ export class MarcasController {
     @Body() dto: CreateMarcaDto,
   ) {
     return this.marcasService.update(id, dto);
+  }
+
+  /**
+   * Fusionar marcas redundantes (Merge Brands).
+   */
+  @Post('fusionar')
+  @ApiOperation({
+    summary: 'Fusionar marcas redundantes en una marca principal (Merge)',
+    description:
+      'Transfiere de forma atómica todos los repuestos del catálogo y vinculaciones de proveedores de la marca origen a la marca destino, eliminando o desactivando la marca origen.',
+  })
+  @ApiResponse({ status: 200, description: 'Fusión completada exitosamente.' })
+  @ApiResponse({ status: 400, description: 'Parámetros inválidos o IDs idénticos.' })
+  @ApiResponse({ status: 404, description: 'Marca origen o destino no encontrada.' })
+  async fusionar(@Body() dto: FusionarMarcasDto) {
+    return this.marcasService.fusionar(dto);
   }
 }

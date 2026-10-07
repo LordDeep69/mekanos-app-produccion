@@ -321,7 +321,37 @@ export class CategoriasComponenteService {
       data.descripcion = dto.descripcion?.trim() || null;
     }
 
-    if (dto.activo !== undefined) {
+    if (dto.activo === false && actual.activo === true) {
+      // 1. Integridad referencial: validar artículos activos asociados a la categoría
+      const articulosAsociados = await this.prisma.catalogo_componentes.count({
+        where: {
+          id_categoria: id,
+          activo: true,
+        },
+      });
+
+      if (articulosAsociados > 0) {
+        throw new BadRequestException(
+          `No se puede desactivar la categoría '${actual.nombre}' porque contiene ${articulosAsociados} artículo(s) activo(s) en el catálogo. Reubique los artículos antes de desactivar la rama.`,
+        );
+      }
+
+      // 2. Integridad jerárquica: validar subcategorías hijas activas
+      const subcategoriasActivas = await this.prisma.categorias_componente.count({
+        where: {
+          id_padre: id,
+          activo: true,
+        },
+      });
+
+      if (subcategoriasActivas > 0) {
+        throw new BadRequestException(
+          `No se puede desactivar la categoría '${actual.nombre}' porque contiene ${subcategoriasActivas} subcategoría(s) activa(s). Desactive o reubique las subcategorías hijas primero.`,
+        );
+      }
+
+      data.activo = false;
+    } else if (dto.activo !== undefined) {
       data.activo = dto.activo;
     }
 
