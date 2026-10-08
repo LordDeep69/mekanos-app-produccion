@@ -288,17 +288,12 @@ export class ArticulosService {
 
         // Stock inicial = movimiento auditable en Kardex (el stock nunca se "digita")
         if (stockInicial > 0) {
-          const maxMov = await tx.movimientos_inventario.aggregate({
-            _max: { id_movimiento: true },
-          });
-          const nuevoIdMov = (maxMov._max.id_movimiento || 0) + 1;
           const bodega = await tx.ubicaciones_bodega.findFirst({
             where: { activo: true },
           });
 
           await tx.movimientos_inventario.create({
             data: {
-              id_movimiento: nuevoIdMov,
               tipo_movimiento: 'ENTRADA',
               origen_movimiento: 'INVENTARIO_INICIAL',
               id_componente: idComponente,

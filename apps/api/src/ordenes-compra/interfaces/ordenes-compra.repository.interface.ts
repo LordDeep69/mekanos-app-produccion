@@ -5,10 +5,13 @@ export interface IOrdenesCompraRepository {
   findAll(filters: OrdenesCompraFilters): Promise<OrdenesCompraPaginatedResult>;
   findById(idOrdenCompra: number): Promise<OrdenCompraResult>;
   getOrdenesActivasProveedor(idProveedor: number): Promise<OrdenCompraResult[]>;
+  getResumenKpis(): Promise<OrdenesCompraResumenKpis>;
+  getSourcingProveedor(idProveedor: number): Promise<ArticuloSourcingResult[]>;
+  getCostoComponente(idProveedor: number, idComponente: number): Promise<CostoComponenteResult>;
 }
 
 export interface CrearOrdenCompraData {
-  numero_orden_compra: string;
+  numero_orden_compra?: string;
   id_proveedor: number;
   fecha_necesidad?: Date;
   observaciones?: string;
@@ -44,17 +47,26 @@ export interface OrdenCompraResult {
   solicitada_por: number;
   aprobada_por: number | null;
   fecha_aprobacion: Date | null;
+  subtotal: number;
+  porcentaje_iva: number;
+  iva: number;
+  total: number;
+  total_items: number;
   proveedor?: {
     id_proveedor: number;
     nombre_completo: string;
+    razon_social?: string | null;
+    numero_identificacion?: string | null;
   };
   solicitante?: {
     id_usuario: number;
     nombre_completo: string;
+    username?: string;
   };
   aprobador?: {
     id_usuario: number;
     nombre_completo: string;
+    username?: string;
   } | null;
   detalles?: OrdenCompraDetalleResult[];
   recepciones?: RecepcionCompraResult[];
@@ -71,7 +83,8 @@ export interface OrdenCompraDetalleResult {
     id_componente: number;
     referencia_fabricante: string;
     descripcion_corta?: string;
-    codigo_interno?: string;
+    codigo_interno?: string | null;
+    unidad_medida?: string | null;
   };
 }
 
@@ -94,3 +107,39 @@ export interface OrdenesCompraPaginatedResult {
     totalPages: number;
   };
 }
+
+export interface OrdenesCompraResumenKpis {
+  total_ordenes: number;
+  borradores: number;
+  enviadas: number;
+  parciales: number;
+  completadas: number;
+  canceladas: number;
+  monto_total_comprometido: number;
+}
+
+export interface ArticuloSourcingResult {
+  id_componente: number;
+  codigo_interno: string | null;
+  descripcion_corta: string;
+  referencia_fabricante: string;
+  referencia_proveedor: string | null;
+  costo_actual: number;
+  moneda: string;
+  tiempo_entrega_dias: number | null;
+  cantidad_minima_compra: number | null;
+  es_pactado: boolean;
+  stock_actual: number;
+  unidad_medida: string | null;
+}
+
+export interface CostoComponenteResult {
+  id_componente: number;
+  id_proveedor: number;
+  costo: number;
+  moneda: string;
+  referencia_proveedor: string | null;
+  tiempo_entrega_dias: number | null;
+  es_pactado: boolean;
+}
+

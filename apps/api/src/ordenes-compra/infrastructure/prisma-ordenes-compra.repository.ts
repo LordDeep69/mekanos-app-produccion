@@ -1,16 +1,89 @@
 import { PrismaService } from '@mekanos/database';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
-    CrearOrdenCompraData,
-    IOrdenesCompraRepository,
-    OrdenCompraResult,
-    OrdenesCompraFilters,
-    OrdenesCompraPaginatedResult,
+  ArticuloSourcingResult,
+  CostoComponenteResult,
+  CrearOrdenCompraData,
+  IOrdenesCompraRepository,
+  OrdenCompraResult,
+  OrdenesCompraFilters,
+  OrdenesCompraPaginatedResult,
+  OrdenesCompraResumenKpis,
 } from '../interfaces/ordenes-compra.repository.interface';
 
 @Injectable()
 export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Generación atómica del siguiente número correlativo determinista formal de Orden de Compra.
+   * Formato industrial estandarizado: OC-{YYYY}-{0001} (ej: OC-2026-0001).
+   * Utiliza sequence_counter con bloqueo FOR UPDATE para serializar transacciones concurrentes.
+   */
+  private async generarSiguienteNumeroOrden(tx: any): Promise<string> {
+    const year = new Date().getFullYear();
+    const rows = await tx.$queryRawUnsafe(`
+      SELECT id, current_value FROM sequence_counter
+      WHERE type = 'OC' AND year = ${year}
+      FOR UPDATE;
+    `);
+
+    let nextVal = 1;
+    if (rows && rows.length > 0) {
+      nextVal = Number(rows[0].current_value) + 1;
+      await tx.$executeRawUnsafe(`
+        UPDATE sequence_counter
+        SET current_value = ${nextVal}, updated_at = NOW()
+        WHERE id = ${rows[0].id};
+      `);
+    } else {
+      const maxRes = await tx.$queryRawUnsafe(`
+        SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sequence_counter;
+      `);
+      const nextId = Number(maxRes[0]?.next_id || 100);
+      await tx.$executeRawUnsafe(`
+        INSERT INTO sequence_counter (id, type, year, current_value, created_at, updated_at)
+        VALUES (${nextId}, 'OC', ${year}, 1, NOW(), NOW());
+      `);
+      nextVal = 1;
+    }
+
+    return `OC-${year}-${String(nextVal).padStart(4, '0')}`;
+  }
+
+  /**
+   * Helper para resolver nombres de usuarios en lote a partir de sus IDs
+   */
+  private async obtenerMapUsuarios(
+    userIds: number[],
+  ): Promise<Map<number, { id_usuario: number; nombre_completo: string; username: string }>> {
+    const ids = Array.from(new Set(userIds.filter((id) => id && id > 0)));
+    const map = new Map<number, { id_usuario: number; nombre_completo: string; username: string }>();
+    if (ids.length === 0) return map;
+
+    const usuarios = await this.prisma.usuarios.findMany({
+      where: { id_usuario: { in: ids } },
+      select: {
+        id_usuario: true,
+        username: true,
+        persona: {
+          select: {
+            nombre_completo: true,
+          },
+        },
+      },
+    });
+
+    for (const u of usuarios) {
+      map.set(u.id_usuario, {
+        id_usuario: u.id_usuario,
+        nombre_completo: u.persona?.nombre_completo || u.username || `Usuario #${u.id_usuario}`,
+        username: u.username,
+      });
+    }
+
+    return map;
+  }
 
   /**
    * Crea una orden de compra con items en transacción atómica
@@ -20,6 +93,15 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
     // Validar proveedor existe
     const proveedor = await this.prisma.proveedores.findUnique({
       where: { id_proveedor: data.id_proveedor },
+      include: {
+        persona: {
+          select: {
+            nombre_completo: true,
+            razon_social: true,
+            numero_identificacion: true,
+          },
+        },
+      },
     });
 
     if (!proveedor) {
@@ -33,24 +115,31 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
     });
 
     if (componentes.length !== componentesIds.length) {
-      throw new NotFoundException('Uno o más componentes no encontrados');
+      throw new NotFoundException('Uno o más componentes especificados no existen en el catálogo');
     }
 
-    // Validar número orden compra no duplicado
-    const existente = await this.prisma.ordenes_compra.findUnique({
-      where: { numero_orden_compra: data.numero_orden_compra },
-    });
-
-    if (existente) {
-      throw new ConflictException(`Número orden compra '${data.numero_orden_compra}' ya existe`);
-    }
-
-    // Transacción atómica: orden + detalles
+    // Transacción atómica: generación de correlativo + orden + detalles
     const ordenCreada = await this.prisma.$transaction(async (tx) => {
-      // Crear orden compra
+      let numeroOrden = data.numero_orden_compra?.trim();
+
+      if (numeroOrden) {
+        // Validar número orden compra no duplicado
+        const existente = await tx.ordenes_compra.findFirst({
+          where: { numero_orden_compra: numeroOrden },
+        });
+
+        if (existente) {
+          throw new ConflictException(`Número orden compra '${numeroOrden}' ya existe en el sistema`);
+        }
+      } else {
+        // Autogeneración determinista formal via sequence_counter
+        numeroOrden = await this.generarSiguienteNumeroOrden(tx);
+      }
+
+      // Crear orden compra cabecera
       const orden = await tx.ordenes_compra.create({
         data: {
-          numero_orden_compra: data.numero_orden_compra,
+          numero_orden_compra: numeroOrden,
           id_proveedor: data.id_proveedor,
           fecha_necesidad: data.fecha_necesidad || null,
           estado: 'BORRADOR',
@@ -59,43 +148,39 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         },
       });
 
-      // Crear detalles
-      const detallesData = data.items.map((item) => ({
-        id_orden_compra: orden.id_orden_compra,
-        id_componente: item.id_componente,
-        cantidad: item.cantidad,
-        precio_unitario: item.precio_unitario,
-        observaciones: item.observaciones || null,
-      }));
+      // Crear detalles con subtotal calculado
+      for (const item of data.items) {
+        const subtotal = Number((item.cantidad * item.precio_unitario).toFixed(2));
+        await tx.ordenes_compra_detalle.create({
+          data: {
+            id_orden_compra: orden.id_orden_compra,
+            id_componente: item.id_componente,
+            cantidad: item.cantidad,
+            precio_unitario: item.precio_unitario,
+            subtotal: subtotal,
+            observaciones: item.observaciones || null,
+          },
+        });
+      }
 
-      await tx.ordenes_compra_detalle.createMany({
-        data: detallesData,
-      });
-
-      // Retornar orden completa con relaciones
+      // Retornar orden completa con relaciones reales de Prisma
       return await tx.ordenes_compra.findUnique({
         where: { id_orden_compra: orden.id_orden_compra },
         include: {
           proveedores: {
             select: {
               id_proveedor: true,
+              id_persona: true,
               persona: {
                 select: {
                   nombre_completo: true,
+                  razon_social: true,
+                  numero_identificacion: true,
                 },
               },
             },
           },
-          usuarios_ordenes_compra_solicitada_porTousuarios: {
-            include: {
-              persona: {
-                select: {
-                  nombre_completo: true,
-                },
-              },
-            },
-          },
-          detalles: {
+          ordenes_compra_detalle: {
             include: {
               catalogo_componentes: {
                 select: {
@@ -103,15 +188,18 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
                   referencia_fabricante: true,
                   descripcion_corta: true,
                   codigo_interno: true,
+                  unidad_medida: true,
                 },
               },
             },
           },
+          recepciones_compra: true,
         },
       });
     });
 
-    return this.mapOrdenCompraToResult(ordenCreada);
+    const usuariosMap = await this.obtenerMapUsuarios([ordenCreada!.solicitada_por]);
+    return this.mapOrdenCompraToResult(ordenCreada, usuariosMap);
   }
 
   /**
@@ -128,10 +216,10 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
     }
 
     if (orden.estado !== 'BORRADOR') {
-      throw new ConflictException(`Orden compra debe estar en BORRADOR para enviar (actual: ${orden.estado})`);
+      throw new ConflictException(`Orden compra debe estar en BORRADOR para ser enviada/emitida (actual: ${orden.estado})`);
     }
 
-    // Actualizar estado y aprobar
+    // Actualizar estado y registrar aprobador
     const ordenActualizada = await this.prisma.ordenes_compra.update({
       where: { id_orden_compra: idOrdenCompra },
       data: {
@@ -143,32 +231,17 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         proveedores: {
           select: {
             id_proveedor: true,
+            id_persona: true,
             persona: {
               select: {
                 nombre_completo: true,
+                razon_social: true,
+                numero_identificacion: true,
               },
             },
           },
         },
-        usuarios_ordenes_compra_solicitada_porTousuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
-          },
-        },
-        usuarios_ordenes_compra_aprobada_porTousuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
-          },
-        },
-        detalles: {
+        ordenes_compra_detalle: {
           include: {
             catalogo_componentes: {
               select: {
@@ -176,19 +249,25 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
                 referencia_fabricante: true,
                 descripcion_corta: true,
                 codigo_interno: true,
+                unidad_medida: true,
               },
             },
           },
         },
+        recepciones_compra: true,
       },
     });
 
-    return this.mapOrdenCompraToResult(ordenActualizada);
+    const usuariosMap = await this.obtenerMapUsuarios([
+      ordenActualizada.solicitada_por,
+      ordenActualizada.aprobada_por || 0,
+    ]);
+    return this.mapOrdenCompraToResult(ordenActualizada, usuariosMap);
   }
 
   /**
    * Cancela orden compra
-   * Solo se puede cancelar si NO está COMPLETADA
+   * Solo se puede cancelar si NO está COMPLETADA ni ya CANCELADA
    */
   async cancelarOrdenCompra(idOrdenCompra: number, motivo: string, _userId: number): Promise<OrdenCompraResult> {
     const orden = await this.prisma.ordenes_compra.findUnique({
@@ -200,42 +279,35 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
     }
 
     if (orden.estado === 'COMPLETADA') {
-      throw new ConflictException('No se puede cancelar orden compra COMPLETADA');
+      throw new ConflictException('No se puede cancelar una orden de compra COMPLETADA');
     }
 
     if (orden.estado === 'CANCELADA') {
-      throw new ConflictException('Orden compra ya está CANCELADA');
+      throw new ConflictException('La orden de compra ya se encuentra CANCELADA');
     }
 
-    // Actualizar estado y motivo
+    // Actualizar estado y motivo en observaciones
     const ordenCancelada = await this.prisma.ordenes_compra.update({
       where: { id_orden_compra: idOrdenCompra },
       data: {
         estado: 'CANCELADA',
-        observaciones: `${orden.observaciones || ''}\n\nCANCELADA: ${motivo}`.trim(),
-        // REMOVED: modificado_por doesn't exist in ordenes_compra model
+        observaciones: `${orden.observaciones ? orden.observaciones + '\n' : ''}[CANCELADA]: ${motivo}`.trim(),
       },
       include: {
         proveedores: {
           select: {
             id_proveedor: true,
+            id_persona: true,
             persona: {
               select: {
                 nombre_completo: true,
+                razon_social: true,
+                numero_identificacion: true,
               },
             },
           },
         },
-        usuarios_ordenes_compra_solicitada_porTousuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
-          },
-        },
-        detalles: {
+        ordenes_compra_detalle: {
           include: {
             catalogo_componentes: {
               select: {
@@ -243,22 +315,28 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
                 referencia_fabricante: true,
                 descripcion_corta: true,
                 codigo_interno: true,
+                unidad_medida: true,
               },
             },
           },
         },
+        recepciones_compra: true,
       },
     });
 
-    return this.mapOrdenCompraToResult(ordenCancelada);
+    const usuariosMap = await this.obtenerMapUsuarios([
+      ordenCancelada.solicitada_por,
+      ordenCancelada.aprobada_por || 0,
+    ]);
+    return this.mapOrdenCompraToResult(ordenCancelada, usuariosMap);
   }
 
   /**
    * Lista órdenes compra con filtros y paginación
    */
   async findAll(filters: OrdenesCompraFilters): Promise<OrdenesCompraPaginatedResult> {
-    const page = filters.page || 1;
-    const limit = filters.limit || 10;
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters.limit && filters.limit > 0 ? filters.limit : 10;
     const skip = (page - 1) * limit;
 
     // Construir filtros dinámicos
@@ -275,6 +353,7 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
     if (filters.numero_orden) {
       where.numero_orden_compra = {
         contains: filters.numero_orden,
+        mode: 'insensitive',
       };
     }
 
@@ -288,43 +367,28 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
       }
     }
 
-    // Consulta paginada
+    // Consulta paginada concurrente
     const [ordenes, total] = await Promise.all([
       this.prisma.ordenes_compra.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { fecha_solicitud: 'desc' },
+        orderBy: { id_orden_compra: 'desc' },
         include: {
           proveedores: {
             select: {
               id_proveedor: true,
+              id_persona: true,
               persona: {
                 select: {
                   nombre_completo: true,
+                  razon_social: true,
+                  numero_identificacion: true,
                 },
               },
             },
           },
-          usuarios_ordenes_compra_solicitada_porTousuarios: {
-            include: {
-              persona: {
-                select: {
-                  nombre_completo: true,
-                },
-              },
-            },
-          },
-          usuarios_ordenes_compra_aprobada_porTousuarios: {
-            include: {
-              persona: {
-                select: {
-                  nombre_completo: true,
-                },
-              },
-            },
-          },
-          detalles: {
+          ordenes_compra_detalle: {
             include: {
               catalogo_componentes: {
                 select: {
@@ -332,39 +396,38 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
                   referencia_fabricante: true,
                   descripcion_corta: true,
                   codigo_interno: true,
+                  unidad_medida: true,
                 },
               },
             },
           },
-          recepciones: {
-            select: {
-              id_recepcion: true,
-              numero_recepcion: true,
-              cantidad_recibida: true,
-              cantidad_aceptada: true,
-              cantidad_rechazada: true,
-              calidad: true,
-              fecha_recepcion: true,
-            },
-          },
+          recepciones_compra: true,
         },
       }),
       this.prisma.ordenes_compra.count({ where }),
     ]);
 
+    // Recolectar IDs de usuarios de todas las órdenes para resolver en un solo query
+    const userIds: number[] = [];
+    for (const o of ordenes) {
+      if (o.solicitada_por) userIds.push(o.solicitada_por);
+      if (o.aprobada_por) userIds.push(o.aprobada_por);
+    }
+    const usuariosMap = await this.obtenerMapUsuarios(userIds);
+
     return {
-      data: ordenes.map((orden) => this.mapOrdenCompraToResult(orden)),
+      data: ordenes.map((orden) => this.mapOrdenCompraToResult(orden, usuariosMap)),
       meta: {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit) || 1,
       },
     };
   }
 
   /**
-   * Obtiene orden compra por ID con todas relaciones
+   * Obtiene orden compra por ID con todas sus relaciones
    */
   async findById(idOrdenCompra: number): Promise<OrdenCompraResult> {
     const orden = await this.prisma.ordenes_compra.findUnique({
@@ -373,32 +436,17 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         proveedores: {
           select: {
             id_proveedor: true,
+            id_persona: true,
             persona: {
               select: {
                 nombre_completo: true,
+                razon_social: true,
+                numero_identificacion: true,
               },
             },
           },
         },
-        usuarios_ordenes_compra_solicitada_porTousuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
-          },
-        },
-        usuarios_ordenes_compra_aprobada_porTousuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
-          },
-        },
-        detalles: {
+        ordenes_compra_detalle: {
           include: {
             catalogo_componentes: {
               select: {
@@ -406,20 +454,12 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
                 referencia_fabricante: true,
                 descripcion_corta: true,
                 codigo_interno: true,
+                unidad_medida: true,
               },
             },
           },
         },
-        recepciones: {
-          select: {
-            id_recepcion: true,
-            numero_recepcion: true,
-            cantidad_recibida: true,
-            cantidad_aceptada: true,
-            cantidad_rechazada: true,
-            calidad: true,
-            fecha_recepcion: true,
-          },
+        recepciones_compra: {
           orderBy: {
             fecha_recepcion: 'desc',
           },
@@ -431,7 +471,11 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
       throw new NotFoundException(`Orden compra ID ${idOrdenCompra} no encontrada`);
     }
 
-    return this.mapOrdenCompraToResult(orden);
+    const userIds = [orden.solicitada_por];
+    if (orden.aprobada_por) userIds.push(orden.aprobada_por);
+    const usuariosMap = await this.obtenerMapUsuarios(userIds);
+
+    return this.mapOrdenCompraToResult(orden, usuariosMap);
   }
 
   /**
@@ -452,23 +496,17 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         proveedores: {
           select: {
             id_proveedor: true,
+            id_persona: true,
             persona: {
               select: {
                 nombre_completo: true,
+                razon_social: true,
+                numero_identificacion: true,
               },
             },
           },
         },
-        usuarios_ordenes_compra_solicitada_porTousuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
-          },
-        },
-        detalles: {
+        ordenes_compra_detalle: {
           include: {
             catalogo_componentes: {
               select: {
@@ -476,20 +514,240 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
                 referencia_fabricante: true,
                 descripcion_corta: true,
                 codigo_interno: true,
+                unidad_medida: true,
               },
             },
+          },
+        },
+        recepciones_compra: true,
+      },
+    });
+
+    const userIds: number[] = [];
+    for (const o of ordenes) {
+      if (o.solicitada_por) userIds.push(o.solicitada_por);
+      if (o.aprobada_por) userIds.push(o.aprobada_por);
+    }
+    const usuariosMap = await this.obtenerMapUsuarios(userIds);
+
+    return ordenes.map((orden) => this.mapOrdenCompraToResult(orden, usuariosMap));
+  }
+
+  /**
+   * KPIs agregados para el dashboard comercial de órdenes de compra
+   */
+  async getResumenKpis(): Promise<OrdenesCompraResumenKpis> {
+    const [total, borradores, enviadas, parciales, completadas, canceladas, ordenesActivas] = await Promise.all([
+      this.prisma.ordenes_compra.count(),
+      this.prisma.ordenes_compra.count({ where: { estado: 'BORRADOR' } }),
+      this.prisma.ordenes_compra.count({ where: { estado: 'ENVIADA' } }),
+      this.prisma.ordenes_compra.count({ where: { estado: 'PARCIAL' } }),
+      this.prisma.ordenes_compra.count({ where: { estado: 'COMPLETADA' } }),
+      this.prisma.ordenes_compra.count({ where: { estado: 'CANCELADA' } }),
+      this.prisma.ordenes_compra.findMany({
+        where: { estado: { in: ['ENVIADA', 'PARCIAL', 'COMPLETADA'] } },
+        select: {
+          ordenes_compra_detalle: {
+            select: {
+              subtotal: true,
+              cantidad: true,
+              precio_unitario: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    let montoTotal = 0;
+    for (const oc of ordenesActivas) {
+      for (const d of oc.ordenes_compra_detalle) {
+        const sub = d.subtotal ? Number(d.subtotal) : Number(d.cantidad) * Number(d.precio_unitario);
+        montoTotal += sub * 1.19; // IVA 19%
+      }
+    }
+
+    return {
+      total_ordenes: total,
+      borradores,
+      enviadas,
+      parciales,
+      completadas,
+      canceladas,
+      monto_total_comprometido: Math.round(montoTotal),
+    };
+  }
+
+  /**
+   * Obtiene catálogo de artículos para un proveedor (articulos_proveedores pactados + catálogo base)
+   */
+  async getSourcingProveedor(idProveedor: number): Promise<ArticuloSourcingResult[]> {
+    // 1. Obtener los pactados para este proveedor
+    const pactados = await this.prisma.articulos_proveedores.findMany({
+      where: {
+        id_proveedor: idProveedor,
+        activo: true,
+      },
+      include: {
+        catalogo_componentes: {
+          select: {
+            id_componente: true,
+            codigo_interno: true,
+            descripcion_corta: true,
+            referencia_fabricante: true,
+            precio_compra: true,
+            stock_actual: true,
+            unidad_medida: true,
           },
         },
       },
     });
 
-    return ordenes.map((orden) => this.mapOrdenCompraToResult(orden));
+    const pactadosMap = new Map<number, (typeof pactados)[0]>();
+    for (const p of pactados) {
+      pactadosMap.set(p.id_componente, p);
+    }
+
+    // 2. Obtener componentes activos del catálogo
+    const todosComponentes = await this.prisma.catalogo_componentes.findMany({
+      where: { activo: true, es_comprable: true },
+      select: {
+        id_componente: true,
+        codigo_interno: true,
+        descripcion_corta: true,
+        referencia_fabricante: true,
+        precio_compra: true,
+        stock_actual: true,
+        unidad_medida: true,
+      },
+      orderBy: { descripcion_corta: 'asc' },
+    });
+
+    return todosComponentes.map((c) => {
+      const pactado = pactadosMap.get(c.id_componente);
+      if (pactado) {
+        return {
+          id_componente: c.id_componente,
+          codigo_interno: c.codigo_interno,
+          descripcion_corta: c.descripcion_corta,
+          referencia_fabricante: c.referencia_fabricante,
+          referencia_proveedor: pactado.referencia_proveedor,
+          costo_actual: Number(pactado.costo_actual),
+          moneda: pactado.moneda,
+          tiempo_entrega_dias: pactado.tiempo_entrega_dias,
+          cantidad_minima_compra: pactado.cantidad_minima_compra ? Number(pactado.cantidad_minima_compra) : null,
+          es_pactado: true,
+          stock_actual: c.stock_actual,
+          unidad_medida: c.unidad_medida,
+        };
+      }
+
+      return {
+        id_componente: c.id_componente,
+        codigo_interno: c.codigo_interno,
+        descripcion_corta: c.descripcion_corta,
+        referencia_fabricante: c.referencia_fabricante,
+        referencia_proveedor: null,
+        costo_actual: Number(c.precio_compra || 0),
+        moneda: 'COP',
+        tiempo_entrega_dias: null,
+        cantidad_minima_compra: null,
+        es_pactado: false,
+        stock_actual: c.stock_actual,
+        unidad_medida: c.unidad_medida,
+      };
+    });
   }
 
   /**
-   * Mapper: Prisma entity → Result DTO
+   * Obtiene el costo específico de un componente para un proveedor
    */
-  private mapOrdenCompraToResult(orden: any): OrdenCompraResult {
+  async getCostoComponente(idProveedor: number, idComponente: number): Promise<CostoComponenteResult> {
+    const pactado = await this.prisma.articulos_proveedores.findUnique({
+      where: {
+        id_componente_id_proveedor: {
+          id_componente: idComponente,
+          id_proveedor: idProveedor,
+        },
+      },
+    });
+
+    if (pactado && pactado.activo) {
+      return {
+        id_componente: idComponente,
+        id_proveedor: idProveedor,
+        costo: Number(pactado.costo_actual),
+        moneda: pactado.moneda,
+        referencia_proveedor: pactado.referencia_proveedor,
+        tiempo_entrega_dias: pactado.tiempo_entrega_dias,
+        es_pactado: true,
+      };
+    }
+
+    const componente = await this.prisma.catalogo_componentes.findUnique({
+      where: { id_componente: idComponente },
+      select: { id_componente: true, precio_compra: true, referencia_fabricante: true },
+    });
+
+    if (!componente) {
+      throw new NotFoundException(`Componente ID ${idComponente} no encontrado en el catálogo`);
+    }
+
+    return {
+      id_componente: idComponente,
+      id_proveedor: idProveedor,
+      costo: Number(componente.precio_compra || 0),
+      moneda: 'COP',
+      referencia_proveedor: null,
+      tiempo_entrega_dias: null,
+      es_pactado: false,
+    };
+  }
+
+  /**
+   * Mapper: Prisma entity → Result DTO con cálculos financieros transparentes
+   */
+  private mapOrdenCompraToResult(
+    orden: any,
+    usuariosMap?: Map<number, { id_usuario: number; nombre_completo: string; username: string }>,
+  ): OrdenCompraResult {
+    const detallesRaw = orden.ordenes_compra_detalle || [];
+    let subtotalCalculado = 0;
+
+    const detalles = detallesRaw.map((detalle: any) => {
+      const cantidad = parseFloat(detalle.cantidad?.toString() || '0');
+      const precioUnitario = parseFloat(detalle.precio_unitario?.toString() || '0');
+      const subtotalItem = detalle.subtotal
+        ? parseFloat(detalle.subtotal.toString())
+        : parseFloat((cantidad * precioUnitario).toFixed(2));
+
+      subtotalCalculado += subtotalItem;
+
+      return {
+        id_detalle: detalle.id_detalle,
+        id_componente: detalle.id_componente,
+        cantidad,
+        precio_unitario: precioUnitario,
+        subtotal: subtotalItem,
+        observaciones: detalle.observaciones,
+        componente: detalle.catalogo_componentes
+          ? {
+              id_componente: detalle.catalogo_componentes.id_componente,
+              referencia_fabricante: detalle.catalogo_componentes.referencia_fabricante,
+              descripcion_corta: detalle.catalogo_componentes.descripcion_corta,
+              codigo_interno: detalle.catalogo_componentes.codigo_interno,
+              unidad_medida: detalle.catalogo_componentes.unidad_medida,
+            }
+          : undefined,
+      };
+    });
+
+    const porcentajeIva = 19;
+    const ivaCalculado = parseFloat((subtotalCalculado * (porcentajeIva / 100)).toFixed(2));
+    const totalCalculado = parseFloat((subtotalCalculado + ivaCalculado).toFixed(2));
+
+    const solicitanteInfo = usuariosMap?.get(orden.solicitada_por);
+    const aprobadorInfo = orden.aprobada_por ? usuariosMap?.get(orden.aprobada_por) : null;
+
     return {
       id_orden_compra: orden.id_orden_compra,
       numero_orden_compra: orden.numero_orden_compra,
@@ -501,48 +759,40 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
       solicitada_por: orden.solicitada_por,
       aprobada_por: orden.aprobada_por,
       fecha_aprobacion: orden.fecha_aprobacion,
+      subtotal: parseFloat(subtotalCalculado.toFixed(2)),
+      porcentaje_iva: porcentajeIva,
+      iva: ivaCalculado,
+      total: totalCalculado,
+      total_items: detalles.length,
       proveedor: orden.proveedores
         ? {
             id_proveedor: orden.proveedores.id_proveedor,
             nombre_completo: orden.proveedores.persona?.nombre_completo || 'N/A',
+            razon_social: orden.proveedores.persona?.razon_social || null,
+            numero_identificacion: orden.proveedores.persona?.numero_identificacion || null,
           }
         : undefined,
-      solicitante: orden.usuarios_ordenes_compra_solicitada_porTousuarios
+      solicitante: solicitanteInfo
         ? {
-            id_usuario: orden.usuarios_ordenes_compra_solicitada_porTousuarios.id_usuario,
-            nombre_completo:
-              orden.usuarios_ordenes_compra_solicitada_porTousuarios.persona?.nombre_completo || 'N/A',
+            id_usuario: solicitanteInfo.id_usuario,
+            nombre_completo: solicitanteInfo.nombre_completo,
+            username: solicitanteInfo.username,
           }
         : undefined,
-      aprobador: orden.usuarios_ordenes_compra_aprobada_porTousuarios
+      aprobador: aprobadorInfo
         ? {
-            id_usuario: orden.usuarios_ordenes_compra_aprobada_porTousuarios.id_usuario,
-            nombre_completo:
-              orden.usuarios_ordenes_compra_aprobada_porTousuarios.persona?.nombre_completo || 'N/A',
+            id_usuario: aprobadorInfo.id_usuario,
+            nombre_completo: aprobadorInfo.nombre_completo,
+            username: aprobadorInfo.username,
           }
         : null,
-      detalles: orden.detalles?.map((detalle: any) => ({
-        id_detalle: detalle.id_detalle,
-        id_componente: detalle.id_componente,
-        cantidad: parseFloat(detalle.cantidad.toString()),
-        precio_unitario: parseFloat(detalle.precio_unitario.toString()),
-        subtotal: parseFloat(detalle.subtotal?.toString() || '0'),
-        observaciones: detalle.observaciones,
-        componente: detalle.catalogo_componentes
-          ? {
-              id_componente: detalle.catalogo_componentes.id_componente,
-              referencia_fabricante: detalle.catalogo_componentes.referencia_fabricante,
-              descripcion_corta: detalle.catalogo_componentes.descripcion_corta,
-              codigo_interno: detalle.catalogo_componentes.codigo_interno,
-            }
-          : undefined,
-      })),
-      recepciones: orden.recepciones?.map((recepcion: any) => ({
+      detalles,
+      recepciones: (orden.recepciones_compra || []).map((recepcion: any) => ({
         id_recepcion: recepcion.id_recepcion,
         numero_recepcion: recepcion.numero_recepcion,
-        cantidad_recibida: parseFloat(recepcion.cantidad_recibida.toString()),
-        cantidad_aceptada: parseFloat(recepcion.cantidad_aceptada.toString()),
-        cantidad_rechazada: parseFloat(recepcion.cantidad_rechazada.toString()),
+        cantidad_recibida: parseFloat(recepcion.cantidad_recibida?.toString() || '0'),
+        cantidad_aceptada: parseFloat(recepcion.cantidad_aceptada?.toString() || '0'),
+        cantidad_rechazada: parseFloat(recepcion.cantidad_rechazada?.toString() || '0'),
         calidad: recepcion.calidad,
         fecha_recepcion: recepcion.fecha_recepcion,
       })),

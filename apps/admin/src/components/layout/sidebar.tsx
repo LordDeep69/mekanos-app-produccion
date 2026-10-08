@@ -30,6 +30,7 @@ import {
   PanelLeftOpen,
   Settings2,
   Shield,
+  ShoppingBag,
   ShoppingCart,
   Tag,
   Truck,
@@ -73,6 +74,7 @@ const navSections: NavSection[] = [
         icon: ShoppingCart,
         badge: 'Enterprise',
         children: [
+          { title: 'Órdenes de Compra', href: '/compras/ordenes', icon: ShoppingBag },
           { title: 'Catálogo Maestro', href: '/compras/catalogo', icon: Boxes },
           { title: 'Marcas y Fabricantes', href: '/compras/marcas', icon: Tag },
           { title: 'Familias y Taxonomía', href: '/compras/categorias', icon: Layers },

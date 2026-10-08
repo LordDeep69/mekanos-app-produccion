@@ -1,6 +1,6 @@
 export class CrearOrdenCompraCommand {
   constructor(
-    public readonly numero_orden_compra: string,
+    public readonly numero_orden_compra: string | undefined,
     public readonly id_proveedor: number,
     public readonly fecha_necesidad: string | undefined,
     public readonly observaciones: string | undefined,

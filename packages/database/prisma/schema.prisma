@@ -1462,7 +1462,7 @@ model motivos_rechazo {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model movimientos_inventario {
-  id_movimiento        Int                               @id
+  id_movimiento        Int                               @id @default(autoincrement())
   tipo_movimiento      tipo_movimiento_inventario_enum
   origen_movimiento    origen_movimiento_inventario_enum
   id_componente        Int
@@ -1529,7 +1529,7 @@ model ordenes_actividades_plan {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model ordenes_compra {
-  id_orden_compra        Int                      @id
+  id_orden_compra        Int                      @id @default(autoincrement())
   numero_orden_compra    String                   @db.VarChar(50)
   id_proveedor           Int
   fecha_solicitud        DateTime                 @default(dbgenerated("CURRENT_DATE")) @db.Date
@@ -1551,7 +1551,7 @@ model ordenes_compra {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model ordenes_compra_detalle {
-  id_detalle           Int                  @id
+  id_detalle           Int                  @id @default(autoincrement())
   id_orden_compra      Int
   id_componente        Int
   cantidad             Decimal              @db.Decimal(10, 2)
@@ -1874,7 +1874,7 @@ model proveedores {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model recepciones_compra {
-  id_recepcion           Int                        @id
+  id_recepcion           Int                        @id @default(autoincrement())
   numero_recepcion       String                     @db.VarChar(50)
   id_orden_compra        Int
   id_detalle_orden       Int

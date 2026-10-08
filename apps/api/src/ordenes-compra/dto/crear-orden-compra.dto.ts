@@ -23,9 +23,10 @@ export class ItemOrdenCompraDto {
 }
 
 export class CrearOrdenCompraDto {
-  @ApiProperty({ description: 'Número único de la orden compra', example: 'OC-2025-001' })
+  @ApiPropertyOptional({ description: 'Número único de la orden compra (si se omite, se autogenera OC-YYYY-XXXX)', example: 'OC-2026-0001' })
+  @IsOptional()
   @IsString()
-  numero_orden_compra!: string;
+  numero_orden_compra?: string;
 
   @ApiProperty({ description: 'ID del proveedor', example: 1 })
   @IsInt()

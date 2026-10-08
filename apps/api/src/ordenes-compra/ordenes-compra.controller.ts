@@ -26,9 +26,12 @@ import { CrearOrdenCompraCommand } from './commands/crear-orden-compra.command';
 import { EnviarOrdenCompraCommand } from './commands/enviar-orden-compra.command';
 import { CancelarOrdenCompraDto } from './dto/cancelar-orden-compra.dto';
 import { CrearOrdenCompraDto } from './dto/crear-orden-compra.dto';
+import { GetCostoComponenteQuery } from './queries/get-costo-componente.query';
 import { GetOrdenCompraByIdQuery } from './queries/get-orden-compra-by-id.query';
 import { GetOrdenesActivasProveedorQuery } from './queries/get-ordenes-activas-proveedor.query';
 import { GetOrdenesCompraQuery } from './queries/get-ordenes-compra.query';
+import { GetResumenKpisQuery } from './queries/get-resumen-kpis.query';
+import { GetSourcingProveedorQuery } from './queries/get-sourcing-proveedor.query';
 
 @ApiTags('FASE 5 - Órdenes de Compra')
 @ApiBearerAuth('JWT-auth')
@@ -168,6 +171,75 @@ export class OrdenesCompraController {
       message: 'Órdenes compra obtenidas exitosamente',
       data: result.data,
       meta: result.meta,
+    };
+  }
+
+  /**
+   * GET /api/ordenes-compra/resumen
+   * KPIs globales para dashboard de órdenes de compra
+   */
+  @Get('resumen')
+  @ApiOperation({
+    summary: 'Resumen y KPIs de órdenes de compra',
+    description: 'Obtiene métricas de órdenes: total, borradores, enviadas, parciales, completadas y monto total comprometido.',
+  })
+  @ApiResponse({ status: 200, description: 'KPIs obtenidos exitosamente' })
+  async getResumenKpis() {
+    const query = new GetResumenKpisQuery();
+    const result = await this.queryBus.execute(query);
+
+    return {
+      success: true,
+      message: 'KPIs de órdenes de compra obtenidos exitosamente',
+      data: result,
+    };
+  }
+
+  /**
+   * GET /api/ordenes-compra/sourcing/costo
+   * Precarga costo pactado o base para un componente y proveedor
+   */
+  @Get('sourcing/costo')
+  @ApiOperation({
+    summary: 'Consultar costo de abastecimiento pactado o base',
+    description: 'Obtiene el costo pactado en articulos_proveedores si existe, o el precio base del catálogo de componentes.',
+  })
+  @ApiQuery({ name: 'id_proveedor', required: true, description: 'ID del proveedor' })
+  @ApiQuery({ name: 'id_componente', required: true, description: 'ID del componente' })
+  @ApiResponse({ status: 200, description: 'Costo obtenido exitosamente' })
+  async getCostoComponente(
+    @Query('id_proveedor', ParseIntPipe) idProveedor: number,
+    @Query('id_componente', ParseIntPipe) idComponente: number,
+  ) {
+    const query = new GetCostoComponenteQuery(idProveedor, idComponente);
+    const result = await this.queryBus.execute(query);
+
+    return {
+      success: true,
+      message: 'Costo de sourcing obtenido exitosamente',
+      data: result,
+    };
+  }
+
+  /**
+   * GET /api/ordenes-compra/proveedor/:id/sourcing
+   * Obtener catálogo de componentes con cotizaciones para el proveedor
+   */
+  @Get('proveedor/:id/sourcing')
+  @ApiOperation({
+    summary: 'Obtener catálogo de abastecimiento para un proveedor',
+    description: 'Lista componentes indicando costos pactados y referencias específicas de proveedor.',
+  })
+  @ApiParam({ name: 'id', description: 'ID del proveedor', example: 1 })
+  @ApiResponse({ status: 200, description: 'Catálogo de abastecimiento del proveedor' })
+  async getSourcingProveedor(@Param('id', ParseIntPipe) idProveedor: number) {
+    const query = new GetSourcingProveedorQuery(idProveedor);
+    const result = await this.queryBus.execute(query);
+
+    return {
+      success: true,
+      message: 'Catálogo de abastecimiento obtenido exitosamente',
+      data: result,
     };
   }
 
