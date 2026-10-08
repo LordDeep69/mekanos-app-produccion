@@ -50,6 +50,7 @@ import {
   User,
   Wrench,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 
 import { comprasService } from '@/lib/api/compras.service';
@@ -70,6 +71,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ArticuloForm, ArticuloFormValues } from '@/components/compras/articulo-form';
 
 export default function FichaArticulo360Page() {
   const params = useParams();
@@ -85,10 +94,15 @@ export default function FichaArticulo360Page() {
   const [fuentes, setFuentes] = useState<ArticuloProveedor[]>([]);
   const [historial, setHistorial] = useState<HistorialCostoCompra[]>([]);
   const [proveedoresCatalogo, setProveedoresCatalogo] = useState<any[]>([]);
+  const [movimientosKardex, setMovimientosKardex] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Estados de Modales
+  const [modalEditarOpen, setModalEditarOpen] = useState(false);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [dialogDesactivarOpen, setDialogDesactivarOpen] = useState(false);
+  const [isProcessingEstado, setIsProcessingEstado] = useState(false);
   const [modalVincularOpen, setModalVincularOpen] = useState(false);
   const [modalActualizarPrecioOpen, setModalActualizarPrecioOpen] = useState(false);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<ArticuloProveedor | null>(null);
@@ -121,17 +135,19 @@ export default function FichaArticulo360Page() {
     if (!idComponente || isNaN(idComponente)) return;
     try {
       if (showToast) setRefreshing(true);
-      const [artRes, fuentesRes, histRes, provsRes] = await Promise.all([
+      const [artRes, fuentesRes, histRes, provsRes, kardexRes] = await Promise.all([
         comprasService.getArticuloById(idComponente),
         comprasService.getFuentesSuministro(idComponente),
         comprasService.getHistorialCostos(idComponente),
         comprasService.getProveedores(),
+        comprasService.getKardexComponente(idComponente),
       ]);
 
       setArticulo(artRes);
       setFuentes(fuentesRes || []);
       setHistorial(histRes || []);
       setProveedoresCatalogo(provsRes || []);
+      setMovimientosKardex(kardexRes || []);
 
       if (provsRes && provsRes.length > 0) {
         setNuevoProveedor((prev) => ({
@@ -157,6 +173,97 @@ export default function FichaArticulo360Page() {
   // Manejar cambio de pestaña y reflejar en URL
   const handleTabChange = (value: string) => {
     router.replace(`/compras/catalogo/${idComponente}?tab=${value}`, { scroll: false });
+  };
+
+  // Handler para Actualizar Recurso (ArticuloForm en modo edit)
+  const handleActualizarArticulo = async (values: ArticuloFormValues) => {
+    try {
+      setIsSubmittingEdit(true);
+      toast.loading('Actualizando recurso maestro...', { id: 'edit-articulo' });
+
+      // Sanitizar payload: NUNCA enviar stock_actual en update (regla inmutable Zero-Trust)
+      const payload: any = {
+        id_categoria: values.id_categoria ? Number(values.id_categoria) : undefined,
+        codigo_interno: values.codigo_interno || undefined,
+        referencia_fabricante: values.referencia_fabricante,
+        marca: values.marca || undefined,
+        id_marca: values.id_marca ? Number(values.id_marca) : null,
+        descripcion_corta: values.descripcion_corta,
+        descripcion_detallada: values.descripcion_detallada || undefined,
+        unidad_medida: values.unidad_medida,
+        codigo_unidad_medida: values.codigo_unidad_medida || null,
+        tipo_comercial: values.tipo_comercial,
+        destino_articulo: values.destino_articulo,
+        es_comprable: Boolean(values.es_comprable),
+        es_inventariable: Boolean(values.es_inventariable),
+        es_facturable: Boolean(values.es_facturable),
+        requiere_serializacion: Boolean(values.requiere_serializacion),
+        es_activo_fijo: Boolean(values.es_activo_fijo),
+        numero_serie_activo: values.numero_serie_activo || undefined,
+        placa_inventario: values.placa_inventario || undefined,
+        frecuencia_mantenimiento_meses: values.frecuencia_mantenimiento_meses
+          ? Number(values.frecuencia_mantenimiento_meses)
+          : null,
+        stock_minimo: Number(values.stock_minimo || 0),
+        precio_compra:
+          values.precio_compra !== null && values.precio_compra !== undefined
+            ? Number(values.precio_compra)
+            : null,
+        precio_venta:
+          values.precio_venta !== null && values.precio_venta !== undefined
+            ? Number(values.precio_venta)
+            : null,
+        margen_utilidad_porcentaje:
+          values.margen_utilidad_porcentaje !== null && values.margen_utilidad_porcentaje !== undefined
+            ? Number(values.margen_utilidad_porcentaje)
+            : null,
+        moneda: values.moneda || 'COP',
+        observaciones: values.observaciones || undefined,
+        notas_instalacion: values.notas_instalacion || undefined,
+      };
+
+      await comprasService.updateArticulo(idComponente, payload);
+      toast.success('Recurso maestro actualizado con éxito', { id: 'edit-articulo' });
+      setModalEditarOpen(false);
+      cargarDatos(true);
+    } catch (error: any) {
+      console.error('Error al actualizar artículo:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Error al actualizar el recurso.';
+      toast.error('No se pudo actualizar el artículo', {
+        id: 'edit-articulo',
+        description: Array.isArray(msg) ? msg.join(', ') : msg,
+      });
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
+
+  // Handler para Desactivar / Reactivar Recurso con Guardas de Integridad Zero-Trust
+  const handleToggleEstado = async () => {
+    try {
+      setIsProcessingEstado(true);
+      if (articulo?.activo) {
+        toast.loading('Validando integridad y desactivando recurso...', { id: 'toggle-estado' });
+        await comprasService.deleteArticulo(idComponente);
+        toast.success('Recurso desactivado y archivado correctamente', { id: 'toggle-estado' });
+        setDialogDesactivarOpen(false);
+      } else {
+        toast.loading('Reactivando recurso maestro...', { id: 'toggle-estado' });
+        await comprasService.reactivarArticulo(idComponente);
+        toast.success('Recurso reactivado con éxito en el catálogo operativo', { id: 'toggle-estado' });
+      }
+      cargarDatos(true);
+    } catch (error: any) {
+      console.error('Error al modificar estado del artículo:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Operación denegada por integridad.';
+      toast.error('Guarda de Integridad Bloqueó la Acción', {
+        id: 'toggle-estado',
+        description: Array.isArray(msg) ? msg.join(', ') : msg,
+        duration: 5000,
+      });
+    } finally {
+      setIsProcessingEstado(false);
+    }
   };
 
   // Proveedor Preferido
@@ -290,7 +397,49 @@ export default function FichaArticulo360Page() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Botón Principal: Editar Recurso Maestro */}
+          <Button
+            onClick={() => setModalEditarOpen(true)}
+            size="sm"
+            className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm"
+          >
+            <Edit className="mr-1.5 h-3.5 w-3.5" />
+            Editar Recurso
+          </Button>
+
+          {/* Botón de Ciclo de Vida: Desactivar / Reactivar */}
+          {articulo.activo ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDialogDesactivarOpen(true)}
+              disabled={isProcessingEstado}
+              className="h-9 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Desactivar Recurso
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleEstado}
+              disabled={isProcessingEstado}
+              className="h-9 text-xs border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-semibold"
+            >
+              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+              Reactivar Recurso
+            </Button>
+          )}
+
+          <Button variant="outline" size="sm" asChild className="h-9 text-xs">
+            <Link href={`/inventario?q=${articulo.referencia_fabricante}`}>
+              <Boxes className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
+              Ver en Kardex
+            </Link>
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -301,15 +450,32 @@ export default function FichaArticulo360Page() {
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Sincronizar
           </Button>
-
-          <Button variant="outline" size="sm" asChild className="h-9 text-xs">
-            <Link href={`/inventario?q=${articulo.referencia_fabricante}`}>
-              <Boxes className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
-              Ver en Kardex
-            </Link>
-          </Button>
         </div>
       </div>
+
+      {/* BANNER INFORMATIVO SI EL RECURSO ESTÁ INACTIVO */}
+      {!articulo.activo && (
+        <div className="rounded-xl border border-red-200 bg-red-50/70 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-red-900 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
+            <div>
+              <p className="font-bold text-red-800">Recurso Desactivado / Archivado en Catálogo Maestro</p>
+              <p className="text-red-700">
+                Este artículo se encuentra bloqueado para cotizaciones y nuevas órdenes de compra. Su histórico contable y Kardex se mantienen inmutables.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleToggleEstado}
+            disabled={isProcessingEstado}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold self-start sm:self-auto shadow-sm"
+          >
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+            Reactivar Ahora
+          </Button>
+        </div>
+      )}
 
       {/* HERO HEADER: FICHA DE IMPACTO 360° */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-6">
@@ -1032,41 +1198,64 @@ export default function FichaArticulo360Page() {
         </TabsContent>
 
         {/* ═══════════════════════════════════════════════════════════════════════ */}
-        {/* PESTAÑA 4: EXISTENCIAS Y BODEGA */}
+        {/* PESTAÑA 4: EXISTENCIAS Y BODEGA (CONECTADA A KARDEX REAL) */}
         {/* ═══════════════════════════════════════════════════════════════════════ */}
         <TabsContent value="existencias" className="space-y-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {/* Tarjeta 1: Estado Físico y Nivel de Existencia */}
             <Card className="border border-gray-200 shadow-sm bg-white">
               <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
-                <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  <Boxes className="h-4 w-4 text-blue-600" />
-                  Estado Físico en Inventario
+                <CardTitle className="text-base font-bold text-gray-900 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Boxes className="h-4 w-4 text-blue-600" />
+                    Estado Físico en Inventario
+                  </div>
+                  <Badge
+                    className={`text-[10px] font-bold ${
+                      articulo.stock_actual <= 0
+                        ? 'bg-red-100 text-red-800 border-red-200'
+                        : articulo.stock_actual <= articulo.stock_minimo
+                        ? 'bg-amber-100 text-amber-800 border-amber-200'
+                        : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                    }`}
+                  >
+                    {articulo.stock_actual <= 0
+                      ? 'Sin Existencias'
+                      : articulo.stock_actual <= articulo.stock_minimo
+                      ? 'Bajo Mínimo'
+                      : 'Stock Saludable'}
+                  </Badge>
                 </CardTitle>
+                <CardDescription className="text-xs text-gray-500">
+                  Saldo físico consolidado a partir de movimientos auditados en Kardex.
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Stock Actual en Bodega:</span>
                   <span className="font-mono text-2xl font-extrabold text-gray-900">
-                    {articulo.stock_actual} {articulo.unidad_medida}
+                    {articulo.stock_actual} <span className="text-sm font-normal text-gray-500">{articulo.unidad_medida}</span>
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Punto de Reorden / Stock Mínimo:</span>
                   <span className="font-mono text-base font-bold text-gray-700">
-                    {articulo.stock_minimo} {articulo.unidad_medida}
+                    {articulo.stock_minimo} <span className="text-xs font-normal text-gray-500">{articulo.unidad_medida}</span>
                   </span>
                 </div>
 
                 {/* Barra de salud de stock */}
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-xs text-gray-500">
-                    <span>Nivel de Existencia</span>
+                    <span>Nivel de Disponibilidad</span>
                     <span>
-                      {articulo.stock_actual <= articulo.stock_minimo ? (
-                        <strong className="text-red-600">Alerta de Reabastecimiento</strong>
+                      {articulo.stock_actual <= 0 ? (
+                        <strong className="text-red-600">Agotado Físicamente</strong>
+                      ) : articulo.stock_actual <= articulo.stock_minimo ? (
+                        <strong className="text-amber-600">Alerta de Reposición Inmediata</strong>
                       ) : (
-                        <strong className="text-emerald-600">Stock Saludable</strong>
+                        <strong className="text-emerald-600">Operación Óptima</strong>
                       )}
                     </span>
                   </div>
@@ -1083,49 +1272,227 @@ export default function FichaArticulo360Page() {
                         )}%`,
                       }}
                       className={`h-full rounded-full transition-all ${
-                        articulo.stock_actual <= articulo.stock_minimo ? 'bg-red-500' : 'bg-emerald-500'
+                        articulo.stock_actual <= 0
+                          ? 'bg-red-500'
+                          : articulo.stock_actual <= articulo.stock_minimo
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
                       }`}
                     />
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-gray-100 flex justify-end">
-                  <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
+                <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-[11px] text-gray-400">Total movimientos: {movimientosKardex.length}</span>
+                  <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
                     <Link href={`/inventario?q=${articulo.referencia_fabricante}`}>
-                      Abrir Kardex Detallado
+                      <Boxes className="mr-1.5 h-3.5 w-3.5" />
+                      Ir al Módulo de Kardex
                     </Link>
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
+            {/* Tarjeta 2: Bodega y Ubicaciones Físicas Reales */}
             <Card className="border border-gray-200 shadow-sm bg-white">
               <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
                 <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-gray-700" />
-                  Almacén y Bodega Principal
+                  Almacén y Ubicación de Almacenamiento
                 </CardTitle>
+                <CardDescription className="text-xs text-gray-500">
+                  Ubicación física identificada a través de las operaciones de Kardex.
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4 text-xs text-gray-600">
-                <p>
-                  Los movimientos de entrada y salida para este recurso impactan directamente las bodegas
-                  centrales de la empresa.
-                </p>
-                <div className="rounded-lg bg-gray-50 p-4 border border-gray-200 space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">Bodega Principal:</span>
-                    <span>Taller Central Cartagena</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">Estado de Operación:</span>
-                    <Badge variant="outline" className="border-emerald-300 text-emerald-800 bg-emerald-50 text-[10px]">
-                      Disponible
-                    </Badge>
-                  </div>
+                {(() => {
+                  const ubicacionesSet = new Map<number, any>();
+                  movimientosKardex.forEach((m) => {
+                    if (m.ubicaciones_bodega) {
+                      ubicacionesSet.set(m.ubicaciones_bodega.id_ubicacion, m.ubicaciones_bodega);
+                    }
+                  });
+                  const ubicacionesReales = Array.from(ubicacionesSet.values());
+
+                  if (ubicacionesReales.length > 0) {
+                    return (
+                      <div className="space-y-3">
+                        {ubicacionesReales.map((u) => (
+                          <div
+                            key={u.id_ubicacion}
+                            className="rounded-xl bg-gray-50/80 p-4 border border-gray-200 space-y-2.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-gray-900 text-sm">{u.zona || 'Bodega Principal'}</span>
+                              <Badge variant="outline" className="font-mono text-[11px] bg-blue-50 text-blue-700 border-blue-200">
+                                {u.codigo_ubicacion}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-[11px] text-gray-600 pt-1 border-t border-gray-100">
+                              <div>
+                                <span className="text-gray-400 block">Pasillo:</span>
+                                <strong className="text-gray-800">{u.pasillo || 'N/A'}</strong>
+                              </div>
+                              <div>
+                                <span className="text-gray-400 block">Estante:</span>
+                                <strong className="text-gray-800">{u.estante || 'N/A'}</strong>
+                              </div>
+                              <div>
+                                <span className="text-gray-400 block">Nivel:</span>
+                                <strong className="text-gray-800">{u.nivel || 'N/A'}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="rounded-xl bg-gray-50/80 p-4 border border-gray-200 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-gray-700">Bodega / Almacén:</span>
+                        <span className="font-medium text-gray-900">Almacén Central</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-gray-700">Estado de Ubicación:</span>
+                        <Badge variant="outline" className="border-gray-300 text-gray-700 bg-white text-[10px]">
+                          Ubicación General
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-gray-400 pt-1 border-t border-gray-100">
+                        Para asignar un pasillo, estante o nivel específico, asigne la ubicación durante la recepción de orden o traslado de bodega.
+                      </p>
+                    </div>
+                  );
+                })()}
+
+                <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 text-[11px] text-blue-800">
+                  🔒 <strong>Gobernanza de Existencias:</strong> Las modificaciones físicas de stock están restringidas a movimientos auditados con justificación documental obligatoria.
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* Tarjeta 3: Mini-Historial de Movimientos de Kardex Inmutable */}
+          <Card className="border border-gray-200 shadow-sm bg-white">
+            <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <History className="h-4 w-4 text-blue-600" />
+                    Trazabilidad Inmutable de Kardex (Movimientos Auditados)
+                  </CardTitle>
+                  <CardDescription className="text-xs text-gray-500">
+                    Historial cronológico de entradas, salidas, traslados y aperturas registradas en la base de datos.
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" asChild className="text-xs h-8">
+                  <Link href={`/inventario?q=${articulo.referencia_fabricante}`}>
+                    Ver Kardex Completo
+                    <ExternalLink className="ml-1 h-3 w-3" />
+                  </Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {movimientosKardex.length === 0 ? (
+                <div className="p-8 text-center space-y-3">
+                  <Boxes className="h-10 w-10 mx-auto text-gray-300" />
+                  <p className="text-sm font-semibold text-gray-700">Sin Movimientos de Inventario Registrados</p>
+                  <p className="text-xs text-gray-500 max-w-md mx-auto">
+                    Este recurso aún no tiene entradas ni salidas en Kardex. Las existencias se actualizarán automáticamente al recepcionar compras o ejecutar movimientos de almacén.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wider text-[11px]">
+                      <tr>
+                        <th className="py-3 px-4">Fecha y Hora</th>
+                        <th className="py-3 px-4">Tipo Movimiento</th>
+                        <th className="py-3 px-4">Origen</th>
+                        <th className="py-3 px-4 text-right">Cantidad</th>
+                        <th className="py-3 px-4 text-right">Saldo Resultante</th>
+                        <th className="py-3 px-4">Ubicación / Bodega</th>
+                        <th className="py-3 px-4">Documento / Soporte</th>
+                        <th className="py-3 px-4">Justificación / Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-normal">
+                      {movimientosKardex.map((m: any) => {
+                        const esEntrada = m.tipo_movimiento === 'ENTRADA';
+                        const esSalida = m.tipo_movimiento === 'SALIDA';
+                        const cantidadNum = Math.abs(parseFloat(m.cantidad || 0));
+
+                        return (
+                          <tr key={m.id_movimiento} className="hover:bg-gray-50/60 transition-colors">
+                            <td className="py-3 px-4 font-mono text-gray-600 text-[11px] whitespace-nowrap">
+                              {new Date(m.fecha_movimiento).toLocaleString()}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <Badge
+                                className={`text-[10px] font-bold ${
+                                  esEntrada
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                    : esSalida
+                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                    : 'bg-blue-100 text-blue-800 border-blue-200'
+                                }`}
+                              >
+                                {m.tipo_movimiento}
+                              </Badge>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <Badge variant="outline" className="text-[10px] font-mono text-gray-700 bg-gray-50">
+                                {m.origen_movimiento?.replace('_', ' ') || 'MOVIMIENTO'}
+                              </Badge>
+                            </td>
+
+                            <td
+                              className={`py-3 px-4 text-right font-mono font-bold text-xs ${
+                                esEntrada ? 'text-emerald-600' : 'text-amber-600'
+                              }`}
+                            >
+                              {esEntrada ? `+${cantidadNum}` : `-${cantidadNum}`}
+                            </td>
+
+                            <td className="py-3 px-4 text-right font-mono font-extrabold text-gray-900 text-xs">
+                              {m.saldo_acumulado !== undefined ? m.saldo_acumulado : '-'}
+                            </td>
+
+                            <td className="py-3 px-4 text-gray-700">
+                              {m.ubicaciones_bodega ? (
+                                <span className="font-mono text-[11px]">
+                                  {m.ubicaciones_bodega.zona || m.ubicaciones_bodega.codigo_ubicacion}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 italic">Bodega General</span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 font-mono text-[11px] text-blue-700">
+                              {m.ordenes_compra?.numero_orden_compra ||
+                                m.ordenes_servicio?.numero_orden ||
+                                m.remisiones?.numero_remision ||
+                                '-'}
+                            </td>
+
+                            <td className="py-3 px-4 text-gray-600 max-w-xs truncate" title={m.justificacion || m.observaciones || ''}>
+                              {m.justificacion || m.observaciones || '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -1379,6 +1746,83 @@ export default function FichaArticulo360Page() {
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL PRINCIPAL: EDITAR RECURSO MAESTRO (ENTERPRISE MAX-W-4XL) */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={modalEditarOpen} onOpenChange={setModalEditarOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto p-6 sm:p-8">
+          <DialogHeader className="pb-4 border-b border-gray-100">
+            <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <Edit className="h-5 w-5 text-blue-600" />
+              Editar Recurso Maestro: {articulo.codigo_interno || articulo.referencia_fabricante}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-500">
+              Actualiza la taxonomía, parámetros técnicos y política de precios. El stock físico está protegido por Kardex y no es editable directamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="pt-4">
+            <ArticuloForm
+              mode="edit"
+              initialData={articulo}
+              onSubmit={handleActualizarArticulo}
+              onCancel={() => setModalEditarOpen(false)}
+              isSubmitting={isSubmittingEdit}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* DIÁLOGO: CONFIRMACIÓN DE DESACTIVACIÓN CON GUARDAS ZERO-TRUST */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={dialogDesactivarOpen} onOpenChange={setDialogDesactivarOpen}>
+        <DialogContent className="sm:max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Desactivar Recurso del Catálogo
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-600 space-y-2 pt-2">
+              <p>
+                ¿Confirmas que deseas archivar y desactivar el recurso{' '}
+                <strong className="text-gray-900">{articulo.descripcion_corta || articulo.referencia_fabricante}</strong>?
+              </p>
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                  Guarda de Integridad Contable (Zero-Trust):
+                </p>
+                <p>
+                  El sistema validará que este recurso tenga <strong>0 existencias físicas en almacén</strong> (Stock actual: {articulo.stock_actual} {articulo.unidad_medida}) y que no cuente con órdenes de compra activas en tránsito.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDialogDesactivarOpen(false)}
+              disabled={isProcessingEstado}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleToggleEstado}
+              disabled={isProcessingEstado}
+              className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
+            >
+              {isProcessingEstado ? 'Verificando Integridad...' : 'Confirmar Desactivación'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

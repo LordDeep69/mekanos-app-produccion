@@ -248,6 +248,19 @@ export interface ArticulosResponse {
   total: number;
   skip: number;
   limit: number;
+  page?: number;
+  totalPages?: number;
+}
+
+export interface ResumenCatalogo {
+  total_articulos: number;
+  total_activos: number;
+  total_inactivos: number;
+  total_inventariables: number;
+  articulos_stock_bajo: number;
+  articulos_sin_stock: number;
+  valor_total_inventario: number;
+  por_arquetipo: Record<string, number>;
 }
 
 export interface ArticuloProveedorInicialPayload {
@@ -340,6 +353,7 @@ export interface FiltrosArticulos {
   es_comprable?: boolean;
   es_inventariable?: boolean;
   activo?: boolean;
+  page?: number;
   skip?: number;
   limit?: number;
 }

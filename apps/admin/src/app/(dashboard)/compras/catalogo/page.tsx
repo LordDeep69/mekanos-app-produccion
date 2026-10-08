@@ -30,6 +30,8 @@ import {
   Truck,
   Wrench,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -50,6 +52,7 @@ function CatalogoComprasContent() {
   const [articulos, setArticulos] = useState<ArticuloMaestro[]>([]);
   const [tiposComponente, setTiposComponente] = useState<TipoComponente[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -65,15 +68,14 @@ function CatalogoComprasContent() {
 
   const cargarConteosGlobales = async () => {
     try {
-      const res = await comprasService.getArticulos({ limit: 500 });
-      const items = res.items || [];
+      const resumen = await comprasService.getResumen();
       setConteoArquetipos({
-        total: res.total || items.length,
-        insumos: items.filter((a) => a.destino_articulo === 'INSUMO_SERVICIO').length,
-        repuestos: items.filter((a) => a.destino_articulo === 'REPUESTO_CORRECTIVO').length,
-        herramientas: items.filter((a) => a.destino_articulo === 'HERRAMIENTA_ACTIVO').length,
-        dotacion: items.filter((a) => a.destino_articulo === 'DOTACION_EPP').length,
-        consumibles: items.filter((a) => a.destino_articulo === 'CONSUMIBLE_TALLER').length,
+        total: resumen.total_activos,
+        insumos: resumen.por_arquetipo['INSUMO_SERVICIO'] || 0,
+        repuestos: resumen.por_arquetipo['REPUESTO_CORRECTIVO'] || 0,
+        herramientas: resumen.por_arquetipo['HERRAMIENTA_ACTIVO'] || 0,
+        dotacion: resumen.por_arquetipo['DOTACION_EPP'] || 0,
+        consumibles: resumen.por_arquetipo['CONSUMIBLE_TALLER'] || 0,
       });
     } catch (e) {
       console.error('Error al calcular conteos de arquetipos:', e);
@@ -84,7 +86,9 @@ function CatalogoComprasContent() {
     cargarConteosGlobales();
   }, []);
 
-  // Filtros activos
+  // Filtros activos y paginación
+  const currentPage = searchParams.get('page') ? Number(searchParams.get('page')) : 1;
+  const currentLimit = searchParams.get('limit') ? Number(searchParams.get('limit')) : 25;
   const currentDestino = (searchParams.get('destino') as DestinoArticulo | null) || undefined;
   const currentSearch = searchParams.get('q') || '';
   const currentTipo = searchParams.get('tipo') ? Number(searchParams.get('tipo')) : undefined;
@@ -116,13 +120,17 @@ function CatalogoComprasContent() {
           id_marca: currentMarca,
           id_categoria: currentCategoria,
           id_proveedor: currentProveedor,
-          limit: 100,
+          page: currentPage,
+          limit: currentLimit,
         }),
         comprasService.getTiposComponente(),
       ]);
 
       setArticulos(resArticulos.items || []);
       setTotal(resArticulos.total || 0);
+      setTotalPages(
+        resArticulos.meta?.totalPages || Math.ceil((resArticulos.total || 0) / currentLimit) || 1
+      );
       setTiposComponente(resTipos || []);
 
       if (showToast) {
@@ -140,7 +148,16 @@ function CatalogoComprasContent() {
 
   useEffect(() => {
     cargarArticulos();
-  }, [currentDestino, currentSearch, currentTipo, currentMarca, currentCategoria, currentProveedor]);
+  }, [
+    currentDestino,
+    currentSearch,
+    currentTipo,
+    currentMarca,
+    currentCategoria,
+    currentProveedor,
+    currentPage,
+    currentLimit,
+  ]);
 
   // Actualizar filtros en URL
   const actualizarFiltro = (params: {
@@ -150,27 +167,43 @@ function CatalogoComprasContent() {
     marca?: string | null;
     categoria?: string | null;
     proveedor?: string | null;
+    page?: number;
+    limit?: number;
   }) => {
     const sp = new URLSearchParams(searchParams.toString());
+
+    if (params.page !== undefined) {
+      if (params.page > 1) sp.set('page', String(params.page));
+      else sp.delete('page');
+    }
+
+    if (params.limit !== undefined) {
+      sp.set('limit', String(params.limit));
+      sp.delete('page');
+    }
 
     if (params.destino !== undefined) {
       if (params.destino) sp.set('destino', params.destino);
       else sp.delete('destino');
+      sp.delete('page');
     }
 
     if (params.q !== undefined) {
       if (params.q) sp.set('q', params.q);
       else sp.delete('q');
+      sp.delete('page');
     }
 
     if (params.tipo !== undefined) {
       if (params.tipo) sp.set('tipo', params.tipo);
       else sp.delete('tipo');
+      sp.delete('page');
     }
 
     if (params.marca !== undefined) {
       if (params.marca) sp.set('marca', params.marca);
       else sp.delete('marca');
+      sp.delete('page');
     }
 
     if (params.categoria !== undefined) {
@@ -181,6 +214,7 @@ function CatalogoComprasContent() {
         sp.delete('categoria');
         sp.delete('id_categoria');
       }
+      sp.delete('page');
     }
 
     if (params.proveedor !== undefined) {
@@ -191,6 +225,7 @@ function CatalogoComprasContent() {
         sp.delete('id_proveedor');
         sp.delete('proveedor');
       }
+      sp.delete('page');
     }
 
     router.replace(`/compras/catalogo?${sp.toString()}`, { scroll: false });
@@ -639,6 +674,70 @@ function CatalogoComprasContent() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* BARRA DE PAGINACIÓN EMPRESARIAL CONECTADA AL SERVIDOR */}
+          {total > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-100 bg-gray-50/40 text-xs">
+              <div className="flex items-center gap-4 text-gray-500">
+                <span>
+                  Mostrando{' '}
+                  <strong className="text-gray-900 font-semibold">
+                    {(currentPage - 1) * currentLimit + (articulos.length > 0 ? 1 : 0)}
+                  </strong>{' '}
+                  a{' '}
+                  <strong className="text-gray-900 font-semibold">
+                    {Math.min(currentPage * currentLimit, total)}
+                  </strong>{' '}
+                  de <strong className="text-gray-900 font-semibold">{total}</strong> recursos
+                </span>
+
+                <div className="flex items-center gap-1.5 pl-2 border-l border-gray-200">
+                  <span className="text-[11px] text-gray-400">Por pág:</span>
+                  <select
+                    value={currentLimit}
+                    onChange={(e) => actualizarFiltro({ limit: Number(e.target.value) })}
+                    className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => actualizarFiltro({ page: currentPage - 1 })}
+                  disabled={currentPage <= 1 || loading}
+                  className="h-8 px-2.5 text-xs font-medium"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+                  Anterior
+                </Button>
+
+                <div className="flex items-center gap-1 px-2 font-mono text-xs text-gray-600">
+                  <span>Página</span>
+                  <strong className="font-bold text-gray-900">{currentPage}</strong>
+                  <span>de</span>
+                  <strong className="font-bold text-gray-900">{totalPages}</strong>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => actualizarFiltro({ page: currentPage + 1 })}
+                  disabled={currentPage >= totalPages || loading}
+                  className="h-8 px-2.5 text-xs font-medium"
+                >
+                  Siguiente
+                  <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

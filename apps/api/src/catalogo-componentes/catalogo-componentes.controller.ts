@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -73,6 +74,20 @@ export class CatalogoComponentesController {
 
   /**
    * =========================================================================
+   * RESUMEN EJECUTIVO Y KPIS DEL CATÁLOGO MAESTRO
+   * =========================================================================
+   */
+  @Get('resumen')
+  @ApiOperation({
+    summary: 'Obtener métricas y KPIs consolidados del catálogo de componentes',
+    description: 'Calcula en tiempo real totales, existencias críticas, valorización de inventario y distribución de arquetipos.',
+  })
+  async getResumen() {
+    return this.articulosService.getResumen();
+  }
+
+  /**
+   * =========================================================================
    * DETALLE COMPLETO DE UN ARTÍCULO (INCLUYE PROVEEDORES Y BITÁCORA)
    * =========================================================================
    */
@@ -100,18 +115,32 @@ export class CatalogoComponentesController {
 
   /**
    * =========================================================================
-   * DESACTIVACIÓN (SOFT DELETE) DE UN ARTÍCULO
+   * DESACTIVACIÓN (SOFT DELETE) DE UN ARTÍCULO CON GUARDAS DE INTEGRIDAD
    * =========================================================================
    */
   @Delete(':id')
-  @ApiOperation({ summary: 'Desactivar un artículo del catálogo' })
+  @ApiOperation({ summary: 'Desactivar un artículo del catálogo con guardas de integridad' })
   async remove(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: any,
   ) {
-    const idUsuario = user?.id_usuario || 1;
-    const command = new DesactivarCatalogoComponenteCommand(id, idUsuario);
-    return this.commandBus.execute(command);
+    const idUsuario = user?.id_usuario || user?.sub || 1;
+    return this.articulosService.desactivar(id, idUsuario);
+  }
+
+  /**
+   * =========================================================================
+   * REACTIVACIÓN DE UN ARTÍCULO PREVIAMENTE ARCHIVADO
+   * =========================================================================
+   */
+  @Patch(':id/reactivar')
+  @ApiOperation({ summary: 'Reactivar un artículo previamente archivado' })
+  async reactivar(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: any,
+  ) {
+    const idUsuario = user?.id_usuario || user?.sub || 1;
+    return this.articulosService.reactivar(id, idUsuario);
   }
 
   /**

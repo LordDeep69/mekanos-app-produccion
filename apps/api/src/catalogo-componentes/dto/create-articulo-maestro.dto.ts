@@ -265,7 +265,7 @@ export class CreateArticuloMaestroDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  stock_actual?: number = 0;
+  stock_actual?: number;
 
   // ==========================================
   // 5. GESTIÓN ECONÓMICA Y PRECIOS DE VENTA (INSUMOS)

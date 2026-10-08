@@ -190,7 +190,7 @@ model catalogo_actividades {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model catalogo_componentes {
   id_componente                Int                             @id @default(autoincrement())
-  id_tipo_componente           Int
+  id_tipo_componente           Int?
   codigo_interno               String?                         @db.VarChar(50)
   referencia_fabricante        String                          @db.VarChar(100)
   marca                        String?                         @db.VarChar(100)
@@ -232,7 +232,7 @@ model catalogo_componentes {
   proveedores                  proveedores?                    @relation(fields: [id_proveedor_principal], references: [id_proveedor], map: "fk_componente_proveedor")
   catalogo_componentes         catalogo_componentes?           @relation("catalogo_componentesTocatalogo_componentes", fields: [reemplazado_por], references: [id_componente], map: "fk_componente_reemplazado_por")
   other_catalogo_componentes   catalogo_componentes[]          @relation("catalogo_componentesTocatalogo_componentes")
-  tipos_componente             tipos_componente                @relation(fields: [id_tipo_componente], references: [id_tipo_componente], onDelete: SetNull, map: "fk_componente_tipo")
+  tipos_componente             tipos_componente?               @relation(fields: [id_tipo_componente], references: [id_tipo_componente], onDelete: SetNull, map: "fk_componente_tipo")
   marcas                       marcas?                         @relation(fields: [id_marca], references: [id_marca], map: "fk_componente_marca")
   unidades_medida              unidades_medida?                @relation(fields: [codigo_unidad_medida], references: [codigo], map: "fk_componente_unidad_medida")
   categorias_componente        categorias_componente?          @relation(fields: [id_categoria], references: [id_categoria], map: "fk_componente_categoria")

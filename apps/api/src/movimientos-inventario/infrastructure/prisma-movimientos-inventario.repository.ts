@@ -80,15 +80,6 @@ export class PrismaMovimientosInventarioRepository {
             fecha_vencimiento: true,
           },
         },
-        usuarios_movimientos_inventario_realizado_porTousuarios: {
-          include: {
-            persona: {
-              select: {
-                nombre_completo: true,
-              },
-            },
-          },
-        },
       },
     });
 
@@ -231,13 +222,6 @@ export class PrismaMovimientosInventarioRepository {
         remisiones: {
           select: { numero_remision: true },
         },
-        usuarios_movimientos_inventario_realizado_porTousuarios: {
-          include: {
-            persona: {
-              select: { nombre_completo: true },
-            },
-          },
-        },
       },
     });
 
@@ -327,13 +311,6 @@ export class PrismaMovimientosInventarioRepository {
               zona: true,
             },
           },
-          usuarios_movimientos_inventario_realizado_porTousuarios: {
-            include: {
-              persona: {
-                select: { nombre_completo: true },
-              },
-            },
-          },
         },
       }),
       this.prisma.movimientos_inventario.count({ where }),
@@ -377,13 +354,6 @@ export class PrismaMovimientosInventarioRepository {
         },
         remisiones: {
           select: { numero_remision: true },
-        },
-        usuarios_movimientos_inventario_realizado_porTousuarios: {
-          include: {
-            persona: {
-              select: { nombre_completo: true },
-            },
-          },
         },
       },
     });

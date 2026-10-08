@@ -66,12 +66,19 @@ export class FiltrosArticulosDto {
   @IsBoolean()
   activo?: boolean;
 
+  @ApiPropertyOptional({ description: 'Paginación: número de página (1-indexado)', default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
   @ApiPropertyOptional({ description: 'Paginación: registros a omitir', default: 0 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  skip?: number = 0;
+  skip?: number;
 
   @ApiPropertyOptional({ description: 'Paginación: límite de registros', default: 50 })
   @IsOptional()

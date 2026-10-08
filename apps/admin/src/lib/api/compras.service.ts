@@ -21,9 +21,18 @@ import {
   UnidadMedida,
   VincularProveedorPayload,
   ProveedorCompleto,
+  ResumenCatalogo,
 } from '@/types/compras.types';
 
 export const comprasService = {
+  /**
+   * Resumen ejecutivo y KPIs globales del catálogo
+   */
+  async getResumen(): Promise<ResumenCatalogo> {
+    const response = await apiClient.get<ResumenCatalogo>('/catalogo-componentes/resumen');
+    return response.data;
+  },
+
   /**
    * Listar artículos con filtros avanzados
    */
@@ -40,6 +49,7 @@ export const comprasService = {
     if (filtros.es_comprable !== undefined) params.append('es_comprable', String(filtros.es_comprable));
     if (filtros.es_inventariable !== undefined) params.append('es_inventariable', String(filtros.es_inventariable));
     if (filtros.activo !== undefined) params.append('activo', String(filtros.activo));
+    if (filtros.page !== undefined) params.append('page', String(filtros.page));
     if (filtros.skip !== undefined) params.append('skip', String(filtros.skip));
     if (filtros.limit !== undefined) params.append('limit', String(filtros.limit));
 
@@ -77,10 +87,18 @@ export const comprasService = {
   },
 
   /**
-   * Desactivar un artículo
+   * Desactivar un artículo con guardas de integridad
    */
   async deleteArticulo(id: number): Promise<any> {
     const response = await apiClient.delete(`/catalogo-componentes/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Reactivar un artículo archivado
+   */
+  async reactivarArticulo(id: number): Promise<ArticuloMaestro> {
+    const response = await apiClient.patch<ArticuloMaestro>(`/catalogo-componentes/${id}/reactivar`);
     return response.data;
   },
 
@@ -336,5 +354,33 @@ export const comprasService = {
    */
   async deleteProveedor(id: number): Promise<void> {
     await apiClient.delete(`/proveedores/${id}`);
+  },
+
+  /**
+   * Obtener movimientos de Kardex con saldos acumulados de un componente
+   */
+  async getKardexComponente(idComponente: number): Promise<any[]> {
+    try {
+      const response = await apiClient.get(`/movimientos-inventario/kardex/${idComponente}`);
+      return response.data?.data || [];
+    } catch (e) {
+      console.error('Error al obtener kardex:', e);
+      return [];
+    }
+  },
+
+  /**
+   * Obtener historial reciente de movimientos de inventario de un componente
+   */
+  async getMovimientosComponente(idComponente: number, limit = 20): Promise<any[]> {
+    try {
+      const response = await apiClient.get('/movimientos-inventario', {
+        params: { id_componente: idComponente, limit },
+      });
+      return response.data?.data || [];
+    } catch (e) {
+      console.error('Error al obtener movimientos de inventario:', e);
+      return [];
+    }
   },
 };

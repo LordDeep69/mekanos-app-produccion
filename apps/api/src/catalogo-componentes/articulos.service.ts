@@ -33,45 +33,59 @@ export class ArticulosService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Resuelve el `id_tipo_componente` legacy (columna obligatoria en BD).
+   * Resuelve el `id_tipo_componente` legacy (columna opcional Int? en PostgreSQL).
    * - Si el cliente lo envía, se valida que exista.
-   * - Si no, se usa (o crea una única vez) el tipo comodín GENERAL.
+   * - Si no viene, se asigna `null`, desacoplando completamente la taxonomía legacy.
    * La clasificación real del artículo es `id_categoria` (categorias_componente).
    */
-  private async resolverTipoComponente(idTipo?: number): Promise<number> {
+  private async resolverTipoComponente(idTipo?: number): Promise<number | null> {
     if (idTipo !== undefined && idTipo !== null) {
       const tipo = await this.prisma.tipos_componente.findUnique({
         where: { id_tipo_componente: idTipo },
       });
       if (!tipo) {
         throw new NotFoundException(
-          `El tipo de componente / categoría ID ${idTipo} no existe.`,
+          `El tipo de componente legacy ID ${idTipo} no existe en el sistema.`,
         );
       }
       return tipo.id_tipo_componente;
     }
+    return null;
+  }
 
-    const existente = await this.prisma.tipos_componente.findFirst({
-      where: { codigo_tipo: ArticulosService.CODIGO_TIPO_GENERAL },
-    });
-    if (existente) return existente.id_tipo_componente;
+  /**
+   * Generación atómica del siguiente SKU formal vía sequence_counter.
+   * Formato industrial estandarizado: ART-{YYYY}-{0001} (ej: ART-2026-0001).
+   */
+  private async generarSiguienteSku(tx: Prisma.TransactionClient): Promise<string> {
+    const year = new Date().getFullYear();
+    const rows = await tx.$queryRaw<any[]>`
+      SELECT id, current_value FROM sequence_counter
+      WHERE type = 'ART' AND year = ${year}
+      FOR UPDATE;
+    `;
 
-    // La PK de tipos_componente no es autoincremental: se asigna max+1.
-    const max = await this.prisma.tipos_componente.aggregate({
-      _max: { id_tipo_componente: true },
-    });
-    const creado = await this.prisma.tipos_componente.create({
-      data: {
-        id_tipo_componente: (max._max.id_tipo_componente ?? 0) + 1,
-        codigo_tipo: ArticulosService.CODIGO_TIPO_GENERAL,
-        nombre_componente: 'General (sin tipo legacy)',
-        categoria: 'OTRO',
-        aplica_a: 'AMBOS',
-        descripcion:
-          'Tipo comodín: la clasificación real se gestiona en categorias_componente.',
-      },
-    });
-    return creado.id_tipo_componente;
+    let nextVal = 1;
+    if (rows && rows.length > 0) {
+      nextVal = Number(rows[0].current_value) + 1;
+      await tx.$executeRawUnsafe(`
+        UPDATE sequence_counter
+        SET current_value = ${nextVal}, updated_at = NOW()
+        WHERE id = ${rows[0].id};
+      `);
+    } else {
+      const maxRes = await tx.$queryRaw<any[]>`
+        SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sequence_counter;
+      `;
+      const nextId = Number(maxRes[0]?.next_id || 100);
+      await tx.$executeRawUnsafe(`
+        INSERT INTO sequence_counter (id, type, year, current_value, created_at, updated_at)
+        VALUES (${nextId}, 'ART', ${year}, 1, NOW(), NOW());
+      `);
+      nextVal = 1;
+    }
+
+    return `ART-${year}-${String(nextVal).padStart(4, '0')}`;
   }
 
   /** IDs de una categoría y todos sus descendientes (tabla pequeña: recorrido en memoria). */
@@ -213,6 +227,12 @@ export class ArticulosService {
     // 5. Ejecución atómica en transacción Prisma
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // Generar SKU formal correlativo si el cliente no lo suministró
+        let codigoInterno = dto.codigo_interno?.trim() || null;
+        if (!codigoInterno) {
+          codigoInterno = await this.generarSiguienteSku(tx);
+        }
+
         // PASO 1: Insertar Recurso Base en la Tabla Maestra con llaves foráneas normalizadas
         const esInventariable =
           dto.es_inventariable !== undefined ? dto.es_inventariable : true;
@@ -226,7 +246,7 @@ export class ArticulosService {
               ? dto.codigo_unidad_medida.trim().toUpperCase()
               : null,
             id_categoria: dto.id_categoria || null,
-            codigo_interno: dto.codigo_interno?.trim() || null,
+            codigo_interno: codigoInterno,
             referencia_fabricante: dto.referencia_fabricante.trim(),
             marca: marcaTexto,
             descripcion_corta: dto.descripcion_corta?.trim() || null,
@@ -268,20 +288,31 @@ export class ArticulosService {
 
         // Stock inicial = movimiento auditable en Kardex (el stock nunca se "digita")
         if (stockInicial > 0) {
+          const maxMov = await tx.movimientos_inventario.aggregate({
+            _max: { id_movimiento: true },
+          });
+          const nuevoIdMov = (maxMov._max.id_movimiento || 0) + 1;
+          const bodega = await tx.ubicaciones_bodega.findFirst({
+            where: { activo: true },
+          });
+
           await tx.movimientos_inventario.create({
             data: {
+              id_movimiento: nuevoIdMov,
               tipo_movimiento: 'ENTRADA',
               origen_movimiento: 'INVENTARIO_INICIAL',
               id_componente: idComponente,
               cantidad: new Prisma.Decimal(stockInicial),
               costo_unitario:
-                dto.precio_compra !== undefined
+                dto.precio_compra !== undefined && dto.precio_compra !== null
                   ? new Prisma.Decimal(dto.precio_compra)
                   : null,
+              id_ubicacion: bodega?.id_ubicacion || null,
               justificacion: 'Stock inicial registrado en el alta del artículo.',
+              observaciones: 'Apertura de balance de inventario formal.',
               realizado_por: idUsuario || 1,
               fecha_movimiento: new Date(),
-            } as any,
+            },
           });
         }
 
@@ -698,8 +729,8 @@ export class ArticulosService {
 
     // 2b. El stock solo cambia mediante movimientos de inventario (Kardex)
     if (
-      dto.stock_actual !== undefined &&
-      dto.stock_actual !== (articuloActual.stock_actual ?? 0)
+      (dto as any).stock_actual !== undefined &&
+      (dto as any).stock_actual !== (articuloActual.stock_actual ?? 0)
     ) {
       throw new BadRequestException(
         'El stock no se edita desde el catálogo. Registra un movimiento (entrada, salida o ajuste) en Inventario.',
@@ -994,11 +1025,20 @@ export class ArticulosService {
       ];
     }
 
+    const page = filtros.page ? Math.max(1, filtros.page) : undefined;
+    const limit = filtros.limit ? Math.max(1, filtros.limit) : 50;
+    const skip =
+      filtros.skip !== undefined
+        ? filtros.skip
+        : page
+        ? (page - 1) * limit
+        : 0;
+
     const [items, total] = await Promise.all([
       this.prisma.catalogo_componentes.findMany({
         where,
-        skip: filtros.skip || 0,
-        take: filtros.limit || 50,
+        skip,
+        take: limit,
         orderBy: { id_componente: 'desc' },
         include: {
           tipos_componente: true,
@@ -1030,11 +1070,16 @@ export class ArticulosService {
       this.prisma.catalogo_componentes.count({ where }),
     ]);
 
+    const currentPage = page ?? Math.floor(skip / limit) + 1;
+    const totalPages = Math.ceil(total / limit);
+
     return {
       items,
       total,
-      skip: filtros.skip || 0,
-      limit: filtros.limit || 50,
+      skip,
+      limit,
+      page: currentPage,
+      totalPages,
     };
   }
 
@@ -1089,5 +1134,169 @@ export class ArticulosService {
     }
 
     return item;
+  }
+
+  /**
+   * Valida restricciones de integridad de negocio antes de desactivar un repuesto.
+   * Reglas Zero-Trust:
+   * 1. No se puede desactivar un repuesto con existencias físicas en bodega (> 0).
+   * 2. No se puede desactivar si está comprometido en órdenes de compra abiertas.
+   */
+  async validarDesactivacion(idComponente: number): Promise<void> {
+    const articulo = await this.prisma.catalogo_componentes.findUnique({
+      where: { id_componente: idComponente },
+      select: {
+        id_componente: true,
+        descripcion_corta: true,
+        referencia_fabricante: true,
+        stock_actual: true,
+        ordenes_compra_detalle: {
+          select: {
+            id_orden_compra: true,
+            ordenes_compra: {
+              select: {
+                numero_orden_compra: true,
+                estado: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!articulo) {
+      throw new NotFoundException(`El artículo ID ${idComponente} no existe.`);
+    }
+
+    if (articulo.stock_actual && articulo.stock_actual > 0) {
+      throw new BadRequestException(
+        `No es posible desactivar el repuesto '${articulo.descripcion_corta || articulo.referencia_fabricante}' porque cuenta con ${articulo.stock_actual} unidades en existencias físicas en bodega. Debe regularizarse el inventario antes de archivarlo.`,
+      );
+    }
+
+    const ocActivas = articulo.ordenes_compra_detalle.filter((det) => {
+      const estado = det.ordenes_compra?.estado;
+      return (
+        estado &&
+        ['BORRADOR', 'PENDIENTE', 'APROBADA', 'EN_TRANSITO'].includes(
+          estado as string,
+        )
+      );
+    });
+
+    if (ocActivas.length > 0) {
+      const ocNumeros = ocActivas
+        .map((o) => o.ordenes_compra?.numero_orden_compra || `#${o.id_orden_compra}`)
+        .join(', ');
+      throw new BadRequestException(
+        `No es posible desactivar el repuesto porque está comprometido en órdenes de compra en curso: ${ocNumeros}.`,
+      );
+    }
+  }
+
+  /**
+   * Desactivar (soft-delete) con guardas de integridad
+   */
+  async desactivar(idComponente: number, idUsuario: number = 1) {
+    await this.validarDesactivacion(idComponente);
+
+    return await this.prisma.catalogo_componentes.update({
+      where: { id_componente: idComponente },
+      data: {
+        activo: false,
+        modificado_por: idUsuario,
+        fecha_modificacion: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Reactivar un artículo previamente archivado
+   */
+  async reactivar(idComponente: number, idUsuario: number = 1) {
+    const articulo = await this.prisma.catalogo_componentes.findUnique({
+      where: { id_componente: idComponente },
+    });
+    if (!articulo) {
+      throw new NotFoundException(`El artículo ID ${idComponente} no existe.`);
+    }
+
+    return await this.prisma.catalogo_componentes.update({
+      where: { id_componente: idComponente },
+      data: {
+        activo: true,
+        modificado_por: idUsuario,
+        fecha_modificacion: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Resumen y KPIs globales del Catálogo Maestro
+   */
+  async getResumen() {
+    const [
+      totalArticulos,
+      totalActivos,
+      totalInactivos,
+      totalInventariables,
+      arquetiposGroup,
+      articulosActivos,
+    ] = await Promise.all([
+      this.prisma.catalogo_componentes.count(),
+      this.prisma.catalogo_componentes.count({ where: { activo: true } }),
+      this.prisma.catalogo_componentes.count({ where: { activo: false } }),
+      this.prisma.catalogo_componentes.count({
+        where: { activo: true, es_inventariable: true },
+      }),
+      this.prisma.catalogo_componentes.groupBy({
+        by: ['destino_articulo'],
+        _count: { id_componente: true },
+      }),
+      this.prisma.catalogo_componentes.findMany({
+        where: { activo: true },
+        select: {
+          stock_actual: true,
+          stock_minimo: true,
+          precio_compra: true,
+        },
+      }),
+    ]);
+
+    let articulosStockBajo = 0;
+    let articulosSinStock = 0;
+    let valorTotalInventario = 0;
+
+    for (const item of articulosActivos) {
+      const stock = item.stock_actual || 0;
+      const min = item.stock_minimo || 0;
+      const costo = item.precio_compra ? Number(item.precio_compra) : 0;
+
+      if (stock === 0) {
+        articulosSinStock++;
+      }
+      if (min > 0 && stock <= min) {
+        articulosStockBajo++;
+      }
+      valorTotalInventario += stock * costo;
+    }
+
+    const porArquetipo: Record<string, number> = {};
+    for (const g of arquetiposGroup) {
+      if (g.destino_articulo) {
+        porArquetipo[g.destino_articulo] = g._count.id_componente;
+      }
+    }
+
+    return {
+      total_articulos: totalArticulos,
+      total_activos: totalActivos,
+      total_inactivos: totalInactivos,
+      total_inventariables: totalInventariables,
+      articulos_stock_bajo: articulosStockBajo,
+      articulos_sin_stock: articulosSinStock,
+      valor_total_inventario: Math.round(valorTotalInventario * 100) / 100,
+      por_arquetipo: porArquetipo,
+    };
   }
 }
