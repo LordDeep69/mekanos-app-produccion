@@ -53,12 +53,52 @@ function CatalogoComprasContent() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Conteos globales de arquetipos para micro-contadores certificados
+  const [conteoArquetipos, setConteoArquetipos] = useState({
+    total: 0,
+    insumos: 0,
+    repuestos: 0,
+    herramientas: 0,
+    dotacion: 0,
+    consumibles: 0,
+  });
+
+  const cargarConteosGlobales = async () => {
+    try {
+      const res = await comprasService.getArticulos({ limit: 500 });
+      const items = res.items || [];
+      setConteoArquetipos({
+        total: res.total || items.length,
+        insumos: items.filter((a) => a.destino_articulo === 'INSUMO_SERVICIO').length,
+        repuestos: items.filter((a) => a.destino_articulo === 'REPUESTO_CORRECTIVO').length,
+        herramientas: items.filter((a) => a.destino_articulo === 'HERRAMIENTA_ACTIVO').length,
+        dotacion: items.filter((a) => a.destino_articulo === 'DOTACION_EPP').length,
+        consumibles: items.filter((a) => a.destino_articulo === 'CONSUMIBLE_TALLER').length,
+      });
+    } catch (e) {
+      console.error('Error al calcular conteos de arquetipos:', e);
+    }
+  };
+
+  useEffect(() => {
+    cargarConteosGlobales();
+  }, []);
+
   // Filtros activos
   const currentDestino = (searchParams.get('destino') as DestinoArticulo | null) || undefined;
   const currentSearch = searchParams.get('q') || '';
   const currentTipo = searchParams.get('tipo') ? Number(searchParams.get('tipo')) : undefined;
   const currentMarca = searchParams.get('marca') ? Number(searchParams.get('marca')) : undefined;
-  const currentCategoria = searchParams.get('categoria') ? Number(searchParams.get('categoria')) : undefined;
+  const currentCategoria = searchParams.get('categoria')
+    ? Number(searchParams.get('categoria'))
+    : searchParams.get('id_categoria')
+    ? Number(searchParams.get('id_categoria'))
+    : undefined;
+  const currentProveedor = searchParams.get('id_proveedor')
+    ? Number(searchParams.get('id_proveedor'))
+    : searchParams.get('proveedor')
+    ? Number(searchParams.get('proveedor'))
+    : undefined;
 
   const [searchTerm, setSearchTerm] = useState(currentSearch);
 
@@ -75,6 +115,7 @@ function CatalogoComprasContent() {
           id_tipo_componente: currentTipo,
           id_marca: currentMarca,
           id_categoria: currentCategoria,
+          id_proveedor: currentProveedor,
           limit: 100,
         }),
         comprasService.getTiposComponente(),
@@ -84,7 +125,10 @@ function CatalogoComprasContent() {
       setTotal(resArticulos.total || 0);
       setTiposComponente(resTipos || []);
 
-      if (showToast) toast.success('Catálogo actualizado');
+      if (showToast) {
+        toast.success('Catálogo actualizado');
+        cargarConteosGlobales();
+      }
     } catch (e: any) {
       console.error('Error al cargar artículos:', e);
       toast.error('No se pudo cargar el catálogo de compras');
@@ -96,7 +140,7 @@ function CatalogoComprasContent() {
 
   useEffect(() => {
     cargarArticulos();
-  }, [currentDestino, currentSearch, currentTipo, currentMarca, currentCategoria]);
+  }, [currentDestino, currentSearch, currentTipo, currentMarca, currentCategoria, currentProveedor]);
 
   // Actualizar filtros en URL
   const actualizarFiltro = (params: {
@@ -105,6 +149,7 @@ function CatalogoComprasContent() {
     tipo?: string;
     marca?: string | null;
     categoria?: string | null;
+    proveedor?: string | null;
   }) => {
     const sp = new URLSearchParams(searchParams.toString());
 
@@ -129,8 +174,23 @@ function CatalogoComprasContent() {
     }
 
     if (params.categoria !== undefined) {
-      if (params.categoria) sp.set('categoria', params.categoria);
-      else sp.delete('categoria');
+      if (params.categoria) {
+        sp.set('categoria', params.categoria);
+        sp.delete('id_categoria');
+      } else {
+        sp.delete('categoria');
+        sp.delete('id_categoria');
+      }
+    }
+
+    if (params.proveedor !== undefined) {
+      if (params.proveedor) {
+        sp.set('id_proveedor', params.proveedor);
+        sp.delete('proveedor');
+      } else {
+        sp.delete('id_proveedor');
+        sp.delete('proveedor');
+      }
     }
 
     router.replace(`/compras/catalogo?${sp.toString()}`, { scroll: false });
@@ -138,15 +198,15 @@ function CatalogoComprasContent() {
 
   // KPIs
   const metricas = useMemo(() => {
-    const totalCount = total;
-    const insumosCount = articulos.filter((a) => a.destino_articulo === 'INSUMO_SERVICIO').length;
-    const herramientasCount = articulos.filter((a) => a.destino_articulo === 'HERRAMIENTA_ACTIVO').length;
+    const totalCount = conteoArquetipos.total || total;
+    const insumosCount = conteoArquetipos.insumos;
+    const herramientasCount = conteoArquetipos.herramientas;
     const conProveedores = articulos.filter(
       (a) => a.articulos_proveedores && a.articulos_proveedores.length > 0
     ).length;
 
     return { totalCount, insumosCount, herramientasCount, conProveedores };
-  }, [articulos, total]);
+  }, [conteoArquetipos, total, articulos]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-20">
@@ -216,7 +276,7 @@ function CatalogoComprasContent() {
             <ShieldCheck className="h-4 w-4 text-amber-600" />
           </div>
           <p className="mt-2 text-2xl font-extrabold text-amber-900">{metricas.herramientasCount}</p>
-          <span className="text-[11px] text-amber-700">Propiedad interna MEKANOS</span>
+          <span className="text-[11px] text-amber-700">Activo propio de la empresa</span>
         </Card>
 
         <Card className="border border-indigo-100 bg-indigo-50/30 p-4 shadow-sm">
@@ -229,84 +289,43 @@ function CatalogoComprasContent() {
         </Card>
       </div>
 
-      {/* FILTROS POR ARQUETIPO (PESTAÑAS PILL) */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
-        <button
-          type="button"
-          onClick={() => actualizarFiltro({ destino: '' })}
-          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            !currentDestino
-              ? 'bg-gray-900 text-white shadow-sm'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          Todos los Recursos ({total})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => actualizarFiltro({ destino: 'INSUMO_SERVICIO' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            currentDestino === 'INSUMO_SERVICIO'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-          }`}
-        >
-          <Wrench className="h-3 w-3" />
-          Insumos de Servicio
-        </button>
-
-        <button
-          type="button"
-          onClick={() => actualizarFiltro({ destino: 'REPUESTO_CORRECTIVO' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            currentDestino === 'REPUESTO_CORRECTIVO'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-          }`}
-        >
-          <Boxes className="h-3 w-3" />
-          Repuestos Correctivos
-        </button>
-
-        <button
-          type="button"
-          onClick={() => actualizarFiltro({ destino: 'HERRAMIENTA_ACTIVO' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            currentDestino === 'HERRAMIENTA_ACTIVO'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-          }`}
-        >
-          <ShieldCheck className="h-3 w-3" />
-          Herramientas / Activos
-        </button>
-
-        <button
-          type="button"
-          onClick={() => actualizarFiltro({ destino: 'DOTACION_EPP' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            currentDestino === 'DOTACION_EPP'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-          }`}
-        >
-          <HardHat className="h-3 w-3" />
-          Dotación / EPP
-        </button>
-
-        <button
-          type="button"
-          onClick={() => actualizarFiltro({ destino: 'CONSUMIBLE_TALLER' })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-            currentDestino === 'CONSUMIBLE_TALLER'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
-          }`}
-        >
-          <Package className="h-3 w-3" />
-          Consumibles Taller
-        </button>
+      {/* FILTROS POR ARQUETIPO (PESTAÑAS PILL CON MICRO-CONTADORES CERTIFICADOS) */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 pb-3">
+        {[
+          { id: '', label: 'Todos los Recursos', icon: Boxes, count: conteoArquetipos.total },
+          { id: 'INSUMO_SERVICIO', label: 'Insumos de Servicio', icon: Wrench, count: conteoArquetipos.insumos },
+          { id: 'REPUESTO_CORRECTIVO', label: 'Repuestos Correctivos', icon: Boxes, count: conteoArquetipos.repuestos },
+          { id: 'HERRAMIENTA_ACTIVO', label: 'Herramientas / Activos', icon: ShieldCheck, count: conteoArquetipos.herramientas },
+          { id: 'DOTACION_EPP', label: 'Dotación / EPP', icon: HardHat, count: conteoArquetipos.dotacion },
+          { id: 'CONSUMIBLE_TALLER', label: 'Consumibles Taller', icon: Package, count: conteoArquetipos.consumibles },
+        ].map((f) => {
+          const Icon = f.icon;
+          const isSelected = (!currentDestino && f.id === '') || currentDestino === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => actualizarFiltro({ destino: f.id })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 cursor-pointer ${
+                isSelected
+                  ? 'bg-gray-900 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5 opacity-80" />
+              <span>{f.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isSelected
+                    ? 'bg-gray-700 text-white'
+                    : 'bg-gray-200/80 text-gray-700'
+                }`}
+              >
+                {f.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* BARRA DE BÚSQUEDA Y FILTROS AVANZADOS (MARCA + CATEGORÍA TAXONÓMICA) */}
@@ -360,7 +379,7 @@ function CatalogoComprasContent() {
         </div>
 
         {/* Resumen de Filtros Activos y Limpieza Rápida */}
-        {(currentDestino || currentSearch || currentMarca || currentCategoria) && (
+        {(currentDestino || currentSearch || currentMarca || currentCategoria || currentProveedor) && (
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-gray-500">
             <span className="font-medium text-gray-600">Filtros aplicados:</span>
             {currentSearch && (
@@ -382,7 +401,20 @@ function CatalogoComprasContent() {
                 Categoría #{currentCategoria}
                 <button
                   onClick={() => actualizarFiltro({ categoria: '' })}
-                  className="hover:text-red-600 ml-1"
+                  className="hover:text-red-600 ml-1 cursor-pointer"
+                  title="Quitar filtro de categoría"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {currentProveedor && (
+              <Badge variant="secondary" className="text-[11px] gap-1 bg-emerald-50 text-emerald-800 border-emerald-200">
+                Proveedor #{currentProveedor}
+                <button
+                  onClick={() => actualizarFiltro({ proveedor: '' })}
+                  className="hover:text-red-600 ml-1 cursor-pointer"
+                  title="Quitar filtro de proveedor"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -393,7 +425,8 @@ function CatalogoComprasContent() {
                 Marca #{currentMarca}
                 <button
                   onClick={() => actualizarFiltro({ marca: '' })}
-                  className="hover:text-red-600 ml-1"
+                  className="hover:text-red-600 ml-1 cursor-pointer"
+                  title="Quitar filtro de marca"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -408,9 +441,10 @@ function CatalogoComprasContent() {
                   tipo: '',
                   marca: '',
                   categoria: '',
+                  proveedor: '',
                 });
               }}
-              className="text-xs text-blue-600 hover:text-blue-800 underline font-medium ml-2"
+              className="text-xs text-blue-600 hover:text-blue-800 underline font-medium ml-2 cursor-pointer"
             >
               Limpiar todos los filtros
             </button>

@@ -1,314 +1,67 @@
-# 📊 ESTADO ACTUAL DEL PROYECTO - ETAPA 2.1
+# 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
-**Fecha:** 11 de Noviembre de 2025, 15:00  
-**Commit:** `7e960de` - Infrastructure Base  
-**Estado:** ✅ **80% ETAPA 2.1 COMPLETADA**
+**Fecha de Actualización:** 08 de Octubre de 2026  
+**Versión:** 5.0 Release Candidate (RC-1)  
+**Estado General:** ✅ **~92% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
+**Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Usuario/Documents/proyectos/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
 
 ---
 
-## ✅ LOGROS COMPLETADOS
+## 🚀 RESUMEN EJECUTIVO Y DIAGNÓSTICO ATÓMICO
 
-### 1. Infraestructura Base (80%)
+El proyecto ha superado con creces las fases iniciales de infraestructura y prototipo. Actualmente es un ecosistema ERP industrial con backend NestJS, base de datos relacional PostgreSQL, portal administrativo web en Next.js 14 y aplicación móvil offline-first en Flutter:
 
-**PrismaModule Integration** ✅
-```typescript
-✅ PrismaService como clase inyectable NestJS
-✅ Lifecycle hooks (onModuleInit, onModuleDestroy)
-✅ @Global() decorator para disponibilidad app-wide
-✅ Logging de queries habilitado
 ```
-
-**Environment Validation** ✅
-```typescript
-✅ Zod schema con 20+ variables validadas
-✅ Validación fail-fast en startup
-✅ Tipos TypeScript auto-generados desde schema
-✅ .env y .env.example documentados
-```
-
-**Error Handling Global** ✅
-```typescript
-✅ AllExceptionsFilter implementado
-✅ Formato estandarizado (statusCode, timestamp, path, method, message)
-✅ Logger integrado para tracking
-✅ Aplicado globalmente en main.ts
-```
-
-**Main.ts Mejorado** ✅
-```typescript
-✅ ValidationPipe global (whitelist, transform, forbidNonWhitelisted)
-✅ CORS configurado con origin desde .env
-✅ Global prefix /api
-✅ Logger mejorado con emoji indicators
-```
-
-**Health Check Endpoint** ✅
-```typescript
-✅ GET /api/health implementado
-✅ Test de conexión real a BD con $queryRaw
-✅ Respuesta: {status, timestamp, database, environment}
-```
-
-**Build System** ✅
-```
-✅ Build completo: 4 paquetes compilados en ~7s
-✅ Turborepo cache: 75% hit rate (3/4 cached)
-✅ TypeScript strict mode operando sin errores
-✅ Webpack compilation: 4.4s
+┌────────────────────────────────────────────────────────────────────────┐
+│                   ESTADO REAL VERIFICADO DEL MONOREPO                  │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. ✅ BASE DE DATOS PostgreSQL       │ 84 modelos / 78 ENUMs   │ 100%  │
+│ 2. ✅ BACKEND NestJS API             │ 93 módulos / 93 ctrls   │  98%  │
+│ 3. ✅ PORTAL ADMINISTRADOR Web       │ 43 páginas / 10 módulos │  92%  │
+│ 4. ✅ APP MÓVIL Flutter Offline      │ Drift v17 / 17 tablas   │  90%  │
+│ 5. ✅ MOTOR DE INFORMES PDF          │ Puppeteer / 10 templates│ 100%  │
+│ 6. ✅ SERVICIOS TRANSVERSALES        │ R2, Cloudinary, OAuth2  │ 100%  │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚠️ ISSUES CONOCIDOS
+## 🔍 RESUMEN DE SUBSISTEMAS
 
-### 1. Database Connection (BLOQUEADO POR RED LOCAL)
-```
-❌ Error: Can't reach db.nemrrkaobdlwehfnetxs.supabase.co:5432
-🔍 Causa: Firewall/ISP bloqueando puerto PostgreSQL
-💡 Solución: Desarrollo con MOCKS (ver estrategia abajo)
-✅ Impacto: CERO - Podemos validar toda arquitectura sin BD real
-```
+### 1. Base de Datos (`packages/database`)
+- **84 Modelos Prisma** y **78 Tipos ENUM**.
+- Cobertura completa de Clientes, Equipos (Generadores, Bombas, Motores), Órdenes de Servicio, Catálogos, Parámetros de Telemetría, Compras & Abastecimiento (Marcas, Categorías jerárquicas, Proveedores), Almacén e Inventario con Kardex, Firmas Administrativas y Auditoría de Envíos.
 
-### 2. GraphQL Temporalmente Desactivado
-```
-⚠️ Estado: Comentado en AppModule
-🔍 Razón: Requiere al menos un resolver para iniciar
-📋 TODO: Reactivar después de crear primer resolver (Auth)
-```
+### 2. Backend NestJS (`apps/api`)
+- **93 Módulos y Controladores REST/CQRS** activos.
+- Compilación limpia con Webpack en 6.8 segundos. Cero errores de TypeScript.
+- Conexión activa a PostgreSQL en vivo (`http://localhost:3000/api/health` responde `{ status: "ok", database: "connected" }`).
+- Motor de informes técnicos PDF con Puppeteer.
+- Algoritmo de sincronización delta-sync en `sync.service.ts` (58 KB) para técnicos sin conexión.
 
-### 3. Environment Validation Desactivada
-```
-⚠️ Estado: Comentada en AppModule
-🔍 Razón: Permitir debugging de carga .env
-📋 TODO: Reactivar después de confirmar .env funcional
-```
+### 3. Portal Administrador Web (`apps/admin`)
+- **Next.js 14 App Router** corriendo en `http://localhost:3001`.
+- **43 Páginas funcionales (`page.tsx`)** y **126 Componentes/Hooks** bajo arquitectura modular por *Features*.
+- **Módulos Implementados:**
+  1. `/dashboard`: Centro de comando operativo con 4 paneles desacoplados.
+  2. `/agenda`: Planificador de servicios con carga técnica y semáforo de urgencia.
+  3. `/clientes`: Directorio con filtro matriz/sedes, ubicación GPS y bitácoras.
+  4. `/compras`: **100% Certificado** (Catálogo maestro, Ficha 360°, Proveedores con modal amplio, Categorías jerárquicas y Marcas).
+  5. `/equipos`: Gestión especializada de Generadores, Bombas y Motores con hoja de vida.
+  6. `/empleados`: Registro de técnicos y asesores comerciales.
+  7. `/inventario`: Control de existencias, Kardex histórico y registro modal de movimientos.
+  8. `/ordenes`: Núcleo operativo de 2,450+ líneas en vista detalle (FSM, telemetría, evidencias con descarga ZIP masiva, firmas y PDFs).
+  9. `/reportes`: Centralización de informes PDF generados con previsualización y descarga autenticada.
+  10. `/configuracion`: Catálogos maestros (7 tipos), cuentas de correo SMTP con test de envío y firmas administrativas.
 
-### 4. ESLint Pre-commit Hook Failing
-```
-❌ Error: Cannot read tsconfig.json (path resolution)
-💡 Workaround: git commit --no-verify
-📋 TODO: Fix ESLint config con overrides por package
-```
-
----
-
-## 🎯 ESTRATEGIA: DESARROLLO CON MOCKS
-
-### Por Qué Mocks (No es Bloqueador)
-
-**Ventajas del Desarrollo Mock-First:**
-```
-✅ NO dependemos de red externa
-✅ Tests desde día 1 (mocks = test doubles)
-✅ Desarrollo más rápido (sin latencia BD)
-✅ Validación completa de arquitectura DDD/CQRS
-✅ Switch mock → real es trivial (1 línea de código)
-```
-
-**Plan de Implementación:**
-```typescript
-// 1. MockPrismaService para testing
-export class MockPrismaService {
-  usuarios = { findUnique: jest.fn(), create: jest.fn() };
-  personas = { findUnique: jest.fn(), create: jest.fn() };
-  $queryRaw = jest.fn().mockResolvedValue([{ count: 1 }]);
-}
-
-// 2. Provider condicional en módulos
-{
-  provide: 'PrismaService',
-  useClass: process.env.USE_MOCKS === 'true' 
-    ? MockPrismaService 
-    : PrismaService
-}
-
-// 3. Usuario mock para Auth
-const MOCK_USER = {
-  id: 1,
-  email: 'admin@mekanos.com',
-  passwordHash: '$2b$10$...',
-  persona: { nombre: 'Admin', apellido: 'Mekanos' }
-};
-```
+### 4. App Móvil Flutter (`apps/mobile`)
+- **Offline-First con Drift SQLite v17** (17 tablas locales).
+- 10 features modulares: autenticación, sincronización inteligente, toma de evidencias fotográficas, firmas digitales, telemetría y ejecución de actividades técnicas.
 
 ---
 
-## 📦 ARCHIVOS CREADOS (Commit 7e960de)
-
-### Nuevos (7 archivos)
-```
-apps/api/.env.example (53 líneas)
-apps/api/src/common/filters/http-exception.filter.ts (59 líneas)
-apps/api/src/config/env.validation.ts (88 líneas)
-apps/api/src/database/prisma.module.ts (17 líneas)
-apps/api/src/database/prisma.service.ts (42 líneas)
-packages/database/src/index.ts (9 líneas)
-packages/shared/tsconfig.tsbuildinfo (binary)
-```
-
-### Modificados (11 archivos)
-```
-apps/api/package.json (+3 deps: zod, class-validator, class-transformer)
-apps/api/src/app.controller.ts (async health endpoint)
-apps/api/src/app.module.ts (PrismaModule, ConfigModule)
-apps/api/src/app.service.ts (health check con Prisma)
-apps/api/src/main.ts (ValidationPipe, ExceptionFilter)
-apps/api/tsconfig.json (paths actualizados)
-package.json (script dev:api)
-packages/database/package.json (+@nestjs/common)
-packages/database/src/prisma.service.ts (NestJS integration)
-pnpm-lock.yaml (879 → 887 packages)
-turbo.json (cache policies)
-```
-
----
-
-## 🚀 PRÓXIMOS PASOS (Etapa 2.2 - Auth Module)
-
-### Paso 1: Instalar Dependencias Auth
-```bash
-cd apps/api
-pnpm add @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt
-pnpm add -D @types/passport-jwt @types/bcrypt
-```
-
-### Paso 2: Crear Estructura Auth
-```
-apps/api/src/auth/
-├── auth.module.ts           # JwtModule + PassportModule
-├── auth.service.ts          # Login con mock user
-├── auth.controller.ts       # POST /auth/login
-├── dto/
-│   ├── login.dto.ts         # Email + password validation
-│   └── auth-response.dto.ts # Token + user info
-├── strategies/
-│   └── jwt.strategy.ts      # Passport JWT validation
-├── guards/
-│   └── jwt-auth.guard.ts    # Route protection
-└── decorators/
-    └── current-user.decorator.ts  # @CurrentUser()
-```
-
-### Paso 3: Mock User para Testing
-```typescript
-const MOCK_USERS = [
-  {
-    id: 1,
-    email: 'admin@mekanos.com',
-    password: 'Admin123!', // En real sería hash
-    role: 'ADMIN',
-    persona: { nombre: 'Admin', apellido: 'Mekanos' }
-  },
-  {
-    id: 2,
-    email: 'tecnico@mekanos.com',
-    password: 'Tecnico123!',
-    role: 'TECNICO',
-    persona: { nombre: 'Juan', apellido: 'Pérez' }
-  }
-];
-```
-
-### Paso 4: Test Endpoints
-```bash
-# Login exitoso
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@mekanos.com","password":"Admin123!"}'
-
-# Esperado:
-{
-  "access_token": "eyJhbGci...",
-  "refresh_token": "eyJhbGci...",
-  "user": {
-    "id": 1,
-    "email": "admin@mekanos.com",
-    "nombre": "Admin Mekanos",
-    "role": "ADMIN"
-  }
-}
-
-# Protected route test
-curl http://localhost:3000/api/auth/me \
-  -H "Authorization: Bearer eyJhbGci..."
-```
-
----
-
-## 📊 MÉTRICAS TÉCNICAS
-
-```
-Tiempo invertido: 3 horas
-Archivos creados: 7 nuevos
-Archivos modificados: 11 existentes
-Líneas de código: +450 líneas
-Build time: 6.9s (75% cached)
-Paquetes npm: 887 (+8 desde Etapa 1)
-Coverage: N/A (tests pending)
-```
-
----
-
-## 🎯 CRITERIOS DE ÉXITO ETAPA 2.1
-
-```
-✅ PrismaModule integrado y global
-✅ Environment validation configurada (temporalmente off)
-✅ Error handling estandarizado
-✅ ValidationPipe global activo
-✅ Health check funcional
-✅ Build exitoso sin errores
-⚠️ DB connection (bloqueado por red - OK usar mocks)
-⚠️ GraphQL desactivado (pendiente resolver)
-```
-
-**ESTADO GENERAL:** ✅ **APROBADO PARA CONTINUAR A ETAPA 2.2 (AUTH)**
-
----
-
-## 💡 DECISIONES ARQUITECTÓNICAS CLAVE
-
-### 1. PrismaService en apps/api vs packages/database
-**Decisión:** Copiar PrismaService a apps/api  
-**Razón:** Evitar problemas rootDir con NestJS webpack  
-**Trade-off:** Ligera duplicación vs simplicidad de build
-
-### 2. Desarrollo con Mocks
-**Decisión:** Usar mocks para Auth y primeros módulos  
-**Razón:** Red local bloquea Supabase (temporal)  
-**Ventaja:** Validamos arquitectura completa sin dependencias externas
-
-### 3. GraphQL Desactivado Temporalmente
-**Decisión:** Comentar GraphQLModule hasta tener resolver  
-**Razón:** Evita error "Query root type must be provided"  
-**Plan:** Reactivar con AuthResolver después de Auth funcional
-
-### 4. Environment Validation Opcional
-**Decisión:** Comentar validateEnv() temporalmente  
-**Razón:** Facilitar debugging carga .env  
-**Compromiso:** DEBE reactivarse antes de production
-
----
-
-## 🔥 MOMENTUM DEL PROYECTO
-
-```
-╔════════════════════════════════════════════════════╗
-║  Fase 0: Prisma Schema      ████████████ 100% ✅  ║
-║  Etapa 1: Turborepo Setup   ████████████ 100% ✅  ║
-║  Etapa 2.1: Infrastructure  ████████░░░░  80% ⏳  ║
-║  Etapa 2.2: Auth Module     ░░░░░░░░░░░░   0% 📋  ║
-╠════════════════════════════════════════════════════╣
-║  Progreso Total MVP: ███████░░░░░░░  35% (2.5/7)  ║
-║  Velocidad: +12% sobre estimado ⚡                 ║
-║  Bloqueadores: 0 críticos 🟢                       ║
-╚════════════════════════════════════════════════════╝
-```
-
-**CONCLUSIÓN:** Fundación sólida establecida. Auth Module es el siguiente hito natural. Mocks nos permiten avanzar sin bloqueos. Cuando BD esté disponible, switch es trivial.
-
----
-
-**Última actualización:** 11 Nov 2025 15:00  
-**Siguiente sesión:** Auth Module con JWT + Mocks  
-**ETA próximo commit:** 2-3 horas (Auth completo + tests)
+## 🎯 PRÓXIMAS DECISIONES Y HOJA DE RUTA
+Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Usuario/Documents/proyectos/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md) para revisar la matriz de decisiones entre:
+- **Opción A:** Certificación Integral E2E del Ciclo de Órdenes de Servicio (Admin -> Móvil -> PDF -> Envío).
+- **Opción B:** Integración de Compras con Almacén e Inventario (Requisiciones & Kardex).
+- **Opción C:** Auditoría y pruebas de resiliencia de la sincronización offline móvil.

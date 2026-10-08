@@ -212,13 +212,101 @@ export class ProveedoresService {
     }
   }
 
-  async update(id: number, updateDto: UpdateProveedoresDto) {
+  async update(id: number, updateDto: any) {
     try {
-      await this.findOne(id); // Verifica existencia
+      const record = await this.findOne(id); // Verifica existencia
+
+      // Actualizar datos de la persona si fueron suministrados
+      const personaData: any = {};
+      if (updateDto.razon_social !== undefined) {
+        personaData.razon_social = updateDto.razon_social?.trim();
+        personaData.nombre_completo = updateDto.razon_social?.trim();
+        if (!updateDto.nombre_comercial) {
+          personaData.nombre_comercial = updateDto.razon_social?.trim();
+        }
+      }
+      if (updateDto.nombre_comercial !== undefined) {
+        personaData.nombre_comercial = updateDto.nombre_comercial?.trim();
+      }
+      if (updateDto.numero_identificacion !== undefined) {
+        personaData.numero_identificacion = updateDto.numero_identificacion?.trim();
+      }
+      if (updateDto.email_principal !== undefined) {
+        personaData.email_principal = updateDto.email_principal?.trim() || null;
+      }
+      if (updateDto.telefono_principal !== undefined) {
+        personaData.telefono_principal = updateDto.telefono_principal?.trim() || null;
+      }
+      if (updateDto.direccion_principal !== undefined) {
+        personaData.direccion_principal = updateDto.direccion_principal?.trim() || null;
+      }
+      if (updateDto.url_ubicacion !== undefined) {
+        personaData.url_ubicacion = updateDto.url_ubicacion?.trim() || null;
+      }
+      if (updateDto.persona_contacto !== undefined) {
+        personaData.representante_legal = updateDto.persona_contacto?.trim() || null;
+      }
+
+      if (Object.keys(personaData).length > 0 && record.id_persona) {
+        await this.prisma.personas.update({
+          where: { id_persona: record.id_persona },
+          data: personaData,
+        });
+      }
+
+      // Preparar rubros y servicios ofrecidos
+      let serviciosOfrecidosFinal = updateDto.servicios_ofrecidos;
+      if (Array.isArray(updateDto.rubros)) {
+        serviciosOfrecidosFinal = updateDto.rubros.filter(Boolean).join(', ');
+      }
+
+      // Formatear observaciones si vienen campos auxiliares
+      let observacionesFinal = updateDto.observaciones;
+      if (
+        updateDto.terminos_credito ||
+        updateDto.email_facturacion ||
+        updateDto.sitio_web ||
+        updateDto.observaciones_despacho
+      ) {
+        const obsPartes: string[] = [];
+        if (updateDto.terminos_credito) obsPartes.push(`Plazo de pago: ${updateDto.terminos_credito}`);
+        if (updateDto.email_facturacion) obsPartes.push(`Facturación: ${updateDto.email_facturacion}`);
+        if (updateDto.sitio_web) obsPartes.push(`Web: ${updateDto.sitio_web}`);
+        if (updateDto.observaciones_despacho) obsPartes.push(`Logística: ${updateDto.observaciones_despacho}`);
+        if (updateDto.observaciones && !updateDto.observaciones.startsWith('Plazo de pago:')) {
+          obsPartes.push(updateDto.observaciones);
+        }
+        observacionesFinal = obsPartes.join(' | ') || null;
+      }
+
+      // Preparar datos propios de proveedores
+      const proveedorData: any = {};
+      if (updateDto.codigo_proveedor !== undefined) proveedorData.codigo_proveedor = updateDto.codigo_proveedor;
+      if (updateDto.categoria_proveedor !== undefined) proveedorData.categoria_proveedor = updateDto.categoria_proveedor;
+      if (updateDto.tipo_proveedor !== undefined) proveedorData.tipo_proveedor = updateDto.tipo_proveedor;
+      if (updateDto.responsable_iva !== undefined) proveedorData.responsable_iva = updateDto.responsable_iva;
+      if (updateDto.tiempo_entrega_dias !== undefined) proveedorData.tiempo_entrega_dias = updateDto.tiempo_entrega_dias;
+      if (serviciosOfrecidosFinal !== undefined) proveedorData.servicios_ofrecidos = serviciosOfrecidosFinal;
+      if (updateDto.realiza_entregas !== undefined) proveedorData.realiza_entregas = updateDto.realiza_entregas;
+      if (updateDto.etiquetas_secundarias !== undefined || updateDto.zona_cobertura !== undefined) {
+        proveedorData.zona_cobertura = updateDto.etiquetas_secundarias || updateDto.zona_cobertura || null;
+      }
+      if (updateDto.proveedor_activo !== undefined) proveedorData.proveedor_activo = updateDto.proveedor_activo;
+      if (observacionesFinal !== undefined) proveedorData.observaciones = observacionesFinal;
 
       return await this.prisma.proveedores.update({
         where: { id_proveedor: id },
-        data: updateDto as any,
+        data: proveedorData,
+        include: {
+          persona: true,
+          _count: {
+            select: {
+              catalogo_componentes: true,
+              articulos_proveedores: true,
+              ordenes_compra: true,
+            },
+          },
+        },
       });
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {

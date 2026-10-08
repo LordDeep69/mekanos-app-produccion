@@ -118,6 +118,11 @@ export interface ProveedorCompleto {
   observaciones?: string | null;
   fecha_registro?: string;
   persona?: PersonaProveedor;
+  _count?: {
+    catalogo_componentes?: number;
+    articulos_proveedores?: number;
+    ordenes_compra?: number;
+  };
 }
 
 export interface PersonaProveedor {
@@ -127,6 +132,10 @@ export interface PersonaProveedor {
   numero_identificacion?: string | null;
   telefono_principal?: string | null;
   email_principal?: string | null;
+  representante_legal?: string | null;
+  direccion_principal?: string | null;
+  url_ubicacion?: string | null;
+  sitio_web?: string | null;
 }
 
 export interface ProveedorBasico {

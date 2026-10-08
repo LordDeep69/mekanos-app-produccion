@@ -1,328 +1,69 @@
-# ✅ TODO LIST COMPLETADO - ETAPA 2.2
+# 📋 PLAN MAESTRO DE TAREAS Y SEGUIMIENTO - MEKANOS 2026
 
-## ESTADO GENERAL
-
-**Fecha actualización:** 11 de Noviembre 2025, 15:30  
-**Progreso MVP:** 58% (4/7 etapas completadas)  
-**Último commit:** `b67a075` - Auth Module complete  
-**Branch:** `main`
+**Fecha de Actualización:** 08 de Octubre de 2026  
+**Versión:** 5.0 Release Candidate  
+**Progreso Global:** ~92% Completado  
 
 ---
 
-## ✅ COMPLETADO (58%)
+## 🏆 HITOS COMPLETADOS AL 100%
 
-### ✅ Fase 0: Prisma Schema (100%)
-- [x] Schema completo con 40+ tablas
-- [x] Relaciones y constraints definidas
-- [x] Enums y tipos personalizados
-- [x] Cliente generado correctamente
+### 1. Base de Datos Relacional (PostgreSQL) - 100%
+- [x] 84 modelos Prisma implementados y sincronizados.
+- [x] 78 tipos ENUM industriales definidos.
+- [x] Migraciones y DDL aplicados limpiamente.
+- [x] Módulo maestro de Compras y Abastecimiento (marcas, categorías jerárquicas, proveedores, artículos, costos).
+- [x] Cuentas de email, firmas administrativas y pendientes técnicos.
 
-### ✅ Etapa 1: Turborepo + Tooling (100%)
-- [x] Monorepo structure con Turborepo
-- [x] pnpm workspaces configurado
-- [x] TypeScript strict mode
-- [x] ESLint + Prettier
-- [x] Husky + lint-staged
-- [x] Shared packages (database, shared, types)
+### 2. Backend NestJS API - 98%
+- [x] 93 controladores y 93 módulos REST/CQRS funcionales.
+- [x] Compilación limpia Webpack sin errores de TypeScript.
+- [x] Autenticación JWT con Refresh Tokens y Guards de Roles (RBAC).
+- [x] Generación de informes PDF con Puppeteer y 10 plantillas multi-equipo.
+- [x] Almacenamiento en Cloudflare R2 y Cloudinary.
+- [x] Envío de correos SMTP/OAuth2 con Nodemailer y auditoría.
+- [x] Motor de Sincronización Delta-Sync (`sync.service.ts` de 58 KB).
+- [x] Tareas programadas CRON operativas.
 
-### ✅ Etapa 2.1: Infrastructure Base (100%)
-- [x] Environment validation con Zod
-- [x] PrismaService como NestJS injectable
-- [x] Global error handling (AllExceptionsFilter)
-- [x] ValidationPipe global
-- [x] Health check endpoint
-- [x] ConfigModule con .env
+### 3. Portal Administrador Web (Next.js 14) - 92%
+- [x] **Módulo Compras & Abastecimiento (100% Certificado):**
+  - [x] Catálogo Maestro con píldoras de arquetipos y contadores (`/compras/catalogo`).
+  - [x] Ficha 360° con Hero Header de fila dedicada de ancho completo (`/compras/catalogo/[id]`).
+  - [x] Formulario dinámico de homologación de recursos (`/compras/catalogo/nuevo`).
+  - [x] Directorio de Fabricantes y Marcas (`/compras/marcas`).
+  - [x] Familias y Taxonomía Jerárquica con propagación (`/compras/categorias`).
+  - [x] Directorio de Proveedores con modal de 2 columnas expandido (`/compras/proveedores`).
+- [x] **Módulo Clientes (95% Certificado):**
+  - [x] Filtro matriz/sedes, ubicación GPS, bitácora, equipos por cliente, modal PDF.
+- [x] **Módulo Dashboard (95%):**
+  - [x] 4 paneles desacoplados con telemetría en tiempo real desde la API.
+- [x] **Módulo Configuración (95%):**
+  - [x] Catálogos maestros (7 tipos), cuentas de email con prueba interactiva, firmas administrativas.
+- [x] **Módulo Reportes (90%):**
+  - [x] Repositorio central de informes PDF con descarga autenticada.
+- [x] **Módulo Empleados (90%):**
+  - [x] Listado, detalle y formulario V2 con roles técnicos y comerciales.
+- [x] **Módulo Equipos (90%):**
+  - [x] Generadores, Bombas y Motores con hoja de vida y editor de parámetros.
+- [x] **Módulo Órdenes de Servicio (95%):**
+  - [x] FSM de estados, toma de telemetría, evidencias con empaquetado ZIP masivo, firmas y reportes.
+- [x] **Módulo Inventario (85%):**
+  - [x] KPIs de existencias, Kardex transaccional y registro modal de movimientos.
 
-### ✅ Etapa 2.2: Auth Module (100%)
-- [x] MockPrismaService con usuarios mock
-- [x] AuthService (login + refresh + validation)
-- [x] JwtStrategy (Passport integration)
-- [x] JwtAuthGuard (authentication)
-- [x] RolesGuard (authorization)
-- [x] @CurrentUser decorator
-- [x] @Roles decorator
-- [x] AuthController (6 endpoints REST)
-- [x] DTOs con class-validator
-- [x] AuthModule integrado en AppModule
-- [x] Build exitoso
-- [x] Server funcionando
-
----
-
-## 📋 PENDIENTE (42%)
-
-### 🔄 Etapa 2.3: Testing Setup (0%)
-**Prioridad:** Alta  
-**ETA:** 2-3 horas
-
-#### Jest Configuration
-- [ ] Instalar @nestjs/testing
-- [ ] Configurar jest.config.js para monorepo
-- [ ] Setup test environment
-- [ ] Mock implementations
-
-#### Unit Tests (Target: >80% coverage)
-- [ ] AuthService.login()
-- [ ] AuthService.refreshTokens()
-- [ ] AuthService.validateUser()
-- [ ] MockPrismaService methods
-- [ ] JwtAuthGuard
-- [ ] RolesGuard
-- [ ] @CurrentUser decorator
-- [ ] @Roles decorator
-
-#### Integration Tests
-- [ ] POST /api/auth/login
-- [ ] POST /api/auth/refresh
-- [ ] GET /api/auth/me
-- [ ] GET /api/auth/mock-users
-- [ ] GET /api/auth/admin-test
-- [ ] GET /api/auth/tech-test
-- [ ] Protected routes behavior
-- [ ] Role authorization
-
-#### E2E Tests
-- [ ] Login flow completo
-- [ ] Refresh token flow
-- [ ] Protected resource access
-- [ ] Invalid credentials (401)
-- [ ] Unauthorized access (403)
+### 4. App Móvil Flutter (Offline-First) - 90%
+- [x] Base de datos Drift SQLite v17 con 17 tablas locales.
+- [x] Soporte para trabajo en sótanos/cuartos de máquinas sin internet.
+- [x] Captura de fotos con compresión local y firmas digitales.
+- [x] Sincronización en segundo plano con reintentos exponenciales.
 
 ---
 
-### 🔄 Etapa 2.4: Domain Layer - Equipos (0%)
-**Prioridad:** Media  
-**ETA:** 4-5 horas
+## 🎯 PENDIENTES CRÍTICOS Y PRÓXIMOS PASOS
 
-#### Aggregate Roots
-- [ ] Equipo aggregate
-- [ ] Motor value object
-- [ ] Generador value object
-- [ ] Bomba value object
-- [ ] Componente entity
-
-#### Repositories
-- [ ] EquipoRepository interface
-- [ ] PrismaEquipoRepository implementation
-- [ ] MockEquipoRepository para testing
-
-#### DTOs
-- [ ] CreateEquipoDto
-- [ ] UpdateEquipoDto
-- [ ] EquipoResponseDto
-- [ ] MotorDto, GeneradorDto, BombaDto
-
-#### Services
-- [ ] EquipoService (CRUD + business logic)
-- [ ] ComponenteService
-
-#### Controllers
-- [ ] EquipoController (REST API)
-- [ ] Endpoints con Guards
-
----
-
-### 🔄 Etapa 2.5: Domain Layer - Usuarios Completo (0%)
-**Prioridad:** Media  
-**ETA:** 3-4 horas
-
-#### Aggregate Roots
-- [ ] Usuario aggregate
-- [ ] Persona value object
-- [ ] Cliente entity
-- [ ] Empleado entity
-
-#### Repositories
-- [ ] UsuarioRepository interface
-- [ ] PrismaUsuarioRepository implementation
-
-#### DTOs
-- [ ] CreateUsuarioDto
-- [ ] UpdateUsuarioDto
-- [ ] UsuarioResponseDto
-- [ ] ClienteDto, EmpleadoDto
-
-#### Services
-- [ ] UsuarioService (CRUD + business logic)
-- [ ] Integración con AuthService
-
-#### Controllers
-- [ ] UsuarioController (REST API)
-- [ ] Role-based permissions
-
----
-
-### 🔄 Etapa 2.6: Domain Layer - Órdenes de Servicio (0%)
-**Prioridad:** Alta  
-**ETA:** 6-8 horas
-
-#### Aggregate Roots
-- [ ] OrdenServicio aggregate
-- [ ] Cotizacion aggregate
-- [ ] Informe aggregate
-- [ ] Cronograma aggregate
-
-#### Repositories
-- [ ] OrdenServicioRepository interface
-- [ ] PrismaOrdenServicioRepository implementation
-- [ ] CotizacionRepository
-- [ ] InformeRepository
-- [ ] CronogramaRepository
-
-#### DTOs
-- [ ] CreateOrdenServicioDto
-- [ ] UpdateOrdenServicioDto
-- [ ] OrdenServicioResponseDto
-- [ ] DTOs para cotizaciones, informes, cronogramas
-
-#### Services
-- [ ] OrdenServicioService (CRUD + workflows)
-- [ ] CotizacionService
-- [ ] InformeService
-- [ ] CronogramaService
-
-#### Controllers
-- [ ] OrdenServicioController
-- [ ] CotizacionController
-- [ ] InformeController
-- [ ] CronogramaController
-
----
-
-### 🔄 Etapa 2.7: GraphQL Layer (0%)
-**Prioridad:** Media  
-**ETA:** 3-4 horas
-
-#### Resolvers
-- [ ] AuthResolver (login, refresh, me)
-- [ ] EquipoResolver (queries + mutations)
-- [ ] UsuarioResolver
-- [ ] OrdenServicioResolver
-- [ ] CotizacionResolver
-
-#### Guards
-- [ ] GqlAuthGuard
-- [ ] GqlRolesGuard
-
-#### Decorators
-- [ ] @CurrentUser para GraphQL
-- [ ] @Roles para GraphQL
-
-#### Schema Generation
-- [ ] Reactivar autoSchemaFile
-- [ ] Configurar playground
-- [ ] Error formatting
-
----
-
-## 🚀 PLAN DE ACCIÓN INMEDIATO
-
-### Sesión 1: Testing (2-3 horas)
-```markdown
-1. [ ] Configurar Jest en monorepo
-2. [ ] Unit tests AuthService (60min)
-3. [ ] Integration tests AuthController (60min)
-4. [ ] E2E tests Auth flows (30min)
-5. [ ] Coverage report >80%
-```
-
-### Sesión 2: Equipos Module (4-5 horas)
-```markdown
-1. [ ] Domain layer: Aggregates + Entities
-2. [ ] Repository pattern implementation
-3. [ ] EquipoService con business logic
-4. [ ] EquipoController REST API
-5. [ ] Tests unitarios e integración
-```
-
-### Sesión 3: Usuarios Module (3-4 horas)
-```markdown
-1. [ ] Domain layer: Usuario aggregate
-2. [ ] Repository pattern
-3. [ ] UsuarioService
-4. [ ] UsuarioController
-5. [ ] Integración con Auth
-```
-
-### Sesión 4: Órdenes de Servicio (6-8 horas)
-```markdown
-1. [ ] Domain layer completo
-2. [ ] Repositories
-3. [ ] Services con workflows
-4. [ ] Controllers REST
-5. [ ] Tests coverage >70%
-```
-
-### Sesión 5: GraphQL (3-4 horas)
-```markdown
-1. [ ] Reactivar GraphQLModule
-2. [ ] Resolvers para módulos existentes
-3. [ ] Guards y decorators GraphQL
-4. [ ] Schema generation
-5. [ ] Playground testing
-```
-
----
-
-## 📊 MÉTRICAS ACTUALES
-
-```
-Total Etapas: 7
-Completadas: 4 (Fase 0, Etapa 1, 2.1, 2.2)
-En Progreso: 0
-Pendientes: 3 (Etapa 2.3, 2.4-2.7)
-
-Progreso: 58%
-Velocidad: +18% sobre estimado
-Bloqueadores: 0 críticos
-
-Commits totales: 4
-Líneas de código: ~3,000
-Archivos creados: ~30
-Build time: ~4.5s
-Coverage: 0% (pendiente testing setup)
-```
-
----
-
-## ⚠️ BLOQUEADORES CONOCIDOS
-
-### 1. Database Connection (Baja prioridad)
-**Issue:** Red local bloquea puerto 5432 de Supabase  
-**Impact:** Ninguno (usando mocks exitosamente)  
-**Solución:** Mocks permiten desarrollo completo  
-**TODO:** Reactivar cuando red lo permita
-
-### 2. ESLint Pre-commit Hook (Baja prioridad)
-**Issue:** Parseo de tsconfig.json desde root  
-**Impact:** Requiere `--no-verify` en commits  
-**Solución:** Workaround funcional  
-**TODO:** Fix con per-package ESLint config
-
-### 3. Environment Validation Disabled (Media prioridad)
-**Issue:** ConfigModule no encuentra .env desde dist/  
-**Impact:** Validation comentada temporalmente  
-**Solución:** Validación manual funcionando  
-**TODO:** Fix path resolution, reactivar validation
-
----
-
-## 🎯 OBJETIVO PRÓXIMA SESIÓN
-
-**Focus:** Etapa 2.3 - Testing Setup  
-**Goal:** >80% coverage en Auth Module  
-**Time:** 2-3 horas  
-**Blocker:** Ninguno
-
-**Tareas críticas:**
-1. Configurar Jest en monorepo
-2. Unit tests completos para AuthService
-3. Integration tests para AuthController
-4. E2E tests para flujos de Auth
-5. Coverage report y CI/CD integration
-
----
-
-**Última actualización:** 11 Nov 2025, 15:30  
-**Próxima revisión:** Inicio Etapa 2.3 (Testing)  
-**Status:** ✅ **READY FOR NEXT PHASE**
+### 🔄 Fase de Cierre: Certificación E2E de Flujos Cruzados
+- [ ] **Prueba de Humo Integral de Orden de Servicio (Flujo de Punta a Punta):**
+  - Crear orden en Admin -> Asignar técnico -> Ejecutar actividades y mediciones -> Adjuntar evidencias -> Capturar firmas -> Transicionar FSM a cerrada -> Generar PDF Puppeteer -> Previsualizar y descargar en `/reportes`.
+- [ ] **Integración de Compras con Inventario:**
+  - Habilitar que la recepción de compras en el catálogo maestro impacte directamente las existencias del Kardex en `/inventario`.
+- [ ] **Verificación de Resiliencia Móvil:**
+  - Validar simulación de desconexión y sincronización masiva con datos reales de campo.

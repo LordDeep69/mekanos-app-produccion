@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -26,7 +27,77 @@ import {
 export class ArticulosService {
   private readonly logger = new Logger(ArticulosService.name);
 
+  /** Código del tipo legacy comodín (la taxonomía real vive en categorias_componente). */
+  private static readonly CODIGO_TIPO_GENERAL = 'GENERAL';
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Resuelve el `id_tipo_componente` legacy (columna obligatoria en BD).
+   * - Si el cliente lo envía, se valida que exista.
+   * - Si no, se usa (o crea una única vez) el tipo comodín GENERAL.
+   * La clasificación real del artículo es `id_categoria` (categorias_componente).
+   */
+  private async resolverTipoComponente(idTipo?: number): Promise<number> {
+    if (idTipo !== undefined && idTipo !== null) {
+      const tipo = await this.prisma.tipos_componente.findUnique({
+        where: { id_tipo_componente: idTipo },
+      });
+      if (!tipo) {
+        throw new NotFoundException(
+          `El tipo de componente / categoría ID ${idTipo} no existe.`,
+        );
+      }
+      return tipo.id_tipo_componente;
+    }
+
+    const existente = await this.prisma.tipos_componente.findFirst({
+      where: { codigo_tipo: ArticulosService.CODIGO_TIPO_GENERAL },
+    });
+    if (existente) return existente.id_tipo_componente;
+
+    // La PK de tipos_componente no es autoincremental: se asigna max+1.
+    const max = await this.prisma.tipos_componente.aggregate({
+      _max: { id_tipo_componente: true },
+    });
+    const creado = await this.prisma.tipos_componente.create({
+      data: {
+        id_tipo_componente: (max._max.id_tipo_componente ?? 0) + 1,
+        codigo_tipo: ArticulosService.CODIGO_TIPO_GENERAL,
+        nombre_componente: 'General (sin tipo legacy)',
+        categoria: 'OTRO',
+        aplica_a: 'AMBOS',
+        descripcion:
+          'Tipo comodín: la clasificación real se gestiona en categorias_componente.',
+      },
+    });
+    return creado.id_tipo_componente;
+  }
+
+  /** IDs de una categoría y todos sus descendientes (tabla pequeña: recorrido en memoria). */
+  private async obtenerIdsCategoriaConDescendientes(idRaiz: number): Promise<number[]> {
+    const todas = await this.prisma.categorias_componente.findMany({
+      select: { id_categoria: true, id_padre: true },
+    });
+    const hijosPorPadre = new Map<number, number[]>();
+    for (const c of todas) {
+      if (c.id_padre === null) continue;
+      const lista = hijosPorPadre.get(c.id_padre) ?? [];
+      lista.push(c.id_categoria);
+      hijosPorPadre.set(c.id_padre, lista);
+    }
+    const resultado: number[] = [];
+    const pila = [idRaiz];
+    const visitados = new Set<number>();
+    while (pila.length) {
+      const actual = pila.pop() as number;
+      if (visitados.has(actual)) continue;
+      visitados.add(actual);
+      resultado.push(actual);
+      pila.push(...(hijosPorPadre.get(actual) ?? []));
+    }
+    return resultado;
+  }
 
   /**
    * =========================================================================
@@ -45,15 +116,8 @@ export class ArticulosService {
       `Iniciando creación de artículo maestro: ${dto.referencia_fabricante} (${dto.destino_articulo})`,
     );
 
-    // 1. Verificación previa de existencia de tipo_componente
-    const tipo = await this.prisma.tipos_componente.findUnique({
-      where: { id_tipo_componente: dto.id_tipo_componente },
-    });
-    if (!tipo) {
-      throw new NotFoundException(
-        `El tipo de componente / categoría ID ${dto.id_tipo_componente} no existe.`,
-      );
-    }
+    // 1. Resolución del tipo legacy (opcional desde el cliente)
+    const idTipoComponente = await this.resolverTipoComponente(dto.id_tipo_componente);
 
     // 2. Verificación y resolución de llaves foráneas normalizadas
     let marcaTexto = dto.marca?.trim() || null;
@@ -150,9 +214,13 @@ export class ArticulosService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         // PASO 1: Insertar Recurso Base en la Tabla Maestra con llaves foráneas normalizadas
+        const esInventariable =
+          dto.es_inventariable !== undefined ? dto.es_inventariable : true;
+        const stockInicial = esInventariable ? Math.max(0, dto.stock_actual ?? 0) : 0;
+
         const componenteCreado = await tx.catalogo_componentes.create({
           data: {
-            id_tipo_componente: dto.id_tipo_componente,
+            id_tipo_componente: idTipoComponente,
             id_marca: dto.id_marca || null,
             codigo_unidad_medida: dto.codigo_unidad_medida
               ? dto.codigo_unidad_medida.trim().toUpperCase()
@@ -187,7 +255,7 @@ export class ArticulosService {
               proveedoresIniciales[0]?.id_proveedor ||
               null,
             stock_minimo: dto.stock_minimo ?? 0,
-            stock_actual: dto.stock_actual ?? 0,
+            stock_actual: stockInicial,
             unidad_medida: unidadTexto,
             observaciones: dto.observaciones?.trim() || null,
             notas_instalacion: dto.notas_instalacion?.trim() || null,
@@ -197,6 +265,25 @@ export class ArticulosService {
         });
 
         const idComponente = componenteCreado.id_componente;
+
+        // Stock inicial = movimiento auditable en Kardex (el stock nunca se "digita")
+        if (stockInicial > 0) {
+          await tx.movimientos_inventario.create({
+            data: {
+              tipo_movimiento: 'ENTRADA',
+              origen_movimiento: 'INVENTARIO_INICIAL',
+              id_componente: idComponente,
+              cantidad: new Prisma.Decimal(stockInicial),
+              costo_unitario:
+                dto.precio_compra !== undefined
+                  ? new Prisma.Decimal(dto.precio_compra)
+                  : null,
+              justificacion: 'Stock inicial registrado en el alta del artículo.',
+              realizado_por: idUsuario || 1,
+              fecha_movimiento: new Date(),
+            } as any,
+          });
+        }
 
         // PASO 2 & 3: Matriz de Proveedores y Bitácora de Auditoría
         for (const prov of proveedoresIniciales) {
@@ -606,14 +693,17 @@ export class ArticulosService {
 
     // 2. Validar tipo_componente si se modifica
     if (dto.id_tipo_componente !== undefined) {
-      const tipo = await this.prisma.tipos_componente.findUnique({
-        where: { id_tipo_componente: dto.id_tipo_componente },
-      });
-      if (!tipo) {
-        throw new NotFoundException(
-          `El tipo de componente ID ${dto.id_tipo_componente} no existe.`,
-        );
-      }
+      await this.resolverTipoComponente(dto.id_tipo_componente);
+    }
+
+    // 2b. El stock solo cambia mediante movimientos de inventario (Kardex)
+    if (
+      dto.stock_actual !== undefined &&
+      dto.stock_actual !== (articuloActual.stock_actual ?? 0)
+    ) {
+      throw new BadRequestException(
+        'El stock no se edita desde el catálogo. Registra un movimiento (entrada, salida o ajuste) en Inventario.',
+      );
     }
 
     // 3. Validar y sincronizar id_marca si se suministra
@@ -780,7 +870,6 @@ export class ArticulosService {
       if (dto.moneda !== undefined) data.moneda = dto.moneda || 'COP';
       if (dto.id_proveedor_principal !== undefined) data.id_proveedor_principal = dto.id_proveedor_principal;
       if (dto.stock_minimo !== undefined) data.stock_minimo = dto.stock_minimo;
-      if (dto.stock_actual !== undefined) data.stock_actual = dto.stock_actual;
       if (unidadTexto !== undefined) data.unidad_medida = unidadTexto;
       if (dto.observaciones !== undefined) data.observaciones = dto.observaciones?.trim() || null;
       if (dto.notas_instalacion !== undefined) data.notas_instalacion = dto.notas_instalacion?.trim() || null;
@@ -841,7 +930,11 @@ export class ArticulosService {
     }
 
     if (filtros.id_categoria) {
-      where.id_categoria = filtros.id_categoria;
+      // Incluye la categoría seleccionada y TODAS sus subcategorías (coherente con el árbol)
+      const idsCategoria = await this.obtenerIdsCategoriaConDescendientes(
+        filtros.id_categoria,
+      );
+      where.id_categoria = { in: idsCategoria };
     }
 
     if (filtros.codigo_unidad_medida) {
@@ -861,9 +954,25 @@ export class ArticulosService {
     }
 
     if (filtros.id_proveedor) {
-      where.articulos_proveedores = {
-        some: { id_proveedor: filtros.id_proveedor },
+      const provCondition: Prisma.catalogo_componentesWhereInput = {
+        OR: [
+          { id_proveedor_principal: filtros.id_proveedor },
+          {
+            articulos_proveedores: {
+              some: { id_proveedor: filtros.id_proveedor },
+            },
+          },
+        ],
       };
+      if (where.AND) {
+        if (Array.isArray(where.AND)) {
+          (where.AND as any[]).push(provCondition);
+        } else {
+          where.AND = [where.AND, provCondition];
+        }
+      } else {
+        where.AND = [provCondition];
+      }
     }
 
     if (filtros.q && filtros.q.trim() !== '') {

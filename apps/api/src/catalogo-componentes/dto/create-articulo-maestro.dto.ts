@@ -122,9 +122,14 @@ export class CreateArticuloMaestroDto {
   // ==========================================
   // 1. IDENTIDAD FÍSICA Y TÉCNICA (AGNOSTICA)
   // ==========================================
-  @ApiProperty({ description: 'ID de la categoría técnica / tipo de componente', example: 1 })
+  @ApiPropertyOptional({
+    description:
+      'ID del tipo de componente LEGACY (opcional). La clasificación real es id_categoria; si se omite se usa el tipo comodín GENERAL.',
+    example: 1,
+  })
+  @IsOptional()
   @IsInt()
-  id_tipo_componente: number;
+  id_tipo_componente?: number;
 
   @ApiPropertyOptional({ description: 'Código interno de control empresarial (SKU Maestro)', example: 'INS-00245' })
   @IsOptional()

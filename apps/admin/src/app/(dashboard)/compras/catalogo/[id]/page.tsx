@@ -312,138 +312,137 @@ export default function FichaArticulo360Page() {
       </div>
 
       {/* HERO HEADER: FICHA DE IMPACTO 360° */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Badge de Arquetipo */}
-              <Badge
-                className={
-                  articulo.destino_articulo === 'INSUMO_SERVICIO'
-                    ? 'bg-blue-100 text-blue-800 border-blue-200'
-                    : articulo.destino_articulo === 'HERRAMIENTA_ACTIVO'
-                    ? 'bg-amber-100 text-amber-800 border-amber-300'
-                    : articulo.destino_articulo === 'REPUESTO_CORRECTIVO'
-                    ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
-                    : articulo.destino_articulo === 'DOTACION_EPP'
-                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                    : 'bg-purple-100 text-purple-800 border-purple-200'
-                }
-              >
-                {articulo.destino_articulo === 'INSUMO_SERVICIO' && <Wrench className="mr-1 h-3 w-3" />}
-                {articulo.destino_articulo === 'HERRAMIENTA_ACTIVO' && <ShieldCheck className="mr-1 h-3 w-3" />}
-                {articulo.destino_articulo === 'DOTACION_EPP' && <HardHat className="mr-1 h-3 w-3" />}
-                {articulo.destino_articulo.replace('_', ' ')}
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-6">
+        {/* BLOQUE SUPERIOR DE IDENTIDAD Y TAXONOMÍA */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Badge de Arquetipo */}
+            <Badge
+              className={
+                articulo.destino_articulo === 'INSUMO_SERVICIO'
+                  ? 'bg-blue-100 text-blue-800 border-blue-200'
+                  : articulo.destino_articulo === 'HERRAMIENTA_ACTIVO'
+                  ? 'bg-amber-100 text-amber-800 border-amber-300'
+                  : articulo.destino_articulo === 'REPUESTO_CORRECTIVO'
+                  ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                  : articulo.destino_articulo === 'DOTACION_EPP'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  : 'bg-purple-100 text-purple-800 border-purple-200'
+              }
+            >
+              {articulo.destino_articulo === 'INSUMO_SERVICIO' && <Wrench className="mr-1 h-3 w-3" />}
+              {articulo.destino_articulo === 'HERRAMIENTA_ACTIVO' && <ShieldCheck className="mr-1 h-3 w-3" />}
+              {articulo.destino_articulo === 'DOTACION_EPP' && <HardHat className="mr-1 h-3 w-3" />}
+              {articulo.destino_articulo.replace('_', ' ')}
+            </Badge>
+
+            {/* Badges de Atributos */}
+            {articulo.es_comprable && (
+              <Badge variant="outline" className="border-gray-300 text-gray-700 text-[11px]">
+                Comprable
               </Badge>
-
-              {/* Badges de Atributos */}
-              {articulo.es_comprable && (
-                <Badge variant="outline" className="border-gray-300 text-gray-700 text-[11px]">
-                  Comprable
-                </Badge>
-              )}
-              {articulo.es_inventariable && (
-                <Badge variant="outline" className="border-gray-300 text-gray-700 text-[11px]">
-                  Inventariable
-                </Badge>
-              )}
-              {articulo.requiere_serializacion && (
-                <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 text-[11px]">
-                  Serializado
-                </Badge>
-              )}
-              {articulo.activo ? (
-                <Badge className="bg-emerald-600 text-white text-[11px]">Activo</Badge>
-              ) : (
-                <Badge variant="destructive" className="text-[11px]">Inactivo</Badge>
-              )}
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight sm:text-3xl">
-                {articulo.descripcion_corta || articulo.referencia_fabricante}
-              </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-500">
-                <span>
-                  Ref. Fabricante: <strong className="font-mono text-gray-800">{articulo.referencia_fabricante}</strong>
-                </span>
-                {articulo.codigo_interno && (
-                  <span>
-                    SKU Interno: <strong className="font-mono text-blue-700">{articulo.codigo_interno}</strong>
-                  </span>
-                )}
-                {articulo.marcas ? (
-                  <span className="flex items-center gap-1.5">
-                    Marca: <strong className="text-gray-900">{articulo.marcas.nombre}</strong>
-                    {articulo.marcas.es_fabricante_oem && (
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 font-semibold">
-                        OEM
-                      </Badge>
-                    )}
-                    {articulo.marcas.pais_origen && (
-                      <span className="text-[11px] text-gray-400">({articulo.marcas.pais_origen})</span>
-                    )}
-                  </span>
-                ) : articulo.marca ? (
-                  <span>
-                    Marca: <strong className="text-gray-800">{articulo.marca}</strong>
-                  </span>
-                ) : null}
-                <span className="flex items-center gap-1.5">
-                  Categoría: <strong className="text-gray-900">{articulo.categorias_componente?.nombre || articulo.tipos_componente?.nombre_componente || 'General'}</strong>
-                  {articulo.categorias_componente?.ruta_jerarquica && (
-                    <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 border-gray-200 font-mono">
-                      {articulo.categorias_componente.ruta_jerarquica}
-                    </Badge>
-                  )}
-                </span>
-              </div>
-            </div>
+            )}
+            {articulo.es_inventariable && (
+              <Badge variant="outline" className="border-gray-300 text-gray-700 text-[11px]">
+                Inventariable
+              </Badge>
+            )}
+            {articulo.requiere_serializacion && (
+              <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 text-[11px]">
+                Serializado
+              </Badge>
+            )}
+            {articulo.activo ? (
+              <Badge className="bg-emerald-600 text-white text-[11px]">Activo</Badge>
+            ) : (
+              <Badge variant="destructive" className="text-[11px]">Inactivo</Badge>
+            )}
           </div>
 
-          {/* FLASH METRICS CARDS */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
-            {/* Costo Preferido */}
-            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 text-left">
-              <span className="text-[11px] font-medium text-gray-500">Costo Adquisición</span>
-              <p className="mt-0.5 font-mono text-lg font-bold text-gray-900">
-                ${Number(proveedorPreferido?.costo_actual || articulo.precio_compra || 0).toLocaleString()}
-              </p>
-              <span className="text-[10px] text-gray-400">
-                {proveedorPreferido ? 'Prov. preferido' : 'Costo base'}
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight sm:text-3xl">
+              {articulo.descripcion_corta || articulo.referencia_fabricante}
+            </h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-500">
+              <span>
+                Ref. Fabricante: <strong className="font-mono text-gray-800">{articulo.referencia_fabricante}</strong>
+              </span>
+              {articulo.codigo_interno && (
+                <span>
+                  SKU Interno: <strong className="font-mono text-blue-700">{articulo.codigo_interno}</strong>
+                </span>
+              )}
+              {articulo.marcas ? (
+                <span className="flex items-center gap-1.5">
+                  Marca: <strong className="text-gray-900">{articulo.marcas.nombre}</strong>
+                  {articulo.marcas.es_fabricante_oem && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 font-semibold">
+                      OEM
+                    </Badge>
+                  )}
+                  {articulo.marcas.pais_origen && (
+                    <span className="text-[11px] text-gray-400">({articulo.marcas.pais_origen})</span>
+                  )}
+                </span>
+              ) : articulo.marca ? (
+                <span>
+                  Marca: <strong className="text-gray-800">{articulo.marca}</strong>
+                </span>
+              ) : null}
+              <span className="flex items-center gap-1.5">
+                Categoría: <strong className="text-gray-900">{articulo.categorias_componente?.nombre || articulo.tipos_componente?.nombre_componente || 'General'}</strong>
+                {articulo.categorias_componente?.ruta_jerarquica && (
+                  <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 border-gray-200 font-mono">
+                    {articulo.categorias_componente.ruta_jerarquica}
+                  </Badge>
+                )}
               </span>
             </div>
+          </div>
+        </div>
 
-            {/* Precio Venta / Margen */}
-            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 text-left">
-              <span className="text-[11px] font-medium text-blue-800">Precio Venta Sug.</span>
-              <p className="mt-0.5 font-mono text-lg font-bold text-blue-700">
-                ${Number(articulo.precio_venta || 0).toLocaleString()}
-              </p>
-              <span className="text-[10px] text-blue-600 font-medium">
-                {articulo.margen_utilidad_porcentaje ? `${articulo.margen_utilidad_porcentaje}% margen` : 'Sin margen'}
-              </span>
-            </div>
+        {/* FLASH METRICS CARDS: FILA DEDICADA DE ANCHO COMPLETO CON MÁXIMA HOLGURA TIPOGRÁFICA */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 w-full pt-4 mt-4 border-t border-slate-100">
+          {/* Costo Preferido */}
+          <div className="rounded-xl border border-gray-200/90 bg-gray-50/70 p-3.5 text-left transition-all hover:bg-gray-50">
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Costo Adquisición</span>
+            <p className="mt-1 font-mono text-xl font-bold text-gray-900 truncate" title={`$${Number(proveedorPreferido?.costo_actual || articulo.precio_compra || 0).toLocaleString()}`}>
+              ${Number(proveedorPreferido?.costo_actual || articulo.precio_compra || 0).toLocaleString()}
+            </p>
+            <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
+              {proveedorPreferido ? 'Prov. preferido' : 'Costo base'}
+            </span>
+          </div>
 
-            {/* Stock Actual */}
-            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 text-left">
-              <span className="text-[11px] font-medium text-gray-500">Stock en Bodega</span>
-              <p className="mt-0.5 font-mono text-lg font-bold text-gray-900">
-                {articulo.stock_actual} <span className="text-xs font-normal text-gray-500">{articulo.unidad_medida}</span>
-              </p>
-              <span className="text-[10px] text-gray-400">Mínimo: {articulo.stock_minimo}</span>
-            </div>
+          {/* Precio Venta / Margen */}
+          <div className="rounded-xl border border-blue-200/70 bg-blue-50/40 p-3.5 text-left transition-all hover:bg-blue-50/70">
+            <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider block">Precio Venta Sug.</span>
+            <p className="mt-1 font-mono text-xl font-bold text-blue-700 truncate" title={`$${Number(articulo.precio_venta || 0).toLocaleString()}`}>
+              ${Number(articulo.precio_venta || 0).toLocaleString()}
+            </p>
+            <span className="text-[11px] text-blue-600 font-medium block mt-0.5">
+              {articulo.margen_utilidad_porcentaje ? `${articulo.margen_utilidad_porcentaje}% margen comercial` : 'Sin margen definido'}
+            </span>
+          </div>
 
-            {/* Proveedores */}
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-left">
-              <span className="text-[11px] font-medium text-indigo-800">Fuentes Suministro</span>
-              <p className="mt-0.5 font-mono text-lg font-bold text-indigo-700">
-                {fuentes.length}
-              </p>
-              <span className="text-[10px] text-indigo-600 font-medium">
-                {fuentes.length === 1 ? '1 proveedor' : `${fuentes.length} proveedores`}
-              </span>
-            </div>
+          {/* Stock Actual */}
+          <div className="rounded-xl border border-gray-200/90 bg-gray-50/70 p-3.5 text-left transition-all hover:bg-gray-50">
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Stock en Bodega</span>
+            <p className="mt-1 font-mono text-xl font-bold text-gray-900">
+              {articulo.stock_actual} <span className="text-xs font-medium text-gray-500">{articulo.unidad_medida}</span>
+            </p>
+            <span className="text-[11px] text-gray-400 font-medium block mt-0.5">Stock mín: {articulo.stock_minimo}</span>
+          </div>
+
+          {/* Fuentes Suministro */}
+          <div className="rounded-xl border border-indigo-200/70 bg-indigo-50/40 p-3.5 text-left transition-all hover:bg-indigo-50/70">
+            <span className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wider block">Fuentes Suministro</span>
+            <p className="mt-1 font-mono text-xl font-bold text-indigo-700">
+              {fuentes.length}
+            </p>
+            <span className="text-[11px] text-indigo-600 font-medium block mt-0.5">
+              {fuentes.length === 1 ? '1 proveedor homologado' : `${fuentes.length} proveedores homologados`}
+            </span>
           </div>
         </div>
       </div>
@@ -1110,7 +1109,7 @@ export default function FichaArticulo360Page() {
               <CardContent className="pt-6 space-y-4 text-xs text-gray-600">
                 <p>
                   Los movimientos de entrada y salida para este recurso impactan directamente las bodegas
-                  centrales de <strong>MEKANOS S.A.S</strong>.
+                  centrales de la empresa.
                 </p>
                 <div className="rounded-lg bg-gray-50 p-4 border border-gray-200 space-y-2">
                   <div className="flex justify-between">

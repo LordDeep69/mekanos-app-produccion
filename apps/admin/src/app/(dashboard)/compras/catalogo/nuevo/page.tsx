@@ -72,8 +72,7 @@ const proveedorInicialSchema = z.object({
 
 const articuloFormSchema = z
   .object({
-    id_tipo_componente: z.coerce.number().min(1, 'Selecciona una categoría técnica'),
-    id_categoria: z.coerce.number().optional().nullable(),
+    id_categoria: z.coerce.number({ invalid_type_error: 'Selecciona una categoría taxonómica' }).min(1, 'Selecciona una categoría taxonómica'),
     codigo_interno: z.string().optional(),
     referencia_fabricante: z.string().min(2, 'La referencia neutral del fabricante es obligatoria'),
     marca: z.string().optional(),
@@ -179,7 +178,7 @@ const ARQUETIPOS: ArquetipoConfig[] = [
   {
     id: 'HERRAMIENTA_ACTIVO',
     titulo: 'Herramienta o Activo Propio',
-    badge: 'Propiedad MEKANOS',
+    badge: 'Activo propio',
     descripcion: 'Equipos, herramientas de diagnóstico y activos propios. Control con serial y calibración.',
     icono: ShieldCheck,
     colorBorder: 'border-amber-500 hover:border-amber-600',
@@ -275,7 +274,7 @@ export default function NuevoArticuloPage() {
       name: 'proveedores_iniciales',
     });
 
-  // Cargar datos complementarios (Categorías y Proveedores)
+  // Cargar datos complementarios (Proveedores). La taxonomía usa id_categoria (no el tipo legacy).
   useEffect(() => {
     async function loadAuxData() {
       try {
@@ -286,9 +285,6 @@ export default function NuevoArticuloPage() {
         ]);
         setTiposComponente(tiposRes || []);
         setProveedores(provsRes || []);
-        if (tiposRes && tiposRes.length > 0) {
-          setValue('id_tipo_componente', tiposRes[0].id_tipo_componente);
-        }
       } catch (e) {
         toast.error('Error al precargar listas auxiliares.');
       } finally {
@@ -296,7 +292,7 @@ export default function NuevoArticuloPage() {
       }
     }
     loadAuxData();
-  }, [setValue]);
+  }, []);
 
   // Manejar cambio de arquetipo y aplicar defaults inteligentes
   const handleSelectArquetipo = (arquetipo: ArquetipoConfig) => {
@@ -498,16 +494,13 @@ export default function NuevoArticuloPage() {
                 <HierarchicalCategorySelect
                   id="id_categoria"
                   value={watch('id_categoria')}
-                  onChange={(idCat, catObj) => {
-                    setValue('id_categoria', idCat);
-                    if (idCat) {
-                      setValue('id_tipo_componente', idCat);
-                    }
+                  onChange={(idCat) => {
+                    setValue('id_categoria', idCat as any, { shouldValidate: true });
                   }}
                   placeholder="Seleccionar familia / subfamilia..."
                 />
-                {errors.id_tipo_componente && (
-                  <p className="text-xs text-red-500">{errors.id_tipo_componente.message}</p>
+                {errors.id_categoria && (
+                  <p className="text-xs text-red-500">{errors.id_categoria.message}</p>
                 )}
               </div>
 
@@ -648,7 +641,7 @@ export default function NuevoArticuloPage() {
                 <ShieldCheck className="h-5 w-5 text-amber-700" />
                 <div>
                   <CardTitle className="text-base font-bold text-amber-900">
-                    Control de Herramientas y Activos Propios (MEKANOS)
+                    Control de Herramientas y Activos Propios
                   </CardTitle>
                   <CardDescription className="text-xs text-amber-800">
                     Campos especializados para trazabilidad física individual, calibración y custodia.

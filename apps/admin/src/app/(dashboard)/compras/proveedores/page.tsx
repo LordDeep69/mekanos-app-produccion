@@ -1,10 +1,12 @@
 'use client';
 
 /**
- * MEKANOS S.A.S - Portal Admin
+ * Portal Admin - Abastecimiento y Cadena de Suministro
  * Directorio de Proveedores (/compras/proveedores)
  * 
- * Gestión centralizada de fuentes de suministro, datos comerciales y fiscales.
+ * Gestión centralizada de fuentes de suministro comercial, datos fiscales y condiciones de entrega.
+ * Diseño Enterprise Calibrado: Modal espacioso de 2 columnas (sm:max-w-4xl md:max-w-5xl) con Header y Footer fijos,
+ * tabla balanceada sin scroll horizontal, condiciones comerciales horizontales elegantes y micro-portales activos.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -12,9 +14,9 @@ import Link from 'next/link';
 import {
   Building2,
   CheckCircle2,
+  Clock,
   CreditCard,
   ExternalLink,
-  Filter,
   Globe,
   Layers,
   Mail,
@@ -25,12 +27,28 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShieldCheck,
   Tag,
   Truck,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { comprasService } from '@/lib/api/compras.service';
+import { ProveedorCompleto } from '@/types/compras.types';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const RUBROS_CATALOGO_INSTITUCIONAL = [
   'Filtros y Elementos de Filtración',
@@ -50,23 +68,6 @@ const RUBROS_CATALOGO_INSTITUCIONAL = [
   'Servicios Técnicos Especializados',
   'Suministros y Dotación EPP',
 ];
-
-import { comprasService } from '@/lib/api/compras.service';
-import { ProveedorCompleto } from '@/types/compras.types';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 // Función determinista para avatar con iniciales y gradiente
 const getAvatarGradient = (nombre: string) => {
@@ -94,6 +95,103 @@ const getInitials = (nombre: string) => {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 };
 
+const getTerminosCredito = (prov: ProveedorCompleto) => {
+  const obs = prov.observaciones || '';
+  const match = obs.match(/Plazo de pago:\s*([^|]+)/i);
+  if (match) return match[1].trim();
+  if (/cr[eé]dito\s*60/i.test(obs)) return 'Crédito 60 días';
+  if (/cr[eé]dito\s*45/i.test(obs)) return 'Crédito 45 días';
+  if (/cr[eé]dito\s*30/i.test(obs)) return 'Crédito 30 días';
+  if (/cr[eé]dito\s*15/i.test(obs)) return 'Crédito 15 días';
+  if (/cr[eé]dito/i.test(obs)) return 'Crédito';
+  if (/contado/i.test(obs)) return 'Contado';
+  return 'Contado (Pago inmediato)';
+};
+
+// Formateador compacto para la tabla (evita alturas excesivas en la fila)
+const formatTerminoComercial = (prov: ProveedorCompleto) => {
+  const termino = getTerminosCredito(prov);
+  if (/cr[eé]dito\s*60/i.test(termino)) return 'Crédito 60d';
+  if (/cr[eé]dito\s*45/i.test(termino)) return 'Crédito 45d';
+  if (/cr[eé]dito\s*30/i.test(termino)) return 'Crédito 30d';
+  if (/cr[eé]dito\s*15/i.test(termino)) return 'Crédito 15d';
+  if (/cr[eé]dito/i.test(termino)) return 'Crédito';
+  if (/contado/i.test(termino)) return 'Contado';
+  if (/anticipo/i.test(termino)) return 'Anticipo 50%';
+  return termino.length > 14 ? termino.slice(0, 14) : termino;
+};
+
+const extractWebUrl = (prov: ProveedorCompleto): string => {
+  const obs = prov.observaciones || '';
+  const match = obs.match(/Web:\s*([^|]+)/i);
+  if (match) return match[1].trim();
+  return (prov.persona as any)?.sitio_web || '';
+};
+
+const extractEmailFacturacion = (prov: ProveedorCompleto): string => {
+  const obs = prov.observaciones || '';
+  const match = obs.match(/Facturación:\s*([^|]+)/i);
+  return match ? match[1].trim() : '';
+};
+
+const extractLogistica = (prov: ProveedorCompleto): string => {
+  const obs = prov.observaciones || '';
+  const match = obs.match(/Logística:\s*([^|]+)/i);
+  return match ? match[1].trim() : '';
+};
+
+const extractRubros = (prov: ProveedorCompleto): string[] => {
+  if (!prov.servicios_ofrecidos) return [];
+  return prov.servicios_ofrecidos
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean);
+};
+
+interface ProveedorFormData {
+  razon_social: string;
+  numero_identificacion: string;
+  categoria_proveedor: string;
+  tipo_proveedor: string;
+  rubros: string[];
+  sitio_web: string;
+  persona_contacto: string;
+  telefono_principal: string;
+  email_principal: string;
+  email_facturacion: string;
+  direccion_principal: string;
+  url_ubicacion: string;
+  terminos_credito: string;
+  tiempo_entrega_dias: number;
+  responsable_iva: boolean;
+  realiza_entregas: boolean;
+  proveedor_activo: boolean;
+  observaciones_despacho: string;
+  etiquetas_secundarias: string;
+}
+
+const defaultFormData: ProveedorFormData = {
+  razon_social: '',
+  numero_identificacion: '',
+  categoria_proveedor: 'REPUESTOS',
+  tipo_proveedor: 'NACIONAL',
+  rubros: [],
+  sitio_web: '',
+  persona_contacto: '',
+  telefono_principal: '',
+  email_principal: '',
+  email_facturacion: '',
+  direccion_principal: '',
+  url_ubicacion: '',
+  terminos_credito: 'Contado (Pago inmediato)',
+  tiempo_entrega_dias: 1,
+  responsable_iva: true,
+  realiza_entregas: true,
+  proveedor_activo: true,
+  observaciones_despacho: '',
+  etiquetas_secundarias: '',
+};
+
 export default function ProveedoresPage() {
   const [proveedores, setProveedores] = useState<ProveedorCompleto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,89 +199,13 @@ export default function ProveedoresPage() {
   const [search, setSearch] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState<string>('TODOS');
 
-  // Modal de Edición
+  // Modal Unificado (Crear / Editar)
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedProveedor, setSelectedProveedor] = useState<ProveedorCompleto | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  // Modal de Creación
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [createSubmitting, setCreateSubmitting] = useState(false);
   const [nuevoRubroInput, setNuevoRubroInput] = useState('');
-  const [createFormData, setCreateFormData] = useState({
-    razon_social: '',
-    numero_identificacion: '',
-    rubros: [] as string[],
-    sitio_web: '',
-    persona_contacto: '',
-    telefono_principal: '',
-    email_principal: '',
-    email_facturacion: '',
-    direccion_principal: '',
-    url_ubicacion: '',
-    terminos_credito: 'Contado (Pago inmediato)',
-    observaciones_despacho: '',
-    etiquetas_secundarias: '',
-  });
-
-  const resetCreateForm = () => {
-    setCreateFormData({
-      razon_social: '',
-      numero_identificacion: '',
-      rubros: [],
-      sitio_web: '',
-      persona_contacto: '',
-      telefono_principal: '',
-      email_principal: '',
-      email_facturacion: '',
-      direccion_principal: '',
-      url_ubicacion: '',
-      terminos_credito: 'Contado (Pago inmediato)',
-      observaciones_despacho: '',
-      etiquetas_secundarias: '',
-    });
-    setNuevoRubroInput('');
-  };
-
-  const handleAgregarRubro = (rubro: string) => {
-    const r = rubro.trim();
-    if (!r) return;
-    if (createFormData.rubros.includes(r)) {
-      toast.info(`El rubro "${r}" ya está asignado`);
-      return;
-    }
-    setCreateFormData((prev) => ({
-      ...prev,
-      rubros: [...prev.rubros, r],
-    }));
-  };
-
-  const handleRemoverRubro = (rubro: string) => {
-    setCreateFormData((prev) => ({
-      ...prev,
-      rubros: prev.rubros.filter((item) => item !== rubro),
-    }));
-  };
-
-  const handleCrearRubroPersonalizado = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const r = nuevoRubroInput.trim();
-    if (!r) return;
-    handleAgregarRubro(r);
-    setNuevoRubroInput('');
-  };
-
-  // Form State para edición
-  const [formData, setFormData] = useState({
-    categoria_proveedor: 'REPUESTOS',
-    tipo_proveedor: 'NACIONAL',
-    tiempo_entrega_dias: 1,
-    responsable_iva: true,
-    realiza_entregas: true,
-    proveedor_activo: true,
-    servicios_ofrecidos: '',
-    observaciones: '',
-  });
+  const [formData, setFormData] = useState<ProveedorFormData>(defaultFormData);
 
   // Cargar proveedores
   const cargarProveedores = async (showToast = false) => {
@@ -242,97 +264,149 @@ export default function ProveedoresPage() {
     });
   }, [proveedores, search, filtroCategoria]);
 
-  // Alternar estado activo rápidamente
+  // Alternar estado activo rápidamente con actualización optimista
   const alternarEstado = async (prov: ProveedorCompleto) => {
     const nuevoEstado = !prov.proveedor_activo;
+    const nom =
+      prov.persona?.razon_social ||
+      prov.persona?.nombre_comercial ||
+      `Proveedor #${prov.id_proveedor}`;
+
+    // Actualización optimista local
+    setProveedores((prev) =>
+      prev.map((p) =>
+        p.id_proveedor === prov.id_proveedor ? { ...p, proveedor_activo: nuevoEstado } : p
+      )
+    );
+
     try {
       await comprasService.updateProveedor(prov.id_proveedor, {
         proveedor_activo: nuevoEstado,
       });
-      const nom = prov.persona?.razon_social || prov.persona?.nombre_comercial || `Proveedor #${prov.id_proveedor}`;
       toast.success(`Proveedor "${nom}" marcado como ${nuevoEstado ? 'Activo' : 'Inactivo'}`);
-      cargarProveedores();
     } catch (e: any) {
       console.error('Error al alternar estado de proveedor:', e);
       toast.error('No se pudo actualizar el estado del proveedor');
+      cargarProveedores();
     }
   };
 
-  // Abrir modal de edición
-  const abrirEditarModal = (p: ProveedorCompleto) => {
-    setSelectedProveedor(p);
-    setFormData({
-      categoria_proveedor: p.categoria_proveedor || 'REPUESTOS',
-      tipo_proveedor: p.tipo_proveedor || 'NACIONAL',
-      tiempo_entrega_dias: p.tiempo_entrega_dias || 1,
-      responsable_iva: p.responsable_iva ?? true,
-      realiza_entregas: p.realiza_entregas ?? true,
-      proveedor_activo: p.proveedor_activo ?? true,
-      servicios_ofrecidos: p.servicios_ofrecidos || '',
-      observaciones: p.observaciones || '',
-    });
+  // Apertura de Modales
+  const abrirCrearModal = () => {
+    setSelectedProveedor(null);
+    setModalMode('create');
+    setFormData(defaultFormData);
+    setNuevoRubroInput('');
     setModalOpen(true);
   };
 
-  // Guardar edición
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProveedor) return;
-
-    try {
-      setSubmitting(true);
-      await comprasService.updateProveedor(selectedProveedor.id_proveedor, formData);
-      toast.success('Proveedor actualizado con éxito');
-      setModalOpen(false);
-      cargarProveedores();
-    } catch (e: any) {
-      console.error('Error al actualizar proveedor:', e);
-      toast.error('No se pudo actualizar el proveedor');
-    } finally {
-      setSubmitting(false);
-    }
+  const abrirEditarModal = (p: ProveedorCompleto) => {
+    setSelectedProveedor(p);
+    setModalMode('edit');
+    setFormData({
+      razon_social: p.persona?.razon_social || p.persona?.nombre_comercial || '',
+      numero_identificacion: p.persona?.numero_identificacion || '',
+      categoria_proveedor: p.categoria_proveedor || 'REPUESTOS',
+      tipo_proveedor: p.tipo_proveedor || 'NACIONAL',
+      rubros: extractRubros(p),
+      sitio_web: extractWebUrl(p),
+      persona_contacto: p.persona?.representante_legal || '',
+      telefono_principal: p.persona?.telefono_principal || '',
+      email_principal: p.persona?.email_principal || '',
+      email_facturacion: extractEmailFacturacion(p),
+      direccion_principal: p.persona?.direccion_principal || '',
+      url_ubicacion: p.persona?.url_ubicacion || '',
+      terminos_credito: getTerminosCredito(p),
+      tiempo_entrega_dias: p.tiempo_entrega_dias ?? 1,
+      responsable_iva: p.responsable_iva ?? true,
+      realiza_entregas: p.realiza_entregas ?? true,
+      proveedor_activo: p.proveedor_activo ?? true,
+      observaciones_despacho: extractLogistica(p),
+      etiquetas_secundarias: p.zona_cobertura || '',
+    });
+    setNuevoRubroInput('');
+    setModalOpen(true);
   };
 
-  // Crear nuevo proveedor comercial (flexible: solo razón social obligatoria)
-  const handleCreate = async (e: React.FormEvent) => {
+  // Gestión de Rubros
+  const handleAgregarRubro = (rubro: string) => {
+    const r = rubro.trim();
+    if (!r) return;
+    if (formData.rubros.includes(r)) {
+      toast.info(`El rubro "${r}" ya está asignado`);
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      rubros: [...prev.rubros, r],
+    }));
+  };
+
+  const handleRemoverRubro = (rubro: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      rubros: prev.rubros.filter((item) => item !== rubro),
+    }));
+  };
+
+  const handleCrearRubroPersonalizado = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const r = nuevoRubroInput.trim();
+    if (!r) return;
+    handleAgregarRubro(r);
+    setNuevoRubroInput('');
+  };
+
+  // Envío Unificado (Crear / Editar)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createFormData.razon_social.trim()) {
+    if (!formData.razon_social.trim()) {
       toast.error('La Razón Social o Nombre Comercial es obligatorio (*)');
       return;
     }
 
     try {
-      setCreateSubmitting(true);
-      await comprasService.createProveedor({
-        razon_social: createFormData.razon_social.trim(),
-        nombre_comercial: createFormData.razon_social.trim(),
-        numero_identificacion: createFormData.numero_identificacion.trim() || undefined,
-        rubros: createFormData.rubros,
-        persona_contacto: createFormData.persona_contacto.trim() || undefined,
-        telefono_principal: createFormData.telefono_principal.trim() || undefined,
-        email_principal: createFormData.email_principal.trim() || undefined,
-        email_facturacion: createFormData.email_facturacion.trim() || undefined,
-        direccion_principal: createFormData.direccion_principal.trim() || undefined,
-        url_ubicacion: createFormData.url_ubicacion.trim() || undefined,
-        sitio_web: createFormData.sitio_web.trim() || undefined,
-        terminos_credito: createFormData.terminos_credito || undefined,
-        observaciones_despacho: createFormData.observaciones_despacho.trim() || undefined,
-        etiquetas_secundarias: createFormData.etiquetas_secundarias.trim() || undefined,
-        categoria_proveedor: 'REPUESTOS',
-        tipo_proveedor: 'NACIONAL',
-        proveedor_activo: true,
-      });
+      setSubmitting(true);
+      const payload = {
+        razon_social: formData.razon_social.trim(),
+        nombre_comercial: formData.razon_social.trim(),
+        numero_identificacion: formData.numero_identificacion.trim() || undefined,
+        categoria_proveedor: formData.categoria_proveedor,
+        tipo_proveedor: formData.tipo_proveedor,
+        rubros: formData.rubros,
+        persona_contacto: formData.persona_contacto.trim() || undefined,
+        telefono_principal: formData.telefono_principal.trim() || undefined,
+        email_principal: formData.email_principal.trim() || undefined,
+        email_facturacion: formData.email_facturacion.trim() || undefined,
+        direccion_principal: formData.direccion_principal.trim() || undefined,
+        url_ubicacion: formData.url_ubicacion.trim() || undefined,
+        sitio_web: formData.sitio_web.trim() || undefined,
+        terminos_credito: formData.terminos_credito || undefined,
+        tiempo_entrega_dias: formData.tiempo_entrega_dias,
+        responsable_iva: formData.responsable_iva,
+        realiza_entregas: formData.realiza_entregas,
+        proveedor_activo: formData.proveedor_activo,
+        observaciones_despacho: formData.observaciones_despacho.trim() || undefined,
+        etiquetas_secundarias: formData.etiquetas_secundarias.trim() || undefined,
+      };
 
-      toast.success('Proveedor comercial registrado exitosamente');
-      setCreateModalOpen(false);
-      resetCreateForm();
+      if (modalMode === 'create') {
+        await comprasService.createProveedor(payload);
+        toast.success('Proveedor comercial registrado exitosamente');
+      } else {
+        if (!selectedProveedor) return;
+        await comprasService.updateProveedor(selectedProveedor.id_proveedor, payload);
+        toast.success('Proveedor comercial actualizado exitosamente');
+      }
+
+      setModalOpen(false);
       cargarProveedores(true);
     } catch (e: any) {
-      console.error('Error al registrar proveedor:', e);
-      const msg = e?.response?.data?.message || 'No se pudo registrar el proveedor';
+      console.error('Error al guardar proveedor:', e);
+      const msg = e?.response?.data?.message || 'No se pudo guardar la información del proveedor';
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
     } finally {
-      setCreateSubmitting(false);
+      setSubmitting(false);
     }
   };
 
@@ -368,10 +442,7 @@ export default function ProveedoresPage() {
 
           <Button
             size="sm"
-            onClick={() => {
-              resetCreateForm();
-              setCreateModalOpen(true);
-            }}
+            onClick={abrirCrearModal}
             className="h-10 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
           >
             <Plus className="mr-1.5 h-4 w-4" />
@@ -460,7 +531,7 @@ export default function ProveedoresPage() {
                   key={f.id}
                   type="button"
                   onClick={() => setFiltroCategoria(f.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5 cursor-pointer ${
                     filtroCategoria === f.id
                       ? 'bg-gray-900 text-white shadow-sm'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -483,33 +554,33 @@ export default function ProveedoresPage() {
         </CardContent>
       </Card>
 
-      {/* TABLA DE PROVEEDORES */}
+      {/* TABLA DE PROVEEDORES: CALIBRADA SIN SCROLL HORIZONTAL */}
       <Card className="border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-600">
+        <div className="w-full">
+          <table className="w-full text-left text-sm text-gray-600 table-auto">
             <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3.5">Proveedor / Razón Social</th>
-                <th className="px-6 py-3.5">Identificación / NIT</th>
-                <th className="px-6 py-3.5">Categoría & Tipo</th>
-                <th className="px-6 py-3.5 text-center">Artículos</th>
-                <th className="px-6 py-3.5">Contacto & Portales</th>
-                <th className="px-6 py-3.5">Entrega Promedio</th>
-                <th className="px-6 py-3.5">Estado</th>
-                <th className="px-6 py-3.5 text-right">Acciones</th>
+                <th className="px-4 py-3.5">Proveedor / Razón Social</th>
+                <th className="px-3.5 py-3.5">Identificación / NIT</th>
+                <th className="px-3.5 py-3.5">Categoría & Tipo</th>
+                <th className="px-3 py-3.5 text-center">Artículos</th>
+                <th className="px-3.5 py-3.5">Contacto & Portales</th>
+                <th className="px-3.5 py-3.5">Condiciones Comerciales</th>
+                <th className="px-3 py-3.5 text-center">Estado</th>
+                <th className="px-3.5 py-3.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-sm text-gray-400">
+                  <td colSpan={8} className="py-12 text-center text-sm text-gray-400">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-blue-500 mb-2" />
                     Cargando directorio de proveedores...
                   </td>
                 </tr>
               ) : proveedoresFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center">
+                  <td colSpan={8} className="py-12 text-center">
                     <Truck className="mx-auto h-8 w-8 text-gray-300 mb-2" />
                     <p className="text-sm font-semibold text-gray-700">No se encontraron proveedores</p>
                     <p className="text-xs text-gray-400 mt-1">
@@ -518,10 +589,7 @@ export default function ProveedoresPage() {
                     <div className="mt-4">
                       <Button
                         size="sm"
-                        onClick={() => {
-                          resetCreateForm();
-                          setCreateModalOpen(true);
-                        }}
+                        onClick={abrirCrearModal}
                         className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
                       >
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -539,8 +607,8 @@ export default function ProveedoresPage() {
                   const nit = prov.persona?.numero_identificacion || '--';
                   const tel = prov.persona?.telefono_principal;
                   const email = prov.persona?.email_principal;
-                  const web = prov.persona?.sitio_web;
-                  const ubicacion = prov.persona?.url_ubicacion;
+                  const webUrl = extractWebUrl(prov);
+                  const ubicacionUrl = prov.persona?.url_ubicacion;
                   const articulosCount =
                     (prov._count?.catalogo_componentes ?? 0) +
                     (prov._count?.articulos_proveedores ?? 0);
@@ -548,19 +616,21 @@ export default function ProveedoresPage() {
                   return (
                     <tr key={prov.id_proveedor} className="hover:bg-slate-50/80 transition-colors">
                       {/* Razón Social con Avatar Determinista */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
+                      <td className="px-4 py-3.5 min-w-[240px]">
+                        <div className="flex items-center gap-2.5">
                           <div
-                            className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getAvatarGradient(
+                            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${getAvatarGradient(
                               nombre,
                             )} text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0 tracking-wider`}
                           >
                             {getInitials(nombre)}
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-gray-900 text-sm truncate max-w-xs">{nombre}</p>
+                          <div className="min-w-0 max-w-[230px] xl:max-w-[310px]" title={nombre}>
+                            <p className="font-bold text-gray-900 text-sm truncate" title={nombre}>
+                              {nombre}
+                            </p>
                             {prov.persona?.nombre_comercial && prov.persona.razon_social && prov.persona.nombre_comercial !== prov.persona.razon_social ? (
-                              <span className="text-[11px] text-gray-400 block truncate max-w-xs">
+                              <span className="text-[11px] text-gray-400 block truncate" title={prov.persona.nombre_comercial}>
                                 {prov.persona.nombre_comercial}
                               </span>
                             ) : prov.codigo_proveedor ? (
@@ -573,12 +643,12 @@ export default function ProveedoresPage() {
                       </td>
 
                       {/* NIT */}
-                      <td className="px-6 py-4 font-mono text-xs text-gray-700">
+                      <td className="px-3.5 py-3.5 font-mono text-xs text-gray-700 whitespace-nowrap">
                         {nit}
                       </td>
 
                       {/* Categoría y Tipo */}
-                      <td className="px-6 py-4 space-y-1">
+                      <td className="px-3.5 py-3.5 space-y-0.5 whitespace-nowrap">
                         <Badge variant="outline" className="text-[10px] font-semibold text-blue-700 border-blue-200 bg-blue-50/50">
                           {prov.categoria_proveedor}
                         </Badge>
@@ -587,13 +657,13 @@ export default function ProveedoresPage() {
                         </span>
                       </td>
 
-                      {/* Artículos Suministrados (Relación con Catálogo) */}
-                      <td className="px-6 py-4 text-center">
+                      {/* Artículos Suministrados: 0 repuestos (texto neutro legible) vs >0 repuestos (badge interactivo) */}
+                      <td className="px-3 py-3.5 text-center whitespace-nowrap">
                         {articulosCount > 0 ? (
                           <Link
                             href={`/compras/catalogo?id_proveedor=${prov.id_proveedor}`}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:text-blue-900 transition-colors shadow-2xs"
-                            title={`Ver ${articulosCount} artículo(s) suministrado(s) en Catálogo`}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:text-blue-900 transition-colors shadow-2xs"
+                            title={`Ver ${articulosCount} repuesto(s) suministrado(s) en Catálogo`}
                           >
                             <Package className="h-3 w-3 text-blue-600" />
                             <span>
@@ -601,18 +671,18 @@ export default function ProveedoresPage() {
                             </span>
                           </Link>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium text-gray-400 bg-gray-50 border border-gray-100">
+                          <span className="text-xs text-slate-400 font-medium select-none">
                             0 repuestos
                           </span>
                         )}
                       </td>
 
-                      {/* Contacto & Portales */}
-                      <td className="px-6 py-4 text-xs space-y-1">
+                      {/* Contacto & Portales: Tel, Email y micro-iconos interactivos Globe / MapPin */}
+                      <td className="px-3.5 py-3.5 text-xs space-y-1">
                         {tel && (
                           <a
                             href={`tel:${tel}`}
-                            className="flex items-center gap-1.5 text-gray-700 hover:text-blue-600 transition-colors"
+                            className="flex items-center gap-1.5 text-gray-700 hover:text-blue-600 transition-colors whitespace-nowrap"
                           >
                             <Phone className="h-3 w-3 text-gray-400 shrink-0" />
                             <span>{tel}</span>
@@ -621,63 +691,96 @@ export default function ProveedoresPage() {
                         {email && (
                           <a
                             href={`mailto:${email}`}
-                            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors truncate max-w-[200px]"
+                            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-600 transition-colors max-w-[220px] xl:max-w-[270px]"
                             title={email}
                           >
                             <Mail className="h-3 w-3 text-gray-400 shrink-0" />
                             <span className="truncate">{email}</span>
                           </a>
                         )}
-                        {web && (
-                          <a
-                            href={web.startsWith('http') ? web : `https://${web}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline"
-                          >
-                            <Globe className="h-3 w-3 text-blue-500" />
-                            <span>Sitio Web</span>
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
+                        {(webUrl || ubicacionUrl) && (
+                          <div className="flex items-center gap-2 pt-0.5">
+                            {webUrl && (
+                              <a
+                                href={webUrl.startsWith('http') ? webUrl : `https://${webUrl}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 transition-colors shadow-2xs"
+                                title={`Abrir portal web / catálogo: ${webUrl}`}
+                              >
+                                <Globe className="h-3 w-3 text-sky-600 shrink-0" />
+                                <span>Web</span>
+                                <ExternalLink className="h-2 w-2 opacity-70 shrink-0" />
+                              </a>
+                            )}
+                            {ubicacionUrl && (
+                              <a
+                                href={ubicacionUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-2xs"
+                                title="Abrir ubicación en Google Maps / Waze"
+                              >
+                                <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
+                                <span>GPS</span>
+                                <ExternalLink className="h-2.5 w-2.5 opacity-70 shrink-0" />
+                              </a>
+                            )}
+                          </div>
                         )}
-                        {ubicacion && (
-                          <a
-                            href={ubicacion}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-emerald-600 hover:underline ml-2"
-                            title="Ver ubicación en Google Maps"
-                          >
-                            <MapPin className="h-3 w-3 text-emerald-500" />
-                            <span>Mapa</span>
-                          </a>
+                        {!tel && !email && !webUrl && !ubicacionUrl && (
+                          <span className="text-gray-400 text-xs italic">Sin datos</span>
                         )}
-                        {!tel && !email && !web && <span className="text-gray-400">Sin datos de contacto</span>}
                       </td>
 
-                      {/* Entrega */}
-                      <td className="px-6 py-4 text-xs">
-                        <span className="font-semibold text-gray-800">
-                          {prov.tiempo_entrega_dias || 1} {prov.tiempo_entrega_dias === 1 ? 'día' : 'días'}
-                        </span>
-                        {prov.realiza_entregas && (
-                          <span className="block text-[10px] text-emerald-600 font-medium mt-0.5">
-                            ✓ Entregas a domicilio
+                      {/* Condiciones Comerciales: Composición horizontal limpia */}
+                      <td className="px-3.5 py-3.5 space-y-1">
+                        <div>
+                          {(() => {
+                            const terminoCompleto = getTerminosCredito(prov);
+                            const terminoCorto = formatTerminoComercial(prov);
+                            const isCredito = /cr[eé]dito/i.test(terminoCompleto);
+                            return (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                                  isCredito
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                }`}
+                                title={terminoCompleto}
+                              >
+                                <CreditCard className="h-2.5 w-2.5 shrink-0" />
+                                <span>{terminoCorto}</span>
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-500 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-gray-400" />
+                            <span>{prov.tiempo_entrega_dias || 1}d</span>
                           </span>
-                        )}
+                          {prov.realiza_entregas && (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                              <span>•</span>
+                              <Truck className="h-3 w-3 text-emerald-600" />
+                              <span>Sede propia</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
 
-                      {/* Estado con Toggle Rápido */}
-                      <td className="px-6 py-4">
+                      {/* Estado con Toggle Rápido Optimista */}
+                      <td className="px-3 py-3.5 text-center">
                         <button
                           type="button"
                           onClick={() => alternarEstado(prov)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all shadow-2xs ${
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold transition-all shadow-2xs cursor-pointer ${
                             prov.proveedor_activo
                               ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
                               : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200'
                           }`}
-                          title={`Proveedor ${prov.proveedor_activo ? 'Activo' : 'Inactivo'}. Haz clic para alternar estado`}
+                          title={`Proveedor ${prov.proveedor_activo ? 'Activo' : 'Inactivo'}. Clic para alternar estado`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
@@ -689,18 +792,16 @@ export default function ProveedoresPage() {
                       </td>
 
                       {/* Acciones */}
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => abrirEditarModal(prov)}
-                            className="h-8 px-2.5 text-xs text-gray-600 hover:text-blue-700 hover:bg-blue-50 font-medium"
-                          >
-                            <Pencil className="h-3.5 w-3.5 mr-1 text-gray-400 group-hover:text-blue-600" />
-                            Editar
-                          </Button>
-                        </div>
+                      <td className="px-3 py-3.5 text-right whitespace-nowrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => abrirEditarModal(prov)}
+                          className="h-8 px-2 text-xs text-gray-600 hover:text-blue-700 hover:bg-blue-50 font-medium"
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1 text-gray-400 group-hover:text-blue-600" />
+                          Editar
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -711,117 +812,457 @@ export default function ProveedoresPage() {
         </div>
       </Card>
 
-      {/* MODAL DE EDICIÓN DE CONDICIONES COMERCIALES */}
+      {/* MODAL ENTERPRISE EXPANDIDO: 2 COLUMNAS (sm:max-w-4xl md:max-w-5xl) CON HEADER Y FOOTER FIJOS */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-gray-900">
-              Editar Condiciones de Proveedor
-            </DialogTitle>
-            <DialogDescription className="text-xs text-gray-500">
-              {selectedProveedor?.persona?.razon_social || selectedProveedor?.persona?.nombre_comercial}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleUpdate} className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="ed_cat" className="text-xs font-semibold text-gray-700">
-                  Categoría
-                </Label>
-                <select
-                  id="ed_cat"
-                  value={formData.categoria_proveedor}
-                  onChange={(e) => setFormData({ ...formData, categoria_proveedor: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="REPUESTOS">REPUESTOS</option>
-                  <option value="SERVICIOS">SERVICIOS</option>
-                  <option value="SUMINISTROS">SUMINISTROS</option>
-                  <option value="EQUIPOS">EQUIPOS</option>
-                  <option value="MIXTO">MIXTO</option>
-                </select>
+        <DialogContent className="sm:max-w-4xl md:max-w-5xl w-full max-h-[92vh] flex flex-col p-0 rounded-2xl border border-gray-100 shadow-2xl overflow-hidden">
+          {/* Header Fijo */}
+          <div className="flex items-start justify-between p-6 pb-4 border-b border-gray-100 bg-gray-50/60 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shadow-2xs">
+                <Building2 className="h-6 w-6" />
               </div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight">
+                  {modalMode === 'create' ? 'Nuevo Proveedor Comercial' : 'Editar Proveedor Comercial'}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-gray-500 mt-0.5">
+                  {modalMode === 'create'
+                    ? 'Registra un aliado de suministro para compras de insumos, repuestos y materias primas.'
+                    : `Modificación integral de datos fiscales, comerciales y operativos de ${
+                        selectedProveedor?.persona?.razon_social || selectedProveedor?.persona?.nombre_comercial || 'Proveedor'
+                      }.`}
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="ed_tipo" className="text-xs font-semibold text-gray-700">
-                  Tipo
-                </Label>
-                <select
-                  id="ed_tipo"
-                  value={formData.tipo_proveedor}
-                  onChange={(e) => setFormData({ ...formData, tipo_proveedor: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="NACIONAL">NACIONAL</option>
-                  <option value="INTERNACIONAL">INTERNACIONAL</option>
-                </select>
+          {/* Formulario con Body Scrolleable y Footer Fijo */}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="p-6 md:p-8 space-y-6 overflow-y-auto flex-1 max-h-[calc(92vh-145px)] pr-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                
+                {/* COLUMNA 1: IDENTIDAD JURÍDICA Y RUBROS */}
+                <div className="space-y-4">
+                  <div className="border-b border-slate-200 pb-2">
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-blue-600" />
+                      Identidad Jurídica y Rubros
+                    </h3>
+                  </div>
+
+                  {/* Razón Social */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="prov_razon" className="text-xs font-semibold text-gray-700">
+                      Razón Social o Nombre Comercial <span className="text-blue-600 font-bold">*</span>
+                    </Label>
+                    <Input
+                      id="prov_razon"
+                      required
+                      placeholder="Ej. Químicos Industriales del Caribe S.A.S."
+                      value={formData.razon_social}
+                      onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })}
+                      className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
+                    />
+                  </div>
+
+                  {/* NIT y Tipo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_nit" className="text-xs font-semibold text-gray-700">
+                        NIT / Identificación
+                      </Label>
+                      <Input
+                        id="prov_nit"
+                        placeholder="Ej. 900.123.456-7"
+                        value={formData.numero_identificacion}
+                        onChange={(e) => setFormData({ ...formData, numero_identificacion: e.target.value })}
+                        className="h-10 text-sm bg-white border-gray-200 rounded-lg font-mono px-3"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_tipo" className="text-xs font-semibold text-gray-700">
+                        Tipo Proveedor
+                      </Label>
+                      <select
+                        id="prov_tipo"
+                        value={formData.tipo_proveedor}
+                        onChange={(e) => setFormData({ ...formData, tipo_proveedor: e.target.value })}
+                        className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="NACIONAL">NACIONAL</option>
+                        <option value="INTERNACIONAL">INTERNACIONAL</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Categoría y Sitio Web */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_cat" className="text-xs font-semibold text-gray-700">
+                        Categoría Principal
+                      </Label>
+                      <select
+                        id="prov_cat"
+                        value={formData.categoria_proveedor}
+                        onChange={(e) => setFormData({ ...formData, categoria_proveedor: e.target.value })}
+                        className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="REPUESTOS">REPUESTOS</option>
+                        <option value="SERVICIOS">SERVICIOS</option>
+                        <option value="SUMINISTROS">SUMINISTROS</option>
+                        <option value="EQUIPOS">EQUIPOS</option>
+                        <option value="MIXTO">MIXTO</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_web" className="text-xs font-semibold text-gray-700">
+                        Sitio Web / Catálogo Digital
+                      </Label>
+                      <div className="relative">
+                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-500" />
+                        <Input
+                          id="prov_web"
+                          placeholder="https://proveedor.com"
+                          value={formData.sitio_web}
+                          onChange={(e) => setFormData({ ...formData, sitio_web: e.target.value })}
+                          className="h-10 pl-9 pr-3 text-sm bg-white border-gray-200 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN RUBROS / CATEGORÍAS */}
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Layers className="h-4 w-4 text-blue-600" />
+                        <span className="text-xs font-bold text-gray-800">
+                          Rubros y Especialidades
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                        {formData.rubros.length} asignados
+                      </span>
+                    </div>
+
+                    {/* Contenedor compacto de chips */}
+                    <div className="min-h-[42px] max-h-28 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 flex flex-wrap items-center gap-1.5">
+                      {formData.rubros.length === 0 ? (
+                        <span className="text-xs text-gray-400 italic">
+                          Sin rubros asignados. Agrega del catálogo institucional o escribe uno nuevo.
+                        </span>
+                      ) : (
+                        formData.rubros.map((rubro) => (
+                          <span
+                            key={rubro}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200/80 shadow-2xs"
+                          >
+                            <span>{rubro}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoverRubro(rubro)}
+                              className="text-blue-400 hover:text-blue-700 rounded-full p-0.5 hover:bg-blue-100 transition-colors"
+                              title={`Eliminar ${rubro}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Selector del Catálogo */}
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleAgregarRubro(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="" disabled>
+                        + Seleccionar rubro del catálogo institucional...
+                      </option>
+                      {RUBROS_CATALOGO_INSTITUCIONAL.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Rubro personalizado */}
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Crear rubro personalizado..."
+                        value={nuevoRubroInput}
+                        onChange={(e) => setNuevoRubroInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleCrearRubroPersonalizado();
+                          }
+                        }}
+                        className="h-10 text-xs bg-white border-gray-200 rounded-lg flex-1 px-3"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleCrearRubroPersonalizado()}
+                        className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shrink-0"
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Añadir
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Clasificación Secundaria / Tags */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="prov_tags" className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                        <Tag className="h-3 w-3 text-gray-500" />
+                        Etiquetas de Clasificación Secundarias
+                      </Label>
+                      <span className="text-[10px] text-gray-400">Separadas por coma</span>
+                    </div>
+                    <Input
+                      id="prov_tags"
+                      placeholder="Ej. HDPE, Conexiones, Soldaduras, Diésel..."
+                      value={formData.etiquetas_secundarias}
+                      onChange={(e) => setFormData({ ...formData, etiquetas_secundarias: e.target.value })}
+                      className="h-10 text-xs bg-white border-gray-200 rounded-lg px-3"
+                    />
+                  </div>
+                </div>
+
+                {/* COLUMNA 2: CONTACTO, LOGÍSTICA & CONDICIONES */}
+                <div className="space-y-4">
+                  <div className="border-b border-slate-200 pb-2">
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Truck className="h-3.5 w-3.5 text-blue-600" />
+                      Contacto, Logística y Finanzas
+                    </h3>
+                  </div>
+
+                  {/* Asesor y Teléfono */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_contacto" className="text-xs font-semibold text-gray-700">
+                        Asesor Comercial / Contacto
+                      </Label>
+                      <Input
+                        id="prov_contacto"
+                        placeholder="Ej. Carlos Mendoza"
+                        value={formData.persona_contacto}
+                        onChange={(e) => setFormData({ ...formData, persona_contacto: e.target.value })}
+                        className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_tel" className="text-xs font-semibold text-gray-700">
+                        Teléfono / WhatsApp Compras
+                      </Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <Input
+                          id="prov_tel"
+                          placeholder="Ej. +57 300 123 4567"
+                          value={formData.telefono_principal}
+                          onChange={(e) => setFormData({ ...formData, telefono_principal: e.target.value })}
+                          className="h-10 pl-9 pr-3 text-sm bg-white border-gray-200 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Correos */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_email" className="text-xs font-semibold text-gray-700">
+                        Correo Pedidos / Compras
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <Input
+                          id="prov_email"
+                          type="email"
+                          placeholder="Ej. pedidos@proveedor.com"
+                          value={formData.email_principal}
+                          onChange={(e) => setFormData({ ...formData, email_principal: e.target.value })}
+                          className="h-10 pl-9 pr-3 text-sm bg-white border-gray-200 rounded-lg"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prov_email_fact" className="text-xs font-semibold text-gray-700">
+                        Correo Facturación Electrónica
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <Input
+                          id="prov_email_fact"
+                          type="email"
+                          placeholder="Ej. facturas@proveedor.com"
+                          value={formData.email_facturacion}
+                          onChange={(e) => setFormData({ ...formData, email_facturacion: e.target.value })}
+                          className="h-10 pl-9 pr-3 text-sm bg-white border-gray-200 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dirección Física */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="prov_dir" className="text-xs font-semibold text-gray-700">
+                      Dirección Física / Bodega Despacho
+                    </Label>
+                    <Input
+                      id="prov_dir"
+                      placeholder="Ej. Zona Industrial Mamonal Km 3, Cartagena"
+                      value={formData.direccion_principal}
+                      onChange={(e) => setFormData({ ...formData, direccion_principal: e.target.value })}
+                      className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
+                    />
+                  </div>
+
+                  {/* GPS */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="prov_gps" className="text-xs font-semibold text-gray-700">
+                        Enlace Ubicación GPS (Google Maps / Waze)
+                      </Label>
+                      <span className="text-[10px] text-gray-400">Opcional</span>
+                    </div>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-500" />
+                      <Input
+                        id="prov_gps"
+                        placeholder="https://maps.google.com/?q=..."
+                        value={formData.url_ubicacion}
+                        onChange={(e) => setFormData({ ...formData, url_ubicacion: e.target.value })}
+                        className="h-10 pl-9 pr-3 text-xs bg-white border-gray-200 rounded-lg font-mono text-[11px]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Plazo de Pago y Tiempo de Entrega con distribución 7/5 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                    <div className="space-y-1.5 sm:col-span-7">
+                      <Label htmlFor="prov_plazo" className="text-xs font-semibold text-gray-700">
+                        Plazo de Pago / Crédito
+                      </Label>
+                      <div className="relative">
+                        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                        <select
+                          id="prov_plazo"
+                          value={formData.terminos_credito}
+                          onChange={(e) => setFormData({ ...formData, terminos_credito: e.target.value })}
+                          className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
+                        >
+                          <option value="Contado (Pago inmediato)">Contado (Pago inmediato)</option>
+                          <option value="Crédito 15 días">Crédito 15 días</option>
+                          <option value="Crédito 30 días">Crédito 30 días</option>
+                          <option value="Crédito 45 días">Crédito 45 días</option>
+                          <option value="Crédito 60 días">Crédito 60 días</option>
+                          <option value="Anticipo 50% / Saldo contra entrega">
+                            Anticipo 50% / Saldo contra entrega
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-5">
+                      <Label htmlFor="prov_dias" className="text-xs font-semibold text-gray-700">
+                        Tiempo de Entrega (Días)
+                      </Label>
+                      <Input
+                        id="prov_dias"
+                        type="number"
+                        min="0"
+                        value={formData.tiempo_entrega_dias}
+                        onChange={(e) => setFormData({ ...formData, tiempo_entrega_dias: Number(e.target.value) })}
+                        className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switches Comerciales y Logísticos */}
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="prov_iva" className="text-xs font-bold text-gray-800 cursor-pointer">
+                          Responsable de IVA
+                        </Label>
+                        <p className="text-[10px] text-gray-500">Aplica impuestos en órdenes de compra.</p>
+                      </div>
+                      <Switch
+                        id="prov_iva"
+                        checked={formData.responsable_iva}
+                        onCheckedChange={(c) => setFormData({ ...formData, responsable_iva: c })}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-gray-200/60 pt-2.5">
+                      <div>
+                        <Label htmlFor="prov_entregas" className="text-xs font-bold text-gray-800 cursor-pointer">
+                          Entrega a Domicilio / Sede Propia
+                        </Label>
+                        <p className="text-[10px] text-gray-500">Entrega directa en taller o sede propia de la empresa.</p>
+                      </div>
+                      <Switch
+                        id="prov_entregas"
+                        checked={formData.realiza_entregas}
+                        onCheckedChange={(c) => setFormData({ ...formData, realiza_entregas: c })}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-gray-200/60 pt-2.5">
+                      <div>
+                        <Label htmlFor="prov_activo" className="text-xs font-bold text-gray-800 cursor-pointer">
+                          Proveedor Activo
+                        </Label>
+                        <p className="text-[10px] text-gray-500">Habilitado para abastecimiento y requisiciones.</p>
+                      </div>
+                      <Switch
+                        id="prov_activo"
+                        checked={formData.proveedor_activo}
+                        onCheckedChange={(c) => setFormData({ ...formData, proveedor_activo: c })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Observaciones Logísticas */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="prov_obs" className="text-xs font-semibold text-gray-700">
+                      Observaciones Logísticas / Despacho
+                    </Label>
+                    <Input
+                      id="prov_obs"
+                      placeholder="Ej. Despacho semanal los martes, entregas en bodega..."
+                      value={formData.observaciones_despacho}
+                      onChange={(e) => setFormData({ ...formData, observaciones_despacho: e.target.value })}
+                      className="h-10 text-sm bg-white border-gray-200 rounded-lg px-3"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="ed_dias" className="text-xs font-semibold text-gray-700">
-                Tiempo de Entrega Promedio (Días)
-              </Label>
-              <Input
-                id="ed_dias"
-                type="number"
-                min="0"
-                value={formData.tiempo_entrega_dias}
-                onChange={(e) => setFormData({ ...formData, tiempo_entrega_dias: Number(e.target.value) })}
-                className="bg-white text-sm"
-              />
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="ed_iva" className="text-xs font-bold text-gray-800 cursor-pointer">
-                  Responsable de IVA
-                </Label>
-                <p className="text-[11px] text-gray-500">Aplica impuestos en órdenes de compra.</p>
-              </div>
-              <Switch
-                id="ed_iva"
-                checked={formData.responsable_iva}
-                onCheckedChange={(c) => setFormData({ ...formData, responsable_iva: c })}
-              />
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="ed_entregas" className="text-xs font-bold text-gray-800 cursor-pointer">
-                  Realiza Entregas a Domicilio
-                </Label>
-                <p className="text-[11px] text-gray-500">Despacha repuestos directamente a sede MEKANOS.</p>
-              </div>
-              <Switch
-                id="ed_entregas"
-                checked={formData.realiza_entregas}
-                onCheckedChange={(c) => setFormData({ ...formData, realiza_entregas: c })}
-              />
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="ed_activo" className="text-xs font-bold text-gray-800 cursor-pointer">
-                  Proveedor Activo
-                </Label>
-                <p className="text-[11px] text-gray-500">Habilita al proveedor para abastecimiento.</p>
-              </div>
-              <Switch
-                id="ed_activo"
-                checked={formData.proveedor_activo}
-                onCheckedChange={(c) => setFormData({ ...formData, proveedor_activo: c })}
-              />
-            </div>
-
-            <DialogFooter className="pt-2">
+            {/* Footer Fijo en la Base */}
+            <div className="p-4 px-6 md:px-8 border-t border-gray-100 bg-gray-50/70 flex items-center justify-end gap-3 shrink-0">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setModalOpen(false)}
                 disabled={submitting}
+                className="h-10 px-5 text-xs text-gray-700 border-gray-200 rounded-lg hover:bg-gray-100"
               >
                 Cancelar
               </Button>
@@ -829,416 +1270,11 @@ export default function ProveedoresPage() {
                 type="submit"
                 size="sm"
                 disabled={submitting}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="h-10 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-xs"
               >
-                {submitting ? 'Guardando...' : 'Guardar Cambios'}
+                {submitting ? 'Guardando...' : modalMode === 'create' ? 'Registrar Proveedor' : 'Guardar Cambios'}
               </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* MODAL DE CREACIÓN: NUEVO PROVEEDOR COMERCIAL */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 rounded-2xl border border-gray-100 shadow-2xl">
-          {/* Header */}
-          <div className="flex items-start justify-between p-6 pb-4 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-500 border border-sky-100/60 shadow-xs">
-                <Building2 className="h-6 w-6" />
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-gray-900 tracking-tight">
-                  Nuevo Proveedor Comercial
-                </DialogTitle>
-                <DialogDescription className="text-xs text-gray-500 mt-0.5">
-                  Registra un aliado de suministro para compras de insumos y materias primas.
-                </DialogDescription>
-              </div>
             </div>
-          </div>
-
-          <form onSubmit={handleCreate} className="p-6 pt-4 space-y-6">
-            {/* SECCIÓN 1: IDENTIFICACIÓN JURÍDICA Y RUBROS COMERCIALES */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Identificación Jurídica y Rubros Comerciales
-              </h3>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_razon" className="text-xs font-semibold text-gray-700">
-                    Razón social o nombre comercial <span className="text-sky-500 font-bold">*</span>
-                  </Label>
-                  <Input
-                    id="nprov_razon"
-                    required
-                    placeholder="Ej. Químicos Industriales del Caribe S.A.S."
-                    value={createFormData.razon_social}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, razon_social: e.target.value })
-                    }
-                    className="h-10 text-sm bg-white border-gray-200 focus:border-sky-400 focus:ring-sky-400 rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_nit" className="text-xs font-semibold text-gray-700">
-                    NIT / Identificación tributaria
-                  </Label>
-                  <Input
-                    id="nprov_nit"
-                    placeholder="Ej. 900.123.456-7"
-                    value={createFormData.numero_identificacion}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, numero_identificacion: e.target.value })
-                    }
-                    className="h-10 text-sm bg-white border-gray-200 focus:border-sky-400 focus:ring-sky-400 rounded-lg font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* CARD: RUBROS / CATEGORÍAS DE SUMINISTRO */}
-              <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3.5 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Layers className="h-4 w-4 text-sky-500" />
-                    <span className="text-xs font-bold text-gray-800">
-                      Rubros / Categorías de Suministro <span className="text-sky-500">*</span>
-                    </span>
-                    <span className="text-[11px] text-gray-400 font-normal">
-                      (Permite seleccionar múltiples rubros)
-                    </span>
-                  </div>
-                  <span className="text-xs font-semibold text-sky-600 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
-                    {createFormData.rubros.length} rubros asignados
-                  </span>
-                </div>
-
-                {/* Display chips */}
-                <div className="min-h-[44px] rounded-lg border border-gray-200 bg-gray-50/50 p-2.5 flex flex-wrap items-center gap-1.5">
-                  {createFormData.rubros.length === 0 ? (
-                    <span className="text-xs italic text-gray-400">
-                      Ningún rubro asignado aún. Selecciona uno del catálogo o crea uno nuevo abajo.
-                    </span>
-                  ) : (
-                    createFormData.rubros.map((rubro, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200/80 shadow-2xs animate-in fade-in duration-150"
-                      >
-                        {rubro}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoverRubro(rubro)}
-                          className="text-sky-400 hover:text-sky-700 rounded-full p-0.5 hover:bg-sky-100 transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))
-                  )}
-                </div>
-
-                {/* Subrow 1: Agregar del Catálogo Institucional */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="nprov_cat_select" className="text-xs font-semibold text-gray-700">
-                      Agregar del Catálogo Institucional
-                    </Label>
-                    <span className="text-[11px] text-gray-400">Selecciona para añadir</span>
-                  </div>
-                  <select
-                    id="nprov_cat_select"
-                    defaultValue=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAgregarRubro(e.target.value);
-                        e.target.value = '';
-                      }
-                    }}
-                    className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 focus:border-sky-400 focus:outline-none"
-                  >
-                    <option value="" disabled>
-                      + Seleccionar rubro del catálogo para agregar...
-                    </option>
-                    {RUBROS_CATALOGO_INSTITUCIONAL.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Subrow 2: Crear Rubro Personalizado */}
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="nprov_custom_rubro" className="text-xs font-semibold text-gray-700">
-                      ¿No está en la lista? Crear Rubro Personalizado
-                    </Label>
-                    <span className="text-[11px] text-sky-600 font-semibold cursor-pointer">
-                      Asignación directa
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      id="nprov_custom_rubro"
-                      placeholder="Nombre del nuevo rubro (ej. Bombas Dosificadoras, Válvulas, Atomizad..."
-                      value={nuevoRubroInput}
-                      onChange={(e) => setNuevoRubroInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleCrearRubroPersonalizado();
-                        }
-                      }}
-                      className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg flex-1"
-                    />
-                    <Button
-                      type="button"
-                      onClick={() => handleCrearRubroPersonalizado()}
-                      className="h-10 px-4 bg-sky-400 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg shrink-0"
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-1" />
-                      Crear y Asignar
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sitio Web / Catálogo Digital */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="nprov_web" className="text-xs font-semibold text-gray-700">
-                    Sitio Web / Catálogo Digital
-                  </Label>
-                  <span className="text-[11px] text-gray-400">Opcional</span>
-                </div>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sky-500" />
-                  <Input
-                    id="nprov_web"
-                    placeholder="https://proveedor.com"
-                    value={createFormData.sitio_web}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, sitio_web: e.target.value })
-                    }
-                    className="h-10 pl-9 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* SECCIÓN 2: DATOS DE CONTACTO Y FACTURACIÓN */}
-            <div className="space-y-4 pt-2 border-t border-gray-100">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Datos de Contacto y Facturación
-              </h3>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_contacto" className="text-xs font-semibold text-gray-700">
-                    Persona de contacto / Asesor Comercial
-                  </Label>
-                  <Input
-                    id="nprov_contacto"
-                    placeholder="Ej. Carlos Mendoza"
-                    value={createFormData.persona_contacto}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, persona_contacto: e.target.value })
-                    }
-                    className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_tel" className="text-xs font-semibold text-gray-700">
-                    Teléfono / WhatsApp de Compras
-                  </Label>
-                  <Input
-                    id="nprov_tel"
-                    placeholder="Ej. +57 300 123 4567"
-                    value={createFormData.telefono_principal}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, telefono_principal: e.target.value })
-                    }
-                    className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_email" className="text-xs font-semibold text-gray-700">
-                    Correo electrónico para compras / pedidos
-                  </Label>
-                  <Input
-                    id="nprov_email"
-                    type="email"
-                    placeholder="Ej. compras@proveedor.com"
-                    value={createFormData.email_principal}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, email_principal: e.target.value })
-                    }
-                    className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="nprov_email_fact" className="text-xs font-semibold text-gray-700">
-                      Correo Facturación Electrónica
-                    </Label>
-                    <span className="text-[11px] text-gray-400">Opcional</span>
-                  </div>
-                  <Input
-                    id="nprov_email_fact"
-                    type="email"
-                    placeholder="Ej. facturacion@proveedor.com"
-                    value={createFormData.email_facturacion}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, email_facturacion: e.target.value })
-                    }
-                    className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* SECCIÓN 3: UBICACIÓN FÍSICA, LOGÍSTICA Y FINANZAS */}
-            <div className="space-y-4 pt-2 border-t border-gray-100">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Ubicación Física, Logística y Finanzas
-              </h3>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_dir" className="text-xs font-semibold text-gray-700">
-                    Dirección física de despacho / Bodega
-                  </Label>
-                  <Input
-                    id="nprov_dir"
-                    placeholder="Ej. Zona Industrial Mamonal Km 3, Cartagena"
-                    value={createFormData.direccion_principal}
-                    onChange={(e) =>
-                      setCreateFormData({ ...createFormData, direccion_principal: e.target.value })
-                    }
-                    className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="nprov_gps" className="text-xs font-semibold text-gray-700">
-                      Enlace Google Maps / Waze / GPS
-                    </Label>
-                    <span className="text-[11px] text-gray-400">Opcional</span>
-                  </div>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-rose-500" />
-                    <Input
-                      id="nprov_gps"
-                      placeholder="https://maps.google.com/?q=..."
-                      value={createFormData.url_ubicacion}
-                      onChange={(e) =>
-                        setCreateFormData({ ...createFormData, url_ubicacion: e.target.value })
-                      }
-                      className="h-10 pl-9 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg font-mono text-[11px]"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_plazo" className="text-xs font-semibold text-gray-700">
-                    Plazo de Pago / Términos de Crédito
-                  </Label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sky-500 pointer-events-none" />
-                    <select
-                      id="nprov_plazo"
-                      value={createFormData.terminos_credito}
-                      onChange={(e) =>
-                        setCreateFormData({ ...createFormData, terminos_credito: e.target.value })
-                      }
-                      className="w-full h-10 pl-9 pr-3 rounded-lg border border-gray-200 bg-white text-xs text-gray-800 focus:border-sky-400 focus:outline-none"
-                    >
-                      <option value="Contado (Pago inmediato)">Contado (Pago inmediato)</option>
-                      <option value="Crédito 15 días">Crédito 15 días</option>
-                      <option value="Crédito 30 días">Crédito 30 días</option>
-                      <option value="Crédito 45 días">Crédito 45 días</option>
-                      <option value="Crédito 60 días">Crédito 60 días</option>
-                      <option value="Anticipo 50% / Saldo contra entrega">
-                        Anticipo 50% / Saldo contra entrega
-                      </option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="nprov_logistica" className="text-xs font-semibold text-gray-700">
-                    Observaciones Logísticas / Despacho
-                  </Label>
-                  <Input
-                    id="nprov_logistica"
-                    placeholder="Ej. Despacho semanal los martes, entregas en M..."
-                    value={createFormData.observaciones_despacho}
-                    onChange={(e) =>
-                      setCreateFormData({
-                        ...createFormData,
-                        observaciones_despacho: e.target.value,
-                      })
-                    }
-                    className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-
-                <div className="space-y-1.5 sm:col-span-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Tag className="h-3.5 w-3.5 text-sky-500" />
-                      <Label htmlFor="nprov_tags" className="text-xs font-semibold text-gray-700">
-                        Etiquetas de Clasificación Secundarias
-                      </Label>
-                    </div>
-                    <span className="text-[11px] text-gray-400">
-                      Separadas por coma (ej. Tapas, HDPE, Inyección)
-                    </span>
-                  </div>
-                  <Input
-                    id="nprov_tags"
-                    placeholder="Ej. Tapas, Canecas, Galoneras, Inyección, Polietileno..."
-                    value={createFormData.etiquetas_secundarias}
-                    onChange={(e) =>
-                      setCreateFormData({
-                        ...createFormData,
-                        etiquetas_secundarias: e.target.value,
-                      })
-                    }
-                    className="h-10 text-xs bg-white border-gray-200 focus:border-sky-400 rounded-lg"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <DialogFooter className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateModalOpen(false)}
-                disabled={createSubmitting}
-                className="h-10 px-5 text-xs text-gray-700 border-gray-200 rounded-lg hover:bg-gray-50"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={createSubmitting}
-                className="h-10 px-6 bg-sky-400 hover:bg-sky-500 text-white font-semibold text-xs rounded-lg shadow-xs"
-              >
-                {createSubmitting ? 'Registrando...' : 'Registrar Proveedor'}
-              </Button>
-            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

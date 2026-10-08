@@ -5,6 +5,7 @@ import {
     Get,
     Param,
     ParseIntPipe,
+    Patch,
     Post,
     Put,
     Query,
@@ -46,6 +47,7 @@ export class ProveedoresController {
   }
 
   @Put(':id')
+  @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateProveedoresDto,
