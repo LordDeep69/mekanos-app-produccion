@@ -81,10 +81,19 @@ export default function OrdenesCompraPage() {
   const [isPending, startTransition] = useTransition();
 
   // Helper para sanitizar nombres de usuario y erradicar textos quemados (White-label institucional)
-  const sanitizarNombreUsuario = (nombre: string | null | undefined) => {
+  const sanitizarNombreUsuario = (nombre: string | null | undefined): string => {
     if (!nombre) return 'Administrador del Sistema';
-    if (nombre.trim().toLowerCase() === 'admin mekanos') return 'Administrador del Sistema';
-    return nombre;
+    const trimmed = nombre.trim();
+    const lower = trimmed.toLowerCase();
+    if (
+      lower === 'admin mekanos' ||
+      lower === 'admin' ||
+      lower === 'administrador' ||
+      lower.includes('admin')
+    ) {
+      return 'Administrador del Sistema';
+    }
+    return trimmed;
   };
 
   // Usuario de sesión para auditoría white-label
@@ -1282,7 +1291,7 @@ export default function OrdenesCompraPage() {
                   <p className="text-slate-800 mt-0.5">
                     <span className="text-slate-500 font-medium">Solicitado:</span>{' '}
                     <span className="font-semibold text-slate-900">
-                      {ordenDetalle.solicitante?.nombre_completo || 'Administrador del Sistema'}
+                      {sanitizarNombreUsuario(ordenDetalle.solicitante?.nombre_completo)}
                     </span>
                   </p>
                   <p className="text-slate-800 mt-0.5">
@@ -1290,7 +1299,7 @@ export default function OrdenesCompraPage() {
                     <span className="font-semibold text-slate-900">
                       {ordenDetalle.estado === 'BORRADOR'
                         ? 'Pendiente de Aprobación'
-                        : ordenDetalle.aprobador?.nombre_completo || 'Administrador del Sistema'}
+                        : sanitizarNombreUsuario(ordenDetalle.aprobador?.nombre_completo)}
                     </span>
                   </p>
                 </div>
