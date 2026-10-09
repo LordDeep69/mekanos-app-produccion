@@ -1,21 +1,23 @@
 import {
-    Body,
-    Controller,
-    Get,
-    Param,
-    ParseIntPipe,
-    Post,
-    Query,
-    UseGuards,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserId } from '../common/decorators/user-id.decorator';
+import { RegistrarRecepcionLoteCommand } from './application/commands/registrar-recepcion-lote.command';
 import { RegistrarRecepcionCommand } from './application/commands/registrar-recepcion.command';
 import { GetRecepcionByIdQuery } from './application/queries/get-recepcion-by-id.query';
 import { GetRecepcionesQuery } from './application/queries/get-recepciones.query';
 import { CreateRecepcionesCompraDto } from './dto/create-recepciones-compra.dto';
+import { RegistrarRecepcionLoteDto } from './dto/registrar-recepcion-lote.dto';
 
 @Controller('recepciones-compra')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -37,13 +39,30 @@ export class RecepcionesCompraController {
         createDto.cantidad_recibida,
         createDto.cantidad_aceptada,
         createDto.cantidad_rechazada,
+        userId,
         createDto.tipo_recepcion,
         createDto.calidad,
-        userId,
         createDto.id_ubicacion_destino,
         createDto.observaciones,
         createDto.costo_unitario_real,
       ),
+    );
+  }
+
+  @Post('lote')
+  createLote(
+    @Body() loteDto: RegistrarRecepcionLoteDto,
+    @UserId() userId: number,
+  ) {
+    return this.commandBus.execute(
+      new RegistrarRecepcionLoteCommand({
+        id_orden_compra: loteDto.id_orden_compra,
+        recibido_por: userId,
+        id_ubicacion_destino: loteDto.id_ubicacion_destino,
+        guia_remision: loteDto.guia_remision,
+        observaciones: loteDto.observaciones,
+        items: loteDto.items,
+      }),
     );
   }
 

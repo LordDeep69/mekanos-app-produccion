@@ -401,7 +401,17 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
               },
             },
           },
-          recepciones_compra: true,
+          recepciones_compra: {
+            include: {
+              ubicaciones_bodega: {
+                select: {
+                  id_ubicacion: true,
+                  codigo_ubicacion: true,
+                  zona: true,
+                },
+              },
+            },
+          },
         },
       }),
       this.prisma.ordenes_compra.count({ where }),
@@ -462,6 +472,15 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
         recepciones_compra: {
           orderBy: {
             fecha_recepcion: 'desc',
+          },
+          include: {
+            ubicaciones_bodega: {
+              select: {
+                id_ubicacion: true,
+                codigo_ubicacion: true,
+                zona: true,
+              },
+            },
           },
         },
       },
@@ -722,10 +741,32 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
 
       subtotalCalculado += subtotalItem;
 
+      // Calcular acumulados de recepciones para esta línea
+      const recepcionesDetalle = (orden.recepciones_compra || []).filter(
+        (r: any) => r.id_detalle_orden === detalle.id_detalle,
+      );
+      const cantidad_recibida_acumulada = recepcionesDetalle.reduce(
+        (acc: number, r: any) => acc + parseFloat(r.cantidad_recibida?.toString() || '0'),
+        0,
+      );
+      const cantidad_aceptada_acumulada = recepcionesDetalle.reduce(
+        (acc: number, r: any) => acc + parseFloat(r.cantidad_aceptada?.toString() || '0'),
+        0,
+      );
+      const cantidad_rechazada_acumulada = recepcionesDetalle.reduce(
+        (acc: number, r: any) => acc + parseFloat(r.cantidad_rechazada?.toString() || '0'),
+        0,
+      );
+      const cantidad_pendiente = Math.max(0, cantidad - cantidad_recibida_acumulada);
+
       return {
         id_detalle: detalle.id_detalle,
         id_componente: detalle.id_componente,
         cantidad,
+        cantidad_recibida_acumulada,
+        cantidad_aceptada_acumulada,
+        cantidad_rechazada_acumulada,
+        cantidad_pendiente,
         precio_unitario: precioUnitario,
         subtotal: subtotalItem,
         observaciones: detalle.observaciones,
@@ -790,10 +831,15 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
       recepciones: (orden.recepciones_compra || []).map((recepcion: any) => ({
         id_recepcion: recepcion.id_recepcion,
         numero_recepcion: recepcion.numero_recepcion,
+        id_detalle_orden: recepcion.id_detalle_orden,
         cantidad_recibida: parseFloat(recepcion.cantidad_recibida?.toString() || '0'),
         cantidad_aceptada: parseFloat(recepcion.cantidad_aceptada?.toString() || '0'),
         cantidad_rechazada: parseFloat(recepcion.cantidad_rechazada?.toString() || '0'),
+        tipo_recepcion: recepcion.tipo_recepcion,
         calidad: recepcion.calidad,
+        id_ubicacion_destino: recepcion.id_ubicacion_destino,
+        ubicacion_nombre: recepcion.ubicaciones_bodega?.codigo_ubicacion || null,
+        observaciones: recepcion.observaciones,
         fecha_recepcion: recepcion.fecha_recepcion,
       })),
     };

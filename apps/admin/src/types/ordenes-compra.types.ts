@@ -9,6 +9,10 @@ export interface OrdenCompraDetalle {
   id_detalle: number;
   id_componente: number;
   cantidad: number;
+  cantidad_recibida_acumulada?: number;
+  cantidad_aceptada_acumulada?: number;
+  cantidad_rechazada_acumulada?: number;
+  cantidad_pendiente?: number;
   precio_unitario: number;
   subtotal: number;
   observaciones?: string | null;
@@ -24,11 +28,45 @@ export interface OrdenCompraDetalle {
 export interface RecepcionResumen {
   id_recepcion: number;
   numero_recepcion: string;
+  id_detalle_orden?: number;
   cantidad_recibida: number;
   cantidad_aceptada: number;
   cantidad_rechazada: number;
   calidad: string;
+  tipo_recepcion?: string;
+  id_ubicacion_destino?: number | null;
+  ubicacion_nombre?: string | null;
+  observaciones?: string | null;
   fecha_recepcion: string;
+}
+
+export interface UbicacionBodega {
+  id_ubicacion: number;
+  codigo_ubicacion: string;
+  zona: string;
+  pasillo?: string | null;
+  estante?: string | null;
+  nivel?: string | null;
+  activo: boolean;
+}
+
+export interface ItemRecepcionLotePayload {
+  id_detalle_orden: number;
+  cantidad_recibida: number;
+  cantidad_aceptada: number;
+  cantidad_rechazada: number;
+  calidad?: 'OK' | 'PARCIAL_DA_ADO' | 'RECHAZADO';
+  id_ubicacion_destino?: number;
+  observaciones?: string;
+  costo_unitario_real?: number;
+}
+
+export interface RegistrarRecepcionLotePayload {
+  id_orden_compra: number;
+  id_ubicacion_destino?: number;
+  guia_remision?: string;
+  observaciones?: string;
+  items: ItemRecepcionLotePayload[];
 }
 
 export interface OrdenCompra {

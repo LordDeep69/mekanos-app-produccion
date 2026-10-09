@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { RegistrarRecepcionLoteHandler } from './application/commands/registrar-recepcion-lote.command';
 import { RegistrarRecepcionHandler } from './application/commands/registrar-recepcion.command';
 import { GetRecepcionByIdHandler } from './application/queries/get-recepcion-by-id.query';
 import { GetRecepcionesHandler } from './application/queries/get-recepciones.query';
 import { PrismaRecepcionesCompraRepository } from './infrastructure/persistence/prisma-recepciones-compra.repository';
 import { RecepcionesCompraController } from './recepciones-compra.controller';
 
-const CommandHandlers = [RegistrarRecepcionHandler];
+const CommandHandlers = [RegistrarRecepcionHandler, RegistrarRecepcionLoteHandler];
 const QueryHandlers = [GetRecepcionesHandler, GetRecepcionByIdHandler];
 
 @Module({

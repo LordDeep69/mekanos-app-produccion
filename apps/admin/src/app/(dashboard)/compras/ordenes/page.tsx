@@ -23,12 +23,16 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  Layers,
   Loader2,
+  PackageCheck,
   Plus,
   Printer,
   RefreshCw,
   Search,
   Send,
+  ShieldAlert,
+  ShieldCheck,
   ShoppingBag,
   TrendingUp,
   Truck,
@@ -61,11 +65,14 @@ import {
   FiltrosOrdenesCompra,
   ordenesCompraService,
 } from '@/lib/api/ordenes-compra.service';
+import { recepcionesCompraService } from '@/lib/api/recepciones-compra.service';
 import { comprasService } from '@/lib/api/compras.service';
 import {
   EstadoOrdenCompra,
   OrdenCompra,
   OrdenesCompraKpis,
+  RegistrarRecepcionLotePayload,
+  UbicacionBodega,
 } from '@/types/ordenes-compra.types';
 import { ProveedorCompleto } from '@/types/compras.types';
 
@@ -109,7 +116,7 @@ export default function OrdenesCompraPage() {
   const [filtroProveedor, setFiltroProveedor] = useState<string>('TODOS');
   const [paginaActual, setPaginaActual] = useState(1);
 
-  // Estados de modales
+  // Estados de modales (Ciclo 4.A y 4.B)
   const [ordenDetalle, setOrdenDetalle] = useState<OrdenCompra | null>(null);
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
   const [ordenParaEnviar, setOrdenParaEnviar] = useState<OrdenCompra | null>(null);
@@ -118,6 +125,31 @@ export default function OrdenesCompraPage() {
   const [modalCancelarOpen, setModalCancelarOpen] = useState(false);
   const [motivoCancelacion, setMotivoCancelacion] = useState('');
   const [accionEnProgreso, setAccionEnProgreso] = useState(false);
+
+  // Estados Modal Recepción Almacén y Control de Calidad (Ciclo 4.B)
+  const [ordenParaRecibir, setOrdenParaRecibir] = useState<OrdenCompra | null>(null);
+  const [modalRecepcionOpen, setModalRecepcionOpen] = useState(false);
+  const [ubicacionesBodega, setUbicacionesBodega] = useState<UbicacionBodega[]>([]);
+  const [ubicacionSeleccionada, setUbicacionSeleccionada] = useState<string>('');
+  const [guiaRemision, setGuiaRemision] = useState('');
+  const [observacionesRecepcion, setObservacionesRecepcion] = useState('');
+  const [itemsRecepcion, setItemsRecepcion] = useState<
+    Array<{
+      id_detalle: number;
+      id_componente: number;
+      descripcion: string;
+      sku: string;
+      unidad_medida: string;
+      cantidad_solicitada: number;
+      cantidad_recibida_previa: number;
+      saldo_pendiente: number;
+      cantidad_recibir: number;
+      cantidad_aceptada: number;
+      cantidad_rechazada: number;
+      calidad: 'OK' | 'PARCIAL_DA_ADO' | 'RECHAZADO';
+      observacion_linea: string;
+    }>
+  >([]);
 
   // Formateador de moneda colombiana COP con precisión determinista
   const formatCOP = (valor: number | null | undefined, forceDecimals = false) => {
@@ -270,6 +302,208 @@ export default function OrdenesCompraPage() {
       await cargarDatos(paginaActual);
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Error al cancelar la orden de compra');
+    } finally {
+      setAccionEnProgreso(false);
+    }
+  };
+
+  // Abrir modal de recepción física (Ciclo 4.B)
+  const handleAbrirModalRecepcion = async (orden: OrdenCompra) => {
+    try {
+      setAccionEnProgreso(true);
+      // Obtener orden completa con sus líneas y recepciones
+      const ordenCompleta = await ordenesCompraService.getOrdenById(orden.id_orden_compra);
+      setOrdenParaRecibir(ordenCompleta);
+
+      // Cargar catálogo de ubicaciones de bodega si no se ha cargado
+      let bodegas = ubicacionesBodega;
+      if (bodegas.length === 0) {
+        bodegas = await recepcionesCompraService.getUbicacionesBodega();
+        setUbicacionesBodega(bodegas);
+      }
+      if (bodegas.length > 0 && !ubicacionSeleccionada) {
+        setUbicacionSeleccionada(String(bodegas[0].id_ubicacion));
+      }
+
+      // Mapear líneas con saldos pendientes deterministas
+      const lineasMapeadas = (ordenCompleta.detalles || []).map((det) => {
+        const cantSolicitada = Number(det.cantidad);
+        const cantRecibidaPrevia = Number(det.cantidad_recibida_acumulada || 0);
+        const saldoPendiente =
+          det.cantidad_pendiente !== undefined
+            ? Number(det.cantidad_pendiente)
+            : Math.max(0, cantSolicitada - cantRecibidaPrevia);
+
+        return {
+          id_detalle: det.id_detalle,
+          id_componente: det.id_componente,
+          descripcion: det.componente?.descripcion_corta || 'Componente / Repuesto',
+          sku: det.componente?.codigo_interno || det.componente?.referencia_fabricante || '—',
+          unidad_medida: det.componente?.unidad_medida || 'UND',
+          cantidad_solicitada: cantSolicitada,
+          cantidad_recibida_previa: cantRecibidaPrevia,
+          saldo_pendiente: saldoPendiente,
+          cantidad_recibir: saldoPendiente,
+          cantidad_aceptada: saldoPendiente,
+          cantidad_rechazada: 0,
+          calidad: 'OK' as const,
+          observacion_linea: '',
+        };
+      });
+
+      setItemsRecepcion(lineasMapeadas);
+      setGuiaRemision('');
+      setObservacionesRecepcion('');
+      setModalRecepcionOpen(true);
+    } catch (e: any) {
+      console.error('Error al abrir modal de recepción:', e);
+      toast.error(e.response?.data?.message || 'Error al preparar la recepción de almacén');
+    } finally {
+      setAccionEnProgreso(false);
+    }
+  };
+
+  const handleModificarCantidadRecibir = (id_detalle: number, cant: number) => {
+    setItemsRecepcion((prev) =>
+      prev.map((item) => {
+        if (item.id_detalle !== id_detalle) return item;
+        const nuevaRecibir = Math.max(0, Math.min(item.saldo_pendiente, cant));
+        const nuevaAceptada = Math.max(0, nuevaRecibir - item.cantidad_rechazada);
+        let cal: 'OK' | 'PARCIAL_DA_ADO' | 'RECHAZADO' = 'OK';
+        if (item.cantidad_rechazada > 0 && nuevaAceptada === 0) cal = 'RECHAZADO';
+        else if (item.cantidad_rechazada > 0 && nuevaAceptada > 0) cal = 'PARCIAL_DA_ADO';
+
+        return {
+          ...item,
+          cantidad_recibir: nuevaRecibir,
+          cantidad_aceptada: nuevaAceptada,
+          calidad: cal,
+        };
+      }),
+    );
+  };
+
+  const handleModificarAceptada = (id_detalle: number, cant: number) => {
+    setItemsRecepcion((prev) =>
+      prev.map((item) => {
+        if (item.id_detalle !== id_detalle) return item;
+        const nuevaAceptada = Math.max(0, Math.min(item.cantidad_recibir, cant));
+        const nuevaRechazada = item.cantidad_recibir - nuevaAceptada;
+        let cal: 'OK' | 'PARCIAL_DA_ADO' | 'RECHAZADO' = 'OK';
+        if (nuevaRechazada > 0 && nuevaAceptada === 0) cal = 'RECHAZADO';
+        else if (nuevaRechazada > 0 && nuevaAceptada > 0) cal = 'PARCIAL_DA_ADO';
+
+        return {
+          ...item,
+          cantidad_aceptada: nuevaAceptada,
+          cantidad_rechazada: nuevaRechazada,
+          calidad: cal,
+        };
+      }),
+    );
+  };
+
+  const handleModificarRechazada = (id_detalle: number, cant: number) => {
+    setItemsRecepcion((prev) =>
+      prev.map((item) => {
+        if (item.id_detalle !== id_detalle) return item;
+        const nuevaRechazada = Math.max(0, Math.min(item.cantidad_recibir, cant));
+        const nuevaAceptada = item.cantidad_recibir - nuevaRechazada;
+        let cal: 'OK' | 'PARCIAL_DA_ADO' | 'RECHAZADO' = 'OK';
+        if (nuevaRechazada > 0 && nuevaAceptada === 0) cal = 'RECHAZADO';
+        else if (nuevaRechazada > 0 && nuevaAceptada > 0) cal = 'PARCIAL_DA_ADO';
+
+        return {
+          ...item,
+          cantidad_aceptada: nuevaAceptada,
+          cantidad_rechazada: nuevaRechazada,
+          calidad: cal,
+        };
+      }),
+    );
+  };
+
+  const handleModificarNotaItem = (id_detalle: number, nota: string) => {
+    setItemsRecepcion((prev) =>
+      prev.map((item) =>
+        item.id_detalle === id_detalle ? { ...item, observacion_linea: nota } : item,
+      ),
+    );
+  };
+
+  const handlePrellenarTodoPendiente = () => {
+    setItemsRecepcion((prev) =>
+      prev.map((item) => ({
+        ...item,
+        cantidad_recibir: item.saldo_pendiente,
+        cantidad_aceptada: item.saldo_pendiente,
+        cantidad_rechazada: 0,
+        calidad: 'OK',
+      })),
+    );
+  };
+
+  const handleConfirmarRecepcion = async () => {
+    if (!ordenParaRecibir) return;
+
+    const itemsAProcesar = itemsRecepcion.filter((it) => it.cantidad_recibir > 0);
+    if (itemsAProcesar.length === 0) {
+      toast.warning('Debe ingresar una cantidad a recibir mayor a 0 en al menos una línea');
+      return;
+    }
+
+    const totalAceptado = itemsAProcesar.reduce((acc, it) => acc + it.cantidad_aceptada, 0);
+    if (totalAceptado > 0 && !ubicacionSeleccionada) {
+      toast.warning('Debe seleccionar la bodega / ubicación de destino para el ingreso físico a inventario');
+      return;
+    }
+
+    for (const it of itemsAProcesar) {
+      if (it.cantidad_recibir !== it.cantidad_aceptada + it.cantidad_rechazada) {
+        toast.error(`Inconsistencia en "${it.descripcion}": la cantidad recibida (${it.cantidad_recibir}) debe ser igual a aceptada (${it.cantidad_aceptada}) + rechazada (${it.cantidad_rechazada})`);
+        return;
+      }
+      if (it.cantidad_recibir > it.saldo_pendiente) {
+        toast.error(`La cantidad recibida de "${it.descripcion}" excede el saldo pendiente (${it.saldo_pendiente})`);
+        return;
+      }
+    }
+
+    try {
+      setAccionEnProgreso(true);
+      const payload: RegistrarRecepcionLotePayload = {
+        id_orden_compra: ordenParaRecibir.id_orden_compra,
+        id_ubicacion_destino: ubicacionSeleccionada ? parseInt(ubicacionSeleccionada, 10) : undefined,
+        guia_remision: guiaRemision.trim() || undefined,
+        observaciones: observacionesRecepcion.trim() || undefined,
+        items: itemsAProcesar.map((it) => ({
+          id_detalle_orden: it.id_detalle,
+          cantidad_recibida: it.cantidad_recibir,
+          cantidad_aceptada: it.cantidad_aceptada,
+          cantidad_rechazada: it.cantidad_rechazada,
+          calidad: it.calidad,
+          observaciones: it.observacion_linea.trim() || undefined,
+        })),
+      };
+
+      const res = await recepcionesCompraService.registrarRecepcionLote(payload);
+      toast.success(
+        `Recepción ${res.numero_recepcion} procesada con éxito. La orden ahora está en estado '${res.nuevo_estado_orden}'.`,
+      );
+
+      setModalRecepcionOpen(false);
+
+      // Recargar datos de la tabla y KPIs
+      await cargarDatos(paginaActual);
+
+      // Si el modal de detalle 360° estaba abierto, recargarlo con los nuevos datos
+      if (modalDetalleOpen && ordenDetalle?.id_orden_compra === ordenParaRecibir.id_orden_compra) {
+        const ordenActualizada = await ordenesCompraService.getOrdenById(ordenParaRecibir.id_orden_compra);
+        setOrdenDetalle(ordenActualizada);
+      }
+    } catch (e: any) {
+      console.error('Error al registrar recepción:', e);
+      toast.error(e.response?.data?.message || 'Error al procesar la recepción física');
     } finally {
       setAccionEnProgreso(false);
     }
@@ -910,6 +1144,18 @@ export default function OrdenesCompraPage() {
                           </Button>
                         )}
 
+                        {(orden.estado === 'ENVIADA' || orden.estado === 'PARCIAL') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                            title="Registrar Recepción Física en Almacén (Ciclo 4.B)"
+                            onClick={() => handleAbrirModalRecepcion(orden)}
+                          >
+                            <PackageCheck className="w-4 h-4" />
+                          </Button>
+                        )}
+
                         {orden.estado !== 'COMPLETADA' && orden.estado !== 'CANCELADA' && (
                           <Button
                             variant="ghost"
@@ -1049,26 +1295,38 @@ export default function OrdenesCompraPage() {
                 </div>
               )}
 
-              {/* Tabla de Líneas / Ítems Holgada y Respirable */}
+              {/* Tabla de Líneas / Ítems Holgada y Respirable con Saldos Físicos (Ciclo 4.B) */}
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-600 flex items-center justify-between">
                   <span>Líneas de la Orden ({ordenDetalle.detalles?.length || 0})</span>
+                  <span className="text-[11px] font-normal text-slate-500 lowercase">
+                    Cantidades solicitadas vs recibidas en muelle
+                  </span>
                 </h4>
                 <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                       <tr>
-                        <th className="py-2.5 px-3 w-12 text-center">#</th>
-                        <th className="py-2.5 px-3 w-32">SKU / Ref</th>
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3 w-28">SKU / Ref</th>
                         <th className="py-2.5 px-3">Descripción Componente</th>
-                        <th className="py-2.5 px-3 text-right w-28">Cantidad</th>
-                        <th className="py-2.5 px-3 text-right w-36">Precio Unitario</th>
-                        <th className="py-2.5 px-3 text-right w-36">Subtotal</th>
+                        <th className="py-2.5 px-3 text-right w-24">Solicitado</th>
+                        <th className="py-2.5 px-3 text-right w-24">Recibido</th>
+                        <th className="py-2.5 px-3 text-right w-24">Pendiente</th>
+                        <th className="py-2.5 px-3 text-right w-28">P. Unitario</th>
+                        <th className="py-2.5 px-3 text-right w-32">Subtotal</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {ordenDetalle.detalles?.map((det, idx) => {
                         const subtotalCalculado = Number(det.cantidad) * Number(det.precio_unitario);
+                        const recibidaPrevia = Number(det.cantidad_recibida_acumulada || 0);
+                        const saldoPendiente =
+                          det.cantidad_pendiente !== undefined
+                            ? Number(det.cantidad_pendiente)
+                            : Math.max(0, Number(det.cantidad) - recibidaPrevia);
+                        const estaCompleto = saldoPendiente === 0 && recibidaPrevia > 0;
+
                         return (
                           <tr key={det.id_detalle} className="hover:bg-slate-50/60">
                             <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-xs">{idx + 1}</td>
@@ -1076,8 +1334,13 @@ export default function OrdenesCompraPage() {
                               {det.componente?.codigo_interno || det.componente?.referencia_fabricante || '—'}
                             </td>
                             <td className="py-2.5 px-3">
-                              <div className="font-semibold text-slate-900">
-                                {det.componente?.descripcion_corta || 'Artículo'}
+                              <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                <span>{det.componente?.descripcion_corta || 'Artículo'}</span>
+                                {estaCompleto && (
+                                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] py-0 px-1.5">
+                                    Recibido 100%
+                                  </Badge>
+                                )}
                               </div>
                               {det.observaciones && (
                                 <div className="text-[11px] text-slate-500 italic mt-0.5">
@@ -1085,8 +1348,22 @@ export default function OrdenesCompraPage() {
                                 </div>
                               )}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-semibold whitespace-nowrap text-slate-900">
+                            <td className="py-2.5 px-3 text-right font-mono font-medium whitespace-nowrap text-slate-700">
                               {det.cantidad} {det.componente?.unidad_medida || 'UND'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold whitespace-nowrap text-emerald-700">
+                              {recibidaPrevia} {det.componente?.unidad_medida || 'UND'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap">
+                              <span
+                                className={
+                                  saldoPendiente > 0
+                                    ? 'text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200'
+                                    : 'text-slate-400'
+                                }
+                              >
+                                {saldoPendiente} {det.componente?.unidad_medida || 'UND'}
+                              </span>
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono text-slate-600 tabular-nums">
                               {formatCOP(det.precio_unitario)}
@@ -1100,6 +1377,106 @@ export default function OrdenesCompraPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Trazabilidad Histórica de Recepciones Físicas y Control de Calidad (Ciclo 4.B) */}
+              <div className="space-y-2 pt-1">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-600 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <PackageCheck className="w-4 h-4 text-emerald-600" />
+                    Historial de Recepciones Físicas y Control de Calidad ({ordenDetalle.recepciones?.length || 0})
+                  </span>
+                  {(ordenDetalle.estado === 'ENVIADA' || ordenDetalle.estado === 'PARCIAL') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 bg-emerald-50/40"
+                      onClick={() => {
+                        setModalDetalleOpen(false);
+                        handleAbrirModalRecepcion(ordenDetalle);
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      Registrar Nueva Recepción
+                    </Button>
+                  )}
+                </h4>
+
+                {ordenDetalle.recepciones && ordenDetalle.recepciones.length > 0 ? (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3 w-32">N° Recepción</th>
+                          <th className="py-2.5 px-3 w-36">Fecha / Hora</th>
+                          <th className="py-2.5 px-3 text-right w-24">Cant. Recibida</th>
+                          <th className="py-2.5 px-3 text-right w-24 text-emerald-700">Aceptada</th>
+                          <th className="py-2.5 px-3 text-right w-24 text-rose-700">Rechazada</th>
+                          <th className="py-2.5 px-3 text-center w-28">Calidad</th>
+                          <th className="py-2.5 px-3 w-32">Bodega Destino</th>
+                          <th className="py-2.5 px-3">Observaciones / Guía</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {ordenDetalle.recepciones.map((rec) => {
+                          const badgeCalidad = () => {
+                            if (rec.calidad === 'OK') {
+                              return (
+                                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                                  Conforme (OK)
+                                </Badge>
+                              );
+                            }
+                            if (rec.calidad === 'PARCIAL_DA_ADO' || rec.calidad === 'PARCIAL_DAÑADO') {
+                              return (
+                                <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
+                                  Parcial Dañado
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px]">
+                                Rechazado
+                              </Badge>
+                            );
+                          };
+
+                          return (
+                            <tr key={rec.id_recepcion} className="hover:bg-slate-50/60">
+                              <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
+                                {rec.numero_recepcion}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                                {formatFecha(rec.fecha_recepcion)}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-800">
+                                {rec.cantidad_recibida}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                                {rec.cantidad_aceptada}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-rose-700">
+                                {rec.cantidad_rechazada}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">{badgeCalidad()}</td>
+                              <td className="py-2.5 px-3 font-medium text-slate-700">
+                                {rec.ubicacion_nombre || 'BODEGA-PRUEBA'}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-500 italic">
+                                {rec.observaciones || 'Ingreso conforme sin novedades'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
+                    <Truck className="w-5 h-5 mx-auto text-slate-400 mb-1" />
+                    <span>Aún no se registran recepciones físicas para esta orden de compra. La mercancía está pendiente de arribo a almacén.</span>
+                  </div>
+                )}
               </div>
 
               {/* Liquidación Financiera Total */}
@@ -1133,6 +1510,18 @@ export default function OrdenesCompraPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {(ordenDetalle.estado === 'ENVIADA' || ordenDetalle.estado === 'PARCIAL') && (
+                    <Button
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                      onClick={() => {
+                        setModalDetalleOpen(false);
+                        handleAbrirModalRecepcion(ordenDetalle);
+                      }}
+                    >
+                      <PackageCheck className="w-3.5 h-3.5 mr-1" />
+                      Registrar Recepción Física
+                    </Button>
+                  )}
                   {ordenDetalle.estado === 'BORRADOR' && (
                     <Button
                       className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
@@ -1261,6 +1650,315 @@ export default function OrdenesCompraPage() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL RECEPCIÓN FÍSICA EN ALMACÉN, CONTROL DE CALIDAD Y KARDEX (CICLO 4.B) */}
+      <Dialog open={modalRecepcionOpen} onOpenChange={setModalRecepcionOpen}>
+        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl w-full bg-white border-slate-200 text-slate-900 max-h-[92vh] overflow-y-auto shadow-2xl rounded-2xl p-6 pr-5">
+          {ordenParaRecibir && (
+            <>
+              <DialogHeader className="border-b border-slate-200 pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600">
+                      <PackageCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <DialogTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        Recepción Física de Mercancías en Almacén
+                      </DialogTitle>
+                      <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                        Orden de Compra: <span className="font-semibold text-slate-800">{ordenParaRecibir.numero_orden_compra}</span> • Proveedor:{' '}
+                        <span className="font-semibold text-slate-800">
+                          {ordenParaRecibir.proveedor?.razon_social || ordenParaRecibir.proveedor?.nombre_completo}
+                        </span>
+                      </DialogDescription>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs py-1 px-2.5 font-medium">
+                      Control de Calidad & Kardex
+                    </Badge>
+                    {renderBadgeEstado(ordenParaRecibir.estado)}
+                  </div>
+                </div>
+              </DialogHeader>
+
+              {/* Formulario Superior: Parámetros del Despacho y Bodega */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <div>
+                  <label className="text-slate-700 font-semibold block mb-1">
+                    Bodega Destino (Ingreso Físico): <span className="text-rose-500">*</span>
+                  </label>
+                  <Select
+                    value={ubicacionSeleccionada}
+                    onValueChange={(val) => setUbicacionSeleccionada(val)}
+                  >
+                    <SelectTrigger className="w-full bg-white border-slate-200 text-slate-900 text-xs h-9">
+                      <SelectValue placeholder="Seleccionar bodega..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200 text-slate-900">
+                      {ubicacionesBodega.map((bod) => (
+                        <SelectItem key={bod.id_ubicacion} value={String(bod.id_ubicacion)}>
+                          {bod.codigo_ubicacion} - {bod.zona}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-slate-700 font-semibold block mb-1">
+                    Guía de Remisión / Factura Proveedor:
+                  </label>
+                  <Input
+                    placeholder="Ej: REM-2026-991, FAC-8840"
+                    value={guiaRemision}
+                    onChange={(e) => setGuiaRemision(e.target.value)}
+                    className="bg-white border-slate-200 text-slate-900 text-xs h-9"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 font-semibold block mb-1">
+                    Observaciones / Condiciones de Empaque:
+                  </label>
+                  <Input
+                    placeholder="Ej: Embalaje sellado, inspeccionado en muelle..."
+                    value={observacionesRecepcion}
+                    onChange={(e) => setObservacionesRecepcion(e.target.value)}
+                    className="bg-white border-slate-200 text-slate-900 text-xs h-9"
+                  />
+                </div>
+              </div>
+
+              {/* Barra de utilidades de selección rápida */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 pb-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                  Líneas de la Orden para Inspección ({itemsRecepcion.length})
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    onClick={handlePrellenarTodoPendiente}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    Prellenar Todo Pendiente (100% Conforme)
+                  </Button>
+                </div>
+              </div>
+
+              {/* Tabla Interactiva de Control de Calidad por Renglón */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3 w-8 text-center">#</th>
+                      <th className="py-2.5 px-3">Componente / SKU</th>
+                      <th className="py-2.5 px-3 text-right w-24">Pendiente</th>
+                      <th className="py-2.5 px-3 text-center w-28">Cant. Recibida</th>
+                      <th className="py-2.5 px-3 text-center w-28 text-emerald-700">Aceptada (OK)</th>
+                      <th className="py-2.5 px-3 text-center w-28 text-rose-700">Rechazada</th>
+                      <th className="py-2.5 px-3 text-center w-32">Calidad</th>
+                      <th className="py-2.5 px-3 w-40">Nota / Causa Daño</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {itemsRecepcion.map((item, idx) => {
+                      const tieneErrorConsistencia =
+                        item.cantidad_recibir !== item.cantidad_aceptada + item.cantidad_rechazada;
+                      const sobregiro = item.cantidad_recibir > item.saldo_pendiente;
+
+                      return (
+                        <tr
+                          key={item.id_detalle}
+                          className={`hover:bg-slate-50/60 ${
+                            tieneErrorConsistencia || sobregiro ? 'bg-rose-50/30' : ''
+                          }`}
+                        >
+                          <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-xs">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-semibold text-slate-900">{item.descripcion}</div>
+                            <div className="text-[11px] font-mono text-slate-500">
+                              Ref: {item.sku} • Solicitado: {item.cantidad_solicitada} {item.unidad_medida} (Recibido prev: {item.cantidad_recibida_previa})
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap text-amber-700">
+                            {item.saldo_pendiente} {item.unidad_medida}
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <Input
+                              type="number"
+                              min="0"
+                              max={item.saldo_pendiente}
+                              step="any"
+                              value={item.cantidad_recibir}
+                              onChange={(e) =>
+                                handleModificarCantidadRecibir(
+                                  item.id_detalle,
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="h-8 text-center font-mono font-bold text-xs bg-white border-slate-200"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <Input
+                              type="number"
+                              min="0"
+                              max={item.cantidad_recibir}
+                              step="any"
+                              value={item.cantidad_aceptada}
+                              onChange={(e) =>
+                                handleModificarAceptada(
+                                  item.id_detalle,
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="h-8 text-center font-mono font-bold text-xs bg-emerald-50/50 border-emerald-300 text-emerald-800"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <Input
+                              type="number"
+                              min="0"
+                              max={item.cantidad_recibir}
+                              step="any"
+                              value={item.cantidad_rechazada}
+                              onChange={(e) =>
+                                handleModificarRechazada(
+                                  item.id_detalle,
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="h-8 text-center font-mono font-bold text-xs bg-rose-50/50 border-rose-300 text-rose-800"
+                            />
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {item.cantidad_recibir === 0 ? (
+                              <span className="text-slate-400 text-[11px]">Sin ingreso</span>
+                            ) : item.calidad === 'OK' ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                                Conforme (OK)
+                              </Badge>
+                            ) : item.calidad === 'PARCIAL_DA_ADO' ? (
+                              <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
+                                Parcial Dañado
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px]">
+                                Rechazado
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="py-2 px-2">
+                            <Input
+                              placeholder="Opcional: motivo o detalle..."
+                              value={item.observacion_linea}
+                              onChange={(e) =>
+                                handleModificarNotaItem(item.id_detalle, e.target.value)
+                              }
+                              className="h-8 text-xs bg-white border-slate-200"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Resumen de Impacto en Inventario y Transición de la Orden */}
+              {(() => {
+                const totalRecibiendo = itemsRecepcion.reduce((a, b) => a + b.cantidad_recibir, 0);
+                const totalAceptado = itemsRecepcion.reduce((a, b) => a + b.cantidad_aceptada, 0);
+                const totalRechazado = itemsRecepcion.reduce((a, b) => a + b.cantidad_rechazada, 0);
+                const todasLasLineasCompletas = itemsRecepcion.every(
+                  (it) => it.cantidad_recibida_previa + it.cantidad_recibir >= it.cantidad_solicitada,
+                );
+
+                return (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs">
+                    <div className="flex flex-wrap items-center gap-6">
+                      <div>
+                        <span className="text-slate-500 block">Total Unidades Recibidas:</span>
+                        <span className="font-mono font-bold text-slate-900 text-sm">
+                          {totalRecibiendo} UND
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Ingreso a Kardex (Stock Actual):</span>
+                        <span className="font-mono font-bold text-emerald-700 text-sm">
+                          +{totalAceptado} UND
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Devolución por Rechazo:</span>
+                        <span className="font-mono font-bold text-rose-700 text-sm">
+                          {totalRechazado} UND
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
+                      <span className="text-slate-500 block font-medium">Estado Resultante Proyectado:</span>
+                      <span className="font-bold flex items-center gap-1.5 mt-0.5">
+                        {todasLasLineasCompletas ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span className="text-emerald-700">COMPLETADA (100% Recibido)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-4 h-4 text-blue-600" />
+                            <span className="text-blue-700">PARCIAL (Entregas Pendientes)</span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <DialogFooter className="border-t border-slate-200 pt-3 gap-2 flex flex-wrap sm:justify-between items-center">
+                <Button
+                  variant="outline"
+                  className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+                  onClick={() => setModalRecepcionOpen(false)}
+                  disabled={accionEnProgreso}
+                >
+                  Cancelar
+                </Button>
+
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5 shadow-sm"
+                  onClick={handleConfirmarRecepcion}
+                  disabled={
+                    accionEnProgreso ||
+                    itemsRecepcion.reduce((a, b) => a + b.cantidad_recibir, 0) === 0
+                  }
+                >
+                  {accionEnProgreso ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                      Procesando Entrada en Almacén...
+                    </>
+                  ) : (
+                    <>
+                      <PackageCheck className="w-4 h-4 mr-1" />
+                      Confirmar Entrada a Almacén e Impactar Kardex
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

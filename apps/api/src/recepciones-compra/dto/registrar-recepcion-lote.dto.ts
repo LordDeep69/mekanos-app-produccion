@@ -1,4 +1,6 @@
+import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -7,6 +9,7 @@ import {
   IsPositive,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 export enum TipoRecepcionEnum {
@@ -21,12 +24,7 @@ export enum CalidadRecepcionEnum {
   RECHAZADO = 'RECHAZADO',
 }
 
-export class CreateRecepcionesCompraDto {
-  @IsInt()
-  @IsPositive()
-  @IsNotEmpty()
-  id_orden_compra!: number;
-
+export class ItemRecepcionLoteDto {
   @IsInt()
   @IsPositive()
   @IsNotEmpty()
@@ -47,10 +45,6 @@ export class CreateRecepcionesCompraDto {
   @IsNotEmpty()
   cantidad_rechazada!: number;
 
-  @IsEnum(TipoRecepcionEnum)
-  @IsOptional()
-  tipo_recepcion?: TipoRecepcionEnum;
-
   @IsEnum(CalidadRecepcionEnum)
   @IsOptional()
   calidad?: CalidadRecepcionEnum;
@@ -68,4 +62,30 @@ export class CreateRecepcionesCompraDto {
   @IsPositive()
   @IsOptional()
   costo_unitario_real?: number;
+}
+
+export class RegistrarRecepcionLoteDto {
+  @IsInt()
+  @IsPositive()
+  @IsNotEmpty()
+  id_orden_compra!: number;
+
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  id_ubicacion_destino?: number;
+
+  @IsString()
+  @IsOptional()
+  guia_remision?: string;
+
+  @IsString()
+  @IsOptional()
+  observaciones?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ItemRecepcionLoteDto)
+  @IsNotEmpty()
+  items!: ItemRecepcionLoteDto[];
 }

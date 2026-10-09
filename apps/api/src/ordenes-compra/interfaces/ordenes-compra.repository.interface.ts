@@ -76,6 +76,10 @@ export interface OrdenCompraDetalleResult {
   id_detalle: number;
   id_componente: number;
   cantidad: number;
+  cantidad_recibida_acumulada?: number;
+  cantidad_aceptada_acumulada?: number;
+  cantidad_rechazada_acumulada?: number;
+  cantidad_pendiente?: number;
   precio_unitario: number;
   subtotal: number;
   observaciones: string | null;
@@ -91,10 +95,15 @@ export interface OrdenCompraDetalleResult {
 export interface RecepcionCompraResult {
   id_recepcion: number;
   numero_recepcion: string;
+  id_detalle_orden?: number;
   cantidad_recibida: number;
   cantidad_aceptada: number;
   cantidad_rechazada: number;
   calidad: string;
+  tipo_recepcion?: string;
+  id_ubicacion_destino?: number | null;
+  ubicacion_nombre?: string | null;
+  observaciones?: string | null;
   fecha_recepcion: Date;
 }
 
