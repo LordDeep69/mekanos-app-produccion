@@ -179,6 +179,26 @@ export default function OrdenesCompraPage() {
     }
   };
 
+  // Sanitizador y reparador UTF-8 para notas y observaciones (evita mojibake y omisiones legacy)
+  const sanitizarTextoUTF8 = (texto: string | null | undefined): string => {
+    if (!texto) return '';
+    return texto
+      .normalize('NFC')
+      .replace(/\bRecepcin\b/gi, (match) => match[0] === 'R' ? 'Recepción' : 'recepción')
+      .replace(/\bSegunda recepcin\b/gi, 'Segunda recepción')
+      .replace(/\bPrimera recepcin\b/gi, 'Primera recepción')
+      .replace(/\bUbicacin\b/gi, (match) => match[0] === 'U' ? 'Ubicación' : 'ubicación')
+      .replace(/\bAprobacin\b/gi, (match) => match[0] === 'A' ? 'Aprobación' : 'aprobación')
+      .replace(/\bTransaccin\b/gi, (match) => match[0] === 'T' ? 'Transacción' : 'transacción')
+      .replace(/\bEdicin\b/gi, (match) => match[0] === 'E' ? 'Edición' : 'edición')
+      .replace(/\bDescripcin\b/gi, (match) => match[0] === 'D' ? 'Descripción' : 'descripción')
+      .replace(/\bDevolucin\b/gi, (match) => match[0] === 'D' ? 'Devolución' : 'devolución')
+      .replace(/\bCondicin\b/gi, (match) => match[0] === 'C' ? 'Condición' : 'condición')
+      .replace(/\bRetencin\b/gi, (match) => match[0] === 'R' ? 'Retención' : 'retención')
+      .replace(/\uFFFD/g, '')
+      .trim();
+  };
+
   // Cargar datos iniciales
   const cargarDatos = async (pagina = paginaActual) => {
     setLoading(true);
@@ -474,15 +494,15 @@ export default function OrdenesCompraPage() {
       const payload: RegistrarRecepcionLotePayload = {
         id_orden_compra: ordenParaRecibir.id_orden_compra,
         id_ubicacion_destino: ubicacionSeleccionada ? parseInt(ubicacionSeleccionada, 10) : undefined,
-        guia_remision: guiaRemision.trim() || undefined,
-        observaciones: observacionesRecepcion.trim() || undefined,
+        guia_remision: sanitizarTextoUTF8(guiaRemision) || undefined,
+        observaciones: sanitizarTextoUTF8(observacionesRecepcion) || undefined,
         items: itemsAProcesar.map((it) => ({
           id_detalle_orden: it.id_detalle,
           cantidad_recibida: it.cantidad_recibir,
           cantidad_aceptada: it.cantidad_aceptada,
           cantidad_rechazada: it.cantidad_rechazada,
           calidad: it.calidad,
-          observaciones: it.observacion_linea.trim() || undefined,
+          observaciones: sanitizarTextoUTF8(it.observacion_linea) || undefined,
         })),
       };
 
@@ -810,8 +830,8 @@ export default function OrdenesCompraPage() {
                 <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
                   Órdenes de Compra
                 </h1>
-                <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-semibold">
-                  Ciclo 4.A
+                <Badge className="bg-slate-100 text-slate-700 border-slate-200 font-semibold text-xs shadow-2xs">
+                  Gestión Transaccional
                 </Badge>
               </div>
               <p className="mt-0.5 text-sm text-slate-500">
@@ -1221,7 +1241,7 @@ export default function OrdenesCompraPage() {
 
       {/* MODAL DETALLE 360° DE LA ORDEN (TEMA CLARO CORPORATIVO ENTERPRISE) */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
-        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl w-full bg-white border-slate-200 text-slate-900 max-h-[90vh] overflow-y-auto shadow-2xl rounded-2xl p-6 pr-5">
+        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl w-full bg-white border-slate-200 text-slate-900 max-h-[90vh] overflow-y-auto shadow-2xl rounded-2xl p-6 pr-6 sm:pr-8">
           {ordenDetalle && (
             <>
               <DialogHeader className="border-b border-slate-200 pb-3">
@@ -1262,7 +1282,7 @@ export default function OrdenesCompraPage() {
                   <p className="text-slate-800 mt-0.5">
                     <span className="text-slate-500 font-medium">Solicitado:</span>{' '}
                     <span className="font-semibold text-slate-900">
-                      {sanitizarNombreUsuario(ordenDetalle.solicitante?.nombre_completo)}
+                      {ordenDetalle.solicitante?.nombre_completo || 'Administrador del Sistema'}
                     </span>
                   </p>
                   <p className="text-slate-800 mt-0.5">
@@ -1270,7 +1290,7 @@ export default function OrdenesCompraPage() {
                     <span className="font-semibold text-slate-900">
                       {ordenDetalle.estado === 'BORRADOR'
                         ? 'Pendiente de Aprobación'
-                        : sanitizarNombreUsuario(ordenDetalle.aprobador?.nombre_completo)}
+                        : ordenDetalle.aprobador?.nombre_completo || 'Administrador del Sistema'}
                     </span>
                   </p>
                 </div>
@@ -1291,7 +1311,7 @@ export default function OrdenesCompraPage() {
               {ordenDetalle.observaciones && (
                 <div className="p-3.5 bg-amber-50/40 rounded-xl border border-amber-200/80 text-xs">
                   <span className="text-amber-900 font-semibold block mb-1">Observaciones / Notas:</span>
-                  <p className="text-amber-950 whitespace-pre-line">{ordenDetalle.observaciones}</p>
+                  <p className="text-amber-950 whitespace-pre-line">{sanitizarTextoUTF8(ordenDetalle.observaciones)}</p>
                 </div>
               )}
 
@@ -1463,7 +1483,7 @@ export default function OrdenesCompraPage() {
                                 {rec.ubicacion_nombre || 'BODEGA-PRUEBA'}
                               </td>
                               <td className="py-2.5 px-3 text-slate-500 italic">
-                                {rec.observaciones || 'Ingreso conforme sin novedades'}
+                                {sanitizarTextoUTF8(rec.observaciones) || 'Ingreso conforme sin novedades'}
                               </td>
                             </tr>
                           );
@@ -1655,7 +1675,7 @@ export default function OrdenesCompraPage() {
 
       {/* MODAL RECEPCIÓN FÍSICA EN ALMACÉN, CONTROL DE CALIDAD Y KARDEX (CICLO 4.B) */}
       <Dialog open={modalRecepcionOpen} onOpenChange={setModalRecepcionOpen}>
-        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl w-full bg-white border-slate-200 text-slate-900 max-h-[92vh] overflow-y-auto shadow-2xl rounded-2xl p-6 pr-5">
+        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl w-full bg-white border-slate-200 text-slate-900 max-h-[92vh] overflow-y-auto shadow-2xl rounded-2xl p-6 pr-6 sm:pr-8">
           {ordenParaRecibir && (
             <>
               <DialogHeader className="border-b border-slate-200 pb-3">

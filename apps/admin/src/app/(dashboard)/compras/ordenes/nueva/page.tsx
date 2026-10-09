@@ -321,12 +321,12 @@ export default function NuevaOrdenCompraPage() {
       const payload: CrearOrdenCompraPayload = {
         id_proveedor: idProveedorSeleccionado,
         fecha_necesidad: fechaNecesidad ? fechaNecesidad : undefined,
-        observaciones: observacionesGenerales.trim() || undefined,
+        observaciones: observacionesGenerales ? observacionesGenerales.normalize('NFC').trim() : undefined,
         items: lineas.map((l) => ({
           id_componente: l.id_componente,
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
-          observaciones: l.observaciones,
+          observaciones: l.observaciones ? l.observaciones.normalize('NFC').trim() : undefined,
         })),
       };
 

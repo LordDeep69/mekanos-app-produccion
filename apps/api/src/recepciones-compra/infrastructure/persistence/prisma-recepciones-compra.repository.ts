@@ -213,7 +213,9 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
           data.observaciones || null,
         ]
           .filter(Boolean)
-          .join(' • ');
+          .join(' • ')
+          .normalize('NFC')
+          .trim();
 
         // A. Crear registro en recepciones_compra
         const recepcion = await tx.recepciones_compra.create({
