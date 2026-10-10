@@ -130,6 +130,8 @@ export interface ItemOrdenCompraPayload {
   cantidad: number;
   precio_unitario: number;
   observaciones?: string;
+  vincular_proveedor?: boolean;
+  codigo_proveedor?: string;
 }
 
 export interface CrearOrdenCompraPayload {

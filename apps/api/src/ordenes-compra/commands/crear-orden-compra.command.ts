@@ -10,6 +10,8 @@ export class CrearOrdenCompraCommand {
       cantidad: number;
       precio_unitario: number;
       observaciones?: string;
+      vincular_proveedor?: boolean;
+      codigo_proveedor?: string;
     }>,
   ) {}
 }

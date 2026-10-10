@@ -550,7 +550,19 @@ export class ArticulosService {
     }
 
     return await this.prisma.$transaction(async (tx) => {
-      // 1. Actualizar el costo vigente en la matriz de referencias cruzadas
+      // 1. Si se marca como preferido, desmarcar los anteriores del mismo componente
+      const esPreferido = dto.es_proveedor_preferido !== undefined
+        ? dto.es_proveedor_preferido
+        : vinculoExistente.es_proveedor_preferido;
+
+      if (dto.es_proveedor_preferido === true) {
+        await tx.articulos_proveedores.updateMany({
+          where: { id_componente: idComponente },
+          data: { es_proveedor_preferido: false },
+        });
+      }
+
+      // 2. Actualizar datos en la matriz de referencias cruzadas
       const vinculoActualizado = await tx.articulos_proveedores.update({
         where: {
           id_componente_id_proveedor: {
@@ -561,16 +573,20 @@ export class ArticulosService {
         data: {
           costo_actual: new Prisma.Decimal(nuevoCosto),
           moneda: dto.moneda || vinculoExistente.moneda,
+          referencia_proveedor: dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
+          tiempo_entrega_dias: dto.tiempo_entrega_dias !== undefined ? dto.tiempo_entrega_dias : vinculoExistente.tiempo_entrega_dias,
+          es_proveedor_preferido: esPreferido,
           escalas_precios: dto.escalas_precios ? (dto.escalas_precios as any) : undefined,
           modificado_por: idUsuario || null,
         },
       });
 
-      // 2. Si es el proveedor preferido, sincronizar también el costo base de referencia
-      if (vinculoExistente.es_proveedor_preferido) {
+      // 3. Si es o pasa a ser el proveedor preferido, sincronizar también el costo base de referencia
+      if (esPreferido) {
         await tx.catalogo_componentes.update({
           where: { id_componente: idComponente },
           data: {
+            id_proveedor_principal: idProveedor,
             precio_compra: new Prisma.Decimal(nuevoCosto),
             modificado_por: idUsuario || null,
           },

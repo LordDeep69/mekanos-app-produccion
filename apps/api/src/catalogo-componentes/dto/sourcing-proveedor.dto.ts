@@ -137,6 +137,23 @@ export class ActualizarPrecioProveedorDto {
   @IsString()
   observaciones?: string;
 
+  @ApiPropertyOptional({ description: 'Referencia comercial o SKU del proveedor actualizada', example: 'FLT-CUMMINS-FF5052-REV' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  referencia_proveedor?: string;
+
+  @ApiPropertyOptional({ description: 'Tiempo de entrega en días hábiles', default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  tiempo_entrega_dias?: number;
+
+  @ApiPropertyOptional({ description: 'Marcar como proveedor preferido para este artículo' })
+  @IsOptional()
+  @IsBoolean()
+  es_proveedor_preferido?: boolean;
+
   @ApiPropertyOptional({ description: 'Nuevas escalas de precios por volumen' })
   @IsOptional()
   @IsArray()

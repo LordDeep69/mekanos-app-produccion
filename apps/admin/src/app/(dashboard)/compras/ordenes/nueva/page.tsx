@@ -65,7 +65,10 @@ interface LineaOrdenCompra {
   unidad_medida: string;
   cantidad: number;
   precio_unitario: number;
+  precio_original: number;
   es_pactado: boolean;
+  vincular_proveedor: boolean;
+  codigo_proveedor?: string;
   observaciones?: string;
 }
 
@@ -88,14 +91,17 @@ export default function NuevaOrdenCompraPage() {
   const [fechaNecesidad, setFechaNecesidad] = useState<string>('');
   const [observacionesGenerales, setObservacionesGenerales] = useState<string>('');
 
-  // Buscador interactivo unificado de artículos con autocompletado
+  // Buscador interactivo unificado de artículos con autocompletado y auto-vinculación
   const [busquedaArticulo, setBusquedaArticulo] = useState('');
   const [menuArticulosAbierto, setMenuArticulosAbierto] = useState(false);
   const [articuloSeleccionado, setArticuloSeleccionado] = useState<ArticuloMaestro | null>(null);
   const [cantidadParaAgregar, setCantidadParaAgregar] = useState<number>(1);
   const [precioParaAgregar, setPrecioParaAgregar] = useState<number>(0);
+  const [precioOriginalParaAgregar, setPrecioOriginalParaAgregar] = useState<number>(0);
+  const [codigoProveedorParaAgregar, setCodigoProveedorParaAgregar] = useState<string>('');
   const [obsParaAgregar, setObsParaAgregar] = useState<string>('');
   const [esPrecioPactadoItem, setEsPrecioPactadoItem] = useState<boolean>(false);
+  const [vincularParaAgregar, setVincularParaAgregar] = useState<boolean>(false);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
@@ -173,7 +179,7 @@ export default function NuevaOrdenCompraPage() {
     cargarSourcing();
   }, [idProveedorSeleccionado]);
 
-  // Al seleccionar un artículo del buscador, calcular precio sugerido
+  // Al seleccionar un artículo del buscador, calcular precio sugerido y auto-vinculación
   const seleccionarArticuloParaAgregar = (art: ArticuloMaestro) => {
     setArticuloSeleccionado(art);
     setBusquedaArticulo(`${art.codigo_interno ? `[${art.codigo_interno}] ` : ''}${art.descripcion_corta}`);
@@ -182,10 +188,17 @@ export default function NuevaOrdenCompraPage() {
     const pactado = sourcingProveedor.get(art.id_componente);
     if (pactado && pactado.es_pactado) {
       setPrecioParaAgregar(pactado.costo_actual);
+      setPrecioOriginalParaAgregar(pactado.costo_actual);
+      setCodigoProveedorParaAgregar(pactado.referencia_proveedor || '');
       setEsPrecioPactadoItem(true);
+      setVincularParaAgregar(false);
     } else {
-      setPrecioParaAgregar(Number(art.precio_compra || 0));
+      const precioBase = Number(art.precio_compra || 0);
+      setPrecioParaAgregar(precioBase);
+      setPrecioOriginalParaAgregar(precioBase);
+      setCodigoProveedorParaAgregar(art.codigo_interno || art.referencia_fabricante || '');
       setEsPrecioPactadoItem(false);
+      setVincularParaAgregar(true); // Base catálogo: sugerir auto-vinculación activa por defecto
     }
     setCantidadParaAgregar(1);
     setObsParaAgregar('');
@@ -196,21 +209,75 @@ export default function NuevaOrdenCompraPage() {
     return proveedores.find((p) => p.id_proveedor === idProveedorSeleccionado);
   }, [proveedores, idProveedorSeleccionado]);
 
-  // Artículos filtrados para el buscador unificado
-  const articulosFiltrados = useMemo(() => {
-    if (!busquedaArticulo.trim()) {
-      return catalogoArticulos.slice(0, 15);
+  // Consolidación de catálogo completo combinando catálogo general y sourcing del proveedor
+  const poolArticulos = useMemo(() => {
+    const mapa = new Map<number, ArticuloMaestro>();
+    for (const art of catalogoArticulos) {
+      mapa.set(art.id_componente, art);
     }
+    for (const [id, s] of sourcingProveedor.entries()) {
+      if (s.es_pactado && !mapa.has(id)) {
+        mapa.set(id, {
+          id_componente: s.id_componente,
+          codigo_interno: s.codigo_interno,
+          descripcion_corta: s.descripcion_corta,
+          referencia_fabricante: s.referencia_fabricante,
+          precio_compra: s.costo_actual,
+          stock_actual: s.stock_actual,
+          unidad_medida: s.unidad_medida,
+          activo: true,
+          es_comprable: true,
+        } as ArticuloMaestro);
+      }
+    }
+    return Array.from(mapa.values());
+  }, [catalogoArticulos, sourcingProveedor]);
+
+  // Segmentación predictiva jerárquica: 1. Homologado con Proveedor | 2. Catálogo General
+  const { articulosPactados, articulosGenerales } = useMemo(() => {
     const q = busquedaArticulo.toLowerCase().trim();
-    return catalogoArticulos
-      .filter((a) => {
-        const cod = (a.codigo_interno || '').toLowerCase();
-        const ref = (a.referencia_fabricante || '').toLowerCase();
-        const desc = (a.descripcion_corta || '').toLowerCase();
-        return cod.includes(q) || ref.includes(q) || desc.includes(q);
-      })
-      .slice(0, 20);
-  }, [catalogoArticulos, busquedaArticulo]);
+
+    const coincide = (art: ArticuloMaestro) => {
+      if (!q) return true;
+      const cod = (art.codigo_interno || '').toLowerCase();
+      const ref = (art.referencia_fabricante || '').toLowerCase();
+      const desc = (art.descripcion_corta || '').toLowerCase();
+      const refProv = (sourcingProveedor.get(art.id_componente)?.referencia_proveedor || '').toLowerCase();
+      return cod.includes(q) || ref.includes(q) || desc.includes(q) || refProv.includes(q);
+    };
+
+    const pactados: ArticuloMaestro[] = [];
+    const generales: ArticuloMaestro[] = [];
+
+    for (const art of poolArticulos) {
+      if (coincide(art)) {
+        const pact = sourcingProveedor.get(art.id_componente);
+        if (pact && pact.es_pactado) {
+          pactados.push(art);
+        } else {
+          generales.push(art);
+        }
+      }
+    }
+
+    const maxItems = q ? 25 : 15;
+
+    return {
+      articulosPactados: pactados.slice(0, maxItems),
+      articulosGenerales: generales.slice(0, maxItems),
+      totalPactados: pactados.length,
+      totalGenerales: generales.length,
+    };
+  }, [poolArticulos, sourcingProveedor, busquedaArticulo]);
+
+  // Total global de artículos pactados para el proveedor seleccionado
+  const articulosPactadosTotal = useMemo(() => {
+    let count = 0;
+    for (const s of sourcingProveedor.values()) {
+      if (s.es_pactado) count++;
+    }
+    return count;
+  }, [sourcingProveedor]);
 
   // Agregar línea a la tabla
   const handleAgregarLinea = () => {
@@ -243,7 +310,10 @@ export default function NuevaOrdenCompraPage() {
       unidad_medida: articuloSeleccionado.unidad_medida || 'UND',
       cantidad: cantidadParaAgregar,
       precio_unitario: precioParaAgregar,
+      precio_original: precioOriginalParaAgregar,
       es_pactado: esPrecioPactadoItem,
+      vincular_proveedor: vincularParaAgregar,
+      codigo_proveedor: codigoProveedorParaAgregar.trim() || undefined,
       observaciones: obsParaAgregar.trim() || undefined,
     };
 
@@ -255,7 +325,10 @@ export default function NuevaOrdenCompraPage() {
     setBusquedaArticulo('');
     setCantidadParaAgregar(1);
     setPrecioParaAgregar(0);
+    setPrecioOriginalParaAgregar(0);
+    setCodigoProveedorParaAgregar('');
     setObsParaAgregar('');
+    setVincularParaAgregar(false);
   };
 
   // Modificar cantidad en tabla
@@ -271,7 +344,32 @@ export default function NuevaOrdenCompraPage() {
   const handleCambiarPrecio = (index: number, nuevoPrecio: number) => {
     setLineas((prev) => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], precio_unitario: nuevoPrecio < 0 ? 0 : nuevoPrecio };
+      const precioSaneado = nuevoPrecio < 0 ? 0 : nuevoPrecio;
+      const modificado = precioSaneado !== copy[index].precio_original;
+      copy[index] = {
+        ...copy[index],
+        precio_unitario: precioSaneado,
+        // Al modificar manualmente el precio unitario, auto-activar switch de vinculación a la matriz
+        vincular_proveedor: modificado ? true : copy[index].vincular_proveedor,
+      };
+      return copy;
+    });
+  };
+
+  // Toggle interactivo de vinculación en la tabla
+  const handleToggleVincularLinea = (index: number, checked: boolean) => {
+    setLineas((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], vincular_proveedor: checked };
+      return copy;
+    });
+  };
+
+  // Modificar código/referencia del proveedor en tabla
+  const handleCambiarCodigoProveedor = (index: number, nuevoCodigo: string) => {
+    setLineas((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], codigo_proveedor: nuevoCodigo };
       return copy;
     });
   };
@@ -327,6 +425,8 @@ export default function NuevaOrdenCompraPage() {
           cantidad: l.cantidad,
           precio_unitario: l.precio_unitario,
           observaciones: l.observaciones ? l.observaciones.normalize('NFC').trim() : undefined,
+          vincular_proveedor: l.vincular_proveedor,
+          codigo_proveedor: l.codigo_proveedor,
         })),
       };
 
@@ -474,10 +574,15 @@ export default function NuevaOrdenCompraPage() {
                       {proveedorActual.persona?.numero_identificacion || 'N/A'}
                     </span>
                   </div>
-                  {sourcingProveedor.size > 0 && (
+                  {articulosPactadosTotal > 0 ? (
                     <div className="text-emerald-700 font-semibold flex items-center gap-1.5 pt-0.5">
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>{sourcingProveedor.size} artículo(s) con cotización pactada</span>
+                      <span>{articulosPactadosTotal} artículo(s) con cotización pactada</span>
+                    </div>
+                  ) : (
+                    <div className="text-slate-500 font-medium flex items-center gap-1.5 pt-0.5 text-[11px]">
+                      <Tag className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Sin acuerdos previos (Catálogo Base)</span>
                     </div>
                   )}
                 </div>
@@ -600,57 +705,132 @@ export default function NuevaOrdenCompraPage() {
                 )}
               </div>
 
-              {/* Menú desplegable interactivo de sugerencias */}
+              {/* Menú desplegable interactivo de sugerencias segmentado jerárquicamente */}
               {menuArticulosAbierto && (
-                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto divide-y divide-slate-100">
-                  {articulosFiltrados.length === 0 ? (
+                <div
+                  id="menu-articulos-dropdown"
+                  className="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-80 overflow-y-auto divide-y divide-slate-100"
+                >
+                  {articulosPactados.length === 0 && articulosGenerales.length === 0 ? (
                     <div className="p-4 text-center text-xs text-slate-500">
                       No se encontraron artículos que coincidan con la búsqueda.
                     </div>
                   ) : (
-                    articulosFiltrados.map((art) => {
-                      const pact = sourcingProveedor.get(art.id_componente);
-                      const tienePrecioPactado = pact && pact.es_pactado;
-                      const precioSugerido = tienePrecioPactado ? pact.costo_actual : Number(art.precio_compra || 0);
-
-                      return (
-                        <div
-                          key={art.id_componente}
-                          onClick={() => seleccionarArticuloParaAgregar(art)}
-                          className="p-3 hover:bg-slate-50 cursor-pointer transition-colors flex items-center justify-between gap-3 text-xs"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                {art.codigo_interno || art.referencia_fabricante || `ID-${art.id_componente}`}
-                              </span>
-                              <span className="font-semibold text-slate-900 truncate">
-                                {art.descripcion_corta}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
-                              <span>Unidad: {art.unidad_medida || 'UND'}</span>
-                              {art.referencia_fabricante && <span>• Ref: {art.referencia_fabricante}</span>}
-                            </div>
+                    <>
+                      {/* GRUPO 1: CATÁLOGO HOMOLOGADO CON PROVEEDOR */}
+                      {idProveedorSeleccionado && articulosPactados.length > 0 && (
+                        <div>
+                          <div className="sticky top-0 z-10 px-3.5 py-2 bg-emerald-50/95 backdrop-blur-xs border-b border-emerald-100 flex items-center justify-between text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Catálogo Homologado con Proveedor
+                            </span>
+                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] font-semibold py-0 px-1.5">
+                              {articulosPactados.length} pactados
+                            </Badge>
                           </div>
 
-                          <div className="text-right shrink-0">
-                            <div className="font-mono font-bold text-slate-900">
-                              {formatCOP(precioSugerido)}
-                            </div>
-                            {tienePrecioPactado ? (
-                              <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
-                                Pactado
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600 border-slate-200">
-                                Base Catálogo
-                              </Badge>
-                            )}
+                          <div className="divide-y divide-emerald-50/60">
+                            {articulosPactados.map((art) => {
+                              const pact = sourcingProveedor.get(art.id_componente);
+                              const skuProveedor = pact?.referencia_proveedor;
+                              const precioPactado = pact?.costo_actual ?? Number(art.precio_compra || 0);
+
+                              return (
+                                <div
+                                  key={`pactado-${art.id_componente}`}
+                                  onClick={() => seleccionarArticuloParaAgregar(art)}
+                                  className="p-3 hover:bg-emerald-50/50 cursor-pointer transition-colors flex items-center justify-between gap-3 text-xs"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                        {art.codigo_interno || art.referencia_fabricante || `ID-${art.id_componente}`}
+                                      </span>
+                                      {skuProveedor && (
+                                        <span className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                          SKU Prov: {skuProveedor}
+                                        </span>
+                                      )}
+                                      <span className="font-semibold text-slate-900 truncate">
+                                        {art.descripcion_corta}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
+                                      <span>Unidad: {art.unidad_medida || 'UND'}</span>
+                                      {art.referencia_fabricante && <span>• Ref Fab: {art.referencia_fabricante}</span>}
+                                      {pact?.tiempo_entrega_dias && <span>• Entrega: {pact.tiempo_entrega_dias}d</span>}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <div className="font-mono font-bold text-emerald-700">
+                                      {formatCOP(precioPactado)}
+                                    </div>
+                                    <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold mt-0.5">
+                                      Pactado: {formatCOP(precioPactado)}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      );
-                    })
+                      )}
+
+                      {/* GRUPO 2: CATÁLOGO GENERAL DE LA EMPRESA */}
+                      {articulosGenerales.length > 0 && (
+                        <div>
+                          <div className="sticky top-0 z-10 px-3.5 py-2 bg-slate-100/95 backdrop-blur-xs border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            <span className="flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-slate-500" />
+                              Catálogo General de la Empresa
+                            </span>
+                            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full font-semibold">
+                              {articulosGenerales.length} base
+                            </span>
+                          </div>
+
+                          <div className="divide-y divide-slate-100">
+                            {articulosGenerales.map((art) => {
+                              const precioBase = Number(art.precio_compra || 0);
+
+                              return (
+                                <div
+                                  key={`gral-${art.id_componente}`}
+                                  onClick={() => seleccionarArticuloParaAgregar(art)}
+                                  className="p-3 hover:bg-slate-50 cursor-pointer transition-colors flex items-center justify-between gap-3 text-xs"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                        {art.codigo_interno || art.referencia_fabricante || `ID-${art.id_componente}`}
+                                      </span>
+                                      <span className="font-semibold text-slate-800 truncate">
+                                        {art.descripcion_corta}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
+                                      <span>Unidad: {art.unidad_medida || 'UND'}</span>
+                                      {art.referencia_fabricante && <span>• Ref: {art.referencia_fabricante}</span>}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <div className="font-mono font-bold text-slate-800">
+                                      {formatCOP(precioBase)}
+                                    </div>
+                                    <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600 border-slate-200 font-medium mt-0.5">
+                                      Base Catálogo: {formatCOP(precioBase)}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -658,63 +838,123 @@ export default function NuevaOrdenCompraPage() {
 
             {/* Parámetros de la línea a agregar (Aparece cuando hay artículo seleccionado) */}
             {articuloSeleccionado && (
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-3 border-t border-slate-200 items-end">
-                {/* Cantidad */}
-                <div className="sm:col-span-3 space-y-1">
-                  <Label className="text-xs font-semibold text-slate-700">Cantidad Requerida:</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={cantidadParaAgregar}
-                    onChange={(e) => setCantidadParaAgregar(parseFloat(e.target.value) || 0)}
-                    className="bg-white border-slate-200 text-slate-900 text-xs font-mono h-10 rounded-lg"
-                  />
-                </div>
-
-                {/* Precio Unitario */}
-                <div className="sm:col-span-4 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold text-slate-700">Precio Unitario (COP):</Label>
-                    {esPrecioPactadoItem ? (
-                      <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
-                        Pactado Proveedor
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600 border-slate-200">
-                        Base Catálogo
-                      </Badge>
-                    )}
+              <div className="space-y-3 pt-3 border-t border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  {/* Cantidad */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold text-slate-700">Cantidad Requerida:</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={cantidadParaAgregar}
+                      onChange={(e) => setCantidadParaAgregar(parseFloat(e.target.value) || 0)}
+                      className="bg-white border-slate-200 text-slate-900 text-xs font-mono h-10 rounded-lg"
+                    />
                   </div>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={precioParaAgregar}
-                    onChange={(e) => setPrecioParaAgregar(parseFloat(e.target.value) || 0)}
-                    className="bg-white border-slate-200 text-slate-900 text-xs font-mono h-10 rounded-lg"
-                  />
-                </div>
 
-                {/* Subtotal preliminar */}
-                <div className="sm:col-span-3 space-y-1">
-                  <Label className="text-xs font-semibold text-slate-500">Subtotal Estimado:</Label>
-                  <div className="h-10 px-3 rounded-lg bg-white border border-slate-200 flex items-center font-mono text-xs font-bold text-slate-900 shadow-xs">
-                    {formatCOP(cantidadParaAgregar * precioParaAgregar)}
+                  {/* Precio Unitario */}
+                  <div className="sm:col-span-4 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-slate-700">Precio Unitario (COP):</Label>
+                      {esPrecioPactadoItem ? (
+                        <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold">
+                          Pactado Proveedor
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600 border-slate-200">
+                          Base Catálogo
+                        </Badge>
+                      )}
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={precioParaAgregar}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setPrecioParaAgregar(val);
+                        if (val !== precioOriginalParaAgregar) {
+                          setVincularParaAgregar(true);
+                        }
+                      }}
+                      className="bg-white border-slate-200 text-slate-900 text-xs font-mono h-10 rounded-lg"
+                    />
+                  </div>
+
+                  {/* Subtotal preliminar */}
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs font-semibold text-slate-500">Subtotal Estimado:</Label>
+                    <div className="h-10 px-3 rounded-lg bg-white border border-slate-200 flex items-center font-mono text-xs font-bold text-slate-900 shadow-xs">
+                      {formatCOP(cantidadParaAgregar * precioParaAgregar)}
+                    </div>
+                  </div>
+
+                  {/* Botón agregar */}
+                  <div className="sm:col-span-2">
+                    <Button
+                      id="btn-agregar-linea"
+                      type="button"
+                      onClick={handleAgregarLinea}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-10 rounded-lg shadow-sm"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Añadir
+                    </Button>
                   </div>
                 </div>
 
-                {/* Botón agregar */}
-                <div className="sm:col-span-2">
-                  <Button
-                    id="btn-agregar-linea"
-                    type="button"
-                    onClick={handleAgregarLinea}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-10 rounded-lg shadow-sm"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Añadir
-                  </Button>
+                {/* Micro-interacción: Switch de Auto-Vinculación Comercial */}
+                <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/70 space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        id="switch-vincular-proveedor"
+                        checked={vincularParaAgregar}
+                        onChange={(e) => setVincularParaAgregar(e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                      />
+                      <span className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                        Vincular este artículo y precio a la matriz del proveedor
+                      </span>
+                    </label>
+                    <span className="text-[11px] text-blue-700 font-medium">
+                      {vincularParaAgregar
+                        ? '✓ Se actualizará articulos_proveedores y se registrará bitácora inmutable en BD'
+                        : 'Cotización puntual sin actualizar matriz de compras'}
+                    </span>
+                  </div>
+
+                  {/* Input dinámico: Ref. Comercial del Proveedor */}
+                  {vincularParaAgregar && (
+                    <div className="pt-2 border-t border-blue-200/80 flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="input-ref-comercial-prov" className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                            <Tag className="w-3.5 h-3.5 text-blue-600" />
+                            Ref. Comercial del Proveedor: <span className="text-rose-500">*</span>
+                          </Label>
+                          <span className="text-[10px] text-blue-600 font-semibold bg-blue-100 px-1.5 py-0.5 rounded">
+                            Homologación Comercial
+                          </span>
+                        </div>
+                        <Input
+                          id="input-ref-comercial-prov"
+                          type="text"
+                          placeholder="Ej: FIL-JD-884, CAT-4C4205, RE546336..."
+                          value={codigoProveedorParaAgregar}
+                          onChange={(e) => setCodigoProveedorParaAgregar(e.target.value)}
+                          className="bg-white border-blue-300 text-slate-900 font-mono text-xs h-9 rounded-lg focus-visible:ring-blue-500 shadow-2xs"
+                        />
+                      </div>
+                      <div className="text-[11px] text-blue-800/80 sm:max-w-xs leading-tight self-end pb-1 font-medium">
+                        Código comercial con el que este suplidor identifica y factura la pieza.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -762,14 +1002,60 @@ export default function NuevaOrdenCompraPage() {
                         <td className="py-3 px-3 font-mono text-slate-400">{index + 1}</td>
                         <td className="py-3 px-3 font-mono text-slate-700 font-semibold text-xs">
                           {linea.codigo_interno || linea.referencia_fabricante || '—'}
+                          {linea.codigo_proveedor && linea.codigo_proveedor !== linea.codigo_interno && (
+                            <div className="text-[10px] text-emerald-700 font-mono font-medium">
+                              Prov: {linea.codigo_proveedor}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3">
                           <div className="font-semibold text-slate-900">{linea.descripcion_corta}</div>
-                          {linea.es_pactado && (
-                            <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 mt-0.5">
-                              <Sparkles className="w-3 h-3" /> Cotización pactada con proveedor
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {linea.es_pactado ? (
+                              <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cotización pactada con proveedor
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                                <Tag className="w-3 h-3 text-slate-400" /> Base Catálogo General
+                              </span>
+                            )}
+                            {linea.vincular_proveedor && (
+                              <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 py-0 px-1 font-semibold">
+                                Auto-vinculación activa
+                              </Badge>
+                            )}
+                          </div>
+                          {/* Micro-interacción: Switch interactivo y Referencia Comercial en la fila */}
+                          <div className="mt-1.5 space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] select-none group">
+                                <input
+                                  type="checkbox"
+                                  checked={linea.vincular_proveedor}
+                                  onChange={(e) => handleToggleVincularLinea(index, e.target.checked)}
+                                  className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                                />
+                                <span className={linea.vincular_proveedor ? "text-blue-800 font-semibold group-hover:text-blue-900" : "text-slate-500 group-hover:text-slate-700"}>
+                                  Vincular este artículo y precio a la matriz del proveedor
+                                </span>
+                              </label>
+                            </div>
+                            {linea.vincular_proveedor && (
+                              <div className="flex items-center gap-2 pt-0.5">
+                                <span className="text-[11px] font-semibold text-blue-900 shrink-0 flex items-center gap-1">
+                                  <Tag className="w-3 h-3 text-blue-600" /> Ref. Proveedor:
+                                </span>
+                                <input
+                                  type="text"
+                                  placeholder="Ej: FIL-JD-884..."
+                                  value={linea.codigo_proveedor || ''}
+                                  onChange={(e) => handleCambiarCodigoProveedor(index, e.target.value)}
+                                  className="h-7 px-2.5 text-xs font-mono bg-white border border-blue-300 rounded-md text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 w-52 shadow-2xs"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-3 text-right">
                           <Input

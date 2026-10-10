@@ -42,4 +42,12 @@ export class CreateOrdenesCompraDetalleDto {
   @IsOptional()
   @MaxLength(500)
   observaciones?: string;
+
+  @IsOptional()
+  vincular_proveedor?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  codigo_proveedor?: string;
 }

@@ -161,6 +161,82 @@ export class PrismaOrdenesCompraRepository implements IOrdenesCompraRepository {
             observaciones: item.observaciones || null,
           },
         });
+
+        // Auto-vinculación comercial en segundo plano a la matriz del proveedor si se solicitó
+        if (item.vincular_proveedor) {
+          const comp = componentes.find((c) => c.id_componente === item.id_componente);
+          const refProveedor =
+            item.codigo_proveedor?.trim() ||
+            comp?.referencia_fabricante ||
+            comp?.codigo_interno ||
+            `REF-${item.id_componente}`;
+
+          // Consultar costo anterior si existía para la bitácora
+          const vinculoPrevio = await tx.articulos_proveedores.findUnique({
+            where: {
+              id_componente_id_proveedor: {
+                id_componente: item.id_componente,
+                id_proveedor: data.id_proveedor,
+              },
+            },
+          });
+
+          const costoAnterior = vinculoPrevio
+            ? Number(vinculoPrevio.costo_actual)
+            : comp?.precio_compra
+            ? Number(comp.precio_compra)
+            : null;
+
+          let porcentajeVariacion: number | null = null;
+          if (costoAnterior !== null && costoAnterior > 0) {
+            const variacionCalc = Number((((item.precio_unitario - costoAnterior) / costoAnterior) * 100).toFixed(2));
+            porcentajeVariacion = Math.abs(variacionCalc) < 9999 ? variacionCalc : null;
+          }
+
+          // Upsert en articulos_proveedores
+          await tx.articulos_proveedores.upsert({
+            where: {
+              id_componente_id_proveedor: {
+                id_componente: item.id_componente,
+                id_proveedor: data.id_proveedor,
+              },
+            },
+            create: {
+              id_componente: item.id_componente,
+              id_proveedor: data.id_proveedor,
+              referencia_proveedor: refProveedor,
+              nombre_segun_proveedor: comp?.descripcion_corta || undefined,
+              costo_actual: item.precio_unitario,
+              moneda: 'COP',
+              activo: true,
+              registrado_por: data.solicitada_por,
+              modificado_por: data.solicitada_por,
+            },
+            update: {
+              costo_actual: item.precio_unitario,
+              referencia_proveedor: item.codigo_proveedor?.trim() || undefined,
+              activo: true,
+              fecha_actualizacion: new Date(),
+              modificado_por: data.solicitada_por,
+            },
+          });
+
+          // Registrar bitácora inmutable en historial_costos_compra con origen ACTUALIZACION_PROVEEDOR
+          await tx.historial_costos_compra.create({
+            data: {
+              id_componente: item.id_componente,
+              id_proveedor: data.id_proveedor,
+              costo_unitario: item.precio_unitario,
+              costo_unitario_anterior: costoAnterior,
+              porcentaje_variacion: porcentajeVariacion,
+              cantidad_adquirida: item.cantidad,
+              numero_factura_oc: numeroOrden,
+              origen_cambio: 'ACTUALIZACION_PROVEEDOR',
+              observaciones: `Auto-vinculación comercial desde OC ${numeroOrden}`,
+              id_usuario: data.solicitada_por,
+            },
+          });
+        }
       }
 
       // Retornar orden completa con relaciones reales de Prisma

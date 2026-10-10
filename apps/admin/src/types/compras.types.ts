@@ -333,6 +333,9 @@ export interface VincularProveedorPayload {
 
 export interface ActualizarPrecioProveedorPayload {
   nuevo_costo: number;
+  referencia_proveedor?: string;
+  tiempo_entrega_dias?: number;
+  es_proveedor_preferido?: boolean;
   moneda?: string;
   cantidad_adquirida?: number;
   numero_factura_oc?: string;

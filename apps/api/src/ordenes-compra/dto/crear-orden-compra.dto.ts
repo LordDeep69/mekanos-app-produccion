@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDateString, IsInt, IsOptional, IsPositive, IsString, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsInt, IsOptional, IsPositive, IsString, ValidateNested } from 'class-validator';
 
 export class ItemOrdenCompraDto {
   @ApiProperty({ description: 'ID del componente', example: 1 })
@@ -20,6 +20,16 @@ export class ItemOrdenCompraDto {
   @IsOptional()
   @IsString()
   observaciones?: string;
+
+  @ApiPropertyOptional({ description: 'Bandera para auto-vincular o actualizar en la matriz articulos_proveedores', example: true })
+  @IsOptional()
+  @IsBoolean()
+  vincular_proveedor?: boolean;
+
+  @ApiPropertyOptional({ description: 'Código o SKU asignado por el proveedor', example: 'REF-PROV-100' })
+  @IsOptional()
+  @IsString()
+  codigo_proveedor?: string;
 }
 
 export class CrearOrdenCompraDto {
