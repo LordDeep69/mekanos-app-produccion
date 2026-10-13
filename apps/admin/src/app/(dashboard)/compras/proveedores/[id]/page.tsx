@@ -76,6 +76,25 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+const RUBROS_CATALOGO_INSTITUCIONAL = [
+  'Filtros y Elementos de Filtración',
+  'Aceites, Lubricantes y Refrigerantes',
+  'Repuestos de Motor Diésel',
+  'Bombas Dosificadoras y de Agua',
+  'Válvulas, Atomizadores y Tubería',
+  'Baterías y Sistema Eléctrico',
+  'Correas, Poleas y Transmisión',
+  'Mangueras, Acoples y Conexiones Hidráulicas',
+  'Inyección y Turbocargadores',
+  'Empaquetaduras y Sellos Mecánicos',
+  'Ferretería, Tornillería y Anclajes',
+  'Químicos Industriales y Solventes',
+  'Herramientas y Equipos de Taller',
+  'Consumibles, Aseo y Papelería',
+  'Servicios Técnicos Especializados',
+  'Suministros y Dotación EPP',
+];
+
 // Función determinista para avatar con iniciales y gradiente
 const getAvatarGradient = (nombre: string) => {
   const gradients = [
@@ -163,7 +182,16 @@ export default function FichaProveedor360Page() {
 
   // Sincronización de pestaña activa mediante URL (?tab=catalogo | ordenes | fiscal)
   const tabParam = searchParams.get('tab');
-  const activeTab = (tabParam === 'ordenes' || tabParam === 'fiscal' || tabParam === 'catalogo') ? tabParam : 'catalogo';
+  const [activeTab, setActiveTab] = useState<string>(
+    tabParam === 'ordenes' || tabParam === 'fiscal' || tabParam === 'catalogo' ? tabParam : 'catalogo'
+  );
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && (t === 'ordenes' || t === 'fiscal' || t === 'catalogo')) {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
 
   // Datos del proveedor y KPIs
   const [proveedor, setProveedor] = useState<ProveedorCompleto | null>(null);
@@ -193,6 +221,7 @@ export default function FichaProveedor360Page() {
 
   // Selector de componentes para el modal de homologación
   const [catalogoMaestro, setCatalogoMaestro] = useState<ArticuloMaestro[]>([]);
+  const [cargandoCatalogoMaestro, setCargandoCatalogoMaestro] = useState(false);
   const [busquedaComponenteModal, setBusquedaComponenteModal] = useState('');
   const [menuComponentesAbierto, setMenuComponentesAbierto] = useState(false);
   const [componenteSeleccionado, setComponenteSeleccionado] = useState<ArticuloMaestro | null>(null);
@@ -217,14 +246,17 @@ export default function FichaProveedor360Page() {
     observaciones: '',
   });
 
-  // Modal Editar Proveedor Datos Generales
+  // Modal Editar Proveedor Datos Generales (2 Columnas Enterprise)
   const [modalEditarProveedorOpen, setModalEditarProveedorOpen] = useState(false);
   const [isSubmittingEditProveedor, setIsSubmittingEditProveedor] = useState(false);
+  const [nuevoRubroEditInput, setNuevoRubroEditInput] = useState('');
   const [editProveedorData, setEditProveedorData] = useState({
     razon_social: '',
     numero_identificacion: '',
     categoria_proveedor: 'REPUESTOS',
     tipo_proveedor: 'NACIONAL',
+    rubros: [] as string[],
+    etiquetas_secundarias: '',
     telefono_principal: '',
     email_principal: '',
     email_facturacion: '',
@@ -271,13 +303,18 @@ export default function FichaProveedor360Page() {
   }, [idProveedor]);
 
   // Cargar artículos del catálogo maestro para el selector de homologación
-  const cargarCatalogoMaestro = async () => {
-    if (catalogoMaestro.length > 0) return;
+  const cargarCatalogoMaestro = async (force = false) => {
+    if (!force && catalogoMaestro.length > 0) return;
     try {
-      const res = await comprasService.getArticulos({ limit: 100, activo: true });
-      setCatalogoMaestro(res.data || []);
+      setCargandoCatalogoMaestro(true);
+      const res = await comprasService.getArticulos({ limit: 300, activo: true });
+      const items = (res as any)?.items || (res as any)?.data || (Array.isArray(res) ? res : []);
+      setCatalogoMaestro(items);
     } catch (e) {
       console.error('Error al cargar catálogo maestro:', e);
+      toast.error('No se pudo cargar el catálogo maestro de repuestos');
+    } finally {
+      setCargandoCatalogoMaestro(false);
     }
   };
 
@@ -309,15 +346,16 @@ export default function FichaProveedor360Page() {
 
   // Navegación de pestañas con cambio de URL
   const handleTabChange = (val: string) => {
-    setTabActual(val);
+    setActiveTab(val);
     router.replace(`/compras/proveedores/${idProveedor}?tab=${val}`, { scroll: false });
   };
 
   // Abrir modal homologar
   const abrirModalHomologar = () => {
-    cargarCatalogoMaestro();
+    cargarCatalogoMaestro(true);
     setComponenteSeleccionado(null);
     setBusquedaComponenteModal('');
+    setMenuComponentesAbierto(false);
     setFormHomologar({
       id_componente: 0,
       referencia_proveedor: '',
@@ -433,6 +471,35 @@ export default function FichaProveedor360Page() {
     }
   };
 
+  // Gestión de Rubros en Edición de Proveedor
+  const handleAgregarRubroEdit = (rubro: string) => {
+    const r = rubro.trim();
+    if (!r) return;
+    if (editProveedorData.rubros.includes(r)) {
+      toast.info(`El rubro "${r}" ya está asignado`);
+      return;
+    }
+    setEditProveedorData((prev) => ({
+      ...prev,
+      rubros: [...prev.rubros, r],
+    }));
+  };
+
+  const handleRemoverRubroEdit = (rubro: string) => {
+    setEditProveedorData((prev) => ({
+      ...prev,
+      rubros: prev.rubros.filter((item) => item !== rubro),
+    }));
+  };
+
+  const handleCrearRubroPersonalizadoEdit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const r = nuevoRubroEditInput.trim();
+    if (!r) return;
+    handleAgregarRubroEdit(r);
+    setNuevoRubroEditInput('');
+  };
+
   // Abrir modal editar proveedor datos generales
   const abrirEditarProveedor = () => {
     if (!proveedor) return;
@@ -442,6 +509,8 @@ export default function FichaProveedor360Page() {
       numero_identificacion: persona?.numero_identificacion || '',
       categoria_proveedor: proveedor.categoria_proveedor || 'REPUESTOS',
       tipo_proveedor: proveedor.tipo_proveedor || 'NACIONAL',
+      rubros: extractRubros(proveedor),
+      etiquetas_secundarias: proveedor.zona_cobertura || '',
       telefono_principal: persona?.telefono_principal || '',
       email_principal: persona?.email_principal || '',
       email_facturacion: extractEmailFacturacion(proveedor),
@@ -450,12 +519,13 @@ export default function FichaProveedor360Page() {
       url_ubicacion: persona?.url_ubicacion || '',
       sitio_web: extractWebUrl(proveedor),
       terminos_credito: getTerminosCredito(proveedor),
-      tiempo_entrega_dias: proveedor.tiempo_entrega_dias || 1,
-      responsable_iva: proveedor.responsable_iva,
-      realiza_entregas: proveedor.realiza_entregas,
-      proveedor_activo: proveedor.proveedor_activo,
+      tiempo_entrega_dias: proveedor.tiempo_entrega_dias ?? 1,
+      responsable_iva: proveedor.responsable_iva ?? true,
+      realiza_entregas: proveedor.realiza_entregas ?? true,
+      proveedor_activo: proveedor.proveedor_activo ?? true,
       observaciones_despacho: extractLogistica(proveedor),
     });
+    setNuevoRubroEditInput('');
     setModalEditarProveedorOpen(true);
   };
 
@@ -463,6 +533,10 @@ export default function FichaProveedor360Page() {
   const handleGuardarProveedorGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!proveedor) return;
+    if (!editProveedorData.razon_social.trim()) {
+      toast.error('La Razón Social o Nombre Comercial es obligatorio (*)');
+      return;
+    }
     try {
       setIsSubmittingEditProveedor(true);
       await comprasService.updateProveedor(idProveedor, {
@@ -471,6 +545,8 @@ export default function FichaProveedor360Page() {
         numero_identificacion: editProveedorData.numero_identificacion.trim() || undefined,
         categoria_proveedor: editProveedorData.categoria_proveedor,
         tipo_proveedor: editProveedorData.tipo_proveedor,
+        rubros: editProveedorData.rubros,
+        etiquetas_secundarias: editProveedorData.etiquetas_secundarias.trim() || undefined,
         persona_contacto: editProveedorData.persona_contacto.trim() || undefined,
         telefono_principal: editProveedorData.telefono_principal.trim() || undefined,
         email_principal: editProveedorData.email_principal.trim() || undefined,
@@ -485,9 +561,9 @@ export default function FichaProveedor360Page() {
         proveedor_activo: editProveedorData.proveedor_activo,
         observaciones_despacho: editProveedorData.observaciones_despacho.trim() || undefined,
       });
-      toast.success('Datos del proveedor actualizados.');
+      toast.success('Datos del proveedor actualizados exitosamente.');
       setModalEditarProveedorOpen(false);
-      cargarDatos();
+      cargarDatos(true);
     } catch (e: any) {
       console.error('Error al actualizar proveedor:', e);
       const msg = e?.response?.data?.message || 'Error al actualizar el proveedor.';
@@ -1479,8 +1555,13 @@ export default function FichaProveedor360Page() {
                         autoFocus
                       />
                       <div className="divide-y divide-slate-100">
-                        {componentesFiltradosModal.length === 0 ? (
-                          <div className="py-4 text-center text-xs text-slate-400">
+                        {cargandoCatalogoMaestro ? (
+                          <div className="py-6 flex flex-col items-center justify-center gap-2 text-xs text-slate-500">
+                            <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
+                            <span>Cargando catálogo maestro...</span>
+                          </div>
+                        ) : componentesFiltradosModal.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-slate-400">
                             No se encontraron artículos
                           </div>
                         ) : (
@@ -1853,9 +1934,9 @@ export default function FichaProveedor360Page() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: EDITAR DATOS GENERALES DEL PROVEEDOR */}
+      {/* MODAL: EDITAR DATOS GENERALES DEL PROVEEDOR (2 COLUMNAS ENTERPRISE) */}
       <Dialog open={modalEditarProveedorOpen} onOpenChange={setModalEditarProveedorOpen}>
-        <DialogContent className="sm:max-w-3xl w-full max-h-[90vh] flex flex-col p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden">
+        <DialogContent className="max-w-4xl w-full max-h-[92vh] flex flex-col p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden">
           <form onSubmit={handleGuardarProveedorGeneral} className="flex flex-col h-full">
             <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
               <div className="flex items-center gap-3">
@@ -1867,197 +1948,492 @@ export default function FichaProveedor360Page() {
                     Editar Proveedor Comercial
                   </DialogTitle>
                   <DialogDescription className="text-xs text-slate-500">
-                    Modificación de datos fiscales, comerciales y operativos de {nombre}.
+                    Actualización integral de datos fiscales, comerciales, rubros y logística de {nombre}.
                   </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
 
-            <div className="p-6 space-y-4 overflow-y-auto text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 overflow-y-auto max-h-[calc(92vh-140px)] text-xs">
+              {/* COLUMNA 1: IDENTIFICACIÓN Y CLASIFICACIÓN */}
+              <div className="space-y-4">
+                <div className="border-b border-slate-200 pb-2">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-blue-600" />
+                    Identificación y Clasificación
+                  </h3>
+                </div>
+
+                {/* Razón Social */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Razón Social o Nombre *</Label>
+                  <Label htmlFor="edit_prov_razon" className="text-xs font-semibold text-slate-700">
+                    Razón Social o Nombre Comercial <span className="text-blue-600 font-bold">*</span>
+                  </Label>
                   <Input
+                    id="edit_prov_razon"
+                    required
+                    placeholder="Ej. Químicos Industriales del Caribe S.A.S."
                     value={editProveedorData.razon_social}
                     onChange={(e) =>
                       setEditProveedorData((prev) => ({ ...prev, razon_social: e.target.value }))
                     }
-                    required
-                    className="text-xs h-9 border-slate-200"
+                    className="h-10 text-sm bg-white border-slate-200 rounded-lg px-3"
                   />
                 </div>
+
+                {/* NIT y Tipo */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_nit" className="text-xs font-semibold text-slate-700">
+                      NIT / Identificación
+                    </Label>
+                    <Input
+                      id="edit_prov_nit"
+                      placeholder="Ej. 900.123.456-7"
+                      value={editProveedorData.numero_identificacion}
+                      onChange={(e) =>
+                        setEditProveedorData((prev) => ({
+                          ...prev,
+                          numero_identificacion: e.target.value,
+                        }))
+                      }
+                      className="h-10 text-sm bg-white border-slate-200 rounded-lg font-mono px-3"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_tipo" className="text-xs font-semibold text-slate-700">
+                      Tipo Proveedor
+                    </Label>
+                    <select
+                      id="edit_prov_tipo"
+                      value={editProveedorData.tipo_proveedor}
+                      onChange={(e) =>
+                        setEditProveedorData((prev) => ({ ...prev, tipo_proveedor: e.target.value }))
+                      }
+                      className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="NACIONAL">NACIONAL</option>
+                      <option value="INTERNACIONAL">INTERNACIONAL</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Categoría y Sitio Web */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_cat" className="text-xs font-semibold text-slate-700">
+                      Categoría Principal
+                    </Label>
+                    <select
+                      id="edit_prov_cat"
+                      value={editProveedorData.categoria_proveedor}
+                      onChange={(e) =>
+                        setEditProveedorData((prev) => ({
+                          ...prev,
+                          categoria_proveedor: e.target.value,
+                        }))
+                      }
+                      className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="REPUESTOS">REPUESTOS</option>
+                      <option value="SERVICIOS">SERVICIOS</option>
+                      <option value="SUMINISTROS">SUMINISTROS</option>
+                      <option value="EQUIPOS">EQUIPOS</option>
+                      <option value="MIXTO">MIXTO</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_web" className="text-xs font-semibold text-slate-700">
+                      Sitio Web / Catálogo Digital
+                    </Label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-500" />
+                      <Input
+                        id="edit_prov_web"
+                        placeholder="https://proveedor.com"
+                        value={editProveedorData.sitio_web}
+                        onChange={(e) =>
+                          setEditProveedorData((prev) => ({ ...prev, sitio_web: e.target.value }))
+                        }
+                        className="h-10 pl-9 pr-3 text-sm bg-white border-slate-200 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECCIÓN RUBROS / ESPECIALIDADES */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="h-4 w-4 text-blue-600" />
+                      <span className="text-xs font-bold text-slate-800">
+                        Rubros y Especialidades
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                      {editProveedorData.rubros.length} asignados
+                    </span>
+                  </div>
+
+                  {/* Contenedor compacto de chips */}
+                  <div className="min-h-[42px] max-h-28 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 flex flex-wrap items-center gap-1.5">
+                    {editProveedorData.rubros.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">
+                        Sin rubros asignados. Agrega del catálogo institucional o escribe uno nuevo.
+                      </span>
+                    ) : (
+                      editProveedorData.rubros.map((rubro) => (
+                        <span
+                          key={rubro}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200/80 shadow-2xs"
+                        >
+                          <span>{rubro}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoverRubroEdit(rubro)}
+                            className="text-blue-400 hover:text-blue-700 rounded-full p-0.5 hover:bg-blue-100 transition-colors"
+                            title={`Eliminar ${rubro}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Selector del Catálogo */}
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAgregarRubroEdit(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="" disabled>
+                      + Seleccionar rubro del catálogo institucional...
+                    </option>
+                    {RUBROS_CATALOGO_INSTITUCIONAL.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Rubro personalizado */}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Crear rubro personalizado..."
+                      value={nuevoRubroEditInput}
+                      onChange={(e) => setNuevoRubroEditInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCrearRubroPersonalizadoEdit();
+                        }
+                      }}
+                      className="h-10 text-xs bg-white border-slate-200 rounded-lg flex-1 px-3"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleCrearRubroPersonalizadoEdit()}
+                      className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shrink-0"
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Añadir
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Clasificación Secundaria / Tags */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">NIT / Identificación</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="edit_prov_tags" className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                      <Tag className="h-3 w-3 text-slate-500" />
+                      Etiquetas de Clasificación Secundarias
+                    </Label>
+                    <span className="text-[10px] text-slate-400">Separadas por coma</span>
+                  </div>
                   <Input
-                    value={editProveedorData.numero_identificacion}
+                    id="edit_prov_tags"
+                    placeholder="Ej. HDPE, Conexiones, Soldaduras, Diésel..."
+                    value={editProveedorData.etiquetas_secundarias}
                     onChange={(e) =>
                       setEditProveedorData((prev) => ({
                         ...prev,
-                        numero_identificacion: e.target.value,
+                        etiquetas_secundarias: e.target.value,
                       }))
                     }
-                    className="font-mono text-xs h-9 border-slate-200"
+                    className="h-10 text-xs bg-white border-slate-200 rounded-lg px-3"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Asesor Comercial</Label>
-                  <Input
-                    value={editProveedorData.persona_contacto}
-                    onChange={(e) =>
-                      setEditProveedorData((prev) => ({
-                        ...prev,
-                        persona_contacto: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-9 border-slate-200"
-                  />
+              {/* COLUMNA 2: CONTACTO, LOGÍSTICA & CONDICIONES */}
+              <div className="space-y-4">
+                <div className="border-b border-slate-200 pb-2">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Truck className="h-3.5 w-3.5 text-blue-600" />
+                    Contacto, Logística y Finanzas
+                  </h3>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Teléfono / WhatsApp</Label>
-                  <Input
-                    value={editProveedorData.telefono_principal}
-                    onChange={(e) =>
-                      setEditProveedorData((prev) => ({
-                        ...prev,
-                        telefono_principal: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-9 border-slate-200"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Correo Pedidos</Label>
-                  <Input
-                    type="email"
-                    value={editProveedorData.email_principal}
-                    onChange={(e) =>
-                      setEditProveedorData((prev) => ({
-                        ...prev,
-                        email_principal: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-9 border-slate-200"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Correo Facturación</Label>
-                  <Input
-                    type="email"
-                    value={editProveedorData.email_facturacion}
-                    onChange={(e) =>
-                      setEditProveedorData((prev) => ({
-                        ...prev,
-                        email_facturacion: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-9 border-slate-200"
-                  />
-                </div>
-              </div>
+                {/* Asesor y Teléfono */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_contacto" className="text-xs font-semibold text-slate-700">
+                      Asesor Comercial / Contacto
+                    </Label>
+                    <Input
+                      id="edit_prov_contacto"
+                      placeholder="Ej. Carlos Mendoza"
+                      value={editProveedorData.persona_contacto}
+                      onChange={(e) =>
+                        setEditProveedorData((prev) => ({
+                          ...prev,
+                          persona_contacto: e.target.value,
+                        }))
+                      }
+                      className="h-10 text-sm bg-white border-slate-200 rounded-lg px-3"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_tel" className="text-xs font-semibold text-slate-700">
+                      Teléfono / WhatsApp Compras
+                    </Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <Input
+                        id="edit_prov_tel"
+                        placeholder="Ej. +57 300 123 4567"
+                        value={editProveedorData.telefono_principal}
+                        onChange={(e) =>
+                          setEditProveedorData((prev) => ({
+                            ...prev,
+                            telefono_principal: e.target.value,
+                          }))
+                        }
+                        className="h-10 pl-9 pr-3 text-sm bg-white border-slate-200 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Correos */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_email" className="text-xs font-semibold text-slate-700">
+                      Correo Pedidos / Compras
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <Input
+                        id="edit_prov_email"
+                        type="email"
+                        placeholder="Ej. pedidos@proveedor.com"
+                        value={editProveedorData.email_principal}
+                        onChange={(e) =>
+                          setEditProveedorData((prev) => ({
+                            ...prev,
+                            email_principal: e.target.value,
+                          }))
+                        }
+                        className="h-10 pl-9 pr-3 text-sm bg-white border-slate-200 rounded-lg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_prov_email_fact" className="text-xs font-semibold text-slate-700">
+                      Correo Facturación Electrónica
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <Input
+                        id="edit_prov_email_fact"
+                        type="email"
+                        placeholder="Ej. facturas@proveedor.com"
+                        value={editProveedorData.email_facturacion}
+                        onChange={(e) =>
+                          setEditProveedorData((prev) => ({
+                            ...prev,
+                            email_facturacion: e.target.value,
+                          }))
+                        }
+                        className="h-10 pl-9 pr-3 text-sm bg-white border-slate-200 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dirección Física */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Plazo de Pago / Crédito</Label>
+                  <Label htmlFor="edit_prov_dir" className="text-xs font-semibold text-slate-700">
+                    Dirección Física / Bodega Despacho
+                  </Label>
                   <Input
-                    value={editProveedorData.terminos_credito}
+                    id="edit_prov_dir"
+                    placeholder="Ej. Zona Industrial Mamonal Km 3, Cartagena"
+                    value={editProveedorData.direccion_principal}
                     onChange={(e) =>
                       setEditProveedorData((prev) => ({
                         ...prev,
-                        terminos_credito: e.target.value,
+                        direccion_principal: e.target.value,
                       }))
                     }
-                    className="text-xs h-9 border-slate-200"
+                    className="h-10 text-sm bg-white border-slate-200 rounded-lg px-3"
                   />
                 </div>
+
+                {/* GPS */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Días de Entrega Estándar</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="edit_prov_gps" className="text-xs font-semibold text-slate-700">
+                      Enlace Ubicación GPS (Google Maps / Waze)
+                    </Label>
+                    <span className="text-[10px] text-slate-400">Opcional</span>
+                  </div>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-500" />
+                    <Input
+                      id="edit_prov_gps"
+                      placeholder="https://maps.google.com/?q=..."
+                      value={editProveedorData.url_ubicacion}
+                      onChange={(e) =>
+                        setEditProveedorData((prev) => ({
+                          ...prev,
+                          url_ubicacion: e.target.value,
+                        }))
+                      }
+                      className="h-10 pl-9 pr-3 text-xs bg-white border-slate-200 rounded-lg font-mono text-[11px]"
+                    />
+                  </div>
+                </div>
+
+                {/* Plazo de Pago y Tiempo de Entrega */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                  <div className="space-y-1.5 sm:col-span-7">
+                    <Label htmlFor="edit_prov_plazo" className="text-xs font-semibold text-slate-700">
+                      Plazo de Pago / Crédito
+                    </Label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                      <select
+                        id="edit_prov_plazo"
+                        value={editProveedorData.terminos_credito}
+                        onChange={(e) =>
+                          setEditProveedorData((prev) => ({
+                            ...prev,
+                            terminos_credito: e.target.value,
+                          }))
+                        }
+                        className="w-full h-10 pl-9 pr-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="Contado (Pago inmediato)">Contado (Pago inmediato)</option>
+                        <option value="Crédito 15 días">Crédito 15 días</option>
+                        <option value="Crédito 30 días">Crédito 30 días</option>
+                        <option value="Crédito 45 días">Crédito 45 días</option>
+                        <option value="Crédito 60 días">Crédito 60 días</option>
+                        <option value="Anticipo 50% / Saldo contra entrega">
+                          Anticipo 50% / Saldo contra entrega
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-5">
+                    <Label htmlFor="edit_prov_dias" className="text-xs font-semibold text-slate-700">
+                      Tiempo de Entrega (Días)
+                    </Label>
+                    <Input
+                      id="edit_prov_dias"
+                      type="number"
+                      min="0"
+                      value={editProveedorData.tiempo_entrega_dias}
+                      onChange={(e) =>
+                        setEditProveedorData((prev) => ({
+                          ...prev,
+                          tiempo_entrega_dias: Number(e.target.value),
+                        }))
+                      }
+                      className="h-10 text-sm bg-white border-slate-200 rounded-lg px-3 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Switches Comerciales y Logísticos */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="edit_prov_iva" className="text-xs font-bold text-slate-800 cursor-pointer">
+                        Responsable de IVA
+                      </Label>
+                      <p className="text-[10px] text-slate-500">Aplica impuestos en órdenes de compra.</p>
+                    </div>
+                    <Switch
+                      id="edit_prov_iva"
+                      checked={editProveedorData.responsable_iva}
+                      onCheckedChange={(c) =>
+                        setEditProveedorData((prev) => ({ ...prev, responsable_iva: c }))
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5">
+                    <div>
+                      <Label htmlFor="edit_prov_entregas" className="text-xs font-bold text-slate-800 cursor-pointer">
+                        Entrega a Domicilio / Sede Propia
+                      </Label>
+                      <p className="text-[10px] text-slate-500">Entrega directa en taller o sede propia de la empresa.</p>
+                    </div>
+                    <Switch
+                      id="edit_prov_entregas"
+                      checked={editProveedorData.realiza_entregas}
+                      onCheckedChange={(c) =>
+                        setEditProveedorData((prev) => ({ ...prev, realiza_entregas: c }))
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-200/60 pt-2.5">
+                    <div>
+                      <Label htmlFor="edit_prov_activo" className="text-xs font-bold text-slate-800 cursor-pointer">
+                        Proveedor Activo
+                      </Label>
+                      <p className="text-[10px] text-slate-500">Habilitado para abastecimiento y requisiciones.</p>
+                    </div>
+                    <Switch
+                      id="edit_prov_activo"
+                      checked={editProveedorData.proveedor_activo}
+                      onCheckedChange={(c) =>
+                        setEditProveedorData((prev) => ({ ...prev, proveedor_activo: c }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Observaciones Logísticas */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit_prov_obs" className="text-xs font-semibold text-slate-700">
+                    Observaciones Logísticas / Despacho
+                  </Label>
                   <Input
-                    type="number"
-                    min={1}
-                    value={editProveedorData.tiempo_entrega_dias}
+                    id="edit_prov_obs"
+                    placeholder="Ej. Despachos martes y jueves, flete incluido..."
+                    value={editProveedorData.observaciones_despacho}
                     onChange={(e) =>
                       setEditProveedorData((prev) => ({
                         ...prev,
-                        tiempo_entrega_dias: Number(e.target.value),
+                        observaciones_despacho: e.target.value,
                       }))
                     }
-                    className="font-mono text-xs h-9 border-slate-200"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">Dirección Física Bodega</Label>
-                <Input
-                  value={editProveedorData.direccion_principal}
-                  onChange={(e) =>
-                    setEditProveedorData((prev) => ({
-                      ...prev,
-                      direccion_principal: e.target.value,
-                    }))
-                  }
-                  className="text-xs h-9 border-slate-200"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Sitio Web / Catálogo</Label>
-                  <Input
-                    value={editProveedorData.sitio_web}
-                    onChange={(e) =>
-                      setEditProveedorData((prev) => ({ ...prev, sitio_web: e.target.value }))
-                    }
-                    className="text-xs h-9 border-slate-200"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">Enlace GPS (Google Maps)</Label>
-                  <Input
-                    value={editProveedorData.url_ubicacion}
-                    onChange={(e) =>
-                      setEditProveedorData((prev) => ({
-                        ...prev,
-                        url_ubicacion: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-9 border-slate-200"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-                  <span className="font-semibold text-slate-700">Responsable IVA</span>
-                  <Switch
-                    checked={editProveedorData.responsable_iva}
-                    onCheckedChange={(c) =>
-                      setEditProveedorData((prev) => ({ ...prev, responsable_iva: c }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-                  <span className="font-semibold text-slate-700">Entrega Taller</span>
-                  <Switch
-                    checked={editProveedorData.realiza_entregas}
-                    onCheckedChange={(c) =>
-                      setEditProveedorData((prev) => ({ ...prev, realiza_entregas: c }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
-                  <span className="font-semibold text-slate-700">Proveedor Activo</span>
-                  <Switch
-                    checked={editProveedorData.proveedor_activo}
-                    onCheckedChange={(c) =>
-                      setEditProveedorData((prev) => ({ ...prev, proveedor_activo: c }))
-                    }
+                    className="h-10 text-xs bg-white border-slate-200 rounded-lg px-3"
                   />
                 </div>
               </div>
@@ -2079,7 +2455,17 @@ export default function FichaProveedor360Page() {
                 disabled={isSubmittingEditProveedor}
                 className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {isSubmittingEditProveedor ? 'Guardando...' : 'Guardar Cambios'}
+                {isSubmittingEditProveedor ? (
+                  <>
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    Guardar Cambios
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </form>
