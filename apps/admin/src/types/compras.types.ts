@@ -360,3 +360,57 @@ export interface FiltrosArticulos {
   skip?: number;
   limit?: number;
 }
+
+export interface ProveedorKPIs {
+  total_articulos_homologados: number;
+  total_ordenes_compra: number;
+  monto_total_comprado: number;
+  cumplimiento_calidad: number;
+}
+
+export interface ProveedorFicha360Response {
+  proveedor: ProveedorCompleto;
+  kpis: ProveedorKPIs;
+  ordenes_recientes: any[];
+}
+
+export interface ArticuloHomologadoProveedor extends ArticuloProveedor {
+  catalogo_componentes?: {
+    id_componente: number;
+    codigo_interno?: string | null;
+    descripcion_corta?: string | null;
+    referencia_fabricante?: string | null;
+    precio_compra?: number | string | null;
+    marcas?: Marca | null;
+    categorias_componente?: {
+      id_categoria: number;
+      nombre: string;
+      codigo_categoria?: string;
+    } | null;
+    unidades_medida?: {
+      codigo_unidad: string;
+      nombre: string;
+      simbolo: string;
+    } | null;
+  };
+}
+
+export interface HomologarArticuloPayload {
+  id_componente: number;
+  referencia_proveedor: string;
+  costo_actual: number;
+  tiempo_entrega_dias?: number;
+  es_proveedor_preferido?: boolean;
+  marca_ofrecida?: string;
+  id_marca_ofrecida?: number;
+  notas?: string;
+}
+
+export interface ActualizarArticuloProveedorPayload {
+  nuevo_costo?: number;
+  referencia_proveedor?: string;
+  tiempo_entrega_dias?: number;
+  es_proveedor_preferido?: boolean;
+  observaciones?: string;
+}
+

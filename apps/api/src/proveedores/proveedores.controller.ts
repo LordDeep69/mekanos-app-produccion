@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserId } from '../common/decorators/user-id.decorator';
 import { CrearProveedorDto } from './dto/create-proveedor.dto';
+import { ActualizarArticuloProveedorDto, HomologarArticuloProveedorDto } from './dto/homologar-articulo.dto';
 import { UpdateProveedoresDto } from './dto/update-proveedores.dto';
 import { ProveedoresService } from './proveedores.service';
 
@@ -46,6 +47,56 @@ export class ProveedoresController {
     return this.proveedoresService.findOne(id);
   }
 
+  @Get(':id/ficha')
+  getFicha360(@Param('id', ParseIntPipe) id: number) {
+    return this.proveedoresService.getFicha360(id);
+  }
+
+  @Get(':id/articulos')
+  getArticulos(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('search') search?: string,
+  ) {
+    return this.proveedoresService.getArticulosProveedor(id, search);
+  }
+
+  @Post(':id/articulos')
+  homologarArticulo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: HomologarArticuloProveedorDto,
+    @UserId() userId: number,
+  ) {
+    return this.proveedoresService.homologarArticulo(id, dto, userId);
+  }
+
+  @Put(':id/articulos/:idComponente')
+  actualizarArticulo(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idComponente', ParseIntPipe) idComponente: number,
+    @Body() dto: ActualizarArticuloProveedorDto,
+    @UserId() userId: number,
+  ) {
+    return this.proveedoresService.actualizarArticuloHomologado(
+      id,
+      idComponente,
+      dto,
+      userId,
+    );
+  }
+
+  @Delete(':id/articulos/:idComponente')
+  desvincularArticulo(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idComponente', ParseIntPipe) idComponente: number,
+  ) {
+    return this.proveedoresService.desvincularArticulo(id, idComponente);
+  }
+
+  @Get(':id/ordenes')
+  getOrdenes(@Param('id', ParseIntPipe) id: number) {
+    return this.proveedoresService.getOrdenesProveedor(id);
+  }
+
   @Put(':id')
   @Patch(':id')
   update(
@@ -60,3 +111,4 @@ export class ProveedoresController {
     return this.proveedoresService.remove(id);
   }
 }
+

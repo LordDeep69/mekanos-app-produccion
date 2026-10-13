@@ -17,6 +17,7 @@ import {
   Clock,
   CreditCard,
   ExternalLink,
+  Eye,
   Globe,
   Layers,
   Mail,
@@ -615,20 +616,26 @@ export default function ProveedoresPage() {
 
                   return (
                     <tr key={prov.id_proveedor} className="hover:bg-slate-50/80 transition-colors">
-                      {/* Razón Social con Avatar Determinista */}
+                      {/* Razón Social con Avatar Determinista y Enlace a Ficha 360° */}
                       <td className="px-4 py-3.5 min-w-[240px]">
                         <div className="flex items-center gap-2.5">
-                          <div
+                          <Link
+                            href={`/compras/proveedores/${prov.id_proveedor}`}
                             className={`w-9 h-9 rounded-xl bg-gradient-to-br ${getAvatarGradient(
                               nombre,
-                            )} text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0 tracking-wider`}
+                            )} text-white flex items-center justify-center font-bold text-xs shadow-2xs shrink-0 tracking-wider hover:scale-105 transition-transform`}
+                            title={`Ver Ficha 360° de ${nombre}`}
                           >
                             {getInitials(nombre)}
-                          </div>
+                          </Link>
                           <div className="min-w-0 max-w-[230px] xl:max-w-[310px]" title={nombre}>
-                            <p className="font-bold text-gray-900 text-sm truncate" title={nombre}>
+                            <Link
+                              href={`/compras/proveedores/${prov.id_proveedor}`}
+                              className="font-bold text-gray-900 text-sm truncate hover:text-blue-600 hover:underline block"
+                              title={`Ver Ficha 360°: ${nombre}`}
+                            >
                               {nombre}
-                            </p>
+                            </Link>
                             {prov.persona?.nombre_comercial && prov.persona.razon_social && prov.persona.nombre_comercial !== prov.persona.razon_social ? (
                               <span className="text-[11px] text-gray-400 block truncate" title={prov.persona.nombre_comercial}>
                                 {prov.persona.nombre_comercial}
@@ -657,13 +664,13 @@ export default function ProveedoresPage() {
                         </span>
                       </td>
 
-                      {/* Artículos Suministrados: 0 repuestos (texto neutro legible) vs >0 repuestos (badge interactivo) */}
+                      {/* Artículos Suministrados: Vinculados directamente a Ficha 360° (?tab=catalogo) */}
                       <td className="px-3 py-3.5 text-center whitespace-nowrap">
                         {articulosCount > 0 ? (
                           <Link
-                            href={`/compras/catalogo?id_proveedor=${prov.id_proveedor}`}
+                            href={`/compras/proveedores/${prov.id_proveedor}?tab=catalogo`}
                             className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:text-blue-900 transition-colors shadow-2xs"
-                            title={`Ver ${articulosCount} repuesto(s) suministrado(s) en Catálogo`}
+                            title={`Ver ${articulosCount} repuesto(s) homologado(s) en Ficha 360°`}
                           >
                             <Package className="h-3 w-3 text-blue-600" />
                             <span>
@@ -671,9 +678,13 @@ export default function ProveedoresPage() {
                             </span>
                           </Link>
                         ) : (
-                          <span className="text-xs text-slate-400 font-medium select-none">
-                            0 repuestos
-                          </span>
+                          <Link
+                            href={`/compras/proveedores/${prov.id_proveedor}?tab=catalogo`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-slate-400 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:text-blue-600 transition-colors"
+                            title="0 repuestos. Clic para homologar en Ficha 360°"
+                          >
+                            <span>0 repuestos</span>
+                          </Link>
                         )}
                       </td>
 
@@ -791,17 +802,31 @@ export default function ProveedoresPage() {
                         </button>
                       </td>
 
-                      {/* Acciones */}
+                      {/* Acciones: Ver Ficha 360° y Editar */}
                       <td className="px-3 py-3.5 text-right whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => abrirEditarModal(prov)}
-                          className="h-8 px-2 text-xs text-gray-600 hover:text-blue-700 hover:bg-blue-50 font-medium"
-                        >
-                          <Pencil className="h-3.5 w-3.5 mr-1 text-gray-400 group-hover:text-blue-600" />
-                          Editar
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Link href={`/compras/proveedores/${prov.id_proveedor}`}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-blue-700 hover:text-blue-900 hover:bg-blue-50 font-medium"
+                              title="Ver Ficha 360° del Proveedor"
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1 text-blue-600" />
+                              Ver Ficha
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => abrirEditarModal(prov)}
+                            className="h-8 px-2 text-xs text-gray-600 hover:text-blue-700 hover:bg-blue-50 font-medium"
+                            title="Editar Datos del Proveedor"
+                          >
+                            <Pencil className="h-3.5 w-3.5 mr-1 text-gray-400 group-hover:text-blue-600" />
+                            Editar
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

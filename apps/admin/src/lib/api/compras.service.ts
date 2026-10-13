@@ -5,7 +5,9 @@
 
 import { apiClient } from '@/lib/api/client';
 import {
+  ActualizarArticuloProveedorPayload,
   ActualizarPrecioProveedorPayload,
+  ArticuloHomologadoProveedor,
   ArticuloMaestro,
   ArticuloProveedor,
   ArticulosResponse,
@@ -16,13 +18,16 @@ import {
   FusionarMarcasPayload,
   FiltrosArticulos,
   HistorialCostoCompra,
+  HomologarArticuloPayload,
   Marca,
+  ProveedorCompleto,
+  ProveedorFicha360Response,
+  ResumenCatalogo,
   TipoComponente,
   UnidadMedida,
   VincularProveedorPayload,
-  ProveedorCompleto,
-  ResumenCatalogo,
 } from '@/types/compras.types';
+
 
 export const comprasService = {
   /**
@@ -355,6 +360,73 @@ export const comprasService = {
   async deleteProveedor(id: number): Promise<void> {
     await apiClient.delete(`/proveedores/${id}`);
   },
+
+  /**
+   * Obtener Ficha 360° consolidada del proveedor (con KPIs operativos y órdenes)
+   */
+  async getProveedorFicha360(id: number): Promise<ProveedorFicha360Response> {
+    const response = await apiClient.get<ProveedorFicha360Response>(`/proveedores/${id}/ficha`);
+    return response.data;
+  },
+
+  /**
+   * Obtener catálogo de repuestos homologados del proveedor (Matriz de Sourcing)
+   */
+  async getArticulosProveedor(id: number, search?: string): Promise<ArticuloHomologadoProveedor[]> {
+    const params = search ? { search } : undefined;
+    const response = await apiClient.get<ArticuloHomologadoProveedor[]>(`/proveedores/${id}/articulos`, {
+      params,
+    });
+    return response.data;
+  },
+
+  /**
+   * Homologar / Vincular repuesto a la matriz de abastecimiento del proveedor
+   */
+  async homologarArticuloProveedor(
+    idProveedor: number,
+    payload: HomologarArticuloPayload,
+  ): Promise<ArticuloHomologadoProveedor> {
+    const response = await apiClient.post<ArticuloHomologadoProveedor>(
+      `/proveedores/${idProveedor}/articulos`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
+   * Actualizar condiciones comerciales de un artículo homologado
+   */
+  async actualizarArticuloProveedor(
+    idProveedor: number,
+    idComponente: number,
+    payload: ActualizarArticuloProveedorPayload,
+  ): Promise<any> {
+    const response = await apiClient.put(
+      `/proveedores/${idProveedor}/articulos/${idComponente}`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
+   * Desvincular artículo de la matriz de sourcing del proveedor
+   */
+  async desvincularArticuloProveedor(
+    idProveedor: number,
+    idComponente: number,
+  ): Promise<void> {
+    await apiClient.delete(`/proveedores/${idProveedor}/articulos/${idComponente}`);
+  },
+
+  /**
+   * Obtener historial de órdenes de compra del proveedor
+   */
+  async getOrdenesProveedor(id: number): Promise<any[]> {
+    const response = await apiClient.get<any[]>(`/proveedores/${id}/ordenes`);
+    return response.data;
+  },
+
 
   /**
    * Obtener movimientos de Kardex con saldos acumulados de un componente

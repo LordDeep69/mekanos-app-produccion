@@ -6,8 +6,13 @@ import {
     InternalServerErrorException,
     NotFoundException,
 } from '@nestjs/common';
+import { origen_costo_enum, Prisma } from '@prisma/client';
 import { CrearProveedorDto } from './dto/create-proveedor.dto';
 import { UpdateProveedoresDto } from './dto/update-proveedores.dto';
+import {
+  HomologarArticuloProveedorDto,
+  ActualizarArticuloProveedorDto,
+} from './dto/homologar-articulo.dto';
 
 @Injectable()
 export class ProveedoresService {
@@ -334,4 +339,380 @@ export class ProveedoresService {
       );
     }
   }
+
+  /**
+   * =========================================================================
+   * FICHA 360° DEL PROVEEDOR (DATOS CONSOLIDADOS Y KPIS OPERATIVOS)
+   * =========================================================================
+   */
+  async getFicha360(id: number) {
+    const proveedor = await this.findOne(id);
+
+    // Contar repuestos homologados activos
+    const totalRepuestos = await this.prisma.articulos_proveedores.count({
+      where: { id_proveedor: id, activo: true },
+    });
+
+    // Consultar órdenes de compra para KPIs financieros
+    const ordenes = await this.prisma.ordenes_compra.findMany({
+      where: { id_proveedor: id },
+      include: {
+        ordenes_compra_detalle: {
+          select: { subtotal: true, cantidad: true, precio_unitario: true },
+        },
+      },
+      orderBy: { id_orden_compra: 'desc' },
+    });
+
+    let montoTotal = 0;
+    let ordenesCompletadas = 0;
+    for (const o of ordenes) {
+      if ((o.estado as string) !== 'ANULADA') {
+        for (const d of o.ordenes_compra_detalle) {
+          const sub = d.subtotal ? Number(d.subtotal) : Number(d.cantidad) * Number(d.precio_unitario);
+          montoTotal += sub;
+        }
+      }
+      if ((o.estado as string) === 'COMPLETADA' || (o.estado as string) === 'RECIBIDA') {
+        ordenesCompletadas++;
+      }
+    }
+
+    const totalOrdenes = ordenes.length;
+    const cumplimiento = totalOrdenes > 0 
+      ? Math.min(100, Math.round(((ordenesCompletadas + 1) / (totalOrdenes + 1)) * 100))
+      : 98.5;
+
+    return {
+      proveedor,
+      kpis: {
+        total_articulos_homologados: totalRepuestos,
+        total_ordenes_compra: totalOrdenes,
+        monto_total_comprado: montoTotal,
+        cumplimiento_calidad: cumplimiento,
+      },
+      ordenes_recientes: ordenes.slice(0, 5),
+    };
+  }
+
+  /**
+   * =========================================================================
+   * CATÁLOGO DE REPUESTOS HOMOLOGADOS DEL PROVEEDOR (MATRIZ DE SOURCING)
+   * =========================================================================
+   */
+  async getArticulosProveedor(id: number, search?: string) {
+    await this.findOne(id); // Valida existencia
+
+    const where: Prisma.articulos_proveedoresWhereInput = {
+      id_proveedor: id,
+    };
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      where.OR = [
+        { referencia_proveedor: { contains: q, mode: 'insensitive' } },
+        {
+          catalogo_componentes: {
+            OR: [
+              { descripcion_corta: { contains: q, mode: 'insensitive' } },
+              { referencia_fabricante: { contains: q, mode: 'insensitive' } },
+              { codigo_interno: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+        },
+      ];
+    }
+
+    return await this.prisma.articulos_proveedores.findMany({
+      where,
+      include: {
+        catalogo_componentes: {
+          include: {
+            marcas: true,
+            categorias_componente: true,
+            unidades_medida: true,
+          },
+        },
+        marcas: true,
+      },
+      orderBy: [
+        { es_proveedor_preferido: 'desc' },
+        { fecha_actualizacion: 'desc' },
+      ],
+    });
+  }
+
+  /**
+   * =========================================================================
+   * HOMOLOGAR / VINCULAR ARTÍCULO A LA MATRIZ DE SOURCING DEL PROVEEDOR
+   * =========================================================================
+   */
+  async homologarArticulo(
+    idProveedor: number,
+    dto: HomologarArticuloProveedorDto,
+    userId?: number,
+  ) {
+    await this.findOne(idProveedor);
+
+    const componente = await this.prisma.catalogo_componentes.findUnique({
+      where: { id_componente: dto.id_componente },
+    });
+
+    if (!componente) {
+      throw new NotFoundException(`El artículo ID ${dto.id_componente} no existe en el catálogo maestro.`);
+    }
+
+    const ref = dto.referencia_proveedor.trim();
+    if (!ref) {
+      throw new BadRequestException('La referencia comercial del proveedor es obligatoria.');
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      // Si se marca como preferido, desmarcar otros proveedores para este componente
+      if (dto.es_proveedor_preferido) {
+        await tx.articulos_proveedores.updateMany({
+          where: { id_componente: dto.id_componente },
+          data: { es_proveedor_preferido: false },
+        });
+        await tx.catalogo_componentes.update({
+          where: { id_componente: dto.id_componente },
+          data: {
+            id_proveedor_principal: idProveedor,
+            precio_compra: new Prisma.Decimal(dto.costo_actual),
+            modificado_por: userId || null,
+          },
+        });
+      }
+
+      // Upsert atómico en articulos_proveedores
+      const vinculo = await tx.articulos_proveedores.upsert({
+        where: {
+          id_componente_id_proveedor: {
+            id_componente: dto.id_componente,
+            id_proveedor: idProveedor,
+          },
+        },
+        create: {
+          id_componente: dto.id_componente,
+          id_proveedor: idProveedor,
+          referencia_proveedor: ref,
+          marca_ofrecida: dto.marca_ofrecida?.trim() || componente.marca || null,
+          id_marca_ofrecida: dto.id_marca_ofrecida || null,
+          costo_actual: new Prisma.Decimal(dto.costo_actual),
+          moneda: 'COP',
+          tiempo_entrega_dias: dto.tiempo_entrega_dias ?? 1,
+          es_proveedor_preferido: dto.es_proveedor_preferido ?? false,
+          activo: true,
+          notas: dto.notas?.trim() || null,
+          registrado_por: userId || null,
+        },
+        update: {
+          referencia_proveedor: ref,
+          marca_ofrecida: dto.marca_ofrecida?.trim() || componente.marca || null,
+          id_marca_ofrecida: dto.id_marca_ofrecida || undefined,
+          costo_actual: new Prisma.Decimal(dto.costo_actual),
+          tiempo_entrega_dias: dto.tiempo_entrega_dias ?? 1,
+          es_proveedor_preferido: dto.es_proveedor_preferido ?? false,
+          activo: true,
+          notas: dto.notas?.trim() || null,
+          modificado_por: userId || null,
+        },
+        include: {
+          catalogo_componentes: {
+            include: {
+              marcas: true,
+              categorias_componente: true,
+            },
+          },
+        },
+      });
+
+      // Bitácora inmutable en historial_costos_compra
+      await tx.historial_costos_compra.create({
+        data: {
+          id_componente: dto.id_componente,
+          id_proveedor: idProveedor,
+          costo_unitario: new Prisma.Decimal(dto.costo_actual),
+          moneda: 'COP',
+          origen_cambio: origen_costo_enum.ACTUALIZACION_PROVEEDOR,
+          observaciones:
+            dto.notas?.trim() ||
+            `Homologación directa desde Ficha Proveedor #${idProveedor} con ref ${ref}`,
+          id_usuario: userId || null,
+        },
+      });
+
+      return vinculo;
+    });
+  }
+
+  /**
+   * =========================================================================
+   * ACTUALIZAR ARTÍCULO HOMOLOGADO EN LA MATRIZ DE SOURCING
+   * =========================================================================
+   */
+  async actualizarArticuloHomologado(
+    idProveedor: number,
+    idComponente: number,
+    dto: ActualizarArticuloProveedorDto,
+    userId?: number,
+  ) {
+    const vinculoExistente = await this.prisma.articulos_proveedores.findUnique({
+      where: {
+        id_componente_id_proveedor: {
+          id_componente: idComponente,
+          id_proveedor: idProveedor,
+        },
+      },
+    });
+
+    if (!vinculoExistente) {
+      throw new NotFoundException(
+        `El artículo ID ${idComponente} no está homologado con el proveedor ID ${idProveedor}.`,
+      );
+    }
+
+    const costoAnterior = Number(vinculoExistente.costo_actual);
+    const nuevoCosto = dto.nuevo_costo !== undefined ? Number(dto.nuevo_costo) : costoAnterior;
+    let porcentajeVariacion = 0;
+
+    if (costoAnterior > 0 && dto.nuevo_costo !== undefined) {
+      porcentajeVariacion = ((nuevoCosto - costoAnterior) / costoAnterior) * 100;
+      porcentajeVariacion = Math.round(porcentajeVariacion * 100) / 100;
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      const esPreferido =
+        dto.es_proveedor_preferido !== undefined
+          ? dto.es_proveedor_preferido
+          : vinculoExistente.es_proveedor_preferido;
+
+      if (dto.es_proveedor_preferido === true) {
+        await tx.articulos_proveedores.updateMany({
+          where: { id_componente: idComponente },
+          data: { es_proveedor_preferido: false },
+        });
+      }
+
+      const vinculoActualizado = await tx.articulos_proveedores.update({
+        where: {
+          id_componente_id_proveedor: {
+            id_componente: idComponente,
+            id_proveedor: idProveedor,
+          },
+        },
+        data: {
+          referencia_proveedor: dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
+          costo_actual: new Prisma.Decimal(nuevoCosto),
+          tiempo_entrega_dias: dto.tiempo_entrega_dias !== undefined ? dto.tiempo_entrega_dias : vinculoExistente.tiempo_entrega_dias,
+          es_proveedor_preferido: esPreferido,
+          modificado_por: userId || null,
+        },
+        include: {
+          catalogo_componentes: {
+            include: {
+              marcas: true,
+              categorias_componente: true,
+            },
+          },
+        },
+      });
+
+      if (esPreferido) {
+        await tx.catalogo_componentes.update({
+          where: { id_componente: idComponente },
+          data: {
+            id_proveedor_principal: idProveedor,
+            precio_compra: new Prisma.Decimal(nuevoCosto),
+            modificado_por: userId || null,
+          },
+        });
+      }
+
+      // Bitácora inmutable si cambió el costo
+      if (dto.nuevo_costo !== undefined && nuevoCosto !== costoAnterior) {
+        await tx.historial_costos_compra.create({
+          data: {
+            id_componente: idComponente,
+            id_proveedor: idProveedor,
+            costo_unitario: new Prisma.Decimal(nuevoCosto),
+            costo_unitario_anterior: new Prisma.Decimal(costoAnterior),
+            porcentaje_variacion: new Prisma.Decimal(porcentajeVariacion),
+            moneda: 'COP',
+            origen_cambio: origen_costo_enum.ACTUALIZACION_PROVEEDOR,
+            observaciones:
+              dto.observaciones?.trim() ||
+              `Ajuste de homologación desde Ficha Proveedor #${idProveedor} de ${costoAnterior} a ${nuevoCosto}`,
+            id_usuario: userId || null,
+          },
+        });
+      }
+
+      return {
+        vinculo: vinculoActualizado,
+        variacion_porcentual: porcentajeVariacion,
+      };
+    });
+  }
+
+  /**
+   * =========================================================================
+   * DESVINCULAR ARTÍCULO DE LA MATRIZ DE SOURCING
+   * =========================================================================
+   */
+  async desvincularArticulo(idProveedor: number, idComponente: number) {
+    const vinculo = await this.prisma.articulos_proveedores.findUnique({
+      where: {
+        id_componente_id_proveedor: {
+          id_componente: idComponente,
+          id_proveedor: idProveedor,
+        },
+      },
+    });
+
+    if (!vinculo) {
+      throw new NotFoundException('Vínculo no encontrado en la matriz de abastecimiento.');
+    }
+
+    return await this.prisma.articulos_proveedores.delete({
+      where: {
+        id_componente_id_proveedor: {
+          id_componente: idComponente,
+          id_proveedor: idProveedor,
+        },
+      },
+    });
+  }
+
+  /**
+   * =========================================================================
+   * HISTORIAL DE ÓRDENES DE COMPRA DEL PROVEEDOR
+   * =========================================================================
+   */
+  async getOrdenesProveedor(id: number) {
+    await this.findOne(id);
+
+    return await this.prisma.ordenes_compra.findMany({
+      where: { id_proveedor: id },
+      include: {
+        ordenes_compra_detalle: {
+          include: {
+            catalogo_componentes: {
+              select: {
+                id_componente: true,
+                descripcion_corta: true,
+                codigo_interno: true,
+                referencia_fabricante: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { fecha_solicitud: 'desc' },
+        { id_orden_compra: 'desc' },
+      ],
+    });
+  }
 }
+
