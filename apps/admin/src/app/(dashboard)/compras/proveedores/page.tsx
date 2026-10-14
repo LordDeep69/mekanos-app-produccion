@@ -568,7 +568,7 @@ export default function ProveedoresPage() {
                 <th className="px-3.5 py-3.5">Contacto & Portales</th>
                 <th className="px-3.5 py-3.5">Condiciones Comerciales</th>
                 <th className="px-3 py-3.5 text-center">Estado</th>
-                <th className="px-3.5 py-3.5 text-right">Acciones</th>
+                <th className="px-3.5 py-3.5 text-center min-w-[150px]">ACCIONES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -803,13 +803,13 @@ export default function ProveedoresPage() {
                       </td>
 
                       {/* Acciones: Ver Ficha 360° y Editar */}
-                      <td className="px-3 py-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="px-3.5 py-3.5 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
                           <Link href={`/compras/proveedores/${prov.id_proveedor}`}>
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-8 px-2 text-xs text-blue-700 hover:text-blue-900 hover:bg-blue-50 font-medium"
+                              className="h-7.5 px-2.5 text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 font-semibold shadow-2xs"
                               title="Ver Ficha 360° del Proveedor"
                             >
                               <Eye className="h-3.5 w-3.5 mr-1 text-blue-600" />
@@ -817,13 +817,13 @@ export default function ProveedoresPage() {
                             </Button>
                           </Link>
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={() => abrirEditarModal(prov)}
-                            className="h-8 px-2 text-xs text-gray-600 hover:text-blue-700 hover:bg-blue-50 font-medium"
+                            className="h-7.5 px-2.5 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 border-slate-200 font-medium shadow-2xs"
                             title="Editar Datos del Proveedor"
                           >
-                            <Pencil className="h-3.5 w-3.5 mr-1 text-gray-400 group-hover:text-blue-600" />
+                            <Pencil className="h-3.5 w-3.5 mr-1 text-slate-500" />
                             Editar
                           </Button>
                         </div>

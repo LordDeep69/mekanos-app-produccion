@@ -30,14 +30,21 @@ export function Header() {
     await signOut({ callbackUrl: '/login' });
   };
 
+  // Sanitizar nombre de usuario para portal white-label
+  const sanitizeUserName = (nombre?: string | null) => {
+    if (!nombre) return 'Administrador del Sistema';
+    if (nombre.toLowerCase().includes('admin mekanos')) return 'Administrador del Sistema';
+    return nombre;
+  };
+
   // Obtener iniciales del nombre
   const getInitials = (nombre?: string) => {
-    if (!nombre) return 'U';
-    const parts = nombre.split(' ');
+    const sName = sanitizeUserName(nombre);
+    const parts = sName.split(' ');
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     }
-    return nombre.substring(0, 2).toUpperCase();
+    return sName.substring(0, 2).toUpperCase();
   };
 
   return (
@@ -91,7 +98,7 @@ export function Header() {
                 </Avatar>
                 <div className="hidden flex-col items-start md:flex">
                   <span className="text-sm font-medium">
-                    {session?.user?.nombre || 'Usuario'}
+                    {sanitizeUserName(session?.user?.nombre)}
                   </span>
                   <span className="text-xs text-gray-500">
                     {session?.user?.rol || 'Sin rol'}

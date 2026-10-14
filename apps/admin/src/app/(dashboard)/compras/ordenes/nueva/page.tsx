@@ -222,6 +222,8 @@ function NuevaOrdenCompraContent() {
       setCodigoProveedorParaAgregar(pactado.referencia_proveedor || '');
       setEsPrecioPactadoItem(true);
       setVincularParaAgregar(false);
+      const moqSugerido = Math.max(1, Number(pactado.cantidad_minima_compra || 1));
+      setCantidadParaAgregar(moqSugerido);
     } else {
       const precioBase = Number(art.precio_compra || 0);
       setPrecioParaAgregar(precioBase);
@@ -229,8 +231,8 @@ function NuevaOrdenCompraContent() {
       setCodigoProveedorParaAgregar(art.codigo_interno || art.referencia_fabricante || '');
       setEsPrecioPactadoItem(false);
       setVincularParaAgregar(true); // Base catálogo: sugerir auto-vinculación activa por defecto
+      setCantidadParaAgregar(1);
     }
-    setCantidadParaAgregar(1);
     setObsParaAgregar('');
   };
 
@@ -752,7 +754,7 @@ function NuevaOrdenCompraContent() {
               {menuArticulosAbierto && (
                 <div
                   id="menu-articulos-dropdown"
-                  className="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-80 overflow-y-auto divide-y divide-slate-100"
+                  className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl ring-1 ring-slate-900/10 max-h-80 overflow-y-auto divide-y divide-slate-100"
                 >
                   {articulosPactados.length === 0 && articulosGenerales.length === 0 ? (
                     <div className="p-4 text-center text-xs text-slate-500">
@@ -826,11 +828,11 @@ function NuevaOrdenCompraContent() {
                                   </div>
 
                                   <div className="text-right shrink-0">
-                                    <div className="font-mono font-bold text-emerald-700">
+                                    <div className="font-mono font-bold text-slate-900 text-sm">
                                       {formatCOP(precioPactado)}
                                     </div>
-                                    <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold mt-0.5">
-                                      Pactado: {formatCOP(precioPactado)}
+                                    <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold mt-0.5 inline-flex items-center gap-1">
+                                      ✓ Pactado{pact?.tiempo_entrega_dias ? ` • Entrega: ${pact.tiempo_entrega_dias}d` : ''}{pact?.cantidad_minima_compra ? ` • MOQ: ${pact.cantidad_minima_compra}` : ''}
                                     </Badge>
                                   </div>
                                 </div>
@@ -926,15 +928,35 @@ function NuevaOrdenCompraContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                   {/* Cantidad */}
                   <div className="sm:col-span-3 space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">Cantidad Requerida:</Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-slate-700">Cantidad Requerida:</Label>
+                      {esPrecioPactadoItem && sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra ? (
+                        <span className="text-[10px] font-semibold text-slate-500">
+                          MOQ: {sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra}
+                        </span>
+                      ) : null}
+                    </div>
                     <Input
                       type="number"
                       min="1"
                       step="1"
                       value={cantidadParaAgregar}
                       onChange={(e) => setCantidadParaAgregar(parseFloat(e.target.value) || 0)}
-                      className="bg-white border-slate-200 text-slate-900 text-xs font-mono h-10 rounded-lg"
+                      className={`bg-white text-slate-900 text-xs font-mono h-10 rounded-lg ${
+                        esPrecioPactadoItem &&
+                        sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra &&
+                        cantidadParaAgregar < Number(sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra)
+                          ? 'border-amber-400 ring-1 ring-amber-300'
+                          : 'border-slate-200'
+                      }`}
                     />
+                    {esPrecioPactadoItem &&
+                      sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra &&
+                      cantidadParaAgregar < Number(sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra) && (
+                        <p className="text-[10px] font-semibold text-amber-700 flex items-center gap-1 mt-0.5">
+                          ⚠️ MOQ pactado: {sourcingProveedor.get(articuloSeleccionado.id_componente)?.cantidad_minima_compra} und
+                        </p>
+                      )}
                   </div>
 
                   {/* Precio Unitario */}
@@ -1160,8 +1182,19 @@ function NuevaOrdenCompraContent() {
                             min="1"
                             value={linea.cantidad}
                             onChange={(e) => handleCambiarCantidad(index, parseFloat(e.target.value) || 0)}
-                            className="h-8 text-right font-mono text-xs bg-white border-slate-200 text-slate-900 rounded-md focus:ring-1 focus:ring-blue-500"
+                            className={`h-8 text-right font-mono text-xs bg-white text-slate-900 rounded-md focus:ring-1 focus:ring-blue-500 ${
+                              sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra &&
+                              linea.cantidad < Number(sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra)
+                                ? 'border-amber-400 ring-1 ring-amber-300'
+                                : 'border-slate-200'
+                            }`}
                           />
+                          {sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra &&
+                            linea.cantidad < Number(sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra) && (
+                              <span className="text-[10px] text-amber-700 font-bold block mt-0.5 whitespace-nowrap">
+                                ⚠️ MOQ: {sourcingProveedor.get(linea.id_componente)?.cantidad_minima_compra}
+                              </span>
+                            )}
                         </td>
                         <td className="py-3 px-3 text-right">
                           <Input

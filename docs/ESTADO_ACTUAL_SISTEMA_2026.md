@@ -151,14 +151,18 @@ El portal web administrativo (`apps/admin`) está estructurado en 10 módulos pr
   - Pestañas en la ficha detalle: Información Comercial, Red de Sedes, Equipos Instalados, Bitácora de Novedades, Historial de Servicios.
   - Modal de Vista Previa de Trazabilidad en PDF.
 
-#### 4. Compras y Abastecimiento (`/compras/*`) - 100% Certificado
+#### 4. Compras y Abastecimiento (`/compras/*`) - 100% Certificado y Auditoría Zero-Trust Completada
 - **Páginas:**
   - `/compras/catalogo`: Directorio maestro de recursos (repuestos, insumos, consumibles, herramientas, dotación). Píldoras de arquetipo con micro-contadores certificados (`Todos [26]`, `Insumos [26]`, etc.), selector taxonómico jerárquico in-context y combobox de fabricantes con creación al vuelo.
-  - `/compras/catalogo/[id]`: Ficha 360° del recurso. Hero Header reestructurado a fila inferior dedicada para evitar asfixia tipográfica, visualización de costos en COP, márgenes comerciales, especificaciones técnicas, equivalencias y proveedores autorizados.
+  - `/compras/catalogo/[id]`: Ficha 360° del recurso maestro (2,079 líneas). Pestaña 2 Fuentes de Suministro con simetría bidireccional completa (denominación comercial en facturas, SKU del proveedor, MOQ, marca ofrecida, tiempos y enlace web). Visualización de costos en COP, márgenes comerciales, especificaciones técnicas, equivalencias y proveedores autorizados.
   - `/compras/catalogo/nuevo`: Formulario reactivo de creación y homologación con validación Zero-Trust (1,033 líneas).
   - `/compras/marcas`: Directorio de fabricantes con soporte OEM/Aftermarket y fusión de duplicados (885 líneas).
-  - `/compras/categorias`: Taxonomía jerárquica ilimitada en árbol interactivo con propagación de conteos y enlaces cruzados (615 líneas).
-  - `/compras/proveedores`: Directorio comercial con modal ergonómico de 2 columnas expandido (`sm:max-w-4xl md:max-w-5xl`), condiciones comerciales, micro-portales (`Web ↗` y `GPS ↗`), y micro-copy neutro `0 repuestos` (1,203 líneas).
+  - `/compras/categorias`: Taxonomía jerárquica ilimitada en árbol interactivo con propagación de conteos y enlaces cruzados (615 líneas). Saneamiento taxonómico industrial 100% exacto sobre los 22 repuestos del catálogo (subcategorías de Baterías, Filtros de Aceite, Filtros de Aire, Filtros Hidráulicos y Lubricantes).
+  - `/compras/proveedores`: Directorio comercial (1,309 líneas) con columna de tabla `ACCIONES` debidamente rotulada, botones de acción rápida `Ver Ficha` y `Editar`, modal ergonómico de 2 columnas expandido (`sm:max-w-4xl md:max-w-5xl`), condiciones comerciales, micro-portales (`Web ↗` y `GPS ↗`), y micro-copy neutro.
+  - `/compras/proveedores/[id]`: Ficha 360° Integral de Proveedor (2,881 líneas). 4 Pestañas funcionales sincronizadas con URL (`?tab=catalogo | ordenes | fiscal | trazabilidad`). Centro de Control Contractual y Matriz de Sourcing con denominación comercial de factura y SKU de proveedor. KPIs de lógica contable estricta: "Volumen Comprometido" suma solo órdenes firmes (`ENVIADA`, `PARCIAL`, `COMPLETADA`, `RECIBIDA`), excluyendo borradores y canceladas (monto en borrador detallado en subtexto informativo); KPI "Cumplimiento en Muelle" calculado sobre recepciones físicas reales en `recepciones_compra` (mostrando "Sin evaluar" / "Sin recepciones en muelle" en caso de cero recepciones históricas).
+  - `/compras/ordenes`: Gestión y liquidación de órdenes de compra con micro-filtros por estado FSM y correlativos formales.
+  - `/compras/ordenes/nueva`: Emisión Inteligente de Órdenes de Compra (1,315 líneas). Desplegable predictivo jerárquico (`z-50`, `shadow-2xl`) con badge limpio `✓ Pactado • Entrega: Xd • MOQ: Y`, preselección automática del proveedor proveniente de la URL (`?proveedorId=...`), prellenado de cantidad sugerida basada en el Pedido Mínimo (MOQ $\ge 1$) y alerta preventiva visual si la cantidad es menor al MOQ pactado tanto en el selector interactivo como en la tabla de ítems.
+- **Identidad Global White-Label:** Saneamiento en Topbar (`header.tsx`) para mostrar `'Administrador del Sistema'`.
 
 #### 5. Parque de Equipos (`/equipos`) - 90% Completado
 - **Páginas:** Listado (`/equipos`), Detalle (`/equipos/[id]`), Edición (`/equipos/[id]/editar`).

@@ -353,7 +353,7 @@ export class ProveedoresService {
       where: { id_proveedor: id, activo: true },
     });
 
-    // Consultar órdenes de compra para KPIs financieros
+    // Consultar órdenes de compra para KPIs financieros y logísticos
     const ordenes = await this.prisma.ordenes_compra.findMany({
       where: { id_proveedor: id },
       include: {
@@ -364,32 +364,66 @@ export class ProveedoresService {
       orderBy: { id_orden_compra: 'desc' },
     });
 
-    let montoTotal = 0;
+    let montoComprometido = 0;
+    let montoEnBorrador = 0;
     let ordenesCompletadas = 0;
+
     for (const o of ordenes) {
-      if ((o.estado as string) !== 'ANULADA') {
-        for (const d of o.ordenes_compra_detalle) {
-          const sub = d.subtotal ? Number(d.subtotal) : Number(d.cantidad) * Number(d.precio_unitario);
-          montoTotal += sub;
-        }
+      const estadoStr = String(o.estado || '').toUpperCase();
+      let totalOrden = 0;
+      for (const d of o.ordenes_compra_detalle) {
+        const sub = d.subtotal ? Number(d.subtotal) : Number(d.cantidad) * Number(d.precio_unitario);
+        totalOrden += sub;
       }
-      if ((o.estado as string) === 'COMPLETADA' || (o.estado as string) === 'RECIBIDA') {
+
+      // Solo sumar a volumen comprometido órdenes emitidas firmes (excluyendo estrictamente BORRADOR y CANCELADA/ANULADA)
+      if (['ENVIADA', 'PARCIAL', 'COMPLETADA', 'RECIBIDA'].includes(estadoStr)) {
+        montoComprometido += totalOrden;
+      } else if (estadoStr === 'BORRADOR') {
+        montoEnBorrador += totalOrden;
+      }
+
+      if (['COMPLETADA', 'RECIBIDA'].includes(estadoStr)) {
         ordenesCompletadas++;
       }
     }
 
-    const totalOrdenes = ordenes.length;
-    const cumplimiento = totalOrdenes > 0 
-      ? Math.min(100, Math.round(((ordenesCompletadas + 1) / (totalOrdenes + 1)) * 100))
-      : 98.5;
+    // Consultar recepciones físicas en muelle (recepciones_compra) para este proveedor
+    const recepciones = await this.prisma.recepciones_compra.findMany({
+      where: {
+        ordenes_compra: {
+          id_proveedor: id,
+        },
+      },
+      select: {
+        cantidad_recibida: true,
+        cantidad_aceptada: true,
+      },
+    });
+
+    let totalRecibidoMuelle = 0;
+    let totalAceptadoMuelle = 0;
+
+    for (const r of recepciones) {
+      totalRecibidoMuelle += Number(r.cantidad_recibida || 0);
+      totalAceptadoMuelle += Number(r.cantidad_aceptada || 0);
+    }
+
+    // Cumplimiento en muelle determinista: (Unidades Aceptadas / Total Unidades Recibidas) * 100
+    // Si no registra recepciones físicas, se retorna null (Sin evaluar / Sin recepciones)
+    const cumplimientoMuelle = totalRecibidoMuelle > 0
+      ? Math.round((totalAceptadoMuelle / totalRecibidoMuelle) * 100)
+      : null;
 
     return {
       proveedor,
       kpis: {
         total_articulos_homologados: totalRepuestos,
-        total_ordenes_compra: totalOrdenes,
-        monto_total_comprado: montoTotal,
-        cumplimiento_calidad: cumplimiento,
+        total_ordenes_compra: ordenes.length,
+        monto_total_comprado: montoComprometido,
+        monto_en_borrador: montoEnBorrador,
+        cumplimiento_calidad: cumplimientoMuelle,
+        total_recepciones: recepciones.length,
       },
       ordenes_recientes: ordenes.slice(0, 5),
     };

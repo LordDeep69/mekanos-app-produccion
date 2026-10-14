@@ -365,7 +365,9 @@ export interface ProveedorKPIs {
   total_articulos_homologados: number;
   total_ordenes_compra: number;
   monto_total_comprado: number;
-  cumplimiento_calidad: number;
+  monto_en_borrador?: number;
+  cumplimiento_calidad: number | null;
+  total_recepciones?: number;
 }
 
 export interface ProveedorFicha360Response {

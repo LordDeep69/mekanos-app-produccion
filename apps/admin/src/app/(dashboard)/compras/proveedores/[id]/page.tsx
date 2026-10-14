@@ -895,13 +895,15 @@ export default function FichaProveedor360Page() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Total Facturado
+                  Volumen Comprometido
                 </p>
                 <p className="mt-1 text-2xl font-black text-slate-900">
                   {formatMonedaCOP(kpis.monto_total_comprado)}
                 </p>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Volumen neto acumulado
+                  {kpis.monto_en_borrador && kpis.monto_en_borrador > 0
+                    ? `En borrador: ${formatMonedaCOP(kpis.monto_en_borrador)}`
+                    : "Órdenes emitidas y en tránsito"}
                 </p>
               </div>
               <div className="h-12 w-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -920,10 +922,14 @@ export default function FichaProveedor360Page() {
                   Cumplimiento en Muelle
                 </p>
                 <p className="mt-1 text-2xl font-black text-slate-900">
-                  {kpis.cumplimiento_calidad}%
+                  {kpis.cumplimiento_calidad !== null && kpis.cumplimiento_calidad !== undefined
+                    ? `${kpis.cumplimiento_calidad}%`
+                    : "Sin evaluar"}
                 </p>
-                <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
-                  Conformidad y puntualidad
+                <p className={`text-[11px] font-medium mt-0.5 ${kpis.cumplimiento_calidad !== null && kpis.cumplimiento_calidad !== undefined ? "text-emerald-700" : "text-slate-400"}`}>
+                  {kpis.cumplimiento_calidad !== null && kpis.cumplimiento_calidad !== undefined
+                    ? "Conformidad y puntualidad"
+                    : "Sin recepciones en muelle"}
                 </p>
               </div>
               <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -999,7 +1005,7 @@ export default function FichaProveedor360Page() {
                     className="h-9 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm shrink-0"
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    + Homologar Repuesto
+                    Homologar Repuesto
                   </Button>
                 </div>
               </div>
@@ -1231,7 +1237,7 @@ export default function FichaProveedor360Page() {
                     className="h-9 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    + Emitir Orden de Compra
+                    Emitir Orden de Compra
                   </Button>
                 </Link>
               </div>
