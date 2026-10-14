@@ -35,7 +35,7 @@ import {
 import { toast } from 'sonner';
 
 import { comprasService } from '@/lib/api/compras.service';
-import { ProveedorCompleto } from '@/types/compras.types';
+import { ProveedorCompleto, getNombreProveedor } from '@/types/compras.types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -248,7 +248,7 @@ export default function ProveedoresPage() {
   // Filtrado reactivo
   const proveedoresFiltrados = useMemo(() => {
     return proveedores.filter((p) => {
-      const nombre = (p.persona?.razon_social || p.persona?.nombre_comercial || '').toLowerCase();
+      const nombre = getNombreProveedor(p.persona, p.id_proveedor).toLowerCase();
       const nit = (p.persona?.numero_identificacion || '').toLowerCase();
       const matchSearch =
         !search.trim() ||
@@ -555,20 +555,20 @@ export default function ProveedoresPage() {
         </CardContent>
       </Card>
 
-      {/* TABLA DE PROVEEDORES: CALIBRADA SIN SCROLL HORIZONTAL */}
+      {/* TABLA DE PROVEEDORES: RESPONSIVE CON SCROLL HORIZONTAL FLUIDO */}
       <Card className="border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div className="w-full">
-          <table className="w-full text-left text-sm text-gray-600 table-auto">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-600 table-auto min-w-[1100px]">
             <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3.5">Proveedor / Razón Social</th>
-                <th className="px-3.5 py-3.5">Identificación / NIT</th>
-                <th className="px-3.5 py-3.5">Categoría & Tipo</th>
-                <th className="px-3 py-3.5 text-center">Artículos</th>
-                <th className="px-3.5 py-3.5">Contacto & Portales</th>
-                <th className="px-3.5 py-3.5">Condiciones Comerciales</th>
-                <th className="px-3 py-3.5 text-center">Estado</th>
-                <th className="px-3.5 py-3.5 text-center min-w-[150px]">ACCIONES</th>
+                <th className="px-4 py-3.5 min-w-[220px]">Proveedor / Razón Social</th>
+                <th className="px-3.5 py-3.5 whitespace-nowrap">Identificación / NIT</th>
+                <th className="px-3.5 py-3.5 whitespace-nowrap">Categoría & Tipo</th>
+                <th className="px-3 py-3.5 text-center whitespace-nowrap">Artículos</th>
+                <th className="px-3.5 py-3.5 min-w-[190px]">Contacto & Portales</th>
+                <th className="px-3.5 py-3.5 whitespace-nowrap min-w-[160px]">Condiciones Comerciales</th>
+                <th className="px-3 py-3.5 text-center whitespace-nowrap">Estado</th>
+                <th className="px-4 py-3.5 text-center min-w-[210px] whitespace-nowrap">ACCIONES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -601,10 +601,7 @@ export default function ProveedoresPage() {
                 </tr>
               ) : (
                 proveedoresFiltrados.map((prov) => {
-                  const nombre =
-                    prov.persona?.razon_social ||
-                    prov.persona?.nombre_comercial ||
-                    `Proveedor #${prov.id_proveedor}`;
+                  const nombre = getNombreProveedor(prov.persona, prov.id_proveedor);
                   const nit = prov.persona?.numero_identificacion || '--';
                   const tel = prov.persona?.telefono_principal;
                   const email = prov.persona?.email_principal;
@@ -803,16 +800,16 @@ export default function ProveedoresPage() {
                       </td>
 
                       {/* Acciones: Ver Ficha 360° y Editar */}
-                      <td className="px-3.5 py-3.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="px-4 py-3.5 text-center whitespace-nowrap min-w-[210px]">
+                        <div className="flex items-center justify-center gap-2 shrink-0">
                           <Link href={`/compras/proveedores/${prov.id_proveedor}`}>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-7.5 px-2.5 text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 font-semibold shadow-2xs"
+                              className="h-8 px-2.5 text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 font-semibold shadow-2xs whitespace-nowrap shrink-0"
                               title="Ver Ficha 360° del Proveedor"
                             >
-                              <Eye className="h-3.5 w-3.5 mr-1 text-blue-600" />
+                              <Eye className="h-3.5 w-3.5 mr-1 text-blue-600 shrink-0" />
                               Ver Ficha
                             </Button>
                           </Link>
@@ -820,10 +817,10 @@ export default function ProveedoresPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => abrirEditarModal(prov)}
-                            className="h-7.5 px-2.5 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 border-slate-200 font-medium shadow-2xs"
+                            className="h-8 px-2.5 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 border-slate-200 font-medium shadow-2xs whitespace-nowrap shrink-0"
                             title="Editar Datos del Proveedor"
                           >
-                            <Pencil className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                            <Pencil className="h-3.5 w-3.5 mr-1 text-slate-500 shrink-0" />
                             Editar
                           </Button>
                         </div>
