@@ -148,6 +148,8 @@ export interface ArticuloSourcing {
   descripcion_corta: string;
   referencia_fabricante: string;
   referencia_proveedor: string | null;
+  nombre_segun_proveedor?: string | null;
+  marca_ofrecida?: string | null;
   costo_actual: number;
   moneda: string;
   tiempo_entrega_dias: number | null;

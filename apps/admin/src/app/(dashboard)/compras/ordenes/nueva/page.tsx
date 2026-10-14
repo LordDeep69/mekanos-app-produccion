@@ -7,9 +7,9 @@
 
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   ArrowLeft,
@@ -69,11 +69,22 @@ interface LineaOrdenCompra {
   es_pactado: boolean;
   vincular_proveedor: boolean;
   codigo_proveedor?: string;
+  nombre_segun_proveedor?: string | null;
+  marca_ofrecida?: string | null;
   observaciones?: string;
 }
 
-export default function NuevaOrdenCompraPage() {
+function NuevaOrdenCompraContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Detección y extracción robusta de proveedor preseleccionado desde URL (?proveedorId=... o ?idProveedor=...)
+  const proveedorIdParam = searchParams.get('proveedorId') || searchParams.get('idProveedor');
+  const initialProveedorId = useMemo(() => {
+    if (!proveedorIdParam) return null;
+    const parsed = parseInt(proveedorIdParam, 10);
+    return isNaN(parsed) || parsed <= 0 ? null : parsed;
+  }, [proveedorIdParam]);
 
   // Estados de carga
   const [loadingInicial, setLoadingInicial] = useState(true);
@@ -84,8 +95,8 @@ export default function NuevaOrdenCompraPage() {
   const [catalogoArticulos, setCatalogoArticulos] = useState<ArticuloMaestro[]>([]);
   const [sourcingProveedor, setSourcingProveedor] = useState<Map<number, ArticuloSourcing>>(new Map());
 
-  // Formulario cabecera
-  const [idProveedorSeleccionado, setIdProveedorSeleccionado] = useState<number | null>(null);
+  // Formulario cabecera (preseleccionado automáticamente si viene en searchParams)
+  const [idProveedorSeleccionado, setIdProveedorSeleccionado] = useState<number | null>(initialProveedorId);
   const [numeroOrdenPersonalizado, setNumeroOrdenPersonalizado] = useState<string>('');
   const [esNumeroAutomatico, setEsNumeroAutomatico] = useState<boolean>(true);
   const [fechaNecesidad, setFechaNecesidad] = useState<string>('');
@@ -121,7 +132,14 @@ export default function NuevaOrdenCompraPage() {
     }).format(num);
   };
 
-  // Cargar catálogo inicial de proveedores y artículos
+  // Sincronizar selección de proveedor si el query parameter cambia dinámicamente
+  useEffect(() => {
+    if (initialProveedorId && idProveedorSeleccionado !== initialProveedorId) {
+      setIdProveedorSeleccionado(initialProveedorId);
+    }
+  }, [initialProveedorId, idProveedorSeleccionado]);
+
+  // Cargar catálogo inicial de proveedores y artículos (garantizando inclusión del proveedor preseleccionado)
   useEffect(() => {
     const init = async () => {
       setLoadingInicial(true);
@@ -131,7 +149,19 @@ export default function NuevaOrdenCompraPage() {
           comprasService.getArticulos({ activo: true, es_comprable: true, limit: 200 }),
         ]);
 
-        setProveedores(resProv.data || []);
+        let provList = resProv.data || [];
+        if (initialProveedorId && !provList.some((p) => p.id_proveedor === initialProveedorId)) {
+          try {
+            const ficha = await comprasService.getProveedorFicha360(initialProveedorId);
+            if (ficha?.proveedor) {
+              provList = [ficha.proveedor, ...provList];
+            }
+          } catch (e) {
+            console.warn('No se pudo precargar ficha del proveedor preseleccionado:', e);
+          }
+        }
+
+        setProveedores(provList);
         const articulos = (resArt as any)?.items || (resArt as any)?.data || [];
         setCatalogoArticulos(articulos);
       } catch (e) {
@@ -143,7 +173,7 @@ export default function NuevaOrdenCompraPage() {
     };
 
     init();
-  }, []);
+  }, [initialProveedorId]);
 
   // Cerrar menú de autocompletado si hace clic afuera
   useEffect(() => {
@@ -242,8 +272,18 @@ export default function NuevaOrdenCompraPage() {
       const cod = (art.codigo_interno || '').toLowerCase();
       const ref = (art.referencia_fabricante || '').toLowerCase();
       const desc = (art.descripcion_corta || '').toLowerCase();
-      const refProv = (sourcingProveedor.get(art.id_componente)?.referencia_proveedor || '').toLowerCase();
-      return cod.includes(q) || ref.includes(q) || desc.includes(q) || refProv.includes(q);
+      const pact = sourcingProveedor.get(art.id_componente);
+      const refProv = (pact?.referencia_proveedor || '').toLowerCase();
+      const nomProv = (pact?.nombre_segun_proveedor || '').toLowerCase();
+      const marcaOf = (pact?.marca_ofrecida || '').toLowerCase();
+      return (
+        cod.includes(q) ||
+        ref.includes(q) ||
+        desc.includes(q) ||
+        refProv.includes(q) ||
+        nomProv.includes(q) ||
+        marcaOf.includes(q)
+      );
     };
 
     const pactados: ArticuloMaestro[] = [];
@@ -301,6 +341,7 @@ export default function NuevaOrdenCompraPage() {
       return;
     }
 
+    const pactado = sourcingProveedor.get(articuloSeleccionado.id_componente);
     const nuevaLinea: LineaOrdenCompra = {
       id_temp: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       id_componente: articuloSeleccionado.id_componente,
@@ -314,6 +355,8 @@ export default function NuevaOrdenCompraPage() {
       es_pactado: esPrecioPactadoItem,
       vincular_proveedor: vincularParaAgregar,
       codigo_proveedor: codigoProveedorParaAgregar.trim() || undefined,
+      nombre_segun_proveedor: pactado?.nombre_segun_proveedor || undefined,
+      marca_ofrecida: pactado?.marca_ofrecida || undefined,
       observaciones: obsParaAgregar.trim() || undefined,
     };
 
@@ -756,6 +799,25 @@ export default function NuevaOrdenCompraPage() {
                                         {art.descripcion_corta}
                                       </span>
                                     </div>
+
+                                    {/* Denominación Comercial registrada por el Proveedor */}
+                                    {pact?.nombre_segun_proveedor && (
+                                      <div className="text-[11px] text-slate-600 mt-1 flex items-center gap-1.5 flex-wrap">
+                                        <span className="inline-flex items-center gap-1 text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200/90 shrink-0">
+                                          <Tag className="w-2.5 h-2.5 text-emerald-600" />
+                                          Factura Prov:
+                                        </span>
+                                        <span className="font-medium text-slate-800 italic truncate max-w-md">
+                                          &ldquo;{pact.nombre_segun_proveedor}&rdquo;
+                                        </span>
+                                        {pact.marca_ofrecida && (
+                                          <span className="text-[10px] text-slate-500 font-normal shrink-0">
+                                            • Marca: <strong className="text-slate-700 font-semibold">{pact.marca_ofrecida}</strong>
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+
                                     <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
                                       <span>Unidad: {art.unidad_medida || 'UND'}</span>
                                       {art.referencia_fabricante && <span>• Ref Fab: {art.referencia_fabricante}</span>}
@@ -839,6 +901,28 @@ export default function NuevaOrdenCompraPage() {
             {/* Parámetros de la línea a agregar (Aparece cuando hay artículo seleccionado) */}
             {articuloSeleccionado && (
               <div className="space-y-3 pt-3 border-t border-slate-200">
+                {/* Banner de confirmación de artículo homologado y denominación del proveedor */}
+                {sourcingProveedor.get(articuloSeleccionado.id_componente)?.nombre_segun_proveedor && (
+                  <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                        Denominación Proveedor:
+                      </span>
+                      <span className="italic font-semibold text-emerald-950 truncate">
+                        &ldquo;{sourcingProveedor.get(articuloSeleccionado.id_componente)?.nombre_segun_proveedor}&rdquo;
+                      </span>
+                      {sourcingProveedor.get(articuloSeleccionado.id_componente)?.marca_ofrecida && (
+                        <span className="text-[11px] text-emerald-700 font-medium shrink-0">
+                          (Marca: {sourcingProveedor.get(articuloSeleccionado.id_componente)?.marca_ofrecida})
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-100/60 px-2 py-0.5 rounded-full shrink-0">
+                      Homologado
+                    </span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                   {/* Cantidad */}
                   <div className="sm:col-span-3 space-y-1">
@@ -1010,6 +1094,19 @@ export default function NuevaOrdenCompraPage() {
                         </td>
                         <td className="py-3 px-3">
                           <div className="font-semibold text-slate-900">{linea.descripcion_corta}</div>
+                          {linea.nombre_segun_proveedor && (
+                            <div className="text-[11px] text-slate-600 font-medium italic mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 not-italic">
+                                Factura Prov:
+                              </span>
+                              <span>&ldquo;{linea.nombre_segun_proveedor}&rdquo;</span>
+                              {linea.marca_ofrecida && (
+                                <span className="text-slate-400 font-normal not-italic">
+                                  ({linea.marca_ofrecida})
+                                </span>
+                              )}
+                            </div>
+                          )}
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {linea.es_pactado ? (
                               <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
@@ -1177,5 +1274,19 @@ export default function NuevaOrdenCompraPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+export default function NuevaOrdenCompraPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen p-8 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
+      }
+    >
+      <NuevaOrdenCompraContent />
+    </Suspense>
   );
 }
