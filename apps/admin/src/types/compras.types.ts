@@ -398,8 +398,11 @@ export interface ArticuloHomologadoProveedor extends ArticuloProveedor {
 export interface HomologarArticuloPayload {
   id_componente: number;
   referencia_proveedor: string;
+  nombre_segun_proveedor?: string;
   costo_actual: number;
   tiempo_entrega_dias?: number;
+  cantidad_minima_compra?: number;
+  url_producto_proveedor?: string;
   es_proveedor_preferido?: boolean;
   marca_ofrecida?: string;
   id_marca_ofrecida?: number;
@@ -409,8 +412,13 @@ export interface HomologarArticuloPayload {
 export interface ActualizarArticuloProveedorPayload {
   nuevo_costo?: number;
   referencia_proveedor?: string;
+  nombre_segun_proveedor?: string;
+  marca_ofrecida?: string;
+  id_marca_ofrecida?: number;
+  cantidad_minima_compra?: number;
   tiempo_entrega_dias?: number;
   es_proveedor_preferido?: boolean;
+  url_producto_proveedor?: string;
   observaciones?: string;
 }
 

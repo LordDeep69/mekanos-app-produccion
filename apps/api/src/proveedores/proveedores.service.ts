@@ -411,6 +411,8 @@ export class ProveedoresService {
       const q = search.trim();
       where.OR = [
         { referencia_proveedor: { contains: q, mode: 'insensitive' } },
+        { nombre_segun_proveedor: { contains: q, mode: 'insensitive' } },
+        { marca_ofrecida: { contains: q, mode: 'insensitive' } },
         {
           catalogo_componentes: {
             OR: [
@@ -484,7 +486,7 @@ export class ProveedoresService {
         });
       }
 
-      // Upsert atómico en articulos_proveedores
+      // Upsert atómico en articulos_proveedores con estructura de datos completa
       const vinculo = await tx.articulos_proveedores.upsert({
         where: {
           id_componente_id_proveedor: {
@@ -496,11 +498,14 @@ export class ProveedoresService {
           id_componente: dto.id_componente,
           id_proveedor: idProveedor,
           referencia_proveedor: ref,
+          nombre_segun_proveedor: dto.nombre_segun_proveedor?.trim() || null,
           marca_ofrecida: dto.marca_ofrecida?.trim() || componente.marca || null,
           id_marca_ofrecida: dto.id_marca_ofrecida || null,
           costo_actual: new Prisma.Decimal(dto.costo_actual),
           moneda: 'COP',
           tiempo_entrega_dias: dto.tiempo_entrega_dias ?? 1,
+          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : new Prisma.Decimal(1),
+          url_producto_proveedor: dto.url_producto_proveedor?.trim() || null,
           es_proveedor_preferido: dto.es_proveedor_preferido ?? false,
           activo: true,
           notas: dto.notas?.trim() || null,
@@ -508,10 +513,13 @@ export class ProveedoresService {
         },
         update: {
           referencia_proveedor: ref,
+          nombre_segun_proveedor: dto.nombre_segun_proveedor !== undefined ? dto.nombre_segun_proveedor.trim() || null : undefined,
           marca_ofrecida: dto.marca_ofrecida?.trim() || componente.marca || null,
           id_marca_ofrecida: dto.id_marca_ofrecida || undefined,
           costo_actual: new Prisma.Decimal(dto.costo_actual),
           tiempo_entrega_dias: dto.tiempo_entrega_dias ?? 1,
+          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : undefined,
+          url_producto_proveedor: dto.url_producto_proveedor?.trim() || null,
           es_proveedor_preferido: dto.es_proveedor_preferido ?? false,
           activo: true,
           notas: dto.notas?.trim() || null,
@@ -537,7 +545,7 @@ export class ProveedoresService {
           origen_cambio: origen_costo_enum.ACTUALIZACION_PROVEEDOR,
           observaciones:
             dto.notas?.trim() ||
-            `Homologación directa desde Ficha Proveedor #${idProveedor} con ref ${ref}`,
+            `Homologación directa desde Ficha Proveedor #${idProveedor} con ref ${ref}${dto.nombre_segun_proveedor ? ` ("${dto.nombre_segun_proveedor.trim()}")` : ''}`,
           id_usuario: userId || null,
         },
       });
@@ -603,9 +611,15 @@ export class ProveedoresService {
         },
         data: {
           referencia_proveedor: dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
+          nombre_segun_proveedor: dto.nombre_segun_proveedor !== undefined ? (dto.nombre_segun_proveedor.trim() || null) : vinculoExistente.nombre_segun_proveedor,
+          marca_ofrecida: dto.marca_ofrecida !== undefined ? (dto.marca_ofrecida.trim() || null) : vinculoExistente.marca_ofrecida,
+          id_marca_ofrecida: dto.id_marca_ofrecida !== undefined ? dto.id_marca_ofrecida : vinculoExistente.id_marca_ofrecida,
+          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : vinculoExistente.cantidad_minima_compra,
           costo_actual: new Prisma.Decimal(nuevoCosto),
           tiempo_entrega_dias: dto.tiempo_entrega_dias !== undefined ? dto.tiempo_entrega_dias : vinculoExistente.tiempo_entrega_dias,
           es_proveedor_preferido: esPreferido,
+          url_producto_proveedor: dto.url_producto_proveedor !== undefined ? (dto.url_producto_proveedor.trim() || null) : vinculoExistente.url_producto_proveedor,
+          notas: dto.observaciones !== undefined ? (dto.observaciones.trim() || null) : vinculoExistente.notas,
           modificado_por: userId || null,
         },
         include: {

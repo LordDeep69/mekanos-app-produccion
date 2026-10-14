@@ -24,12 +24,14 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  Copy,
   CreditCard,
   DollarSign,
   ExternalLink,
   Eye,
   FileText,
   Globe,
+  Info,
   Layers,
   Mail,
   MapPin,
@@ -230,18 +232,25 @@ export default function FichaProveedor360Page() {
   const [formHomologar, setFormHomologar] = useState<HomologarArticuloPayload>({
     id_componente: 0,
     referencia_proveedor: '',
+    nombre_segun_proveedor: '',
+    marca_ofrecida: '',
     costo_actual: 0,
     tiempo_entrega_dias: 1,
+    cantidad_minima_compra: 1,
+    url_producto_proveedor: '',
     es_proveedor_preferido: false,
-    marca_ofrecida: '',
     notas: '',
   });
 
   // Formulario de Edición de Homologación
   const [formEditHomologacion, setFormEditHomologacion] = useState({
     referencia_proveedor: '',
+    nombre_segun_proveedor: '',
+    marca_ofrecida: '',
     nuevo_costo: 0,
     tiempo_entrega_dias: 1,
+    cantidad_minima_compra: 1,
+    url_producto_proveedor: '',
     es_proveedor_preferido: false,
     observaciones: '',
   });
@@ -337,10 +346,19 @@ export default function FichaProveedor360Page() {
     const q = busquedaArticulo.toLowerCase().trim();
     return articulosHomologados.filter((a) => {
       const refProv = (a.referencia_proveedor || '').toLowerCase();
+      const nomProv = (a.nombre_segun_proveedor || '').toLowerCase();
+      const marcaOf = (a.marca_ofrecida || '').toLowerCase();
       const codMek = (a.catalogo_componentes?.codigo_interno || '').toLowerCase();
       const desc = (a.catalogo_componentes?.descripcion_corta || '').toLowerCase();
       const refFab = (a.catalogo_componentes?.referencia_fabricante || '').toLowerCase();
-      return refProv.includes(q) || codMek.includes(q) || desc.includes(q) || refFab.includes(q);
+      return (
+        refProv.includes(q) ||
+        nomProv.includes(q) ||
+        marcaOf.includes(q) ||
+        codMek.includes(q) ||
+        desc.includes(q) ||
+        refFab.includes(q)
+      );
     });
   }, [articulosHomologados, busquedaArticulo]);
 
@@ -359,10 +377,13 @@ export default function FichaProveedor360Page() {
     setFormHomologar({
       id_componente: 0,
       referencia_proveedor: '',
+      nombre_segun_proveedor: '',
+      marca_ofrecida: '',
       costo_actual: 0,
       tiempo_entrega_dias: proveedor?.tiempo_entrega_dias || 1,
+      cantidad_minima_compra: 1,
+      url_producto_proveedor: '',
       es_proveedor_preferido: false,
-      marca_ofrecida: '',
       notas: '',
     });
     setModalHomologarOpen(true);
@@ -374,9 +395,12 @@ export default function FichaProveedor360Page() {
     setFormHomologar((prev) => ({
       ...prev,
       id_componente: c.id_componente,
-      referencia_proveedor: prev.referencia_proveedor || c.referencia_fabricante || '',
+      // Sugerencia inicial para el nombre según proveedor, completamente editable
+      nombre_segun_proveedor: prev.nombre_segun_proveedor || c.descripcion_corta || '',
+      marca_ofrecida: prev.marca_ofrecida || c.marca || '',
+      // No sobreescribir la referencia del proveedor automáticamente; dejamos que ingrese su SKU comercial
+      referencia_proveedor: prev.referencia_proveedor || '',
       costo_actual: prev.costo_actual > 0 ? prev.costo_actual : Number(c.precio_compra) || 0,
-      marca_ofrecida: c.marca || '',
     }));
     setMenuComponentesAbierto(false);
   };
@@ -417,10 +441,14 @@ export default function FichaProveedor360Page() {
     setArticuloSeleccionadoEdit(art);
     setFormEditHomologacion({
       referencia_proveedor: art.referencia_proveedor || '',
+      nombre_segun_proveedor: art.nombre_segun_proveedor || art.catalogo_componentes?.descripcion_corta || '',
+      marca_ofrecida: art.marca_ofrecida || art.catalogo_componentes?.marcas?.nombre || (art.catalogo_componentes as any)?.marca || '',
       nuevo_costo: Number(art.costo_actual) || 0,
       tiempo_entrega_dias: art.tiempo_entrega_dias || 1,
+      cantidad_minima_compra: Number(art.cantidad_minima_compra) || 1,
+      url_producto_proveedor: art.url_producto_proveedor || '',
       es_proveedor_preferido: Boolean(art.es_proveedor_preferido),
-      observaciones: '',
+      observaciones: art.notas || '',
     });
     setModalEditarHomologacionOpen(true);
   };
@@ -429,6 +457,15 @@ export default function FichaProveedor360Page() {
   const handleGuardarEdicionHomologacion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!articuloSeleccionadoEdit) return;
+
+    if (!formEditHomologacion.referencia_proveedor.trim()) {
+      toast.error('La referencia o código de facturación del proveedor es obligatoria.');
+      return;
+    }
+    if (formEditHomologacion.nuevo_costo <= 0) {
+      toast.error('El costo pactado debe ser mayor a 0 COP.');
+      return;
+    }
 
     try {
       setIsSubmittingHomologacion(true);
@@ -1047,6 +1084,18 @@ export default function FichaProveedor360Page() {
                               <p className="font-semibold text-slate-800 text-xs truncate" title={descripcion}>
                                 {descripcion}
                               </p>
+                              {art.nombre_segun_proveedor &&
+                                art.nombre_segun_proveedor.trim().toLowerCase() !== descripcion.trim().toLowerCase() && (
+                                  <p
+                                    className="text-[11px] text-blue-700 font-medium truncate mt-0.5 flex items-center gap-1"
+                                    title={art.nombre_segun_proveedor}
+                                  >
+                                    <span className="text-[9px] uppercase font-bold text-blue-600 bg-blue-50 px-1 py-0.2 rounded border border-blue-200 shrink-0">
+                                      Factura:
+                                    </span>
+                                    <span className="truncate">{art.nombre_segun_proveedor}</span>
+                                  </p>
+                                )}
                               <div className="flex items-center gap-2 mt-0.5">
                                 {marca && (
                                   <Badge
@@ -1066,17 +1115,37 @@ export default function FichaProveedor360Page() {
 
                             {/* Ref. Homóloga Proveedor */}
                             <td className="px-3.5 py-3.5 whitespace-nowrap">
-                              <Badge
-                                variant="outline"
-                                className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50/60 border-indigo-200"
-                              >
-                                {art.referencia_proveedor}
-                              </Badge>
-                              {art.marca_ofrecida && art.marca_ofrecida !== marca && (
-                                <span className="block text-[10px] text-slate-400 mt-0.5">
-                                  Marca: {art.marca_ofrecida}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                <Badge
+                                  variant="outline"
+                                  className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50/60 border-indigo-200"
+                                >
+                                  {art.referencia_proveedor}
+                                </Badge>
+                                {art.url_producto_proveedor && (
+                                  <a
+                                    href={art.url_producto_proveedor}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-slate-400 hover:text-blue-600 transition-colors"
+                                    title="Ver producto en catálogo web del proveedor"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                                {art.marca_ofrecida && (
+                                  <span>
+                                    Marca: <strong className="text-slate-600">{art.marca_ofrecida}</strong>
+                                  </span>
+                                )}
+                                {Number(art.cantidad_minima_compra) > 1 && (
+                                  <span>
+                                    MOQ: <strong className="text-slate-600">{art.cantidad_minima_compra}</strong>
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {/* Costo Pactado */}
@@ -1499,11 +1568,11 @@ export default function FichaProveedor360Page() {
 
       {/* MODAL ENTERPRISE: + HOMOLOGAR REPUESTO */}
       <Dialog open={modalHomologarOpen} onOpenChange={setModalHomologarOpen}>
-        <DialogContent className="sm:max-w-xl w-full p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden">
-          <form onSubmit={handleGuardarHomologacion}>
-            <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50/70">
+        <DialogContent className="sm:max-w-2xl w-full p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <form onSubmit={handleGuardarHomologacion} className="flex flex-col flex-1 overflow-hidden">
+            <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
                   <Package className="h-5 w-5" />
                 </div>
                 <div>
@@ -1511,163 +1580,359 @@ export default function FichaProveedor360Page() {
                     Homologar Repuesto Comercial
                   </DialogTitle>
                   <DialogDescription className="text-xs text-slate-500">
-                    Vincula un artículo del catálogo maestro con la referencia y costo pactado con {nombre}.
+                    Vincula un artículo del catálogo maestro con la ficha comercial, código de facturación y costo pactado con {nombre}.
                   </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
 
-            <div className="p-6 space-y-4 text-xs">
+            <div className="p-6 space-y-4 text-xs overflow-y-auto max-h-[calc(90vh-140px)]">
               {/* 1. Selector Searchable del Catálogo Maestro */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">
-                  Artículo del Catálogo Maestro *
-                </Label>
-                <div className="relative">
-                  <div
-                    onClick={() => setMenuComponentesAbierto(!menuComponentesAbierto)}
-                    className="flex items-center justify-between w-full h-10 px-3 border border-slate-200 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors"
-                  >
-                    {componenteSeleccionado ? (
-                      <div className="truncate">
-                        <strong className="text-slate-900 font-mono mr-2">
-                          {componenteSeleccionado.codigo_interno || `ID #${componenteSeleccionado.id_componente}`}
-                        </strong>
-                        <span className="text-slate-700 font-medium">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Package className="h-3.5 w-3.5 text-blue-600" />
+                    Artículo Base del Catálogo Maestro *
+                  </Label>
+                  {componenteSeleccionado && (
+                    <button
+                      type="button"
+                      onClick={() => setMenuComponentesAbierto(true)}
+                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                    >
+                      Cambiar repuesto maestro
+                    </button>
+                  )}
+                </div>
+
+                {!componenteSeleccionado || menuComponentesAbierto ? (
+                  <div className="relative">
+                    <div
+                      onClick={() => setMenuComponentesAbierto(!menuComponentesAbierto)}
+                      className="flex items-center justify-between w-full h-10 px-3 border border-slate-200 rounded-xl bg-white cursor-pointer hover:border-blue-400 transition-colors shadow-sm"
+                    >
+                      {componenteSeleccionado ? (
+                        <div className="truncate text-xs">
+                          <strong className="text-slate-900 font-mono mr-2">
+                            {componenteSeleccionado.codigo_interno || `REF-${componenteSeleccionado.id_componente}`}
+                          </strong>
+                          <span className="text-slate-700 font-medium">
+                            {componenteSeleccionado.descripcion_corta}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs">
+                          Selecciona o busca un componente del catálogo...
+                        </span>
+                      )}
+                      <Search className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+                    </div>
+
+                    {menuComponentesAbierto && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-2 max-h-60 overflow-y-auto">
+                        <Input
+                          placeholder="Filtrar por nombre, SKU o marca..."
+                          value={busquedaComponenteModal}
+                          onChange={(e) => setBusquedaComponenteModal(e.target.value)}
+                          className="h-8 text-xs border-slate-200"
+                          autoFocus
+                        />
+                        <div className="divide-y divide-slate-100">
+                          {cargandoCatalogoMaestro ? (
+                            <div className="py-6 flex flex-col items-center justify-center gap-2 text-xs text-slate-500">
+                              <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
+                              <span>Cargando catálogo maestro...</span>
+                            </div>
+                          ) : componentesFiltradosModal.length === 0 ? (
+                            <div className="py-6 text-center text-xs text-slate-400">
+                              No se encontraron artículos
+                            </div>
+                          ) : (
+                            componentesFiltradosModal.map((c) => (
+                              <div
+                                key={c.id_componente}
+                                onClick={() => handleSeleccionarComponente(c)}
+                                className="p-2.5 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-mono font-bold text-slate-900 text-xs">
+                                    {c.codigo_interno || `REF-${c.id_componente}`}
+                                  </span>
+                                  {c.marca && (
+                                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200 bg-white">
+                                      {c.marca}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-700 truncate font-semibold mt-0.5">
+                                  {c.descripcion_corta}
+                                </p>
+                                <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400 font-mono">
+                                  {c.referencia_fabricante && (
+                                    <span>OEM: {c.referencia_fabricante}</span>
+                                  )}
+                                  {Number(c.precio_compra) > 0 && (
+                                    <span>Base: {formatMonedaCOP(Number(c.precio_compra))}</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Tarjeta elegante de contexto del componente maestro seleccionado */
+                  <div className="p-3.5 bg-blue-50/50 border border-blue-200/80 rounded-xl space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-blue-900 bg-blue-100/70 px-2 py-0.5 rounded">
+                            {componenteSeleccionado.codigo_interno || `REF-${componenteSeleccionado.id_componente}`}
+                          </span>
+                          {componenteSeleccionado.marca && (
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-blue-200 text-blue-800 bg-white">
+                              {componenteSeleccionado.marca}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs font-bold text-slate-900 mt-1">
                           {componenteSeleccionado.descripcion_corta}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Costo Base</span>
+                        <span className="font-mono text-xs font-bold text-slate-800">
+                          {Number(componenteSeleccionado.precio_compra) > 0
+                            ? formatMonedaCOP(Number(componenteSeleccionado.precio_compra))
+                            : 'Sin precio base'}
                         </span>
                       </div>
-                    ) : (
-                      <span className="text-slate-400">
-                        Selecciona o busca un componente del catálogo...
-                      </span>
-                    )}
-                    <Search className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
-                  </div>
-
-                  {menuComponentesAbierto && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-2 max-h-60 overflow-y-auto">
-                      <Input
-                        placeholder="Filtrar por nombre, SKU o marca..."
-                        value={busquedaComponenteModal}
-                        onChange={(e) => setBusquedaComponenteModal(e.target.value)}
-                        className="h-8 text-xs border-slate-200"
-                        autoFocus
-                      />
-                      <div className="divide-y divide-slate-100">
-                        {cargandoCatalogoMaestro ? (
-                          <div className="py-6 flex flex-col items-center justify-center gap-2 text-xs text-slate-500">
-                            <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
-                            <span>Cargando catálogo maestro...</span>
-                          </div>
-                        ) : componentesFiltradosModal.length === 0 ? (
-                          <div className="py-6 text-center text-xs text-slate-400">
-                            No se encontraron artículos
-                          </div>
-                        ) : (
-                          componentesFiltradosModal.map((c) => (
-                            <div
-                              key={c.id_componente}
-                              onClick={() => handleSeleccionarComponente(c)}
-                              className="p-2 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="font-mono font-bold text-slate-900 text-xs">
-                                  {c.codigo_interno || `REF-${c.id_componente}`}
-                                </span>
-                                {c.marca && (
-                                  <Badge variant="outline" className="text-[10px] py-0 px-1.5">
-                                    {c.marca}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-xs text-slate-700 truncate font-medium mt-0.5">
-                                {c.descripcion_corta}
-                              </p>
-                              {c.referencia_fabricante && (
-                                <span className="text-[10px] text-slate-400">
-                                  Ref Fab: {c.referencia_fabricante}
-                                </span>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 2. Referencia / SKU del Proveedor */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">
-                  Referencia / SKU del Proveedor (Código de Facturación) *
-                </Label>
-                <Input
-                  placeholder="Ej. CAT-1R-0716, DON-P550388..."
-                  value={formHomologar.referencia_proveedor}
-                  onChange={(e) =>
-                    setFormHomologar((prev) => ({
-                      ...prev,
-                      referencia_proveedor: e.target.value,
-                    }))
-                  }
-                  required
-                  className="font-mono font-bold text-xs h-10 border-slate-200"
-                />
-                <p className="text-[11px] text-slate-500">
-                  Código o número de parte con el que este proveedor factura o cotiza el ítem.
-                </p>
-              </div>
-
-              {/* 3. Costo Pactado y Días de Entrega */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">
-                    Costo Unitario Pactado ($ COP) *
-                  </Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
-                      $
-                    </span>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={100}
-                      placeholder="0"
-                      value={formHomologar.costo_actual || ''}
-                      onChange={(e) =>
-                        setFormHomologar((prev) => ({
-                          ...prev,
-                          costo_actual: Number(e.target.value),
-                        }))
-                      }
-                      required
-                      className="pl-7 font-mono font-bold text-xs h-10 border-slate-200"
-                    />
+                    {componenteSeleccionado.referencia_fabricante && (
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1 border-t border-blue-100">
+                        <span className="font-medium">Ref. Fabricante / OEM:</span>
+                        <code className="font-mono font-bold text-slate-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                          {componenteSeleccionado.referencia_fabricante}
+                        </code>
+                      </div>
+                    )}
                   </div>
-                  {formHomologar.costo_actual > 0 && (
-                    <span className="text-[11px] font-bold text-emerald-700 block">
-                      Preview: {formatMonedaCOP(formHomologar.costo_actual)}
+                )}
+              </div>
+
+              {/* 2. Sección: Datos de Facturación del Proveedor */}
+              <div className="p-4 bg-slate-50/80 border border-slate-200/90 rounded-xl space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold text-slate-900">
+                      Identificación Comercial en Facturas del Proveedor
                     </span>
-                  )}
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    Datos con los que el proveedor cotiza o factura
+                  </span>
                 </div>
 
+                {/* Nombre según Proveedor */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">
-                    Tiempo de Entrega (Días Hábiles)
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Nombre / Denominación según Proveedor (Factura) *
+                    </Label>
+                    {componenteSeleccionado?.descripcion_corta &&
+                      formHomologar.nombre_segun_proveedor !== componenteSeleccionado.descripcion_corta && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormHomologar((prev) => ({
+                              ...prev,
+                              nombre_segun_proveedor: componenteSeleccionado.descripcion_corta || '',
+                            }))
+                          }
+                          className="text-[10px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline"
+                        >
+                          <Copy className="h-2.5 w-2.5" />
+                          Copiar nombre del catálogo base
+                        </button>
+                      )}
+                  </div>
                   <Input
-                    type="number"
-                    min={1}
-                    value={formHomologar.tiempo_entrega_dias || 1}
+                    placeholder="Ej. Elemento Filtrante Lubricante Donaldson P550388..."
+                    value={formHomologar.nombre_segun_proveedor || ''}
                     onChange={(e) =>
                       setFormHomologar((prev) => ({
                         ...prev,
-                        tiempo_entrega_dias: Number(e.target.value),
+                        nombre_segun_proveedor: e.target.value,
                       }))
                     }
-                    className="font-mono text-xs h-10 border-slate-200"
+                    className="text-xs h-9 bg-white border-slate-200 font-medium"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Nombre o descripción literal con la que este proveedor factura o cotiza el ítem.
+                  </p>
+                </div>
+
+                {/* Referencia/SKU del Proveedor y Marca Ofrecida */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-slate-700">
+                        Referencia / SKU del Proveedor *
+                      </Label>
+                      {componenteSeleccionado?.referencia_fabricante &&
+                        formHomologar.referencia_proveedor !== componenteSeleccionado.referencia_fabricante && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormHomologar((prev) => ({
+                                ...prev,
+                                referencia_proveedor: componenteSeleccionado.referencia_fabricante || '',
+                              }))
+                            }
+                            className="text-[10px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline"
+                            title="Usar la referencia OEM del fabricante"
+                          >
+                            Usar Ref. OEM ({componenteSeleccionado.referencia_fabricante})
+                          </button>
+                        )}
+                    </div>
+                    <Input
+                      placeholder="Ej. P550388, 1R-0719, FL-9921..."
+                      value={formHomologar.referencia_proveedor}
+                      onChange={(e) =>
+                        setFormHomologar((prev) => ({
+                          ...prev,
+                          referencia_proveedor: e.target.value,
+                        }))
+                      }
+                      required
+                      className="font-mono font-bold text-xs h-9 bg-white border-slate-200 text-indigo-900"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Código o número de parte con el que este proveedor factura.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Marca Comercial Ofrecida
+                    </Label>
+                    <Input
+                      placeholder="Ej. Caterpillar, Donaldson, Baldwin..."
+                      value={formHomologar.marca_ofrecida || ''}
+                      onChange={(e) =>
+                        setFormHomologar((prev) => ({
+                          ...prev,
+                          marca_ofrecida: e.target.value,
+                        }))
+                      }
+                      className="text-xs h-9 bg-white border-slate-200"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Marca suministrada (OEM o alternativa equivalente).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Condiciones Comerciales Acordadas */}
+              <div className="p-4 bg-slate-50/80 border border-slate-200/90 rounded-xl space-y-3.5">
+                <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
+                  <DollarSign className="h-4 w-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-slate-900">
+                    Condiciones Comerciales y de Entrega
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Costo Unitario Pactado ($ COP) *
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
+                        $
+                      </span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={100}
+                        placeholder="0"
+                        value={formHomologar.costo_actual || ''}
+                        onChange={(e) =>
+                          setFormHomologar((prev) => ({
+                            ...prev,
+                            costo_actual: Number(e.target.value),
+                          }))
+                        }
+                        required
+                        className="pl-7 font-mono font-bold text-xs h-9 bg-white border-slate-200"
+                      />
+                    </div>
+                    {formHomologar.costo_actual > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-700 block truncate">
+                        Preview: {formatMonedaCOP(formHomologar.costo_actual)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Tiempo de Entrega (Días)
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formHomologar.tiempo_entrega_dias || 1}
+                      onChange={(e) =>
+                        setFormHomologar((prev) => ({
+                          ...prev,
+                          tiempo_entrega_dias: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono text-xs h-9 bg-white border-slate-200"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Pedido Mínimo (MOQ)
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formHomologar.cantidad_minima_compra || 1}
+                      onChange={(e) =>
+                        setFormHomologar((prev) => ({
+                          ...prev,
+                          cantidad_minima_compra: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono text-xs h-9 bg-white border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                {/* Enlace al Producto / Catálogo Web del Proveedor */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                    <Globe className="h-3 w-3 text-slate-400" />
+                    Enlace al Producto en Portal / Catálogo del Proveedor (Opcional)
+                  </Label>
+                  <Input
+                    placeholder="https://tienda.proveedor.com/item/12345"
+                    value={formHomologar.url_producto_proveedor || ''}
+                    onChange={(e) =>
+                      setFormHomologar((prev) => ({
+                        ...prev,
+                        url_producto_proveedor: e.target.value,
+                      }))
+                    }
+                    className="text-xs h-8 bg-white border-slate-200"
                   />
                 </div>
               </div>
@@ -1675,11 +1940,12 @@ export default function FichaProveedor360Page() {
               {/* 4. Switch Proveedor Preferente */}
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3.5 border border-slate-200">
                 <div className="space-y-0.5">
-                  <Label className="text-xs font-bold text-slate-800">
+                  <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
                     Establecer como Proveedor Preferente
                   </Label>
                   <p className="text-[11px] text-slate-500">
-                    Si se activa, este proveedor será la primera opción automática al generar órdenes de compra.
+                    Si se activa, este proveedor será la primera opción automática al generar órdenes de compra para este repuesto.
                   </p>
                 </div>
                 <Switch
@@ -1698,8 +1964,8 @@ export default function FichaProveedor360Page() {
                 <Label className="text-xs font-medium text-slate-700">
                   Notas u Observaciones Comerciales (Opcional)
                 </Label>
-                <Input
-                  placeholder="Ej. Precio especial por volumen, garantía 6 meses..."
+                <Textarea
+                  placeholder="Ej. Descuento del 5% por caja completa, garantía de 6 meses con factura, entrega en bodega..."
                   value={formHomologar.notas || ''}
                   onChange={(e) =>
                     setFormHomologar((prev) => ({
@@ -1707,12 +1973,13 @@ export default function FichaProveedor360Page() {
                       notas: e.target.value,
                     }))
                   }
-                  className="text-xs h-9 border-slate-200"
+                  rows={2}
+                  className="text-xs border-slate-200 resize-none bg-white"
                 />
               </div>
             </div>
 
-            <DialogFooter className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2">
+            <DialogFooter className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2 shrink-0">
               <Button
                 type="button"
                 variant="outline"
@@ -1750,9 +2017,9 @@ export default function FichaProveedor360Page() {
         open={modalEditarHomologacionOpen}
         onOpenChange={setModalEditarHomologacionOpen}
       >
-        <DialogContent className="sm:max-w-lg w-full p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden">
-          <form onSubmit={handleGuardarEdicionHomologacion}>
-            <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50/70">
+        <DialogContent className="sm:max-w-2xl w-full p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <form onSubmit={handleGuardarEdicionHomologacion} className="flex flex-col flex-1 overflow-hidden">
+            <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
               <DialogTitle className="text-base font-bold text-slate-900">
                 Editar Condiciones de Homologación
               </DialogTitle>
@@ -1764,77 +2031,196 @@ export default function FichaProveedor360Page() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="p-6 space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">
-                  Referencia / SKU Homólogo del Suplidor *
-                </Label>
-                <Input
-                  value={formEditHomologacion.referencia_proveedor}
-                  onChange={(e) =>
-                    setFormEditHomologacion((prev) => ({
-                      ...prev,
-                      referencia_proveedor: e.target.value,
-                    }))
-                  }
-                  required
-                  className="font-mono font-bold text-xs h-10 border-slate-200"
-                />
+            <div className="p-6 space-y-4 text-xs overflow-y-auto max-h-[calc(90vh-140px)]">
+              {/* Tarjeta de contexto del repuesto maestro */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-slate-900">
+                    {articuloSeleccionadoEdit?.catalogo_componentes?.codigo_interno || `REF-${articuloSeleccionadoEdit?.id_componente}`}
+                  </span>
+                  {articuloSeleccionadoEdit?.catalogo_componentes?.marcas?.nombre && (
+                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200 bg-white">
+                      {articuloSeleccionadoEdit.catalogo_componentes.marcas.nombre}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-slate-700 font-medium">
+                  {articuloSeleccionadoEdit?.catalogo_componentes?.descripcion_corta}
+                </p>
+                {articuloSeleccionadoEdit?.catalogo_componentes?.referencia_fabricante && (
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    Ref. Fabricante OEM: {articuloSeleccionadoEdit.catalogo_componentes.referencia_fabricante}
+                  </p>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">
-                    Nuevo Costo Pactado ($ COP) *
-                  </Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
-                      $
-                    </span>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={100}
-                      value={formEditHomologacion.nuevo_costo || ''}
-                      onChange={(e) =>
-                        setFormEditHomologacion((prev) => ({
-                          ...prev,
-                          nuevo_costo: Number(e.target.value),
-                        }))
-                      }
-                      required
-                      className="pl-7 font-mono font-bold text-xs h-10 border-slate-200"
-                    />
-                  </div>
-                  {formEditHomologacion.nuevo_costo > 0 && (
-                    <span className="text-[11px] font-bold text-emerald-700 block">
-                      Preview: {formatMonedaCOP(formEditHomologacion.nuevo_costo)}
-                    </span>
-                  )}
+              {/* 1. Identificación Comercial */}
+              <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-xl space-y-3.5">
+                <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
+                  <Tag className="h-4 w-4 text-indigo-600" />
+                  <span className="text-xs font-bold text-slate-900">
+                    Identificación en Facturas del Proveedor
+                  </span>
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-700">
-                    Días de Entrega Muelle
+                    Nombre / Denominación según Proveedor (Factura)
                   </Label>
                   <Input
-                    type="number"
-                    min={1}
-                    value={formEditHomologacion.tiempo_entrega_dias || 1}
+                    placeholder="Ej. Elemento Filtrante Lubricante Donaldson P550388..."
+                    value={formEditHomologacion.nombre_segun_proveedor || ''}
                     onChange={(e) =>
                       setFormEditHomologacion((prev) => ({
                         ...prev,
-                        tiempo_entrega_dias: Number(e.target.value),
+                        nombre_segun_proveedor: e.target.value,
                       }))
                     }
-                    className="font-mono text-xs h-10 border-slate-200"
+                    className="text-xs h-9 bg-white border-slate-200 font-medium"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Nombre comercial con el que el proveedor factura este ítem.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Referencia / SKU del Proveedor *
+                    </Label>
+                    <Input
+                      value={formEditHomologacion.referencia_proveedor}
+                      onChange={(e) =>
+                        setFormEditHomologacion((prev) => ({
+                          ...prev,
+                          referencia_proveedor: e.target.value,
+                        }))
+                      }
+                      required
+                      className="font-mono font-bold text-xs h-9 bg-white border-slate-200 text-indigo-900"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Marca Comercial Ofrecida
+                    </Label>
+                    <Input
+                      placeholder="Ej. Caterpillar, Donaldson, Baldwin..."
+                      value={formEditHomologacion.marca_ofrecida || ''}
+                      onChange={(e) =>
+                        setFormEditHomologacion((prev) => ({
+                          ...prev,
+                          marca_ofrecida: e.target.value,
+                        }))
+                      }
+                      className="text-xs h-9 bg-white border-slate-200"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Condiciones Comerciales */}
+              <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-xl space-y-3.5">
+                <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
+                  <DollarSign className="h-4 w-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-slate-900">
+                    Condiciones Comerciales
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Nuevo Costo Pactado ($ COP) *
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
+                        $
+                      </span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={100}
+                        value={formEditHomologacion.nuevo_costo || ''}
+                        onChange={(e) =>
+                          setFormEditHomologacion((prev) => ({
+                            ...prev,
+                            nuevo_costo: Number(e.target.value),
+                          }))
+                        }
+                        required
+                        className="pl-7 font-mono font-bold text-xs h-9 bg-white border-slate-200"
+                      />
+                    </div>
+                    {formEditHomologacion.nuevo_costo > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-700 block truncate">
+                        Preview: {formatMonedaCOP(formEditHomologacion.nuevo_costo)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Días de Entrega Muelle
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formEditHomologacion.tiempo_entrega_dias || 1}
+                      onChange={(e) =>
+                        setFormEditHomologacion((prev) => ({
+                          ...prev,
+                          tiempo_entrega_dias: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono text-xs h-9 bg-white border-slate-200"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">
+                      Pedido Mínimo (MOQ)
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formEditHomologacion.cantidad_minima_compra || 1}
+                      onChange={(e) =>
+                        setFormEditHomologacion((prev) => ({
+                          ...prev,
+                          cantidad_minima_compra: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono text-xs h-9 bg-white border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                    <Globe className="h-3 w-3 text-slate-400" />
+                    Enlace al Producto en Portal / Catálogo del Proveedor
+                  </Label>
+                  <Input
+                    placeholder="https://tienda.proveedor.com/item/12345"
+                    value={formEditHomologacion.url_producto_proveedor || ''}
+                    onChange={(e) =>
+                      setFormEditHomologacion((prev) => ({
+                        ...prev,
+                        url_producto_proveedor: e.target.value,
+                      }))
+                    }
+                    className="text-xs h-8 bg-white border-slate-200"
                   />
                 </div>
               </div>
 
+              {/* 3. Proveedor Preferente */}
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3.5 border border-slate-200">
                 <div className="space-y-0.5">
-                  <Label className="text-xs font-bold text-slate-800">
+                  <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
                     Proveedor Preferente
                   </Label>
                   <p className="text-[11px] text-slate-500">
@@ -1852,12 +2238,13 @@ export default function FichaProveedor360Page() {
                 />
               </div>
 
+              {/* 4. Motivo / Observaciones */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-700">
                   Motivo de Actualización / Observación para Auditoría
                 </Label>
-                <Input
-                  placeholder="Ej. Ajuste tarifario anual, actualización de lista..."
+                <Textarea
+                  placeholder="Ej. Ajuste tarifario anual, actualización de lista comercial..."
                   value={formEditHomologacion.observaciones}
                   onChange={(e) =>
                     setFormEditHomologacion((prev) => ({
@@ -1865,12 +2252,13 @@ export default function FichaProveedor360Page() {
                       observaciones: e.target.value,
                     }))
                   }
-                  className="text-xs h-9 border-slate-200"
+                  rows={2}
+                  className="text-xs border-slate-200 resize-none bg-white"
                 />
               </div>
             </div>
 
-            <DialogFooter className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2">
+            <DialogFooter className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2 shrink-0">
               <Button
                 type="button"
                 variant="outline"
@@ -1884,9 +2272,19 @@ export default function FichaProveedor360Page() {
                 type="submit"
                 size="sm"
                 disabled={isSubmittingHomologacion}
-                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
               >
-                {isSubmittingHomologacion ? 'Guardando...' : 'Guardar Cambios'}
+                {isSubmittingHomologacion ? (
+                  <>
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    Guardar Cambios
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </form>
