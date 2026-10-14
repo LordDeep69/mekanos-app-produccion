@@ -334,13 +334,19 @@ export interface VincularProveedorPayload {
 export interface ActualizarPrecioProveedorPayload {
   nuevo_costo: number;
   referencia_proveedor?: string;
+  nombre_segun_proveedor?: string;
+  marca_ofrecida?: string;
+  id_marca_ofrecida?: number;
+  cantidad_minima_compra?: number;
   tiempo_entrega_dias?: number;
   es_proveedor_preferido?: boolean;
   moneda?: string;
+  url_producto_proveedor?: string;
   cantidad_adquirida?: number;
   numero_factura_oc?: string;
   origen_cambio?: OrigenCosto;
   observaciones?: string;
+  notas?: string;
   escalas_precios?: EscalaPrecio[];
 }
 
@@ -422,5 +428,28 @@ export interface ActualizarArticuloProveedorPayload {
   es_proveedor_preferido?: boolean;
   url_producto_proveedor?: string;
   observaciones?: string;
+  notas?: string;
+  numero_factura_oc?: string;
+  origen_cambio?: OrigenCosto;
+  moneda?: string;
 }
+
+/**
+ * Resuelve canónicamente el nombre de un proveedor priorizando Razón Social jurídica.
+ * Evita que placeholders o textos comerciales genéricos suplanten la identidad legal.
+ */
+export function getNombreProveedor(
+  persona?: { razon_social?: string | null; nombre_comercial?: string | null } | null,
+  idFallback?: number
+): string {
+  if (!persona) return idFallback ? `Proveedor #${idFallback}` : 'Proveedor';
+  if (persona.razon_social && persona.razon_social.trim()) {
+    return persona.razon_social.trim();
+  }
+  if (persona.nombre_comercial && persona.nombre_comercial.trim()) {
+    return persona.nombre_comercial.trim();
+  }
+  return idFallback ? `Proveedor #${idFallback}` : 'Proveedor';
+}
+
 

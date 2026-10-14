@@ -143,6 +143,32 @@ export class ActualizarPrecioProveedorDto {
   @MaxLength(100)
   referencia_proveedor?: string;
 
+  @ApiPropertyOptional({ description: 'Nombre o denominación del repuesto según factura del proveedor', example: 'Filtro Aceite Mann W719' })
+  @IsOptional()
+  @IsString()
+  nombre_segun_proveedor?: string;
+
+  @ApiPropertyOptional({ description: 'Marca comercial ofrecida', example: 'MANN' })
+  @IsOptional()
+  @IsString()
+  marca_ofrecida?: string;
+
+  @ApiPropertyOptional({ description: 'ID de la marca ofrecida', example: 1 })
+  @IsOptional()
+  @IsInt()
+  id_marca_ofrecida?: number;
+
+  @ApiPropertyOptional({ description: 'Cantidad mínima de compra (MOQ)', example: 1 })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  cantidad_minima_compra?: number;
+
+  @ApiPropertyOptional({ description: 'Enlace web al producto en portal del proveedor' })
+  @IsOptional()
+  @IsString()
+  url_producto_proveedor?: string;
+
   @ApiPropertyOptional({ description: 'Tiempo de entrega en días hábiles', default: 1 })
   @IsOptional()
   @IsInt()
@@ -153,6 +179,11 @@ export class ActualizarPrecioProveedorDto {
   @IsOptional()
   @IsBoolean()
   es_proveedor_preferido?: boolean;
+
+  @ApiPropertyOptional({ description: 'Notas u observaciones de auditoría' })
+  @IsOptional()
+  @IsString()
+  notas?: string;
 
   @ApiPropertyOptional({ description: 'Nuevas escalas de precios por volumen' })
   @IsOptional()

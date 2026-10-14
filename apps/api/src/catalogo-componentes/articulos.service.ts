@@ -562,7 +562,7 @@ export class ArticulosService {
         });
       }
 
-      // 2. Actualizar datos en la matriz de referencias cruzadas
+      // 2. Actualizar datos en la matriz de referencias cruzadas con trazabilidad completa
       const vinculoActualizado = await tx.articulos_proveedores.update({
         where: {
           id_componente_id_proveedor: {
@@ -574,8 +574,14 @@ export class ArticulosService {
           costo_actual: new Prisma.Decimal(nuevoCosto),
           moneda: dto.moneda || vinculoExistente.moneda,
           referencia_proveedor: dto.referencia_proveedor?.trim() || vinculoExistente.referencia_proveedor,
+          nombre_segun_proveedor: dto.nombre_segun_proveedor !== undefined ? (dto.nombre_segun_proveedor.trim() || null) : vinculoExistente.nombre_segun_proveedor,
+          marca_ofrecida: dto.marca_ofrecida !== undefined ? (dto.marca_ofrecida.trim() || null) : vinculoExistente.marca_ofrecida,
+          id_marca_ofrecida: dto.id_marca_ofrecida !== undefined ? dto.id_marca_ofrecida : vinculoExistente.id_marca_ofrecida,
+          cantidad_minima_compra: dto.cantidad_minima_compra !== undefined ? new Prisma.Decimal(dto.cantidad_minima_compra) : vinculoExistente.cantidad_minima_compra,
           tiempo_entrega_dias: dto.tiempo_entrega_dias !== undefined ? dto.tiempo_entrega_dias : vinculoExistente.tiempo_entrega_dias,
           es_proveedor_preferido: esPreferido,
+          url_producto_proveedor: dto.url_producto_proveedor !== undefined ? (dto.url_producto_proveedor.trim() || null) : vinculoExistente.url_producto_proveedor,
+          notas: (dto.observaciones || dto.notas) !== undefined ? ((dto.observaciones || dto.notas || '').trim() || null) : vinculoExistente.notas,
           escalas_precios: dto.escalas_precios ? (dto.escalas_precios as any) : undefined,
           modificado_por: idUsuario || null,
         },

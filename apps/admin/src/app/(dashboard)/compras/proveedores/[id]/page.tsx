@@ -54,12 +54,14 @@ import {
 } from 'lucide-react';
 
 import { comprasService } from '@/lib/api/compras.service';
+import { ModalHomologacionSourcing } from '@/components/compras/modal-homologacion-sourcing';
 import {
   ArticuloHomologadoProveedor,
   ArticuloMaestro,
   HomologarArticuloPayload,
   ProveedorCompleto,
   ProveedorKPIs,
+  getNombreProveedor,
 } from '@/types/compras.types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -213,47 +215,14 @@ export default function FichaProveedor360Page() {
   // Búsqueda en pestaña catálogo
   const [busquedaArticulo, setBusquedaArticulo] = useState('');
 
-  // Modales
-  const [modalHomologarOpen, setModalHomologarOpen] = useState(false);
-  const [modalEditarHomologacionOpen, setModalEditarHomologacionOpen] = useState(false);
-  const [articuloSeleccionadoEdit, setArticuloSeleccionadoEdit] = useState<ArticuloHomologadoProveedor | null>(null);
+  // Modales y confirmaciones
   const [dialogDesvincularOpen, setDialogDesvincularOpen] = useState(false);
   const [articuloADesvincular, setArticuloADesvincular] = useState<ArticuloHomologadoProveedor | null>(null);
-  const [isSubmittingHomologacion, setIsSubmittingHomologacion] = useState(false);
 
-  // Selector de componentes para el modal de homologación
-  const [catalogoMaestro, setCatalogoMaestro] = useState<ArticuloMaestro[]>([]);
-  const [cargandoCatalogoMaestro, setCargandoCatalogoMaestro] = useState(false);
-  const [busquedaComponenteModal, setBusquedaComponenteModal] = useState('');
-  const [menuComponentesAbierto, setMenuComponentesAbierto] = useState(false);
-  const [componenteSeleccionado, setComponenteSeleccionado] = useState<ArticuloMaestro | null>(null);
-
-  // Formulario de Homologación
-  const [formHomologar, setFormHomologar] = useState<HomologarArticuloPayload>({
-    id_componente: 0,
-    referencia_proveedor: '',
-    nombre_segun_proveedor: '',
-    marca_ofrecida: '',
-    costo_actual: 0,
-    tiempo_entrega_dias: 1,
-    cantidad_minima_compra: 1,
-    url_producto_proveedor: '',
-    es_proveedor_preferido: false,
-    notas: '',
-  });
-
-  // Formulario de Edición de Homologación
-  const [formEditHomologacion, setFormEditHomologacion] = useState({
-    referencia_proveedor: '',
-    nombre_segun_proveedor: '',
-    marca_ofrecida: '',
-    nuevo_costo: 0,
-    tiempo_entrega_dias: 1,
-    cantidad_minima_compra: 1,
-    url_producto_proveedor: '',
-    es_proveedor_preferido: false,
-    observaciones: '',
-  });
+  // Modal Atómico Unificado de Homologación Sourcing
+  const [modalHomologacionOpen, setModalHomologacionOpen] = useState(false);
+  const [modalHomologacionModo, setModalHomologacionModo] = useState<'crear' | 'editar'>('crear');
+  const [datosEdicionHomologacion, setDatosEdicionHomologacion] = useState<any>(null);
 
   // Modal Editar Proveedor Datos Generales (2 Columnas Enterprise)
   const [modalEditarProveedorOpen, setModalEditarProveedorOpen] = useState(false);
@@ -312,34 +281,6 @@ export default function FichaProveedor360Page() {
   }, [idProveedor]);
 
   // Cargar artículos del catálogo maestro para el selector de homologación
-  const cargarCatalogoMaestro = async (force = false) => {
-    if (!force && catalogoMaestro.length > 0) return;
-    try {
-      setCargandoCatalogoMaestro(true);
-      const res = await comprasService.getArticulos({ limit: 300, activo: true });
-      const items = (res as any)?.items || (res as any)?.data || (Array.isArray(res) ? res : []);
-      setCatalogoMaestro(items);
-    } catch (e) {
-      console.error('Error al cargar catálogo maestro:', e);
-      toast.error('No se pudo cargar el catálogo maestro de repuestos');
-    } finally {
-      setCargandoCatalogoMaestro(false);
-    }
-  };
-
-  // Filtrado de artículos del modal
-  const componentesFiltradosModal = useMemo(() => {
-    if (!busquedaComponenteModal.trim()) return catalogoMaestro;
-    const q = busquedaComponenteModal.toLowerCase().trim();
-    return catalogoMaestro.filter((c) => {
-      const desc = (c.descripcion_corta || '').toLowerCase();
-      const cod = (c.codigo_interno || '').toLowerCase();
-      const ref = (c.referencia_fabricante || '').toLowerCase();
-      const marca = (c.marca || '').toLowerCase();
-      return desc.includes(q) || cod.includes(q) || ref.includes(q) || marca.includes(q);
-    });
-  }, [catalogoMaestro, busquedaComponenteModal]);
-
   // Artículos homologados filtrados por búsqueda
   const articulosFiltrados = useMemo(() => {
     if (!busquedaArticulo.trim()) return articulosHomologados;
@@ -368,122 +309,42 @@ export default function FichaProveedor360Page() {
     router.replace(`/compras/proveedores/${idProveedor}?tab=${val}`, { scroll: false });
   };
 
-  // Abrir modal homologar
+  // Abrir modal atómico para homologar nuevo repuesto
   const abrirModalHomologar = () => {
-    cargarCatalogoMaestro(true);
-    setComponenteSeleccionado(null);
-    setBusquedaComponenteModal('');
-    setMenuComponentesAbierto(false);
-    setFormHomologar({
-      id_componente: 0,
-      referencia_proveedor: '',
-      nombre_segun_proveedor: '',
-      marca_ofrecida: '',
-      costo_actual: 0,
-      tiempo_entrega_dias: proveedor?.tiempo_entrega_dias || 1,
-      cantidad_minima_compra: 1,
-      url_producto_proveedor: '',
-      es_proveedor_preferido: false,
-      notas: '',
-    });
-    setModalHomologarOpen(true);
+    setDatosEdicionHomologacion(undefined);
+    setModalHomologacionModo('crear');
+    setModalHomologacionOpen(true);
   };
 
-  // Seleccionar componente en modal
-  const handleSeleccionarComponente = (c: ArticuloMaestro) => {
-    setComponenteSeleccionado(c);
-    setFormHomologar((prev) => ({
-      ...prev,
-      id_componente: c.id_componente,
-      // Sugerencia inicial para el nombre según proveedor, completamente editable
-      nombre_segun_proveedor: prev.nombre_segun_proveedor || c.descripcion_corta || '',
-      marca_ofrecida: prev.marca_ofrecida || c.marca || '',
-      // No sobreescribir la referencia del proveedor automáticamente; dejamos que ingrese su SKU comercial
-      referencia_proveedor: prev.referencia_proveedor || '',
-      costo_actual: prev.costo_actual > 0 ? prev.costo_actual : Number(c.precio_compra) || 0,
-    }));
-    setMenuComponentesAbierto(false);
-  };
-
-  // Guardar homologación
-  const handleGuardarHomologacion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formHomologar.id_componente) {
-      toast.error('Debes seleccionar un artículo del catálogo maestro.');
-      return;
-    }
-    if (!formHomologar.referencia_proveedor.trim()) {
-      toast.error('Ingresa la referencia o código con el que factura el proveedor.');
-      return;
-    }
-    if (formHomologar.costo_actual <= 0) {
-      toast.error('El costo pactado debe ser mayor a 0 COP.');
-      return;
-    }
-
-    try {
-      setIsSubmittingHomologacion(true);
-      await comprasService.homologarArticuloProveedor(idProveedor, formHomologar);
-      toast.success('Artículo homologado y vinculado a la matriz de abastecimiento.');
-      setModalHomologarOpen(false);
-      cargarDatos();
-    } catch (e: any) {
-      console.error('Error al homologar artículo:', e);
-      const msg = e?.response?.data?.message || 'Error al homologar el artículo.';
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
-    } finally {
-      setIsSubmittingHomologacion(false);
-    }
-  };
-
-  // Abrir modal editar homologación
+  // Abrir modal atómico para editar homologación existente
   const abrirEditarHomologacion = (art: ArticuloHomologadoProveedor) => {
-    setArticuloSeleccionadoEdit(art);
-    setFormEditHomologacion({
+    const comp = art.catalogo_componentes;
+    const persona = proveedor?.persona;
+    const nombreProv = getNombreProveedor(persona, idProveedor);
+    const nitProv = persona?.numero_identificacion || undefined;
+
+    setDatosEdicionHomologacion({
+      id_componente: art.id_componente,
+      id_proveedor: idProveedor,
+      nombre_segun_proveedor: art.nombre_segun_proveedor || comp?.descripcion_corta || '',
       referencia_proveedor: art.referencia_proveedor || '',
-      nombre_segun_proveedor: art.nombre_segun_proveedor || art.catalogo_componentes?.descripcion_corta || '',
-      marca_ofrecida: art.marca_ofrecida || art.catalogo_componentes?.marcas?.nombre || (art.catalogo_componentes as any)?.marca || '',
-      nuevo_costo: Number(art.costo_actual) || 0,
+      marca_ofrecida: art.marca_ofrecida || comp?.marcas?.nombre || (comp as any)?.marca || '',
+      costo_actual: Number(art.costo_actual) || 0,
+      costo_anterior: Number(art.costo_actual) || 0,
       tiempo_entrega_dias: art.tiempo_entrega_dias || 1,
       cantidad_minima_compra: Number(art.cantidad_minima_compra) || 1,
       url_producto_proveedor: art.url_producto_proveedor || '',
       es_proveedor_preferido: Boolean(art.es_proveedor_preferido),
       observaciones: art.notas || '',
+      moneda: art.moneda || 'COP',
+      nombre_articulo: comp?.descripcion_corta,
+      codigo_articulo: comp?.codigo_interno || `REF-${art.id_componente}`,
+      ref_oem_articulo: comp?.referencia_fabricante || undefined,
+      nombre_proveedor: nombreProv,
+      nit_proveedor: nitProv,
     });
-    setModalEditarHomologacionOpen(true);
-  };
-
-  // Guardar edición de homologación
-  const handleGuardarEdicionHomologacion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!articuloSeleccionadoEdit) return;
-
-    if (!formEditHomologacion.referencia_proveedor.trim()) {
-      toast.error('La referencia o código de facturación del proveedor es obligatoria.');
-      return;
-    }
-    if (formEditHomologacion.nuevo_costo <= 0) {
-      toast.error('El costo pactado debe ser mayor a 0 COP.');
-      return;
-    }
-
-    try {
-      setIsSubmittingHomologacion(true);
-      await comprasService.actualizarArticuloProveedor(
-        idProveedor,
-        articuloSeleccionadoEdit.id_componente,
-        formEditHomologacion,
-      );
-      toast.success('Condiciones comerciales actualizadas exitosamente.');
-      setModalEditarHomologacionOpen(false);
-      cargarDatos();
-    } catch (e: any) {
-      console.error('Error al actualizar artículo:', e);
-      const msg = e?.response?.data?.message || 'Error al actualizar condiciones.';
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
-    } finally {
-      setIsSubmittingHomologacion(false);
-    }
+    setModalHomologacionModo('editar');
+    setModalHomologacionOpen(true);
   };
 
   // Confirmar desvinculación
@@ -637,10 +498,7 @@ export default function FichaProveedor360Page() {
     );
   }
 
-  const nombre =
-    proveedor.persona?.razon_social ||
-    proveedor.persona?.nombre_comercial ||
-    `Proveedor #${proveedor.id_proveedor}`;
+  const nombre = getNombreProveedor(proveedor.persona, proveedor.id_proveedor);
   const nit = proveedor.persona?.numero_identificacion || '--';
   const tel = proveedor.persona?.telefono_principal;
   const email = proveedor.persona?.email_principal;
@@ -1572,730 +1430,24 @@ export default function FichaProveedor360Page() {
         </TabsContent>
       </Tabs>
 
-      {/* MODAL ENTERPRISE: + HOMOLOGAR REPUESTO */}
-      <Dialog open={modalHomologarOpen} onOpenChange={setModalHomologarOpen}>
-        <DialogContent className="sm:max-w-2xl w-full p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-          <form onSubmit={handleGuardarHomologacion} className="flex flex-col flex-1 overflow-hidden">
-            <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div>
-                  <DialogTitle className="text-lg font-bold text-slate-900">
-                    Homologar Repuesto Comercial
-                  </DialogTitle>
-                  <DialogDescription className="text-xs text-slate-500">
-                    Vincula un artículo del catálogo maestro con la ficha comercial, código de facturación y costo pactado con {nombre}.
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-
-            <div className="p-6 space-y-4 text-xs overflow-y-auto max-h-[calc(90vh-140px)]">
-              {/* 1. Selector Searchable del Catálogo Maestro */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Package className="h-3.5 w-3.5 text-blue-600" />
-                    Artículo Base del Catálogo Maestro *
-                  </Label>
-                  {componenteSeleccionado && (
-                    <button
-                      type="button"
-                      onClick={() => setMenuComponentesAbierto(true)}
-                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline"
-                    >
-                      Cambiar repuesto maestro
-                    </button>
-                  )}
-                </div>
-
-                {!componenteSeleccionado || menuComponentesAbierto ? (
-                  <div className="relative">
-                    <div
-                      onClick={() => setMenuComponentesAbierto(!menuComponentesAbierto)}
-                      className="flex items-center justify-between w-full h-10 px-3 border border-slate-200 rounded-xl bg-white cursor-pointer hover:border-blue-400 transition-colors shadow-sm"
-                    >
-                      {componenteSeleccionado ? (
-                        <div className="truncate text-xs">
-                          <strong className="text-slate-900 font-mono mr-2">
-                            {componenteSeleccionado.codigo_interno || `REF-${componenteSeleccionado.id_componente}`}
-                          </strong>
-                          <span className="text-slate-700 font-medium">
-                            {componenteSeleccionado.descripcion_corta}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-xs">
-                          Selecciona o busca un componente del catálogo...
-                        </span>
-                      )}
-                      <Search className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
-                    </div>
-
-                    {menuComponentesAbierto && (
-                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-2 max-h-60 overflow-y-auto">
-                        <Input
-                          placeholder="Filtrar por nombre, SKU o marca..."
-                          value={busquedaComponenteModal}
-                          onChange={(e) => setBusquedaComponenteModal(e.target.value)}
-                          className="h-8 text-xs border-slate-200"
-                          autoFocus
-                        />
-                        <div className="divide-y divide-slate-100">
-                          {cargandoCatalogoMaestro ? (
-                            <div className="py-6 flex flex-col items-center justify-center gap-2 text-xs text-slate-500">
-                              <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
-                              <span>Cargando catálogo maestro...</span>
-                            </div>
-                          ) : componentesFiltradosModal.length === 0 ? (
-                            <div className="py-6 text-center text-xs text-slate-400">
-                              No se encontraron artículos
-                            </div>
-                          ) : (
-                            componentesFiltradosModal.map((c) => (
-                              <div
-                                key={c.id_componente}
-                                onClick={() => handleSeleccionarComponente(c)}
-                                className="p-2.5 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-mono font-bold text-slate-900 text-xs">
-                                    {c.codigo_interno || `REF-${c.id_componente}`}
-                                  </span>
-                                  {c.marca && (
-                                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200 bg-white">
-                                      {c.marca}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <p className="text-xs text-slate-700 truncate font-semibold mt-0.5">
-                                  {c.descripcion_corta}
-                                </p>
-                                <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400 font-mono">
-                                  {c.referencia_fabricante && (
-                                    <span>OEM: {c.referencia_fabricante}</span>
-                                  )}
-                                  {Number(c.precio_compra) > 0 && (
-                                    <span>Base: {formatMonedaCOP(Number(c.precio_compra))}</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Tarjeta elegante de contexto del componente maestro seleccionado */
-                  <div className="p-3.5 bg-blue-50/50 border border-blue-200/80 rounded-xl space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-blue-900 bg-blue-100/70 px-2 py-0.5 rounded">
-                            {componenteSeleccionado.codigo_interno || `REF-${componenteSeleccionado.id_componente}`}
-                          </span>
-                          {componenteSeleccionado.marca && (
-                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-blue-200 text-blue-800 bg-white">
-                              {componenteSeleccionado.marca}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs font-bold text-slate-900 mt-1">
-                          {componenteSeleccionado.descripcion_corta}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Costo Base</span>
-                        <span className="font-mono text-xs font-bold text-slate-800">
-                          {Number(componenteSeleccionado.precio_compra) > 0
-                            ? formatMonedaCOP(Number(componenteSeleccionado.precio_compra))
-                            : 'Sin precio base'}
-                        </span>
-                      </div>
-                    </div>
-                    {componenteSeleccionado.referencia_fabricante && (
-                      <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1 border-t border-blue-100">
-                        <span className="font-medium">Ref. Fabricante / OEM:</span>
-                        <code className="font-mono font-bold text-slate-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">
-                          {componenteSeleccionado.referencia_fabricante}
-                        </code>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* 2. Sección: Datos de Facturación del Proveedor */}
-              <div className="p-4 bg-slate-50/80 border border-slate-200/90 rounded-xl space-y-3.5">
-                <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-indigo-600" />
-                    <span className="text-xs font-bold text-slate-900">
-                      Identificación Comercial en Facturas del Proveedor
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">
-                    Datos con los que el proveedor cotiza o factura
-                  </span>
-                </div>
-
-                {/* Nombre según Proveedor */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Nombre / Denominación según Proveedor (Factura) *
-                    </Label>
-                    {componenteSeleccionado?.descripcion_corta &&
-                      formHomologar.nombre_segun_proveedor !== componenteSeleccionado.descripcion_corta && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFormHomologar((prev) => ({
-                              ...prev,
-                              nombre_segun_proveedor: componenteSeleccionado.descripcion_corta || '',
-                            }))
-                          }
-                          className="text-[10px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline"
-                        >
-                          <Copy className="h-2.5 w-2.5" />
-                          Copiar nombre del catálogo base
-                        </button>
-                      )}
-                  </div>
-                  <Input
-                    placeholder="Ej. Elemento Filtrante Lubricante Donaldson P550388..."
-                    value={formHomologar.nombre_segun_proveedor || ''}
-                    onChange={(e) =>
-                      setFormHomologar((prev) => ({
-                        ...prev,
-                        nombre_segun_proveedor: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-9 bg-white border-slate-200 font-medium"
-                    required
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    Nombre o descripción literal con la que este proveedor factura o cotiza el ítem.
-                  </p>
-                </div>
-
-                {/* Referencia/SKU del Proveedor y Marca Ofrecida */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold text-slate-700">
-                        Referencia / SKU del Proveedor *
-                      </Label>
-                      {componenteSeleccionado?.referencia_fabricante &&
-                        formHomologar.referencia_proveedor !== componenteSeleccionado.referencia_fabricante && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setFormHomologar((prev) => ({
-                                ...prev,
-                                referencia_proveedor: componenteSeleccionado.referencia_fabricante || '',
-                              }))
-                            }
-                            className="text-[10px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline"
-                            title="Usar la referencia OEM del fabricante"
-                          >
-                            Usar Ref. OEM ({componenteSeleccionado.referencia_fabricante})
-                          </button>
-                        )}
-                    </div>
-                    <Input
-                      placeholder="Ej. P550388, 1R-0719, FL-9921..."
-                      value={formHomologar.referencia_proveedor}
-                      onChange={(e) =>
-                        setFormHomologar((prev) => ({
-                          ...prev,
-                          referencia_proveedor: e.target.value,
-                        }))
-                      }
-                      required
-                      className="font-mono font-bold text-xs h-9 bg-white border-slate-200 text-indigo-900"
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      Código o número de parte con el que este proveedor factura.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Marca Comercial Ofrecida
-                    </Label>
-                    <Input
-                      placeholder="Ej. Caterpillar, Donaldson, Baldwin..."
-                      value={formHomologar.marca_ofrecida || ''}
-                      onChange={(e) =>
-                        setFormHomologar((prev) => ({
-                          ...prev,
-                          marca_ofrecida: e.target.value,
-                        }))
-                      }
-                      className="text-xs h-9 bg-white border-slate-200"
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      Marca suministrada (OEM o alternativa equivalente).
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Condiciones Comerciales Acordadas */}
-              <div className="p-4 bg-slate-50/80 border border-slate-200/90 rounded-xl space-y-3.5">
-                <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
-                  <DollarSign className="h-4 w-4 text-emerald-600" />
-                  <span className="text-xs font-bold text-slate-900">
-                    Condiciones Comerciales y de Entrega
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Costo Unitario Pactado ($ COP) *
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
-                        $
-                      </span>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={100}
-                        placeholder="0"
-                        value={formHomologar.costo_actual || ''}
-                        onChange={(e) =>
-                          setFormHomologar((prev) => ({
-                            ...prev,
-                            costo_actual: Number(e.target.value),
-                          }))
-                        }
-                        required
-                        className="pl-7 font-mono font-bold text-xs h-9 bg-white border-slate-200"
-                      />
-                    </div>
-                    {formHomologar.costo_actual > 0 && (
-                      <span className="text-[10px] font-bold text-emerald-700 block truncate">
-                        Preview: {formatMonedaCOP(formHomologar.costo_actual)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Tiempo de Entrega (Días)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={formHomologar.tiempo_entrega_dias || 1}
-                      onChange={(e) =>
-                        setFormHomologar((prev) => ({
-                          ...prev,
-                          tiempo_entrega_dias: Number(e.target.value),
-                        }))
-                      }
-                      className="font-mono text-xs h-9 bg-white border-slate-200"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Pedido Mínimo (MOQ)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={formHomologar.cantidad_minima_compra || 1}
-                      onChange={(e) =>
-                        setFormHomologar((prev) => ({
-                          ...prev,
-                          cantidad_minima_compra: Number(e.target.value),
-                        }))
-                      }
-                      className="font-mono text-xs h-9 bg-white border-slate-200"
-                    />
-                  </div>
-                </div>
-
-                {/* Enlace al Producto / Catálogo Web del Proveedor */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                    <Globe className="h-3 w-3 text-slate-400" />
-                    Enlace al Producto en Portal / Catálogo del Proveedor (Opcional)
-                  </Label>
-                  <Input
-                    placeholder="https://tienda.proveedor.com/item/12345"
-                    value={formHomologar.url_producto_proveedor || ''}
-                    onChange={(e) =>
-                      setFormHomologar((prev) => ({
-                        ...prev,
-                        url_producto_proveedor: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-8 bg-white border-slate-200"
-                  />
-                </div>
-              </div>
-
-              {/* 4. Switch Proveedor Preferente */}
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3.5 border border-slate-200">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                    Establecer como Proveedor Preferente
-                  </Label>
-                  <p className="text-[11px] text-slate-500">
-                    Si se activa, este proveedor será la primera opción automática al generar órdenes de compra para este repuesto.
-                  </p>
-                </div>
-                <Switch
-                  checked={formHomologar.es_proveedor_preferido}
-                  onCheckedChange={(checked) =>
-                    setFormHomologar((prev) => ({
-                      ...prev,
-                      es_proveedor_preferido: checked,
-                    }))
-                  }
-                />
-              </div>
-
-              {/* 5. Notas u Observaciones */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-700">
-                  Notas u Observaciones Comerciales (Opcional)
-                </Label>
-                <Textarea
-                  placeholder="Ej. Descuento del 5% por caja completa, garantía de 6 meses con factura, entrega en bodega..."
-                  value={formHomologar.notas || ''}
-                  onChange={(e) =>
-                    setFormHomologar((prev) => ({
-                      ...prev,
-                      notas: e.target.value,
-                    }))
-                  }
-                  rows={2}
-                  className="text-xs border-slate-200 resize-none bg-white"
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setModalHomologarOpen(false)}
-                className="text-xs"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isSubmittingHomologacion}
-                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-              >
-                {isSubmittingHomologacion ? (
-                  <>
-                    <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Homologando...
-                  </>
-                ) : (
-                  <>
-                    <Check className="mr-1.5 h-3.5 w-3.5" />
-                    Guardar Homologación
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* MODAL: EDITAR CONDICIONES DE HOMOLOGACIÓN */}
-      <Dialog
-        open={modalEditarHomologacionOpen}
-        onOpenChange={setModalEditarHomologacionOpen}
-      >
-        <DialogContent className="sm:max-w-2xl w-full p-0 rounded-2xl border border-slate-100 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-          <form onSubmit={handleGuardarEdicionHomologacion} className="flex flex-col flex-1 overflow-hidden">
-            <DialogHeader className="p-6 pb-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
-              <DialogTitle className="text-base font-bold text-slate-900">
-                Editar Condiciones de Homologación
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                {articuloSeleccionadoEdit?.catalogo_componentes?.descripcion_corta} (SKU:{' '}
-                {articuloSeleccionadoEdit?.catalogo_componentes?.codigo_interno ||
-                  articuloSeleccionadoEdit?.id_componente}
-                )
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="p-6 space-y-4 text-xs overflow-y-auto max-h-[calc(90vh-140px)]">
-              {/* Tarjeta de contexto del repuesto maestro */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-slate-900">
-                    {articuloSeleccionadoEdit?.catalogo_componentes?.codigo_interno || `REF-${articuloSeleccionadoEdit?.id_componente}`}
-                  </span>
-                  {articuloSeleccionadoEdit?.catalogo_componentes?.marcas?.nombre && (
-                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-200 bg-white">
-                      {articuloSeleccionadoEdit.catalogo_componentes.marcas.nombre}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-slate-700 font-medium">
-                  {articuloSeleccionadoEdit?.catalogo_componentes?.descripcion_corta}
-                </p>
-                {articuloSeleccionadoEdit?.catalogo_componentes?.referencia_fabricante && (
-                  <p className="text-[10px] text-slate-500 font-mono">
-                    Ref. Fabricante OEM: {articuloSeleccionadoEdit.catalogo_componentes.referencia_fabricante}
-                  </p>
-                )}
-              </div>
-
-              {/* 1. Identificación Comercial */}
-              <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-xl space-y-3.5">
-                <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
-                  <Tag className="h-4 w-4 text-indigo-600" />
-                  <span className="text-xs font-bold text-slate-900">
-                    Identificación en Facturas del Proveedor
-                  </span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">
-                    Nombre / Denominación según Proveedor (Factura)
-                  </Label>
-                  <Input
-                    placeholder="Ej. Elemento Filtrante Lubricante Donaldson P550388..."
-                    value={formEditHomologacion.nombre_segun_proveedor || ''}
-                    onChange={(e) =>
-                      setFormEditHomologacion((prev) => ({
-                        ...prev,
-                        nombre_segun_proveedor: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-9 bg-white border-slate-200 font-medium"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    Nombre comercial con el que el proveedor factura este ítem.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Referencia / SKU del Proveedor *
-                    </Label>
-                    <Input
-                      value={formEditHomologacion.referencia_proveedor}
-                      onChange={(e) =>
-                        setFormEditHomologacion((prev) => ({
-                          ...prev,
-                          referencia_proveedor: e.target.value,
-                        }))
-                      }
-                      required
-                      className="font-mono font-bold text-xs h-9 bg-white border-slate-200 text-indigo-900"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Marca Comercial Ofrecida
-                    </Label>
-                    <Input
-                      placeholder="Ej. Caterpillar, Donaldson, Baldwin..."
-                      value={formEditHomologacion.marca_ofrecida || ''}
-                      onChange={(e) =>
-                        setFormEditHomologacion((prev) => ({
-                          ...prev,
-                          marca_ofrecida: e.target.value,
-                        }))
-                      }
-                      className="text-xs h-9 bg-white border-slate-200"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Condiciones Comerciales */}
-              <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-xl space-y-3.5">
-                <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
-                  <DollarSign className="h-4 w-4 text-emerald-600" />
-                  <span className="text-xs font-bold text-slate-900">
-                    Condiciones Comerciales
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Nuevo Costo Pactado ($ COP) *
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
-                        $
-                      </span>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={100}
-                        value={formEditHomologacion.nuevo_costo || ''}
-                        onChange={(e) =>
-                          setFormEditHomologacion((prev) => ({
-                            ...prev,
-                            nuevo_costo: Number(e.target.value),
-                          }))
-                        }
-                        required
-                        className="pl-7 font-mono font-bold text-xs h-9 bg-white border-slate-200"
-                      />
-                    </div>
-                    {formEditHomologacion.nuevo_costo > 0 && (
-                      <span className="text-[10px] font-bold text-emerald-700 block truncate">
-                        Preview: {formatMonedaCOP(formEditHomologacion.nuevo_costo)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Días de Entrega Muelle
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={formEditHomologacion.tiempo_entrega_dias || 1}
-                      onChange={(e) =>
-                        setFormEditHomologacion((prev) => ({
-                          ...prev,
-                          tiempo_entrega_dias: Number(e.target.value),
-                        }))
-                      }
-                      className="font-mono text-xs h-9 bg-white border-slate-200"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">
-                      Pedido Mínimo (MOQ)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={formEditHomologacion.cantidad_minima_compra || 1}
-                      onChange={(e) =>
-                        setFormEditHomologacion((prev) => ({
-                          ...prev,
-                          cantidad_minima_compra: Number(e.target.value),
-                        }))
-                      }
-                      className="font-mono text-xs h-9 bg-white border-slate-200"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                    <Globe className="h-3 w-3 text-slate-400" />
-                    Enlace al Producto en Portal / Catálogo del Proveedor
-                  </Label>
-                  <Input
-                    placeholder="https://tienda.proveedor.com/item/12345"
-                    value={formEditHomologacion.url_producto_proveedor || ''}
-                    onChange={(e) =>
-                      setFormEditHomologacion((prev) => ({
-                        ...prev,
-                        url_producto_proveedor: e.target.value,
-                      }))
-                    }
-                    className="text-xs h-8 bg-white border-slate-200"
-                  />
-                </div>
-              </div>
-
-              {/* 3. Proveedor Preferente */}
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3.5 border border-slate-200">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                    Proveedor Preferente
-                  </Label>
-                  <p className="text-[11px] text-slate-500">
-                    Marcar como fuente de suministro prioritaria para este ítem.
-                  </p>
-                </div>
-                <Switch
-                  checked={formEditHomologacion.es_proveedor_preferido}
-                  onCheckedChange={(checked) =>
-                    setFormEditHomologacion((prev) => ({
-                      ...prev,
-                      es_proveedor_preferido: checked,
-                    }))
-                  }
-                />
-              </div>
-
-              {/* 4. Motivo / Observaciones */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-700">
-                  Motivo de Actualización / Observación para Auditoría
-                </Label>
-                <Textarea
-                  placeholder="Ej. Ajuste tarifario anual, actualización de lista comercial..."
-                  value={formEditHomologacion.observaciones}
-                  onChange={(e) =>
-                    setFormEditHomologacion((prev) => ({
-                      ...prev,
-                      observaciones: e.target.value,
-                    }))
-                  }
-                  rows={2}
-                  className="text-xs border-slate-200 resize-none bg-white"
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setModalEditarHomologacionOpen(false)}
-                className="text-xs"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isSubmittingHomologacion}
-                className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-              >
-                {isSubmittingHomologacion ? (
-                  <>
-                    <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Actualizando...
-                  </>
-                ) : (
-                  <>
-                    <Check className="mr-1.5 h-3.5 w-3.5" />
-                    Guardar Cambios
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL ATÓMICO UNIFICADO: HOMOLOGACIÓN Y SOURCING */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {proveedor && (
+        <ModalHomologacionSourcing
+          open={modalHomologacionOpen}
+          onOpenChange={setModalHomologacionOpen}
+          modo={modalHomologacionModo}
+          origen="desde_proveedor"
+          proveedorFijo={{
+            id_proveedor: proveedor.id_proveedor,
+            nombre: nombre,
+            nit: nit,
+          }}
+          datosIniciales={datosEdicionHomologacion}
+          onSuccess={() => cargarDatos(true)}
+        />
+      )}
 
       {/* DIÁLOGO: CONFIRMAR DESVINCULACIÓN */}
       <Dialog open={dialogDesvincularOpen} onOpenChange={setDialogDesvincularOpen}>
