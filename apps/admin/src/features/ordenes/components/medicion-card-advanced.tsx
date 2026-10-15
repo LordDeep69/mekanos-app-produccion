@@ -175,7 +175,7 @@ export function MedicionCardAdvanced({ medicion, idOrdenServicio, onUpdate }: Me
                 idMedicion: medicion.id_medicion,
                 data: {
                     valorNumerico: valorNumerico ? parseFloat(valorNumerico) : undefined,
-                    observaciones: observaciones || undefined,
+                    observaciones: observaciones?.trim() || null,
                 },
             });
             setIsEditing(false);

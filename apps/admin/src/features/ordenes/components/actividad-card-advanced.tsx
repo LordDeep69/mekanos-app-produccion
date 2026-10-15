@@ -22,7 +22,7 @@ import {
     MessageSquare,
     X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { EstadoActividad } from '../api/ordenes.service';
 import { useUpdateActividad } from '../hooks/use-ordenes';
 import { GaleriaActividadFotos } from './galeria-actividad-fotos';
@@ -290,6 +290,18 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
         esRico ? plainTextToHtml(separado.contenido) : ''
     );
 
+    // Sincronizar estado local cuando cambien las props desde el servidor
+    useEffect(() => {
+        setObservaciones(actividad.observaciones || '');
+        if (esRico && editor) {
+            const sep = separarPrefijo(actividad.observaciones || '');
+            const nuevoHtml = sep.contenido ? plainTextToHtml(sep.contenido) : '';
+            if (editor.getHTML() !== nuevoHtml) {
+                editor.commands.setContent(nuevoHtml);
+            }
+        }
+    }, [actividad.observaciones, esRico, editor]);
+
     const handleEstadoChange = async (nuevoEstado: EstadoActividad) => {
         if (updateActividad.isPending) return;
 
@@ -311,7 +323,7 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
         if (updateActividad.isPending) return;
 
         try {
-            let valorAGuardar: string | null;
+            let valorAGuardar: string | null = null;
 
             if (esRico && editor) {
                 const html = editor.getHTML();
@@ -319,25 +331,28 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
                 const tieneContenido = tieneContenidoReal(textoLimpio);
 
                 if (!tieneContenido) {
-                    // Si se borró el contenido o solo se dejó '.', guardar solo el prefijo formateado
-                    // para que Portal Admin mantenga la cabecera del prefijo + 'Sin contenido'
-                    valorAGuardar = separado.prefijo ? separado.prefijo : null;
+                    valorAGuardar = null;
                 } else {
                     // Reconstruir observación final = PREFIJO + contenido
                     valorAGuardar = (separado.prefijo + html) || null;
                 }
             } else {
                 const tieneContenido = tieneContenidoReal(observaciones || '');
-                valorAGuardar = tieneContenido ? observaciones : null;
+                valorAGuardar = tieneContenido ? observaciones.trim() : null;
             }
 
             await updateActividad.mutateAsync({
                 idActividad: actividad.id_actividad_ejecutada,
                 data: {
-                    observaciones: valorAGuardar ?? undefined,
+                    observaciones: valorAGuardar,
                 },
             });
             setShowObservaciones(false);
+            setObservaciones(valorAGuardar || '');
+            if (esRico && editor) {
+                const sep = separarPrefijo(valorAGuardar || '');
+                editor.commands.setContent(sep.contenido ? plainTextToHtml(sep.contenido) : '');
+            }
             onUpdate?.();
         } catch (error) {
             console.error('Error al guardar observaciones:', error);
@@ -350,7 +365,7 @@ export function ActividadCardAdvanced({ actividad, idOrdenServicio, onUpdate }: 
         setObservaciones(actividad.observaciones || '');
         // Resetear editor rico al contenido original
         if (esRico && editor) {
-            editor.commands.setContent(plainTextToHtml(separado.contenido));
+            editor.commands.setContent(separado.contenido ? plainTextToHtml(separado.contenido) : '');
         }
     };
 

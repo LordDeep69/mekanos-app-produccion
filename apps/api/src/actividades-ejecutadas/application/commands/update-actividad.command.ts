@@ -9,7 +9,7 @@ export class UpdateActividadCommand {
     public readonly sistema?: string,
     public readonly ordenSecuencia?: number,
     public readonly estado?: EstadoActividadEnum,
-    public readonly observaciones?: string,
+    public readonly observaciones?: string | null,
     public readonly ejecutada?: boolean,
     public readonly ejecutadaPor?: number,
     public readonly tiempoEjecucionMinutos?: number,

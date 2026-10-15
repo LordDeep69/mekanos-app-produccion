@@ -364,7 +364,7 @@ export type EstadoActividad = 'B' | 'R' | 'M' | 'I' | 'C' | 'LI' | 'A' | 'L' | n
 
 export interface UpdateActividadDto {
     estado?: EstadoActividad;
-    observaciones?: string;
+    observaciones?: string | null;
     ejecutada?: boolean;
 }
 
@@ -389,7 +389,7 @@ export async function updateActividad(
 export interface UpdateMedicionDto {
     valorNumerico?: number;
     valorTexto?: string;
-    observaciones?: string;
+    observaciones?: string | null;
     // FIX 04-MAY-2026: Excluir/incluir medición del PDF
     excluidoPdf?: boolean;
 }

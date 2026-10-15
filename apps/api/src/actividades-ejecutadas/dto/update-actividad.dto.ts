@@ -32,7 +32,7 @@ export class UpdateActividadDto {
 
   @IsOptional()
   @IsString()
-  observaciones?: string;
+  observaciones?: string | null;
 
   @IsOptional()
   @IsBoolean()
