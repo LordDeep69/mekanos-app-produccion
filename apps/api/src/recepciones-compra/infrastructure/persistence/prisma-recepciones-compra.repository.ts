@@ -53,6 +53,37 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
     return `REC-${year}-${String(nextVal).padStart(4, '0')}`;
   }
 
+  private async generarSiguienteNumeroLote(tx: any): Promise<string> {
+    const year = new Date().getFullYear();
+    const rows = await tx.$queryRawUnsafe(`
+      SELECT id, current_value FROM sequence_counter
+      WHERE type = 'LOT' AND year = ${year}
+      FOR UPDATE;
+    `);
+
+    let nextVal = 1;
+    if (rows && rows.length > 0) {
+      nextVal = Number(rows[0].current_value) + 1;
+      await tx.$executeRawUnsafe(`
+        UPDATE sequence_counter
+        SET current_value = ${nextVal}, updated_at = NOW()
+        WHERE id = ${rows[0].id};
+      `);
+    } else {
+      const maxRes = await tx.$queryRawUnsafe(`
+        SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sequence_counter;
+      `);
+      const nextId = Number(maxRes[0]?.next_id || 300);
+      await tx.$executeRawUnsafe(`
+        INSERT INTO sequence_counter (id, type, year, current_value, created_at, updated_at)
+        VALUES (${nextId}, 'LOT', ${year}, 1, NOW(), NOW());
+      `);
+      nextVal = 1;
+    }
+
+    return `LOT-${year}-${String(nextVal).padStart(4, '0')}`;
+  }
+
   /**
    * Registra una recepción física de una sola línea de la orden
    */
@@ -236,8 +267,31 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
         });
         recepcionesCreadas.push(recepcion);
 
-        // B. Movimiento inmutable de inventario (Kardex) si hay unidades aceptadas
+        // B. Crear registro en lotes_componentes si hay unidades aceptadas
         if (Number(item.cantidad_aceptada) > 0 && ubicacionDestino) {
+          const codigoLote = await this.generarSiguienteNumeroLote(tx);
+          const fechaVenc = item.fecha_vencimiento ? new Date(item.fecha_vencimiento) : null;
+
+          const loteCreado = await tx.lotes_componentes.create({
+            data: {
+              codigo_lote: codigoLote,
+              id_componente: detalle.id_componente,
+              fecha_fabricacion: new Date(),
+              fecha_vencimiento: fechaVenc,
+              cantidad_inicial: item.cantidad_aceptada,
+              cantidad_actual: item.cantidad_aceptada,
+              estado_lote: 'DISPONIBLE',
+              id_proveedor: orden.id_proveedor,
+              numero_factura_proveedor: item.numero_lote_fabricante || data.guia_remision || null,
+              observaciones:
+                notasCompuestas ||
+                `Lote generado por recepción ${numero_recepcion} de OC ${orden.numero_orden_compra}`,
+              fecha_ingreso: new Date(),
+              ingresado_por: data.recibido_por,
+            },
+          });
+
+          // C. Movimiento inmutable de inventario (Kardex) vinculado al lote
           await tx.movimientos_inventario.create({
             data: {
               tipo_movimiento: 'ENTRADA',
@@ -246,16 +300,17 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
               cantidad: item.cantidad_aceptada,
               costo_unitario: item.costo_unitario_real || detalle.precio_unitario,
               id_ubicacion: ubicacionDestino,
+              id_lote: loteCreado.id_lote,
               id_orden_compra: data.id_orden_compra,
               justificacion: `Recepción ${numero_recepcion} de OC ${orden.numero_orden_compra}`,
               observaciones:
                 notasCompuestas ||
-                `Ingreso físico de ${item.cantidad_aceptada} unidades al almacén vía ${numero_recepcion}`,
+                `Ingreso físico de ${item.cantidad_aceptada} unidades al almacén vía ${numero_recepcion} (Lote: ${codigoLote})`,
               realizado_por: data.recibido_por,
             },
           });
 
-          // C. Incrementar atómicamente stock_actual en catalogo_componentes
+          // D. Incrementar atómicamente stock_actual en catalogo_componentes
           await tx.catalogo_componentes.update({
             where: { id_componente: detalle.id_componente },
             data: {

@@ -12,11 +12,20 @@
 
 'use client';
 
-import { useActualizarComponente, useDetalleComponente, useKardex } from '@/features/inventario/api/inventario-motor.service';
+import {
+    ComponenteStock,
+    useActualizarComponente,
+    useDetalleComponente,
+    useKardex,
+} from '@/features/inventario/api/inventario-motor.service';
+import { MovimientoModal, TipoOperacionInventario } from '@/features/inventario/components/MovimientoModal';
 import { cn } from '@/lib/utils';
 import {
     AlertCircle,
+    ArrowDownCircle,
     ArrowLeft,
+    ArrowLeftRight,
+    ArrowUpCircle,
     Box,
     Building2,
     Calendar,
@@ -28,10 +37,11 @@ import {
     Package,
     Save,
     Settings,
+    SlidersHorizontal,
     Tag,
     TrendingDown,
     TrendingUp,
-    X
+    X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -101,10 +111,33 @@ export default function DetalleComponentePage() {
     const [activeTab, setActiveTab] = useState<'general' | 'gestion' | 'kardex'>('general');
     const [editMode, setEditMode] = useState(false);
     const [formData, setFormData] = useState<Record<string, any>>({});
+    const [modalMovimiento, setModalMovimiento] = useState<{
+        open: boolean;
+        tipo: TipoOperacionInventario;
+    }>({ open: false, tipo: 'ENTRADA' });
 
     const { data: componente, isLoading, isError, refetch } = useDetalleComponente(id);
     const { data: kardexData, isLoading: loadingKardex } = useKardex(activeTab === 'kardex' ? id : null);
     const actualizarMutation = useActualizarComponente();
+
+    const compStock: ComponenteStock | null = componente ? {
+        id_componente: componente.id,
+        codigo: componente.codigo_interno,
+        referencia: componente.referencia_fabricante,
+        nombre: componente.descripcion_corta,
+        tipo: componente.tipo?.nombre,
+        marca: componente.marca,
+        unidad: componente.unidad_medida,
+        stock_actual: componente.stock.actual,
+        stock_minimo: componente.stock.minimo,
+        stock_seguridad: 0,
+        precio_compra: componente.precios.compra,
+        precio_venta: componente.precios.venta,
+        valor_stock: componente.stock.valor_total,
+        estado_stock: componente.stock.estado,
+        total_lotes: 0,
+        activo: componente.activo,
+    } : null;
 
     // Inicializar formData cuando carga el componente
     const initEditMode = () => {
@@ -204,12 +237,49 @@ export default function DetalleComponentePage() {
                 </div>
 
                 {/* Acciones */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {!editMode && (
+                        <>
+                            <button
+                                onClick={() => setModalMovimiento({ open: true, tipo: 'ENTRADA' })}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                                title="Registrar Entrada a Inventario"
+                            >
+                                <ArrowDownCircle className="h-4 w-4" />
+                                Entrada
+                            </button>
+                            <button
+                                onClick={() => setModalMovimiento({ open: true, tipo: 'SALIDA' })}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                                title="Registrar Salida / Despacho"
+                            >
+                                <ArrowUpCircle className="h-4 w-4" />
+                                Salida
+                            </button>
+                            <button
+                                onClick={() => setModalMovimiento({ open: true, tipo: 'AJUSTE' })}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                                title="Registrar Ajuste Físico"
+                            >
+                                <SlidersHorizontal className="h-4 w-4" />
+                                Ajuste
+                            </button>
+                            <button
+                                onClick={() => setModalMovimiento({ open: true, tipo: 'TRASLADO' })}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                                title="Trasladar a otra Bodega"
+                            >
+                                <ArrowLeftRight className="h-4 w-4" />
+                                Traslado
+                            </button>
+                        </>
+                    )}
+
                     {editMode ? (
                         <>
                             <button
                                 onClick={handleCancel}
-                                className="flex items-center gap-2 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50"
+                                className="flex items-center gap-2 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 text-xs font-semibold"
                             >
                                 <X className="h-4 w-4" />
                                 Cancelar
@@ -217,7 +287,7 @@ export default function DetalleComponentePage() {
                             <button
                                 onClick={handleSave}
                                 disabled={actualizarMutation.isPending}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-xs font-semibold"
                             >
                                 {actualizarMutation.isPending ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -230,7 +300,7 @@ export default function DetalleComponentePage() {
                     ) : (
                         <button
                             onClick={initEditMode}
-                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-xs font-semibold"
                         >
                             <Edit2 className="h-4 w-4" />
                             Editar
@@ -648,6 +718,17 @@ export default function DetalleComponentePage() {
                     )}
                 </div>
             )}
+
+            {/* Modal de Operaciones Físicas de Inventario */}
+            <MovimientoModal
+                isOpen={modalMovimiento.open}
+                onClose={() => setModalMovimiento({ ...modalMovimiento, open: false })}
+                tipo={modalMovimiento.tipo}
+                componentePreseleccionado={compStock}
+                onSuccess={() => {
+                    refetch();
+                }}
+            />
         </div>
     );
 }

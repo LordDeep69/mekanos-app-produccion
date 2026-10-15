@@ -62,6 +62,14 @@ export class ItemRecepcionLoteDto {
   @IsPositive()
   @IsOptional()
   costo_unitario_real?: number;
+
+  @IsString()
+  @IsOptional()
+  numero_lote_fabricante?: string;
+
+  @IsString()
+  @IsOptional()
+  fecha_vencimiento?: string;
 }
 
 export class RegistrarRecepcionLoteDto {

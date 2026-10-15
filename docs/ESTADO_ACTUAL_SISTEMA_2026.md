@@ -151,16 +151,16 @@ El portal web administrativo (`apps/admin`) está estructurado en 10 módulos pr
   - Pestañas en la ficha detalle: Información Comercial, Red de Sedes, Equipos Instalados, Bitácora de Novedades, Historial de Servicios.
   - Modal de Vista Previa de Trazabilidad en PDF.
 
-#### 4. Compras y Abastecimiento (`/compras/*`) - 100% Certificado y Auditoría Zero-Trust Completada
+#### 4. Compras y Abastecimiento (`/compras/*`) - 100% Certificado y Auditoría Zero-Trust Completada (Cierre Commit 59a74a5, 25d09ae y db549c3)
 - **Páginas:**
   - `/compras/catalogo`: Directorio maestro de recursos (repuestos, insumos, consumibles, herramientas, dotación). Píldoras de arquetipo con micro-contadores certificados (`Todos [26]`, `Insumos [26]`, etc.), selector taxonómico jerárquico in-context y combobox de fabricantes con creación al vuelo.
-  - `/compras/catalogo/[id]`: Ficha 360° del recurso maestro (2,079 líneas). Pestaña 2 Fuentes de Suministro con simetría bidireccional completa (denominación comercial en facturas, SKU del proveedor, MOQ, marca ofrecida, tiempos y enlace web). Visualización de costos en COP, márgenes comerciales, especificaciones técnicas, equivalencias y proveedores autorizados.
+  - `/compras/catalogo/[id]`: Ficha 360° del recurso maestro (2,079 líneas). Pestaña 2 Fuentes de Suministro con simetría bidireccional completa (denominación comercial en facturas, SKU del proveedor, MOQ, marca ofrecida, tiempos y enlace web). Visualización de costos en COP, márgenes comerciales, especificaciones técnicas, equivalencias y proveedores autorizados. Integrado con `ModalHomologacionSourcing` atómico centralizado (Commit `59a74a5`).
   - `/compras/catalogo/nuevo`: Formulario reactivo de creación y homologación con validación Zero-Trust (1,033 líneas).
   - `/compras/marcas`: Directorio de fabricantes con soporte OEM/Aftermarket y fusión de duplicados (885 líneas).
   - `/compras/categorias`: Taxonomía jerárquica ilimitada en árbol interactivo con propagación de conteos y enlaces cruzados (615 líneas). Saneamiento taxonómico industrial 100% exacto sobre los 22 repuestos del catálogo (subcategorías de Baterías, Filtros de Aceite, Filtros de Aire, Filtros Hidráulicos y Lubricantes).
-  - `/compras/proveedores`: Directorio comercial (1,309 líneas) con columna de tabla `ACCIONES` debidamente rotulada, botones de acción rápida `Ver Ficha` y `Editar`, modal ergonómico de 2 columnas expandido (`sm:max-w-4xl md:max-w-5xl`), condiciones comerciales, micro-portales (`Web ↗` y `GPS ↗`), y micro-copy neutro.
-  - `/compras/proveedores/[id]`: Ficha 360° Integral de Proveedor (2,881 líneas). 4 Pestañas funcionales sincronizadas con URL (`?tab=catalogo | ordenes | fiscal | trazabilidad`). Centro de Control Contractual y Matriz de Sourcing con denominación comercial de factura y SKU de proveedor. KPIs de lógica contable estricta: "Volumen Comprometido" suma solo órdenes firmes (`ENVIADA`, `PARCIAL`, `COMPLETADA`, `RECIBIDA`), excluyendo borradores y canceladas (monto en borrador detallado en subtexto informativo); KPI "Cumplimiento en Muelle" calculado sobre recepciones físicas reales en `recepciones_compra` (mostrando "Sin evaluar" / "Sin recepciones en muelle" en caso de cero recepciones históricas).
-  - `/compras/ordenes`: Gestión y liquidación de órdenes de compra con micro-filtros por estado FSM y correlativos formales.
+  - `/compras/proveedores`: Directorio comercial rediseñado con 7 columnas sin scroll horizontal (Commit `db549c3`), columna `ACCIONES` completamente visible con botones `Ver Ficha` y `Editar` perfectamente alineados en horizontal, integración de NIT como metadata secundaria bajo la Razón Social, modal ergonómico de 2 columnas expandido (`sm:max-w-4xl md:max-w-5xl`), condiciones comerciales, micro-portales (`Web ↗` y `GPS ↗`), y resolución uniforme con `getNombreProveedor()` (Commit `59a74a5`).
+  - `/compras/proveedores/[id]`: Ficha 360° Integral de Proveedor (2,881 líneas). 4 Pestañas funcionales sincronizadas con URL (`?tab=catalogo | ordenes | fiscal | trazabilidad`). Centro de Control Contractual y Matriz de Sourcing con denominación comercial de factura y SKU de proveedor con `ModalHomologacionSourcing`. KPIs de lógica contable estricta: "Volumen Comprometido" suma solo órdenes firmes (`ENVIADA`, `PARCIAL`, `COMPLETADA`, `RECIBIDA`), excluyendo borradores y canceladas; KPI "Cumplimiento en Muelle" calculado sobre recepciones físicas reales en `recepciones_compra`.
+  - `/compras/ordenes`: Gestión y liquidación de órdenes de compra con micro-filtros por estado FSM y correlativos formales deterministas (`OC-YYYY-XXXX`).
   - `/compras/ordenes/nueva`: Emisión Inteligente de Órdenes de Compra (1,315 líneas). Desplegable predictivo jerárquico (`z-50`, `shadow-2xl`) con badge limpio `✓ Pactado • Entrega: Xd • MOQ: Y`, preselección automática del proveedor proveniente de la URL (`?proveedorId=...`), prellenado de cantidad sugerida basada en el Pedido Mínimo (MOQ $\ge 1$) y alerta preventiva visual si la cantidad es menor al MOQ pactado tanto en el selector interactivo como en la tabla de ítems.
 - **Identidad Global White-Label:** Saneamiento en Topbar (`header.tsx`) para mostrar `'Administrador del Sistema'`.
 
@@ -177,12 +177,17 @@ El portal web administrativo (`apps/admin`) está estructurado en 10 módulos pr
   - Discriminación de roles técnicos (campo) vs comerciales/asesores.
   - Formulario V2 con vinculación a entidades de personas, seguridad social, cargos y certificaciones técnicas.
 
-#### 7. Inventario y Control de Stock (`/inventario`) - 85% Completado
-- **Páginas:** Listado de Existencias (`/inventario`), Detalle de Componente (`/inventario/[id]`).
-- **Capacidades Especiales:**
-  - Tarjetas KPI de valorización total de almacén, alertas de stock mínimo y crítico.
-  - Registro modal de movimientos físicos (Entrada, Salida, Ajuste de auditoría).
-  - Ficha de componente con Kardex transaccional histórico de entradas/salidas.
+#### 7. Inventario y Control de Stock (`/inventario`) - Diagnóstico Forense y Estado Real (Octubre 2026)
+- **Estado Funcional:** En desarrollo temprano (~40% de madurez real, no 85% como se estimaba preliminarmente). Desconectado del ecosistema operativo y fuera de flujo.
+- **Páginas Actuales:**
+  - `/inventario`: Vista plana con 5 KPIs simples y tabla básica con estados 'AGOTADO'. Modales de Entrada/Salida manuales rudimentarios sin selector de almacén, sin soporte de lotes ni fechas de vencimiento, y con usuario `realizado_por: 1` quemado en código. Botón "+ Nuevo Item" huérfano sin acción.
+  - `/inventario/[id]`: Ficha aislada que intenta duplicar datos maestros del catálogo (`catalogo_componentes`), rota con error 500 al cargar debido a consulta de relaciones inexistentes en Prisma (`usuarios_catalogo_componentes_creado_porTousuarios`).
+- **Arquitectura Backend & Base de Datos:**
+  - Existe un módulo CQRS `movimientos-inventario` y módulos de `ubicaciones-bodega`, `lotes-componentes` y `motivos-ajuste`, pero están desarticulados entre sí y no están consumidos por el Frontend.
+  - No existe Kardex Global auditable consolidado ni gestión multi-bodega (solo existen 2 ubicaciones de prueba en BD).
+  - El sistema de recepciones de compras (`recepciones_compra`) incrementa `stock_actual` pero NO genera lotes (`lotes_componentes`).
+  - La lógica de traslados en `movimientos-inventario` no valida stock por bodega ni maneja adecuadamente el tipo `TRANSFERENCIA` en el cálculo de saldos.
+  - Falta autoincrement determinista en claves primarias de `ubicaciones_bodega` y `lotes_componentes`.
 
 #### 8. Núcleo Operativo: Órdenes de Servicio (`/ordenes`) - 95% Completado (Enterprise Core)
 - **Páginas:** Listado (`/ordenes`), Nueva Orden (`/ordenes/nueva`), Ficha Detalle Integral (`/ordenes/[id]`), Edición (`/ordenes/[id]/editar`).
@@ -246,7 +251,7 @@ La aplicación móvil (`apps/mobile`) está diseñada para los técnicos que ope
 | **Evidencias y Galería ZIP** | ✅ 95% | 100% | 95% | 95% | Mantenimiento |
 | **Generación Informes PDF (Puppeteer)** | ✅ 100% | 100% | 95% | N/A | Mantenimiento |
 | **Envíos de Email (SMTP/OAuth2)** | ✅ 95% | 100% | 95% | N/A | Mantenimiento |
-| **Inventario y Kardex** | 🟡 85% | 95% | 85% | N/A | **Alta (Enlace con Compras)** |
+| **Inventario, Bodegas y Kardex** | 🔴 40% | 60% | 35% | N/A | **Crítica (Reestructuración Enterprise)** |
 | **Agenda y Programación** | 🟡 90% | 95% | 90% | N/A | Media |
 | **Reportes Centralizados** | 🟡 90% | 95% | 90% | N/A | Media |
 | **Catálogos y Parámetros** | ✅ 95% | 100% | 95% | 95% | Mantenimiento |

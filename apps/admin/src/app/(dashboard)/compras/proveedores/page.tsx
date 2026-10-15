@@ -555,10 +555,10 @@ export default function ProveedoresPage() {
         </CardContent>
       </Card>
 
-      {/* TABLA DE PROVEEDORES: COMPACTA, AJUSTADA AL ANCHO SIN SCROLL HORIZONTAL */}
+      {/* TABLA DE PROVEEDORES: RESPONSIVA CON SCROLL HORIZONTAL FLUIDO */}
       <Card className="border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div className="w-full">
-          <table className="w-full text-left text-sm text-gray-600 table-auto">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-600 min-w-[1020px]">
             <thead className="bg-gray-50 text-[10.5px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200">
               <tr>
                 <th className="pl-4 pr-2 py-3.5">Proveedor / NIT</th>
@@ -567,7 +567,7 @@ export default function ProveedoresPage() {
                 <th className="px-2.5 py-3.5">Contacto & Portales</th>
                 <th className="px-2.5 py-3.5">Condiciones</th>
                 <th className="px-2 py-3.5 text-center">Estado</th>
-                <th className="pl-2 pr-4 py-3.5 text-center whitespace-nowrap">ACCIONES</th>
+                <th className="px-3 py-3.5 text-center min-w-[195px] whitespace-nowrap">ACCIONES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -794,13 +794,13 @@ export default function ProveedoresPage() {
                       </td>
 
                       {/* Acciones: Ver Ficha 360° y Editar */}
-                      <td className="pl-2 pr-4 py-3.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="px-3 py-3.5 text-center whitespace-nowrap min-w-[195px]">
+                        <div className="flex items-center justify-center gap-2">
                           <Link href={`/compras/proveedores/${prov.id_proveedor}`}>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-8 px-2 text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 font-semibold shadow-2xs whitespace-nowrap shrink-0"
+                              className="h-8 px-2.5 text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 font-semibold shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
                               title="Ver Ficha 360° del Proveedor"
                             >
                               <Eye className="h-3.5 w-3.5 mr-1 text-blue-600 shrink-0" />
@@ -811,7 +811,7 @@ export default function ProveedoresPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => abrirEditarModal(prov)}
-                            className="h-8 px-2 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 border-slate-200 font-medium shadow-2xs whitespace-nowrap shrink-0"
+                            className="h-8 px-2.5 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 border-slate-200 font-medium shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
                             title="Editar Datos del Proveedor"
                           >
                             <Pencil className="h-3.5 w-3.5 mr-1 text-slate-500 shrink-0" />

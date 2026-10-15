@@ -1373,7 +1373,7 @@ model lecturas_horometro {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model lotes_componentes {
-  id_lote                  Int                      @id
+  id_lote                  Int                      @id @default(autoincrement())
   codigo_lote              String                   @db.VarChar(50)
   id_componente            Int
   fecha_fabricacion        DateTime?                @db.Date
@@ -1429,7 +1429,7 @@ model mediciones_servicio {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model motivos_ajuste {
-  id_motivo_ajuste                 Int                          @id
+  id_motivo_ajuste                 Int                          @id @default(autoincrement())
   codigo_motivo                    String                       @db.VarChar(30)
   nombre_motivo                    String                       @db.VarChar(100)
   categoria                        categoria_motivo_ajuste_enum
@@ -2126,7 +2126,7 @@ model tipos_servicio {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model ubicaciones_bodega {
-  id_ubicacion           Int                      @id
+  id_ubicacion           Int                      @id @default(autoincrement())
   codigo_ubicacion       String                   @db.VarChar(20)
   zona                   String                   @db.VarChar(50)
   pasillo                String?                  @db.VarChar(10)
