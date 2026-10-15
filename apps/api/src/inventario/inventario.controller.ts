@@ -47,6 +47,7 @@ export class InventarioController {
     @ApiQuery({ name: 'busqueda', required: false })
     @ApiQuery({ name: 'id_tipo', required: false })
     @ApiQuery({ name: 'id_categoria', required: false })
+    @ApiQuery({ name: 'estado_stock', required: false })
     @ApiQuery({ name: 'solo_criticos', required: false })
     @ApiQuery({ name: 'skip', required: false })
     @ApiQuery({ name: 'limit', required: false })
@@ -54,6 +55,7 @@ export class InventarioController {
         @Query('busqueda') busqueda?: string,
         @Query('id_tipo') idTipo?: string,
         @Query('id_categoria') idCategoria?: string,
+        @Query('estado_stock') estadoStock?: string,
         @Query('solo_criticos') soloCriticos?: string,
         @Query('skip') skip?: string,
         @Query('limit') limit?: string,
@@ -62,6 +64,7 @@ export class InventarioController {
             busqueda,
             id_tipo: idTipo ? parseInt(idTipo, 10) : undefined,
             id_categoria: idCategoria ? parseInt(idCategoria, 10) : undefined,
+            estado_stock: estadoStock,
             solo_criticos: soloCriticos === 'true',
             skip: skip ? parseInt(skip, 10) : undefined,
             limit: limit ? parseInt(limit, 10) : undefined,

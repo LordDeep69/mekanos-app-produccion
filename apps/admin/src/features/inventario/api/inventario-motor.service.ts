@@ -417,6 +417,7 @@ export async function getComponentesStock(params?: {
     busqueda?: string;
     id_tipo?: number;
     id_categoria?: number;
+    estado_stock?: string;
     solo_criticos?: boolean;
     skip?: number;
     limit?: number;
@@ -536,6 +537,7 @@ export function useComponentesStock(params?: {
     busqueda?: string;
     id_tipo?: number;
     id_categoria?: number;
+    estado_stock?: string;
     solo_criticos?: boolean;
     skip?: number;
     limit?: number;

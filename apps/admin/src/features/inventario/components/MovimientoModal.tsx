@@ -31,6 +31,7 @@ import {
     Warehouse,
     X,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import React, { useEffect, useState } from 'react';
 
 export type TipoOperacionInventario = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'TRASLADO';
@@ -50,6 +51,16 @@ export function MovimientoModal({
     componentePreseleccionado,
     onSuccess,
 }: MovimientoModalProps) {
+    const { data: session } = useSession();
+    const usuarioId = Number((session?.user as any)?.id) || 1;
+
+    // Tipo de operación activo (permite conmutar dentro del modal unificado)
+    const [operacionActiva, setOperacionActiva] = useState<TipoOperacionInventario>(tipo);
+
+    useEffect(() => {
+        setOperacionActiva(tipo);
+    }, [tipo]);
+
     // Selección de Componente
     const [busqueda, setBusqueda] = useState('');
     const [componenteSeleccionado, setComponenteSeleccionado] = useState<ComponenteStock | null>(
@@ -135,13 +146,13 @@ export function MovimientoModal({
 
     // Establecer costo unitario al cambiar componente para ENTRADA
     useEffect(() => {
-        if (componenteSeleccionado && tipo === 'ENTRADA') {
+        if (componenteSeleccionado && operacionActiva === 'ENTRADA') {
             setCostoUnitario(componenteSeleccionado.precio_compra?.toString() || '');
         }
-        if (componenteSeleccionado && tipo === 'AJUSTE') {
+        if (componenteSeleccionado && operacionActiva === 'AJUSTE') {
             setNuevoStock(componenteSeleccionado.stock_actual.toString());
         }
-    }, [componenteSeleccionado, tipo]);
+    }, [componenteSeleccionado, operacionActiva]);
 
     if (!isOpen) return null;
 
@@ -166,7 +177,7 @@ export function MovimientoModal({
         }
 
         try {
-            if (tipo === 'ENTRADA') {
+            if (operacionActiva === 'ENTRADA') {
                 const costo = parseFloat(costoUnitario) || 0;
                 if (cantidadNum <= 0) {
                     setError('La cantidad a ingresar debe ser mayor a 0');
@@ -186,11 +197,11 @@ export function MovimientoModal({
                     fecha_vencimiento: fechaVencimiento || undefined,
                     numero_factura: numeroFactura.trim() || undefined,
                     observaciones: observaciones.trim() || undefined,
-                    realizado_por: 1,
+                    realizado_por: usuarioId,
                 });
 
                 setSuccessMsg(`Entrada registrada: +${cantidadNum} unidades agregadas al stock`);
-            } else if (tipo === 'SALIDA') {
+            } else if (operacionActiva === 'SALIDA') {
                 if (cantidadNum <= 0) {
                     setError('La cantidad a despachar debe ser mayor a 0');
                     return;
@@ -207,11 +218,11 @@ export function MovimientoModal({
                     motivo: motivoSalida,
                     justificacion: justificacion.trim() || undefined,
                     observaciones: observaciones.trim() || undefined,
-                    realizado_por: 1,
+                    realizado_por: usuarioId,
                 });
 
                 setSuccessMsg(`Salida registrada: -${cantidadNum} unidades despachadas`);
-            } else if (tipo === 'AJUSTE') {
+            } else if (operacionActiva === 'AJUSTE') {
                 if (isNaN(nuevoStockNum) || nuevoStockNum < 0) {
                     setError('El conteo físico o nuevo stock debe ser mayor o igual a 0');
                     return;
@@ -231,11 +242,11 @@ export function MovimientoModal({
                     id_ubicacion: bodegaEntrada ? parseInt(bodegaEntrada, 10) : undefined,
                     motivo: motivoAjuste || 'CONTEO_FISICO',
                     justificacion: justificacion.trim(),
-                    realizado_por: 1,
+                    realizado_por: usuarioId,
                 });
 
                 setSuccessMsg(`Ajuste de inventario aplicado. Nuevo stock: ${nuevoStockNum} (Variación: ${deltaAjuste > 0 ? `+${deltaAjuste}` : deltaAjuste})`);
-            } else if (tipo === 'TRASLADO') {
+            } else if (operacionActiva === 'TRASLADO') {
                 if (cantidadNum <= 0) {
                     setError('La cantidad a transferir debe ser mayor a 0');
                     return;
@@ -260,7 +271,7 @@ export function MovimientoModal({
                     id_ubicacion_destino: parseInt(bodegaDestino, 10),
                     justificacion: justificacion.trim() || undefined,
                     observaciones: observaciones.trim() || undefined,
-                    realizado_por: 1,
+                    realizado_por: usuarioId,
                 });
 
                 setSuccessMsg(`Traslado registrado: ${cantidadNum} unidades transferidas exitosamente`);
@@ -277,54 +288,91 @@ export function MovimientoModal({
         }
     };
 
-    // Configuración visual según tipo de operación
+    // Configuración visual según tipo de operación (Paleta Clara Corporativa)
     const visualConfig = {
         ENTRADA: {
             title: 'Entrada de Inventario & Lote',
+            subtitle: 'Ingreso físico de mercancía con trazabilidad de lote y costo unitario',
             icon: ArrowDownCircle,
-            headerBg: 'bg-emerald-700',
-            btnBg: 'bg-emerald-600 hover:bg-emerald-700',
+            badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white',
         },
         SALIDA: {
-            title: 'Salida / Despacho de Inventario',
+            title: 'Salida / Despacho Justificado',
+            subtitle: 'Descargo de repuestos con trazabilidad por bodega y regla FIFO',
             icon: ArrowUpCircle,
-            headerBg: 'bg-amber-600',
-            btnBg: 'bg-amber-600 hover:bg-amber-700',
+            badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+            btnBg: 'bg-amber-600 hover:bg-amber-700 text-white',
         },
         AJUSTE: {
             title: 'Ajuste de Inventario (Conteo Físico / Merma)',
+            subtitle: 'Regularización de existencias con justificación de auditoría obligatoria',
             icon: SlidersHorizontal,
-            headerBg: 'bg-purple-700',
-            btnBg: 'bg-purple-600 hover:bg-purple-700',
+            badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+            btnBg: 'bg-purple-600 hover:bg-purple-700 text-white',
         },
         TRASLADO: {
             title: 'Traslado Entre Bodegas / Ubicaciones',
+            subtitle: 'Transferencia entre almacenes sin alterar el stock global de la empresa',
             icon: ArrowLeftRight,
-            headerBg: 'bg-blue-700',
-            btnBg: 'bg-blue-600 hover:bg-blue-700',
+            badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+            btnBg: 'bg-blue-600 hover:bg-blue-700 text-white',
         },
-    }[tipo];
+    }[operacionActiva];
 
     const Icon = visualConfig.icon;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" onClick={onClose} />
+            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
 
-            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto border border-slate-200">
-                {/* Header */}
-                <div className={cn('flex items-center justify-between px-6 py-4 text-white', visualConfig.headerBg)}>
-                    <div className="flex items-center gap-2">
-                        <Icon className="h-5 w-5" />
-                        <h2 className="text-base font-semibold">{visualConfig.title}</h2>
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200">
+                {/* Header Corporativo Elegante */}
+                <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
+                    <div className="flex items-center gap-3">
+                        <div className={cn('p-2.5 rounded-lg border', visualConfig.badgeClass)}>
+                            <Icon className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-slate-900">{visualConfig.title}</h2>
+                            <p className="text-xs text-slate-500 mt-0.5">{visualConfig.subtitle}</p>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="text-white/80 hover:text-white p-1">
+                    <button
+                        onClick={onClose}
+                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                    >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
                 {/* Formulario */}
                 <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
+                    {/* Selector Segmentado de Operación */}
+                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                        {(['ENTRADA', 'SALIDA', 'AJUSTE', 'TRASLADO'] as TipoOperacionInventario[]).map((op) => (
+                            <button
+                                key={op}
+                                type="button"
+                                onClick={() => {
+                                    setOperacionActiva(op);
+                                    setError(null);
+                                }}
+                                className={cn(
+                                    'flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5',
+                                    operacionActiva === op
+                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                )}
+                            >
+                                {op === 'ENTRADA' && <ArrowDownCircle className="h-3.5 w-3.5 text-emerald-600" />}
+                                {op === 'SALIDA' && <ArrowUpCircle className="h-3.5 w-3.5 text-amber-600" />}
+                                {op === 'AJUSTE' && <SlidersHorizontal className="h-3.5 w-3.5 text-purple-600" />}
+                                {op === 'TRASLADO' && <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />}
+                                <span>{op === 'ENTRADA' ? 'Entrada' : op === 'SALIDA' ? 'Salida' : op === 'AJUSTE' ? 'Ajuste' : 'Traslado'}</span>
+                            </button>
+                        ))}
+                    </div>
                     {error && (
                         <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
                             <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
@@ -418,7 +466,7 @@ export function MovimientoModal({
                     </div>
 
                     {/* CAMPOS ESPECÍFICOS POR TIPO DE OPERACIÓN */}
-                    {tipo === 'ENTRADA' && (
+                    {operacionActiva === 'ENTRADA' && (
                         <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
@@ -519,7 +567,7 @@ export function MovimientoModal({
                         </>
                     )}
 
-                    {tipo === 'SALIDA' && (
+                    {operacionActiva === 'SALIDA' && (
                         <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
@@ -589,7 +637,7 @@ export function MovimientoModal({
                         </>
                     )}
 
-                    {tipo === 'AJUSTE' && (
+                    {operacionActiva === 'AJUSTE' && (
                         <>
                             <div className="grid grid-cols-2 gap-3 p-3 bg-purple-50/70 border border-purple-200 rounded-lg">
                                 <div>
@@ -661,7 +709,7 @@ export function MovimientoModal({
                         </>
                     )}
 
-                    {tipo === 'TRASLADO' && (
+                    {operacionActiva === 'TRASLADO' && (
                         <>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">

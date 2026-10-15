@@ -701,6 +701,7 @@ export class InventarioService {
         id_tipo?: number;
         id_categoria?: number;
         id_ubicacion?: number;
+        estado_stock?: string;
         solo_criticos?: boolean;
         skip?: number;
         limit?: number;
@@ -727,6 +728,19 @@ export class InventarioService {
             where.id_categoria = filtros.id_categoria;
         }
 
+        if (filtros?.estado_stock === 'EN_STOCK') {
+            where.stock_actual = { gt: 0 };
+        } else if (filtros?.estado_stock === 'AGOTADO') {
+            where.stock_actual = 0;
+        } else if (filtros?.estado_stock === 'BAJO' || filtros?.solo_criticos) {
+            const criticos = await this.prisma.$queryRaw<Array<{ id_componente: number }>>`
+                SELECT id_componente FROM catalogo_componentes
+                WHERE activo = true AND es_inventariable = true AND stock_minimo > 0 AND stock_actual <= stock_minimo;
+            `;
+            const ids = criticos.map((c) => c.id_componente);
+            where.id_componente = { in: ids.length > 0 ? ids : [-1] };
+        }
+
         const [data, total] = await Promise.all([
             this.prisma.catalogo_componentes.findMany({
                 where,
@@ -746,7 +760,7 @@ export class InventarioService {
                     },
                 },
                 orderBy: [
-                    { stock_actual: 'asc' },
+                    { stock_actual: 'desc' },
                     { descripcion_corta: 'asc' },
                 ],
                 skip: filtros?.skip || 0,
@@ -1255,6 +1269,9 @@ export class InventarioService {
                 },
                 lotes_componentes: {
                     where: { cantidad_actual: { gt: 0 } },
+                    include: {
+                        ubicaciones_bodega: { select: { id_ubicacion: true, codigo_ubicacion: true, zona: true } },
+                    },
                     orderBy: { fecha_ingreso: 'desc' },
                 },
             },
@@ -1291,6 +1308,7 @@ export class InventarioService {
         const comp = componente as any;
 
         return {
+            id: componente.id_componente,
             id_componente: componente.id_componente,
             codigo_interno: componente.codigo_interno || `ART-${componente.id_componente}`,
             referencia_fabricante: componente.referencia_fabricante,
@@ -1345,6 +1363,8 @@ export class InventarioService {
                 fecha_vencimiento: l.fecha_vencimiento,
                 estado_lote: l.estado_lote,
                 fecha_ingreso: l.fecha_ingreso,
+                bodega: l.ubicaciones_bodega?.codigo_ubicacion || 'BOD-CENTRAL',
+                zona: l.ubicaciones_bodega?.zona || 'Taller Principal',
             })),
 
             ultimos_movimientos: ultimosMovimientos.map((m: any) => ({
@@ -1364,6 +1384,8 @@ export class InventarioService {
 
             metricas: {
                 total_movimientos: totalMovimientos,
+                alertas_activas: stockActual <= stockMinimo && stockMinimo > 0 ? 1 : 0,
+                lotes_activos_count: (componente.lotes_componentes || []).length,
             },
 
             auditoria: {

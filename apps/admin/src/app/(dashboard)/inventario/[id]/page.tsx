@@ -31,8 +31,10 @@ import {
     Calendar,
     DollarSign,
     Edit2,
+    ExternalLink,
     FileText,
     History,
+    Layers,
     Loader2,
     Package,
     Save,
@@ -41,8 +43,10 @@ import {
     Tag,
     TrendingDown,
     TrendingUp,
+    Warehouse,
     X,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -53,14 +57,14 @@ import { useState } from 'react';
 
 function StockBadge({ estado }: { estado: 'OK' | 'BAJO' | 'CRITICO' | 'AGOTADO' }) {
     const config = {
-        OK: { bg: 'bg-green-100', text: 'text-green-800', label: 'Stock OK' },
+        OK: { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'Stock Óptimo' },
         BAJO: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Stock Bajo' },
-        CRITICO: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Crítico' },
-        AGOTADO: { bg: 'bg-red-100', text: 'text-red-800', label: 'Agotado' },
+        CRITICO: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Crítico' },
+        AGOTADO: { bg: 'bg-rose-100', text: 'text-rose-800', label: 'Agotado' },
     };
-    const { bg, text, label } = config[estado];
+    const { bg, text, label } = config[estado] || config.OK;
     return (
-        <span className={cn('px-3 py-1 rounded-full text-sm font-semibold', bg, text)}>
+        <span className={cn('px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider', bg, text)}>
             {label}
         </span>
     );
@@ -68,10 +72,10 @@ function StockBadge({ estado }: { estado: 'OK' | 'BAJO' | 'CRITICO' | 'AGOTADO' 
 
 function InfoCard({ title, children, icon: Icon }: { title: string; children: React.ReactNode; icon: React.ElementType }) {
     return (
-        <div className="bg-white rounded-lg border p-4">
-            <div className="flex items-center gap-2 mb-3">
-                <Icon className="h-5 w-5 text-gray-500" />
-                <h3 className="font-semibold text-gray-700">{title}</h3>
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
+            <div className="flex items-center gap-2 mb-3.5 pb-2 border-b border-slate-100">
+                <Icon className="h-4 w-4 text-slate-500" />
+                <h3 className="font-semibold text-sm text-slate-800">{title}</h3>
             </div>
             {children}
         </div>
@@ -88,10 +92,10 @@ function TabButton({ active, onClick, children, icon: Icon }: {
         <button
             onClick={onClick}
             className={cn(
-                'flex items-center gap-2 px-4 py-2 font-medium rounded-lg transition-colors',
+                'flex items-center gap-2 px-4 py-2 font-semibold text-xs rounded-lg transition-colors border',
                 active
-                    ? 'bg-orange-100 text-orange-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-2xs'
+                    : 'text-slate-600 border-transparent hover:bg-slate-100 hover:text-slate-900'
             )}
         >
             <Icon className="h-4 w-4" />
@@ -108,7 +112,10 @@ export default function DetalleComponentePage() {
     const params = useParams();
     const id = Number(params.id);
 
-    const [activeTab, setActiveTab] = useState<'general' | 'gestion' | 'kardex'>('general');
+    const { data: session } = useSession();
+    const usuarioId = Number((session?.user as any)?.id) || 1;
+
+    const [activeTab, setActiveTab] = useState<'general' | 'gestion' | 'lotes' | 'kardex'>('general');
     const [editMode, setEditMode] = useState(false);
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [modalMovimiento, setModalMovimiento] = useState<{
@@ -121,21 +128,21 @@ export default function DetalleComponentePage() {
     const actualizarMutation = useActualizarComponente();
 
     const compStock: ComponenteStock | null = componente ? {
-        id_componente: componente.id,
+        id_componente: componente.id_componente || (componente as any).id || id,
         codigo: componente.codigo_interno,
         referencia: componente.referencia_fabricante,
         nombre: componente.descripcion_corta,
         tipo: componente.tipo?.nombre,
         marca: componente.marca,
         unidad: componente.unidad_medida,
-        stock_actual: componente.stock.actual,
-        stock_minimo: componente.stock.minimo,
+        stock_actual: componente.stock?.actual ?? 0,
+        stock_minimo: componente.stock?.minimo ?? 0,
         stock_seguridad: 0,
-        precio_compra: componente.precios.compra,
-        precio_venta: componente.precios.venta,
-        valor_stock: componente.stock.valor_total,
-        estado_stock: componente.stock.estado,
-        total_lotes: 0,
+        precio_compra: componente.precios?.compra ?? 0,
+        precio_venta: componente.precios?.venta ?? 0,
+        valor_stock: componente.stock?.valor_total ?? 0,
+        estado_stock: componente.stock?.estado ?? 'OK',
+        total_lotes: componente.lotes_activos?.length || 0,
         activo: componente.activo,
     } : null;
 
@@ -149,9 +156,9 @@ export default function DetalleComponentePage() {
                 descripcion_detallada: componente.descripcion_detallada || '',
                 marca: componente.marca || '',
                 unidad_medida: componente.unidad_medida || '',
-                stock_minimo: componente.stock.minimo,
-                precio_compra: componente.precios.compra,
-                precio_venta: componente.precios.venta || '',
+                stock_minimo: componente.stock?.minimo ?? 0,
+                precio_compra: componente.precios?.compra ?? 0,
+                precio_venta: componente.precios?.venta || '',
                 observaciones: componente.observaciones || '',
                 notas_instalacion: componente.notas_instalacion || '',
             });
@@ -168,7 +175,7 @@ export default function DetalleComponentePage() {
                     stock_minimo: Number(formData.stock_minimo),
                     precio_compra: Number(formData.precio_compra),
                     precio_venta: formData.precio_venta ? Number(formData.precio_venta) : undefined,
-                    modificado_por: 1, // TODO: Usar usuario actual de sesión
+                    modificado_por: usuarioId,
                 },
             });
             setEditMode(false);
@@ -238,6 +245,15 @@ export default function DetalleComponentePage() {
 
                 {/* Acciones */}
                 <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                        href={`/compras/catalogo/${id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors"
+                        title="Ver Ficha Comercial y Matriz de Sourcing en Catálogo"
+                    >
+                        <ExternalLink className="h-4 w-4 text-slate-500" />
+                        Ficha Comercial
+                    </Link>
+
                     {!editMode && (
                         <>
                             <button
@@ -300,7 +316,7 @@ export default function DetalleComponentePage() {
                     ) : (
                         <button
                             onClick={initEditMode}
-                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-xs font-semibold"
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-xs font-semibold"
                         >
                             <Edit2 className="h-4 w-4" />
                             Editar
@@ -311,64 +327,61 @@ export default function DetalleComponentePage() {
 
             {/* KPIs Rápidos */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-lg border p-4">
+                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
                     <div className="flex items-center justify-between">
-                        <span className="text-gray-500 text-sm">Stock Actual</span>
+                        <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Stock Actual</span>
                         <Package className="h-5 w-5 text-blue-500" />
                     </div>
                     <p className={cn(
                         'text-3xl font-bold mt-1',
-                        componente.stock.estado === 'AGOTADO' && 'text-red-600',
-                        componente.stock.estado === 'CRITICO' && 'text-orange-600',
+                        componente.stock.estado === 'AGOTADO' && 'text-rose-600',
+                        componente.stock.estado === 'CRITICO' && 'text-amber-600',
                         componente.stock.estado === 'BAJO' && 'text-yellow-600',
-                        componente.stock.estado === 'OK' && 'text-green-600'
+                        componente.stock.estado === 'OK' && 'text-emerald-600'
                     )}>
-                        {componente.stock.actual}
+                        {componente.stock.actual} {componente.unidad_medida || 'UND'}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">Mínimo: {componente.stock.minimo}</p>
+                    <p className="text-xs text-slate-400 mt-1">Mínimo requerido: {componente.stock.minimo}</p>
                 </div>
 
-                <div className="bg-white rounded-lg border p-4">
+                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
                     <div className="flex items-center justify-between">
-                        <span className="text-gray-500 text-sm">Valor en Stock</span>
-                        <DollarSign className="h-5 w-5 text-green-500" />
+                        <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Valor en Almacén</span>
+                        <DollarSign className="h-5 w-5 text-emerald-500" />
                     </div>
-                    <p className="text-3xl font-bold mt-1 text-green-600">
-                        ${componente.stock.valor_total.toLocaleString()}
+                    <p className="text-3xl font-bold mt-1 text-emerald-600">
+                        ${componente.stock.valor_total.toLocaleString('es-CO')}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                        Precio compra: ${componente.precios.compra.toLocaleString()}
+                    <p className="text-xs text-slate-400 mt-1">
+                        Costo unitario: ${componente.precios.compra.toLocaleString('es-CO')}
                     </p>
                 </div>
 
-                <div className="bg-white rounded-lg border p-4">
+                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
                     <div className="flex items-center justify-between">
-                        <span className="text-gray-500 text-sm">Movimientos</span>
+                        <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Lotes Activos</span>
+                        <Layers className="h-5 w-5 text-indigo-500" />
+                    </div>
+                    <p className="text-3xl font-bold mt-1 text-indigo-600">
+                        {componente.lotes_activos?.length || 0}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">Con existencias disponibles</p>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Movimientos Kardex</span>
                         <History className="h-5 w-5 text-purple-500" />
                     </div>
                     <p className="text-3xl font-bold mt-1 text-purple-600">
-                        {componente.metricas.total_movimientos}
+                        {componente.metricas?.total_movimientos ?? 0}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">Total histórico</p>
-                </div>
-
-                <div className="bg-white rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                        <span className="text-gray-500 text-sm">Alertas</span>
-                        <AlertCircle className="h-5 w-5 text-red-500" />
-                    </div>
-                    <p className={cn(
-                        'text-3xl font-bold mt-1',
-                        componente.metricas.alertas_activas > 0 ? 'text-red-600' : 'text-gray-400'
-                    )}>
-                        {componente.metricas.alertas_activas}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">Pendientes</p>
+                    <p className="text-xs text-slate-400 mt-1">Transacciones históricas</p>
                 </div>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 border-b pb-2">
+            <div className="flex gap-2 border-b border-slate-200 pb-2">
                 <TabButton
                     active={activeTab === 'general'}
                     onClick={() => setActiveTab('general')}
@@ -382,6 +395,13 @@ export default function DetalleComponentePage() {
                     icon={Settings}
                 >
                     Gestión
+                </TabButton>
+                <TabButton
+                    active={activeTab === 'lotes'}
+                    onClick={() => setActiveTab('lotes')}
+                    icon={Layers}
+                >
+                    Lotes & Bodegas ({componente.lotes_activos?.length || 0})
                 </TabButton>
                 <TabButton
                     active={activeTab === 'kardex'}
@@ -637,6 +657,102 @@ export default function DetalleComponentePage() {
                                 {componente.reemplazado_por.codigo} - {componente.reemplazado_por.nombre}
                             </Link>
                         </InfoCard>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'lotes' && (
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                        <div>
+                            <h3 className="font-bold text-sm text-slate-800">Trazabilidad de Lotes Físicos en Almacén</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Existencias remanentes, ubicación física y semáforo de vencimiento
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setModalMovimiento({ open: true, tipo: 'ENTRADA' })}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        >
+                            <ArrowDownCircle className="h-3.5 w-3.5" />
+                            Nuevo Lote (Entrada)
+                        </button>
+                    </div>
+
+                    {(componente.lotes_activos || []).length === 0 ? (
+                        <div className="text-center py-12 text-slate-500">
+                            <Layers className="h-10 w-10 mx-auto text-slate-300 mb-2" />
+                            <p className="text-sm font-semibold text-slate-700">Sin lotes activos</p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                                Este componente no tiene existencias físicas vinculadas a un lote activo en bodega.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+                                    <tr>
+                                        <th className="px-4 py-3">Código Lote</th>
+                                        <th className="px-4 py-3">Bodega / Ubicación</th>
+                                        <th className="px-4 py-3 text-center">Disponible</th>
+                                        <th className="px-4 py-3 text-center">Inicial</th>
+                                        <th className="px-4 py-3">Lote Fabricante / Factura</th>
+                                        <th className="px-4 py-3">Fecha Ingreso</th>
+                                        <th className="px-4 py-3">Vencimiento</th>
+                                        <th className="px-4 py-3 text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {(componente.lotes_activos || []).map((lote: any) => (
+                                        <tr key={lote.id_lote} className="hover:bg-slate-50/80 transition-colors">
+                                            <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                                                {lote.codigo_lote}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Warehouse className="h-3.5 w-3.5 text-slate-400" />
+                                                    <span className="font-semibold text-slate-800">{lote.bodega}</span>
+                                                    {lote.zona && <span className="text-[11px] text-slate-400">({lote.zona})</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs">
+                                                    {lote.cantidad_actual} {componente.unidad_medida || 'UND'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-center text-slate-500">
+                                                {lote.cantidad_inicial}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600 font-mono">
+                                                {lote.numero_lote_fabricante || '--'}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600">
+                                                {lote.fecha_ingreso ? new Date(lote.fecha_ingreso).toLocaleDateString('es-CO') : '--'}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {lote.fecha_vencimiento ? (
+                                                    <span className="font-medium text-slate-700">
+                                                        {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">No aplica</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={cn(
+                                                    'inline-block px-2 py-0.5 rounded-full text-[11px] font-bold uppercase',
+                                                    lote.estado_lote === 'DISPONIBLE' && 'bg-emerald-100 text-emerald-800',
+                                                    lote.estado_lote === 'CUARENTENA' && 'bg-amber-100 text-amber-800',
+                                                    lote.estado_lote === 'AGOTADO' && 'bg-rose-100 text-rose-800'
+                                                )}>
+                                                    {lote.estado_lote || 'DISPONIBLE'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
             )}

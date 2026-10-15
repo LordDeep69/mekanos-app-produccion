@@ -36,6 +36,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Clock,
+    ExternalLink,
     Eye,
     History,
     Layers,
@@ -45,6 +46,7 @@ import {
     RefreshCw,
     Search,
     ShieldAlert,
+    ShoppingCart,
     SlidersHorizontal,
     TrendingUp,
     Warehouse,
@@ -112,13 +114,14 @@ export default function InventarioPage() {
     const [modalOperacion, setModalOperacion] = useState<{
         open: boolean;
         tipo: TipoOperacionInventario;
+        componente?: any;
     }>({ open: false, tipo: 'ENTRADA' });
     const [modalBodega, setModalBodega] = useState(false);
 
     // Filtros de Pestaña Stock
     const [stockPage, setStockPage] = useState(1);
     const [stockBusqueda, setStockBusqueda] = useState('');
-    const [soloCriticos, setSoloCriticos] = useState(false);
+    const [estadoStockFiltro, setEstadoStockFiltro] = useState<'TODOS' | 'EN_STOCK' | 'BAJO' | 'AGOTADO'>('TODOS');
     const stockPageSize = 15;
 
     // Filtros de Pestaña Kardex
@@ -143,7 +146,8 @@ export default function InventarioPage() {
         refetch: refetchStock,
     } = useComponentesStock({
         busqueda: stockBusqueda || undefined,
-        solo_criticos: soloCriticos || undefined,
+        estado_stock: estadoStockFiltro !== 'TODOS' ? estadoStockFiltro : undefined,
+        solo_criticos: estadoStockFiltro === 'BAJO' ? true : undefined,
         skip: (stockPage - 1) * stockPageSize,
         limit: stockPageSize,
     });
@@ -176,8 +180,8 @@ export default function InventarioPage() {
 
     const kpis = dashboardData?.kpis;
 
-    const abrirOperacion = (tipo: TipoOperacionInventario) => {
-        setModalOperacion({ open: true, tipo });
+    const abrirOperacion = (tipo: TipoOperacionInventario, componente?: any) => {
+        setModalOperacion({ open: true, tipo, componente });
     };
 
     const handleRefreshAll = () => {
@@ -256,6 +260,16 @@ export default function InventarioPage() {
                         <Warehouse className="h-4 w-4" />
                         Nueva Bodega
                     </button>
+
+                    <Link
+                        href="/compras/catalogo"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        title="Ir a Catálogo Maestro de Compras & Sourcing"
+                    >
+                        <Package className="h-4 w-4 text-slate-500" />
+                        Catálogo Maestro
+                        <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                    </Link>
 
                     <button
                         onClick={handleRefreshAll}
@@ -393,21 +407,65 @@ export default function InventarioPage() {
                             />
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200">
                             <button
                                 onClick={() => {
-                                    setSoloCriticos(!soloCriticos);
+                                    setEstadoStockFiltro('TODOS');
                                     setStockPage(1);
                                 }}
                                 className={cn(
-                                    'px-3.5 py-2 border rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5',
-                                    soloCriticos
-                                        ? 'bg-rose-50 border-rose-300 text-rose-700'
-                                        : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                                    estadoStockFiltro === 'TODOS'
+                                        ? 'bg-white text-slate-900 shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                )}
+                            >
+                                Todos
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setEstadoStockFiltro('EN_STOCK');
+                                    setStockPage(1);
+                                }}
+                                className={cn(
+                                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1',
+                                    estadoStockFiltro === 'EN_STOCK'
+                                        ? 'bg-emerald-600 text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                )}
+                            >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                En Stock
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setEstadoStockFiltro('BAJO');
+                                    setStockPage(1);
+                                }}
+                                className={cn(
+                                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1',
+                                    estadoStockFiltro === 'BAJO'
+                                        ? 'bg-amber-600 text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900'
                                 )}
                             >
                                 <AlertTriangle className="h-3.5 w-3.5" />
-                                {soloCriticos ? 'Mostrando Críticos' : 'Solo Stock Crítico'}
+                                Stock Bajo
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setEstadoStockFiltro('AGOTADO');
+                                    setStockPage(1);
+                                }}
+                                className={cn(
+                                    'px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1',
+                                    estadoStockFiltro === 'AGOTADO'
+                                        ? 'bg-rose-600 text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                )}
+                            >
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                Agotado
                             </button>
                         </div>
                     </div>
@@ -494,13 +552,32 @@ export default function InventarioPage() {
                                                     ${Number(comp.valor_stock || 0).toLocaleString('es-CO')}
                                                 </td>
                                                 <td className="px-4 py-3 text-center">
-                                                    <Link
-                                                        href={`/inventario/${comp.id_componente}`}
-                                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md text-xs font-semibold transition-colors"
-                                                    >
-                                                        <Eye className="h-3.5 w-3.5" />
-                                                        Ver Ficha
-                                                    </Link>
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        <Link
+                                                            href={`/inventario/${comp.id_componente}`}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md text-xs font-semibold transition-colors"
+                                                            title="Ver Ficha Logística y Kardex"
+                                                        >
+                                                            <Eye className="h-3.5 w-3.5" />
+                                                            Logística
+                                                        </Link>
+                                                        <button
+                                                            onClick={() => abrirOperacion('SALIDA', comp)}
+                                                            className="inline-flex items-center gap-1 px-2 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-xs font-semibold transition-colors"
+                                                            title="Operar movimiento físico para este ítem"
+                                                        >
+                                                            <SlidersHorizontal className="h-3.5 w-3.5" />
+                                                            Operar
+                                                        </button>
+                                                        <Link
+                                                            href={`/compras/ordenes/nueva?id_componente=${comp.id_componente}`}
+                                                            className="inline-flex items-center gap-1 px-2 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-md text-xs font-semibold transition-colors"
+                                                            title="Crear Orden de Compra para reabastecer"
+                                                        >
+                                                            <ShoppingCart className="h-3.5 w-3.5" />
+                                                            Pedir
+                                                        </Link>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -929,6 +1006,7 @@ export default function InventarioPage() {
                 isOpen={modalOperacion.open}
                 onClose={() => setModalOperacion({ ...modalOperacion, open: false })}
                 tipo={modalOperacion.tipo}
+                componentePreseleccionado={modalOperacion.componente}
                 onSuccess={handleRefreshAll}
             />
 
