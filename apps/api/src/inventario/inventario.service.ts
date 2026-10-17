@@ -176,6 +176,26 @@ export class InventarioService {
         return `LOT-${year}-${String(nextVal).padStart(4, '0')}`;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // HELPER DE SANITIZACIÓN WHITE-LABEL DE USUARIOS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private sanitizarNombreResponsable(user: any): string {
+        if (!user) return 'Administrador del Sistema';
+        const persona = user.persona;
+        let nombre = '';
+        if (persona) {
+            nombre = `${persona.primer_nombre || ''} ${persona.primer_apellido || ''}`.trim() || persona.nombre_completo || '';
+        }
+        if (!nombre) {
+            nombre = user.nombre_usuario || user.username || '';
+        }
+        if (!nombre || /admin(\s+mekanos)?/i.test(nombre)) {
+            return 'Administrador del Sistema';
+        }
+        return nombre;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPERACIONES DE ALMACÉN TRANSACCIONALES (ENTRADA, SALIDA, AJUSTE, TRASLADO)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -747,7 +767,14 @@ export class InventarioService {
                 include: {
                     tipos_componente: true,
                     categorias_componente: {
-                        select: { id_categoria: true, nombre: true, codigo_categoria: true },
+                        select: {
+                            id_categoria: true,
+                            nombre: true,
+                            codigo_categoria: true,
+                            categoria_padre: {
+                                select: { id_categoria: true, nombre: true },
+                            },
+                        },
                     },
                     lotes_componentes: {
                         where: { estado_lote: 'DISPONIBLE', cantidad_actual: { gt: 0 } },
@@ -781,14 +808,21 @@ export class InventarioService {
                     estadoStock = 'BAJO';
                 }
 
+                const catPadre = (c.categorias_componente as any)?.categoria_padre?.nombre;
+                const catNombre = c.categorias_componente?.nombre;
+                const catTexto = catNombre || 'General';
+                const catCompleta = catPadre ? `${catPadre} > ${catNombre}` : catTexto;
+
                 return {
                     id_componente: c.id_componente,
                     codigo: c.codigo_interno || `ART-${c.id_componente}`,
                     referencia: c.referencia_fabricante || '--',
                     nombre: c.descripcion_corta,
                     marca: c.marca || 'N/A',
-                    tipo: (c.tipos_componente as any)?.nombre_tipo || c.tipos_componente?.nombre_componente || 'General',
-                    categoria: c.categorias_componente?.nombre || 'Sin Categoría',
+                    tipo: catTexto,
+                    categoria: catTexto,
+                    categoria_padre: catPadre || null,
+                    categoria_completa: catCompleta,
                     stock_actual: stockActual,
                     stock_minimo: stockMinimo,
                     estado_stock: estadoStock,
@@ -909,9 +943,7 @@ export class InventarioService {
         return {
             data: movimientos.map((m: any) => {
                 const user = userMap.get(m.realizado_por);
-                const nombreUsuario = user?.persona
-                    ? `${user.persona.primer_nombre || ''} ${user.persona.primer_apellido || ''}`.trim() || user.nombre_usuario
-                    : 'Administrador del Sistema';
+                const nombreUsuario = this.sanitizarNombreResponsable(user);
 
                 return {
                     id_movimiento: m.id_movimiento,
@@ -1212,9 +1244,7 @@ export class InventarioService {
         const kardex = movimientos.map((mov: any) => {
             const cantidad = Number(mov.cantidad);
             const user = userMap.get(mov.realizado_por);
-            const nombreUsuario = user?.persona
-                ? `${user.persona.primer_nombre || ''} ${user.persona.primer_apellido || ''}`.trim() || user.nombre_usuario
-                : 'Administrador del Sistema';
+            const nombreUsuario = this.sanitizarNombreResponsable(user);
 
             const resultado = {
                 id_movimiento: mov.id_movimiento,
@@ -1264,7 +1294,11 @@ export class InventarioService {
             where: { id_componente: idComponente },
             include: {
                 tipos_componente: true,
-                categorias_componente: true,
+                categorias_componente: {
+                    include: {
+                        categoria_padre: true,
+                    },
+                },
                 proveedores: {
                     include: {
                         persona: {
@@ -1278,6 +1312,32 @@ export class InventarioService {
                             },
                         },
                     },
+                },
+                articulos_proveedores: {
+                    where: { activo: true },
+                    include: {
+                        proveedores: {
+                            include: {
+                                persona: {
+                                    select: {
+                                        razon_social: true,
+                                        nombre_completo: true,
+                                        numero_identificacion: true,
+                                        email_principal: true,
+                                        telefono_principal: true,
+                                        celular: true,
+                                    },
+                                },
+                            },
+                        },
+                        marcas: {
+                            select: { nombre: true },
+                        },
+                    },
+                    orderBy: [
+                        { es_proveedor_preferido: 'desc' },
+                        { costo_actual: 'asc' },
+                    ],
                 },
                 lotes_componentes: {
                     where: { cantidad_actual: { gt: 0 } },
@@ -1322,7 +1382,50 @@ export class InventarioService {
             }),
         ]);
 
+        const userIdsMovs = [...new Set(ultimosMovimientos.map((m: any) => m.realizado_por).filter(Boolean))];
+        const usuariosMovs = userIdsMovs.length > 0
+            ? await this.prisma.usuarios.findMany({
+                where: { id_usuario: { in: userIdsMovs } },
+                include: { persona: true },
+            })
+            : [];
+        const userMapMovs = new Map(usuariosMovs.map((u) => [u.id_usuario, u]));
+
         const comp = componente as any;
+
+        const proveedoresHomologados = (componente.articulos_proveedores || []).map((ap: any) => ({
+            id_proveedor: ap.id_proveedor,
+            nombre_proveedor: ap.proveedores?.persona?.razon_social || ap.proveedores?.persona?.nombre_completo || `Proveedor #${ap.id_proveedor}`,
+            nit: ap.proveedores?.persona?.numero_identificacion || '--',
+            referencia_proveedor: ap.referencia_proveedor || '--',
+            marca_ofrecida: ap.marcas?.nombre || ap.marca_ofrecida || '--',
+            costo_actual: Number(ap.costo_actual || 0),
+            moneda: ap.moneda || 'COP',
+            tiempo_entrega_dias: ap.tiempo_entrega_dias ?? 1,
+            cantidad_minima_compra: Number(ap.cantidad_minima_compra || 1),
+            es_proveedor_preferido: ap.es_proveedor_preferido || false,
+            telefono: ap.proveedores?.persona?.telefono_principal || ap.proveedores?.persona?.celular || '--',
+            email: ap.proveedores?.persona?.email_principal || '--',
+        }));
+
+        const provPrincipal = comp.proveedores ? {
+            id: comp.proveedores.id_proveedor,
+            nombre: comp.proveedores.persona?.razon_social || comp.proveedores.persona?.nombre_completo,
+            nit: comp.proveedores.persona?.numero_identificacion,
+            telefono: comp.proveedores.persona?.telefono_principal || comp.proveedores.persona?.celular,
+            email: comp.proveedores.persona?.email_principal,
+        } : (proveedoresHomologados.length > 0 ? {
+            id: proveedoresHomologados[0].id_proveedor,
+            nombre: proveedoresHomologados[0].nombre_proveedor,
+            nit: proveedoresHomologados[0].nit,
+            telefono: proveedoresHomologados[0].telefono,
+            email: proveedoresHomologados[0].email,
+        } : null);
+
+        const catPadre = (componente.categorias_componente as any)?.categoria_padre?.nombre;
+        const catNombre = componente.categorias_componente?.nombre;
+        const catTexto = catNombre || 'General';
+        const catCompleta = catPadre ? `${catPadre} > ${catNombre}` : catTexto;
 
         return {
             id: componente.id_componente,
@@ -1335,14 +1438,18 @@ export class InventarioService {
             activo: componente.activo,
 
             tipo: {
-                id: comp.tipos_componente?.id_tipo_componente,
-                nombre: comp.tipos_componente?.nombre_tipo || comp.tipos_componente?.nombre_componente || 'General',
-                codigo: comp.tipos_componente?.codigo_tipo,
+                id: comp.categorias_componente?.id_categoria || comp.tipos_componente?.id_tipo_componente,
+                nombre: catTexto,
+                codigo: comp.categorias_componente?.codigo_categoria || comp.tipos_componente?.codigo_tipo,
+                padre: catPadre || null,
+                completo: catCompleta,
             },
             categoria: {
                 id: comp.categorias_componente?.id_categoria,
-                nombre: comp.categorias_componente?.nombre || 'Sin Categoría',
+                nombre: catTexto,
                 codigo: comp.categorias_componente?.codigo_categoria,
+                padre: catPadre || null,
+                completo: catCompleta,
             },
 
             especificaciones_tecnicas: componente.especificaciones_tecnicas,
@@ -1363,13 +1470,8 @@ export class InventarioService {
                 moneda: componente.moneda || 'COP',
             },
 
-            proveedor: comp.proveedores ? {
-                id: comp.proveedores.id_proveedor,
-                nombre: comp.proveedores.persona?.razon_social || comp.proveedores.persona?.nombre_completo,
-                nit: comp.proveedores.persona?.numero_identificacion,
-                telefono: comp.proveedores.persona?.telefono_principal || comp.proveedores.persona?.celular,
-                email: comp.proveedores.persona?.email_principal,
-            } : null,
+            proveedor: provPrincipal,
+            proveedores_homologados: proveedoresHomologados,
 
             lotes_activos: (componente.lotes_componentes || []).map((l: any) => {
                 const ub = l.movimientos_inventario?.[0]?.ubicaciones_bodega;
@@ -1387,18 +1489,21 @@ export class InventarioService {
                 };
             }),
 
-            ultimos_movimientos: ultimosMovimientos.map((m: any) => ({
-                id_movimiento: m.id_movimiento,
-                fecha: m.fecha_movimiento,
-                tipo: m.tipo_movimiento,
-                origen: m.origen_movimiento,
-                cantidad: Number(m.cantidad),
-                costo_unitario: m.costo_unitario ? Number(m.costo_unitario) : null,
-                bodega: m.ubicaciones_bodega?.codigo_ubicacion || 'BOD-CENTRAL',
-                lote: m.lotes_componentes?.codigo_lote || '--',
-                justificacion: m.justificacion,
-                realizado_por: 'Administrador del Sistema',
-            })),
+            ultimos_movimientos: ultimosMovimientos.map((m: any) => {
+                const u = userMapMovs.get(m.realizado_por);
+                return {
+                    id_movimiento: m.id_movimiento,
+                    fecha: m.fecha_movimiento,
+                    tipo: m.tipo_movimiento,
+                    origen: m.origen_movimiento,
+                    cantidad: Number(m.cantidad),
+                    costo_unitario: m.costo_unitario ? Number(m.costo_unitario) : null,
+                    bodega: m.ubicaciones_bodega?.codigo_ubicacion || 'BOD-CENTRAL',
+                    lote: m.lotes_componentes?.codigo_lote || '--',
+                    justificacion: m.justificacion,
+                    realizado_por: this.sanitizarNombreResponsable(u),
+                };
+            }),
 
             metricas: {
                 total_movimientos: totalMovimientos,

@@ -1143,6 +1143,19 @@ export class ArticulosService {
             },
           },
         },
+        lotes_componentes: {
+          where: { cantidad_actual: { gt: 0 } },
+          include: {
+            movimientos_inventario: {
+              take: 1,
+              orderBy: { fecha_movimiento: 'desc' },
+              include: {
+                ubicaciones_bodega: { select: { id_ubicacion: true, codigo_ubicacion: true, zona: true, pasillo: true, estante: true, nivel: true } },
+              },
+            },
+          },
+          orderBy: { fecha_ingreso: 'desc' },
+        },
       },
     });
 

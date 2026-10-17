@@ -218,63 +218,62 @@ export default function InventarioPage() {
                 <div className="flex flex-wrap items-center gap-2">
                     <button
                         onClick={() => abrirOperacion('ENTRADA')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                        title="Registrar entrada de mercancía al inventario"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        title="Registrar entrada de mercancía al inventario con lote"
                     >
                         <ArrowDownCircle className="h-4 w-4" />
-                        Entrada
+                        Nueva Entrada
                     </button>
 
                     <button
                         onClick={() => abrirOperacion('SALIDA')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
                         title="Despachar repuestos para órdenes de servicio o venta"
                     >
-                        <ArrowUpCircle className="h-4 w-4" />
+                        <ArrowUpCircle className="h-4 w-4 text-amber-600" />
                         Salida
                     </button>
 
                     <button
                         onClick={() => abrirOperacion('AJUSTE')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
                         title="Ajuste por conteo físico cíclico o merma"
                     >
-                        <SlidersHorizontal className="h-4 w-4" />
+                        <SlidersHorizontal className="h-4 w-4 text-violet-600" />
                         Ajuste Físico
                     </button>
 
                     <button
                         onClick={() => abrirOperacion('TRASLADO')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
                         title="Transferir existencias entre bodegas o ubicaciones"
                     >
-                        <ArrowLeftRight className="h-4 w-4" />
+                        <ArrowLeftRight className="h-4 w-4 text-blue-600" />
                         Traslado
                     </button>
 
                     <button
                         onClick={() => setModalBodega(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
                         title="Registrar una nueva bodega o estantería"
                     >
-                        <Warehouse className="h-4 w-4" />
+                        <Warehouse className="h-4 w-4 text-slate-500" />
                         Nueva Bodega
                     </button>
 
                     <Link
                         href="/compras/catalogo"
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                        title="Ir a Catálogo Maestro de Compras & Sourcing"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        title="Ir al Catálogo Maestro de Artículos y Repuestos"
                     >
-                        <Package className="h-4 w-4 text-slate-500" />
+                        <ExternalLink className="h-4 w-4 text-slate-500" />
                         Catálogo Maestro
-                        <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
                     </Link>
 
                     <button
                         onClick={handleRefreshAll}
-                        className="p-2 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
-                        title="Refrescar datos en pantalla"
+                        className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                        title="Refrescar todos los datos"
                     >
                         <RefreshCw className="h-4 w-4" />
                     </button>
@@ -506,8 +505,10 @@ export default function InventarioPage() {
                                     <tbody className="divide-y divide-slate-100">
                                         {(componentesData?.data || []).map((comp) => (
                                             <tr key={comp.id_componente} className="hover:bg-slate-50/80 transition-colors">
-                                                <td className="px-4 py-3 font-mono font-medium text-slate-800">
-                                                    {comp.codigo || '--'}
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-xs font-semibold border border-slate-200/50">
+                                                        {comp.codigo || '--'}
+                                                    </span>
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <p className="font-semibold text-slate-900">{comp.referencia}</p>
@@ -518,18 +519,21 @@ export default function InventarioPage() {
                                                         {comp.nombre || '--'}
                                                     </p>
                                                 </td>
-                                                <td className="px-4 py-3 text-slate-600">
-                                                    <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px] font-medium">
-                                                        {comp.tipo || 'General'}
+                                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                                                    <span
+                                                        className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px] font-medium border border-slate-200/60"
+                                                        title={(comp as any).categoria_completa || comp.categoria || comp.tipo || ''}
+                                                    >
+                                                        {comp.categoria || comp.tipo || 'General'}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-center">
+                                                <td className="px-4 py-3 text-center whitespace-nowrap">
                                                     <span className={cn(
-                                                        'font-bold text-sm px-2 py-0.5 rounded',
-                                                        comp.estado_stock === 'AGOTADO' && 'text-rose-700 bg-rose-50',
-                                                        comp.estado_stock === 'CRITICO' && 'text-amber-700 bg-amber-50',
-                                                        comp.estado_stock === 'BAJO' && 'text-yellow-700 bg-yellow-50',
-                                                        comp.estado_stock === 'OK' && 'text-emerald-700 bg-emerald-50'
+                                                        'inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-md font-bold text-xs',
+                                                        comp.estado_stock === 'AGOTADO' && 'text-rose-700 bg-rose-50 border border-rose-200/60',
+                                                        comp.estado_stock === 'CRITICO' && 'text-amber-700 bg-amber-50 border border-amber-200/60',
+                                                        comp.estado_stock === 'BAJO' && 'text-yellow-700 bg-yellow-50 border border-yellow-200/60',
+                                                        comp.estado_stock === 'OK' && 'text-emerald-700 bg-emerald-50 border border-emerald-200/60'
                                                     )}>
                                                         {comp.stock_actual} {comp.unidad || 'UND'}
                                                     </span>
@@ -570,7 +574,7 @@ export default function InventarioPage() {
                                                             Operar
                                                         </button>
                                                         <Link
-                                                            href={`/compras/ordenes/nueva?id_componente=${comp.id_componente}`}
+                                                            href={`/compras/ordenes/nueva?componenteId=${comp.id_componente}`}
                                                             className="inline-flex items-center gap-1 px-2 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-md text-xs font-semibold transition-colors"
                                                             title="Crear Orden de Compra para reabastecer"
                                                         >
