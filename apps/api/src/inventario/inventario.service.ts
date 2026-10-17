@@ -1282,7 +1282,13 @@ export class InventarioService {
                 lotes_componentes: {
                     where: { cantidad_actual: { gt: 0 } },
                     include: {
-                        ubicaciones_bodega: { select: { id_ubicacion: true, codigo_ubicacion: true, zona: true } },
+                        movimientos_inventario: {
+                            take: 1,
+                            orderBy: { fecha_movimiento: 'desc' },
+                            include: {
+                                ubicaciones_bodega: { select: { id_ubicacion: true, codigo_ubicacion: true, zona: true } },
+                            },
+                        },
                     },
                     orderBy: { fecha_ingreso: 'desc' },
                 },
@@ -1365,18 +1371,21 @@ export class InventarioService {
                 email: comp.proveedores.persona?.email_principal,
             } : null,
 
-            lotes_activos: (componente.lotes_componentes || []).map((l: any) => ({
-                id_lote: l.id_lote,
-                codigo_lote: l.codigo_lote,
-                numero_lote_fabricante: l.numero_factura_proveedor,
-                cantidad_inicial: Number(l.cantidad_inicial),
-                cantidad_actual: Number(l.cantidad_actual),
-                fecha_vencimiento: l.fecha_vencimiento,
-                estado_lote: l.estado_lote,
-                fecha_ingreso: l.fecha_ingreso,
-                bodega: l.ubicaciones_bodega?.codigo_ubicacion || 'BOD-CENTRAL',
-                zona: l.ubicaciones_bodega?.zona || 'Taller Principal',
-            })),
+            lotes_activos: (componente.lotes_componentes || []).map((l: any) => {
+                const ub = l.movimientos_inventario?.[0]?.ubicaciones_bodega;
+                return {
+                    id_lote: l.id_lote,
+                    codigo_lote: l.codigo_lote,
+                    numero_lote_fabricante: l.numero_factura_proveedor,
+                    cantidad_inicial: Number(l.cantidad_inicial),
+                    cantidad_actual: Number(l.cantidad_actual),
+                    fecha_vencimiento: l.fecha_vencimiento,
+                    estado_lote: l.estado_lote,
+                    fecha_ingreso: l.fecha_ingreso,
+                    bodega: ub?.codigo_ubicacion || 'BOD-CENTRAL',
+                    zona: ub?.zona || 'Bodega Central Taller',
+                };
+            }),
 
             ultimos_movimientos: ultimosMovimientos.map((m: any) => ({
                 id_movimiento: m.id_movimiento,

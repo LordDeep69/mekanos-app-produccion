@@ -110,7 +110,8 @@ function TabButton({ active, onClick, children, icon: Icon }: {
 
 export default function DetalleComponentePage() {
     const params = useParams();
-    const id = Number(params.id);
+    const rawId = params?.id;
+    const validId = rawId && !isNaN(Number(rawId)) && Number(rawId) > 0 ? Number(rawId) : null;
 
     const { data: session } = useSession();
     const usuarioId = Number((session?.user as any)?.id) || 1;
@@ -123,8 +124,8 @@ export default function DetalleComponentePage() {
         tipo: TipoOperacionInventario;
     }>({ open: false, tipo: 'ENTRADA' });
 
-    const { data: componente, isLoading, isError, refetch } = useDetalleComponente(id);
-    const { data: kardexData, isLoading: loadingKardex } = useKardex(activeTab === 'kardex' ? id : null);
+    const { data: componente, isLoading, isError, refetch } = useDetalleComponente(validId);
+    const { data: kardexData, isLoading: loadingKardex } = useKardex(activeTab === 'kardex' ? validId : null);
     const actualizarMutation = useActualizarComponente();
 
     const compStock: ComponenteStock | null = componente ? {

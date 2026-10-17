@@ -501,7 +501,11 @@ export async function registrarSalida(dto: SalidaInventarioDto): Promise<Movimie
 }
 
 export async function getDetalleComponente(id: number): Promise<DetalleComponente> {
-    const { data } = await apiClient.get(`/inventario/componente/${id}`);
+    const numId = Number(id);
+    if (!numId || isNaN(numId) || numId <= 0) {
+        throw new Error('ID de componente numérico inválido');
+    }
+    const { data } = await apiClient.get(`/inventario/componente/${numId}`);
     return data;
 }
 
@@ -669,10 +673,11 @@ export function useRegistrarSalida() {
 }
 
 export function useDetalleComponente(id: number | null) {
+    const validId = id && !isNaN(Number(id)) && Number(id) > 0 ? Number(id) : null;
     return useQuery({
-        queryKey: ['inventario', 'componente', id],
-        queryFn: () => getDetalleComponente(id!),
-        enabled: !!id,
+        queryKey: ['inventario', 'componente', validId],
+        queryFn: () => getDetalleComponente(validId!),
+        enabled: validId !== null,
         staleTime: 10 * 1000,
     });
 }
