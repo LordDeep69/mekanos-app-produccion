@@ -747,7 +747,7 @@ export class InventarioService {
                 include: {
                     tipos_componente: true,
                     categorias_componente: {
-                        select: { id_categoria: true, nombre_categoria: true, codigo_categoria: true },
+                        select: { id_categoria: true, nombre: true, codigo_categoria: true },
                     },
                     lotes_componentes: {
                         where: { estado_lote: 'DISPONIBLE', cantidad_actual: { gt: 0 } },
@@ -788,7 +788,7 @@ export class InventarioService {
                     nombre: c.descripcion_corta,
                     marca: c.marca || 'N/A',
                     tipo: (c.tipos_componente as any)?.nombre_tipo || c.tipos_componente?.nombre_componente || 'General',
-                    categoria: c.categorias_componente?.nombre_categoria || 'Sin Categoría',
+                    categoria: c.categorias_componente?.nombre || 'Sin Categoría',
                     stock_actual: stockActual,
                     stock_minimo: stockMinimo,
                     estado_stock: estadoStock,
@@ -889,9 +889,6 @@ export class InventarioService {
                     ordenes_servicio: {
                         select: { id_orden_servicio: true, numero_orden: true },
                     },
-                    usuarios_movimientos_inventario_realizado_porTousuarios: {
-                        include: { persona: true },
-                    },
                 },
                 orderBy: { fecha_movimiento: 'desc' },
                 skip,
@@ -900,11 +897,20 @@ export class InventarioService {
             this.prisma.movimientos_inventario.count({ where }),
         ]);
 
+        const userIds = [...new Set(movimientos.map((m: any) => m.realizado_por).filter(Boolean))];
+        const usuarios = userIds.length > 0
+            ? await this.prisma.usuarios.findMany({
+                where: { id_usuario: { in: userIds } },
+                include: { persona: true },
+            })
+            : [];
+        const userMap = new Map(usuarios.map((u) => [u.id_usuario, u]));
+
         return {
             data: movimientos.map((m: any) => {
-                const user = m.usuarios_movimientos_inventario_realizado_porTousuarios;
+                const user = userMap.get(m.realizado_por);
                 const nombreUsuario = user?.persona
-                    ? `${user.persona.primer_nombre} ${user.persona.primer_apellido}`
+                    ? `${user.persona.primer_nombre || ''} ${user.persona.primer_apellido || ''}`.trim() || user.nombre_usuario
                     : 'Administrador del Sistema';
 
                 return {
@@ -1182,9 +1188,6 @@ export class InventarioService {
             take: opciones?.limit || 50,
             skip: opciones?.offset || 0,
             include: {
-                usuarios_movimientos_inventario_realizado_porTousuarios: {
-                    include: { persona: true },
-                },
                 ubicaciones_bodega: { select: { id_ubicacion: true, codigo_ubicacion: true, zona: true } },
                 lotes_componentes: { select: { id_lote: true, codigo_lote: true } },
                 ordenes_servicio: { select: { numero_orden: true } },
@@ -1196,12 +1199,21 @@ export class InventarioService {
             where: { id_componente: idComponente },
         });
 
+        const userIds = [...new Set(movimientos.map((m: any) => m.realizado_por).filter(Boolean))];
+        const usuarios = userIds.length > 0
+            ? await this.prisma.usuarios.findMany({
+                where: { id_usuario: { in: userIds } },
+                include: { persona: true },
+            })
+            : [];
+        const userMap = new Map(usuarios.map((u) => [u.id_usuario, u]));
+
         let saldoAcumulado = componente.stock_actual || 0;
         const kardex = movimientos.map((mov: any) => {
             const cantidad = Number(mov.cantidad);
-            const user = mov.usuarios_movimientos_inventario_realizado_porTousuarios;
+            const user = userMap.get(mov.realizado_por);
             const nombreUsuario = user?.persona
-                ? `${user.persona.primer_nombre} ${user.persona.primer_apellido}`
+                ? `${user.persona.primer_nombre || ''} ${user.persona.primer_apellido || ''}`.trim() || user.nombre_usuario
                 : 'Administrador del Sistema';
 
             const resultado = {
@@ -1300,7 +1312,6 @@ export class InventarioService {
                 include: {
                     ubicaciones_bodega: { select: { id_ubicacion: true, codigo_ubicacion: true, zona: true } },
                     lotes_componentes: { select: { id_lote: true, codigo_lote: true } },
-                    usuarios_movimientos_inventario_realizado_porTousuarios: { include: { persona: true } },
                 },
             }),
         ]);
@@ -1324,7 +1335,7 @@ export class InventarioService {
             },
             categoria: {
                 id: comp.categorias_componente?.id_categoria,
-                nombre: comp.categorias_componente?.nombre_categoria || 'Sin Categoría',
+                nombre: comp.categorias_componente?.nombre || 'Sin Categoría',
                 codigo: comp.categorias_componente?.codigo_categoria,
             },
 
@@ -1377,9 +1388,7 @@ export class InventarioService {
                 bodega: m.ubicaciones_bodega?.codigo_ubicacion || 'BOD-CENTRAL',
                 lote: m.lotes_componentes?.codigo_lote || '--',
                 justificacion: m.justificacion,
-                realizado_por: m.usuarios_movimientos_inventario_realizado_porTousuarios?.persona
-                    ? `${m.usuarios_movimientos_inventario_realizado_porTousuarios.persona.primer_nombre} ${m.usuarios_movimientos_inventario_realizado_porTousuarios.persona.primer_apellido}`
-                    : 'Administrador del Sistema',
+                realizado_por: 'Administrador del Sistema',
             })),
 
             metricas: {
