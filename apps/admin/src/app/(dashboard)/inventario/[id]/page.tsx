@@ -111,7 +111,8 @@ function TabButton({ active, onClick, children, icon: Icon }: {
 export default function DetalleComponentePage() {
     const params = useParams();
     const rawId = params?.id;
-    const validId = rawId && !isNaN(Number(rawId)) && Number(rawId) > 0 ? Number(rawId) : null;
+    const id = rawId && !isNaN(Number(rawId)) && Number(rawId) > 0 ? Number(rawId) : 0;
+    const validId = id > 0 ? id : null;
 
     const { data: session } = useSession();
     const usuarioId = Number((session?.user as any)?.id) || 1;
