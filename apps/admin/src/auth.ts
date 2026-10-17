@@ -62,6 +62,7 @@ async function refreshAccessToken(token: any): Promise<any> {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'mekanos-jwt-secret-ultra-secure-2025-production-change-this-in-deployment',
   providers: [
     Credentials({
       name: 'Credentials',

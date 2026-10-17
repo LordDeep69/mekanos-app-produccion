@@ -42,6 +42,7 @@ interface TokenCache {
 let tokenCache: TokenCache | null = null;
 const TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutos en ms
 let tokenFetchPromise: Promise<string | null> | null = null;
+let isSigningOut = false;
 
 /**
  * Obtiene el token JWT con cache inteligente
@@ -159,12 +160,25 @@ apiClient.interceptors.response.use(
       switch (status) {
         case 401:
           // Token expirado o inválido - ACCIÓN INMEDIATA
-          console.error('[API] 401 No autorizado - Cerrando sesión');
+          console.error('[API] 401 No autorizado - Evaluando redirección');
           // ✅ OPTIMIZACIÓN: Invalidar cache del token
           invalidateTokenCache();
           if (typeof window !== 'undefined') {
-            // Usar signOut de NextAuth para limpiar todo
-            await signOut({ callbackUrl: '/login', redirect: true });
+            // Prevenir recarga infinita si ya estamos en /login o si ya hay un proceso de cierre de sesión
+            if (!window.location.pathname.startsWith('/login') && !isSigningOut) {
+              isSigningOut = true;
+              try {
+                console.warn('[API] Cerrando sesión y redirigiendo a /login...');
+                await signOut({ callbackUrl: '/login', redirect: true });
+              } catch (signOutError) {
+                console.error('[API] Error al ejecutar signOut de NextAuth:', signOutError);
+                window.location.href = '/login';
+              } finally {
+                setTimeout(() => {
+                  isSigningOut = false;
+                }, 3000);
+              }
+            }
           }
           break;
         case 403:
