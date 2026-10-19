@@ -10,9 +10,10 @@ export const UserId = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): number => {
     const request = ctx.switchToHttp().getRequest();
     
-    // Intentar diferentes campos comunes en JWT
-    const userId = request.user?.id_usuario || request.user?.sub || request.user?.id;
+    // Intentar diferentes campos comunes en JWT y request.user
+    const rawId = request.user?.id_usuario || request.user?.id || request.user?.sub;
+    const num = rawId ? Number(rawId) : NaN;
     
-    return userId;
+    return !isNaN(num) && num > 0 ? num : 1;
   },
 );

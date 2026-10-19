@@ -1,12 +1,13 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 19 de Octubre de 2026  
-**Versión:** 5.1 Release Candidate (RC-2)  
+**Versión:** 5.2 Release Candidate (RC-1)  
 **Últimos Commits Clave:** 
 - `613d72b`: `feat(inventario): remediacion integral de auditoria forense y sincronizacion bidireccional compras-inventario`
+- `2bf9877`: `docs(estado): consolidar estado maestro v5.1 rc-2 con auditoria de compras e inventario`
 - `275f2c9`: `fix(ordenes/equipos): detectar familia por tipo declarado en tipos_equipo e integrar soporte COMPRESOR`
 - `25bb910`: `fix(inventario): correccion taxonomica backend, saneamiento white-label y pulido UI ejecutiva`
-**Estado General:** ✅ **~95% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
+**Estado General:** ✅ **~96% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
 **Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
 
 ---
@@ -58,10 +59,23 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración completa
 ### 4. Soporte de Familias de Equipos y Órdenes (`/equipos` y `/ordenes`)
 - Nueva naturaleza **COMPRESOR** completamente integrada en backend y frontend (código autogenerado, parámetros de medición, discriminadores de servicio preventivo y compatibilidad en wizard).
 
+### 5. Recepción Automática de Mercancía en Almacén (Compras ⇄ WMS) — **100% Certificado**
+- **Botones de Acción Ejecutiva en Tabla (`/compras/ordenes`):**
+  - Órdenes en `BORRADOR`: botón visible y estilizado **"Emitir"** (azul suave, icono Send) para despacho inmediato al proveedor.
+  - Órdenes en `ENVIADA` y `PARCIAL`: botón prominente **"Recibir"** (verde esmeralda suave, icono PackageCheck) que lanza el modal de recepción física y control de calidad.
+- **Transacción Atómica de Ingreso a Almacén (`POST /api/recepciones-compra/lote`):**
+  - Generación determinista de consecutivo de recepción: `REC-{YYYY}-{0001}` con bloqueo `FOR UPDATE`.
+  - Generación de lote físico industrial: `LOT-{YYYY}-{0001}` en `lotes_componentes` con estado `DISPONIBLE` y número de guía/remisión.
+  - Asentamiento de movimiento inmutable en Kardex (`movimientos_inventario` con `tipo_movimiento: 'ENTRADA'`, `origen_movimiento: 'COMPRA'`, asociado al lote y bodega destino).
+  - Incremento atómico de `stock_actual` en `catalogo_componentes`.
+  - Transición automática de estado de la orden de compra a `PARCIAL` o `COMPLETADA`.
+- **Reflejo Inmediato en Inventario:** Los lotes generados se visualizan al instante en la Pestaña 1 (*Lotes & Ubicaciones*) de `/inventario/[id]` y el movimiento en la Pestaña 2 (*Historial Kardex*).
+
 ---
 
 ## 🎯 PRÓXIMAS DECISIONES Y HOJA DE RUTA
 Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md) para los siguientes pasos:
 - **Flujo A (Recomendado):** Certificación E2E de Creación y Cierre de Órdenes de Servicio (Admin -> PDF -> Envío).
-- **Flujo B:** Pruebas de integración de recepciones automáticas de mercancía (Orden de Compra -> Entrada a Lote WMS).
+- **Flujo B:** ✅ **COMPLETADO:** Pruebas de integración de recepciones automáticas de mercancía (Orden de Compra -> Entrada a Lote WMS).
 - **Flujo C:** Auditoría de sincronización offline con la aplicación móvil Flutter.
+

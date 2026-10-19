@@ -209,6 +209,7 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
 
       // 3. Generar número correlativo formal determinista de recepción (único por despacho)
       const numero_recepcion = await this.generarSiguienteNumeroRecepcion(tx);
+      const idUsuarioResponsable = Number(data.recibido_por) > 0 ? Number(data.recibido_por) : 1;
 
       // 4. Crear recepciones, movimientos de inventario e incrementar stock
       const recepcionesCreadas: recepciones_compra[] = [];
@@ -262,7 +263,7 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
             id_ubicacion_destino: Number(item.cantidad_aceptada) > 0 ? ubicacionDestino : null,
             costo_unitario_real: item.costo_unitario_real || detalle.precio_unitario,
             observaciones: notasCompuestas || null,
-            recibido_por: data.recibido_por,
+            recibido_por: idUsuarioResponsable,
           },
         });
         recepcionesCreadas.push(recepcion);
@@ -287,7 +288,7 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
                 notasCompuestas ||
                 `Lote generado por recepción ${numero_recepcion} de OC ${orden.numero_orden_compra}`,
               fecha_ingreso: new Date(),
-              ingresado_por: data.recibido_por,
+              ingresado_por: idUsuarioResponsable,
             },
           });
 
@@ -306,7 +307,7 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
               observaciones:
                 notasCompuestas ||
                 `Ingreso físico de ${item.cantidad_aceptada} unidades al almacén vía ${numero_recepcion} (Lote: ${codigoLote})`,
-              realizado_por: data.recibido_por,
+              realizado_por: idUsuarioResponsable,
             },
           });
 
@@ -318,7 +319,7 @@ export class PrismaRecepcionesCompraRepository implements IRecepcionesCompraRepo
                 increment: Math.round(Number(item.cantidad_aceptada)),
               },
               fecha_modificacion: new Date(),
-              modificado_por: data.recibido_por,
+              modificado_por: idUsuarioResponsable,
             },
           });
         }

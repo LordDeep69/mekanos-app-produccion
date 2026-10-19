@@ -1160,28 +1160,30 @@ export default function OrdenesCompraPage() {
 
                         {orden.estado === 'BORRADOR' && (
                           <Button
-                            variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            variant="outline"
+                            className="h-7 px-2.5 text-xs font-semibold bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100 hover:text-blue-800 gap-1.5 shadow-xs transition-colors"
                             title="Emitir / Enviar Orden al Proveedor"
                             onClick={() => {
                               setOrdenParaEnviar(orden);
                               setModalEnviarOpen(true);
                             }}
                           >
-                            <Send className="w-4 h-4" />
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Emitir</span>
                           </Button>
                         )}
 
                         {(orden.estado === 'ENVIADA' || orden.estado === 'PARCIAL') && (
                           <Button
-                            variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                            title="Registrar Recepción Física en Almacén (Ciclo 4.B)"
+                            variant="outline"
+                            className="h-7 px-2.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 gap-1.5 shadow-xs transition-colors"
+                            title="Registrar Recepción Física en Almacén"
                             onClick={() => handleAbrirModalRecepcion(orden)}
                           >
-                            <PackageCheck className="w-4 h-4" />
+                            <PackageCheck className="w-3.5 h-3.5" />
+                            <span>Recibir</span>
                           </Button>
                         )}
 
@@ -1489,7 +1491,7 @@ export default function OrdenesCompraPage() {
                               </td>
                               <td className="py-2.5 px-3 text-center">{badgeCalidad()}</td>
                               <td className="py-2.5 px-3 font-medium text-slate-700">
-                                {rec.ubicacion_nombre || 'BODEGA-PRUEBA'}
+                                {rec.ubicacion_nombre ? `[${rec.ubicacion_nombre}]` : 'BOD-CENTRAL'}
                               </td>
                               <td className="py-2.5 px-3 text-slate-500 italic">
                                 {sanitizarTextoUTF8(rec.observaciones) || 'Ingreso conforme sin novedades'}
