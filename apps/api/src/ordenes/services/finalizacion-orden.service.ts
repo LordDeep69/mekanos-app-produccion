@@ -28,6 +28,8 @@
 
 import {
     BadRequestException,
+    ForbiddenException,
+    HttpException,
     Injectable,
     InternalServerErrorException,
     Logger,
@@ -339,6 +341,7 @@ export class FinalizacionOrdenService {
     async finalizarOrden(
         dto: FinalizarOrdenDto,
         onProgress?: ProgressCallback,
+        user?: { id?: number; idEmpleado?: number | null; esAdmin?: boolean },
     ): Promise<FinalizacionResult> {
         const startTime = Date.now();
         this.logger.log(`🚀 Iniciando finalización de orden ${dto.idOrden}`);
@@ -419,6 +422,19 @@ export class FinalizacionOrdenService {
 
             if (!estadoCompletada) {
                 throw new InternalServerErrorException('Estado COMPLETADA no encontrado en BD');
+            }
+
+            // ✅ 19-OCT-2026: Zero Trust. Solo el técnico asignado (o un admin)
+            // puede finalizar/resubir la orden. Evita que un técnico autenticado
+            // use la autorización de otra orden conociendo su ID.
+            if (
+                user &&
+                !user.esAdmin &&
+                orden.id_tecnico_asignado !== user.idEmpleado
+            ) {
+                throw new ForbiddenException(
+                    'La orden no está asignada al técnico autenticado; edición no autorizada.',
+                );
             }
 
             emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
@@ -723,6 +739,7 @@ export class FinalizacionOrdenService {
                 dto.usuarioId,
                 dto.horaEntrada,
                 dto.horaSalida,
+                esYaCompletada,
             );
             emitProgress('actualizando_estado', 'completed', 'Estado actualizado a COMPLETADA', 98);
 
@@ -781,9 +798,11 @@ export class FinalizacionOrdenService {
             // Intentar rollback de recursos creados
             await this.rollback(recursosCreados);
 
-            // Re-lanzar error con contexto
-            if (error instanceof BadRequestException ||
-                error instanceof NotFoundException) {
+            // Re-lanzar errores HTTP de Nest TAL CUAL (400, 403, 404, etc.).
+            // ✅ 19-OCT-2026: antes solo se preservaban 400/404; el 403 del
+            // guard de edición técnica se convertía en 500 y el móvil no podía
+            // distinguir un permiso revocado de una falla del servidor.
+            if (error instanceof HttpException) {
                 throw error;
             }
 
@@ -888,10 +907,25 @@ export class FinalizacionOrdenService {
             throw new NotFoundException(`Orden con ID ${idOrden} no encontrada`);
         }
 
-        // Validar que la orden esté en estado que permita finalización
-        // ✅ FIX 26-FEB-2026: Agregar COMPLETADA para permitir re-subida desde mobile
-        const estadosPermitidos = ['EN_PROCESO', 'EN_EJECUCION', 'PENDIENTE', 'COMPLETADA'];
-        if (!estadosPermitidos.includes(orden.estados_orden?.codigo_estado || '')) {
+        // Validar que la orden esté en estado que permita finalización.
+        // ✅ 19-OCT-2026: COMPLETADA ya NO es un permiso implícito. La resubida
+        // desde móvil exige una autorización administrativa explícita y vigente.
+        const estadosPermitidos = ['EN_PROCESO', 'EN_EJECUCION', 'PENDIENTE'];
+        const codigoEstado = orden.estados_orden?.codigo_estado || '';
+        const esResubidaAutorizada =
+            codigoEstado === 'COMPLETADA' &&
+            orden.edicion_tecnico_habilitada === true;
+
+        if (
+            !estadosPermitidos.includes(codigoEstado) &&
+            !esResubidaAutorizada
+        ) {
+            if (codigoEstado === 'COMPLETADA') {
+                throw new ForbiddenException(
+                    'La orden está COMPLETADA y la edición del técnico no está autorizada por el administrador.',
+                );
+            }
+
             throw new BadRequestException(
                 `La orden está en estado ${orden.estados_orden?.nombre_estado}, no puede finalizarse`,
             );
@@ -1889,13 +1923,18 @@ export class FinalizacionOrdenService {
         usuarioId: number,
         horaEntrada?: string,
         horaSalida?: string,
+        esResubida: boolean = false,
     ): Promise<void> {
         // 🔧 FIX 20-DIC-2025: Obtener la orden para usar fecha_inicio_real existente
         // Esto evita violar el constraint chk_os_fecha_fin_posterior cuando la orden
         // fue iniciada en un día diferente al que se finaliza
         const ordenExistente = await this.prisma.ordenes_servicio.findUnique({
             where: { id_orden_servicio: idOrden },
-            select: { fecha_inicio_real: true },
+            select: {
+                fecha_inicio_real: true,
+                fecha_fin_real: true,
+                duracion_minutos: true,
+            },
         });
 
         // Usar fecha_inicio_real existente como base, o fecha actual si no existe
@@ -1971,6 +2010,21 @@ export class FinalizacionOrdenService {
             }
         }
 
+        // ✅ 19-OCT-2026: una resubida corrige datos, NO el tiempo del servicio.
+        // Si existen fechas originales, se conservan para no alterar la duración
+        // histórica ni el PDF, aunque un cliente antiguo envíe horas nuevas.
+        if (
+            esResubida &&
+            ordenExistente?.fecha_inicio_real != null &&
+            ordenExistente?.fecha_fin_real != null
+        ) {
+            fechaInicioReal = new Date(ordenExistente.fecha_inicio_real);
+            fechaFinReal = new Date(ordenExistente.fecha_fin_real);
+            this.logger.log(
+                '🔁 Resubida: conservando fechas originales del servicio',
+            );
+        }
+
         // Log para debugging
         this.logger.log(`   📅 Fechas calculadas:`);
         this.logger.log(`      - fecha_inicio_real: ${fechaInicioReal?.toISOString() ?? 'null'}`);
@@ -2011,9 +2065,20 @@ export class FinalizacionOrdenService {
             this.prisma.historial_estados_orden.create({
                 data: {
                     id_orden_servicio: idOrden,
+                    // En resubida el estado anterior y el nuevo son COMPLETADA;
+                    // la acción distingue la corrección de una finalización normal.
+                    id_estado_anterior: esResubida
+                        ? idEstadoCompletada
+                        : undefined,
                     id_estado_nuevo: idEstadoCompletada, // ✅ Usar parámetro precargado
+                    accion: esResubida ? 'RESUBIDA_TECNICO' : undefined,
+                    motivo_cambio: esResubida
+                        ? 'Corrección autorizada por el administrador'
+                        : undefined,
                     fecha_cambio: new Date(),
-                    observaciones: `Orden finalizada. ${observaciones}`,
+                    observaciones: esResubida
+                        ? `Orden corregida y resubida. ${observaciones}`
+                        : `Orden finalizada. ${observaciones}`,
                     realizado_por: usuarioId,
                 },
             }),

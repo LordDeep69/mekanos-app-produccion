@@ -184,6 +184,16 @@ class OrdenDetalleFull {
   /// Estado LOCAL: completada offline pero no sincronizada
   bool get estaPorSubir => estadoOrden.codigo.toUpperCase() == 'POR_SUBIR';
 
+  /// ✅ 19-OCT-2026: el administrador autorizó la edición de esta orden.
+  /// Fuente: backend → SmartSync/consulta puntual → columna local.
+  bool get permiteEdicionTecnico => orden.permiteEdicionTecnico;
+
+  /// ✅ 19-OCT-2026: habilita reabrir la ejecución SOLO cuando la orden está
+  /// COMPLETADA y tiene autorización administrativa vigente.
+  bool get puedeEditarTecnico =>
+      estadoOrden.codigo.toUpperCase() == 'COMPLETADA' &&
+      orden.permiteEdicionTecnico;
+
   // ============================================================================
   // MÉTODOS DE UTILIDAD
   // ============================================================================

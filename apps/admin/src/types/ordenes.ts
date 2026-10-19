@@ -144,6 +144,13 @@ export interface Orden {
 
     // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
     progreso_registro?: ProgresoRegistroResumen;
+
+    // ✅ 19-OCT-2026: Autorización administrativa para edición técnica
+    // de una orden COMPLETADA desde la app móvil.
+    edicion_tecnico_habilitada?: boolean;
+    edicion_tecnico_autorizada_por?: number | null;
+    edicion_tecnico_fecha_autorizacion?: string | null;
+    edicion_tecnico_motivo?: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

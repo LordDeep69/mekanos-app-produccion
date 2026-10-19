@@ -994,6 +994,9 @@ class _ResumenFinalizacionScreenState
             ? razonFalla!.trim()
             : null,
         modo: 'SOLO_DATOS',
+        // ✅ 19-OCT-2026: si la orden ya está COMPLETADA y tiene permiso
+        // administrativo, este flujo es una resubida (no una finalización).
+        esResubida: orden.permiteEdicionTecnico,
       );
 
       Navigator.of(context).pop(); // Cerrar loading

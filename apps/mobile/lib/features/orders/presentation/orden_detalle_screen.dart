@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/smart_sync_service.dart';
 import '../../ejecucion/data/ejecucion_service.dart';
 import '../../ejecucion/presentation/ejecucion_screen.dart';
 import '../../ejecucion/presentation/resumen_finalizacion_screen.dart';
@@ -28,10 +31,36 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   bool _isLoading = true;
   String? _error;
 
+  /// ✅ 19-OCT-2026: escucha cambios del permiso para reaccionar en vivo
+  /// cuando el administrador habilita/revoca la edición.
+  StreamSubscription<bool>? _permisoSub;
+
   @override
   void initState() {
     super.initState();
     _loadDetalleOrden();
+
+    _permisoSub = ref
+        .read(databaseProvider)
+        .watchPermisoEdicionTecnico(widget.idOrdenLocal)
+        .listen((permite) async {
+      if (!mounted || _detalle == null) return;
+      if (_detalle!.permiteEdicionTecnico == permite) return;
+
+      final actualizado = await ref
+          .read(ordenRepositoryProvider)
+          .getDetalleCompleto(widget.idOrdenLocal);
+
+      if (mounted && actualizado != null) {
+        setState(() => _detalle = actualizado);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _permisoSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadDetalleOrden() async {
@@ -66,12 +95,55 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
           _resumen = resumen;
           _isLoading = false;
         });
+
+        // ✅ 19-OCT-2026: verificación puntual contra el servidor al abrir
+        // una COMPLETADA. Detecta en segundos cambios administrativos sin
+        // esperar el ciclo de 5 minutos. No bloquea el render.
+        if (detalle.codigoEstado.toUpperCase() == 'COMPLETADA' &&
+            detalle.idBackend != null) {
+          unawaited(_refrescarPermisoDesdeServidor());
+        }
       }
     } catch (e) {
       setState(() {
         _error = 'Error: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// ✅ 19-OCT-2026: consulta liviana del permiso al servidor.
+  /// - Si el servidor responde y cambió → refresca el detalle local.
+  /// - Si falla la red → conserva el último valor local (offline-first).
+  Future<void> _refrescarPermisoDesdeServidor() async {
+    final detalle = _detalle;
+    final idBackend = detalle?.idBackend;
+    if (detalle == null || idBackend == null) return;
+
+    final permite = await ref
+        .read(smartSyncServiceProvider)
+        .verificarPermisoEdicion(idBackend, idLocal: widget.idOrdenLocal);
+
+    if (!mounted || permite == null) return;
+    if (permite == detalle.permiteEdicionTecnico) return;
+
+    final actualizado = await ref
+        .read(ordenRepositoryProvider)
+        .getDetalleCompleto(widget.idOrdenLocal);
+
+    if (!mounted || actualizado == null) return;
+
+    setState(() => _detalle = actualizado);
+
+    if (!permite) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'El administrador revocó la edición de esta orden.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
@@ -99,11 +171,15 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         foregroundColor: Colors.white,
       ),
       body: _buildBody(),
-      // ✅ FIX 17-JUL-2026: Solo permitir INICIAR EJECUCIÓN en órdenes NO finalizadas.
-      // Órdenes COMPLETADA/CERRADA/CANCELADA/FINALIZADA ya no son editables desde aquí;
-      // deben visualizarse a través del módulo HISTORIAL DE SERVICIOS (read-only).
+      // ✅ 19-OCT-2026: las órdenes finales son read-only SALVO que el
+      // administrador haya habilitado explícitamente la edición técnica para
+      // esta orden COMPLETADA. CERRADA/CANCELADA nunca muestran la barra.
       bottomNavigationBar: _detalle != null
-          ? (!_detalle!.estaFinalizada ? _buildBottomBar() : const SizedBox.shrink())
+          ? (!_detalle!.estaFinalizada
+              ? _buildBottomBar()
+              : (_detalle!.puedeEditarTecnico
+                  ? _buildResubirBar()
+                  : const SizedBox.shrink()))
           : null,
     );
   }
@@ -762,24 +838,19 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // ⚠️ MÉTODOS BLOQUEADOS - 17-JUL-2026
-  // Por política corporativa, los técnicos NO pueden editar órdenes
-  // finalizadas desde la app mobile. Estas funciones fueron
-  // diseñadas anteriormente para permitir "resubir" órdenes
-  // COMPLETADA, pero fueron suspendidas por integridad de datos.
-  // Las órdenes finalizadas ahora SOLO se visualizan en modo
-  // read-only desde el módulo HISTORIAL DE SERVICIOS.
-  // ⚠️ NO LLAMAR - dejar como referencia histórica.
+  // ✅ 19-OCT-2026: EDICIÓN TÉCNICA AUTORIZADA POR ORDEN
+  // Las órdenes finalizadas siguen siendo read-only por defecto.
+  // Excepción: una orden COMPLETADA cuya edición fue habilitada
+  // explícitamente por un administrador en el portal web.
+  // El backend valida la autorización en cada resubida, por lo que
+  // ocultar/mostrar este botón es solo UX; no es el control de seguridad.
   // ════════════════════════════════════════════════════════════════
 
-  /// ✅ FIX 26-FEB-2026: Barra inferior para órdenes COMPLETADA
-  /// Permite al técnico entrar a la vista de ejecución para revisar/editar y resubir
-  /// ⚠️ BLOQUEADO desde 17-JUL-2026
-  // ignore: unused_element
+  /// Barra inferior para una orden COMPLETADA con edición autorizada.
+  /// Permite revisar/editar los registros y resubir al servidor.
   Widget _buildResubirBar() {
-    // Solo mostrar para COMPLETADA (no CERRADA ni CANCELADA)
-    final codigoEstado = _detalle?.codigoEstado.toUpperCase() ?? '';
-    if (codigoEstado != 'COMPLETADA') {
+    // Solo para COMPLETADA + permiso administrativo vigente.
+    if (!(_detalle?.puedeEditarTecnico ?? false)) {
       return const SizedBox.shrink();
     }
 
@@ -853,12 +924,11 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
     );
   }
 
-  /// ✅ FIX 26-FEB-2026: Navega a EjecucionScreen en modo resubida
-  /// NO llama iniciarEjecucion (datos ya existen en BD local)
-  /// Pasa esResubida=true para que el botón muestre RESUBIR ORDEN
-  /// ⚠️ BLOQUEADO desde 17-JUL-2026
+  /// Navega a EjecucionScreen en modo resubida.
+  /// NO llama iniciarEjecucion (los datos ya existen en BD local).
+  /// Pasa esResubida=true para que el botón muestre RESUBIR ORDEN.
   Future<void> _navegarAEjecucionResubida() async {
-    if (_detalle == null) return;
+    if (_detalle == null || !_detalle!.puedeEditarTecnico) return;
 
     final db = ref.read(databaseProvider);
     final idBackend = _detalle?.idBackend;

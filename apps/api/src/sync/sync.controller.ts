@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SyncBatchResponseDto, SyncCompareResponseDto, SyncDownloadResponseDto } from './dto/sync-response.dto';
 import { SyncBatchUploadDto } from './dto/sync-upload-orden.dto';
@@ -180,6 +181,42 @@ export class SyncController {
   ): Promise<SyncCompareResponseDto> {
     const limitNum = limit ? parseInt(limit, 10) : 500;
     return await this.syncService.getOrdenesResumen(tecnicoId, limitNum);
+  }
+
+  /**
+   * GET /api/sync/permiso-edicion/:ordenId
+   * ✅ 19-OCT-2026: Verificación puntual del permiso de edición de una orden.
+   * Usado por el móvil al abrir una orden COMPLETADA para detectar cambios
+   * administrativos sin esperar el ciclo completo de SmartSync.
+   */
+  @Get('permiso-edicion/:ordenId')
+  @ApiOperation({
+    summary: 'Consultar permiso de edición técnica de una orden',
+    description:
+      'Retorna si la orden está COMPLETADA y si el administrador autorizó su edición. Valida que el técnico autenticado sea el asignado.',
+  })
+  @ApiParam({
+    name: 'ordenId',
+    description: 'ID de la orden a consultar',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Permiso de edición consultado',
+  })
+  @ApiResponse({ status: 403, description: 'Orden no asignada al técnico autenticado' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  async getPermisoEdicion(
+    @Param('ordenId', ParseIntPipe) ordenId: number,
+    @CurrentUser() user: any,
+  ): Promise<{
+    ordenId: number;
+    estadoCodigo: string;
+    esEstadoFinal: boolean;
+    permiteEdicionTecnico: boolean;
+    fechaModificacion: string | null;
+  }> {
+    return await this.syncService.getPermisoEdicion(ordenId, user);
   }
 
   /**

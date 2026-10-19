@@ -1271,10 +1271,15 @@ class _OrdenCardOptimizado extends StatelessWidget {
           final codigoEstado = detalles?.codigoEstado.toUpperCase() ?? '';
           final esFinalizada = const ['COMPLETADA', 'CERRADA', 'CANCELADA', 'FINALIZADA']
               .contains(codigoEstado);
+          // ✅ 19-OCT-2026: una orden COMPLETADA con autorización vigente se
+          // abre en el detalle editable; el resto de finales sigue read-only.
+          final puedeEditar = codigoEstado == 'COMPLETADA' &&
+              orden.permiteEdicionTecnico;
+          final irAHistorial = esFinalizada && !puedeEditar;
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => esFinalizada
+              builder: (context) => irAHistorial
                   ? HistorialDetalleScreen(idOrdenLocal: orden.idLocal)
                   : OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
             ),

@@ -1615,6 +1615,13 @@ model ordenes_servicio {
   modificado_por                                                                           Int?
   fecha_modificacion                                                                       DateTime?                   @db.Timestamp(6)
   id_firma_tecnico                                                                         Int?
+  // ✅ 19-OCT-2026: Autorización administrativa por orden para que el técnico
+  // pueda corregir/resubir una orden COMPLETADA desde la app móvil.
+  // Solo aplica a id_estado_actual = COMPLETADA; el backend es la autoridad final.
+  edicion_tecnico_habilitada                                                               Boolean                     @default(false)
+  edicion_tecnico_autorizada_por                                                           Int?
+  edicion_tecnico_fecha_autorizacion                                                       DateTime?                   @db.Timestamp(6)
+  edicion_tecnico_motivo                                                                   String?                     @db.VarChar(500)
   actividades_ejecutadas                                                                   actividades_ejecutadas[]
   componentes_usados                                                                       componentes_usados[]
   cotizaciones                                                                             cotizaciones[]

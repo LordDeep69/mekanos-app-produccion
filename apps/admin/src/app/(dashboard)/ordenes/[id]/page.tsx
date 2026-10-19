@@ -38,6 +38,7 @@ import {
     useTecnicosSelector
 } from '@/features/ordenes';
 import { ActividadCardAdvanced, ResumenEstados } from '@/features/ordenes/components/actividad-card-advanced';
+import { EdicionTecnicoSection } from '@/features/ordenes/components/edicion-tecnico-section';
 import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gallery';
 import { FirmasSection } from '@/features/ordenes/components/firmas-section';
 import { GaleriaFotosGenerales } from '@/features/ordenes/components/galeria-fotos-generales';
@@ -476,6 +477,9 @@ function TabGeneral({ orden }: { orden: Orden }) {
 
             {/* Observaciones de Cierre - Editables por Admin */}
             <ObservacionesCierreSection orden={orden} />
+
+            {/* ✅ 19-OCT-2026: Autorización de edición técnica para orden COMPLETADA */}
+            <EdicionTecnicoSection orden={orden} />
 
             {/* Pendientes Técnicos por Orden de Servicio */}
             <PendientesSection orden={orden} />
@@ -1922,6 +1926,15 @@ export default function OrdenDetallePage() {
                         </h1>
                         <EstadoBadge estado={estadoActual} size="lg" />
                         <PrioridadBadge prioridad={orden.prioridad} />
+                        {orden.edicion_tecnico_habilitada && estadoActual === 'COMPLETADA' && (
+                            <span
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200"
+                                title="Un administrador autorizó al técnico a corregir y resubir esta orden desde la app móvil"
+                            >
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                Edición técnica
+                            </span>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">

@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -2012,6 +2013,158 @@ export class OrdenesController {
   }
 
   /**
+   * PATCH /api/ordenes/:id/edicion-tecnico
+   *
+   * Autoriza o revoca la edición de una orden COMPLETADA desde la app móvil.
+   * Reglas de negocio:
+   * - Solo un administrador puede invocar este endpoint.
+   * - Solo aplica a órdenes en estado COMPLETADA (los demás estados están cerrados).
+   * - Cada cambio queda auditado en historial_estados_orden y actualiza
+   *   fecha_modificacion para que el sync móvil lo detecte.
+   */
+  @Patch(':id/edicion-tecnico')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Habilitar/revocar edición del técnico para una orden COMPLETADA',
+    description: `
+      Permite que un administrador autorice al técnico asignado a corregir y
+      resubir una orden COMPLETADA desde la app móvil, o revoque esa autorización.
+      La decisión se audita y se propaga al móvil por SmartSync.
+    `,
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
+  @ApiResponse({ status: 200, description: 'Autorización actualizada' })
+  @ApiResponse({ status: 403, description: 'Usuario no autorizado' })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  @ApiResponse({ status: 400, description: 'Estado no permite edición o datos inválidos' })
+  async updateEdicionTecnico(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { habilitada: boolean; motivo?: string },
+    @UserId() userId: number,
+    @CurrentUser() user: any,
+  ) {
+    // 1. Zero Trust: solo roles administrativos pueden modificar la autorización.
+    if (!user?.esAdmin) {
+      throw new ForbiddenException(
+        'Solo un administrador puede autorizar o revocar la edición de una orden.',
+      );
+    }
+
+    if (typeof body?.habilitada !== 'boolean') {
+      throw new BadRequestException(
+        'El campo "habilitada" es obligatorio y debe ser booleano.',
+      );
+    }
+
+    const motivo = body.motivo?.trim() || null;
+    if (motivo && motivo.length > 500) {
+      throw new BadRequestException(
+        'El motivo no puede exceder 500 caracteres.',
+      );
+    }
+
+    const adminId = Number(userId) || Number(user?.id) || 1;
+
+    // 2. Verificar existencia y estado actual.
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: {
+        id_orden_servicio: true,
+        id_estado_actual: true,
+        edicion_tecnico_habilitada: true,
+        estados_orden: {
+          select: { codigo_estado: true, nombre_estado: true },
+        },
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden ${id} no encontrada`);
+    }
+
+    const estadoCodigo = orden.estados_orden?.codigo_estado || '';
+    if (estadoCodigo !== 'COMPLETADA') {
+      throw new BadRequestException(
+        `Solo las órdenes en estado COMPLETADA pueden autorizarse para edición. Estado actual: ${estadoCodigo || 'DESCONOCIDO'}.`,
+      );
+    }
+
+    // 3. Idempotencia: evitar registros de auditoría duplicados por doble clic.
+    if (orden.edicion_tecnico_habilitada === body.habilitada) {
+      return {
+        success: true,
+        message: body.habilitada
+          ? 'La edición del técnico ya estaba habilitada.'
+          : 'La edición del técnico ya estaba bloqueada.',
+        data: {
+          id_orden_servicio: id,
+          edicion_tecnico_habilitada: orden.edicion_tecnico_habilitada,
+        },
+      };
+    }
+
+    const fechaDecision = new Date();
+    const accion = body.habilitada
+      ? 'HABILITAR_EDICION_TECNICO'
+      : 'REVOCAR_EDICION_TECNICO';
+
+    // 4. Actualización + auditoría atómicas.
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.ordenes_servicio.update({
+        where: { id_orden_servicio: id },
+        data: {
+          edicion_tecnico_habilitada: body.habilitada,
+          edicion_tecnico_autorizada_por: adminId,
+          edicion_tecnico_fecha_autorizacion: fechaDecision,
+          edicion_tecnico_motivo: motivo,
+          fecha_modificacion: fechaDecision,
+          modificado_por: adminId,
+        },
+      }),
+      this.prisma.historial_estados_orden.create({
+        data: {
+          id_orden_servicio: id,
+          id_estado_anterior: orden.id_estado_actual,
+          id_estado_nuevo: orden.id_estado_actual,
+          accion,
+          fecha_cambio: fechaDecision,
+          realizado_por: adminId,
+          motivo_cambio:
+            motivo ||
+            (body.habilitada
+              ? 'Edición técnica habilitada por el administrador'
+              : 'Edición técnica revocada por el administrador'),
+          observaciones: body.habilitada
+            ? 'El administrador autorizó al técnico a corregir y resubir esta orden COMPLETADA desde la app móvil.'
+            : 'El administrador revocó la autorización de edición del técnico para esta orden COMPLETADA.',
+          metadata: {
+            origen: 'PORTAL_ADMIN',
+            habilitada: body.habilitada,
+            motivo,
+            estado_orden: estadoCodigo,
+          } as any,
+        },
+      }),
+    ]);
+
+    return {
+      success: true,
+      message: body.habilitada
+        ? 'Edición del técnico habilitada. La app móvil la detectará en el próximo sync.'
+        : 'Edición del técnico revocada.',
+      data: {
+        id_orden_servicio: updated.id_orden_servicio,
+        edicion_tecnico_habilitada: updated.edicion_tecnico_habilitada,
+        edicion_tecnico_autorizada_por:
+          updated.edicion_tecnico_autorizada_por,
+        edicion_tecnico_fecha_autorizacion:
+          updated.edicion_tecnico_fecha_autorizacion,
+        edicion_tecnico_motivo: updated.edicion_tecnico_motivo,
+      },
+    };
+  }
+
+  /**
    * PATCH /api/ordenes/:id/estado
    * Cambia el estado de una orden usando FSM (Finite State Machine)
    * Valida transiciones permitidas y registra en historial automáticamente
@@ -2293,6 +2446,7 @@ export class OrdenesController {
     @Param('id') id: string,
     @Body() dto: FinalizarOrdenCompletoDto,
     @UserId() userId: number,
+    @CurrentUser() user: { id?: number; idEmpleado?: number | null; esAdmin?: boolean },
   ) {
     // ═══════════════════════════════════════════════════════════════════
     // 🔬 LOG FORENSE - DATOS RECIBIDOS DEL MOBILE
@@ -2381,8 +2535,13 @@ export class OrdenesController {
       modo: 'SOLO_DATOS' as 'COMPLETO' | 'SOLO_DATOS',
     };
 
-    // Ejecutar flujo de finalización (solo datos, sin PDF ni email)
-    const result = await this.finalizacionService.finalizarOrden(finalizarDto);
+    // Ejecutar flujo de finalización (solo datos, sin PDF ni email).
+    // Se pasa el usuario autenticado para validar asignación (Zero Trust).
+    const result = await this.finalizacionService.finalizarOrden(
+      finalizarDto,
+      undefined,
+      user,
+    );
 
     return {
       success: result.success,
@@ -2428,6 +2587,7 @@ export class OrdenesController {
     @Param('id') id: string,
     @Body() dto: FinalizarOrdenCompletoDto,
     @UserId() userId: number,
+    @CurrentUser() user: { id?: number; idEmpleado?: number | null; esAdmin?: boolean },
     @Res() res: Response,
   ) {
     // ✅ FIX 20-DIC-2025: Establecer status 200 explícitamente para SSE
@@ -2502,6 +2662,7 @@ export class OrdenesController {
       const result = await this.finalizacionService.finalizarOrden(
         finalizarDto,
         (event) => sendEvent(event), // Callback para emitir eventos SSE
+        user, // Zero Trust: valida que la orden esté asignada al técnico
       );
 
       // Enviar resultado final

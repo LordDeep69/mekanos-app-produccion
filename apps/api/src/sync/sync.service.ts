@@ -1,6 +1,7 @@
 import { PrismaService } from '@mekanos/database';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException
@@ -121,6 +122,20 @@ export class SyncService {
       if (ordenServidor.id_tecnico_asignado !== tecnicoId) {
         throw new BadRequestException(
           `Técnico ${tecnicoId} no está asignado a orden ${dto.idOrdenServicio}`,
+        );
+      }
+
+      // 2.1 🔐 19-OCT-2026: Zero Trust. Una orden final (COMPLETADA/CANCELADA)
+      // no puede modificarse por el batch salvo autorización administrativa
+      // explícita y vigente para COMPLETADA.
+      const esFinal = ordenServidor.estados_orden?.es_estado_final === true;
+      const tienePermisoEdicion =
+        ordenServidor.estados_orden?.codigo_estado === 'COMPLETADA' &&
+        ordenServidor.edicion_tecnico_habilitada === true;
+
+      if (esFinal && !tienePermisoEdicion) {
+        throw new ForbiddenException(
+          `La orden ${dto.idOrdenServicio} está finalizada (${ordenServidor.estados_orden?.codigo_estado}) y no admite modificaciones.`,
         );
       }
 
@@ -587,6 +602,13 @@ export class SyncService {
             estados_orden: { es_estado_final: true },
             fecha_cambio_estado: { gte: hace14Dias },
           },
+          // ✅ 19-OCT-2026: una orden final con edición autorizada debe
+          // permanecer disponible para el técnico sin importar su antigüedad.
+          // Incluirla en idsOrdenesValidas evita que el full sync la pode.
+          {
+            estados_orden: { es_estado_final: true },
+            edicion_tecnico_habilitada: true,
+          },
         ],
       };
 
@@ -831,6 +853,10 @@ export class SyncService {
       idEstadoActual: o.id_estado_actual,
       codigoEstado: o.estados_orden?.codigo_estado || '',
       nombreEstado: o.estados_orden?.nombre_estado || '',
+      esEstadoFinal: o.estados_orden?.es_estado_final || false,
+      permiteEdicionTecnico:
+        o.estados_orden?.codigo_estado === 'COMPLETADA' &&
+        o.edicion_tecnico_habilitada === true,
       fechaProgramada: o.fecha_programada?.toISOString(),
       prioridad: o.prioridad as string,
       idCliente: o.id_cliente,
@@ -1083,72 +1109,162 @@ export class SyncService {
   // ============================================================================
 
   /**
+   * ✅ 19-OCT-2026: Verificación puntual y liviana de la autorización de
+   * edición de UNA orden. El móvil la invoca al abrir una orden COMPLETADA
+   * para detectar en segundos un cambio hecho por el administrador, sin
+   * esperar el ciclo de SmartSync ni descargar la orden completa.
+   *
+   * Zero Trust: valida que el técnico autenticado sea el asignado (un admin
+   * puede consultarla para diagnóstico). No confía en IDs enviados por el
+   * cliente.
+   */
+  async getPermisoEdicion(
+    ordenId: number,
+    user: { id?: number; idEmpleado?: number | null; esAdmin?: boolean },
+  ): Promise<{
+    ordenId: number;
+    estadoCodigo: string;
+    esEstadoFinal: boolean;
+    permiteEdicionTecnico: boolean;
+    fechaModificacion: string | null;
+  }> {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: ordenId },
+      select: {
+        id_orden_servicio: true,
+        id_tecnico_asignado: true,
+        edicion_tecnico_habilitada: true,
+        fecha_modificacion: true,
+        estados_orden: {
+          select: {
+            codigo_estado: true,
+            es_estado_final: true,
+          },
+        },
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden ${ordenId} no existe`);
+    }
+
+    if (!user?.esAdmin) {
+      if (
+        !user?.idEmpleado ||
+        orden.id_tecnico_asignado !== user.idEmpleado
+      ) {
+        throw new ForbiddenException(
+          `La orden ${ordenId} no está asignada al técnico autenticado.`,
+        );
+      }
+    }
+
+    const estadoCodigo = orden.estados_orden?.codigo_estado || 'DESCONOCIDO';
+    const esEstadoFinal = orden.estados_orden?.es_estado_final === true;
+
+    return {
+      ordenId: orden.id_orden_servicio,
+      estadoCodigo,
+      esEstadoFinal,
+      permiteEdicionTecnico:
+        estadoCodigo === 'COMPLETADA' &&
+        orden.edicion_tecnico_habilitada === true,
+      fechaModificacion:
+        orden.fecha_modificacion?.toISOString() ||
+        new Date().toISOString(),
+    };
+  }
+
+  /**
    * Obtiene resúmenes compactos de órdenes para comparación inteligente.
    * El móvil usa estos resúmenes para detectar diferencias con su BD local.
    * 
    * @param tecnicoId - ID del técnico
    * @param limit - Número máximo de órdenes (default 500)
    */
-  async getOrdenesResumen(tecnicoId: number, limit: number = 500): Promise<{
-    serverTimestamp: string;
-    tecnicoId: number;
-    totalOrdenes: number;
-    ordenes: Array<{
-      id: number;
-      numeroOrden: string;
-      estadoId: number;
-      estadoCodigo: string;
-      fechaModificacion: string;
-      urlPdf?: string;
-    }>;
-  }> {
+  async getOrdenesResumen(tecnicoId: number, limit: number = 500) {
     // ========================================================================
-    // 🚨 POLÍTICA ENTERPRISE: CERO ÓRDENES COMPLETADAS DEL SERVIDOR
+    // 19-OCT-2026: El compare ahora incluye DOS grupos:
+    //   1. Órdenes ACTIVAS (comportamiento histórico).
+    //   2. COMPLETADAS recientes, SOLO para propagar la autorización de
+    //      edición técnica (habilitar/revocar) sin descargar la orden.
+    //
+    // Por qué dos consultas y no una: las 1.300+ órdenes completadas de un
+    // técnico desplazarían a las activas si se aplicara un único `take`. Se
+    // limita el segundo grupo a las 200 modificadas más recientemente; cada
+    // habilitación/revocación actualiza fecha_modificacion, por lo que la
+    // decisión administrativa siempre entra en esa ventana.
     // ========================================================================
-    // El móvil NUNCA recibe órdenes completadas del servidor.
-    // Solo órdenes ACTIVAS (es_estado_final = false)
-    // ========================================================================
-    this.logger.log(`[🚨 COMPARE] POLÍTICA: Solo órdenes ACTIVAS para técnico ${tecnicoId}`);
+    this.logger.log(
+      `[🧠 COMPARE] Activas + COMPLETADAS recientes para técnico ${tecnicoId}`,
+    );
 
-    // Obtener órdenes del técnico (SOLO ACTIVAS)
-    const ordenes = await this.prisma.ordenes_servicio.findMany({
-      where: {
-        id_tecnico_asignado: tecnicoId,
-        estados_orden: { es_estado_final: false },
-      },
-      select: {
-        id_orden_servicio: true,
-        numero_orden: true,
-        id_estado_actual: true,
-        id_cliente: true,
-        id_equipo: true,
-        id_tipo_servicio: true,
-        prioridad: true,
-        fecha_programada: true,
-        fecha_modificacion: true,
-        estados_orden: {
-          select: {
-            codigo_estado: true,
-          },
+    const ordenSelect = {
+      id_orden_servicio: true,
+      numero_orden: true,
+      id_estado_actual: true,
+      id_cliente: true,
+      id_equipo: true,
+      id_tipo_servicio: true,
+      prioridad: true,
+      fecha_programada: true,
+      fecha_modificacion: true,
+      edicion_tecnico_habilitada: true,
+      estados_orden: {
+        select: {
+          codigo_estado: true,
+          es_estado_final: true,
         },
-        clientes: {
-          select: {
-            id_cliente: true,
-            // ✅ FIX 09-FEB-2026: Incluir nombre_sede para clientes-sede
-            nombre_sede: true,
-            persona: {
-              select: {
-                nombre_comercial: true,
-                nombre_completo: true,
-                razon_social: true,
-              },
+      },
+      clientes: {
+        select: {
+          id_cliente: true,
+          // ✅ FIX 09-FEB-2026: Incluir nombre_sede para clientes-sede
+          nombre_sede: true,
+          persona: {
+            select: {
+              nombre_comercial: true,
+              nombre_completo: true,
+              razon_social: true,
             },
           },
         },
       },
-      orderBy: { fecha_modificacion: 'desc' },
-      take: limit,
-    });
+    } as const;
+
+    const LIMITE_COMPLETADAS = 200;
+
+    const [ordenesActivas, ordenesCompletadas] = await Promise.all([
+      this.prisma.ordenes_servicio.findMany({
+        where: {
+          id_tecnico_asignado: tecnicoId,
+          estados_orden: { es_estado_final: false },
+        },
+        select: ordenSelect,
+        orderBy: { fecha_modificacion: 'desc' },
+        take: limit,
+      }),
+      this.prisma.ordenes_servicio.findMany({
+        where: {
+          id_tecnico_asignado: tecnicoId,
+          estados_orden: { codigo_estado: 'COMPLETADA' },
+        },
+        select: ordenSelect,
+        orderBy: { fecha_modificacion: 'desc' },
+        take: LIMITE_COMPLETADAS,
+      }),
+    ]);
+
+    // Deduplicación defensiva (un estado no puede ser activo y COMPLETADA a la vez)
+    const idsActivos = new Set(
+      ordenesActivas.map((o) => o.id_orden_servicio),
+    );
+    const ordenes = [
+      ...ordenesActivas,
+      ...ordenesCompletadas.filter(
+        (o) => !idsActivos.has(o.id_orden_servicio),
+      ),
+    ];
 
     // Obtener los IDs de órdenes para buscar PDFs
     const ordenIds = ordenes.map(o => o.id_orden_servicio);
@@ -1186,6 +1302,11 @@ export class SyncService {
         estadoId: o.id_estado_actual,
         id_estado: o.id_estado_actual, // Alias snake_case
         estadoCodigo: o.estados_orden?.codigo_estado || 'DESCONOCIDO',
+        esEstadoFinal: o.estados_orden?.es_estado_final || false,
+        // ✅ 19-OCT-2026: Solo COMPLETADA + autorización vigente habilita edición.
+        permiteEdicionTecnico:
+          o.estados_orden?.codigo_estado === 'COMPLETADA' &&
+          o.edicion_tecnico_habilitada === true,
         idCliente: o.id_cliente || 1,
         id_cliente: o.id_cliente || 1, // Alias snake_case
         // ✅ FIX 09-FEB-2026: Priorizar nombre_sede del cliente-sede
@@ -1255,9 +1376,20 @@ export class SyncService {
       return null;
     }
 
-    // 🚨 POLÍTICA ENTERPRISE: NUNCA enviar órdenes completadas
-    if (orden.estados_orden?.es_estado_final) {
-      this.logger.warn(`[🚨 POLÍTICA] Orden ${ordenId} está COMPLETADA - NO se envía al móvil`);
+    // 🔐 19-OCT-2026: Una orden final solo se entrega al móvil cuando es
+    // COMPLETADA y el administrador habilitó explícitamente su edición.
+    // CANCELADA (u otro estado final) nunca se entrega.
+    const esCompletadaConAutorizacion =
+      orden.estados_orden?.codigo_estado === 'COMPLETADA' &&
+      orden.edicion_tecnico_habilitada === true;
+
+    if (
+      orden.estados_orden?.es_estado_final &&
+      !esCompletadaConAutorizacion
+    ) {
+      this.logger.warn(
+        `[🔐 POLÍTICA] Orden ${ordenId} final (${orden.estados_orden?.codigo_estado}) sin autorización de edición - NO se envía al móvil`,
+      );
       return null;
     }
 
@@ -1364,6 +1496,8 @@ export class SyncService {
       idEstadoActual: orden.id_estado_actual,
       codigoEstado: orden.estados_orden?.codigo_estado || 'DESCONOCIDO',
       nombreEstado: orden.estados_orden?.nombre_estado || 'Desconocido',
+      esEstadoFinal: orden.estados_orden?.es_estado_final || false,
+      permiteEdicionTecnico: esCompletadaConAutorizacion,
       fechaProgramada: orden.fecha_programada?.toISOString(),
       prioridad: orden.prioridad || 'NORMAL',
       idCliente: orden.id_cliente,

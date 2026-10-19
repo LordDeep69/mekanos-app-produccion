@@ -617,6 +617,10 @@ class SyncService {
             // ✅ FIX: Horas como TEXTO PLANO (HH:mm) - sin zona horaria
             horaEntradaTexto: Value(orden['horaEntrada'] as String?),
             horaSalidaTexto: Value(orden['horaSalida'] as String?),
+            // ✅ 19-OCT-2026: Permiso administrativo de edición técnica.
+            permiteEdicionTecnico: Value(
+              orden['permiteEdicionTecnico'] as bool? ?? false,
+            ),
             isDirty: const Value(false),
             lastSyncedAt: Value(DateTime.now()),
           );
@@ -649,11 +653,49 @@ class SyncService {
             final estadoLocalFinalizado =
                 estadosFinalizados.contains(estadoLocalCodigo);
 
+            final permisoServidor =
+                orden['permiteEdicionTecnico'] as bool? ?? false;
+
+            // ✅ 19-OCT-2026: una orden FINAL nunca se sobrescribe con el
+            // snapshot del servidor. Solo se replican permiso de edición,
+            // versión, PDF y estado final; se preserva el trabajo local
+            // (actividades, mediciones, evidencias y equipos).
+            final servidorFinal = estadosFinalizados.contains(
+              codigoEstadoServer,
+            );
+
+            if (servidorFinal) {
+              final idEstadoServidor = estadosMap[codigoEstadoServer];
+
+              await _db.updateOrden(
+                OrdenesCompanion(
+                  version: Value(serverVersion),
+                  permiteEdicionTecnico: Value(permisoServidor),
+                  lastSyncedAt: Value(DateTime.now()),
+                  idEstado:
+                      (idEstadoServidor != null &&
+                          existingOrden.idEstado != idEstadoServidor)
+                      ? Value(idEstadoServidor)
+                      : const Value.absent(),
+                  urlPdf: orden['urlPdf'] != null
+                      ? Value(orden['urlPdf'] as String)
+                      : const Value.absent(),
+                ),
+                existingOrden.idLocal,
+              );
+
+              ordenesCount++;
+              continue;
+            }
+
             final debeActualizar =
                 serverVersion > existingOrden.version ||
                 codigoEstadoServer != estadoLocalCodigo ||
                 (estadosFinalizados.contains(codigoEstadoServer) &&
-                    !estadoLocalFinalizado);
+                    !estadoLocalFinalizado) ||
+                // ✅ 19-OCT-2026: detectar habilitación/revocación aunque
+                // la versión no haya cambiado (defensa adicional).
+                permisoServidor != existingOrden.permiteEdicionTecnico;
 
             if (debeActualizar) {
               // ✅ v3.3 FIX: Protección de estado local "isDirty"

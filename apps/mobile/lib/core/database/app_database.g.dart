@@ -5212,6 +5212,21 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _permiteEdicionTecnicoMeta =
+      const VerificationMeta('permiteEdicionTecnico');
+  @override
+  late final GeneratedColumn<bool> permiteEdicionTecnico =
+      GeneratedColumn<bool>(
+        'permite_edicion_tecnico',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("permite_edicion_tecnico" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _isDirtyMeta = const VerificationMeta(
     'isDirty',
   );
@@ -5294,6 +5309,7 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
     horaEntradaTexto,
     horaSalidaTexto,
     razonFalla,
+    permiteEdicionTecnico,
     isDirty,
     lastSyncedAt,
     createdAt,
@@ -5561,6 +5577,15 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
         razonFalla.isAcceptableOrUnknown(data['razon_falla']!, _razonFallaMeta),
       );
     }
+    if (data.containsKey('permite_edicion_tecnico')) {
+      context.handle(
+        _permiteEdicionTecnicoMeta,
+        permiteEdicionTecnico.isAcceptableOrUnknown(
+          data['permite_edicion_tecnico']!,
+          _permiteEdicionTecnicoMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_dirty')) {
       context.handle(
         _isDirtyMeta,
@@ -5717,6 +5742,10 @@ class $OrdenesTable extends Ordenes with TableInfo<$OrdenesTable, Ordene> {
         DriftSqlType.string,
         data['${effectivePrefix}razon_falla'],
       ),
+      permiteEdicionTecnico: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}permite_edicion_tecnico'],
+      )!,
       isDirty: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_dirty'],
@@ -5773,6 +5802,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
   final String? horaEntradaTexto;
   final String? horaSalidaTexto;
   final String? razonFalla;
+  final bool permiteEdicionTecnico;
   final bool isDirty;
   final DateTime? lastSyncedAt;
   final DateTime createdAt;
@@ -5808,6 +5838,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     this.horaEntradaTexto,
     this.horaSalidaTexto,
     this.razonFalla,
+    required this.permiteEdicionTecnico,
     required this.isDirty,
     this.lastSyncedAt,
     required this.createdAt,
@@ -5868,6 +5899,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     if (!nullToAbsent || razonFalla != null) {
       map['razon_falla'] = Variable<String>(razonFalla);
     }
+    map['permite_edicion_tecnico'] = Variable<bool>(permiteEdicionTecnico);
     map['is_dirty'] = Variable<bool>(isDirty);
     if (!nullToAbsent || lastSyncedAt != null) {
       map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
@@ -5931,6 +5963,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       razonFalla: razonFalla == null && nullToAbsent
           ? const Value.absent()
           : Value(razonFalla),
+      permiteEdicionTecnico: Value(permiteEdicionTecnico),
       isDirty: Value(isDirty),
       lastSyncedAt: lastSyncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -5984,6 +6017,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       horaEntradaTexto: serializer.fromJson<String?>(json['horaEntradaTexto']),
       horaSalidaTexto: serializer.fromJson<String?>(json['horaSalidaTexto']),
       razonFalla: serializer.fromJson<String?>(json['razonFalla']),
+      permiteEdicionTecnico: serializer.fromJson<bool>(
+        json['permiteEdicionTecnico'],
+      ),
       isDirty: serializer.fromJson<bool>(json['isDirty']),
       lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -6024,6 +6060,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       'horaEntradaTexto': serializer.toJson<String?>(horaEntradaTexto),
       'horaSalidaTexto': serializer.toJson<String?>(horaSalidaTexto),
       'razonFalla': serializer.toJson<String?>(razonFalla),
+      'permiteEdicionTecnico': serializer.toJson<bool>(permiteEdicionTecnico),
       'isDirty': serializer.toJson<bool>(isDirty),
       'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -6062,6 +6099,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     Value<String?> horaEntradaTexto = const Value.absent(),
     Value<String?> horaSalidaTexto = const Value.absent(),
     Value<String?> razonFalla = const Value.absent(),
+    bool? permiteEdicionTecnico,
     bool? isDirty,
     Value<DateTime?> lastSyncedAt = const Value.absent(),
     DateTime? createdAt,
@@ -6109,6 +6147,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
         ? horaSalidaTexto.value
         : this.horaSalidaTexto,
     razonFalla: razonFalla.present ? razonFalla.value : this.razonFalla,
+    permiteEdicionTecnico: permiteEdicionTecnico ?? this.permiteEdicionTecnico,
     isDirty: isDirty ?? this.isDirty,
     lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -6188,6 +6227,9 @@ class Ordene extends DataClass implements Insertable<Ordene> {
       razonFalla: data.razonFalla.present
           ? data.razonFalla.value
           : this.razonFalla,
+      permiteEdicionTecnico: data.permiteEdicionTecnico.present
+          ? data.permiteEdicionTecnico.value
+          : this.permiteEdicionTecnico,
       isDirty: data.isDirty.present ? data.isDirty.value : this.isDirty,
       lastSyncedAt: data.lastSyncedAt.present
           ? data.lastSyncedAt.value
@@ -6230,6 +6272,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           ..write('horaEntradaTexto: $horaEntradaTexto, ')
           ..write('horaSalidaTexto: $horaSalidaTexto, ')
           ..write('razonFalla: $razonFalla, ')
+          ..write('permiteEdicionTecnico: $permiteEdicionTecnico, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -6270,6 +6313,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
     horaEntradaTexto,
     horaSalidaTexto,
     razonFalla,
+    permiteEdicionTecnico,
     isDirty,
     lastSyncedAt,
     createdAt,
@@ -6309,6 +6353,7 @@ class Ordene extends DataClass implements Insertable<Ordene> {
           other.horaEntradaTexto == this.horaEntradaTexto &&
           other.horaSalidaTexto == this.horaSalidaTexto &&
           other.razonFalla == this.razonFalla &&
+          other.permiteEdicionTecnico == this.permiteEdicionTecnico &&
           other.isDirty == this.isDirty &&
           other.lastSyncedAt == this.lastSyncedAt &&
           other.createdAt == this.createdAt &&
@@ -6346,6 +6391,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
   final Value<String?> horaEntradaTexto;
   final Value<String?> horaSalidaTexto;
   final Value<String?> razonFalla;
+  final Value<bool> permiteEdicionTecnico;
   final Value<bool> isDirty;
   final Value<DateTime?> lastSyncedAt;
   final Value<DateTime> createdAt;
@@ -6381,6 +6427,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     this.horaEntradaTexto = const Value.absent(),
     this.horaSalidaTexto = const Value.absent(),
     this.razonFalla = const Value.absent(),
+    this.permiteEdicionTecnico = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -6417,6 +6464,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     this.horaEntradaTexto = const Value.absent(),
     this.horaSalidaTexto = const Value.absent(),
     this.razonFalla = const Value.absent(),
+    this.permiteEdicionTecnico = const Value.absent(),
     this.isDirty = const Value.absent(),
     this.lastSyncedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -6457,6 +6505,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     Expression<String>? horaEntradaTexto,
     Expression<String>? horaSalidaTexto,
     Expression<String>? razonFalla,
+    Expression<bool>? permiteEdicionTecnico,
     Expression<bool>? isDirty,
     Expression<DateTime>? lastSyncedAt,
     Expression<DateTime>? createdAt,
@@ -6496,6 +6545,8 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
       if (horaEntradaTexto != null) 'hora_entrada_texto': horaEntradaTexto,
       if (horaSalidaTexto != null) 'hora_salida_texto': horaSalidaTexto,
       if (razonFalla != null) 'razon_falla': razonFalla,
+      if (permiteEdicionTecnico != null)
+        'permite_edicion_tecnico': permiteEdicionTecnico,
       if (isDirty != null) 'is_dirty': isDirty,
       if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -6534,6 +6585,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     Value<String?>? horaEntradaTexto,
     Value<String?>? horaSalidaTexto,
     Value<String?>? razonFalla,
+    Value<bool>? permiteEdicionTecnico,
     Value<bool>? isDirty,
     Value<DateTime?>? lastSyncedAt,
     Value<DateTime>? createdAt,
@@ -6572,6 +6624,8 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
       horaEntradaTexto: horaEntradaTexto ?? this.horaEntradaTexto,
       horaSalidaTexto: horaSalidaTexto ?? this.horaSalidaTexto,
       razonFalla: razonFalla ?? this.razonFalla,
+      permiteEdicionTecnico:
+          permiteEdicionTecnico ?? this.permiteEdicionTecnico,
       isDirty: isDirty ?? this.isDirty,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -6678,6 +6732,11 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
     if (razonFalla.present) {
       map['razon_falla'] = Variable<String>(razonFalla.value);
     }
+    if (permiteEdicionTecnico.present) {
+      map['permite_edicion_tecnico'] = Variable<bool>(
+        permiteEdicionTecnico.value,
+      );
+    }
     if (isDirty.present) {
       map['is_dirty'] = Variable<bool>(isDirty.value);
     }
@@ -6726,6 +6785,7 @@ class OrdenesCompanion extends UpdateCompanion<Ordene> {
           ..write('horaEntradaTexto: $horaEntradaTexto, ')
           ..write('horaSalidaTexto: $horaSalidaTexto, ')
           ..write('razonFalla: $razonFalla, ')
+          ..write('permiteEdicionTecnico: $permiteEdicionTecnico, ')
           ..write('isDirty: $isDirty, ')
           ..write('lastSyncedAt: $lastSyncedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -17072,6 +17132,7 @@ typedef $$OrdenesTableCreateCompanionBuilder =
       Value<String?> horaEntradaTexto,
       Value<String?> horaSalidaTexto,
       Value<String?> razonFalla,
+      Value<bool> permiteEdicionTecnico,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -17109,6 +17170,7 @@ typedef $$OrdenesTableUpdateCompanionBuilder =
       Value<String?> horaEntradaTexto,
       Value<String?> horaSalidaTexto,
       Value<String?> razonFalla,
+      Value<bool> permiteEdicionTecnico,
       Value<bool> isDirty,
       Value<DateTime?> lastSyncedAt,
       Value<DateTime> createdAt,
@@ -17461,6 +17523,11 @@ class $$OrdenesTableFilterComposer
 
   ColumnFilters<String> get razonFalla => $composableBuilder(
     column: $table.razonFalla,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get permiteEdicionTecnico => $composableBuilder(
+    column: $table.permiteEdicionTecnico,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17867,6 +17934,11 @@ class $$OrdenesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get permiteEdicionTecnico => $composableBuilder(
+    column: $table.permiteEdicionTecnico,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDirty => $composableBuilder(
     column: $table.isDirty,
     builder: (column) => ColumnOrderings(column),
@@ -18104,6 +18176,11 @@ class $$OrdenesTableAnnotationComposer
 
   GeneratedColumn<String> get razonFalla => $composableBuilder(
     column: $table.razonFalla,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get permiteEdicionTecnico => $composableBuilder(
+    column: $table.permiteEdicionTecnico,
     builder: (column) => column,
   );
 
@@ -18435,6 +18512,7 @@ class $$OrdenesTableTableManager
                 Value<String?> horaEntradaTexto = const Value.absent(),
                 Value<String?> horaSalidaTexto = const Value.absent(),
                 Value<String?> razonFalla = const Value.absent(),
+                Value<bool> permiteEdicionTecnico = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -18470,6 +18548,7 @@ class $$OrdenesTableTableManager
                 horaEntradaTexto: horaEntradaTexto,
                 horaSalidaTexto: horaSalidaTexto,
                 razonFalla: razonFalla,
+                permiteEdicionTecnico: permiteEdicionTecnico,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,
@@ -18507,6 +18586,7 @@ class $$OrdenesTableTableManager
                 Value<String?> horaEntradaTexto = const Value.absent(),
                 Value<String?> horaSalidaTexto = const Value.absent(),
                 Value<String?> razonFalla = const Value.absent(),
+                Value<bool> permiteEdicionTecnico = const Value.absent(),
                 Value<bool> isDirty = const Value.absent(),
                 Value<DateTime?> lastSyncedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -18542,6 +18622,7 @@ class $$OrdenesTableTableManager
                 horaEntradaTexto: horaEntradaTexto,
                 horaSalidaTexto: horaSalidaTexto,
                 razonFalla: razonFalla,
+                permiteEdicionTecnico: permiteEdicionTecnico,
                 isDirty: isDirty,
                 lastSyncedAt: lastSyncedAt,
                 createdAt: createdAt,

@@ -114,11 +114,34 @@ class SyncUploadService {
     String? emailAdicional,
     String? razonFalla,
     String modo = 'SOLO_DATOS',
+    /// ✅ 19-OCT-2026: true cuando la orden YA estaba COMPLETADA y el
+    /// administrador autorizó su corrección. Cambia el manejo de errores:
+    /// no se infiere éxito por el estado previo ni se encola a ciegas.
+    bool esResubida = false,
   }) async {
+    // ✅ 19-OCT-2026: `esResubida` solo es válido si la orden local sigue
+    // en COMPLETADA. Si fue reabierta, el flag administrativo pudo quedar
+    // en true pero el flujo correcto es una finalización normal.
+    // Se declara antes del try para que el catch final también lo conozca.
+    var modoResubida = esResubida;
+
     try {
       // ✅ 19-DIC-2025: Iniciar progreso
       _progressNotifier.iniciar(idOrdenBackend);
       _progressNotifier.avanzar(SyncStep.preparando);
+
+      final ordenLocal = await _db.getOrdenById(idOrdenLocal);
+      if (ordenLocal != null && modoResubida) {
+        final estadoLocal = await _db.getEstadoOrdenById(ordenLocal.idEstado);
+        final codigoEstadoLocal = estadoLocal?.codigo.toUpperCase();
+        if (codigoEstadoLocal != 'COMPLETADA') {
+          modoResubida = false;
+          debugPrint(
+            '⚠️ [SYNC] esResubida ignorado: estado local '
+            '${codigoEstadoLocal ?? 'DESCONOCIDO'}',
+          );
+        }
+      }
 
       // ✅ MULTI-EQUIPOS: Detectar si es orden multi-equipo
       final equipos = await _db.getEquiposByOrdenServicio(idOrdenBackend);
@@ -501,13 +524,16 @@ class SyncUploadService {
         );
       }
 
-      // 8. CON CONEXIÓN - Guardar estado COMPLETADA y sync normal
+      // 8. CON CONEXIÓN - Guardar el trabajo local antes de sincronizar.
+      // En una resubida NO se cambia el estado (ya es COMPLETADA) ni se
+      // sobrescribe la fecha de fin original.
       await _guardarEstadoLocalCompletada(
         idOrdenLocal,
         observaciones,
         horaEntrada,
         horaSalida,
         razonFalla: razonFalla,
+        esResubida: modoResubida,
       );
 
       // ✅ 19-DIC-2025: Progreso - Enviando al servidor
@@ -554,7 +580,11 @@ class SyncUploadService {
 
           // CRÍTICO: El backend YA procesó la orden exitosamente
           try {
-            await _marcarOrdenSincronizada(idOrdenLocal, urlPdf: pdfUrl);
+            await _marcarOrdenSincronizada(
+              idOrdenLocal,
+              urlPdf: pdfUrl,
+              esResubida: modoResubida,
+            );
             debugPrint(
               '✅ [SYNC] Orden marcada como sincronizada con urlPdf=$pdfUrl',
             );
@@ -596,6 +626,59 @@ class SyncUploadService {
             );
           }
 
+          // ✅ 19-OCT-2026: sesión expirada (SSE 401). No encolar.
+          if (response.error == 'SESION_EXPIRADA') {
+            _progressNotifier.error('Sesión expirada');
+            return SyncUploadResult(
+              success: false,
+              mensaje:
+                  'Tu sesión expiró. Inicia sesión nuevamente para resubir la orden.\n\n'
+                  'Tus cambios quedaron guardados en el dispositivo.',
+              error: 'SESION_EXPIRADA',
+              guardadoOffline: false,
+            );
+          }
+
+          // ✅ 19-OCT-2026: un rechazo de autorización es DEFINITIVO.
+          // Reintentarlo en segundo plano solo generaría fallos perpetuos.
+          final esPermisoDenegado =
+              errorMsg.contains('edicion_no_autorizada') ||
+              errorMsg.contains('no está autorizada') ||
+              errorMsg.contains('no autorizada') ||
+              errorMsg.contains('no autorizado') ||
+              errorMsg.contains('forbidden') ||
+              errorMsg.contains('prohibido') ||
+              errorMsg.contains('403');
+
+          if (esPermisoDenegado) {
+            _progressNotifier.error('Edición no autorizada');
+            return SyncUploadResult(
+              success: false,
+              mensaje:
+                  'El administrador no autorizó (o revocó) la edición de esta orden.\n\n'
+                  'Tus cambios quedaron guardados en el dispositivo, pero no se subieron.',
+              error: 'EDICION_NO_AUTORIZADA',
+              guardadoOffline: false,
+            );
+          }
+
+          // ✅ 19-OCT-2026: una resubida fallida NO se encola a ciegas.
+          // El técnico está en pantalla y puede reintentar; además, la orden
+          // ya está COMPLETADA y el proceso de cola la ignora.
+          if (modoResubida) {
+            _progressNotifier.error(
+              response.error ?? 'No se pudo resubir la orden',
+            );
+            return SyncUploadResult(
+              success: false,
+              mensaje:
+                  'No se pudo resubir la orden: ${response.error ?? 'error del servidor'}.\n\n'
+                  'Tus cambios siguen guardados en el dispositivo. Inténtalo de nuevo.',
+              error: response.error,
+              guardadoOffline: false,
+            );
+          }
+
           // Error genuino del servidor - guardar en cola para retry silencioso
           _progressNotifier.error(response.error ?? 'Error del servidor');
           await _offlineSync.guardarEnCola(
@@ -613,9 +696,49 @@ class SyncUploadService {
           );
         }
       } on DioException catch (e) {
+        final status = e.response?.statusCode;
         debugPrint(
-          '⚠️ [SYNC] DioException: type=${e.type}, status=${e.response?.statusCode}, msg=${e.message}',
+          '⚠️ [SYNC] DioException: type=${e.type}, status=$status, msg=${e.message}',
         );
+
+        // ✅ 19-OCT-2026: 401/403 son DEFINITIVOS. No se debe reenviar,
+        // verificar idempotencia ni encolar: el servidor ya negó el permiso.
+        if (status == 401 || status == 403) {
+          _progressNotifier.error('Edición no autorizada');
+
+          return SyncUploadResult(
+            success: false,
+            mensaje: status == 401
+                ? 'Tu sesión expiró. Inicia sesión nuevamente para resubir la orden.\n\n'
+                      'Tus cambios quedaron guardados en el dispositivo.'
+                : 'El administrador no autorizó (o revocó) la edición de esta orden.\n\n'
+                      'Tus cambios quedaron guardados en el dispositivo, pero no se subieron.',
+            error: status == 401
+                ? 'SESION_EXPIRADA'
+                : 'EDICION_NO_AUTORIZADA',
+            guardadoOffline: false,
+          );
+        }
+
+        // ✅ 19-OCT-2026: en una resubida NO se puede inferir éxito con
+        // _verificarOrdenYaCompletadaEnBackend: la orden YA estaba COMPLETADA
+        // antes del envío. Hacerlo reportaría un falso éxito y perdería los
+        // cambios del técnico. Se informa el fallo y se conserva lo local.
+        if (modoResubida) {
+          _progressNotifier.error(
+            e.message ?? 'No se pudo confirmar la resubida',
+          );
+
+          return SyncUploadResult(
+            success: false,
+            mensaje:
+                'No se pudo confirmar la resubida con el servidor.\n\n'
+                'Tus cambios siguen guardados en el dispositivo. '
+                'Verifica tu conexión e inténtalo de nuevo.',
+            error: e.message,
+            guardadoOffline: false,
+          );
+        }
 
         // CRÍTICO: El backend puede estar procesando aún (toma ~25s)
         // Esperar y verificar múltiples veces antes de decidir si guardar en cola
@@ -670,9 +793,24 @@ class SyncUploadService {
         );
       }
     } catch (e) {
+      debugPrint('❌ [SYNC] Error inesperado: $e');
+
+      // ✅ 19-OCT-2026: una resubida fallida no se encola. La orden ya está
+      // COMPLETADA y el técnico puede reintentar desde la pantalla.
+      if (modoResubida) {
+        return SyncUploadResult(
+          success: false,
+          mensaje:
+              'No se pudo resubir la orden.\n\n'
+              'Tus cambios siguen guardados en el dispositivo. Inténtalo de nuevo.',
+          error: e.toString(),
+          guardadoOffline: false,
+        );
+      }
+
       // ✅ FIX 09-FEB-2026: Intentar guardar en cola como último recurso
       // Si el payload ya se construyó, no perder el trabajo del técnico
-      debugPrint('❌ [SYNC] Error inesperado: $e - intentando guardar en cola');
+      debugPrint('❌ [SYNC] Guardando en cola como último recurso');
       try {
         await _offlineSync.guardarEnCola(
           idOrdenLocal: idOrdenLocal,
@@ -713,6 +851,7 @@ class SyncUploadService {
     String horaEntrada,
     String horaSalida, {
     String? razonFalla,
+    bool esResubida = false,
   }) async {
     // Obtener el ID del estado COMPLETADA
     final estadoCompletada = await (_db.select(
@@ -723,16 +862,20 @@ class SyncUploadService {
       _db.ordenes,
     )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
       OrdenesCompanion(
-        idEstado: estadoCompletada != null
-            ? Value(estadoCompletada.id)
-            : const Value.absent(),
+        // En resubida la orden ya está COMPLETADA: no se toca el estado.
+        idEstado: esResubida
+            ? const Value.absent()
+            : (estadoCompletada != null
+                  ? Value(estadoCompletada.id)
+                  : const Value.absent()),
         observacionesTecnico: Value(observaciones),
         horaEntradaTexto: Value(horaEntrada),
         horaSalidaTexto: Value(horaSalida),
         razonFalla: razonFalla != null && razonFalla.isNotEmpty
             ? Value(razonFalla)
             : const Value.absent(),
-        fechaFin: Value(DateTime.now()),
+        // ✅ 19-OCT-2026: preservar la fecha de fin original en resubidas.
+        fechaFin: esResubida ? const Value.absent() : Value(DateTime.now()),
         isDirty: const Value(true), // Marcado para sync
         updatedAt: Value(DateTime.now()),
       ),
@@ -773,6 +916,7 @@ class SyncUploadService {
   Future<void> _marcarOrdenSincronizada(
     int idOrdenLocal, {
     String? urlPdf,
+    bool esResubida = false,
   }) async {
     await _db.transaction(() async {
       // Obtener el ID del estado COMPLETADA
@@ -788,7 +932,9 @@ class SyncUploadService {
       )..where((o) => o.idLocal.equals(idOrdenLocal))).write(
         OrdenesCompanion(
           isDirty: const Value(false),
-          fechaFin: Value(ahora),
+          // ✅ 19-OCT-2026: la resubida no debe reescribir la fecha de fin
+          // original del servicio; solo sincroniza los datos corregidos.
+          fechaFin: esResubida ? const Value.absent() : Value(ahora),
           lastSyncedAt: Value(ahora),
           idEstado: estadoCompletada != null
               ? Value(estadoCompletada.id)
@@ -1068,9 +1214,20 @@ class SyncUploadService {
       // Si no hubo resultado explícito pero no hubo error, asumir éxito
       return _SSEResult(success: true);
     } on DioException catch (e) {
-      debugPrint('❌ [SSE] DioException: ${e.message}');
+      final status = e.response?.statusCode;
+      debugPrint('❌ [SSE] DioException: status=$status, ${e.message}');
 
-      // Si falla el SSE, hacer fallback al endpoint tradicional
+      // ✅ 19-OCT-2026: 401/403 son respuestas DEFINITIVAS del guard/permiso.
+      // Reintentar por el endpoint tradicional duplicaría el rechazo y podría
+      // confundir al usuario; se devuelve el error sin fallback.
+      if (status == 401) {
+        return _SSEResult(success: false, error: 'SESION_EXPIRADA');
+      }
+      if (status == 403) {
+        return _SSEResult(success: false, error: 'EDICION_NO_AUTORIZADA');
+      }
+
+      // Si falla el SSE por red/servidor, hacer fallback al endpoint tradicional
       debugPrint('📡 [SSE] Fallback a endpoint tradicional...');
       return _fallbackEnvioTradicional(idOrdenBackend, payload);
     } catch (e) {

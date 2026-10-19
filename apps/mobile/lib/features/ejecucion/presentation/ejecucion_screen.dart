@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/sync/smart_sync_service.dart';
 import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart'
     show SyncUploadResult, syncUploadServiceProvider;
@@ -3811,17 +3812,84 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     );
   }
 
+  /// ✅ 19-OCT-2026: consulta puntual del permiso antes de abrir el diálogo
+  /// de resubida. Evita que el técnico complete el formulario y falle al final
+  /// porque el administrador revocó el permiso mientras editaba.
+  Future<bool> _verificarPermisoAntesDeResubir() async {
+    final db = ref.read(databaseProvider);
+    final orden = await (db.select(db.ordenes)
+          ..where((o) => o.idLocal.equals(widget.idOrdenLocal)))
+        .getSingleOrNull();
+
+    final idBackend = orden?.idBackend;
+    if (idBackend == null) return false;
+
+    final permite = await ref
+        .read(smartSyncServiceProvider)
+        .verificarPermisoEdicion(idBackend, idLocal: widget.idOrdenLocal);
+
+    if (!mounted) return false;
+
+    if (permite == false) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.lock, color: Colors.red),
+              SizedBox(width: 8),
+              Expanded(child: Text('Edición no autorizada')),
+            ],
+          ),
+          content: const Text(
+            'El administrador revocó la autorización para modificar esta orden.\n\n'
+            'Tus cambios quedaron guardados en el dispositivo. '
+            'Contacta al administrador si necesitas corregirla.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+
+    // null = sin red o verificación no concluyente. Se permite intentar:
+    // el backend validará la autorización al recibir la resubida.
+    return true;
+  }
+
   /// Muestra diálogo para capturar datos finales y sincronizar
   /// ✅ FIX 07-FEB-2026: Reemplazado TextField con TimePicker nativo
   /// para evitar "Invalid time value" en backend por formatos como "1:37 p. m."
   Future<void> _mostrarDialogoFinalizacion() async {
+    // ✅ 19-OCT-2026: antes de resubir, verificar contra el servidor que el
+    // administrador no haya revocado la autorización. Si no hay red, se
+    // permite continuar: el backend volverá a validar al recibir el envío.
+    if (widget.esResubida) {
+      final permitido = await _verificarPermisoAntesDeResubir();
+      if (!permitido || !mounted) return;
+    }
+
     final now = DateTime.now();
 
-    // Valores iniciales: entrada = ahora - 1h, salida = ahora
-    TimeOfDay horaEntrada = TimeOfDay.fromDateTime(
-      now.subtract(const Duration(hours: 1)),
-    );
-    TimeOfDay horaSalida = TimeOfDay.fromDateTime(now);
+    // ✅ 19-OCT-2026: usar la hora real de inicio registrada localmente.
+    // En una resubida, la salida debe conservar la hora original del servicio:
+    // la corrección ocurre después y no debe alterar la duración histórica.
+    final db = ref.read(databaseProvider);
+    final ordenLocal = await db.getOrdenById(widget.idOrdenLocal);
+    final fechaInicioLocal = ordenLocal?.fechaInicio;
+    final fechaFinLocal = ordenLocal?.fechaFin;
+
+    TimeOfDay horaEntrada = fechaInicioLocal != null
+        ? TimeOfDay.fromDateTime(fechaInicioLocal)
+        : TimeOfDay.fromDateTime(now.subtract(const Duration(hours: 1)));
+    TimeOfDay horaSalida = widget.esResubida && fechaFinLocal != null
+        ? TimeOfDay.fromDateTime(fechaFinLocal)
+        : TimeOfDay.fromDateTime(now);
 
     final razonFallaController = TextEditingController(
       text: _razonFallaActual ?? '',
@@ -4049,6 +4117,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             ? razonFalla!.trim()
             : null,
         modo: modo,
+        // ✅ 19-OCT-2026: propaga el modo resubida para que el manejo de
+        // errores no reporte un falso éxito por estar ya COMPLETADA.
+        esResubida: widget.esResubida,
       );
 
       Navigator.of(context).pop(); // Cerrar loading

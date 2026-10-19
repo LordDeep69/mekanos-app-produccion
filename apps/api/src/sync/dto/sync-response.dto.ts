@@ -45,6 +45,15 @@ export class OrdenResumenDto {
   @ApiProperty({ description: 'Prioridad de la orden' })
   prioridad: string;
 
+  @ApiProperty({ description: 'Indica si el estado es final' })
+  esEstadoFinal: boolean;
+
+  @ApiProperty({
+    description:
+      'Solo true si la orden está COMPLETADA y el administrador habilitó su edición técnica',
+  })
+  permiteEdicionTecnico: boolean;
+
   @ApiPropertyOptional({ description: 'Fecha programada ISO 8601' })
   fechaProgramada?: string;
 
@@ -231,6 +240,17 @@ export class SyncOrdenDownloadDto {
 
   @ApiProperty()
   nombreEstado: string;
+
+  @ApiProperty()
+  esEstadoFinal: boolean;
+
+  /**
+   * ✅ 19-OCT-2026: Solo true para órdenes COMPLETADAS cuya edición fue
+   * autorizada por un administrador. El móvil lo usa para habilitar la
+   * corrección/resubida y para refrescar el permiso sin descargar la orden.
+   */
+  @ApiProperty()
+  permiteEdicionTecnico: boolean;
 
   @ApiPropertyOptional()
   fechaProgramada?: string;

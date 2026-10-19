@@ -36,6 +36,7 @@ import {
     getServiciosOrden,
     removeServicioOrden,
     updateActividad,
+    updateEdicionTecnico,
     updateFirmaOrden,
     updateHorariosServicio,
     updateMedicion,
@@ -43,6 +44,7 @@ import {
     updateOrden,
     type AddServicioDetalleDto,
     type UpdateActividadDto,
+    type UpdateEdicionTecnicoDto,
     getFirmasHistorialTecnico,
     getProgresoRegistro,
     sendHeartbeat,
@@ -450,6 +452,32 @@ export function useUpdateObservacionesCierre() {
             const message = err.response?.data?.message;
             const errorText = Array.isArray(message) ? message.join(', ') : message;
             toast.error(errorText || 'Error al actualizar observaciones de cierre');
+        },
+    });
+}
+
+/**
+ * ✅ 19-OCT-2026: Hook para habilitar/revocar la edición técnica de una
+ * orden COMPLETADA desde la app móvil. Invalida la orden, la lista y el
+ * historial para reflejar la auditoría de inmediato.
+ */
+export function useUpdateEdicionTecnico() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: number; data: UpdateEdicionTecnicoDto }) =>
+            updateEdicionTecnico(id, data),
+        onSuccess: (response, variables) => {
+            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
+            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: ['orden-historial', variables.id] });
+            toast.success(response.message || 'Autorización de edición actualizada');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al actualizar la autorización de edición');
         },
     });
 }

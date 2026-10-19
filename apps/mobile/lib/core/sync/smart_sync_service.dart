@@ -42,6 +42,12 @@ class OrdenResumen {
   final int? idEquipo;
   final int? idTipoServicio;
 
+  /// ✅ 19-OCT-2026: estado final autoritativo del servidor.
+  final bool esEstadoFinal;
+
+  /// ✅ 19-OCT-2026: true solo para COMPLETADA con autorización administrativa.
+  final bool permiteEdicionTecnico;
+
   OrdenResumen({
     required this.id,
     required this.numeroOrden,
@@ -53,6 +59,8 @@ class OrdenResumen {
     this.idCliente,
     this.idEquipo,
     this.idTipoServicio,
+    this.esEstadoFinal = false,
+    this.permiteEdicionTecnico = false,
   });
 
   factory OrdenResumen.fromJson(Map<String, dynamic> json) {
@@ -67,6 +75,9 @@ class OrdenResumen {
       idCliente: json['id_cliente'] as int?,
       idEquipo: json['id_equipo'] as int?,
       idTipoServicio: json['id_tipo_servicio'] as int?,
+      esEstadoFinal: json['esEstadoFinal'] as bool? ?? false,
+      permiteEdicionTecnico:
+          json['permiteEdicionTecnico'] as bool? ?? false,
     );
   }
 }
@@ -109,6 +120,68 @@ class SmartSyncService {
   final AppDatabase _db;
 
   SmartSyncService(this._apiClient, this._db);
+
+  /// ✅ 19-OCT-2026: consulta puntual y liviana del permiso de edición de una
+  /// orden. Se usa al abrir una orden COMPLETADA para detectar en segundos un
+  /// cambio del administrador, sin esperar los 5 minutos de SmartSync.
+  ///
+  /// Retorna true/false cuando el servidor respondió; null si fue un error de
+  /// red (en ese caso se conserva el último valor local).
+  Future<bool?> verificarPermisoEdicion(
+    int idOrdenBackend, {
+    int? idLocal,
+  }) async {
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/sync/permiso-edicion/$idOrdenBackend',
+      );
+
+      final data = response.data;
+      if (data == null || data['permiteEdicionTecnico'] is! bool) {
+        return null;
+      }
+
+      final permite = data['permiteEdicionTecnico'] as bool;
+
+      final local = idLocal != null
+          ? await _db.getOrdenById(idLocal)
+          : await _db.getOrdenByBackendId(idOrdenBackend);
+
+      if (local != null && local.permiteEdicionTecnico != permite) {
+        await _db.updateOrdenPermisoEdicion(local.idLocal, permite);
+        debugPrint(
+          '🔐 [PERMISO] Orden $idOrdenBackend → '
+          '${permite ? "HABILITADA" : "BLOQUEADA"}',
+        );
+      }
+
+      return permite;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+
+      // 403: la orden no está asignada al técnico autenticado.
+      // 404: la orden ya no existe. En ambos casos se bloquea localmente.
+      if (status == 403 || status == 404) {
+        if (idLocal != null) {
+          await _db.updateOrdenPermisoEdicion(idLocal, false);
+        } else {
+          final local = await _db.getOrdenByBackendId(idOrdenBackend);
+          if (local != null) {
+            await _db.updateOrdenPermisoEdicion(local.idLocal, false);
+          }
+        }
+        return false;
+      }
+
+      debugPrint(
+        '⚠️ [PERMISO] Error de red consultando orden $idOrdenBackend: $e',
+      );
+      return null;
+    } catch (e) {
+      debugPrint('⚠️ [PERMISO] Error consultando orden $idOrdenBackend: $e');
+      return null;
+    }
+  }
 
   /// Ejecuta la sincronización inteligente completa
   Future<SmartSyncResult> sincronizarInteligente(
@@ -184,49 +257,101 @@ class SmartSyncService {
       debugPrint('🧠 [SMART SYNC] Paso 3: Comparando órdenes...');
 
       final aDescargar = <OrdenResumen>[];
+      int permisosActualizados = 0;
 
       for (final ordenServidor in ordenesServidor) {
         final ordenLocal = mapaLocal[ordenServidor.id];
 
         if (ordenLocal == null) {
+          // ✅ 19-OCT-2026: una orden final sin fila local NO se descarga.
+          // El detalle de sync no reconstruye ejecución/evidencias y podría
+          // inducir una edición vacía. El lifecycle ya la purgó localmente.
+          if (ordenServidor.esEstadoFinal) {
+            debugPrint(
+              '   ⏭️ ${ordenServidor.numeroOrden}: final sin fila local (purgada) → no descargar',
+            );
+            omitidas++;
+            continue;
+          }
+
           // Orden existe en servidor pero NO en local → DESCARGAR
           debugPrint(
             '   📥 ${ordenServidor.numeroOrden}: Nueva (no existe localmente)',
           );
           aDescargar.add(ordenServidor);
-        } else {
-          // Comparar estados usando el código
-          final idEstadoLocalEsperado = estadosMap[ordenServidor.estadoCodigo];
+          continue;
+        }
+
+        // ✅ 19-OCT-2026 (1): sincronizar SIEMPRE el permiso de edición.
+        // Es una escritura puntual: no toca estado, ejecución ni PDF y
+        // detecta tanto habilitaciones como revocaciones.
+        if (ordenServidor.permiteEdicionTecnico !=
+            ordenLocal.permiteEdicionTecnico) {
+          await _db.updateOrdenPermisoEdicion(
+            ordenLocal.idLocal,
+            ordenServidor.permiteEdicionTecnico,
+          );
+          permisosActualizados++;
+          debugPrint(
+            '   🔐 ${ordenServidor.numeroOrden}: permiso de edición → '
+            '${ordenServidor.permiteEdicionTecnico ? "HABILITADO" : "BLOQUEADO"}',
+          );
+        }
+
+        // ✅ 19-OCT-2026 (2): las órdenes finales solo admiten actualización
+        // ligera de estado/PDF. NUNCA se descargan desde el resumen.
+        if (ordenServidor.esEstadoFinal) {
+          final idEstadoLocalEsperado =
+              estadosMap[ordenServidor.estadoCodigo];
 
           if (idEstadoLocalEsperado != null &&
               ordenLocal.idEstado != idEstadoLocalEsperado) {
-            // Estado diferente → DESCARGAR
-            debugPrint(
-              '   📥 ${ordenServidor.numeroOrden}: Estado diferente '
-              '(local=${ordenLocal.idEstado}, servidor=$idEstadoLocalEsperado [${ordenServidor.estadoCodigo}])',
+            await _db.updateOrdenEstadoYPdf(
+              ordenLocal.idLocal,
+              idEstadoLocalEsperado,
+              ordenServidor.urlPdf ?? ordenLocal.urlPdf,
             );
-            aDescargar.add(ordenServidor);
-          } else if (ordenServidor.urlPdf != null &&
-              ordenLocal.urlPdf == null) {
-            // Servidor tiene PDF pero local no → DESCARGAR
             debugPrint(
-              '   📥 ${ordenServidor.numeroOrden}: PDF disponible en servidor',
+              '   🔄 ${ordenServidor.numeroOrden}: estado final actualizado '
+              '(${ordenServidor.estadoCodigo}) sin descarga',
             );
-            aDescargar.add(ordenServidor);
-          } else {
-            // Sin cambios en la orden, pero igual actualizamos el nombre del cliente por si cambió la prioridad/dato
-            if (ordenServidor.idCliente != null &&
-                ordenServidor.nombreCliente != null) {
-              await _db.upsertCliente(
-                ClientesCompanion(
-                  id: Value(ordenServidor.idCliente!),
-                  nombre: Value(ordenServidor.nombreCliente!),
-                  lastSyncedAt: Value(DateTime.now()),
-                ),
-              );
-            }
-            omitidas++;
           }
+
+          omitidas++;
+          continue;
+        }
+
+        // (3) Órdenes activas: lógica histórica de comparación.
+        final idEstadoLocalEsperado = estadosMap[ordenServidor.estadoCodigo];
+
+        if (idEstadoLocalEsperado != null &&
+            ordenLocal.idEstado != idEstadoLocalEsperado) {
+          // Estado diferente → DESCARGAR
+          debugPrint(
+            '   📥 ${ordenServidor.numeroOrden}: Estado diferente '
+            '(local=${ordenLocal.idEstado}, servidor=$idEstadoLocalEsperado [${ordenServidor.estadoCodigo}])',
+          );
+          aDescargar.add(ordenServidor);
+        } else if (ordenServidor.urlPdf != null &&
+            ordenLocal.urlPdf == null) {
+          // Servidor tiene PDF pero local no → DESCARGAR
+          debugPrint(
+            '   📥 ${ordenServidor.numeroOrden}: PDF disponible en servidor',
+          );
+          aDescargar.add(ordenServidor);
+        } else {
+          // Sin cambios en la orden, pero igual actualizamos el nombre del cliente por si cambió la prioridad/dato
+          if (ordenServidor.idCliente != null &&
+              ordenServidor.nombreCliente != null) {
+            await _db.upsertCliente(
+              ClientesCompanion(
+                id: Value(ordenServidor.idCliente!),
+                nombre: Value(ordenServidor.nombreCliente!),
+                lastSyncedAt: Value(DateTime.now()),
+              ),
+            );
+          }
+          omitidas++;
         }
       }
 
@@ -328,7 +453,9 @@ class SmartSyncService {
       }
 
       debugPrint(
-        '🧠 [SMART SYNC] Resultado: ${aDescargar.length} a descargar, $omitidas sin cambios, $ordenesEliminadasCount eliminadas del servidor',
+        '🧠 [SMART SYNC] Resultado: ${aDescargar.length} a descargar, '
+        '$omitidas sin cambios, $permisosActualizados permisos de edición '
+        'actualizados, $ordenesEliminadasCount eliminadas del servidor',
       );
 
       // =====================================================================
@@ -557,6 +684,10 @@ class SmartSyncService {
       fechaFin: Value(_parseDateTime(ordenData['fechaFinReal'])),
       horaEntradaTexto: Value(ordenData['horaEntrada'] as String?),
       horaSalidaTexto: Value(ordenData['horaSalida'] as String?),
+      // ✅ 19-OCT-2026: permiso administrativo de edición técnica.
+      permiteEdicionTecnico: Value(
+        ordenData['permiteEdicionTecnico'] as bool? ?? false,
+      ),
       // ✅ ESTADÍSTICAS COMPLETAS
       totalActividades: Value(ordenData['totalActividades'] as int? ?? 0),
       totalMediciones: Value(ordenData['totalMediciones'] as int? ?? 0),
@@ -815,6 +946,7 @@ class SmartSyncService {
       idTipoServicio: Value(resumen.idTipoServicio ?? 1),
       prioridad: const Value('MEDIA'),
       urlPdf: Value(resumen.urlPdf),
+      permiteEdicionTecnico: Value(resumen.permiteEdicionTecnico),
       lastSyncedAt: Value(DateTime.now()),
       isDirty: const Value(false),
     );

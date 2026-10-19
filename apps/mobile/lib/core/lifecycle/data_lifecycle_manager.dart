@@ -355,6 +355,10 @@ class DataLifecycleManager {
         await (_db.select(_db.ordenes)
               ..where((o) => o.idEstado.isIn(estadosFinalesIds))
               ..where((o) => o.isDirty.equals(false)) // NUNCA dirty
+              // ✅ 19-OCT-2026: NUNCA purgar una orden con edición técnica
+              // autorizada. El administrador podría necesitar que el técnico
+              // corrija datos incluso después del período de retención.
+              ..where((o) => o.permiteEdicionTecnico.equals(false))
               ..where(
                 (o) => o.idBackend.isNotNull(),
               )) // Debe existir en servidor
@@ -904,6 +908,18 @@ class DataLifecycleManager {
     final orden = await _db.getOrdenById(idOrdenLocal);
     if (orden == null) return false;
     if (!estadosFinalesIds.contains(orden.idEstado)) return false;
+
+    // ✅ 19-OCT-2026: preservar archivos locales (evidencias/firmas) de una
+    // orden cuya edición fue autorizada. Sin ellos el técnico no podría
+    // resubir; se purgarán cuando el permiso sea revocado o la orden salga
+    // del estado final.
+    if (orden.permiteEdicionTecnico) {
+      debugPrint(
+        '🛡️ [LIFECYCLE] Orden ${orden.numeroOrden} con edición autorizada, '
+        'archivos protegidos de purga',
+      );
+      return false;
+    }
 
     return _fueSubidaAlServidor(orden, permitirDirtyConHuella: false);
   }

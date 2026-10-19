@@ -546,6 +546,42 @@ export async function updateHorariosServicio(
 }
 
 // ========================================================================
+// AUTORIZACIÓN DE EDICIÓN TÉCNICA (19-OCT-2026)
+// ========================================================================
+
+export interface UpdateEdicionTecnicoDto {
+    habilitada: boolean;
+    motivo?: string;
+}
+
+export interface UpdateEdicionTecnicoResponse {
+    success: boolean;
+    message: string;
+    data: {
+        id_orden_servicio: number;
+        edicion_tecnico_habilitada: boolean;
+        edicion_tecnico_autorizada_por?: number | null;
+        edicion_tecnico_fecha_autorizacion?: string | null;
+        edicion_tecnico_motivo?: string | null;
+    };
+}
+
+/**
+ * Habilita o revoca la edición de una orden COMPLETADA desde la app móvil.
+ * Endpoint dedicado PATCH /ordenes/:id/edicion-tecnico (solo administradores).
+ */
+export async function updateEdicionTecnico(
+    id: number,
+    data: UpdateEdicionTecnicoDto
+): Promise<UpdateEdicionTecnicoResponse> {
+    const response = await apiClient.patch<UpdateEdicionTecnicoResponse>(
+        `${ORDENES_BASE}/${id}/edicion-tecnico`,
+        data
+    );
+    return response.data;
+}
+
+// ========================================================================
 // HISTORIAL DE EMAILS ENVIADOS
 // ========================================================================
 

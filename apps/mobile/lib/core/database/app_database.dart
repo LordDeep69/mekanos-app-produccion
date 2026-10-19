@@ -326,6 +326,12 @@ class Ordenes extends Table {
   // Si está lleno, se incluye en el PDF. Si no, se omite.
   TextColumn get razonFalla => text().nullable()();
 
+  // ✅ 19-OCT-2026: Autorización administrativa POR ORDEN para que el técnico
+  // pueda corregir y resubir una orden COMPLETADA. El backend es la autoridad;
+  // el móvil solo replica el valor vía SmartSync / consulta puntual.
+  BoolColumn get permiteEdicionTecnico =>
+      boolean().withDefault(const Constant(false))();
+
   // Sync control - CRÍTICO para offline-first
   BoolColumn get isDirty => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastSyncedAt => dateTime().nullable()();
@@ -596,7 +602,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 17; // v17: Sistema Inteligente de Pendientes Técnicos
+  int get schemaVersion => 18; // v18: autorizacion de edicion tecnica por orden // v17: Sistema Inteligente de Pendientes Técnicos
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -752,6 +758,14 @@ class AppDatabase extends _$AppDatabase {
         // v17: Sistema Inteligente de Pendientes Técnicos
         await m.createTable(pendientesCatalogo);
         await m.createTable(ordenesPendientes);
+      }
+      if (from < 18) {
+        // v18: Autorizacion de edicion tecnica por orden (19-OCT-2026).
+        // La columna se replica desde el backend; nunca se activa localmente
+        // sin confirmacion del servidor.
+        await customStatement(
+          'ALTER TABLE ordenes ADD COLUMN permite_edicion_tecnico INTEGER NOT NULL DEFAULT 0',
+        );
       }
     },
     beforeOpen: (details) async {
@@ -1043,6 +1057,27 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       ordenes,
     )..where((o) => o.idBackend.equals(idBackend))).getSingleOrNull();
+  }
+
+  /// ✅ 19-OCT-2026: Actualizar SOLO el permiso de edición técnica.
+  /// Se usa desde SmartSync al detectar un cambio administrativo, sin
+  /// descargar ni sobrescribir el resto de la orden (protege ediciones locales).
+  Future<void> updateOrdenPermisoEdicion(int idLocal, bool permite) async {
+    await (update(ordenes)..where((o) => o.idLocal.equals(idLocal))).write(
+      OrdenesCompanion(
+        permiteEdicionTecnico: Value(permite),
+      ),
+    );
+  }
+
+  /// ✅ 19-OCT-2026: Observar el permiso de edición de una orden para que la
+  /// UI reaccione en vivo cuando el administrador lo habilite o revoque.
+  Stream<bool> watchPermisoEdicionTecnico(int idLocal) {
+    final query = select(ordenes)
+      ..where((o) => o.idLocal.equals(idLocal));
+    return query.watchSingleOrNull().map(
+          (orden) => orden?.permiteEdicionTecnico ?? false,
+        );
   }
 
   /// Stream de órdenes (reactivo)

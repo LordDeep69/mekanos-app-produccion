@@ -255,6 +255,14 @@ class OfflineSyncService {
             );
           }
           sincronizadas++;
+        } else if (response.statusCode == 401 || response.statusCode == 403) {
+          // ✅ 19-OCT-2026: rechazo definitivo de sesión/permiso.
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          fallidas++;
+          errores.add(
+            'Orden ${orden.idOrdenBackend}: '
+            '${response.statusCode == 403 ? 'edición no autorizada' : 'sesión expirada'}',
+          );
         } else if (response.statusCode == 400 || response.statusCode == 409) {
           // Error 400/409 = Orden ya completada o conflicto
           // Verificar si realmente ya está completada en backend
@@ -299,6 +307,17 @@ class OfflineSyncService {
           await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
           fallidas++;
           errores.add('Orden ${orden.idOrdenBackend}: Eliminada del servidor');
+          continue;
+        }
+        // ✅ 19-OCT-2026: 401/403 son definitivos. No reintentar ni inferir
+        // éxito: se descarta la entrada y se reporta el motivo.
+        if (statusCode == 401 || statusCode == 403) {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+          fallidas++;
+          errores.add(
+            'Orden ${orden.idOrdenBackend}: '
+            '${statusCode == 403 ? 'edición no autorizada' : 'sesión expirada'}',
+          );
           continue;
         }
         if (statusCode == 400 || statusCode == 409) {
@@ -642,6 +661,19 @@ class OfflineSyncService {
         _progressNotifier.completar();
         return true;
       } else {
+        // ✅ 19-OCT-2026: permiso revocado o sesión expirada. No reintentar
+        // ni inferir éxito por el estado previo de la orden.
+        if (sseResult.error == 'EDICION_NO_AUTORIZADA' ||
+            sseResult.error == 'SESION_EXPIRADA') {
+          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+
+          final errorMsg = sseResult.error == 'EDICION_NO_AUTORIZADA'
+              ? 'El administrador no autorizó (o revocó) la edición de esta orden.'
+              : 'Tu sesión expiró. Inicia sesión nuevamente.';
+          _progressNotifier.error(errorMsg);
+          return false;
+        }
+
         // Error del SSE - verificar si la orden ya se completó en el backend
         final verificacion = await _verificarOrdenYaCompletada(
           orden.idOrdenBackend,
@@ -683,6 +715,17 @@ class OfflineSyncService {
         _progressNotifier.error('La orden fue eliminada del servidor');
         return false;
       }
+
+      // ✅ 19-OCT-2026: rechazo definitivo de sesión/permiso. No reintentar.
+      if (statusCode == 401 || statusCode == 403) {
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        final errorMsg = statusCode == 403
+            ? 'El administrador no autorizó (o revocó) la edición de esta orden.'
+            : 'Tu sesión expiró. Inicia sesión nuevamente.';
+        _progressNotifier.error(errorMsg);
+        return false;
+      }
+
       if (statusCode == 400 || statusCode == 409) {
         final verificacion = await _verificarOrdenYaCompletada(
           orden.idOrdenBackend,
@@ -837,9 +880,19 @@ class OfflineSyncService {
       // Si no hubo resultado explícito pero no hubo error, asumir éxito
       return _SSEResult(success: true);
     } on DioException catch (e) {
-      debugPrint('❌ [SSE-OFFLINE] DioException: ${e.message}');
+      final status = e.response?.statusCode;
+      debugPrint('❌ [SSE-OFFLINE] DioException: status=$status, ${e.message}');
 
-      // Si falla el SSE, hacer fallback al endpoint tradicional
+      // ✅ 19-OCT-2026: 401/403 son definitivos (sesión/permiso). No hacer
+      // fallback: repetiría el rechazo y confundiría al usuario.
+      if (status == 401) {
+        return _SSEResult(success: false, error: 'SESION_EXPIRADA');
+      }
+      if (status == 403) {
+        return _SSEResult(success: false, error: 'EDICION_NO_AUTORIZADA');
+      }
+
+      // Si falla el SSE por red/servidor, hacer fallback al endpoint tradicional
       debugPrint('📡 [SSE-OFFLINE] Fallback a endpoint tradicional...');
       return _fallbackEnvioTradicional(idOrdenBackend, payload);
     } catch (e) {

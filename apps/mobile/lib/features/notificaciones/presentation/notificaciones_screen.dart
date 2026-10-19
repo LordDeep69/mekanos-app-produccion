@@ -108,9 +108,15 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
             'FINALIZADA',
           ].contains(codigoEstado);
 
+          // ✅ 19-OCT-2026: COMPLETADA + autorización administrativa
+          // vigente → detalle editable. Resto de finales → historial.
+          final puedeEditar = codigoEstado == 'COMPLETADA' &&
+              orden.permiteEdicionTecnico;
+          final irAHistorial = esFinalizada && !puedeEditar;
+
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => esFinalizada
+              builder: (_) => irAHistorial
                   ? HistorialDetalleScreen(idOrdenLocal: orden.idLocal)
                   : OrdenDetalleScreen(idOrdenLocal: orden.idLocal),
             ),

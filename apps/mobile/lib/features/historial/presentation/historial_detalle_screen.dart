@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/database_service.dart';
 import '../../../core/sync/smart_sync_service.dart';
+import '../../orders/presentation/orden_detalle_screen.dart';
 import '../data/historial_service.dart';
 import '../data/pdf_service.dart';
 import 'pdf_viewer_screen.dart';
@@ -32,6 +36,11 @@ class _HistorialDetalleScreenState
   bool _isFetchingPdf = false;
   bool _isLoadingStats = false; // ✅ NUEVO: Estado para carga on-demand
 
+  /// ✅ 19-OCT-2026: permiso de edición técnica consultado al backend.
+  /// null = aún no consultado (se usa el valor local como fallback).
+  bool? _permiteEdicion;
+  bool _verificandoPermiso = false;
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +70,12 @@ class _HistorialDetalleScreenState
         if (detalle != null && _necesitaCargarEstadisticas(detalle)) {
           _cargarEstadisticasOnDemand(detalle.idBackend!);
         }
+
+        // ✅ 19-OCT-2026: consultar el permiso de edición al servidor.
+        // No bloquea el render; si falla la red se usa el valor local.
+        if (detalle != null) {
+          unawaited(_verificarPermisoEdicion());
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -70,6 +85,84 @@ class _HistorialDetalleScreenState
         });
       }
     }
+  }
+
+  /// ✅ 19-OCT-2026: consulta puntual y liviana del permiso de edición.
+  /// Se ejecuta al abrir/refrescar el historial y al volver de una edición.
+  ///
+  /// Regla: solo COMPLETADA con autorización administrativa permite editar.
+  /// Si el servidor no responde, se conserva el último valor local para no
+  /// romper el modo offline; el backend seguirá validando al resubir.
+  Future<void> _verificarPermisoEdicion() async {
+    final detalle = _detalle;
+    if (detalle == null) return;
+
+    final idBackend = detalle.idBackend;
+    final esCompletada = detalle.estado.toUpperCase() == 'COMPLETADA';
+
+    if (!esCompletada || idBackend == null) {
+      if (mounted) {
+        setState(() {
+          _permiteEdicion = false;
+          _verificandoPermiso = false;
+        });
+      }
+      return;
+    }
+
+    if (_verificandoPermiso) return;
+    setState(() => _verificandoPermiso = true);
+
+    try {
+      final permite = await ref
+          .read(smartSyncServiceProvider)
+          .verificarPermisoEdicion(idBackend, idLocal: detalle.idLocal);
+
+      final local = await ref
+          .read(databaseProvider)
+          .getOrdenById(detalle.idLocal);
+
+      if (!mounted) return;
+
+      setState(() {
+        _permiteEdicion = permite ?? local?.permiteEdicionTecnico ?? false;
+      });
+    } catch (e) {
+      debugPrint('⚠️ [HISTORIAL] Error verificando permiso de edición: $e');
+      if (!mounted) return;
+
+      final local = await ref
+          .read(databaseProvider)
+          .getOrdenById(detalle.idLocal);
+      if (!mounted) return;
+
+      setState(() {
+        _permiteEdicion = local?.permiteEdicionTecnico ?? false;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _verificandoPermiso = false);
+      }
+    }
+  }
+
+  /// ✅ 19-OCT-2026: abre el detalle editable SOLO si el permiso está vigente.
+  /// Al volver, refresca el permiso y los datos del historial.
+  Future<void> _abrirEdicionAutorizada() async {
+    final detalle = _detalle;
+    if (detalle == null) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrdenDetalleScreen(idOrdenLocal: detalle.idLocal),
+      ),
+    );
+
+    if (!mounted) return;
+    await _verificarPermisoEdicion();
+    if (!mounted) return;
+    await _cargarDetalle();
   }
 
   /// ✅ NUEVO: Detecta si la orden necesita cargar estadísticas del backend
@@ -259,6 +352,13 @@ class _HistorialDetalleScreenState
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // ✅ 19-OCT-2026: acceso directo a la corrección autorizada.
+          if (_permiteEdicion == true)
+            IconButton(
+              icon: const Icon(Icons.edit_note),
+              tooltip: 'Corregir y resubir (autorizado)',
+              onPressed: _abrirEdicionAutorizada,
+            ),
           // Botón Ver PDF - Consulta automática si no está disponible
           _isFetchingPdf
               ? const Padding(
@@ -373,6 +473,13 @@ class _HistorialDetalleScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ 19-OCT-2026: banner visible cuando el administrador
+            // habilitó la corrección de esta orden completada.
+            if (_permiteEdicion == true) ...[
+              _buildEdicionAutorizadaBanner(),
+              const SizedBox(height: 16),
+            ],
+
             // ✅ NUEVO: Banner de carga on-demand
             if (_isLoadingStats)
               Container(
@@ -503,6 +610,80 @@ class _HistorialDetalleScreenState
 
             const SizedBox(height: 32),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// ✅ 19-OCT-2026: banner de edición autorizada por el administrador.
+  Widget _buildEdicionAutorizadaBanner() {
+    return Material(
+      color: Colors.amber.shade50,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: _abrirEdicionAutorizada,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.edit_note,
+                  color: Colors.amber.shade900,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Edición autorizada',
+                      style: TextStyle(
+                        color: Colors.amber.shade900,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'El administrador habilitó corregir y resubir esta orden. '
+                      'Toca aquí para abrir la ejecución.',
+                      style: TextStyle(
+                        color: Colors.amber.shade900,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_verificandoPermiso)
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.amber.shade900,
+                    ),
+                  ),
+                )
+              else
+                Icon(Icons.chevron_right, color: Colors.amber.shade900),
+            ],
+          ),
         ),
       ),
     );
