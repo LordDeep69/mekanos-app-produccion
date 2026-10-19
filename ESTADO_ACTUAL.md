@@ -3,6 +3,7 @@
 **Fecha de Actualización:** 19 de Octubre de 2026  
 **Versión:** 5.2 Release Candidate (RC-1)  
 **Últimos Commits Clave:** 
+- `1c502bf`: `feat(compras-wms): integracion y certificacion de recepcion automatica de mercancia en almacen, generacion de lotes y kardex`
 - `613d72b`: `feat(inventario): remediacion integral de auditoria forense y sincronizacion bidireccional compras-inventario`
 - `2bf9877`: `docs(estado): consolidar estado maestro v5.1 rc-2 con auditoria de compras e inventario`
 - `275f2c9`: `fix(ordenes/equipos): detectar familia por tipo declarado en tipos_equipo e integrar soporte COMPRESOR`
