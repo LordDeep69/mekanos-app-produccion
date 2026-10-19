@@ -1,14 +1,15 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 19 de Octubre de 2026  
-**Versión:** 5.2 Release Candidate (RC-1)  
+**Versión:** 5.3 Release Candidate (RC-2)  
 **Últimos Commits Clave:** 
+- `f8f2e18`: `feat(wms-compras): resolucion auditoria forense multi-bodega, modales y trazabilidad`
 - `1c502bf`: `feat(compras-wms): integracion y certificacion de recepcion automatica de mercancia en almacen, generacion de lotes y kardex`
 - `613d72b`: `feat(inventario): remediacion integral de auditoria forense y sincronizacion bidireccional compras-inventario`
 - `2bf9877`: `docs(estado): consolidar estado maestro v5.1 rc-2 con auditoria de compras e inventario`
 - `275f2c9`: `fix(ordenes/equipos): detectar familia por tipo declarado en tipos_equipo e integrar soporte COMPRESOR`
 - `25bb910`: `fix(inventario): correccion taxonomica backend, saneamiento white-label y pulido UI ejecutiva`
-**Estado General:** ✅ **~96% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
+**Estado General:** ✅ **~97% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
 **Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
 
 ---
@@ -23,7 +24,7 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración completa
 ├────────────────────────────────────────────────────────────────────────┤
 │ 1. ✅ BASE DE DATOS PostgreSQL       │ 84 modelos / 78 ENUMs   │ 100%  │
 │ 2. ✅ BACKEND NestJS API             │ 93 módulos / 93 ctrls   │  99%  │
-│ 3. ✅ PORTAL ADMINISTRADOR Web       │ 43 páginas / 10 módulos │  95%  │
+│ 3. ✅ PORTAL ADMINISTRADOR Web       │ 43 páginas / 10 módulos │  96%  │
 │ 4. ✅ APP MÓVIL Flutter Offline      │ Drift v17 / 17 tablas   │  90%  │
 │ 5. ✅ MOTOR DE INFORMES PDF          │ Puppeteer / 10 templates│ 100%  │
 │ 6. ✅ SERVICIOS TRANSVERSALES        │ R2, Cloudinary, OAuth2  │ 100%  │
@@ -35,11 +36,18 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración completa
 ## 🔍 RESUMEN DE SUBSISTEMAS Y ÚLTIMAS REMEDIACIONES
 
 ### 1. Inventario & Almacén WMS (`/inventario` y `/inventario/[id]`) — **100% Certificado**
-- **Saneamiento Taxonómico:** Migración total de `tipos_componente` legacy a `categorias_componentes` con jerarquía padre/hijo. Los artículos ya reflejan su categoría real (ej: *Aceites & Lubricantes Industrial*, *Bombas*, etc.).
+- **Auditoría Forense Senior Zero-Trust (6 Correcciones Certificadas):**
+  1. **Modal Ajuste Físico:** Inclusión obligatoria de `Bodega Auditada *`, cálculo dinámico de variación delta y visualización de stock físico por bodega auditada vs stock consolidado global.
+  2. **Salida y Traslado con Control de Saldo:** Saneamiento de `BOD-CENTRAL` a *"Bodega Central Taller"*, selector de bodega de origen con disponibilidad en tiempo real (`[BOD-CENTRAL] Bodega Central Taller (Disp: X UNIDAD)`), validación de cantidad restringida al saldo de la bodega de origen y sugerencia de lote por rotación FIFO/FEFO.
+  3. **UX de Modales y Ficha Contextual:** Menú predictivo de búsqueda flotante (`z-50 shadow-xl`) sin empujar campos y tarjeta contextual de artículo con SKU, referencia, desglose por bodega en micro-badges, costo unitario y botón de cambio.
+  4. **BodegaModal y Filtro WMS:** Encabezado corporativo claro en `BodegaModal`, nuevo filtro por bodega en `/inventario` conectado al backend mediante `@Query('id_ubicacion')` y micro-badges con desglose de existencias por bodega en la tabla.
+  5. **Ficha 360° Catálogo (`/compras/catalogo/[id]`):** Pestaña 4 con listado dinámico de bodegas con saldo/lotes activos y blindaje de la barra de salud de stock contra valores `NaN`.
+  6. **Recepción de OC y Trazabilidad:** Columna *Componente / Ítem* (SKU + Descripción) y chip limpio de bodega en el historial del modal 360°, y captura de *N° Lote Fabricante* y *Fecha Vencimiento* por renglón en el modal de recepción física.
+- **Saneamiento Taxonómico:** Migración total de `tipos_componente` legacy a `categorias_componentes` con jerarquía padre/hijo.
 - **Expediente Logístico `/inventario/[id]` en 3 Pestañas:**
   - **Pestaña 1 (Predeterminada):** `Lotes & Ubicaciones en Bodega` — Tarjetas de distribución por bodega física, tabla de lotes activos con trazabilidad FIFO/FEFO, días de permanencia y botones rápidos de operación (Despachar, Trasladar).
-  - **Pestaña 2:** `Historial Kardex Auditable` — Contenedor corporativo sobrio (`bg-white border-slate-200`), eliminación de bordes toscos, saneamiento white-label reemplazando nombres provisionales por *"Administrador del Sistema"*.
-  - **Pestaña 3:** `Parámetros de Almacén & Abastecimiento` — Políticas de stock mínimo/máximo/seguridad, costos y tabla de **Proveedores Homologados** obtenida de `articulos_proveedores` con botón de acción directa **"Pedir a Proveedor"**.
+  - **Pestaña 2:** `Historial Kardex Auditable` — Contenedor corporativo sobrio (`bg-white border-slate-200`), saneamiento white-label.
+  - **Pestaña 3:** `Parámetros de Almacén & Abastecimiento` — Políticas de stock mínimo/máximo/seguridad, costos y tabla de **Proveedores Homologados** con botón **"Pedir a Proveedor"**.
 - **Barra de Acciones Ejecutiva y Badges Monolínea:** Botones ejecutivos sobrios (*Kardex Global*, *Revaluar Stock*, *Auditoría WMS*, *Nuevo Artículo*), insignias de código y stock actual en una sola línea horizontal.
 
 ### 2. Sincronización Bidireccional Inventario ⇄ Compras
