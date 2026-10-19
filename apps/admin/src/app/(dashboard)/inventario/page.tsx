@@ -193,7 +193,7 @@ export default function InventarioPage() {
     };
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        <div className="space-y-6 w-full max-w-[1600px] mx-auto pb-12">
             {/* ═══════════════════════════════════════════════════════════════════ */}
             {/* HEADER CON BOTONES DE ACCIÓN */}
             {/* ═══════════════════════════════════════════════════════════════════ */}
@@ -489,61 +489,61 @@ export default function InventarioPage() {
                         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse text-xs">
-                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold text-[11px] tracking-wide border-b border-slate-200">
                                         <tr>
-                                            <th className="px-4 py-3">Código</th>
-                                            <th className="px-4 py-3">Referencia / Marca</th>
-                                            <th className="px-4 py-3">Descripción</th>
-                                            <th className="px-4 py-3">Tipo / Categoría</th>
-                                            <th className="px-4 py-3 text-center">Stock Actual</th>
-                                            <th className="px-4 py-3 text-center">Mínimo</th>
-                                            <th className="px-4 py-3 text-center">Estado</th>
-                                            <th className="px-4 py-3 text-right">Valorización</th>
-                                            <th className="px-4 py-3 text-center">Acciones</th>
+                                            <th className="py-2.5 px-2.5 whitespace-nowrap">Código</th>
+                                            <th className="py-2.5 px-2.5 whitespace-nowrap">Referencia / Marca</th>
+                                            <th className="py-2.5 px-2.5">Descripción</th>
+                                            <th className="py-2.5 px-2.5 whitespace-nowrap">Tipo / Categoría</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Stock Actual</th>
+                                            <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Mínimo</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Estado</th>
+                                            <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Valorización</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {(componentesData?.data || []).map((comp) => (
                                             <tr key={comp.id_componente} className="hover:bg-slate-50/80 transition-colors">
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-xs font-semibold border border-slate-200/50">
+                                                <td className="py-2 px-2.5 whitespace-nowrap align-middle">
+                                                    <span className="inline-block px-1.5 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-[11px] font-semibold border border-slate-200/60">
                                                         {comp.codigo || '--'}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <p className="font-semibold text-slate-900">{comp.referencia}</p>
-                                                    <p className="text-[11px] text-slate-500">{comp.marca || 'Sin marca'}</p>
+                                                <td className="py-2 px-2.5 align-middle whitespace-nowrap">
+                                                    <p className="font-semibold text-slate-900 text-xs leading-tight">{comp.referencia}</p>
+                                                    <p className="text-[10px] text-slate-500 font-medium tracking-tight uppercase">{comp.marca || 'Sin marca'}</p>
                                                 </td>
-                                                <td className="px-4 py-3 max-w-xs">
-                                                    <p className="font-medium text-slate-800 truncate" title={comp.nombre || ''}>
+                                                <td className="py-2 px-2.5 align-middle min-w-[150px] max-w-[240px]">
+                                                    <p className="font-medium text-slate-800 text-xs line-clamp-2 leading-snug break-words" title={comp.nombre || ''}>
                                                         {comp.nombre || '--'}
                                                     </p>
                                                 </td>
-                                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                                                <td className="py-2 px-2.5 text-slate-600 align-middle whitespace-nowrap">
                                                     <span
-                                                        className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px] font-medium border border-slate-200/60"
+                                                        className="inline-block px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-medium border border-slate-200/60 max-w-[130px] truncate align-middle leading-tight"
                                                         title={(comp as any).categoria_completa || comp.categoria || comp.tipo || ''}
                                                     >
                                                         {comp.categoria || comp.tipo || 'General'}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                <td className="py-2 px-2 text-center whitespace-nowrap align-middle">
                                                     <span className={cn(
-                                                        'inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-md font-bold text-xs',
+                                                        'inline-flex items-center justify-center gap-1 whitespace-nowrap px-2 py-0.5 rounded font-bold text-[11px] font-mono',
                                                         comp.estado_stock === 'AGOTADO' && 'text-rose-700 bg-rose-50 border border-rose-200/60',
                                                         comp.estado_stock === 'CRITICO' && 'text-amber-700 bg-amber-50 border border-amber-200/60',
                                                         comp.estado_stock === 'BAJO' && 'text-yellow-700 bg-yellow-50 border border-yellow-200/60',
                                                         comp.estado_stock === 'OK' && 'text-emerald-700 bg-emerald-50 border border-emerald-200/60'
                                                     )}>
-                                                        {comp.stock_actual} {comp.unidad || 'UND'}
+                                                        {comp.stock_actual} <span className="text-[10px] font-medium opacity-80">{comp.unidad || 'UND'}</span>
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-center font-medium text-slate-500">
+                                                <td className="py-2 px-1.5 text-center font-mono text-xs font-semibold text-slate-600 align-middle whitespace-nowrap">
                                                     {comp.stock_minimo}
                                                 </td>
-                                                <td className="px-4 py-3 text-center">
+                                                <td className="py-2 px-2 text-center align-middle whitespace-nowrap">
                                                     <span className={cn(
-                                                        'inline-block px-2 py-0.5 rounded-full text-[11px] font-bold',
+                                                        'inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tight',
                                                         comp.estado_stock === 'AGOTADO' && 'bg-rose-100 text-rose-800',
                                                         comp.estado_stock === 'CRITICO' && 'bg-amber-100 text-amber-800',
                                                         comp.estado_stock === 'BAJO' && 'bg-yellow-100 text-yellow-800',
@@ -552,34 +552,34 @@ export default function InventarioPage() {
                                                         {comp.estado_stock}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-right font-medium text-slate-900">
+                                                <td className="py-2 px-2.5 text-right font-mono text-xs font-semibold text-slate-900 whitespace-nowrap align-middle">
                                                     ${Number(comp.valor_stock || 0).toLocaleString('es-CO')}
                                                 </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <div className="flex items-center justify-center gap-1.5">
+                                                <td className="py-2 px-2 text-center align-middle whitespace-nowrap">
+                                                    <div className="inline-flex items-center gap-1 justify-center">
                                                         <Link
                                                             href={`/inventario/${comp.id_componente}`}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md text-xs font-semibold transition-colors"
+                                                            className="inline-flex items-center gap-1 px-1.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[11px] font-medium border border-blue-200/60 transition-colors"
                                                             title="Ver Ficha Logística y Kardex"
                                                         >
-                                                            <Eye className="h-3.5 w-3.5" />
-                                                            Logística
+                                                            <Eye className="h-3 w-3" />
+                                                            <span>Logística</span>
                                                         </Link>
                                                         <button
                                                             onClick={() => abrirOperacion('SALIDA', comp)}
-                                                            className="inline-flex items-center gap-1 px-2 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-xs font-semibold transition-colors"
+                                                            className="inline-flex items-center gap-1 px-1.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-[11px] font-medium border border-slate-200/70 transition-colors"
                                                             title="Operar movimiento físico para este ítem"
                                                         >
-                                                            <SlidersHorizontal className="h-3.5 w-3.5" />
-                                                            Operar
+                                                            <SlidersHorizontal className="h-3 w-3" />
+                                                            <span>Operar</span>
                                                         </button>
                                                         <Link
                                                             href={`/compras/ordenes/nueva?componenteId=${comp.id_componente}`}
-                                                            className="inline-flex items-center gap-1 px-2 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-md text-xs font-semibold transition-colors"
+                                                            className="inline-flex items-center gap-1 px-1.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-[11px] font-medium border border-emerald-200/60 transition-colors"
                                                             title="Crear Orden de Compra para reabastecer"
                                                         >
-                                                            <ShoppingCart className="h-3.5 w-3.5" />
-                                                            Pedir
+                                                            <ShoppingCart className="h-3 w-3" />
+                                                            <span>Pedir</span>
                                                         </Link>
                                                     </div>
                                                 </td>
@@ -674,16 +674,16 @@ export default function InventarioPage() {
                         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse text-xs">
-                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold text-[11px] tracking-wide border-b border-slate-200">
                                         <tr>
-                                            <th className="px-4 py-3">Fecha & Hora</th>
-                                            <th className="px-4 py-3 text-center">Tipo Operación</th>
-                                            <th className="px-4 py-3">Artículo / Componente</th>
-                                            <th className="px-4 py-3 text-center">Cantidad</th>
-                                            <th className="px-4 py-3">Bodega / Ubicación</th>
-                                            <th className="px-4 py-3">Lote Asoc.</th>
-                                            <th className="px-4 py-3">Documento Soporte / Justificación</th>
-                                            <th className="px-4 py-3">Responsable</th>
+                                            <th className="py-2.5 px-2.5 whitespace-nowrap">Fecha & Hora</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Tipo Operación</th>
+                                            <th className="py-2.5 px-2.5">Artículo / Componente</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Cantidad</th>
+                                            <th className="py-2.5 px-2.5 whitespace-nowrap">Bodega / Ubicación</th>
+                                            <th className="py-2.5 px-2 whitespace-nowrap">Lote Asoc.</th>
+                                            <th className="py-2.5 px-2.5">Documento Soporte / Justificación</th>
+                                            <th className="py-2.5 px-2 whitespace-nowrap">Responsable</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -695,7 +695,7 @@ export default function InventarioPage() {
 
                                             return (
                                                 <tr key={mov.id_movimiento} className="hover:bg-slate-50/80 transition-colors">
-                                                    <td className="px-4 py-3 font-mono text-slate-600 whitespace-nowrap">
+                                                    <td className="py-2 px-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap align-middle">
                                                         {new Date(mov.fecha).toLocaleString('es-CO', {
                                                             day: '2-digit',
                                                             month: '2-digit',
@@ -704,9 +704,9 @@ export default function InventarioPage() {
                                                             minute: '2-digit',
                                                         })}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                    <td className="py-2 px-2 text-center whitespace-nowrap align-middle">
                                                         <span className={cn(
-                                                            'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold',
+                                                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase',
                                                             isEntrada && 'bg-emerald-100 text-emerald-800',
                                                             isSalida && 'bg-amber-100 text-amber-800',
                                                             isAjuste && 'bg-purple-100 text-purple-800',
@@ -719,42 +719,42 @@ export default function InventarioPage() {
                                                             {mov.tipo}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-semibold text-slate-900">{mov.componente?.nombre || mov.componente?.referencia}</p>
-                                                        <p className="text-[11px] text-slate-500 font-mono">REF: {mov.componente?.referencia} | CÓD: {mov.componente?.codigo || '--'}</p>
+                                                    <td className="py-2 px-2.5 align-middle">
+                                                        <p className="font-semibold text-slate-900 text-xs">{mov.componente?.nombre || mov.componente?.referencia}</p>
+                                                        <p className="text-[10px] text-slate-500 font-mono">REF: {mov.componente?.referencia} | CÓD: {mov.componente?.codigo || '--'}</p>
                                                     </td>
-                                                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                    <td className="py-2 px-2 text-center whitespace-nowrap align-middle">
                                                         <span className={cn(
-                                                            'font-bold text-sm',
+                                                            'font-bold text-xs font-mono',
                                                             isEntrada && 'text-emerald-700',
                                                             isSalida && 'text-amber-700',
                                                             isAjuste && 'text-purple-700',
                                                             isTraslado && 'text-blue-700'
                                                         )}>
                                                             {isEntrada ? `+${mov.cantidad}` : isSalida ? `-${mov.cantidad}` : mov.cantidad}{' '}
-                                                            <span className="text-xs font-normal text-slate-500">{mov.componente?.unidad || 'UND'}</span>
+                                                            <span className="text-[10px] font-normal text-slate-500">{mov.componente?.unidad || 'UND'}</span>
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                                                    <td className="py-2 px-2.5 text-slate-700 whitespace-nowrap align-middle">
                                                         {mov.bodega ? (
-                                                            <span className="inline-flex items-center gap-1 font-medium">
-                                                                <Warehouse className="h-3.5 w-3.5 text-slate-400" />
+                                                            <span className="inline-flex items-center gap-1 font-medium text-xs">
+                                                                <Warehouse className="h-3 w-3 text-slate-400" />
                                                                 {mov.bodega.codigo} ({mov.bodega.zona})
                                                             </span>
                                                         ) : (
                                                             '--'
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 font-mono text-slate-600 whitespace-nowrap">
+                                                    <td className="py-2 px-2 font-mono text-[11px] text-slate-600 whitespace-nowrap align-middle">
                                                         {mov.lote?.codigo || '--'}
                                                     </td>
-                                                    <td className="px-4 py-3 max-w-xs">
-                                                        <p className="font-semibold text-slate-800">{mov.documento_soporte || '--'}</p>
-                                                        <p className="text-[11px] text-slate-500 truncate" title={mov.justificacion || mov.observaciones || ''}>
+                                                    <td className="py-2 px-2.5 max-w-xs align-middle">
+                                                        <p className="font-semibold text-slate-800 text-xs">{mov.documento_soporte || '--'}</p>
+                                                        <p className="text-[10px] text-slate-500 truncate" title={mov.justificacion || mov.observaciones || ''}>
                                                             {mov.justificacion || mov.observaciones || '--'}
                                                         </p>
                                                     </td>
-                                                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                                                    <td className="py-2 px-2 text-slate-600 text-xs whitespace-nowrap align-middle">
                                                         {mov.realizado_por}
                                                     </td>
                                                 </tr>
@@ -848,16 +848,16 @@ export default function InventarioPage() {
                         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse text-xs">
-                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold text-[11px] tracking-wide border-b border-slate-200">
                                         <tr>
-                                            <th className="px-4 py-3">Código Lote</th>
-                                            <th className="px-4 py-3">Lote Fabricante</th>
-                                            <th className="px-4 py-3">Artículo Asociado</th>
-                                            <th className="px-4 py-3">Ubicación</th>
-                                            <th className="px-4 py-3 text-center">Inicial / Actual</th>
-                                            <th className="px-4 py-3 text-center">Vencimiento</th>
-                                            <th className="px-4 py-3 text-center">Semáforo</th>
-                                            <th className="px-4 py-3">Proveedor</th>
+                                            <th className="py-2.5 px-2.5 whitespace-nowrap">Código Lote</th>
+                                            <th className="py-2.5 px-2 whitespace-nowrap">Lote Fabricante</th>
+                                            <th className="py-2.5 px-2.5">Artículo Asociado</th>
+                                            <th className="py-2.5 px-2.5 whitespace-nowrap">Ubicación</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Inicial / Actual</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Vencimiento</th>
+                                            <th className="py-2.5 px-2 text-center whitespace-nowrap">Semáforo</th>
+                                            <th className="py-2.5 px-2 whitespace-nowrap">Proveedor</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -872,33 +872,33 @@ export default function InventarioPage() {
 
                                             return (
                                                 <tr key={lote.id_lote} className="hover:bg-slate-50/80 transition-colors">
-                                                    <td className="px-4 py-3 font-mono font-bold text-blue-700">
+                                                    <td className="py-2 px-2.5 font-mono font-bold text-xs text-blue-700 whitespace-nowrap align-middle">
                                                         {lote.codigo_lote}
                                                     </td>
-                                                    <td className="px-4 py-3 font-mono text-slate-600">
+                                                    <td className="py-2 px-2 font-mono text-[11px] text-slate-600 whitespace-nowrap align-middle">
                                                         {lote.numero_lote_fabricante || '--'}
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-semibold text-slate-900">{lote.componente.nombre || lote.componente.referencia}</p>
-                                                        <p className="text-[11px] text-slate-500 font-mono">REF: {lote.componente.referencia}</p>
+                                                    <td className="py-2 px-2.5 align-middle">
+                                                        <p className="font-semibold text-slate-900 text-xs">{lote.componente.nombre || lote.componente.referencia}</p>
+                                                        <p className="text-[10px] text-slate-500 font-mono">REF: {lote.componente.referencia}</p>
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <span className="font-medium text-slate-700">{lote.bodega.codigo}</span>
-                                                        <span className="text-slate-500 text-[11px] block">{lote.bodega.zona}</span>
+                                                    <td className="py-2 px-2.5 align-middle whitespace-nowrap">
+                                                        <span className="font-medium text-slate-700 text-xs">{lote.bodega.codigo}</span>
+                                                        <span className="text-slate-500 text-[10px] block">{lote.bodega.zona}</span>
                                                     </td>
-                                                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                    <td className="py-2 px-2 text-center whitespace-nowrap align-middle font-mono text-xs">
                                                         <span className="font-bold text-slate-900">{lote.cantidad_actual}</span>
-                                                        <span className="text-slate-400"> / {lote.cantidad_inicial} {lote.componente.unidad}</span>
+                                                        <span className="text-slate-400 text-[11px]"> / {lote.cantidad_inicial} {lote.componente.unidad}</span>
                                                     </td>
-                                                    <td className="px-4 py-3 text-center font-mono whitespace-nowrap">
+                                                    <td className="py-2 px-2 text-center font-mono whitespace-nowrap align-middle text-xs">
                                                         {lote.fecha_vencimiento ? (
                                                             <span>{new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}</span>
                                                         ) : (
-                                                            <span className="text-slate-400">No perecedero</span>
+                                                            <span className="text-slate-400 text-[11px]">No perecedero</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center whitespace-nowrap">
-                                                        <span className={cn('px-2.5 py-0.5 rounded-full text-[11px] font-bold', semaforoClasses)}>
+                                                    <td className="py-2 px-2 text-center whitespace-nowrap align-middle">
+                                                        <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold uppercase', semaforoClasses)}>
                                                             {lote.semaforo === 'OK' && 'En Vigencia'}
                                                             {lote.semaforo === 'PROXIMO' && `${lote.dias_para_vencer} días`}
                                                             {lote.semaforo === 'CRITICO' && `¡${lote.dias_para_vencer} días!`}
@@ -906,7 +906,7 @@ export default function InventarioPage() {
                                                             {lote.semaforo === 'NO_APLICA' && 'Sin Fecha'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-3 text-slate-600 text-[11px]">
+                                                    <td className="py-2 px-2 text-slate-600 text-xs truncate max-w-[150px] align-middle" title={lote.proveedor || ''}>
                                                         {lote.proveedor}
                                                     </td>
                                                 </tr>
