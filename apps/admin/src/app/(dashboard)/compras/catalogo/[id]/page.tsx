@@ -360,7 +360,7 @@ export default function FichaArticulo360Page() {
           )}
 
           <Button variant="outline" size="sm" asChild className="h-9 text-xs">
-            <Link href={`/inventario?q=${articulo.referencia_fabricante}`}>
+            <Link href={`/inventario/${idComponente}`}>
               <Boxes className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
               Ver en Kardex
             </Link>
@@ -1230,7 +1230,7 @@ export default function FichaArticulo360Page() {
                 <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
                   <span className="text-[11px] text-gray-400">Total movimientos: {movimientosKardex.length}</span>
                   <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
-                    <Link href={`/inventario?q=${articulo.referencia_fabricante}`}>
+                    <Link href={`/inventario/${idComponente}`}>
                       <Boxes className="mr-1.5 h-3.5 w-3.5" />
                       Ir al Módulo de Kardex
                     </Link>
@@ -1320,6 +1320,86 @@ export default function FichaArticulo360Page() {
             </Card>
           </div>
 
+          {/* Tarjeta: Lotes Físicos Activos en Almacén */}
+          <Card className="border border-gray-200 shadow-sm bg-white">
+            <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-blue-600" />
+                    Lotes Físicos Activos en Almacén
+                  </CardTitle>
+                  <CardDescription className="text-xs text-gray-500">
+                    Trazabilidad por lote físico, existencias disponibles y vencimientos sincronizados con WMS.
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" asChild className="text-xs h-8">
+                  <Link href={`/inventario/${idComponente}`}>
+                    Gestionar Lotes en Inventario
+                    <ExternalLink className="ml-1 h-3 w-3" />
+                  </Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {((articulo as any)?.lotes_componentes || []).length === 0 ? (
+                <div className="p-6 text-center space-y-2">
+                  <Layers className="h-8 w-8 mx-auto text-gray-300" />
+                  <p className="text-xs font-semibold text-gray-700">Sin Lotes Activos con Existencias</p>
+                  <p className="text-[11px] text-gray-400 max-w-sm mx-auto">
+                    No hay lotes con disponibilidad física actualmente en bodega para este artículo.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wider text-[11px]">
+                      <tr>
+                        <th className="py-2.5 px-4">Código Lote</th>
+                        <th className="py-2.5 px-4">Bodega / Ubicación</th>
+                        <th className="py-2.5 px-4 text-center">Disponible</th>
+                        <th className="py-2.5 px-4 text-center">Inicial</th>
+                        <th className="py-2.5 px-4">Fecha Ingreso</th>
+                        <th className="py-2.5 px-4">Vencimiento</th>
+                        <th className="py-2.5 px-4 text-center">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {((articulo as any).lotes_componentes || []).map((lote: any) => {
+                        const ub = lote.movimientos_inventario?.[0]?.ubicaciones_bodega;
+                        return (
+                          <tr key={lote.id_lote} className="hover:bg-gray-50/60">
+                            <td className="py-2.5 px-4 font-mono font-bold text-gray-900">{lote.codigo_lote}</td>
+                            <td className="py-2.5 px-4 font-medium text-gray-700">
+                              {ub?.codigo_ubicacion || 'BOD-CENTRAL'} {ub?.zona ? `(${ub.zona})` : ''}
+                            </td>
+                            <td className="py-2.5 px-4 text-center">
+                              <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 font-bold text-[11px]">
+                                {lote.cantidad_actual} {articulo.unidad_medida}
+                              </Badge>
+                            </td>
+                            <td className="py-2.5 px-4 text-center text-gray-500 font-mono">{lote.cantidad_inicial}</td>
+                            <td className="py-2.5 px-4 text-gray-600 text-[11px]">
+                              {lote.fecha_ingreso ? new Date(lote.fecha_ingreso).toLocaleDateString() : '--'}
+                            </td>
+                            <td className="py-2.5 px-4 text-[11px]">
+                              {lote.fecha_vencimiento ? new Date(lote.fecha_vencimiento).toLocaleDateString() : <span className="text-gray-400 italic">No aplica</span>}
+                            </td>
+                            <td className="py-2.5 px-4 text-center">
+                              <Badge className="text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200">
+                                {lote.estado_lote || 'DISPONIBLE'}
+                              </Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Tarjeta 3: Mini-Historial de Movimientos de Kardex Inmutable */}
           <Card className="border border-gray-200 shadow-sm bg-white">
             <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
@@ -1334,7 +1414,7 @@ export default function FichaArticulo360Page() {
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild className="text-xs h-8">
-                  <Link href={`/inventario?q=${articulo.referencia_fabricante}`}>
+                  <Link href={`/inventario/${idComponente}`}>
                     Ver Kardex Completo
                     <ExternalLink className="ml-1 h-3 w-3" />
                   </Link>

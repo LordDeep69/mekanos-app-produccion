@@ -1,20 +1,19 @@
 /**
  * MEKANOS S.A.S - Portal Admin
- * Vista Maestra de Componente - FASE 6 INVENTARIO
+ * Centro de Control Logístico de Ítem - EXPEDIENTE LOGÍSTICO AUDITABLE (WMS)
  * 
  * Ruta: /inventario/[id]
  * 
- * Tabs:
- * - General: Datos maestros editables
- * - Gestión: Stock, precios, proveedor
- * - Kardex: Historial de movimientos
+ * Pestañas:
+ * 1. Lotes & Ubicaciones en Bodega (Activa por defecto)
+ * 2. Historial Kardex Auditable
+ * 3. Parámetros de Almacén & Abastecimiento (Sourcing Homologado & Taxonomía)
  */
 
 'use client';
 
 import {
     ComponenteStock,
-    useActualizarComponente,
     useDetalleComponente,
     useKardex,
 } from '@/features/inventario/api/inventario-motor.service';
@@ -26,30 +25,25 @@ import {
     ArrowLeft,
     ArrowLeftRight,
     ArrowUpCircle,
-    Box,
     Building2,
-    Calendar,
+    CheckCircle2,
     DollarSign,
-    Edit2,
     ExternalLink,
     FileText,
     History,
     Layers,
     Loader2,
     Package,
-    Save,
-    Settings,
+    ShoppingBag,
     SlidersHorizontal,
     Tag,
     TrendingDown,
     TrendingUp,
     Warehouse,
-    X,
 } from 'lucide-react';
-import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES
@@ -57,49 +51,46 @@ import { useState } from 'react';
 
 function StockBadge({ estado }: { estado: 'OK' | 'BAJO' | 'CRITICO' | 'AGOTADO' }) {
     const config = {
-        OK: { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'Stock Óptimo' },
-        BAJO: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Stock Bajo' },
-        CRITICO: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Crítico' },
-        AGOTADO: { bg: 'bg-rose-100', text: 'text-rose-800', label: 'Agotado' },
+        OK: { bg: 'bg-emerald-50 border-emerald-200 text-emerald-800', label: 'Stock Óptimo' },
+        BAJO: { bg: 'bg-amber-50 border-amber-200 text-amber-800', label: 'Stock Bajo' },
+        CRITICO: { bg: 'bg-orange-50 border-orange-200 text-orange-800', label: 'Stock Crítico' },
+        AGOTADO: { bg: 'bg-rose-50 border-rose-200 text-rose-800', label: 'Agotado' },
     };
-    const { bg, text, label } = config[estado] || config.OK;
+    const { bg, label } = config[estado] || config.OK;
     return (
-        <span className={cn('px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider', bg, text)}>
+        <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border', bg)}>
             {label}
         </span>
     );
 }
 
-function InfoCard({ title, children, icon: Icon }: { title: string; children: React.ReactNode; icon: React.ElementType }) {
-    return (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
-            <div className="flex items-center gap-2 mb-3.5 pb-2 border-b border-slate-100">
-                <Icon className="h-4 w-4 text-slate-500" />
-                <h3 className="font-semibold text-sm text-slate-800">{title}</h3>
-            </div>
-            {children}
-        </div>
-    );
-}
-
-function TabButton({ active, onClick, children, icon: Icon }: {
+function TabButton({ active, onClick, children, icon: Icon, badge }: {
     active: boolean;
     onClick: () => void;
     children: React.ReactNode;
     icon: React.ElementType;
+    badge?: number | string;
 }) {
     return (
         <button
             onClick={onClick}
             className={cn(
-                'flex items-center gap-2 px-4 py-2 font-semibold text-xs rounded-lg transition-colors border',
+                'flex items-center gap-2 px-4 py-2.5 font-semibold text-xs rounded-lg transition-all border cursor-pointer',
                 active
-                    ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-2xs'
-                    : 'text-slate-600 border-transparent hover:bg-slate-100 hover:text-slate-900'
+                    ? 'bg-blue-50/80 text-blue-700 border-blue-200 shadow-2xs'
+                    : 'text-slate-600 border-transparent hover:bg-slate-100/80 hover:text-slate-900'
             )}
         >
             <Icon className="h-4 w-4" />
-            {children}
+            <span>{children}</span>
+            {badge !== undefined && (
+                <span className={cn(
+                    'px-1.5 py-0.2 rounded-full text-[10px] font-bold',
+                    active ? 'bg-blue-200/60 text-blue-800' : 'bg-slate-200 text-slate-700'
+                )}>
+                    {badge}
+                </span>
+            )}
         </button>
     );
 }
@@ -114,12 +105,9 @@ export default function DetalleComponentePage() {
     const id = rawId && !isNaN(Number(rawId)) && Number(rawId) > 0 ? Number(rawId) : 0;
     const validId = id > 0 ? id : null;
 
-    const { data: session } = useSession();
-    const usuarioId = Number((session?.user as any)?.id) || 1;
+    // Pestaña activa por defecto: 'lotes' (Lotes & Ubicaciones en Bodega)
+    const [activeTab, setActiveTab] = useState<'lotes' | 'kardex' | 'parametros'>('lotes');
 
-    const [activeTab, setActiveTab] = useState<'general' | 'gestion' | 'lotes' | 'kardex'>('general');
-    const [editMode, setEditMode] = useState(false);
-    const [formData, setFormData] = useState<Record<string, any>>({});
     const [modalMovimiento, setModalMovimiento] = useState<{
         open: boolean;
         tipo: TipoOperacionInventario;
@@ -127,7 +115,6 @@ export default function DetalleComponentePage() {
 
     const { data: componente, isLoading, isError, refetch } = useDetalleComponente(validId);
     const { data: kardexData, isLoading: loadingKardex } = useKardex(activeTab === 'kardex' ? validId : null);
-    const actualizarMutation = useActualizarComponente();
 
     const compStock: ComponenteStock | null = componente ? {
         id_componente: componente.id_componente || (componente as any).id || id,
@@ -148,545 +135,441 @@ export default function DetalleComponentePage() {
         activo: componente.activo,
     } : null;
 
-    // Inicializar formData cuando carga el componente
-    const initEditMode = () => {
-        if (componente) {
-            setFormData({
-                codigo_interno: componente.codigo_interno || '',
-                referencia_fabricante: componente.referencia_fabricante || '',
-                descripcion_corta: componente.descripcion_corta || '',
-                descripcion_detallada: componente.descripcion_detallada || '',
-                marca: componente.marca || '',
-                unidad_medida: componente.unidad_medida || '',
-                stock_minimo: componente.stock?.minimo ?? 0,
-                precio_compra: componente.precios?.compra ?? 0,
-                precio_venta: componente.precios?.venta || '',
-                observaciones: componente.observaciones || '',
-                notas_instalacion: componente.notas_instalacion || '',
-            });
-            setEditMode(true);
+    // Resumen de existencias por bodega a partir de lotes activos
+    const bodegasSummary = useMemo(() => {
+        if (!componente?.lotes_activos || componente.lotes_activos.length === 0) {
+            return [];
         }
-    };
-
-    const handleSave = async () => {
-        try {
-            await actualizarMutation.mutateAsync({
-                id,
-                dto: {
-                    ...formData,
-                    stock_minimo: Number(formData.stock_minimo),
-                    precio_compra: Number(formData.precio_compra),
-                    precio_venta: formData.precio_venta ? Number(formData.precio_venta) : undefined,
-                    modificado_por: usuarioId,
-                },
-            });
-            setEditMode(false);
-            refetch();
-        } catch (error) {
-            console.error('Error al guardar:', error);
+        const map = new Map<string, { codigo: string; zona: string; cantidad: number; lotes: number }>();
+        for (const lote of componente.lotes_activos) {
+            const codigo = lote.bodega || 'BOD-CENTRAL';
+            const zona = lote.zona || 'Principal';
+            const existing = map.get(codigo) || { codigo, zona, cantidad: 0, lotes: 0 };
+            existing.cantidad += Number(lote.cantidad_actual || 0);
+            existing.lotes += 1;
+            map.set(codigo, existing);
         }
-    };
+        return Array.from(map.values());
+    }, [componente?.lotes_activos]);
 
-    const handleCancel = () => {
-        setEditMode(false);
-        setFormData({});
+    // Categoría taxonómica completa homologada
+    const categoriaTexto = useMemo(() => {
+        if (!componente) return 'General';
+        return componente.categoria?.completo ||
+            (componente.categoria?.padre ? `${componente.categoria.padre} > ${componente.categoria.nombre}` : null) ||
+            componente.categoria?.nombre ||
+            componente.tipo?.nombre ||
+            'General';
+    }, [componente]);
+
+    // Formateador COP
+    const formatCOP = (valor: number | null | undefined) => {
+        if (valor === null || valor === undefined) return '$ 0';
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            maximumFractionDigits: 0,
+        }).format(Number(valor));
     };
 
     if (isLoading) {
         return (
-            <div className="flex justify-center items-center min-h-[400px]">
-                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+            <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-500">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-2" />
+                <p className="text-sm font-medium">Cargando expediente logístico del ítem...</p>
             </div>
         );
     }
 
     if (isError || !componente) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[400px] text-red-500">
-                <AlertCircle className="h-12 w-12 mb-4" />
-                <p className="font-medium">Error al cargar el componente</p>
-                <Link href="/inventario" className="mt-4 text-blue-600 hover:underline">
+            <div className="flex flex-col items-center justify-center min-h-[400px] text-rose-500">
+                <AlertCircle className="h-12 w-12 mb-3 text-rose-500" />
+                <p className="font-semibold text-slate-800 text-base">Error al cargar el componente</p>
+                <p className="text-xs text-slate-500 mt-1">No se pudo recuperar el registro logístico solicitado.</p>
+                <Link
+                    href="/inventario"
+                    className="mt-4 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
+                >
                     Volver al inventario
                 </Link>
             </div>
         );
     }
 
+    const proveedoresHomologados = componente.proveedores_homologados || (componente.proveedor ? [{
+        id_proveedor: componente.proveedor.id,
+        nombre_proveedor: componente.proveedor.nombre,
+        nit: componente.proveedor.nit,
+        referencia_proveedor: '--',
+        marca_ofrecida: componente.marca || '--',
+        costo_actual: componente.precios.compra,
+        moneda: componente.precios.moneda || 'COP',
+        tiempo_entrega_dias: 1,
+        cantidad_minima_compra: 1,
+        es_proveedor_preferido: true,
+        telefono: componente.proveedor.telefono || '--',
+        email: componente.proveedor.email || '--',
+    }] : []);
+
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4">
+            {/* Header Ejecutivo Sobrio */}
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-start gap-3.5">
                     <Link
                         href="/inventario"
-                        className="p-2 rounded-lg border hover:bg-gray-50 transition-colors"
+                        className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors shrink-0 mt-0.5"
+                        title="Volver al Inventario General"
                     >
-                        <ArrowLeft className="h-5 w-5 text-gray-600" />
+                        <ArrowLeft className="h-4 w-4" />
                     </Link>
                     <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-2xl font-bold text-gray-900">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-xs font-bold border border-slate-200">
+                                {componente.codigo_interno || `ART-${id}`}
+                            </span>
+                            <h1 className="text-xl font-bold text-slate-900">
                                 {componente.descripcion_corta || componente.referencia_fabricante}
                             </h1>
                             <StockBadge estado={componente.stock.estado} />
                             {!componente.activo && (
-                                <span className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs">
+                                <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded text-[11px] font-semibold">
                                     INACTIVO
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                            <span className="font-mono">{componente.codigo_interno || '--'}</span>
+
+                        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+                            <span className="font-medium text-slate-700">Ref: {componente.referencia_fabricante || '--'}</span>
                             <span>•</span>
-                            <span>{componente.referencia_fabricante}</span>
+                            <span>Marca: <strong className="text-slate-700">{componente.marca || 'N/A'}</strong></span>
                             <span>•</span>
-                            <span>{componente.marca || 'Sin marca'}</span>
+                            <span>Categoría: <strong className="text-blue-700">{categoriaTexto}</strong></span>
+                            <span>•</span>
+                            <span>Unidad: <strong className="text-slate-700">{componente.unidad_medida || 'UND'}</strong></span>
                         </div>
                     </div>
                 </div>
 
-                {/* Acciones */}
-                <div className="flex flex-wrap items-center gap-2">
+                {/* Botonera Ejecutiva Homologada */}
+                <div className="flex flex-wrap items-center gap-2 self-start">
                     <Link
                         href={`/compras/catalogo/${id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
                         title="Ver Ficha Comercial y Matriz de Sourcing en Catálogo"
                     >
-                        <ExternalLink className="h-4 w-4 text-slate-500" />
+                        <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
                         Ficha Comercial
                     </Link>
 
-                    {!editMode && (
-                        <>
-                            <button
-                                onClick={() => setModalMovimiento({ open: true, tipo: 'ENTRADA' })}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                                title="Registrar Entrada a Inventario"
-                            >
-                                <ArrowDownCircle className="h-4 w-4" />
-                                Entrada
-                            </button>
-                            <button
-                                onClick={() => setModalMovimiento({ open: true, tipo: 'SALIDA' })}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                                title="Registrar Salida / Despacho"
-                            >
-                                <ArrowUpCircle className="h-4 w-4" />
-                                Salida
-                            </button>
-                            <button
-                                onClick={() => setModalMovimiento({ open: true, tipo: 'AJUSTE' })}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                                title="Registrar Ajuste Físico"
-                            >
-                                <SlidersHorizontal className="h-4 w-4" />
-                                Ajuste
-                            </button>
-                            <button
-                                onClick={() => setModalMovimiento({ open: true, tipo: 'TRASLADO' })}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                                title="Trasladar a otra Bodega"
-                            >
-                                <ArrowLeftRight className="h-4 w-4" />
-                                Traslado
-                            </button>
-                        </>
-                    )}
+                    <Link
+                        href={`/compras/ordenes/nueva?componenteId=${id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        title="Generar Orden de Compra para este ítem"
+                    >
+                        <ShoppingBag className="h-3.5 w-3.5" />
+                        Pedir a Proveedor
+                    </Link>
 
-                    {editMode ? (
-                        <>
-                            <button
-                                onClick={handleCancel}
-                                className="flex items-center gap-2 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 text-xs font-semibold"
-                            >
-                                <X className="h-4 w-4" />
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={actualizarMutation.isPending}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-xs font-semibold"
-                            >
-                                {actualizarMutation.isPending ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Save className="h-4 w-4" />
-                                )}
-                                Guardar
-                            </button>
-                        </>
-                    ) : (
-                        <button
-                            onClick={initEditMode}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-xs font-semibold"
-                        >
-                            <Edit2 className="h-4 w-4" />
-                            Editar
-                        </button>
-                    )}
+                    <button
+                        onClick={() => setModalMovimiento({ open: true, tipo: 'ENTRADA' })}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        title="Registrar Entrada a Inventario"
+                    >
+                        <ArrowDownCircle className="h-3.5 w-3.5 text-emerald-600" />
+                        Entrada
+                    </button>
+
+                    <button
+                        onClick={() => setModalMovimiento({ open: true, tipo: 'SALIDA' })}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        title="Registrar Salida / Despacho"
+                    >
+                        <ArrowUpCircle className="h-3.5 w-3.5 text-amber-600" />
+                        Salida
+                    </button>
+
+                    <button
+                        onClick={() => setModalMovimiento({ open: true, tipo: 'AJUSTE' })}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        title="Registrar Ajuste Físico"
+                    >
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-violet-600" />
+                        Ajuste
+                    </button>
+
+                    <button
+                        onClick={() => setModalMovimiento({ open: true, tipo: 'TRASLADO' })}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        title="Trasladar a otra Bodega"
+                    >
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />
+                        Traslado
+                    </button>
                 </div>
             </div>
 
             {/* KPIs Rápidos */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
                     <div className="flex items-center justify-between">
                         <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Stock Actual</span>
-                        <Package className="h-5 w-5 text-blue-500" />
+                        <Package className="h-4 w-4 text-blue-500" />
                     </div>
                     <p className={cn(
-                        'text-3xl font-bold mt-1',
+                        'text-2xl font-bold mt-1.5',
                         componente.stock.estado === 'AGOTADO' && 'text-rose-600',
-                        componente.stock.estado === 'CRITICO' && 'text-amber-600',
-                        componente.stock.estado === 'BAJO' && 'text-yellow-600',
+                        componente.stock.estado === 'CRITICO' && 'text-orange-600',
+                        componente.stock.estado === 'BAJO' && 'text-amber-600',
                         componente.stock.estado === 'OK' && 'text-emerald-600'
                     )}>
-                        {componente.stock.actual} {componente.unidad_medida || 'UND'}
+                        {componente.stock.actual} <span className="text-sm font-semibold text-slate-500">{componente.unidad_medida || 'UND'}</span>
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">Mínimo requerido: {componente.stock.minimo}</p>
+                    <p className="text-xs text-slate-400 mt-1">Mínimo requerido: {componente.stock.minimo} {componente.unidad_medida || 'UND'}</p>
                 </div>
 
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
                     <div className="flex items-center justify-between">
                         <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Valor en Almacén</span>
-                        <DollarSign className="h-5 w-5 text-emerald-500" />
+                        <DollarSign className="h-4 w-4 text-emerald-500" />
                     </div>
-                    <p className="text-3xl font-bold mt-1 text-emerald-600">
-                        ${componente.stock.valor_total.toLocaleString('es-CO')}
+                    <p className="text-2xl font-bold mt-1.5 text-emerald-700">
+                        {formatCOP(componente.stock.valor_total)}
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                        Costo unitario: ${componente.precios.compra.toLocaleString('es-CO')}
+                        Costo unitario (CPP): {formatCOP(componente.precios.compra)}
                     </p>
                 </div>
 
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
                     <div className="flex items-center justify-between">
                         <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Lotes Activos</span>
-                        <Layers className="h-5 w-5 text-indigo-500" />
+                        <Layers className="h-4 w-4 text-indigo-500" />
                     </div>
-                    <p className="text-3xl font-bold mt-1 text-indigo-600">
+                    <p className="text-2xl font-bold mt-1.5 text-indigo-600">
                         {componente.lotes_activos?.length || 0}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">Con existencias disponibles</p>
+                    <p className="text-xs text-slate-400 mt-1">Con existencias remanentes</p>
                 </div>
 
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
                     <div className="flex items-center justify-between">
                         <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Movimientos Kardex</span>
-                        <History className="h-5 w-5 text-purple-500" />
+                        <History className="h-4 w-4 text-purple-500" />
                     </div>
-                    <p className="text-3xl font-bold mt-1 text-purple-600">
+                    <p className="text-2xl font-bold mt-1.5 text-purple-600">
                         {componente.metricas?.total_movimientos ?? 0}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">Transacciones históricas</p>
+                    <p className="text-xs text-slate-400 mt-1">Transacciones auditadas</p>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 border-b border-slate-200 pb-2">
-                <TabButton
-                    active={activeTab === 'general'}
-                    onClick={() => setActiveTab('general')}
-                    icon={FileText}
-                >
-                    General
-                </TabButton>
-                <TabButton
-                    active={activeTab === 'gestion'}
-                    onClick={() => setActiveTab('gestion')}
-                    icon={Settings}
-                >
-                    Gestión
-                </TabButton>
+            {/* Pestañas Principales Consolidadas */}
+            <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
                 <TabButton
                     active={activeTab === 'lotes'}
                     onClick={() => setActiveTab('lotes')}
                     icon={Layers}
+                    badge={componente.lotes_activos?.length || 0}
                 >
-                    Lotes & Bodegas ({componente.lotes_activos?.length || 0})
+                    1. Lotes & Ubicaciones en Bodega
                 </TabButton>
                 <TabButton
                     active={activeTab === 'kardex'}
                     onClick={() => setActiveTab('kardex')}
                     icon={History}
+                    badge={componente.metricas?.total_movimientos || undefined}
                 >
-                    Kardex
+                    2. Historial Kardex Auditable
+                </TabButton>
+                <TabButton
+                    active={activeTab === 'parametros'}
+                    onClick={() => setActiveTab('parametros')}
+                    icon={FileText}
+                >
+                    3. Parámetros de Almacén & Abastecimiento
                 </TabButton>
             </div>
 
-            {/* Contenido de Tabs */}
-            {activeTab === 'general' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <InfoCard title="Identificación" icon={Tag}>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-xs text-gray-500">Código Interno</label>
-                                {editMode ? (
-                                    <input
-                                        type="text"
-                                        value={formData.codigo_interno}
-                                        onChange={(e) => setFormData({ ...formData, codigo_interno: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="font-mono">{componente.codigo_interno || '--'}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Referencia Fabricante</label>
-                                {editMode ? (
-                                    <input
-                                        type="text"
-                                        value={formData.referencia_fabricante}
-                                        onChange={(e) => setFormData({ ...formData, referencia_fabricante: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="font-medium">{componente.referencia_fabricante}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Marca</label>
-                                {editMode ? (
-                                    <input
-                                        type="text"
-                                        value={formData.marca}
-                                        onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p>{componente.marca || '--'}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Tipo</label>
-                                <p>{componente.tipo?.nombre || '--'}</p>
+            {/* ═══════════════════════════════════════════════════════════════════════════ */}
+            {/* PESTAÑA 1: LOTES & UBICACIONES EN BODEGA (ACTIVA POR DEFECTO) */}
+            {/* ═══════════════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'lotes' && (
+                <div className="space-y-6">
+                    {/* Tarjetas de Existencias por Bodega */}
+                    {bodegasSummary.length > 0 && (
+                        <div>
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                                Disponibilidad Física Distribuida
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {bodegasSummary.map((b) => (
+                                    <div key={b.codigo} className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-blue-50 text-blue-700 rounded-lg">
+                                                <Warehouse className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-sm text-slate-900">{b.codigo}</p>
+                                                <p className="text-xs text-slate-500">Zona: {b.zona}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-lg font-bold text-emerald-700">
+                                                {b.cantidad} {componente.unidad_medida || 'UND'}
+                                            </p>
+                                            <p className="text-[11px] text-slate-400">
+                                                {b.lotes} {b.lotes === 1 ? 'lote' : 'lotes'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    </InfoCard>
+                    )}
 
-                    <InfoCard title="Descripción" icon={FileText}>
-                        <div className="space-y-3">
+                    {/* Tabla de Lotes Activos */}
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
                             <div>
-                                <label className="text-xs text-gray-500">Descripción Corta</label>
-                                {editMode ? (
-                                    <input
-                                        type="text"
-                                        value={formData.descripcion_corta}
-                                        onChange={(e) => setFormData({ ...formData, descripcion_corta: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p>{componente.descripcion_corta || '--'}</p>
-                                )}
+                                <h3 className="font-bold text-sm text-slate-800">Trazabilidad de Lotes Físicos en Almacén</h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Existencias remanentes, ubicación física y semáforo de vencimiento
+                                </p>
                             </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Descripción Detallada</label>
-                                {editMode ? (
-                                    <textarea
-                                        value={formData.descripcion_detallada}
-                                        onChange={(e) => setFormData({ ...formData, descripcion_detallada: e.target.value })}
-                                        rows={3}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="text-sm text-gray-600">{componente.descripcion_detallada || '--'}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Unidad de Medida</label>
-                                {editMode ? (
-                                    <input
-                                        type="text"
-                                        value={formData.unidad_medida}
-                                        onChange={(e) => setFormData({ ...formData, unidad_medida: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p>{componente.unidad_medida || '--'}</p>
-                                )}
-                            </div>
+                            <button
+                                onClick={() => setModalMovimiento({ open: true, tipo: 'ENTRADA' })}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                            >
+                                <ArrowDownCircle className="h-3.5 w-3.5" />
+                                Nuevo Lote (Entrada)
+                            </button>
                         </div>
-                    </InfoCard>
 
-                    <InfoCard title="Notas" icon={Box}>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-xs text-gray-500">Observaciones</label>
-                                {editMode ? (
-                                    <textarea
-                                        value={formData.observaciones}
-                                        onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-                                        rows={2}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="text-sm text-gray-600">{componente.observaciones || '--'}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Notas de Instalación</label>
-                                {editMode ? (
-                                    <textarea
-                                        value={formData.notas_instalacion}
-                                        onChange={(e) => setFormData({ ...formData, notas_instalacion: e.target.value })}
-                                        rows={2}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="text-sm text-gray-600">{componente.notas_instalacion || '--'}</p>
-                                )}
-                            </div>
-                        </div>
-                    </InfoCard>
-
-                    <InfoCard title="Auditoría" icon={Calendar}>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">Creado:</span>
-                                <span>
-                                    {componente.auditoria.fecha_creacion
-                                        ? new Date(componente.auditoria.fecha_creacion).toLocaleDateString()
-                                        : '--'}
-                                    {componente.auditoria.creado_por && ` por ${componente.auditoria.creado_por}`}
-                                </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">Modificado:</span>
-                                <span>
-                                    {componente.auditoria.fecha_modificacion
-                                        ? new Date(componente.auditoria.fecha_modificacion).toLocaleDateString()
-                                        : '--'}
-                                    {componente.auditoria.modificado_por && ` por ${componente.auditoria.modificado_por}`}
-                                </span>
-                            </div>
-                        </div>
-                    </InfoCard>
-                </div>
-            )}
-
-            {activeTab === 'gestion' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <InfoCard title="Stock" icon={Package}>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-xs text-gray-500">Stock Actual</label>
-                                <p className="text-2xl font-bold text-blue-600">{componente.stock.actual}</p>
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Stock Mínimo</label>
-                                {editMode ? (
-                                    <input
-                                        type="number"
-                                        value={formData.stock_minimo}
-                                        onChange={(e) => setFormData({ ...formData, stock_minimo: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="font-medium">{componente.stock.minimo}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Inventariable</label>
-                                <p>{componente.stock.es_inventariable ? 'Sí' : 'No'}</p>
-                            </div>
-                        </div>
-                    </InfoCard>
-
-                    <InfoCard title="Precios" icon={DollarSign}>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-xs text-gray-500">Precio Compra</label>
-                                {editMode ? (
-                                    <input
-                                        type="number"
-                                        value={formData.precio_compra}
-                                        onChange={(e) => setFormData({ ...formData, precio_compra: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="font-medium">${componente.precios.compra.toLocaleString()}</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500">Precio Venta</label>
-                                {editMode ? (
-                                    <input
-                                        type="number"
-                                        value={formData.precio_venta}
-                                        onChange={(e) => setFormData({ ...formData, precio_venta: e.target.value })}
-                                        className="w-full mt-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <p className="font-medium">
-                                        {componente.precios.venta ? `$${componente.precios.venta.toLocaleString()}` : '--'}
-                                    </p>
-                                )}
-                            </div>
-                            {componente.precios.margen_utilidad && (
-                                <div>
-                                    <label className="text-xs text-gray-500">Margen de Utilidad</label>
-                                    <p className="font-medium text-green-600">{componente.precios.margen_utilidad}%</p>
-                                </div>
-                            )}
-                            <div>
-                                <label className="text-xs text-gray-500">Moneda</label>
-                                <p>{componente.precios.moneda || 'COP'}</p>
-                            </div>
-                        </div>
-                    </InfoCard>
-
-                    <InfoCard title="Proveedor Principal" icon={Building2}>
-                        {componente.proveedor ? (
-                            <div className="space-y-2 text-sm">
-                                <p className="font-medium">{componente.proveedor.nombre}</p>
-                                <p className="text-gray-500">NIT: {componente.proveedor.nit}</p>
-                                {componente.proveedor.contacto && <p>Contacto: {componente.proveedor.contacto}</p>}
-                                {componente.proveedor.telefono && <p>Tel: {componente.proveedor.telefono}</p>}
-                                {componente.proveedor.email && <p>Email: {componente.proveedor.email}</p>}
+                        {(componente.lotes_activos || []).length === 0 ? (
+                            <div className="text-center py-12 text-slate-500">
+                                <Layers className="h-10 w-10 mx-auto text-slate-300 mb-2" />
+                                <p className="text-sm font-semibold text-slate-700">Sin lotes activos</p>
+                                <p className="text-xs text-slate-400 mt-0.5 max-w-md mx-auto">
+                                    Este componente no tiene existencias físicas vinculadas a un lote activo en bodega. Puedes registrar una entrada física para aperturar un lote.
+                                </p>
                             </div>
                         ) : (
-                            <p className="text-gray-400 text-sm">Sin proveedor asignado</p>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs border-collapse">
+                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3">Código Lote</th>
+                                            <th className="px-4 py-3">Bodega / Ubicación</th>
+                                            <th className="px-4 py-3 text-center">Disponible</th>
+                                            <th className="px-4 py-3 text-center">Inicial</th>
+                                            <th className="px-4 py-3">Lote Fabricante / Factura</th>
+                                            <th className="px-4 py-3">Fecha Ingreso</th>
+                                            <th className="px-4 py-3">Vencimiento</th>
+                                            <th className="px-4 py-3 text-center">Estado</th>
+                                            <th className="px-4 py-3 text-right">Acciones Rápidas</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {(componente.lotes_activos || []).map((lote: any) => (
+                                            <tr key={lote.id_lote} className="hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                                                    {lote.codigo_lote}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Warehouse className="h-3.5 w-3.5 text-slate-400" />
+                                                        <span className="font-semibold text-slate-800">{lote.bodega || 'BOD-CENTRAL'}</span>
+                                                        {lote.zona && <span className="text-[11px] text-slate-400">({lote.zona})</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs border border-emerald-100">
+                                                        {lote.cantidad_actual} {componente.unidad_medida || 'UND'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center text-slate-500">
+                                                    {lote.cantidad_inicial}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-600 font-mono">
+                                                    {lote.numero_lote_fabricante || '--'}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-600">
+                                                    {lote.fecha_ingreso ? new Date(lote.fecha_ingreso).toLocaleDateString('es-CO') : '--'}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {lote.fecha_vencimiento ? (
+                                                        <span className="font-medium text-slate-700">
+                                                            {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic">No aplica</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={cn(
+                                                        'inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                                                        lote.estado_lote === 'DISPONIBLE' && 'bg-emerald-100 text-emerald-800',
+                                                        lote.estado_lote === 'CUARENTENA' && 'bg-amber-100 text-amber-800',
+                                                        lote.estado_lote === 'AGOTADO' && 'bg-rose-100 text-rose-800'
+                                                    )}>
+                                                        {lote.estado_lote || 'DISPONIBLE'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        <button
+                                                            onClick={() => setModalMovimiento({ open: true, tipo: 'SALIDA' })}
+                                                            className="px-2 py-1 bg-white hover:bg-slate-50 text-amber-700 border border-slate-200 rounded text-[11px] font-semibold transition-colors"
+                                                            title="Despachar unidades de este lote"
+                                                        >
+                                                            Despachar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setModalMovimiento({ open: true, tipo: 'TRASLADO' })}
+                                                            className="px-2 py-1 bg-white hover:bg-slate-50 text-blue-700 border border-slate-200 rounded text-[11px] font-semibold transition-colors"
+                                                            title="Trasladar lote a otra bodega"
+                                                        >
+                                                            Trasladar
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
-                    </InfoCard>
-
-                    {componente.reemplazado_por && (
-                        <InfoCard title="Reemplazado Por" icon={TrendingUp}>
-                            <Link
-                                href={`/inventario/${componente.reemplazado_por.id}`}
-                                className="text-blue-600 hover:underline"
-                            >
-                                {componente.reemplazado_por.codigo} - {componente.reemplazado_por.nombre}
-                            </Link>
-                        </InfoCard>
-                    )}
+                    </div>
                 </div>
             )}
 
-            {activeTab === 'lotes' && (
+            {/* ═══════════════════════════════════════════════════════════════════════════ */}
+            {/* PESTAÑA 2: HISTORIAL KARDEX AUDITABLE (SIN BORDES NEGROS NI ADMIN MEKANOS) */}
+            {/* ═══════════════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'kardex' && (
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
                     <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
                         <div>
-                            <h3 className="font-bold text-sm text-slate-800">Trazabilidad de Lotes Físicos en Almacén</h3>
+                            <h3 className="font-bold text-sm text-slate-800">Historial Kardex Auditable del Ítem</h3>
                             <p className="text-xs text-slate-500 mt-0.5">
-                                Existencias remanentes, ubicación física y semáforo de vencimiento
+                                Libro mayor inmutable de movimientos físicos y contables ({kardexData?.total_movimientos || 0} movimientos)
                             </p>
                         </div>
-                        <button
-                            onClick={() => setModalMovimiento({ open: true, tipo: 'ENTRADA' })}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                        >
-                            <ArrowDownCircle className="h-3.5 w-3.5" />
-                            Nuevo Lote (Entrada)
-                        </button>
                     </div>
 
-                    {(componente.lotes_activos || []).length === 0 ? (
+                    {loadingKardex ? (
+                        <div className="flex justify-center items-center py-12 text-slate-500">
+                            <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
+                            <span className="text-xs font-medium">Recuperando registros inmutables de Kardex...</span>
+                        </div>
+                    ) : (kardexData?.kardex || []).length === 0 ? (
                         <div className="text-center py-12 text-slate-500">
-                            <Layers className="h-10 w-10 mx-auto text-slate-300 mb-2" />
-                            <p className="text-sm font-semibold text-slate-700">Sin lotes activos</p>
+                            <History className="h-10 w-10 mx-auto text-slate-300 mb-2" />
+                            <p className="text-sm font-semibold text-slate-700">Sin movimientos en Kardex</p>
                             <p className="text-xs text-slate-400 mt-0.5">
-                                Este componente no tiene existencias físicas vinculadas a un lote activo en bodega.
+                                No se han registrado movimientos de entrada, salida o ajuste físico para este ítem.
                             </p>
                         </div>
                     ) : (
@@ -694,64 +577,93 @@ export default function DetalleComponentePage() {
                             <table className="w-full text-left text-xs border-collapse">
                                 <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
                                     <tr>
-                                        <th className="px-4 py-3">Código Lote</th>
-                                        <th className="px-4 py-3">Bodega / Ubicación</th>
-                                        <th className="px-4 py-3 text-center">Disponible</th>
-                                        <th className="px-4 py-3 text-center">Inicial</th>
-                                        <th className="px-4 py-3">Lote Fabricante / Factura</th>
-                                        <th className="px-4 py-3">Fecha Ingreso</th>
-                                        <th className="px-4 py-3">Vencimiento</th>
-                                        <th className="px-4 py-3 text-center">Estado</th>
+                                        <th className="px-4 py-3">Fecha / Hora</th>
+                                        <th className="px-4 py-3">Tipo & Origen</th>
+                                        <th className="px-4 py-3">Bodega</th>
+                                        <th className="px-4 py-3">Lote</th>
+                                        <th className="px-4 py-3 text-center">Cantidad</th>
+                                        <th className="px-4 py-3 text-center">Saldo Resultante</th>
+                                        <th className="px-4 py-3">Documento / Observación</th>
+                                        <th className="px-4 py-3">Responsable</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {(componente.lotes_activos || []).map((lote: any) => (
-                                        <tr key={lote.id_lote} className="hover:bg-slate-50/80 transition-colors">
-                                            <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                                                {lote.codigo_lote}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center gap-1.5">
-                                                    <Warehouse className="h-3.5 w-3.5 text-slate-400" />
-                                                    <span className="font-semibold text-slate-800">{lote.bodega}</span>
-                                                    {lote.zona && <span className="text-[11px] text-slate-400">({lote.zona})</span>}
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs">
-                                                    {lote.cantidad_actual} {componente.unidad_medida || 'UND'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-center text-slate-500">
-                                                {lote.cantidad_inicial}
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-600 font-mono">
-                                                {lote.numero_lote_fabricante || '--'}
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-600">
-                                                {lote.fecha_ingreso ? new Date(lote.fecha_ingreso).toLocaleDateString('es-CO') : '--'}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {lote.fecha_vencimiento ? (
-                                                    <span className="font-medium text-slate-700">
-                                                        {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400 italic">No aplica</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span className={cn(
-                                                    'inline-block px-2 py-0.5 rounded-full text-[11px] font-bold uppercase',
-                                                    lote.estado_lote === 'DISPONIBLE' && 'bg-emerald-100 text-emerald-800',
-                                                    lote.estado_lote === 'CUARENTENA' && 'bg-amber-100 text-amber-800',
-                                                    lote.estado_lote === 'AGOTADO' && 'bg-rose-100 text-rose-800'
-                                                )}>
-                                                    {lote.estado_lote || 'DISPONIBLE'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {kardexData?.kardex?.map((mov) => {
+                                        const esEntrada = mov.entrada > 0;
+                                        const cantidadValor = esEntrada ? mov.entrada : mov.salida;
+                                        const responsableLimpio = (!mov.realizado_por || mov.realizado_por.toLowerCase().includes('admin') || mov.realizado_por.toLowerCase().includes('mekanos'))
+                                            ? 'Administrador del Sistema'
+                                            : mov.realizado_por;
+
+                                        return (
+                                            <tr key={mov.id_movimiento} className="hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">
+                                                    {new Date(mov.fecha).toLocaleString('es-CO', {
+                                                        day: '2-digit',
+                                                        month: '2-digit',
+                                                        year: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className={cn(
+                                                            'inline-block w-fit px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
+                                                            mov.tipo === 'ENTRADA' && 'bg-emerald-100 text-emerald-800',
+                                                            mov.tipo === 'SALIDA' && 'bg-rose-100 text-rose-800',
+                                                            mov.tipo === 'AJUSTE' && 'bg-violet-100 text-violet-800',
+                                                            mov.tipo === 'TRANSFERENCIA' && 'bg-blue-100 text-blue-800'
+                                                        )}>
+                                                            {mov.tipo}
+                                                        </span>
+                                                        {mov.origen && (
+                                                            <span className="text-[10px] text-slate-400 font-mono">
+                                                                {mov.origen}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">
+                                                    {mov.bodega || 'BOD-CENTRAL'}
+                                                </td>
+                                                <td className="px-4 py-3 font-mono text-slate-800 whitespace-nowrap">
+                                                    {mov.lote && mov.lote !== '--' ? (
+                                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                                                            {mov.lote}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400">--</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                    {esEntrada ? (
+                                                        <span className="text-emerald-700 font-bold inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                                            <TrendingUp className="h-3 w-3" />
+                                                            +{cantidadValor} {componente.unidad_medida || 'UND'}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-rose-700 font-bold inline-flex items-center gap-1 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
+                                                            <TrendingDown className="h-3 w-3" />
+                                                            -{cantidadValor} {componente.unidad_medida || 'UND'}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-bold text-slate-900 whitespace-nowrap">
+                                                    {mov.saldo} <span className="text-slate-400 font-normal text-[11px]">{componente.unidad_medida || 'UND'}</span>
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-600 max-w-xs">
+                                                    <p className="font-semibold text-slate-800 truncate">{mov.referencia || '-'}</p>
+                                                    {mov.observaciones && (
+                                                        <p className="text-[11px] text-slate-400 truncate">{mov.observaciones}</p>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                                                    <span className="font-medium">{responsableLimpio}</span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -759,81 +671,200 @@ export default function DetalleComponentePage() {
                 </div>
             )}
 
-            {activeTab === 'kardex' && (
-                <div className="bg-white rounded-lg border overflow-hidden">
-                    <div className="p-4 border-b bg-gray-50">
-                        <h3 className="font-semibold text-gray-700">Historial de Movimientos</h3>
-                        <p className="text-sm text-gray-500">Total: {kardexData?.total_movimientos || 0} movimientos</p>
+            {/* ═══════════════════════════════════════════════════════════════════════════ */}
+            {/* PESTAÑA 3: PARÁMETROS DE ALMACÉN & ABASTECIMIENTO (CONEXIÓN SOURCING REAL) */}
+            {/* ═══════════════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'parametros' && (
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Especificaciones Técnicas & Taxonomía */}
+                        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
+                            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
+                                <Tag className="h-4 w-4 text-blue-600" />
+                                <h3 className="font-bold text-sm text-slate-800">Especificaciones Técnicas & Taxonomía</h3>
+                            </div>
+                            <div className="space-y-3.5 text-xs">
+                                <div>
+                                    <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Categoría Taxonómica Homologada</label>
+                                    <div className="mt-1 flex items-center gap-2">
+                                        <span className="px-2.5 py-1 bg-blue-50 text-blue-800 font-bold rounded-md border border-blue-100">
+                                            {categoriaTexto}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Código Interno (SKU)</label>
+                                        <p className="mt-1 font-mono font-bold text-slate-900 text-sm">{componente.codigo_interno || `ART-${id}`}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Referencia Fabricante</label>
+                                        <p className="mt-1 font-semibold text-slate-800 text-sm">{componente.referencia_fabricante || '--'}</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Marca</label>
+                                        <p className="mt-1 font-medium text-slate-800">{componente.marca || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Unidad de Medida</label>
+                                        <p className="mt-1 font-medium text-slate-800">{componente.unidad_medida || 'UND'}</p>
+                                    </div>
+                                </div>
+                                {componente.descripcion_detallada && (
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Descripción Detallada</label>
+                                        <p className="mt-1 text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                            {componente.descripcion_detallada}
+                                        </p>
+                                    </div>
+                                )}
+                                {componente.observaciones && (
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Observaciones Logísticas</label>
+                                        <p className="mt-1 text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                            {componente.observaciones}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Políticas de Stock & Valoración */}
+                        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
+                            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
+                                <DollarSign className="h-4 w-4 text-emerald-600" />
+                                <h3 className="font-bold text-sm text-slate-800">Políticas de Stock & Valoración Contable</h3>
+                            </div>
+                            <div className="space-y-3.5 text-xs">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Stock Mínimo Exigido</label>
+                                        <p className="mt-1 font-bold text-slate-900 text-sm">{componente.stock.minimo} {componente.unidad_medida || 'UND'}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Stock Físico Actual</label>
+                                        <p className="mt-1 font-bold text-blue-700 text-sm">{componente.stock.actual} {componente.unidad_medida || 'UND'}</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Costo Unitario Compra (CPP)</label>
+                                        <p className="mt-1 font-bold text-emerald-700 text-sm">{formatCOP(componente.precios.compra)}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Precio Venta Base</label>
+                                        <p className="mt-1 font-medium text-slate-800 text-sm">
+                                            {componente.precios.venta ? formatCOP(componente.precios.venta) : 'No configurado'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-slate-400 uppercase font-semibold text-[10px] tracking-wider">Valoración Total en Almacén</label>
+                                    <p className="mt-1 font-bold text-slate-900 text-lg text-emerald-700">
+                                        {formatCOP(componente.stock.valor_total)}
+                                    </p>
+                                </div>
+                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-slate-500">
+                                    <span>Control Inventariable:</span>
+                                    <span className="font-semibold text-slate-800">
+                                        {componente.stock.es_inventariable ? 'Sí (Control por Lotes)' : 'No'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    {loadingKardex ? (
-                        <div className="flex justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+                    {/* Matriz de Proveedores Homologados Reales */}
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-blue-600" />
+                                <div>
+                                    <h3 className="font-bold text-sm text-slate-800">Proveedores Homologados (Matriz de Sourcing)</h3>
+                                    <p className="text-xs text-slate-500">
+                                        Proveedores habilitados para abastecimiento con acuerdos comerciales y tiempos de entrega
+                                    </p>
+                                </div>
+                            </div>
+                            <Link
+                                href={`/compras/catalogo/${id}`}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors"
+                            >
+                                <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                                Administrar en Ficha Comercial
+                            </Link>
                         </div>
-                    ) : kardexData?.kardex?.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                            <History className="h-12 w-12 mx-auto text-gray-300 mb-2" />
-                            <p>No hay movimientos registrados</p>
-                        </div>
-                    ) : (
-                        <table className="w-full">
-                            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                                <tr>
-                                    <th className="px-4 py-3 text-left">Fecha</th>
-                                    <th className="px-4 py-3 text-left">Tipo</th>
-                                    <th className="px-4 py-3 text-center">Entrada</th>
-                                    <th className="px-4 py-3 text-center">Salida</th>
-                                    <th className="px-4 py-3 text-center">Saldo</th>
-                                    <th className="px-4 py-3 text-left">Referencia</th>
-                                    <th className="px-4 py-3 text-left">Usuario</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {kardexData?.kardex?.map((mov) => (
-                                    <tr key={mov.id_movimiento} className="hover:bg-gray-50">
-                                        <td className="px-4 py-3 text-sm">
-                                            {new Date(mov.fecha).toLocaleDateString()}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={cn(
-                                                'px-2 py-1 rounded text-xs font-medium',
-                                                mov.tipo === 'ENTRADA' && 'bg-green-100 text-green-800',
-                                                mov.tipo === 'SALIDA' && 'bg-red-100 text-red-800',
-                                                mov.tipo === 'AJUSTE' && 'bg-blue-100 text-blue-800'
-                                            )}>
-                                                {mov.tipo}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {mov.entrada > 0 && (
-                                                <span className="text-green-600 font-medium flex items-center justify-center gap-1">
-                                                    <TrendingUp className="h-3 w-3" />
-                                                    +{mov.entrada}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {mov.salida > 0 && (
-                                                <span className="text-red-600 font-medium flex items-center justify-center gap-1">
-                                                    <TrendingDown className="h-3 w-3" />
-                                                    -{mov.salida}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-center font-bold">
-                                            {mov.saldo}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">
-                                            {mov.referencia}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">
-                                            {mov.realizado_por}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
+
+                        {proveedoresHomologados.length === 0 ? (
+                            <div className="text-center py-10 text-slate-500">
+                                <Building2 className="h-9 w-9 mx-auto text-slate-300 mb-2" />
+                                <p className="text-sm font-semibold text-slate-700">Sin proveedores homologados vinculados</p>
+                                <p className="text-xs text-slate-400 mt-0.5 max-w-sm mx-auto">
+                                    Este ítem aún no tiene proveedores vinculados en la matriz de compras. Puedes homologar proveedores directamente desde la Ficha Comercial.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs border-collapse">
+                                    <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-4 py-3">Proveedor / Razón Social</th>
+                                            <th className="px-4 py-3">NIT / Identificación</th>
+                                            <th className="px-4 py-3">Marca Ofrecida</th>
+                                            <th className="px-4 py-3 text-right">Precio Pactado</th>
+                                            <th className="px-4 py-3 text-center">Entrega</th>
+                                            <th className="px-4 py-3 text-center">Estado Sourcing</th>
+                                            <th className="px-4 py-3 text-right">Acción Directa</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {proveedoresHomologados.map((p: any) => (
+                                            <tr key={p.id_proveedor} className="hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-4 py-3 font-semibold text-slate-900">
+                                                    {p.nombre_proveedor}
+                                                </td>
+                                                <td className="px-4 py-3 font-mono text-slate-600">
+                                                    {p.nit}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-700">
+                                                    {p.marca_ofrecida || '--'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-emerald-700">
+                                                    {formatCOP(p.costo_actual)}
+                                                </td>
+                                                <td className="px-4 py-3 text-center text-slate-600">
+                                                    {p.tiempo_entrega_dias ? `${p.tiempo_entrega_dias} d` : '1 d'}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {p.es_proveedor_preferido ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">
+                                                            <CheckCircle2 className="h-3 w-3" />
+                                                            Preferente
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-100 text-slate-700">
+                                                            Homologado
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <Link
+                                                        href={`/compras/ordenes/nueva?componenteId=${id}&proveedorId=${p.id_proveedor}`}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                                                    >
+                                                        <ShoppingBag className="h-3.5 w-3.5" />
+                                                        Pedir a Proveedor
+                                                    </Link>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 

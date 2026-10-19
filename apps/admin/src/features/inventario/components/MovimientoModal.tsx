@@ -393,31 +393,41 @@ export function MovimientoModal({
                             Artículo / Componente *
                         </label>
                         {componenteSeleccionado ? (
-                            <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                            <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl shadow-2xs">
                                 <div>
-                                    <p className="text-sm font-semibold text-slate-900">
-                                        {componenteSeleccionado.nombre || componenteSeleccionado.referencia}
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300/60">
+                                            {componenteSeleccionado.codigo || `ART-${componenteSeleccionado.id_componente}`}
+                                        </span>
+                                        <p className="text-sm font-bold text-slate-900">
+                                            {componenteSeleccionado.nombre || componenteSeleccionado.referencia}
+                                        </p>
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Ref: <span className="font-semibold text-slate-700">{componenteSeleccionado.referencia}</span> | Marca: <span className="font-semibold text-slate-700">{componenteSeleccionado.marca || 'N/A'}</span>
                                     </p>
-                                    <p className="text-xs text-slate-500 font-mono mt-0.5">
-                                        REF: {componenteSeleccionado.referencia} | CÓD: {componenteSeleccionado.codigo || '--'} | MARCA: {componenteSeleccionado.marca || '--'}
-                                    </p>
-                                    <div className="mt-1 flex items-center gap-2 text-xs">
-                                        <span className="text-slate-600 font-medium">Stock Actual:</span>
-                                        <span className="font-bold text-blue-700">{componenteSeleccionado.stock_actual} {componenteSeleccionado.unidad || 'UND'}</span>
+                                    <div className="mt-1.5 flex items-center gap-2 text-xs">
+                                        <span className="text-slate-500 font-medium">Stock Actual:</span>
+                                        <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                            {componenteSeleccionado.stock_actual} {componenteSeleccionado.unidad || 'UND'}
+                                        </span>
+                                        {componenteSeleccionado.precio_compra && componenteSeleccionado.precio_compra > 0 && (
+                                            <span className="text-slate-400 text-[11px]">
+                                                • Costo base: ${Number(componenteSeleccionado.precio_compra).toLocaleString('es-CO')} COP
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
-                                {!componentePreseleccionado && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setComponenteSeleccionado(null);
-                                            setBusqueda('');
-                                        }}
-                                        className="text-xs text-blue-600 hover:text-blue-800 font-medium p-1"
-                                    >
-                                        Cambiar
-                                    </button>
-                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setComponenteSeleccionado(null);
+                                        setBusqueda('');
+                                    }}
+                                    className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-blue-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs shrink-0 ml-3"
+                                >
+                                    Cambiar artículo
+                                </button>
                             </div>
                         ) : (
                             <div className="relative">
@@ -498,6 +508,11 @@ export function MovimientoModal({
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
                                         required
                                     />
+                                    {Number(costoUnitario) > 0 && (
+                                        <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                                            Preview: $ {Number(costoUnitario).toLocaleString('es-CO')} COP
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
@@ -509,11 +524,11 @@ export function MovimientoModal({
                                     <select
                                         value={bodegaEntrada}
                                         onChange={(e) => setBodegaEntrada(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 truncate"
                                     >
                                         {bodegas.map((b) => (
                                             <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                {b.codigo_ubicacion} - {b.zona}
+                                                [{b.codigo_ubicacion}] {b.zona || 'Bodega Principal'}
                                             </option>
                                         ))}
                                     </select>
@@ -569,6 +584,35 @@ export function MovimientoModal({
 
                     {operacionActiva === 'SALIDA' && (
                         <>
+                            {componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0 && (
+                                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-bold text-amber-900 flex items-center gap-1.5">
+                                            <Layers className="h-3.5 w-3.5 text-amber-700" />
+                                            Lotes Físicos Disponibles (Sugerencia FIFO/FEFO)
+                                        </span>
+                                        <span className="text-[10px] text-amber-800 font-semibold uppercase">
+                                            {componenteSeleccionado.lotes_activos.length} {componenteSeleccionado.lotes_activos.length === 1 ? 'lote' : 'lotes'}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                        {componenteSeleccionado.lotes_activos.map((lote) => (
+                                            <span
+                                                key={lote.id_lote}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-200 rounded font-mono text-[11px] text-slate-800 shadow-2xs"
+                                            >
+                                                <strong>{lote.codigo_lote}</strong>: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'}
+                                                {lote.fecha_vencimiento && (
+                                                    <span className="text-[10px] text-slate-400 font-sans">
+                                                        (Vence: {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')})
+                                                    </span>
+                                                )}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
@@ -595,11 +639,11 @@ export function MovimientoModal({
                                     <select
                                         value={bodegaSalida}
                                         onChange={(e) => setBodegaSalida(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500 truncate"
                                     >
                                         {bodegas.map((b) => (
                                             <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                {b.codigo_ubicacion} - {b.zona}
+                                                [{b.codigo_ubicacion}] {b.zona || 'Bodega Principal'}
                                             </option>
                                         ))}
                                     </select>
@@ -711,6 +755,27 @@ export function MovimientoModal({
 
                     {operacionActiva === 'TRASLADO' && (
                         <>
+                            {componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0 && (
+                                <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-xs space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-bold text-blue-900 flex items-center gap-1.5">
+                                            <Layers className="h-3.5 w-3.5 text-blue-700" />
+                                            Lotes Físicos Disponibles para Traslado
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                        {componenteSeleccionado.lotes_activos.map((lote) => (
+                                            <span
+                                                key={lote.id_lote}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-200 rounded font-mono text-[11px] text-slate-800 shadow-2xs"
+                                            >
+                                                <strong>{lote.codigo_lote}</strong>: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
                                     Cantidad a Trasladar *
@@ -738,11 +803,11 @@ export function MovimientoModal({
                                     <select
                                         value={bodegaOrigen}
                                         onChange={(e) => setBodegaOrigen(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 truncate"
                                     >
                                         {bodegas.map((b) => (
                                             <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                {b.codigo_ubicacion} - {b.zona}
+                                                [{b.codigo_ubicacion}] {b.zona || 'Bodega Principal'}
                                             </option>
                                         ))}
                                     </select>
@@ -754,7 +819,7 @@ export function MovimientoModal({
                                     <select
                                         value={bodegaDestino}
                                         onChange={(e) => setBodegaDestino(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 truncate"
                                     >
                                         {bodegas.map((b) => (
                                             <option
@@ -762,7 +827,7 @@ export function MovimientoModal({
                                                 value={b.id_ubicacion}
                                                 disabled={b.id_ubicacion.toString() === bodegaOrigen}
                                             >
-                                                {b.codigo_ubicacion} - {b.zona} {b.id_ubicacion.toString() === bodegaOrigen ? '(Origen)' : ''}
+                                                [{b.codigo_ubicacion}] {b.zona || 'Bodega Principal'} {b.id_ubicacion.toString() === bodegaOrigen ? '(Origen)' : ''}
                                             </option>
                                         ))}
                                     </select>

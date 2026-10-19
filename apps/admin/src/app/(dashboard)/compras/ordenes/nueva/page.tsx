@@ -53,6 +53,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { comprasService } from '@/lib/api/compras.service';
 import { ordenesCompraService } from '@/lib/api/ordenes-compra.service';
+import { getDetalleComponente } from '@/features/inventario/api/inventario-motor.service';
 import { ArticuloMaestro, ProveedorCompleto } from '@/types/compras.types';
 import { ArticuloSourcing, CrearOrdenCompraPayload } from '@/types/ordenes-compra.types';
 
@@ -85,6 +86,16 @@ function NuevaOrdenCompraContent() {
     const parsed = parseInt(proveedorIdParam, 10);
     return isNaN(parsed) || parsed <= 0 ? null : parsed;
   }, [proveedorIdParam]);
+
+  // Detección de artículo preseleccionado desde Inventario (?componenteId=... o ?id_componente=...)
+  const componenteIdParam = searchParams.get('componenteId') || searchParams.get('id_componente');
+  const initialComponenteId = useMemo(() => {
+    if (!componenteIdParam) return null;
+    const parsed = parseInt(componenteIdParam, 10);
+    return isNaN(parsed) || parsed <= 0 ? null : parsed;
+  }, [componenteIdParam]);
+
+  const autoAgregadoComponenteRef = useRef(false);
 
   // Estados de carga
   const [loadingInicial, setLoadingInicial] = useState(true);
@@ -161,6 +172,87 @@ function NuevaOrdenCompraContent() {
           }
         }
 
+        // Flujo contextual inteligente: si se recibe ?componenteId=[id] desde Inventario
+        if (initialComponenteId && !autoAgregadoComponenteRef.current) {
+          try {
+            const comp = await getDetalleComponente(initialComponenteId);
+            if (comp) {
+              // 1. Determinar proveedor sugerido (preferente o primer homologado)
+              let provSugeridoId = initialProveedorId;
+              let provData: any = null;
+
+              if (comp.proveedores_homologados && comp.proveedores_homologados.length > 0) {
+                const pref = comp.proveedores_homologados.find((p) => p.es_proveedor_preferido) || comp.proveedores_homologados[0];
+                if (!provSugeridoId) {
+                  provSugeridoId = pref.id_proveedor;
+                }
+                provData = comp.proveedores_homologados.find((p) => p.id_proveedor === provSugeridoId) || pref;
+              } else if (comp.proveedor) {
+                if (!provSugeridoId) {
+                  provSugeridoId = comp.proveedor.id;
+                }
+                provData = {
+                  id_proveedor: comp.proveedor.id,
+                  nombre_proveedor: comp.proveedor.nombre,
+                  costo_actual: comp.precios?.compra || 0,
+                  cantidad_minima_compra: 1,
+                  referencia_proveedor: comp.codigo_interno,
+                };
+              }
+
+              // Preseleccionar proveedor
+              if (provSugeridoId) {
+                setIdProveedorSeleccionado(provSugeridoId);
+                if (!provList.some((p) => p.id_proveedor === provSugeridoId)) {
+                  try {
+                    const ficha = await comprasService.getProveedorFicha360(provSugeridoId);
+                    if (ficha?.proveedor) {
+                      provList = [ficha.proveedor, ...provList];
+                    }
+                  } catch (e) {
+                    console.warn('Error precargando proveedor del componente:', e);
+                  }
+                }
+              }
+
+              // 2. Calcular cantidad sugerida: max(MOQ, stock_minimo - stock_actual, 1)
+              const stockMin = Number(comp.stock?.minimo || 0);
+              const stockAct = Number(comp.stock?.actual || 0);
+              const moq = Math.max(1, Number(provData?.cantidad_minima_compra || 1));
+              const deficit = stockMin - stockAct;
+              const cantidadSugerida = Math.max(moq, deficit > 0 ? deficit : 1);
+
+              // 3. Precio pactado o base
+              const precioUnitario = Number(provData?.costo_actual || comp.precios?.compra || 0);
+
+              const lineaAuto: LineaOrdenCompra = {
+                id_temp: `temp-auto-${Date.now()}`,
+                id_componente: comp.id_componente,
+                codigo_interno: comp.codigo_interno,
+                descripcion_corta: comp.descripcion_corta || 'Artículo',
+                referencia_fabricante: comp.referencia_fabricante || '',
+                unidad_medida: comp.unidad_medida || 'UND',
+                cantidad: cantidadSugerida,
+                precio_unitario: precioUnitario,
+                precio_original: precioUnitario,
+                es_pactado: Boolean(provData?.costo_actual),
+                vincular_proveedor: !provData?.costo_actual,
+                codigo_proveedor: provData?.referencia_proveedor || comp.codigo_interno || undefined,
+                marca_ofrecida: provData?.marca_ofrecida || comp.marca || undefined,
+                observaciones: `Abastecimiento automático desde Inventario (Déficit: ${deficit > 0 ? deficit : 0} ${comp.unidad_medida || 'UND'})`,
+              };
+
+              setLineas([lineaAuto]);
+              autoAgregadoComponenteRef.current = true;
+              toast.success(`Artículo precargado automáticamente: ${comp.descripcion_corta}`, {
+                description: `Cantidad sugerida: ${cantidadSugerida} ${comp.unidad_medida || 'UND'} | Proveedor: ${provData?.nombre_proveedor || 'Asignado'}`,
+              });
+            }
+          } catch (errComp) {
+            console.warn('No se pudo precargar el componente desde inventario:', errComp);
+          }
+        }
+
         setProveedores(provList);
         const articulos = (resArt as any)?.items || (resArt as any)?.data || [];
         setCatalogoArticulos(articulos);
@@ -173,7 +265,7 @@ function NuevaOrdenCompraContent() {
     };
 
     init();
-  }, [initialProveedorId]);
+  }, [initialProveedorId, initialComponenteId]);
 
   // Cerrar menú de autocompletado si hace clic afuera
   useEffect(() => {

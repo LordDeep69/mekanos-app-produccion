@@ -309,6 +309,8 @@ export interface DetalleComponente {
         id: number;
         nombre: string;
         codigo: string;
+        padre?: string | null;
+        completo?: string | null;
     };
     tipo_comercial?: string | null;
     especificaciones_tecnicas?: any;
@@ -325,6 +327,7 @@ export interface DetalleComponente {
     precios: {
         compra: number;
         venta: number | null;
+        margen_utilidad?: number | null;
         moneda: string | null;
     };
     proveedor: {
@@ -335,6 +338,20 @@ export interface DetalleComponente {
         telefono: string | null;
         email: string | null;
     } | null;
+    proveedores_homologados?: Array<{
+        id_proveedor: number;
+        nombre_proveedor: string;
+        nit: string;
+        referencia_proveedor: string;
+        marca_ofrecida: string;
+        costo_actual: number;
+        moneda: string;
+        tiempo_entrega_dias: number;
+        cantidad_minima_compra: number;
+        es_proveedor_preferido: boolean;
+        telefono: string;
+        email: string;
+    }>;
     lotes_activos?: Array<{
         id_lote: number;
         codigo_lote: string;
@@ -344,6 +361,8 @@ export interface DetalleComponente {
         fecha_vencimiento?: string | null;
         estado_lote: string;
         fecha_ingreso: string;
+        bodega?: string;
+        zona?: string;
     }>;
     ultimos_movimientos?: Array<{
         id_movimiento: number;
@@ -367,6 +386,11 @@ export interface DetalleComponente {
         fecha_modificacion: string | null;
         modificado_por: string | null;
     };
+    reemplazado_por?: {
+        id: number;
+        codigo: string;
+        nombre: string;
+    } | null;
 }
 
 export interface ActualizarComponenteDto {
