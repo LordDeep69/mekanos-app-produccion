@@ -35,6 +35,12 @@ import {
     type TipoServicio,
 } from '@/features/ordenes';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
+import {
+    clasificarServicioCorrectivo,
+    detectarFamiliaEquipos,
+    esServicioCompatibleConFamilia,
+    type FamiliaEquipo,
+} from '@/features/ordenes/lib/familia-equipo';
 import { calculateSmartMatchScore } from '@/lib/search-utils';
 import { cn } from '@/lib/utils';
 import {
@@ -87,113 +93,6 @@ const PRIORIDADES = [
     { value: 'ALTA', label: 'Alta', color: 'bg-orange-100 text-orange-700 border-orange-200' },
     { value: 'URGENTE', label: 'Urgente', color: 'bg-red-100 text-red-700 border-red-200' },
 ] as const;
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CLASIFICACIÓN INTELIGENTE DE FAMILIAS DE EQUIPO Y SERVICIOS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-export type FamiliaEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | 'GLOBAL' | 'MIXTO';
-
-export function detectarFamiliaEquipo(equipo?: EquipoSelector | null): FamiliaEquipo {
-    if (!equipo) return 'GLOBAL';
-    const tipo = equipo.tipos_equipo;
-    const cod = ((tipo?.codigo_tipo || '') + ' ' + (equipo.codigo_equipo || '')).toUpperCase();
-    const nom = ((tipo?.nombre_tipo || '') + ' ' + (equipo.nombre_equipo || '')).toUpperCase();
-    const id = tipo?.id_tipo_equipo || equipo.id_tipo_equipo;
-
-    if (id === 1 || id === 3 || cod.includes('GEN') || nom.includes('GENERADOR') || nom.includes('PLANTA')) {
-        return 'GENERADOR';
-    }
-    if (id === 2 || id === 5 || cod.includes('BOM') || nom.includes('BOMBA') || nom.includes('HIDR')) {
-        return 'BOMBA';
-    }
-    if (id === 4 || id === 6 || cod.includes('MOT') || nom.includes('MOTOR')) {
-        return 'MOTOR';
-    }
-    if (id === 20 || cod.includes('COMP') || nom.includes('COMPRESOR')) {
-        return 'COMPRESOR';
-    }
-    return 'GLOBAL';
-}
-
-export function detectarFamiliaEquipos(equipos: EquipoSelector[]): FamiliaEquipo {
-    if (!equipos || equipos.length === 0) return 'GLOBAL';
-    const familias = Array.from(new Set(equipos.map(detectarFamiliaEquipo)));
-    if (familias.length === 1) return familias[0];
-    return 'MIXTO';
-}
-
-export function esServicioCompatibleConFamilia(
-    service: { codigo_tipo?: string; nombre_tipo?: string; id_tipo_equipo?: number | null; tipos_equipo?: { codigo_tipo?: string; nombre_tipo?: string } | null },
-    familia: FamiliaEquipo
-): boolean {
-    if (familia === 'GLOBAL' || familia === 'MIXTO') return true;
-
-    const cod = (service.codigo_tipo || '').toUpperCase();
-    const nom = (service.nombre_tipo || '').toUpperCase();
-    const codEq = (service.tipos_equipo?.codigo_tipo || '').toUpperCase();
-    const idEq = service.id_tipo_equipo;
-
-    const esGen = idEq === 1 || idEq === 3 || cod.startsWith('GEN') || codEq.includes('GEN') || nom.includes('GENERADOR') || nom.includes('PLANTA');
-    const esBom = idEq === 2 || idEq === 5 || cod.startsWith('BOM') || codEq.includes('BOM') || nom.includes('BOMBA');
-    const esMot = idEq === 4 || idEq === 6 || cod.startsWith('MOT') || codEq.includes('MOT') || nom.includes('MOTOR');
-    const esComp = idEq === 20 || cod.startsWith('COMP') || codEq.includes('COMP') || nom.includes('COMPRESOR');
-
-    if (familia === 'GENERADOR') {
-        if (esBom || esMot || esComp) return false;
-        return true;
-    }
-    if (familia === 'BOMBA') {
-        if (esGen || esMot || esComp) return false;
-        return true;
-    }
-    if (familia === 'MOTOR') {
-        if (esGen || esBom || esComp) return false;
-        return true;
-    }
-    if (familia === 'COMPRESOR') {
-        if (esGen || esBom || esMot) return false;
-        return true;
-    }
-    return true;
-}
-
-export function clasificarServicioCorrectivo(s: CatalogoServicio): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'GLOBAL' {
-    const cod = (s.codigo_servicio || '').toUpperCase();
-    const nom = (s.nombre_servicio || '').toUpperCase();
-    const codEq = (s.tipos_equipo?.codigo_tipo || '').toUpperCase();
-    const nomEq = (s.tipos_equipo?.nombre_tipo || '').toUpperCase();
-    const idEq = s.id_tipo_equipo;
-
-    if (
-        idEq === 1 || idEq === 3 ||
-        codEq.includes('GEN') || nomEq.includes('GENERADOR') ||
-        cod.startsWith('GEN-') || cod.includes('-GEN') ||
-        nom.includes('PLANTA') || nom.includes('GENERADOR') ||
-        nom.includes('RADIADOR') || nom.includes('BATERÍA') || nom.includes('BATERIA') || nom.includes('ALTERNADOR')
-    ) {
-        return 'GENERADOR';
-    }
-    if (
-        idEq === 2 || idEq === 5 ||
-        codEq.includes('BOM') || nomEq.includes('BOMBA') ||
-        cod.startsWith('BOM-') || cod.includes('-BOMB') ||
-        nom.includes('BOMBA') || nom.includes('BOMBEO') ||
-        nom.includes('HIDRONEUMÁTICO') || nom.includes('HIDRONEUMATICO') ||
-        nom.includes('PRESOSTATO') || nom.includes('IMPULSOR') || nom.includes('SELLO MECÁNICO')
-    ) {
-        return 'BOMBA';
-    }
-    if (
-        idEq === 4 || idEq === 6 ||
-        codEq.includes('MOT') || nomEq.includes('MOTOR') ||
-        cod.startsWith('MOT-') || nom.includes('MOTOR') ||
-        nom.includes('BOBINADO') || nom.includes('ESTATOR') || nom.includes('RODAMIENTO')
-    ) {
-        return 'MOTOR';
-    }
-    return 'GLOBAL';
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTES AUXILIARES

@@ -23,6 +23,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Wind,
   Zap
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -327,7 +328,7 @@ const datosBombaSchema = z.object({
   });
 
 const equipoFormSchema = z.object({
-  tipo: z.enum(['GENERADOR', 'BOMBA', 'MOTOR']),
+  tipo: z.enum(['GENERADOR', 'BOMBA', 'MOTOR', 'COMPRESOR']),
   datosEquipo: datosEquipoBaseSchema,
   datosMotor: datosMotorSchema.optional(),
   datosGenerador: datosGeneradorSchema.optional(),
@@ -376,7 +377,7 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
    */
   const generarCodigoAutomatico = () => {
     const tipo = tipoSeleccionado || 'EQP';
-    const prefijo = tipo === 'GENERADOR' ? 'GEN' : tipo === 'BOMBA' ? 'BOM' : 'MOT';
+    const prefijo = tipo === 'GENERADOR' ? 'GEN' : tipo === 'BOMBA' ? 'BOM' : tipo === 'COMPRESOR' ? 'COMP' : 'MOT';
 
     // Obtener prefijo del cliente seleccionado
     const clienteId = form.getValues('datosEquipo.id_cliente');
@@ -919,6 +920,11 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
         } as any);
         setValue('datosGenerador', undefined);
         setValue('datosBomba', undefined);
+
+        if (tipoSeleccionado === 'COMPRESOR') {
+          // Un compresor industrial es eléctrico por defecto.
+          setValue('datosMotor.tipo_motor', 'ELECTRICO');
+        }
       }
     }
   }, [tipoSeleccionado, setValue, tiposEquipoOptions]);
@@ -1038,11 +1044,12 @@ export function EquipoForm({ onSuccess, clientePreseleccionado }: {
             <p className="text-gray-500 mt-2">Seleccione la naturaleza del equipo para habilitar los campos técnicos correspondientes.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { id: 'GENERADOR', label: 'Generador / Planta', desc: 'Equipos de generación eléctrica a combustión.', icon: Zap, color: 'text-yellow-600', bg: 'bg-yellow-50' },
               { id: 'BOMBA', label: 'Bomba / Motobomba', desc: 'Equipos de bombeo de agua o fluidos.', icon: Droplets, color: 'text-blue-600', bg: 'bg-blue-50' },
-              { id: 'MOTOR', label: 'Motor Independiente', desc: 'Motores eléctricos o de combustión solos.', icon: Settings, color: 'text-gray-600', bg: 'bg-gray-50' }
+              { id: 'MOTOR', label: 'Motor Independiente', desc: 'Motores eléctricos o de combustión solos.', icon: Settings, color: 'text-gray-600', bg: 'bg-gray-50' },
+              { id: 'COMPRESOR', label: 'Compresor', desc: 'Compresores de aire y sistemas neumáticos.', icon: Wind, color: 'text-cyan-600', bg: 'bg-cyan-50' }
             ].map((item) => (
               <button
                 key={item.id}

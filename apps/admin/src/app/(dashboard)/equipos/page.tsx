@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  Wind,
   X,
   Zap
 } from 'lucide-react';
@@ -51,6 +52,7 @@ function TipoBadge({ tipo }: { tipo: TipoEquipo }) {
     GENERADOR: { icon: Zap, color: 'bg-yellow-100 text-yellow-800', label: 'Generador' },
     BOMBA: { icon: Droplets, color: 'bg-blue-100 text-blue-800', label: 'Bomba' },
     MOTOR: { icon: Zap, color: 'bg-purple-100 text-purple-800', label: 'Motor' },
+    COMPRESOR: { icon: Wind, color: 'bg-cyan-100 text-cyan-800', label: 'Compresor' },
   }[tipo] || { icon: Zap, color: 'bg-gray-100 text-gray-800', label: tipo };
 
   const Icon = config.icon;

@@ -24,6 +24,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Gauge, RefreshCw, Settings2, Thermometer, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { TipoEquipo } from '../types';
 
 // Tipos para la configuración de parámetros
 interface UnidadesConfig {
@@ -128,6 +129,17 @@ const PARAMETROS_BOMBA = [
     { key: 'temperatura_motor', label: 'Temperatura del Motor', magnitud: 'temperatura' },
 ];
 
+// Parámetros específicos para compresores.
+// Las claves coinciden con parametros_medicion.codigo_parametro (id_tipo_equipo = 20)
+// para que la configuración resuelva correctamente en cascada.
+const PARAMETROS_COMPRESOR = [
+    { key: 'COMP_PRES_ENCENDIDO', label: 'Presión Encendido Presostato', magnitud: 'presion' },
+    { key: 'COMP_PRES_APAGADO', label: 'Presión Apagado Presostato', magnitud: 'presion' },
+    { key: 'COMP_TENSION', label: 'Tensión de Operación', magnitud: 'voltaje' },
+    { key: 'COMP_AMPERAJE', label: 'Amperaje de Operación', magnitud: 'corriente' },
+    { key: 'COMP_VIBRACION', label: 'Ruido de Rodamiento y Vibración', magnitud: 'vibracion' },
+];
+
 // ✅ VALORES POR DEFECTO PARA RANGOS (según unidad seleccionada)
 const RANGOS_DEFAULT_GENERADOR: Record<string, Record<string, RangoParametro>> = {
     frecuencia_generador: {
@@ -184,8 +196,27 @@ const RANGOS_DEFAULT_BOMBA: Record<string, Record<string, RangoParametro>> = {
     },
 };
 
+// Rangos por defecto para compresores (fuente: parametros_medicion del tipo COMPRESOR DE AIRE)
+const RANGOS_DEFAULT_COMPRESOR: Record<string, Record<string, RangoParametro>> = {
+    COMP_PRES_ENCENDIDO: {
+        'PSI': { min_normal: 80, max_normal: 100, min_critico: 60, max_critico: 120, valor_ideal: 90 },
+    },
+    COMP_PRES_APAGADO: {
+        'PSI': { min_normal: 120, max_normal: 150, min_critico: 100, max_critico: 175, valor_ideal: 135 },
+    },
+    COMP_TENSION: {
+        'V': { min_normal: 210, max_normal: 230, min_critico: 190, max_critico: 250, valor_ideal: 220 },
+    },
+    COMP_AMPERAJE: {
+        'A': { min_normal: 5, max_normal: 15, min_critico: 0, max_critico: 20, valor_ideal: 10 },
+    },
+    COMP_VIBRACION: {
+        'mm/s': { min_normal: 0, max_normal: 4.5, min_critico: 0, max_critico: 7.1, valor_ideal: 2.5 },
+    },
+};
+
 interface ConfigParametrosEditorProps {
-    tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR';
+    tipoEquipo: TipoEquipo;
     value?: ConfigParametros;
     onChange: (config: ConfigParametros) => void;
     disabled?: boolean;
@@ -202,7 +233,11 @@ export function ConfigParametrosEditor({
     const [rangos, setRangos] = useState<RangosConfig>(value?.rangos || {});
 
     // Determinar parámetros según tipo de equipo
-    const parametros = tipoEquipo === 'GENERADOR' ? PARAMETROS_GENERADOR : PARAMETROS_BOMBA;
+    const parametros = tipoEquipo === 'GENERADOR'
+        ? PARAMETROS_GENERADOR
+        : tipoEquipo === 'COMPRESOR'
+            ? PARAMETROS_COMPRESOR
+            : PARAMETROS_BOMBA;
 
     // Detectar si hay configuración personalizada
     useEffect(() => {
@@ -267,7 +302,11 @@ export function ConfigParametrosEditor({
 
     // ✅ Cargar valores por defecto según unidades seleccionadas
     const cargarValoresPorDefecto = () => {
-        const rangosDefault = tipoEquipo === 'GENERADOR' ? RANGOS_DEFAULT_GENERADOR : RANGOS_DEFAULT_BOMBA;
+        const rangosDefault = tipoEquipo === 'GENERADOR'
+            ? RANGOS_DEFAULT_GENERADOR
+            : tipoEquipo === 'COMPRESOR'
+                ? RANGOS_DEFAULT_COMPRESOR
+                : RANGOS_DEFAULT_BOMBA;
         const nuevosRangos: RangosConfig = {};
 
         parametros.forEach((param) => {

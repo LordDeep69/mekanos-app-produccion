@@ -39,6 +39,7 @@ export enum TipoEquipoDiscriminator {
   GENERADOR = 'GENERADOR',
   BOMBA = 'BOMBA',
   MOTOR = 'MOTOR',
+  COMPRESOR = 'COMPRESOR',
 }
 
 export enum EstadoEquipoEnum {

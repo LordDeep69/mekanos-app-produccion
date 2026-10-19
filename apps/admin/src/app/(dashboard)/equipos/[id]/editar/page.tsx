@@ -36,6 +36,7 @@ import {
     Loader2,
     Save,
     Settings,
+    Wind,
     X,
     Zap
 } from 'lucide-react';
@@ -123,6 +124,7 @@ function Section({ title, icon, open, onToggle, children }: {
 function TipoIcon({ tipo }: { tipo: string }) {
     if (tipo === 'GENERADOR') return <Zap className="h-5 w-5 text-yellow-500" />;
     if (tipo === 'BOMBA') return <Droplets className="h-5 w-5 text-blue-500" />;
+    if (tipo === 'COMPRESOR') return <Wind className="h-5 w-5 text-cyan-500" />;
     return <Settings className="h-5 w-5 text-gray-500" />;
 }
 
@@ -652,13 +654,13 @@ export default function EditarEquipoPage() {
                         className={cn('flex items-center gap-2 px-5 py-2 rounded-lg shadow-sm text-sm font-medium transition-colors',
                             actualizarEspecificos.isPending || !hasEspecificosChanges ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700')}>
                         {actualizarEspecificos.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        Guardar Motor / {tipoEquipo === 'GENERADOR' ? 'Generador' : 'Bomba'}
+                        Guardar Motor / {tipoEquipo === 'GENERADOR' ? 'Generador' : tipoEquipo === 'COMPRESOR' ? 'Compresor' : 'Bomba'}
                     </button>
                 </div>
             )}
 
             {/* PARÁMETROS PERSONALIZADOS */}
-            {(tipoEquipo === 'GENERADOR' || tipoEquipo === 'BOMBA') && (
+            {(tipoEquipo === 'GENERADOR' || tipoEquipo === 'BOMBA' || tipoEquipo === 'COMPRESOR') && (
                 <Section title="Parámetros de Medición Personalizados" icon={<Settings className="h-5 w-5 text-gray-500" />} open={openSections.parametros} onToggle={() => toggle('parametros')}>
                     <ConfigParametrosEditor tipoEquipo={tipoEquipo as TipoEquipo} value={configParametros} onChange={(c) => { setConfigParametros(c); setHasBaseChanges(true); }} />
                 </Section>

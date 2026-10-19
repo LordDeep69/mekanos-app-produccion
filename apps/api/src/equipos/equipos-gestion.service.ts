@@ -368,6 +368,15 @@ export class EquiposGestionService {
           case TipoEquipoDiscriminator.MOTOR:
             throw new ConflictException('Tipo MOTOR aún no implementado como equipo independiente');
 
+          case TipoEquipoDiscriminator.COMPRESOR:
+            // El compresor no tiene tabla hija propia: su naturaleza técnica se
+            // declara en tipos_equipo (categoria COMPRESION) y sus datos de motor
+            // se persisten en equipos_motor (creado arriba si se envió datosMotor).
+            datosEspecificos = {
+              tabla: 'equipos_motor',
+            };
+            break;
+
           default:
             throw new ConflictException(`Tipo de equipo desconocido: ${dto.tipo}`);
         }
@@ -519,7 +528,15 @@ export class EquiposGestionService {
         let tipoEquipo: string = eq.tipos_equipo?.codigo_tipo || 'DESCONOCIDO';
         let datosEspecificos: any = null;
 
-        if (eq.equipos_generador) {
+        // El tipo declarado manda: un COMPRESOR no debe heredar la etiqueta de
+        // una tabla hija legada (p. ej. equipos_bomba con especificaciones antiguas).
+        const esCompresorDeclarado =
+          eq.tipos_equipo?.codigo_tipo === 'COMP' || eq.tipos_equipo?.codigo_tipo === 'COMPRESOR';
+
+        if (esCompresorDeclarado) {
+          tipoEquipo = 'COMPRESOR';
+          datosEspecificos = { motor: eq.equipos_motor };
+        } else if (eq.equipos_generador) {
           tipoEquipo = 'GENERADOR';
           datosEspecificos = { ...eq.equipos_generador, motor: eq.equipos_motor };
         } else if (eq.equipos_bomba) {
@@ -615,7 +632,15 @@ export class EquiposGestionService {
       let tipoEquipo = equipo.tipos_equipo?.codigo_tipo || 'DESCONOCIDO';
       let datosEspecificos: any = null;
 
-      if (equipo.equipos_generador) {
+      // El tipo declarado manda: un COMPRESOR no debe heredar la etiqueta de
+      // una tabla hija legada (p. ej. equipos_bomba con especificaciones antiguas).
+      const esCompresorDeclarado =
+        equipo.tipos_equipo?.codigo_tipo === 'COMP' || equipo.tipos_equipo?.codigo_tipo === 'COMPRESOR';
+
+      if (esCompresorDeclarado) {
+        tipoEquipo = 'COMPRESOR';
+        datosEspecificos = { motor: equipo.equipos_motor };
+      } else if (equipo.equipos_generador) {
         tipoEquipo = 'GENERADOR';
         datosEspecificos = { ...equipo.equipos_generador, motor: equipo.equipos_motor };
       } else if (equipo.equipos_bomba) {

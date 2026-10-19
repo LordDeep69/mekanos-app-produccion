@@ -9,7 +9,7 @@
 // ENUMS
 // 
 
-export type TipoEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR';
+export type TipoEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR';
 
 export type EstadoEquipo =
   | 'OPERATIVO'
