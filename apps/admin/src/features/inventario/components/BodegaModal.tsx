@@ -66,15 +66,20 @@ export function BodegaModal({ isOpen, onClose, onSuccess }: BodegaModalProps) {
             <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" onClick={onClose} />
 
             <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
-                    <div className="flex items-center gap-2">
-                        <Warehouse className="h-5 w-5 text-blue-400" />
-                        <h2 className="text-base font-semibold">Nueva Bodega / Ubicación</h2>
+                {/* Header Corporativo Claro */}
+                <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-100">
+                            <Warehouse className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-slate-900">Nueva Bodega / Ubicación</h2>
+                            <p className="text-xs text-slate-500">Configuración de almacenes físicos y zonas de acopio</p>
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-slate-400 hover:text-white transition-colors p-1"
+                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
                     >
                         <X className="h-5 w-5" />
                     </button>

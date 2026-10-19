@@ -28,6 +28,13 @@ export interface DashboardKPIs {
     fecha_consulta?: string;
 }
 
+export interface ComponenteBodegaStock {
+    id_ubicacion: number;
+    codigo: string;
+    nombre: string;
+    stock: number;
+}
+
 export interface ComponenteStock {
     id_componente: number;
     codigo: string | null;
@@ -36,6 +43,8 @@ export interface ComponenteStock {
     marca: string | null;
     tipo: string | null;
     categoria?: string | null;
+    categoria_padre?: string | null;
+    categoria_completa?: string | null;
     stock_actual: number;
     stock_minimo: number;
     estado_stock: 'OK' | 'BAJO' | 'CRITICO' | 'AGOTADO';
@@ -43,11 +52,15 @@ export interface ComponenteStock {
     precio_venta: number | null;
     valor_stock: number;
     unidad: string | null;
+    bodegas?: ComponenteBodegaStock[];
     lotes_activos?: Array<{
         id_lote: number;
         codigo_lote: string;
         cantidad_actual: number;
         fecha_vencimiento?: string | null;
+        id_ubicacion?: number;
+        bodega_codigo?: string;
+        bodega_nombre?: string;
     }>;
     activo: boolean | null;
 }
@@ -441,6 +454,7 @@ export async function getComponentesStock(params?: {
     busqueda?: string;
     id_tipo?: number;
     id_categoria?: number;
+    id_ubicacion?: number;
     estado_stock?: string;
     solo_criticos?: boolean;
     skip?: number;
@@ -565,6 +579,7 @@ export function useComponentesStock(params?: {
     busqueda?: string;
     id_tipo?: number;
     id_categoria?: number;
+    id_ubicacion?: number;
     estado_stock?: string;
     solo_criticos?: boolean;
     skip?: number;

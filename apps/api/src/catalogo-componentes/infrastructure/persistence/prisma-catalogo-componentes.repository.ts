@@ -158,6 +158,17 @@ export class PrismaCatalogoComponentesRepository {
         unidades_medida: true,
         categorias_componente: true,
         proveedores: true,
+        lotes_componentes: {
+          include: {
+            movimientos_inventario: {
+              take: 1,
+              orderBy: { fecha_movimiento: 'desc' },
+              include: {
+                ubicaciones_bodega: true,
+              },
+            },
+          },
+        },
       },
     });
   }

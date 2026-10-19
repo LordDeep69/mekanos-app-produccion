@@ -748,6 +748,19 @@ export class InventarioService {
             where.id_categoria = filtros.id_categoria;
         }
 
+        if (filtros?.id_ubicacion) {
+            where.lotes_componentes = {
+                some: {
+                    movimientos_inventario: {
+                        some: {
+                            id_ubicacion: filtros.id_ubicacion,
+                        },
+                    },
+                    cantidad_actual: { gt: 0 },
+                },
+            };
+        }
+
         if (filtros?.estado_stock === 'EN_STOCK') {
             where.stock_actual = { gt: 0 };
         } else if (filtros?.estado_stock === 'AGOTADO') {
@@ -783,6 +796,20 @@ export class InventarioService {
                             codigo_lote: true,
                             cantidad_actual: true,
                             fecha_vencimiento: true,
+                            movimientos_inventario: {
+                                take: 1,
+                                orderBy: { fecha_movimiento: 'desc' },
+                                select: {
+                                    id_ubicacion: true,
+                                    ubicaciones_bodega: {
+                                        select: {
+                                            id_ubicacion: true,
+                                            codigo_ubicacion: true,
+                                            zona: true,
+                                        },
+                                    },
+                                },
+                            },
                         },
                     },
                 },
@@ -813,6 +840,47 @@ export class InventarioService {
                 const catTexto = catNombre || 'General';
                 const catCompleta = catPadre ? `${catPadre} > ${catNombre}` : catTexto;
 
+                // Enriquecer lotes con datos de su última ubicación en bodega
+                const lotesEnriquecidos = (c.lotes_componentes || []).map((l: any) => {
+                    const ultimoMov = l.movimientos_inventario?.[0];
+                    const ubi = ultimoMov?.ubicaciones_bodega;
+                    return {
+                        id_lote: l.id_lote,
+                        codigo_lote: l.codigo_lote,
+                        cantidad_actual: Number(l.cantidad_actual),
+                        fecha_vencimiento: l.fecha_vencimiento,
+                        id_ubicacion: ubi?.id_ubicacion || ultimoMov?.id_ubicacion || 1,
+                        bodega_codigo: ubi?.codigo_ubicacion || 'BOD-CENTRAL',
+                        bodega_nombre: ubi?.zona || 'Bodega Central Taller',
+                    };
+                });
+
+                // Agregación de existencias por bodega
+                const bodegasMap = new Map<number, { id_ubicacion: number; codigo: string; nombre: string; stock: number }>();
+                for (const lote of lotesEnriquecidos) {
+                    const idUbi = lote.id_ubicacion;
+                    const existing = bodegasMap.get(idUbi) || {
+                        id_ubicacion: idUbi,
+                        codigo: lote.bodega_codigo,
+                        nombre: lote.bodega_nombre,
+                        stock: 0,
+                    };
+                    existing.stock += lote.cantidad_actual;
+                    bodegasMap.set(idUbi, existing);
+                }
+
+                // Si tiene existencias registradas pero no lotes en movimientos, asociar a Bodega Central
+                if (bodegasMap.size === 0 && stockActual > 0) {
+                    bodegasMap.set(1, {
+                        id_ubicacion: 1,
+                        codigo: 'BOD-CENTRAL',
+                        nombre: 'Bodega Central Taller',
+                        stock: stockActual,
+                    });
+                }
+
+                const bodegasComponente = Array.from(bodegasMap.values());
+
                 return {
                     id_componente: c.id_componente,
                     codigo: c.codigo_interno || `ART-${c.id_componente}`,
@@ -830,7 +898,8 @@ export class InventarioService {
                     precio_venta: c.precio_venta ? Number(c.precio_venta) : null,
                     valor_stock: c.precio_compra ? Number(c.precio_compra) * stockActual : 0,
                     unidad: c.unidad_medida || 'UND',
-                    lotes_activos: c.lotes_componentes || [],
+                    bodegas: bodegasComponente,
+                    lotes_activos: lotesEnriquecidos,
                     activo: c.activo,
                 };
             }),

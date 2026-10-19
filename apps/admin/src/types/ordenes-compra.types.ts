@@ -59,6 +59,8 @@ export interface ItemRecepcionLotePayload {
   id_ubicacion_destino?: number;
   observaciones?: string;
   costo_unitario_real?: number;
+  numero_lote_fabricante?: string;
+  fecha_vencimiento?: string;
 }
 
 export interface RegistrarRecepcionLotePayload {

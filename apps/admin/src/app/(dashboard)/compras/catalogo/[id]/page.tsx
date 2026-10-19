@@ -1207,13 +1207,16 @@ export default function FichaArticulo360Page() {
                   <div className="w-full h-3 rounded-full bg-gray-100 overflow-hidden">
                     <div
                       style={{
-                        width: `${Math.min(
-                          100,
-                          articulo.stock_minimo > 0
-                            ? (articulo.stock_actual / (articulo.stock_minimo * 2)) * 100
-                            : articulo.stock_actual > 0
-                            ? 100
-                            : 0
+                        width: `${Math.max(
+                          0,
+                          Math.min(
+                            100,
+                            (articulo.stock_minimo || 0) > 0
+                              ? ((articulo.stock_actual || 0) / ((articulo.stock_minimo || 1) * 2)) * 100
+                              : (articulo.stock_actual || 0) > 0
+                              ? 100
+                              : 0
+                          )
                         )}%`,
                       }}
                       className={`h-full rounded-full transition-all ${
@@ -1247,47 +1250,87 @@ export default function FichaArticulo360Page() {
                   Almacén y Ubicación de Almacenamiento
                 </CardTitle>
                 <CardDescription className="text-xs text-gray-500">
-                  Ubicación física identificada a través de las operaciones de Kardex.
+                  Ubicación física identificada a través de las operaciones de Kardex y lotes activos.
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4 text-xs text-gray-600">
                 {(() => {
-                  const ubicacionesSet = new Map<number, any>();
-                  movimientosKardex.forEach((m) => {
-                    if (m.ubicaciones_bodega) {
-                      ubicacionesSet.set(m.ubicaciones_bodega.id_ubicacion, m.ubicaciones_bodega);
-                    }
-                  });
-                  const ubicacionesReales = Array.from(ubicacionesSet.values());
+                  const bodegasMap = new Map<number, { id_ubicacion: number; codigo: string; nombre: string; stock: number; lotesCount: number }>();
+                  const lotes = (articulo as any)?.lotes_componentes || [];
 
-                  if (ubicacionesReales.length > 0) {
+                  lotes.forEach((lote: any) => {
+                    const ub = lote.movimientos_inventario?.[0]?.ubicaciones_bodega;
+                    const idUb = ub?.id_ubicacion || 1;
+                    const cod = ub?.codigo_ubicacion || 'BOD-CENTRAL';
+                    const nom = ub?.zona || 'Bodega Central Taller';
+                    const cant = Number(lote.cantidad_actual || 0);
+
+                    const prev = bodegasMap.get(idUb) || { id_ubicacion: idUb, codigo: cod, nombre: nom, stock: 0, lotesCount: 0 };
+                    prev.stock += cant;
+                    prev.lotesCount += 1;
+                    bodegasMap.set(idUb, prev);
+                  });
+
+                  if (bodegasMap.size === 0 && movimientosKardex.length > 0) {
+                    movimientosKardex.forEach((m) => {
+                      if (m.ubicaciones_bodega) {
+                        const idUb = m.ubicaciones_bodega.id_ubicacion;
+                        if (!bodegasMap.has(idUb)) {
+                          bodegasMap.set(idUb, {
+                            id_ubicacion: idUb,
+                            codigo: m.ubicaciones_bodega.codigo_ubicacion,
+                            nombre: m.ubicaciones_bodega.zona || 'Bodega',
+                            stock: Number(articulo?.stock_actual || 0),
+                            lotesCount: 0,
+                          });
+                        }
+                      }
+                    });
+                  }
+
+                  if (bodegasMap.size === 0 && Number(articulo?.stock_actual || 0) > 0) {
+                    bodegasMap.set(1, {
+                      id_ubicacion: 1,
+                      codigo: 'BOD-CENTRAL',
+                      nombre: 'Bodega Central Taller',
+                      stock: Number(articulo?.stock_actual || 0),
+                      lotesCount: 0,
+                    });
+                  }
+
+                  const bodegasReales = Array.from(bodegasMap.values());
+
+                  if (bodegasReales.length > 0) {
                     return (
                       <div className="space-y-3">
-                        {ubicacionesReales.map((u) => (
+                        {bodegasReales.map((b) => (
                           <div
-                            key={u.id_ubicacion}
+                            key={b.id_ubicacion}
                             className="rounded-xl bg-gray-50/80 p-4 border border-gray-200 space-y-2.5"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-gray-900 text-sm">{u.zona || 'Bodega Principal'}</span>
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-blue-600" />
+                                <span className="font-bold text-gray-900 text-sm">{b.nombre}</span>
+                              </div>
                               <Badge variant="outline" className="font-mono text-[11px] bg-blue-50 text-blue-700 border-blue-200">
-                                {u.codigo_ubicacion}
+                                {b.codigo}
                               </Badge>
                             </div>
-                            <div className="grid grid-cols-3 gap-2 text-[11px] text-gray-600 pt-1 border-t border-gray-100">
-                              <div>
-                                <span className="text-gray-400 block">Pasillo:</span>
-                                <strong className="text-gray-800">{u.pasillo || 'N/A'}</strong>
-                              </div>
-                              <div>
-                                <span className="text-gray-400 block">Estante:</span>
-                                <strong className="text-gray-800">{u.estante || 'N/A'}</strong>
-                              </div>
-                              <div>
-                                <span className="text-gray-400 block">Nivel:</span>
-                                <strong className="text-gray-800">{u.nivel || 'N/A'}</strong>
-                              </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-[11px]">
+                              <span className="text-gray-500">Saldo Físico Disponible:</span>
+                              <span className="font-mono font-bold text-gray-900 text-sm">
+                                {b.stock} <span className="text-xs font-normal text-gray-500">{articulo?.unidad_medida || 'UND'}</span>
+                              </span>
                             </div>
+                            {b.lotesCount > 0 && (
+                              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                                <span>Lotes Activos:</span>
+                                <Badge variant="secondary" className="text-[10px] font-mono">
+                                  {b.lotesCount} {b.lotesCount === 1 ? 'lote' : 'lotes'}
+                                </Badge>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1298,16 +1341,16 @@ export default function FichaArticulo360Page() {
                     <div className="rounded-xl bg-gray-50/80 p-4 border border-gray-200 space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-gray-700">Bodega / Almacén:</span>
-                        <span className="font-medium text-gray-900">Almacén Central</span>
+                        <span className="font-medium text-gray-900">Bodega Central Taller</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-gray-700">Estado de Ubicación:</span>
                         <Badge variant="outline" className="border-gray-300 text-gray-700 bg-white text-[10px]">
-                          Ubicación General
+                          Sin existencias activas
                         </Badge>
                       </div>
                       <p className="text-[11px] text-gray-400 pt-1 border-t border-gray-100">
-                        Para asignar un pasillo, estante o nivel específico, asigne la ubicación durante la recepción de orden o traslado de bodega.
+                        Para ingresar existencias a una bodega, registre una nueva Orden de Compra o un movimiento de Entrada física en inventario.
                       </p>
                     </div>
                   );

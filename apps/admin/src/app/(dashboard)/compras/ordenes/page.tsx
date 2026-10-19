@@ -377,6 +377,8 @@ export default function OrdenesCompraPage() {
           cantidad_rechazada: 0,
           calidad: 'OK' as const,
           observacion_linea: '',
+          numero_lote_fabricante: '',
+          fecha_vencimiento: '',
         };
       });
 
@@ -460,6 +462,22 @@ export default function OrdenesCompraPage() {
     );
   };
 
+  const handleModificarLoteFabricante = (id_detalle: number, lote: string) => {
+    setItemsRecepcion((prev) =>
+      prev.map((item) =>
+        item.id_detalle === id_detalle ? { ...item, numero_lote_fabricante: lote } : item,
+      ),
+    );
+  };
+
+  const handleModificarFechaVencimiento = (id_detalle: number, fecha: string) => {
+    setItemsRecepcion((prev) =>
+      prev.map((item) =>
+        item.id_detalle === id_detalle ? { ...item, fecha_vencimiento: fecha } : item,
+      ),
+    );
+  };
+
   const handlePrellenarTodoPendiente = () => {
     setItemsRecepcion((prev) =>
       prev.map((item) => ({
@@ -512,6 +530,8 @@ export default function OrdenesCompraPage() {
           cantidad_rechazada: it.cantidad_rechazada,
           calidad: it.calidad,
           observaciones: sanitizarTextoUTF8(it.observacion_linea) || undefined,
+          numero_lote_fabricante: sanitizarTextoUTF8(it.numero_lote_fabricante) || undefined,
+          fecha_vencimiento: it.fecha_vencimiento || undefined,
         })),
       };
 
@@ -1438,18 +1458,23 @@ export default function OrdenesCompraPage() {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                         <tr>
-                          <th className="py-2.5 px-3 w-32">N° Recepción</th>
-                          <th className="py-2.5 px-3 w-36">Fecha / Hora</th>
-                          <th className="py-2.5 px-3 text-right w-24">Cant. Recibida</th>
-                          <th className="py-2.5 px-3 text-right w-24 text-emerald-700">Aceptada</th>
-                          <th className="py-2.5 px-3 text-right w-24 text-rose-700">Rechazada</th>
-                          <th className="py-2.5 px-3 text-center w-28">Calidad</th>
-                          <th className="py-2.5 px-3 w-32">Bodega Destino</th>
+                          <th className="py-2.5 px-3 w-28">N° Recepción</th>
+                          <th className="py-2.5 px-3 w-32">Fecha / Hora</th>
+                          <th className="py-2.5 px-3">Componente / Ítem</th>
+                          <th className="py-2.5 px-3 text-right w-20">Cant. Recibida</th>
+                          <th className="py-2.5 px-3 text-right w-20 text-emerald-700">Aceptada</th>
+                          <th className="py-2.5 px-3 text-right w-20 text-rose-700">Rechazada</th>
+                          <th className="py-2.5 px-3 text-center w-24">Calidad</th>
+                          <th className="py-2.5 px-3 w-28">Bodega Destino</th>
                           <th className="py-2.5 px-3">Observaciones / Guía</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
                         {ordenDetalle.recepciones.map((rec) => {
+                          const detalleAsociado = ordenDetalle.detalles?.find(
+                            (d) => d.id_detalle === rec.id_detalle_orden,
+                          );
+
                           const badgeCalidad = () => {
                             if (rec.calidad === 'OK') {
                               return (
@@ -1480,6 +1505,20 @@ export default function OrdenesCompraPage() {
                               <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
                                 {formatFecha(rec.fecha_recepcion)}
                               </td>
+                              <td className="py-2.5 px-3">
+                                {detalleAsociado ? (
+                                  <div>
+                                    <div className="font-semibold text-slate-900 leading-tight">
+                                      {detalleAsociado.componente?.descripcion_corta || 'Artículo'}
+                                    </div>
+                                    <div className="text-[11px] font-mono text-slate-500">
+                                      SKU: {detalleAsociado.componente?.codigo_interno || detalleAsociado.componente?.referencia_fabricante || '—'}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-[11px]">Línea #{rec.id_detalle_orden || 'General'}</span>
+                                )}
+                              </td>
                               <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-800">
                                 {rec.cantidad_recibida}
                               </td>
@@ -1490,8 +1529,10 @@ export default function OrdenesCompraPage() {
                                 {rec.cantidad_rechazada}
                               </td>
                               <td className="py-2.5 px-3 text-center">{badgeCalidad()}</td>
-                              <td className="py-2.5 px-3 font-medium text-slate-700">
-                                {rec.ubicacion_nombre ? `[${rec.ubicacion_nombre}]` : 'BOD-CENTRAL'}
+                              <td className="py-2.5 px-3">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                  {rec.ubicacion_nombre?.replace(/[\[\]]/g, '') || 'BOD-CENTRAL'}
+                                </span>
                               </td>
                               <td className="py-2.5 px-3 text-slate-500 italic">
                                 {sanitizarTextoUTF8(rec.observaciones) || 'Ingreso conforme sin novedades'}
@@ -1790,12 +1831,14 @@ export default function OrdenesCompraPage() {
                     <tr>
                       <th className="py-2.5 px-3 w-8 text-center">#</th>
                       <th className="py-2.5 px-3">Componente / SKU</th>
-                      <th className="py-2.5 px-3 text-right w-24">Pendiente</th>
-                      <th className="py-2.5 px-3 text-center w-28">Cant. Recibida</th>
-                      <th className="py-2.5 px-3 text-center w-28 text-emerald-700">Aceptada (OK)</th>
-                      <th className="py-2.5 px-3 text-center w-28 text-rose-700">Rechazada</th>
-                      <th className="py-2.5 px-3 text-center w-32">Calidad</th>
-                      <th className="py-2.5 px-3 w-40">Nota / Causa Daño</th>
+                      <th className="py-2.5 px-3 text-right w-20">Pendiente</th>
+                      <th className="py-2.5 px-3 text-center w-24">Cant. Recibida</th>
+                      <th className="py-2.5 px-3 text-center w-24 text-emerald-700">Aceptada (OK)</th>
+                      <th className="py-2.5 px-3 text-center w-24 text-rose-700">Rechazada</th>
+                      <th className="py-2.5 px-3 text-center w-28">Calidad</th>
+                      <th className="py-2.5 px-3 w-28">Lote Fab.</th>
+                      <th className="py-2.5 px-3 w-32">Vencimiento</th>
+                      <th className="py-2.5 px-3 w-36">Nota / Causa Daño</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1890,7 +1933,29 @@ export default function OrdenesCompraPage() {
                           </td>
                           <td className="py-2 px-2">
                             <Input
-                              placeholder="Opcional: motivo o detalle..."
+                              placeholder="Ej: LOT-FAB-99"
+                              value={item.numero_lote_fabricante || ''}
+                              onChange={(e) =>
+                                handleModificarLoteFabricante(item.id_detalle, e.target.value)
+                              }
+                              className="h-8 text-xs font-mono bg-white border-slate-200 placeholder:text-slate-300"
+                              title="Número de lote asignado por el fabricante o proveedor"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <Input
+                              type="date"
+                              value={item.fecha_vencimiento || ''}
+                              onChange={(e) =>
+                                handleModificarFechaVencimiento(item.id_detalle, e.target.value)
+                              }
+                              className="h-8 text-xs font-mono bg-white border-slate-200"
+                              title="Fecha de vencimiento o caducidad del lote físico"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <Input
+                              placeholder="Opcional: motivo..."
                               value={item.observacion_linea}
                               onChange={(e) =>
                                 handleModificarNotaItem(item.id_detalle, e.target.value)

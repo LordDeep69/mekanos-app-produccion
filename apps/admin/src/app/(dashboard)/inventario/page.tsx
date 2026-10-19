@@ -122,6 +122,7 @@ export default function InventarioPage() {
     const [stockPage, setStockPage] = useState(1);
     const [stockBusqueda, setStockBusqueda] = useState('');
     const [estadoStockFiltro, setEstadoStockFiltro] = useState<'TODOS' | 'EN_STOCK' | 'BAJO' | 'AGOTADO'>('TODOS');
+    const [bodegaFiltro, setBodegaFiltro] = useState<string>('TODAS');
     const stockPageSize = 15;
 
     // Filtros de Pestaña Kardex
@@ -146,6 +147,7 @@ export default function InventarioPage() {
         refetch: refetchStock,
     } = useComponentesStock({
         busqueda: stockBusqueda || undefined,
+        id_ubicacion: bodegaFiltro !== 'TODAS' ? parseInt(bodegaFiltro, 10) : undefined,
         estado_stock: estadoStockFiltro !== 'TODOS' ? estadoStockFiltro : undefined,
         solo_criticos: estadoStockFiltro === 'BAJO' ? true : undefined,
         skip: (stockPage - 1) * stockPageSize,
@@ -391,7 +393,7 @@ export default function InventarioPage() {
             {tabActiva === 'stock' && (
                 <div className="space-y-4">
                     {/* Filtros Stock */}
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex flex-col md:flex-row gap-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <input
@@ -406,7 +408,27 @@ export default function InventarioPage() {
                             />
                         </div>
 
-                        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                        {/* Filtro por Bodega */}
+                        <div className="relative min-w-[210px]">
+                            <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                            <select
+                                value={bodegaFiltro}
+                                onChange={(e) => {
+                                    setBodegaFiltro(e.target.value);
+                                    setStockPage(1);
+                                }}
+                                className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                            >
+                                <option value="TODAS">🏢 Todas las Bodegas</option>
+                                {bodegas.map((b) => (
+                                    <option key={b.id_ubicacion} value={b.id_ubicacion}>
+                                        {b.codigo_ubicacion} - {b.zona || 'Bodega'}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200 shrink-0">
                             <button
                                 onClick={() => {
                                     setEstadoStockFiltro('TODOS');
@@ -537,6 +559,19 @@ export default function InventarioPage() {
                                                     )}>
                                                         {comp.stock_actual} <span className="text-[10px] font-medium opacity-80">{comp.unidad || 'UND'}</span>
                                                     </span>
+                                                    {comp.bodegas && comp.bodegas.length > 0 && (
+                                                        <div className="flex flex-wrap items-center justify-center gap-1 mt-1">
+                                                            {comp.bodegas.map((b, idx) => (
+                                                                <span
+                                                                    key={b.id_ubicacion || idx}
+                                                                    className="inline-flex items-center px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[9px] font-mono border border-slate-200/80"
+                                                                    title={`${b.nombre}: ${b.stock} ${comp.unidad || 'UND'}`}
+                                                                >
+                                                                    {b.codigo}: {b.stock}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="py-2 px-1.5 text-center font-mono text-xs font-semibold text-slate-600 align-middle whitespace-nowrap">
                                                     {comp.stock_minimo}
