@@ -116,25 +116,6 @@ export default function DetalleComponentePage() {
     const { data: componente, isLoading, isError, refetch } = useDetalleComponente(validId);
     const { data: kardexData, isLoading: loadingKardex } = useKardex(activeTab === 'kardex' ? validId : null);
 
-    const compStock: ComponenteStock | null = componente ? {
-        id_componente: componente.id_componente || (componente as any).id || id,
-        codigo: componente.codigo_interno,
-        referencia: componente.referencia_fabricante,
-        nombre: componente.descripcion_corta,
-        tipo: componente.tipo?.nombre,
-        marca: componente.marca,
-        unidad: componente.unidad_medida,
-        stock_actual: componente.stock?.actual ?? 0,
-        stock_minimo: componente.stock?.minimo ?? 0,
-        stock_seguridad: 0,
-        precio_compra: componente.precios?.compra ?? 0,
-        precio_venta: componente.precios?.venta ?? 0,
-        valor_stock: componente.stock?.valor_total ?? 0,
-        estado_stock: componente.stock?.estado ?? 'OK',
-        total_lotes: componente.lotes_activos?.length || 0,
-        activo: componente.activo,
-    } : null;
-
     // Resumen de existencias por bodega a partir de lotes activos
     const bodegasSummary = useMemo(() => {
         if (!componente?.lotes_activos || componente.lotes_activos.length === 0) {
@@ -151,6 +132,42 @@ export default function DetalleComponentePage() {
         }
         return Array.from(map.values());
     }, [componente?.lotes_activos]);
+
+    const compStock: ComponenteStock | null = componente ? {
+        id_componente: componente.id_componente || (componente as any).id || id,
+        codigo: componente.codigo_interno,
+        referencia: componente.referencia_fabricante,
+        nombre: componente.descripcion_corta,
+        tipo: componente.tipo?.nombre,
+        marca: componente.marca,
+        unidad: componente.unidad_medida,
+        stock_actual: componente.stock?.actual ?? 0,
+        stock_minimo: componente.stock?.minimo ?? 0,
+        stock_seguridad: 0,
+        precio_compra: componente.precios?.compra ?? 0,
+        precio_venta: componente.precios?.venta ?? 0,
+        valor_stock: componente.stock?.valor_total ?? 0,
+        estado_stock: componente.stock?.estado ?? 'OK',
+        total_lotes: componente.lotes_activos?.length || 0,
+        bodegas: ((componente as any).bodegas && (componente as any).bodegas.length > 0)
+            ? (componente as any).bodegas
+            : bodegasSummary.map((b) => ({
+                id_ubicacion: b.codigo === 'BOD-FLUIDOS' ? 2 : b.codigo === 'MOVIL-01' ? 3 : 1,
+                codigo: b.codigo,
+                nombre: b.zona,
+                stock: b.cantidad,
+            })),
+        lotes_activos: componente.lotes_activos?.map((l: any) => ({
+            id_lote: l.id_lote,
+            codigo_lote: l.codigo_lote,
+            cantidad_actual: Number(l.cantidad_actual || 0),
+            fecha_vencimiento: l.fecha_vencimiento,
+            id_ubicacion: l.id_ubicacion || (l.bodega === 'BOD-FLUIDOS' || l.bodega_codigo === 'BOD-FLUIDOS' ? 2 : (l.bodega === 'MOVIL-01' || l.bodega_codigo === 'MOVIL-01' ? 3 : 1)),
+            bodega_codigo: l.bodega_codigo || l.bodega || 'BOD-CENTRAL',
+            bodega_nombre: l.bodega_nombre || l.zona || 'Bodega Central Taller',
+        })),
+        activo: componente.activo,
+    } : null;
 
     // Categoría taxonómica completa homologada
     const categoriaTexto = useMemo(() => {

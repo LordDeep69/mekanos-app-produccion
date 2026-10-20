@@ -1555,8 +1555,28 @@ export class InventarioService {
             proveedor: provPrincipal,
             proveedores_homologados: proveedoresHomologados,
 
+            bodegas: (() => {
+                const bMap = new Map<number, { id_ubicacion: number; codigo: string; nombre: string; stock: number }>();
+                for (const l of (componente.lotes_componentes || [])) {
+                    const ub = l.movimientos_inventario?.[0]?.ubicaciones_bodega;
+                    const idU = ub?.id_ubicacion || 1;
+                    const cod = ub?.codigo_ubicacion || 'BOD-CENTRAL';
+                    const nom = ub?.zona || 'Bodega Central Taller';
+                    const exist = bMap.get(idU) || { id_ubicacion: idU, codigo: cod, nombre: nom, stock: 0 };
+                    exist.stock += Number(l.cantidad_actual || 0);
+                    bMap.set(idU, exist);
+                }
+                if (bMap.size === 0 && stockActual > 0) {
+                    bMap.set(1, { id_ubicacion: 1, codigo: 'BOD-CENTRAL', nombre: 'Bodega Central Taller', stock: stockActual });
+                }
+                return Array.from(bMap.values());
+            })(),
+
             lotes_activos: (componente.lotes_componentes || []).map((l: any) => {
                 const ub = l.movimientos_inventario?.[0]?.ubicaciones_bodega;
+                const idU = ub?.id_ubicacion || 1;
+                const cod = ub?.codigo_ubicacion || 'BOD-CENTRAL';
+                const nom = ub?.zona || 'Bodega Central Taller';
                 return {
                     id_lote: l.id_lote,
                     codigo_lote: l.codigo_lote,
@@ -1566,8 +1586,11 @@ export class InventarioService {
                     fecha_vencimiento: l.fecha_vencimiento,
                     estado_lote: l.estado_lote,
                     fecha_ingreso: l.fecha_ingreso,
-                    bodega: ub?.codigo_ubicacion || 'BOD-CENTRAL',
-                    zona: ub?.zona || 'Bodega Central Taller',
+                    id_ubicacion: idU,
+                    bodega: cod,
+                    zona: nom,
+                    bodega_codigo: cod,
+                    bodega_nombre: nom,
                 };
             }),
 

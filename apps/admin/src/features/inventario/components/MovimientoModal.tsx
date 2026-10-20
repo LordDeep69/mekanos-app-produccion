@@ -140,12 +140,57 @@ export function MovimientoModal({
         }
     }, [isOpen, componentePreseleccionado]);
 
+    // Bodegas efectivas del componente con resolución Zero-Trust (.bodegas o .lotes_activos)
+    const bodegasEfectivas = React.useMemo(() => {
+        if (componenteSeleccionado?.bodegas && componenteSeleccionado.bodegas.length > 0) {
+            return componenteSeleccionado.bodegas;
+        }
+        if (componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0) {
+            const bMap = new Map<number, { id_ubicacion: number; codigo: string; nombre: string; stock: number }>();
+            for (const l of componenteSeleccionado.lotes_activos) {
+                const cod = l.bodega_codigo || (l as any).bodega || 'BOD-CENTRAL';
+                const idU = l.id_ubicacion || (cod === 'BOD-FLUIDOS' ? 2 : cod === 'MOVIL-01' ? 3 : 1);
+                const nom = l.bodega_nombre || (l as any).zona || (idU === 2 ? 'Almacén de Lubricantes y Químicos' : idU === 3 ? 'Unidad Móvil' : 'Bodega Central Taller');
+                const exist = bMap.get(idU) || { id_ubicacion: idU, codigo: cod, nombre: nom, stock: 0 };
+                exist.stock += Number(l.cantidad_actual || 0);
+                bMap.set(idU, exist);
+            }
+            return Array.from(bMap.values());
+        }
+        if (componenteSeleccionado && componenteSeleccionado.stock_actual > 0) {
+            return [{
+                id_ubicacion: 1,
+                codigo: 'BOD-CENTRAL',
+                nombre: 'Bodega Central Taller',
+                stock: componenteSeleccionado.stock_actual,
+            }];
+        }
+        return [];
+    }, [componenteSeleccionado]);
+
+    // Lotes activos garantizados con id_ubicacion para filtrado FIFO en Salida y Traslado
+    const lotesActivosEfectivos = React.useMemo(() => {
+        if (!componenteSeleccionado?.lotes_activos) return [];
+        return componenteSeleccionado.lotes_activos.map((l: any) => {
+            const cod = l.bodega_codigo || l.bodega || 'BOD-CENTRAL';
+            const idU = l.id_ubicacion || (cod === 'BOD-FLUIDOS' ? 2 : cod === 'MOVIL-01' ? 3 : 1);
+            return {
+                ...l,
+                id_ubicacion: idU,
+                bodega_codigo: cod,
+                bodega_nombre: l.bodega_nombre || l.zona || 'Bodega Central Taller',
+            };
+        });
+    }, [componenteSeleccionado]);
+
     // Encontrar primera bodega con existencias reales (stock > 0) para el ítem
     const getBodegaConStock = (comp: ComponenteStock | null, fallbackId?: string): string => {
-        if (!comp || !comp.bodegas || comp.bodegas.length === 0) {
+        if (!comp) return fallbackId || (bodegas[0]?.id_ubicacion?.toString() || '1');
+        const bList = (comp.bodegas && comp.bodegas.length > 0) ? comp.bodegas : bodegasEfectivas;
+        if (!bList || bList.length === 0) {
             return fallbackId || (bodegas[0]?.id_ubicacion?.toString() || '1');
         }
-        const bodegaConSaldo = comp.bodegas.find((b) => b.stock > 0);
+        const bodegaConSaldo = bList.find((b) => b.stock > 0);
         if (bodegaConSaldo) return bodegaConSaldo.id_ubicacion.toString();
         return fallbackId || (bodegas[0]?.id_ubicacion?.toString() || '1');
     };
@@ -167,13 +212,13 @@ export function MovimientoModal({
         setBodegaDestino(destinoDiff ? destinoDiff.id_ubicacion.toString() : defaultId);
 
         if (componenteSeleccionado) {
-            const stockAudit = componenteSeleccionado.bodegas?.find((b) => b.id_ubicacion.toString() === bestBodegaId)?.stock ?? 0;
+            const stockAudit = bodegasEfectivas.find((b) => b.id_ubicacion.toString() === bestBodegaId)?.stock ?? 0;
             setNuevoStock(stockAudit.toString());
             if (operacionActiva === 'ENTRADA') {
                 setCostoUnitario(componenteSeleccionado.precio_compra?.toString() || '');
             }
         }
-    }, [isOpen, componenteSeleccionado, operacionActiva, bodegas]);
+    }, [isOpen, componenteSeleccionado, bodegasEfectivas, operacionActiva, bodegas]);
 
     if (!isOpen) return null;
 
@@ -181,19 +226,19 @@ export function MovimientoModal({
     const stockActual = componenteSeleccionado?.stock_actual ?? 0;
     const nuevoStockNum = parseFloat(nuevoStock) || 0;
 
-    // Métricas por bodega para cálculos de stock (Estricto Cero Trust: sin fallback a stock global)
+    // Métricas por bodega para cálculos de stock (Estricto Cero Trust con bodegasEfectivas)
     const bodegaAjusteId = parseInt(bodegaAjuste, 10);
     const stockEnBodegaAjuste =
-        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaAjusteId)?.stock ?? 0;
+        bodegasEfectivas.find((b) => b.id_ubicacion === bodegaAjusteId)?.stock ?? 0;
     const deltaAjuste = nuevoStockNum - stockEnBodegaAjuste;
 
     const bodegaSalidaId = parseInt(bodegaSalida, 10);
     const stockEnBodegaSalida =
-        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaSalidaId)?.stock ?? 0;
+        bodegasEfectivas.find((b) => b.id_ubicacion === bodegaSalidaId)?.stock ?? 0;
 
     const bodegaOrigenId = parseInt(bodegaOrigen, 10);
     const stockEnBodegaOrigen =
-        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaOrigenId)?.stock ?? 0;
+        bodegasEfectivas.find((b) => b.id_ubicacion === bodegaOrigenId)?.stock ?? 0;
 
     const isLoading =
         entradaMutation.isPending ||
@@ -653,7 +698,7 @@ export function MovimientoModal({
 
                     {operacionActiva === 'SALIDA' && (
                         <>
-                            {componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0 && (
+                            {lotesActivosEfectivos.length > 0 && (
                                 <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs space-y-1.5">
                                     <div className="flex items-center justify-between">
                                         <span className="font-bold text-amber-900 flex items-center gap-1.5">
@@ -661,11 +706,11 @@ export function MovimientoModal({
                                             Lotes Físicos Disponibles (Sugerencia FIFO/FEFO)
                                         </span>
                                         <span className="text-[10px] text-amber-800 font-semibold uppercase">
-                                            {componenteSeleccionado.lotes_activos.length} {componenteSeleccionado.lotes_activos.length === 1 ? 'lote' : 'lotes'}
+                                            {lotesActivosEfectivos.length} {lotesActivosEfectivos.length === 1 ? 'lote' : 'lotes'}
                                         </span>
                                     </div>
                                     <div className="flex flex-wrap gap-1.5 pt-0.5">
-                                        {componenteSeleccionado.lotes_activos.map((lote) => (
+                                        {lotesActivosEfectivos.map((lote) => (
                                             <span
                                                 key={lote.id_lote}
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-200 rounded font-mono text-[11px] text-slate-800 shadow-2xs"
@@ -697,7 +742,7 @@ export function MovimientoModal({
                                         required
                                     >
                                         {bodegas.map((b) => {
-                                            const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                            const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
                                                     [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
@@ -736,7 +781,7 @@ export function MovimientoModal({
                             </div>
 
                             {/* Selector de Lote Específico si hay varios */}
-                            {componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0 && (
+                            {lotesActivosEfectivos.length > 0 && (
                                 <div className="space-y-1">
                                     <label className="block text-xs font-semibold text-slate-700 uppercase">
                                         Lote a Despachar (FIFO)
@@ -747,7 +792,7 @@ export function MovimientoModal({
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500"
                                     >
                                         <option value="">-- Regla Automática FIFO / FEFO (Recomendado) --</option>
-                                        {componenteSeleccionado.lotes_activos
+                                        {lotesActivosEfectivos
                                             .filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10))
                                             .map((lote) => (
                                                 <option key={lote.id_lote} value={lote.id_lote}>
@@ -755,7 +800,7 @@ export function MovimientoModal({
                                                 </option>
                                             ))}
                                     </select>
-                                    {componenteSeleccionado.lotes_activos.filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10)).length === 0 && (
+                                    {lotesActivosEfectivos.filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10)).length === 0 && (
                                         <p className="text-[11px] text-amber-700 italic">No hay lotes con existencias en la bodega seleccionada.</p>
                                     )}
                                 </div>
@@ -824,14 +869,14 @@ export function MovimientoModal({
                                         onChange={(e) => {
                                             setBodegaAjuste(e.target.value);
                                             const bId = parseInt(e.target.value, 10);
-                                            const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === bId)?.stock ?? 0;
+                                            const s = bodegasEfectivas.find((x) => x.id_ubicacion === bId)?.stock ?? 0;
                                             setNuevoStock(s.toString());
                                         }}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-purple-500 truncate"
                                         required
                                     >
                                         {bodegas.map((b) => {
-                                            const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                            const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
                                                     [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
@@ -896,7 +941,7 @@ export function MovimientoModal({
 
                     {operacionActiva === 'TRASLADO' && (
                         <>
-                            {componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0 && (
+                            {lotesActivosEfectivos.length > 0 && (
                                 <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-xs space-y-1">
                                     <div className="flex items-center justify-between">
                                         <span className="font-bold text-blue-900 flex items-center gap-1.5">
@@ -905,7 +950,7 @@ export function MovimientoModal({
                                         </span>
                                     </div>
                                     <div className="flex flex-wrap gap-1.5 pt-0.5">
-                                        {componenteSeleccionado.lotes_activos.map((lote) => (
+                                        {lotesActivosEfectivos.map((lote) => (
                                             <span
                                                 key={lote.id_lote}
                                                 className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-blue-200 rounded font-mono text-[11px] text-slate-800 shadow-2xs"
@@ -936,7 +981,7 @@ export function MovimientoModal({
                                         required
                                     >
                                         {bodegas.map((b) => {
-                                            const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                            const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
                                                     [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
@@ -1006,7 +1051,7 @@ export function MovimientoModal({
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="">-- Asignación Automática FIFO --</option>
-                                        {(componenteSeleccionado?.lotes_activos || [])
+                                        {(lotesActivosEfectivos || [])
                                             .filter((l) => !bodegaOrigen || l.id_ubicacion === parseInt(bodegaOrigen, 10))
                                             .map((lote) => (
                                                 <option key={lote.id_lote} value={lote.id_lote}>
