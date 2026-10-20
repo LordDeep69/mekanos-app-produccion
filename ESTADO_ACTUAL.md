@@ -3,7 +3,7 @@
 **Fecha de Actualización:** 20 de Octubre de 2026  
 **Versión:** 5.3 Release Candidate (RC-2 - Zero-Trust Certified)  
 **Últimos Commits Clave:** 
-- `pending`: `fix(wms): correccion bug falsy zero en modales multi-bodega, preseleccion inteligente con stock, saneamiento kardex historico y footer sticky`
+- `d59d83f`: `fix(wms): correccion bug falsy zero en modales multi-bodega, preseleccion inteligente con stock, saneamiento kardex historico y footer sticky`
 - `b0abaa9`: `fix(inventario): corregir alias getComponentesStock en InventarioService y solventar HTTP 500`
 - `f8f2e18`: `feat(wms-compras): resolucion auditoria forense multi-bodega, modales y trazabilidad`
 - `1c502bf`: `feat(compras-wms): integracion y certificacion de recepcion automatica de mercancia en almacen, generacion de lotes y kardex`
