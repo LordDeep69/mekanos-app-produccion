@@ -911,6 +911,19 @@ export class InventarioService {
         };
     }
 
+    async getComponentesStock(filtros?: {
+        busqueda?: string;
+        id_tipo?: number;
+        id_categoria?: number;
+        id_ubicacion?: number;
+        estado_stock?: string;
+        solo_criticos?: boolean;
+        skip?: number;
+        limit?: number;
+    }) {
+        return this.listarComponentesConStock(filtros);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // KARDEX GLOBAL AUDITABLE (PESTAÑA 2)
     // ═══════════════════════════════════════════════════════════════════════════
