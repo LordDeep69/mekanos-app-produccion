@@ -49,7 +49,7 @@ import { useMemo, useState } from 'react';
 // COMPONENTES AUXILIARES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function StockBadge({ estado }: { estado: 'OK' | 'BAJO' | 'CRITICO' | 'AGOTADO' }) {
+function StockBadge({ estado, className }: { estado: 'OK' | 'BAJO' | 'CRITICO' | 'AGOTADO'; className?: string }) {
     const config = {
         OK: { bg: 'bg-emerald-50 border-emerald-200 text-emerald-800', label: 'Stock Óptimo' },
         BAJO: { bg: 'bg-amber-50 border-amber-200 text-amber-800', label: 'Stock Bajo' },
@@ -58,7 +58,7 @@ function StockBadge({ estado }: { estado: 'OK' | 'BAJO' | 'CRITICO' | 'AGOTADO' 
     };
     const { bg, label } = config[estado] || config.OK;
     return (
-        <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border', bg)}>
+        <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border whitespace-nowrap shrink-0', bg, className)}>
             {label}
         </span>
     );
@@ -215,32 +215,32 @@ export default function DetalleComponentePage() {
     return (
         <div className="space-y-6">
             {/* Header Ejecutivo Sobrio */}
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">
-                <div className="flex items-start gap-3.5">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-4 lg:p-5 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
                     <Link
                         href="/inventario"
-                        className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors shrink-0 mt-0.5"
+                        className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors shrink-0 mt-0.5 sm:mt-0"
                         title="Volver al Inventario General"
                     >
                         <ArrowLeft className="h-4 w-4" />
                     </Link>
-                    <div>
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-xs font-bold border border-slate-200">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2 min-w-0 flex-nowrap">
+                            <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-xs font-bold border border-slate-200 shrink-0">
                                 {componente.codigo_interno || `ART-${id}`}
                             </span>
-                            <h1 className="text-xl font-bold text-slate-900">
+                            <h1 className="text-lg lg:text-xl font-bold text-slate-900 truncate min-w-0">
                                 {componente.descripcion_corta || componente.referencia_fabricante}
                             </h1>
-                            <StockBadge estado={componente.stock.estado} />
+                            <StockBadge estado={componente.stock.estado} className="shrink-0" />
                             {!componente.activo && (
-                                <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded text-[11px] font-semibold">
+                                <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded text-[11px] font-semibold shrink-0">
                                     INACTIVO
                                 </span>
                             )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+                        <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-500">
                             <span className="font-medium text-slate-700">Ref: {componente.referencia_fabricante || '--'}</span>
                             <span>•</span>
                             <span>Marca: <strong className="text-slate-700">{componente.marca || 'N/A'}</strong></span>
@@ -252,60 +252,60 @@ export default function DetalleComponentePage() {
                     </div>
                 </div>
 
-                {/* Botonera Ejecutiva Homologada */}
-                <div className="flex flex-wrap items-center gap-2 self-start">
+                {/* Botonera Ejecutiva Homologada - 100% Monolínea */}
+                <div className="flex items-center gap-1.5 shrink-0 self-start lg:self-center overflow-x-auto">
                     <Link
                         href={`/compras/catalogo/${id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors whitespace-nowrap shrink-0"
                         title="Ver Ficha Comercial y Matriz de Sourcing en Catálogo"
                     >
                         <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
-                        Ficha Comercial
+                        <span>Ficha Comercial</span>
                     </Link>
 
                     <Link
                         href={`/compras/ordenes/nueva?componenteId=${id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors whitespace-nowrap shrink-0"
                         title="Generar Orden de Compra para este ítem"
                     >
                         <ShoppingBag className="h-3.5 w-3.5" />
-                        Pedir a Proveedor
+                        <span>Pedir a Proveedor</span>
                     </Link>
 
                     <button
                         onClick={() => setModalMovimiento({ open: true, tipo: 'ENTRADA' })}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         title="Registrar Entrada a Inventario"
                     >
                         <ArrowDownCircle className="h-3.5 w-3.5 text-emerald-600" />
-                        Entrada
+                        <span>Entrada</span>
                     </button>
 
                     <button
                         onClick={() => setModalMovimiento({ open: true, tipo: 'SALIDA' })}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         title="Registrar Salida / Despacho"
                     >
                         <ArrowUpCircle className="h-3.5 w-3.5 text-amber-600" />
-                        Salida
+                        <span>Salida</span>
                     </button>
 
                     <button
                         onClick={() => setModalMovimiento({ open: true, tipo: 'AJUSTE' })}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         title="Registrar Ajuste Físico"
                     >
                         <SlidersHorizontal className="h-3.5 w-3.5 text-violet-600" />
-                        Ajuste
+                        <span>Ajuste</span>
                     </button>
 
                     <button
                         onClick={() => setModalMovimiento({ open: true, tipo: 'TRASLADO' })}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         title="Trasladar a otra Bodega"
                     >
                         <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />
-                        Traslado
+                        <span>Traslado</span>
                     </button>
                 </div>
             </div>

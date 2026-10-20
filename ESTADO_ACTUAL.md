@@ -1,8 +1,9 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 20 de Octubre de 2026  
-**Versión:** 5.3 Release Candidate (RC-2)  
+**Versión:** 5.3 Release Candidate (RC-2 - Zero-Trust Certified)  
 **Últimos Commits Clave:** 
+- `pending`: `fix(wms): correccion bug falsy zero en modales multi-bodega, preseleccion inteligente con stock, saneamiento kardex historico y footer sticky`
 - `b0abaa9`: `fix(inventario): corregir alias getComponentesStock en InventarioService y solventar HTTP 500`
 - `f8f2e18`: `feat(wms-compras): resolucion auditoria forense multi-bodega, modales y trazabilidad`
 - `1c502bf`: `feat(compras-wms): integracion y certificacion de recepcion automatica de mercancia en almacen, generacion de lotes y kardex`
@@ -10,7 +11,7 @@
 - `2bf9877`: `docs(estado): consolidar estado maestro v5.1 rc-2 con auditoria de compras e inventario`
 - `275f2c9`: `fix(ordenes/equipos): detectar familia por tipo declarado en tipos_equipo e integrar soporte COMPRESOR`
 - `25bb910`: `fix(inventario): correccion taxonomica backend, saneamiento white-label y pulido UI ejecutiva`
-**Estado General:** ✅ **~97% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
+**Estado General:** ✅ **~97.5% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
 **Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
 
 ---
@@ -60,11 +61,14 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración completa
   - Botón de cabecera **"Ver en Kardex"** redirige con precisión a `/inventario/[id]`.
   - Pestaña 4 (`Existencias y Bodega`) incorpora la tarjeta **"Lotes Físicos Activos en Almacén"** mostrando lotes físicos, códigos, bodega, cantidades disponibles y fechas de vencimiento.
 
-### 3. Modal de Operaciones WMS (`MovimientoModal`)
-- Selector contextual de artículo con botón visible y permanente de "Cambiar artículo".
-- Cálculo automático de costos unitarios con preview formateado en moneda colombiana (COP).
-- Selectores de bodega normalizados en formato `[COD] Zona` para evitar clipping en pantallas estándar.
-- Banners inteligentes con sugerencias de lotes físicos disponibles según rotación FIFO/FEFO para salidas y traslados.
+### 3. Modal de Operaciones WMS (`MovimientoModal`) — **Certificación Zero-Trust**
+- **Eliminación del Bug "Falsy Zero":** Erradicada la evaluación booleana `0 || stock_global`. El saldo se evalúa estrictamente como `stockPorBodega[id] ?? 0`, bloqueando despachos y traslados si la bodega seleccionada tiene 0 unidades.
+- **Autoselección Inteligente de Bodega con Stock:** Al abrir `Salida`, `Ajuste` o `Traslado`, el sistema preselecciona automáticamente la primera bodega con existencias reales (`stock > 0`) para el artículo (ej: `BOD-FLUIDOS` para ART-2026-0014), y en traslado selecciona un destino diferente al origen.
+- **Formato Conciso en Selectores de Bodega:** Las opciones despliegan la disponibilidad al inicio: `[BOD-FLUIDOS] (Disp: 62 GALON) • Almacén de Lubricantes y Químicos`, eliminando los cortes con puntos suspensivos.
+- **Selector de Lote en Salida (FIFO):** Igual que en traslado, el tab `Salida` incorpora el selector `LOTE A DESPACHAR (FIFO)` reactivo a la bodega de origen seleccionada.
+- **Footer Sticky y Compactación Ergonómica:** El contenedor de botones `Cancelar` y `Confirmar Operación` está fijado en la base (`sticky bottom-0 bg-slate-50/90 border-t z-20`) y el cuerpo interno cuenta con scroll independiente (`overflow-y-auto space-y-3.5`), asegurando visibilidad total en cualquier resolución.
+- **Cabecera Monolínea en `/inventario/[id]`:** Título, código SKU y `StockBadge` blindados con `min-w-0 flex-nowrap`, y botones de acción homologados en tamaño (`h-8 px-2.5 text-xs`) para permanecer en una sola fila horizontal limpia.
+- **Saneamiento de Kardex en BD:** Normalizados los movimientos históricos 54 (`ART-2026-0014`), 48, 51 y 53 para asignarles de forma consistente `id_ubicacion` e `id_lote` concordantes con sus existencias reales.
 
 ### 4. Soporte de Familias de Equipos y Órdenes (`/equipos` y `/ordenes`)
 - Nueva naturaleza **COMPRESOR** completamente integrada en backend y frontend (código autogenerado, parámetros de medición, discriminadores de servicio preventivo y compatibilidad en wizard).

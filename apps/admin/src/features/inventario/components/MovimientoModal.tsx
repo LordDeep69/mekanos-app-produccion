@@ -140,26 +140,40 @@ export function MovimientoModal({
         }
     }, [isOpen, componentePreseleccionado]);
 
-    // Autoseleccionar primera bodega activa
-    useEffect(() => {
-        if (bodegas.length > 0) {
-            if (!bodegaEntrada) setBodegaEntrada(bodegas[0].id_ubicacion.toString());
-            if (!bodegaSalida) setBodegaSalida(bodegas[0].id_ubicacion.toString());
-            if (!bodegaAjuste) setBodegaAjuste(bodegas[0].id_ubicacion.toString());
-            if (!bodegaOrigen) setBodegaOrigen(bodegas[0].id_ubicacion.toString());
-            if (!bodegaDestino && bodegas.length > 1) setBodegaDestino(bodegas[1].id_ubicacion.toString());
+    // Encontrar primera bodega con existencias reales (stock > 0) para el ítem
+    const getBodegaConStock = (comp: ComponenteStock | null, fallbackId?: string): string => {
+        if (!comp || !comp.bodegas || comp.bodegas.length === 0) {
+            return fallbackId || (bodegas[0]?.id_ubicacion?.toString() || '1');
         }
-    }, [bodegas]);
+        const bodegaConSaldo = comp.bodegas.find((b) => b.stock > 0);
+        if (bodegaConSaldo) return bodegaConSaldo.id_ubicacion.toString();
+        return fallbackId || (bodegas[0]?.id_ubicacion?.toString() || '1');
+    };
 
-    // Establecer costo unitario al cambiar componente para ENTRADA
+    // Preselección inteligente de bodegas según existencias del componente
     useEffect(() => {
-        if (componenteSeleccionado && operacionActiva === 'ENTRADA') {
-            setCostoUnitario(componenteSeleccionado.precio_compra?.toString() || '');
+        if (!isOpen || bodegas.length === 0) return;
+
+        const defaultId = bodegas[0].id_ubicacion.toString();
+        const bestBodegaId = getBodegaConStock(componenteSeleccionado, defaultId);
+
+        if (!bodegaEntrada) setBodegaEntrada(defaultId);
+        setBodegaSalida(bestBodegaId);
+        setBodegaAjuste(bestBodegaId);
+        setBodegaOrigen(bestBodegaId);
+
+        // En traslado, seleccionar un destino diferente al origen
+        const destinoDiff = bodegas.find((b) => b.id_ubicacion.toString() !== bestBodegaId);
+        setBodegaDestino(destinoDiff ? destinoDiff.id_ubicacion.toString() : defaultId);
+
+        if (componenteSeleccionado) {
+            const stockAudit = componenteSeleccionado.bodegas?.find((b) => b.id_ubicacion.toString() === bestBodegaId)?.stock ?? 0;
+            setNuevoStock(stockAudit.toString());
+            if (operacionActiva === 'ENTRADA') {
+                setCostoUnitario(componenteSeleccionado.precio_compra?.toString() || '');
+            }
         }
-        if (componenteSeleccionado && operacionActiva === 'AJUSTE') {
-            setNuevoStock(componenteSeleccionado.stock_actual.toString());
-        }
-    }, [componenteSeleccionado, operacionActiva]);
+    }, [isOpen, componenteSeleccionado, operacionActiva, bodegas]);
 
     if (!isOpen) return null;
 
@@ -167,19 +181,19 @@ export function MovimientoModal({
     const stockActual = componenteSeleccionado?.stock_actual ?? 0;
     const nuevoStockNum = parseFloat(nuevoStock) || 0;
 
-    // Métricas por bodega para cálculos de stock
+    // Métricas por bodega para cálculos de stock (Estricto Cero Trust: sin fallback a stock global)
     const bodegaAjusteId = parseInt(bodegaAjuste, 10);
     const stockEnBodegaAjuste =
-        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaAjusteId)?.stock ?? stockActual;
+        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaAjusteId)?.stock ?? 0;
     const deltaAjuste = nuevoStockNum - stockEnBodegaAjuste;
 
     const bodegaSalidaId = parseInt(bodegaSalida, 10);
     const stockEnBodegaSalida =
-        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaSalidaId)?.stock ?? stockActual;
+        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaSalidaId)?.stock ?? 0;
 
     const bodegaOrigenId = parseInt(bodegaOrigen, 10);
     const stockEnBodegaOrigen =
-        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaOrigenId)?.stock ?? stockActual;
+        componenteSeleccionado?.bodegas?.find((b) => b.id_ubicacion === bodegaOrigenId)?.stock ?? 0;
 
     const isLoading =
         entradaMutation.isPending ||
@@ -354,11 +368,11 @@ export function MovimientoModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
 
-            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden">
                 {/* Header Corporativo Elegante */}
-                <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
+                <div className="flex items-center justify-between px-5 py-3.5 bg-white border-b border-slate-200 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className={cn('p-2.5 rounded-lg border', visualConfig.badgeClass)}>
+                        <div className={cn('p-2 rounded-lg border', visualConfig.badgeClass)}>
                             <Icon className="h-5 w-5" />
                         </div>
                         <div>
@@ -368,14 +382,15 @@ export function MovimientoModal({
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                     >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                {/* Formulario */}
-                <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
+                {/* Formulario con Scroll Interno y Footer Fijo */}
+                <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <div className="p-5 overflow-y-auto space-y-3.5 flex-1">
                     {/* Selector Segmentado de Operación */}
                     <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                         {(['ENTRADA', 'SALIDA', 'AJUSTE', 'TRASLADO'] as TipoOperacionInventario[]).map((op) => (
@@ -674,7 +689,10 @@ export function MovimientoModal({
                                     </label>
                                     <select
                                         value={bodegaSalida}
-                                        onChange={(e) => setBodegaSalida(e.target.value)}
+                                        onChange={(e) => {
+                                            setBodegaSalida(e.target.value);
+                                            setLoteSalida('');
+                                        }}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500 truncate"
                                         required
                                     >
@@ -682,7 +700,7 @@ export function MovimientoModal({
                                             const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                    [{b.codigo_ubicacion}] {b.zona || 'Bodega Principal'} (Disp: {s} {componenteSeleccionado?.unidad || 'UND'})
+                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
                                                 </option>
                                             );
                                         })}
@@ -695,24 +713,33 @@ export function MovimientoModal({
                                     <input
                                         type="number"
                                         min="1"
-                                        max={stockEnBodegaSalida}
+                                        max={stockEnBodegaSalida > 0 ? stockEnBodegaSalida : 1}
+                                        disabled={stockEnBodegaSalida <= 0}
                                         placeholder="0"
                                         value={cantidad}
                                         onChange={(e) => setCantidad(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-amber-500"
+                                        className={cn(
+                                            'w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-amber-500',
+                                            stockEnBodegaSalida <= 0 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'border-slate-300'
+                                        )}
                                         required
                                     />
-                                    <span className="text-[11px] text-slate-500 mt-1 block">
-                                        Disponible en bodega: {stockEnBodegaSalida} {componenteSeleccionado?.unidad || 'UND'}
+                                    <span className={cn(
+                                        'text-[11px] font-medium mt-1 block',
+                                        stockEnBodegaSalida > 0 ? 'text-slate-500' : 'text-rose-600 font-semibold'
+                                    )}>
+                                        {stockEnBodegaSalida > 0
+                                            ? `Disponible en bodega: ${stockEnBodegaSalida} ${componenteSeleccionado?.unidad || 'UND'}`
+                                            : `⚠️ Sin existencias en esta bodega (${stockEnBodegaSalida} ${componenteSeleccionado?.unidad || 'UND'}). Despacho no disponible.`}
                                     </span>
                                 </div>
                             </div>
 
                             {/* Selector de Lote Específico si hay varios */}
                             {componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0 && (
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                                        Lote a Despachar (Opcional)
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-semibold text-slate-700 uppercase">
+                                        Lote a Despachar (FIFO)
                                     </label>
                                     <select
                                         value={loteSalida}
@@ -724,10 +751,13 @@ export function MovimientoModal({
                                             .filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10))
                                             .map((lote) => (
                                                 <option key={lote.id_lote} value={lote.id_lote}>
-                                                    Lote {lote.codigo_lote} - Disp: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'} {lote.fecha_vencimiento ? `(Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')})` : ''}
+                                                    [{lote.codigo_lote}] Disp: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'} {lote.fecha_vencimiento ? `• Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}` : ''}
                                                 </option>
                                             ))}
                                     </select>
+                                    {componenteSeleccionado.lotes_activos.filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10)).length === 0 && (
+                                        <p className="text-[11px] text-amber-700 italic">No hay lotes con existencias en la bodega seleccionada.</p>
+                                    )}
                                 </div>
                             )}
 
@@ -794,7 +824,7 @@ export function MovimientoModal({
                                         onChange={(e) => {
                                             setBodegaAjuste(e.target.value);
                                             const bId = parseInt(e.target.value, 10);
-                                            const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === bId)?.stock ?? stockActual;
+                                            const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === bId)?.stock ?? 0;
                                             setNuevoStock(s.toString());
                                         }}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-purple-500 truncate"
@@ -804,7 +834,7 @@ export function MovimientoModal({
                                             const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                    [{b.codigo_ubicacion}] {b.zona || 'Bodega Principal'} (Disp: {s} {componenteSeleccionado?.unidad || 'UND'})
+                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
                                                 </option>
                                             );
                                         })}
@@ -894,7 +924,14 @@ export function MovimientoModal({
                                     </label>
                                     <select
                                         value={bodegaOrigen}
-                                        onChange={(e) => setBodegaOrigen(e.target.value)}
+                                        onChange={(e) => {
+                                            setBodegaOrigen(e.target.value);
+                                            setLoteTraslado('');
+                                            if (bodegaDestino === e.target.value) {
+                                                const otra = bodegas.find((b) => b.id_ubicacion.toString() !== e.target.value);
+                                                if (otra) setBodegaDestino(otra.id_ubicacion.toString());
+                                            }
+                                        }}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 truncate"
                                         required
                                     >
@@ -902,7 +939,7 @@ export function MovimientoModal({
                                             const s = componenteSeleccionado?.bodegas?.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                    [{b.codigo_ubicacion}] {b.zona || 'Bodega Principal'} (Disp: {s} {componenteSeleccionado?.unidad || 'UND'})
+                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
                                                 </option>
                                             );
                                         })}
@@ -939,20 +976,29 @@ export function MovimientoModal({
                                     <input
                                         type="number"
                                         min="1"
-                                        max={stockEnBodegaOrigen}
+                                        max={stockEnBodegaOrigen > 0 ? stockEnBodegaOrigen : 1}
+                                        disabled={stockEnBodegaOrigen <= 0}
                                         placeholder="0"
                                         value={cantidad}
                                         onChange={(e) => setCantidad(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-blue-500"
+                                        className={cn(
+                                            'w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-blue-500',
+                                            stockEnBodegaOrigen <= 0 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'border-slate-300'
+                                        )}
                                         required
                                     />
-                                    <span className="text-[11px] text-slate-500 mt-1 block">
-                                        Disponible en origen: {stockEnBodegaOrigen} {componenteSeleccionado?.unidad || 'UND'}
+                                    <span className={cn(
+                                        'text-[11px] font-medium mt-1 block',
+                                        stockEnBodegaOrigen > 0 ? 'text-slate-500' : 'text-rose-600 font-semibold'
+                                    )}>
+                                        {stockEnBodegaOrigen > 0
+                                            ? `Disponible en origen: ${stockEnBodegaOrigen} ${componenteSeleccionado?.unidad || 'UND'}`
+                                            : `⚠️ Sin existencias en origen (${stockEnBodegaOrigen} ${componenteSeleccionado?.unidad || 'UND'}). Traslado no disponible.`}
                                     </span>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                                        Lote a Trasladar (Opcional)
+                                        Lote a Trasladar (FIFO)
                                     </label>
                                     <select
                                         value={loteTraslado}
@@ -999,30 +1045,31 @@ export function MovimientoModal({
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                         />
                     </div>
+                </div>
 
-                    {/* Botones de acción */}
-                    <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isLoading || success}
-                            className={cn(
-                                'px-5 py-2 text-sm font-semibold text-white rounded-lg flex items-center gap-2 shadow-xs transition-colors',
-                                visualConfig.btnBg,
-                                'disabled:opacity-50'
-                            )}
-                        >
-                            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Confirmar Operación
-                        </button>
-                    </div>
-                </form>
+                {/* Botones de acción - Footer Sticky / Fijo */}
+                <div className="px-5 py-3 bg-slate-50/90 backdrop-blur-xs border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200/60 rounded-lg font-medium transition-colors cursor-pointer"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isLoading || success}
+                        className={cn(
+                            'px-5 py-2 text-sm font-semibold text-white rounded-lg flex items-center gap-2 shadow-xs transition-colors cursor-pointer',
+                            visualConfig.btnBg,
+                            'disabled:opacity-50'
+                        )}
+                    >
+                        {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Confirmar Operación
+                    </button>
+                </div>
+            </form>
             </div>
         </div>
     );

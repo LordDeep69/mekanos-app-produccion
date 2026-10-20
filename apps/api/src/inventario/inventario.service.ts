@@ -1118,7 +1118,7 @@ export class InventarioService {
                     },
                     movimientos_inventario: {
                         take: 1,
-                        where: { tipo_movimiento: 'ENTRADA' },
+                        orderBy: { fecha_movimiento: 'desc' },
                         include: {
                             ubicaciones_bodega: true,
                         },

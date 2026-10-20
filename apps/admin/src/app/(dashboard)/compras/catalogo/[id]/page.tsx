@@ -1534,11 +1534,12 @@ export default function FichaArticulo360Page() {
 
                             <td className="py-3 px-4 text-gray-700">
                               {m.ubicaciones_bodega ? (
-                                <span className="font-mono text-[11px]">
+                                <span className="font-medium text-slate-800 text-xs">
+                                  <span className="font-mono text-slate-500 font-semibold mr-1">[{m.ubicaciones_bodega.codigo_ubicacion}]</span>
                                   {m.ubicaciones_bodega.zona || m.ubicaciones_bodega.codigo_ubicacion}
                                 </span>
                               ) : (
-                                <span className="text-gray-400 italic">Bodega General</span>
+                                <span className="text-slate-400 italic text-xs">Bodega Central Taller</span>
                               )}
                             </td>
 
