@@ -146,16 +146,10 @@ export class OrdenServicioEntity {
     // Validar fecha programada si se proporciona
     if (props.fechaProgramada) {
       const fecha = new Date(props.fechaProgramada);
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-
-      // Permitir fechas desde ayer para evitar problemas de desfase horario (UTC vs Local)
-      // durante la validación de "hoy"
-      const limitePasado = new Date(hoy.getTime() - 24 * 60 * 60 * 1000);
-
-      if (fecha < limitePasado) {
-        throw new Error('Fecha programada no puede ser en el pasado');
+      if (isNaN(fecha.getTime())) {
+        throw new Error('Fecha programada inválida');
       }
+      // Se permite explícitamente programar órdenes con fecha anterior para registros retroactivos/históricos
     }
   }
 
@@ -172,18 +166,10 @@ export class OrdenServicioEntity {
       );
     }
 
-    // Validar fecha futura
+    // Validar fecha válida
     const fecha = new Date(fechaProgramada);
-    if (fecha < new Date()) {
-      throw new Error('Fecha programada debe ser futura');
-    }
-
-    // Validar que no sea más de 90 días en futuro
-    const diasFuturo = Math.ceil(
-      (fecha.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-    );
-    if (diasFuturo > 90) {
-      throw new Error('Fecha programada no puede ser más de 90 días en el futuro');
+    if (isNaN(fecha.getTime())) {
+      throw new Error('Fecha programada inválida');
     }
 
     this._fechaProgramada = fecha;

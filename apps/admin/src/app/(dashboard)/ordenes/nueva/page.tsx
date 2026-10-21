@@ -12,6 +12,16 @@
 
 'use client';
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -949,23 +959,39 @@ function PasoAlcance({
                     </div>
                 </div>
                 <div>
-                    <label className="text-sm font-bold text-slate-700 uppercase mb-3 block">
-                        Fecha Programada <span className="text-red-500">*</span>
+                    <label className="text-sm font-bold text-slate-700 uppercase mb-3 flex items-center justify-between">
+                        <span>Fecha Programada <span className="text-red-500">*</span></span>
+                        {Boolean(data.fechaProgramada && data.fechaProgramada < new Date().toISOString().split('T')[0]) && (
+                            <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3 text-amber-600" /> Fecha Anterior
+                            </span>
+                        )}
                     </label>
                     <input
                         type="date"
                         value={data.fechaProgramada || ''}
                         onChange={(e) => onChange({ fechaProgramada: e.target.value })}
-                        min={new Date().toISOString().split('T')[0]}
                         className={cn(
-                            "w-full p-2 border-2 rounded-xl text-sm outline-none focus:border-blue-500",
-                            !data.fechaProgramada && "border-red-200 bg-red-50"
+                            "w-full p-2.5 border-2 rounded-xl text-sm outline-none transition-colors",
+                            !data.fechaProgramada && "border-red-200 bg-red-50",
+                            data.fechaProgramada && !(data.fechaProgramada < new Date().toISOString().split('T')[0]) && "border-slate-200 focus:border-blue-500",
+                            Boolean(data.fechaProgramada && data.fechaProgramada < new Date().toISOString().split('T')[0]) && "border-amber-400 bg-amber-50/60 focus:border-amber-500 text-amber-950 font-medium"
                         )}
                         required
                     />
-                    {!data.fechaProgramada && (
+                    {!data.fechaProgramada ? (
                         <p className="text-xs text-red-500 mt-1">La fecha es obligatoria</p>
-                    )}
+                    ) : data.fechaProgramada < new Date().toISOString().split('T')[0] ? (
+                        <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5">
+                                <p className="font-bold text-amber-950">Aviso de Fecha Retroactiva</p>
+                                <p className="text-amber-800 text-[11px] leading-relaxed">
+                                    Ha seleccionado el <strong>{data.fechaProgramada}</strong>, que es anterior a la fecha de hoy. El sistema permitirá registrar la orden con fines históricos o auditoría, y le solicitará confirmación antes de crearla.
+                                </p>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </div>
@@ -1012,6 +1038,8 @@ function PasoAsignacion({
 }
 
 function ResumenOrden({ data }: { data: WizardData }) {
+    const esFechaPasada = Boolean(data.fechaProgramada && data.fechaProgramada < new Date().toISOString().split('T')[0]);
+
     return (
         <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl space-y-6">
             <h4 className="font-bold text-blue-400 text-xs uppercase tracking-widest flex items-center gap-2">
@@ -1036,6 +1064,19 @@ function ResumenOrden({ data }: { data: WizardData }) {
                         {data.tipoServicioSeleccionado?.nombre_tipo || 'N/A'}
                     </p>
                 </div>
+                {data.fechaProgramada && (
+                    <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Fecha Programada</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <p className="font-bold text-slate-100 text-xs">{data.fechaProgramada}</p>
+                            {esFechaPasada && (
+                                <span className="text-[10px] font-semibold text-amber-300 bg-amber-950/80 border border-amber-700/80 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <AlertTriangle className="h-2.5 w-2.5 text-amber-400" /> Retroactiva
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
                 {data.serviciosCorrectivosSeleccionados && data.serviciosCorrectivosSeleccionados.length > 0 && (
                     <div>
                         <p className="text-orange-400 text-[10px] uppercase font-bold tracking-wider">
@@ -1089,6 +1130,7 @@ export default function NuevaOrdenPage() {
         prioridad: 'NORMAL',
         equiposSeleccionados: [],
     });
+    const [showRetroactivaModal, setShowRetroactivaModal] = useState(false);
 
     // Pre-cargar catálogos de servicios en segundo plano para que al avanzar al Paso 2 la carga sea instantánea (0ms)
     useWizardCatalogos();
@@ -1107,8 +1149,9 @@ export default function NuevaOrdenPage() {
         return true;
     };
 
-    const handleSubmit = async () => {
-        if (!canContinue()) return;
+    const esFechaPasada = Boolean(data.fechaProgramada && data.fechaProgramada < new Date().toISOString().split('T')[0]);
+
+    const ejecutarCreacion = async () => {
         try {
             const result = await crearOrden.mutateAsync({
                 clienteId: data.clienteId!,
@@ -1127,7 +1170,20 @@ export default function NuevaOrdenPage() {
             });
             if (result.data?.id_orden_servicio) router.push(`/ordenes/${result.data.id_orden_servicio}`);
             else router.push('/ordenes');
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setShowRetroactivaModal(false);
+        }
+    };
+
+    const handleSubmit = () => {
+        if (!canContinue()) return;
+        if (esFechaPasada) {
+            setShowRetroactivaModal(true);
+            return;
+        }
+        ejecutarCreacion();
     };
 
     return (
@@ -1165,6 +1221,47 @@ export default function NuevaOrdenPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Modal de Alerta y Confirmación para Órdenes con Fecha Anterior */}
+            <AlertDialog open={showRetroactivaModal} onOpenChange={setShowRetroactivaModal}>
+                <AlertDialogContent className="max-w-md">
+                    <AlertDialogHeader>
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 mb-3 shadow-inner">
+                            <AlertTriangle className="h-7 w-7 text-amber-600" />
+                        </div>
+                        <AlertDialogTitle className="text-center text-lg font-bold text-slate-900">
+                            ¿Crear Orden con Fecha Anterior?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-center text-slate-600 text-sm space-y-2 pt-1">
+                            <span>
+                                Ha seleccionado como fecha programada el <strong className="text-amber-900 bg-amber-100/70 px-1.5 py-0.5 rounded font-mono">{data.fechaProgramada}</strong>, la cual es <strong>anterior a la fecha de hoy</strong>.
+                            </span>
+                            <span className="block text-xs text-slate-500 pt-1">
+                                Esta orden quedará registrada con fecha retroactiva para fines de auditoría, archivo o regularización de servicios ya ejecutados.
+                            </span>
+                            <span className="block font-semibold text-slate-800 pt-1">
+                                ¿Está seguro de que desea proceder con la creación?
+                            </span>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="sm:justify-center gap-3 mt-4">
+                        <AlertDialogCancel disabled={crearOrden.isPending} className="border-slate-300">
+                            Cancelar y Revisar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                ejecutarCreacion();
+                            }}
+                            disabled={crearOrden.isPending}
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-md"
+                        >
+                            {crearOrden.isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
+                            Sí, Crear con Fecha Anterior
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
