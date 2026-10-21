@@ -1119,6 +1119,8 @@ function TabFinanciero({ orden }: { orden: Orden }) {
     const [isAddServicioOpen, setIsAddServicioOpen] = useState(false);
     const [isDespacharRepuestoOpen, setIsDespacharRepuestoOpen] = useState(false);
     const [reintegrandoId, setReintegrandoId] = useState<number | null>(null);
+    const [componenteAReintegrar, setComponenteAReintegrar] = useState<ComponenteUsadoOrden | null>(null);
+    const [servicioAEliminar, setServicioAEliminar] = useState<any | null>(null);
 
     const { data: serviciosData, isLoading } = useServiciosOrden(orden.id_orden_servicio);
     const { data: componentesData, isLoading: isLoadingComponentes } = useComponentesOrden(orden.id_orden_servicio);
@@ -1145,30 +1147,39 @@ function TabFinanciero({ orden }: { orden: Orden }) {
     const totalGastosVivo = Number(orden.total_gastos) || 0;
     const totalGeneralVivo = totalServiciosVivo + totalComponentesVivo + totalGastosVivo;
 
-    const handleRemove = async (idDetalle: number) => {
-        if (window.confirm('¿Deseas eliminar este servicio de la orden?')) {
+    const handleConfirmarEliminarServicio = async () => {
+        if (!servicioAEliminar) return;
+        try {
             await removeServicio.mutateAsync({
                 idOrden: orden.id_orden_servicio,
-                idDetalle
+                idDetalle: servicioAEliminar.id_detalle_servicio,
             });
+            toast.success('Servicio retirado de la orden exitosamente');
+            setServicioAEliminar(null);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Error al eliminar el servicio');
         }
     };
 
-    const handleReintegrarComponente = async (comp: ComponenteUsadoOrden) => {
+    const handleConfirmarReintegro = async (motivo: string) => {
+        if (!componenteAReintegrar) return;
+        const comp = componenteAReintegrar;
         const esBodega = comp.origen_componente === 'BODEGA' && comp.id_componente;
-        const msg = esBodega
-            ? `¿Confirmas el REINTEGRO FÍSICO de ${comp.cantidad} ${comp.unidad || 'UND'} de "${comp.descripcion}" a la bodega ${comp.bodega_codigo || 'WMS'}?
-
-Esta operación restaurará el stock en catálogo/lote, asentará una ENTRADA por DEVOLUCIÓN en el Kardex y descontará ${Number(comp.costo_total || 0).toLocaleString('es-CO')} COP de la orden.`
-            : `¿Deseas eliminar el insumo de compra directa "${comp.descripcion}" y descontar ${Number(comp.costo_total || 0).toLocaleString('es-CO')} COP de la orden?`;
-        if (!window.confirm(msg)) return;
         try {
             setReintegrandoId(comp.id_componente_usado);
             await removeComponente.mutateAsync({
                 idOrden: orden.id_orden_servicio,
                 idUso: comp.id_componente_usado,
-                motivo: `Reintegro desde Orden ${orden.numero_orden}`,
+                motivo: motivo || `Reintegro desde Orden ${orden.numero_orden}`,
             });
+            toast.success(
+                esBodega
+                    ? `Repuesto reintegrado a ${comp.bodega_codigo || 'Bodega WMS'} con contra-asiento en Kardex`
+                    : 'Registro de compra directa eliminado de la orden'
+            );
+            setComponenteAReintegrar(null);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Error al reintegrar el repuesto');
         } finally {
             setReintegrandoId(null);
         }
@@ -1346,7 +1357,7 @@ Esta operación restaurará el stock en catálogo/lote, asentará una ENTRADA po
                                                 <button
                                                     type="button"
                                                     disabled={isReintegrando}
-                                                    onClick={() => handleReintegrarComponente(c)}
+                                                    onClick={() => setComponenteAReintegrar(c)}
                                                     title={
                                                         c.origen_componente === 'BODEGA'
                                                             ? 'Reintegrar repuesto al almacén WMS y revertir cargo en la orden'
@@ -1423,7 +1434,7 @@ Esta operación restaurará el stock en catálogo/lote, asentará una ENTRADA po
                                         <td className="px-6 py-4 text-right text-sm font-bold text-blue-700">${Number(s.subtotal).toLocaleString('es-CO')}</td>
                                         <td className="px-6 py-4 text-right">
                                             <button
-                                                onClick={() => handleRemove(s.id_detalle_servicio)}
+                                                onClick={() => setServicioAEliminar(s)}
                                                 className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                                             >
                                                 <Trash2 className="h-4 w-4" />
@@ -1454,6 +1465,278 @@ Esta operación restaurará el stock en catálogo/lote, asentará una ENTRADA po
                     orden={orden}
                 />
             )}
+
+            {/* Modal Enterprise para confirmar reintegro físico a bodega WMS */}
+            {componenteAReintegrar && (
+                <ModalConfirmarReintegro
+                    isOpen={!!componenteAReintegrar}
+                    onClose={() => setComponenteAReintegrar(null)}
+                    componente={componenteAReintegrar}
+                    orden={orden}
+                    onConfirm={handleConfirmarReintegro}
+                    isPending={removeComponente.isPending || !!reintegrandoId}
+                />
+            )}
+
+            {/* Modal Enterprise para confirmar eliminación de servicio facturado */}
+            {servicioAEliminar && (
+                <ModalConfirmarEliminarServicio
+                    isOpen={!!servicioAEliminar}
+                    onClose={() => setServicioAEliminar(null)}
+                    servicio={servicioAEliminar}
+                    orden={orden}
+                    onConfirm={handleConfirmarEliminarServicio}
+                    isPending={removeServicio.isPending}
+                />
+            )}
+        </div>
+    );
+}
+
+function ModalConfirmarReintegro({
+    isOpen,
+    onClose,
+    componente,
+    orden,
+    onConfirm,
+    isPending,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    componente: ComponenteUsadoOrden;
+    orden: Orden;
+    onConfirm: (motivo: string) => Promise<void>;
+    isPending: boolean;
+}) {
+    const [motivo, setMotivo] = useState('');
+    const esBodega = componente.origen_componente === 'BODEGA' && !!componente.id_componente;
+    const costoTotal = Number(componente.costo_total || 0);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await onConfirm(motivo.trim());
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onClick={onClose} />
+
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white">
+                    <div className="flex items-center gap-3">
+                        <div className={cn(
+                            'p-2.5 rounded-xl border shadow-2xs',
+                            esBodega
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                        )}>
+                            <RotateCcw className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900">
+                                {esBodega ? 'Confirmar Reintegro Físico a Bodega' : 'Eliminar Insumo de Orden'}
+                            </h3>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-xs text-slate-500">Orden de Servicio:</span>
+                                <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
+                                    {orden.numero_orden}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                    {/* Ficha Resumen del Repuesto */}
+                    <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+                                    {componente.sku || `ART-${componente.id_componente || 'EXT'}`}
+                                </span>
+                                <p className="text-sm font-bold text-slate-900 mt-1.5 leading-snug">
+                                    {componente.descripcion}
+                                </p>
+                            </div>
+                            <span className="font-mono text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg shrink-0">
+                                -${costoTotal.toLocaleString('es-CO')} COP
+                            </span>
+                        </div>
+
+                        {/* Metadatos Logísticos */}
+                        <div className="grid grid-cols-2 gap-2.5 pt-2.5 border-t border-slate-200 text-xs">
+                            <div>
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Cantidad a Restituir</span>
+                                <span className="font-bold text-slate-900 text-sm">
+                                    {Number(componente.cantidad)} {componente.unidad || 'UND'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                                    {esBodega ? 'Bodega Destino' : 'Tipo Imputación'}
+                                </span>
+                                <span className="font-semibold text-slate-800 truncate block">
+                                    {esBodega
+                                        ? `[${componente.bodega_codigo || 'BOD'}] ${componente.bodega_nombre || 'Bodega'}`
+                                        : 'Compra Directa en Campo'}
+                                </span>
+                            </div>
+                            {componente.codigo_lote && (
+                                <div>
+                                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Lote Físico</span>
+                                    <span className="font-mono font-semibold text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                        {componente.codigo_lote}
+                                    </span>
+                                </div>
+                            )}
+                            {componente.id_movimiento_inventario && (
+                                <div>
+                                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Asiento Kardex Origen</span>
+                                    <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                        KARDEX #{componente.id_movimiento_inventario}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Alerta de Auditoría Zero-Trust */}
+                    <div className="p-3.5 bg-rose-50/70 border border-rose-200/80 rounded-xl flex items-start gap-2.5 shadow-2xs">
+                        <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                        <div className="text-xs text-rose-900 leading-relaxed">
+                            {esBodega ? (
+                                <>
+                                    Esta operación ejecutará un <strong>contra-asiento inmutable de ENTRADA por DEVOLUCIÓN en el Kardex</strong>, incrementará el saldo físico del almacén/lote y descontará <strong>${costoTotal.toLocaleString('es-CO')} COP</strong> del costo acumulado de la orden.
+                                </>
+                            ) : (
+                                <>
+                                    Esta operación eliminará el registro de insumo imputado y descontará <strong>${costoTotal.toLocaleString('es-CO')} COP</strong> del balance de componentes de la orden.
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Input opcional de justificación */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                            Motivo / Justificación de la Devolución (Opcional)
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="Ej: Material sobrante no instalado / Error de digitación / Sustituido en campo..."
+                            value={motivo}
+                            onChange={(e) => setMotivo(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 transition-all"
+                        />
+                    </div>
+
+                    {/* Footer */}
+                    <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={isPending}
+                            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isPending}
+                            className={cn(
+                                'px-4 py-2.5 text-xs font-bold text-white rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer',
+                                esBodega
+                                    ? 'bg-amber-600 hover:bg-amber-700'
+                                    : 'bg-rose-600 hover:bg-rose-700',
+                                isPending && 'opacity-60 cursor-not-allowed'
+                            )}
+                        >
+                            {isPending ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <RotateCcw className="h-3.5 w-3.5" />
+                            )}
+                            {esBodega ? 'Confirmar Reintegro a Bodega' : 'Confirmar Eliminación'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function ModalConfirmarEliminarServicio({
+    isOpen,
+    onClose,
+    servicio,
+    orden,
+    onConfirm,
+    isPending,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    servicio: any;
+    orden: Orden;
+    onConfirm: () => Promise<void>;
+    isPending: boolean;
+}) {
+    if (!isOpen || !servicio) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                            <Trash2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900">Eliminar Servicio de la Orden</h3>
+                            <span className="font-mono text-xs text-slate-500">{orden.numero_orden}</span>
+                        </div>
+                    </div>
+                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                        <span className="font-mono text-[10px] font-bold text-slate-500 uppercase">{servicio.catalogo_servicios?.codigo_servicio}</span>
+                        <p className="text-sm font-bold text-slate-900">{servicio.catalogo_servicios?.nombre_servicio}</p>
+                        <p className="text-xs text-slate-600 font-mono pt-1">
+                            Subtotal: ${Number(servicio.subtotal || 0).toLocaleString('es-CO')} COP
+                        </p>
+                    </div>
+                    <p className="text-xs text-slate-600">
+                        ¿Confirmas que deseas retirar este servicio de la orden? El valor del servicio se descontará del balance total.
+                    </p>
+                    <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+                        <button type="button" onClick={onClose} disabled={isPending} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer">
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            disabled={isPending}
+                            className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            Eliminar Servicio
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
