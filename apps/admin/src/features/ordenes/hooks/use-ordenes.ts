@@ -236,10 +236,12 @@ export function useRemoveServicioOrden() {
  * ✅ INTEGRACIÓN WMS ⇄ OS: Hook para obtener repuestos e insumos de una orden
  */
 export function useComponentesOrden(idOrden: number) {
+    const validId = Number(idOrden);
+    const isValid = Boolean(validId && !isNaN(validId) && validId > 0);
     return useQuery({
-        queryKey: [...COMPONENTES_ORDEN_KEY, idOrden],
-        queryFn: () => getComponentesOrden(idOrden),
-        enabled: !!idOrden,
+        queryKey: [...COMPONENTES_ORDEN_KEY, validId],
+        queryFn: () => getComponentesOrden(validId),
+        enabled: isValid,
         ...CacheStrategy.DYNAMIC,
     });
 }

@@ -767,8 +767,22 @@ export interface DespacharComponenteOrdenDto {
 }
 
 export async function getComponentesOrden(idOrden: number): Promise<ComponentesOrdenResponse> {
+    const numId = Number(idOrden);
+    if (!numId || isNaN(numId) || numId <= 0) {
+        return {
+            success: true,
+            data: [],
+            resumen: {
+                total_items: 0,
+                unidades_totales: 0,
+                costo_total_bodega: 0,
+                costo_total_compra_directa: 0,
+                costo_total_general: 0,
+            },
+        };
+    }
     const response = await apiClient.get<ComponentesOrdenResponse>(
-        `${ORDENES_BASE}/${idOrden}/componentes`
+        `${ORDENES_BASE}/${numId}/componentes`
     );
     return response.data;
 }
