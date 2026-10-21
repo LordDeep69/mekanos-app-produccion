@@ -705,8 +705,11 @@ export function useRegistrarSalida() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: registrarSalida,
-        onSuccess: () => {
+        onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ['inventario'] });
+            if (variables?.id_orden_servicio) {
+                queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+            }
         },
     });
 }

@@ -30,6 +30,7 @@ import { ProgresoRegistroService } from './services/progreso-registro.service';
 // Módulos externos (para FinalizarOrden)
 import { ConfigParametrosModule } from '../config-parametros/config-parametros.module';
 import { EmailModule } from '../email/email.module';
+import { InventarioModule } from '../inventario/inventario.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { StorageModule } from '../storage/storage.module';
 
@@ -55,6 +56,7 @@ import { StorageModule } from '../storage/storage.module';
     EmailModule,    // Envío de emails
     StorageModule,  // R2 + Cloudinary
     ConfigParametrosModule, // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades dinámicas
+    InventarioModule, // ✅ INTEGRACIÓN BIDIRECCIONAL WMS ⇄ ÓRDENES DE SERVICIO
   ],
   controllers: [OrdenesController],
   providers: [

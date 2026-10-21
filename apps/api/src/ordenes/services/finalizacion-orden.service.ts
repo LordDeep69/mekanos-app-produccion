@@ -502,14 +502,19 @@ export class FinalizacionOrdenService {
                         where: { id_orden_servicio: orden.id_orden_servicio },
                     });
                     if (actividadesResExist > 0) {
-                        // Primero eliminar componentes_usados y evidencias vinculadas a actividades
-                        await this.prisma.componentes_usados.deleteMany({
-                            where: { id_orden_servicio: orden.id_orden_servicio },
+                        // ✅ ZERO-TRUST WMS: Preservar repuestos despachados desde Almacén WMS (id_movimiento_inventario != null)
+                        // Desvincular id_actividad_ejecutada si existiera, y solo limpiar registros huérfanos sin movimiento Kardex
+                        await this.prisma.componentes_usados.updateMany({
+                            where: {
+                                id_orden_servicio: orden.id_orden_servicio,
+                                id_actividad_ejecutada: { not: null },
+                            },
+                            data: { id_actividad_ejecutada: null },
                         });
                         await this.prisma.actividades_ejecutadas.deleteMany({
                             where: { id_orden_servicio: orden.id_orden_servicio },
                         });
-                        this.logger.log(`   🗑️ Eliminadas ${actividadesResExist} actividades residuales`);
+                        this.logger.log(`   🗑️ Eliminadas ${actividadesResExist} actividades residuales (preservados repuestos WMS)`);
                     }
 
                     // Limpiar mediciones residuales

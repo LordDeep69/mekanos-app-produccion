@@ -35,6 +35,10 @@ import {
     getOrdenes,
     getServiciosOrden,
     removeServicioOrden,
+    getComponentesOrden,
+    addComponenteOrden,
+    removeComponenteOrden,
+    type DespacharComponenteOrdenDto,
     updateActividad,
     updateEdicionTecnico,
     updateFirmaOrden,
@@ -57,6 +61,7 @@ import {
 // Query keys
 const ORDENES_KEY = ['ordenes'];
 const SERVICIOS_ORDEN_KEY = ['ordenes', 'servicios'];
+const COMPONENTES_ORDEN_KEY = ['ordenes', 'componentes'];
 const ACTIVIDADES_ORDEN_KEY = ['ordenes', 'actividades'];
 const MEDICIONES_ORDEN_KEY = ['ordenes', 'mediciones'];
 const EVIDENCIAS_ORDEN_KEY = ['ordenes', 'evidencias'];
@@ -223,6 +228,60 @@ export function useRemoveServicioOrden() {
             queryClient.invalidateQueries({ queryKey: [...SERVICIOS_ORDEN_KEY, idOrden] });
             queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] }); // Refrescar totales
             toast.success('Servicio eliminado de la orden');
+        },
+    });
+}
+
+/**
+ * ✅ INTEGRACIÓN WMS ⇄ OS: Hook para obtener repuestos e insumos de una orden
+ */
+export function useComponentesOrden(idOrden: number) {
+    return useQuery({
+        queryKey: [...COMPONENTES_ORDEN_KEY, idOrden],
+        queryFn: () => getComponentesOrden(idOrden),
+        enabled: !!idOrden,
+        ...CacheStrategy.DYNAMIC,
+    });
+}
+
+/**
+ * ✅ INTEGRACIÓN WMS ⇄ OS: Hook para despachar repuesto de almacén o compra directa a una orden
+ */
+export function useAddComponenteOrden() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ idOrden, data }: { idOrden: number; data: DespacharComponenteOrdenDto }) =>
+            addComponenteOrden(idOrden, data),
+        onSuccess: (res, { idOrden }) => {
+            queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
+            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
+            queryClient.invalidateQueries({ queryKey: ['inventario'] });
+            toast.success(res?.mensaje || 'Repuesto despachado e imputado a la orden');
+        },
+        onError: (error: any) => {
+            toast.error(error?.response?.data?.message || 'Error al despachar repuesto a la orden');
+        },
+    });
+}
+
+/**
+ * ✅ INTEGRACIÓN WMS ⇄ OS: Hook para reintegrar repuesto al almacén WMS y descontar de la orden
+ */
+export function useRemoveComponenteOrden() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ idOrden, idUso, motivo }: { idOrden: number; idUso: number; motivo?: string }) =>
+            removeComponenteOrden(idOrden, idUso, motivo),
+        onSuccess: (res, { idOrden }) => {
+            queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
+            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
+            queryClient.invalidateQueries({ queryKey: ['inventario'] });
+            toast.success(res?.mensaje || 'Repuesto reintegrado al almacén exitosamente');
+        },
+        onError: (error: any) => {
+            toast.error(error?.response?.data?.message || 'Error al reintegrar repuesto');
         },
     });
 }

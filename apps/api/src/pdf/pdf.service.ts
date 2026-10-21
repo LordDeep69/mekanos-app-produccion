@@ -377,7 +377,15 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       trabajosPendientes: this.esTextoVacioOSinContenido(ext.pendientes) ? undefined : ext.pendientes,
       recomendaciones: this.esTextoVacioOSinContenido(ext.recomendaciones) ? undefined : ext.recomendaciones,
       sistemasAfectados: ext.sistemasAfectados.length > 0 ? ext.sistemasAfectados : undefined,
-      repuestosUtilizados: ext.repuestos.length > 0 ? ext.repuestos : undefined,
+      repuestosUtilizados: (() => {
+        const combinados = [...ext.repuestos];
+        for (const itemWms of (datos.repuestosWms || [])) {
+          if (itemWms && !combinados.some(r => r.toLowerCase() === itemWms.toLowerCase())) {
+            combinados.push(itemWms);
+          }
+        }
+        return combinados.length > 0 ? combinados : undefined;
+      })(),
       materialesUtilizados: ext.materiales.length > 0 ? ext.materiales : undefined,
 
       // ✅ FIX 06-FEB-2026: Observaciones auxiliares del técnico por actividad

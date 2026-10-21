@@ -15,6 +15,7 @@ import {
     useRegistrarSalida,
     useRegistrarTraslado,
 } from '@/features/inventario/api/inventario-motor.service';
+import { getClienteNombre, useOrdenes, type Orden } from '@/features/ordenes';
 import { cn } from '@/lib/utils';
 import {
     AlertCircle,
@@ -85,6 +86,9 @@ export function MovimientoModal({
     const [bodegaSalida, setBodegaSalida] = useState<string>('');
     const [motivoSalida, setMotivoSalida] = useState('DESPACHO_ORDEN');
     const [loteSalida, setLoteSalida] = useState<string>('');
+    const [busquedaOrden, setBusquedaOrden] = useState<string>('');
+    const [ordenSeleccionada, setOrdenSeleccionada] = useState<Orden | null>(null);
+    const [showOrdenDropdown, setShowOrdenDropdown] = useState<boolean>(false);
 
     // Campos de Ajuste
     const [bodegaAjuste, setBodegaAjuste] = useState<string>('');
@@ -108,6 +112,10 @@ export function MovimientoModal({
     });
     const { data: bodegas = [] } = useBodegas();
     const { data: motivosAjuste = [] } = useMotivosAjuste();
+    const { data: ordenesData, isLoading: isLoadingOrdenes } = useOrdenes({
+        busqueda: busquedaOrden || undefined,
+        limit: 12,
+    });
 
     // Mutations
     const entradaMutation = useRegistrarEntrada();
@@ -130,6 +138,9 @@ export function MovimientoModal({
             setNumeroFactura('');
             setLoteSalida('');
             setLoteTraslado('');
+            setBusquedaOrden('');
+            setOrdenSeleccionada(null);
+            setShowOrdenDropdown(false);
             setError(null);
             setSuccess(false);
         } else {
@@ -291,18 +302,30 @@ export function MovimientoModal({
                     return;
                 }
 
+                const idOrdenFk =
+                    motivoSalida === 'DESPACHO_ORDEN' && ordenSeleccionada
+                        ? ordenSeleccionada.id_orden_servicio
+                        : undefined;
+
                 await salidaMutation.mutateAsync({
                     id_componente: componenteSeleccionado.id_componente,
                     cantidad: cantidadNum,
                     id_ubicacion: bodegaSalida ? parseInt(bodegaSalida, 10) : undefined,
                     id_lote: loteSalida ? parseInt(loteSalida, 10) : undefined,
+                    id_orden_servicio: idOrdenFk,
                     motivo: motivoSalida,
-                    justificacion: justificacion.trim() || undefined,
+                    justificacion:
+                        justificacion.trim() ||
+                        (ordenSeleccionada ? `Despacho WMS a Orden ${ordenSeleccionada.numero_orden}` : undefined),
                     observaciones: observaciones.trim() || undefined,
                     realizado_por: usuarioId,
                 });
 
-                setSuccessMsg(`Salida registrada: -${cantidadNum} unidades despachadas`);
+                setSuccessMsg(
+                    ordenSeleccionada && motivoSalida === 'DESPACHO_ORDEN'
+                        ? `Salida registrada: -${cantidadNum} ${componenteSeleccionado.unidad || 'UND'} despachadas e imputadas a ${ordenSeleccionada.numero_orden}`
+                        : `Salida registrada: -${cantidadNum} unidades despachadas`
+                );
             } else if (operacionActiva === 'AJUSTE') {
                 if (!bodegaAjuste) {
                     setError('Debe seleccionar la bodega auditada');
@@ -822,13 +845,124 @@ export function MovimientoModal({
                                 </select>
                             </div>
 
+                            {motivoSalida === 'DESPACHO_ORDEN' && (
+                                <div className="space-y-1.5">
+                                    <label className="block text-xs font-semibold text-slate-700 uppercase">
+                                        Orden de Servicio Destino (Imputación Transaccional WMS ⇄ OS)
+                                    </label>
+                                    {ordenSeleccionada ? (
+                                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1.5">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="font-mono text-xs font-bold text-amber-900 bg-white px-2 py-0.5 rounded border border-amber-300">
+                                                        {ordenSeleccionada.numero_orden}
+                                                    </span>
+                                                    <span className="text-xs font-bold text-slate-900">
+                                                        {getClienteNombre(ordenSeleccionada)}
+                                                    </span>
+                                                    {ordenSeleccionada.estados_orden?.nombre_estado && (
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200">
+                                                            {ordenSeleccionada.estados_orden.nombre_estado}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setOrdenSeleccionada(null);
+                                                        setBusquedaOrden('');
+                                                    }}
+                                                    className="px-2 py-1 text-[11px] font-semibold text-amber-800 bg-white hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors shrink-0 cursor-pointer"
+                                                >
+                                                    Cambiar OT
+                                                </button>
+                                            </div>
+                                            <p className="text-[11px] text-emerald-800 font-medium">
+                                                ✓ Al confirmar, se asentará en Kardex como CONSUMO_OS y se agregará automáticamente a los Repuestos & Costos de {ordenSeleccionada.numero_orden}.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar Orden de Servicio por código (Ej: OS-2026) o cliente..."
+                                                    value={busquedaOrden}
+                                                    onChange={(e) => {
+                                                        setBusquedaOrden(e.target.value);
+                                                        setShowOrdenDropdown(true);
+                                                    }}
+                                                    onFocus={() => setShowOrdenDropdown(true)}
+                                                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                                                />
+                                            </div>
+                                            {showOrdenDropdown && (
+                                                <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                                                    {isLoadingOrdenes ? (
+                                                        <div className="p-3 text-xs text-slate-500 flex items-center justify-center gap-2">
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                                                            Buscando órdenes activas...
+                                                        </div>
+                                                    ) : (ordenesData?.data || []).length === 0 ? (
+                                                        <p className="p-3 text-xs text-slate-500 text-center">
+                                                            No se encontraron órdenes con ese criterio
+                                                        </p>
+                                                    ) : (
+                                                        (ordenesData?.data || []).map((ord) => {
+                                                            const eqCod =
+                                                                ord.equipos?.codigo_equipo ||
+                                                                ord.ordenes_equipos?.[0]?.equipo?.codigo_equipo ||
+                                                                '';
+                                                            return (
+                                                                <button
+                                                                    key={ord.id_orden_servicio}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setOrdenSeleccionada(ord);
+                                                                        setShowOrdenDropdown(false);
+                                                                    }}
+                                                                    className="w-full text-left p-2.5 hover:bg-amber-50/60 border-b border-slate-100 flex items-center justify-between transition-colors cursor-pointer"
+                                                                >
+                                                                    <div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                                                {ord.numero_orden}
+                                                                            </span>
+                                                                            <span className="text-xs font-bold text-slate-800">
+                                                                                {getClienteNombre(ord)}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                            {eqCod ? `Equipo: ${eqCod} • ` : ''}
+                                                                            {ord.tipos_servicio?.nombre_tipo || 'Servicio Técnico'}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0 ml-2">
+                                                                        {ord.estados_orden?.nombre_estado || ord.estados_orden?.codigo_estado || 'ACTIVA'}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                                    Justificación / OT Asociada
+                                    Justificación / Nota de Despacho {motivoSalida === 'DESPACHO_ORDEN' && ordenSeleccionada ? '(Opcional)' : ''}
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="Ej: Para OT-2026-089 o Mantenimiento de Generador"
+                                    placeholder={
+                                        motivoSalida === 'DESPACHO_ORDEN' && ordenSeleccionada
+                                            ? `Despacho WMS a Orden ${ordenSeleccionada.numero_orden} (o escriba nota adicional)`
+                                            : 'Ej: Para mantenimiento correctivo o reemplazo preventivo en campo'
+                                    }
                                     value={justificacion}
                                     onChange={(e) => setJustificacion(e.target.value)}
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"

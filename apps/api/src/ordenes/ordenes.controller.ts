@@ -51,6 +51,8 @@ import { ProgramarOrdenDto } from './dto/programar-orden.dto';
 import { UpdateOrdenDto } from './dto/update-orden.dto';
 
 // Services
+import { Decimal } from '@prisma/client/runtime/library';
+import { DespacharComponenteOrdenDto, InventarioService } from '../inventario/inventario.service';
 import { extractR2KeyFromUrl } from '../pdf/pdf-naming.helper';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { FinalizacionOrdenService, ProgressEvent } from './services/finalizacion-orden.service';
@@ -89,6 +91,7 @@ export class OrdenesController {
     private readonly finalizacionService: FinalizacionOrdenService,
     private readonly r2Service: R2StorageService,
     private readonly progresoService: ProgresoRegistroService,
+    private readonly inventarioService: InventarioService,
   ) { }
 
   /**
@@ -779,6 +782,191 @@ export class OrdenesController {
       success: true,
       data: servicios,
     };
+  }
+
+  /**
+   * POST /api/ordenes/:id/servicios
+   * Agrega un servicio comercial a la orden y recalcula total_servicios + total_general
+   */
+  @Post(':id/servicios')
+  @UseGuards(JwtAuthGuard)
+  async addServicio(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      id_servicio: number;
+      cantidad?: number;
+      precio_unitario?: number;
+      descuento_porcentaje?: number;
+      id_tecnico_ejecutor?: number;
+      observaciones?: string;
+    },
+    @UserId() userId: number,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const orden = await tx.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: id },
+      });
+      if (!orden) {
+        throw new NotFoundException(`Orden #${id} no encontrada`);
+      }
+
+      const srv = await tx.catalogo_servicios.findUnique({
+        where: { id_servicio: Number(body.id_servicio) },
+      });
+      if (!srv) {
+        throw new NotFoundException(`Servicio #${body.id_servicio} no encontrado`);
+      }
+
+      const cantidad = Number(body.cantidad || 1);
+      const precioUnit =
+        body.precio_unitario !== undefined ? Number(body.precio_unitario) : Number(srv.precio_base || 0);
+      const descPct = Number(body.descuento_porcentaje || 0);
+      const subtotalItem = Number((cantidad * precioUnit * (1 - descPct / 100)).toFixed(2));
+
+      const creado = await tx.detalle_servicios_orden.create({
+        data: {
+          id_orden_servicio: id,
+          id_servicio: Number(body.id_servicio),
+          cantidad: new Decimal(cantidad),
+          precio_unitario: new Decimal(precioUnit.toFixed(2)),
+          descuento_porcentaje: new Decimal(descPct.toFixed(2)),
+          subtotal: new Decimal(subtotalItem.toFixed(2)),
+          id_tecnico_ejecutor: body.id_tecnico_ejecutor || orden.id_tecnico_asignado || null,
+          observaciones: body.observaciones || null,
+          registrado_por: userId || 1,
+          fecha_registro: new Date(),
+        },
+        include: { catalogo_servicios: true },
+      });
+
+      const agg = await tx.detalle_servicios_orden.aggregate({
+        where: { id_orden_servicio: id },
+        _sum: { subtotal: true },
+      });
+      const nuevoTotalServicios = Number(agg?._sum?.subtotal ?? 0);
+      const totalComponentes = Number(orden.total_componentes ?? 0);
+      const totalGastos = Number(orden.total_gastos ?? 0);
+      const nuevoSubtotal = nuevoTotalServicios + totalComponentes + totalGastos;
+
+      await tx.ordenes_servicio.update({
+        where: { id_orden_servicio: id },
+        data: {
+          total_servicios: new Decimal(nuevoTotalServicios.toFixed(2)),
+          subtotal: new Decimal(nuevoSubtotal.toFixed(2)),
+          total_general: new Decimal(nuevoSubtotal.toFixed(2)),
+          fecha_modificacion: new Date(),
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Servicio comercial agregado exitosamente',
+        data: creado,
+      };
+    });
+  }
+
+  /**
+   * DELETE /api/ordenes/:id/servicios/:idDetalle
+   * Elimina un servicio comercial de la orden y recalcula total_servicios + total_general
+   */
+  @Delete(':id/servicios/:idDetalle')
+  @UseGuards(JwtAuthGuard)
+  async removeServicio(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idDetalle', ParseIntPipe) idDetalle: number,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const detalle = await tx.detalle_servicios_orden.findUnique({
+        where: { id_detalle_servicio: idDetalle },
+      });
+      if (!detalle || detalle.id_orden_servicio !== id) {
+        throw new NotFoundException('Detalle de servicio no encontrado en esta orden');
+      }
+
+      await tx.detalle_servicios_orden.delete({
+        where: { id_detalle_servicio: idDetalle },
+      });
+
+      const orden = await tx.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: id },
+      });
+      const agg = await tx.detalle_servicios_orden.aggregate({
+        where: { id_orden_servicio: id },
+        _sum: { subtotal: true },
+      });
+      const nuevoTotalServicios = Number(agg?._sum?.subtotal ?? 0);
+      const totalComponentes = Number(orden?.total_componentes ?? 0);
+      const totalGastos = Number(orden?.total_gastos ?? 0);
+      const nuevoSubtotal = nuevoTotalServicios + totalComponentes + totalGastos;
+
+      await tx.ordenes_servicio.update({
+        where: { id_orden_servicio: id },
+        data: {
+          total_servicios: new Decimal(nuevoTotalServicios.toFixed(2)),
+          subtotal: new Decimal(nuevoSubtotal.toFixed(2)),
+          total_general: new Decimal(nuevoSubtotal.toFixed(2)),
+          fecha_modificacion: new Date(),
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Servicio comercial eliminado exitosamente',
+      };
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REPUESTOS & INSUMOS UTILIZADOS (INTEGRACIÓN BIDIRECCIONAL WMS ⇄ OS)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/ordenes/:id/componentes
+   * Obtiene la lista enriquecida de repuestos e insumos consumidos en la orden
+   * con trazabilidad completa de Bodega, Lote (FIFO/FEFO) y Movimiento Kardex.
+   */
+  @Get(':id/componentes')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Listar repuestos e insumos utilizados en la orden (Trazabilidad WMS)' })
+  async getComponentesOrden(@Param('id', ParseIntPipe) id: number) {
+    return this.inventarioService.listarComponentesOrden(id);
+  }
+
+  /**
+   * POST /api/ordenes/:id/componentes
+   * Despacha un repuesto desde Almacén WMS (o registra Compra Directa) e imputa el costo a la orden.
+   */
+  @Post(':id/componentes')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Despachar repuesto de almacén o registrar insumo en una orden de servicio' })
+  async addComponenteOrden(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: DespacharComponenteOrdenDto,
+    @UserId() userId: number,
+  ) {
+    return this.inventarioService.despacharComponenteOrden(id, {
+      ...dto,
+      realizado_por: userId || dto.realizado_por || 1,
+    });
+  }
+
+  /**
+   * DELETE /api/ordenes/:id/componentes/:idUso
+   * Reintegra atómicamente el repuesto al Almacén WMS (restaura lote, stock y asienta DEVOLUCION en Kardex)
+   * y recalcula total_componentes + total_general de la orden.
+   */
+  @Delete(':id/componentes/:idUso')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Reintegrar repuesto al almacén WMS y descontar de la orden' })
+  async removeComponenteOrden(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idUso', ParseIntPipe) idUso: number,
+    @Query('motivo') motivo: string | undefined,
+    @UserId() userId: number,
+  ) {
+    return this.inventarioService.reintegrarComponenteOrden(id, idUso, userId || 1, motivo);
   }
 
   @Get(':id/evidencias')

@@ -411,11 +411,14 @@ model componentes_equipo {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model componentes_usados {
-  id_componente_usado        Int                     @id
+  id_componente_usado        Int                     @id @default(autoincrement())
   id_orden_servicio          Int
   id_componente              Int?
   id_tipo_componente         Int?
   id_actividad_ejecutada     Int?
+  id_ubicacion               Int?
+  id_lote                    Int?
+  id_movimiento_inventario   Int?
   descripcion                String                  @db.VarChar(200)
   referencia_manual          String?                 @db.VarChar(100)
   marca_manual               String?                 @db.VarChar(100)
@@ -439,6 +442,9 @@ model componentes_usados {
   ordenes_servicio           ordenes_servicio        @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: SetNull)
   tipos_componente           tipos_componente?       @relation(fields: [id_tipo_componente], references: [id_tipo_componente])
   empleados                  empleados?              @relation(fields: [usado_por], references: [id_empleado])
+  ubicaciones_bodega         ubicaciones_bodega?     @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: SetNull)
+  lotes_componentes          lotes_componentes?      @relation(fields: [id_lote], references: [id_lote], onDelete: SetNull)
+  movimientos_inventario     movimientos_inventario? @relation(fields: [id_movimiento_inventario], references: [id_movimiento], onDelete: SetNull)
 
   @@index([fecha_uso(sort: Desc)], map: "idx_componentes_usados_fecha")
   @@index([id_orden_servicio], map: "idx_componentes_usados_orden")
@@ -1391,6 +1397,7 @@ model lotes_componentes {
   catalogo_componentes     catalogo_componentes     @relation(fields: [id_componente], references: [id_componente], onDelete: SetNull, map: "fk_lote_componente")
   proveedores              proveedores?             @relation(fields: [id_proveedor], references: [id_proveedor], map: "fk_lote_proveedor")
   movimientos_inventario   movimientos_inventario[]
+  componentes_usados       componentes_usados[]
 
   @@index([id_componente, estado_lote], map: "idx_lote_componente")
 }
@@ -1484,6 +1491,7 @@ model movimientos_inventario {
   ordenes_servicio     ordenes_servicio?                 @relation(fields: [id_orden_servicio], references: [id_orden_servicio], map: "fk_mov_orden_servicio")
   remisiones           remisiones?                       @relation(fields: [id_remision], references: [id_remision], map: "fk_mov_remision")
   ubicaciones_bodega   ubicaciones_bodega?               @relation(fields: [id_ubicacion], references: [id_ubicacion], map: "fk_mov_ubicacion")
+  componentes_usados   componentes_usados[]
 
   @@index([id_componente, fecha_movimiento(sort: Desc)], map: "idx_mov_componente_fecha")
   @@index([tipo_movimiento, origen_movimiento], map: "idx_mov_tipo_origen")
@@ -2142,6 +2150,7 @@ model ubicaciones_bodega {
   activo                 Boolean                  @default(true)
   movimientos_inventario movimientos_inventario[]
   recepciones_compra     recepciones_compra[]
+  componentes_usados     componentes_usados[]
 
   @@index([zona, activo], map: "idx_ubicacion_zona")
 }

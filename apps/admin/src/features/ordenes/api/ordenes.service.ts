@@ -707,3 +707,91 @@ export async function sendHeartbeat(
     return response.data;
 }
 
+
+// ========================================================================
+// REPUESTOS & INSUMOS UTILIZADOS (INTEGRACIÓN BIDIRECCIONAL WMS ⇄ OS)
+// ========================================================================
+
+export interface ComponenteUsadoOrden {
+    id_componente_usado: number;
+    id_orden_servicio: number;
+    id_componente: number | null;
+    sku: string;
+    referencia_fabricante: string | null;
+    descripcion: string;
+    marca: string | null;
+    cantidad: number;
+    unidad: string;
+    costo_unitario: number;
+    costo_total: number;
+    origen_componente: 'BODEGA' | 'COMPRA_DIRECTA' | 'CLIENTE' | 'GARANTIA';
+    id_ubicacion: number | null;
+    bodega_codigo: string | null;
+    bodega_nombre: string | null;
+    id_lote: number | null;
+    codigo_lote: string | null;
+    fecha_vencimiento_lote: string | null;
+    id_movimiento_inventario: number | null;
+    fecha_uso: string | null;
+    observaciones: string | null;
+    registrado_por_nombre: string;
+}
+
+export interface ResumenComponentesOrden {
+    total_items: number;
+    unidades_totales: number;
+    costo_total_bodega: number;
+    costo_total_compra_directa: number;
+    costo_total_general: number;
+}
+
+export interface ComponentesOrdenResponse {
+    success: boolean;
+    data: ComponenteUsadoOrden[];
+    resumen: ResumenComponentesOrden;
+}
+
+export interface DespacharComponenteOrdenDto {
+    origen_componente?: 'BODEGA' | 'COMPRA_DIRECTA' | 'CLIENTE' | 'GARANTIA';
+    id_componente?: number;
+    id_ubicacion?: number;
+    id_lote?: number;
+    descripcion?: string;
+    referencia_manual?: string;
+    marca_manual?: string;
+    cantidad: number;
+    unidad?: string;
+    costo_unitario?: number;
+    observaciones?: string;
+    realizado_por?: number;
+}
+
+export async function getComponentesOrden(idOrden: number): Promise<ComponentesOrdenResponse> {
+    const response = await apiClient.get<ComponentesOrdenResponse>(
+        `${ORDENES_BASE}/${idOrden}/componentes`
+    );
+    return response.data;
+}
+
+export async function addComponenteOrden(
+    idOrden: number,
+    data: DespacharComponenteOrdenDto
+): Promise<{ success: boolean; mensaje: string; data?: any }> {
+    const response = await apiClient.post<{ success: boolean; mensaje: string; data?: any }>(
+        `${ORDENES_BASE}/${idOrden}/componentes`,
+        data
+    );
+    return response.data;
+}
+
+export async function removeComponenteOrden(
+    idOrden: number,
+    idUso: number,
+    motivo?: string
+): Promise<{ success: boolean; mensaje: string; reintegrado_bodega?: boolean }> {
+    const response = await apiClient.delete<{ success: boolean; mensaje: string; reintegrado_bodega?: boolean }>(
+        `${ORDENES_BASE}/${idOrden}/componentes/${idUso}`,
+        { params: motivo ? { motivo } : undefined }
+    );
+    return response.data;
+}

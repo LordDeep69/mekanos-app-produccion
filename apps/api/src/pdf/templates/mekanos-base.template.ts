@@ -141,6 +141,9 @@ export interface DatosOrdenPDF {
   // ✅ Observaciones del técnico (admin edita este campo, contiene DIAGNOSTICO:/FALLAS:)
   observaciones_tecnico?: string;
 
+  // ✅ INTEGRACIÓN WMS: Repuestos e insumos registrados en componentes_usados (Almacén / Compra Directa)
+  repuestosWms?: string[];
+
   // Firmas
   firmaTecnico?: string;
   firmaCliente?: string;

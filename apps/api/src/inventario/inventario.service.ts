@@ -72,6 +72,7 @@ export interface EntradaInventarioDto {
 export interface SalidaInventarioDto {
     id_componente: number;
     cantidad: number;
+    costo_unitario?: number;
     id_ubicacion?: number;
     id_lote?: number;
     id_orden_servicio?: number;
@@ -81,6 +82,23 @@ export interface SalidaInventarioDto {
     justificacion?: string;
     observaciones?: string;
     realizado_por: number;
+}
+
+export interface DespacharComponenteOrdenDto {
+    origen_componente?: 'BODEGA' | 'COMPRA_DIRECTA' | 'CLIENTE' | 'GARANTIA';
+    id_componente?: number;
+    id_ubicacion?: number;
+    id_lote?: number;
+    descripcion?: string;
+    referencia_manual?: string;
+    marca_manual?: string;
+    cantidad: number;
+    unidad?: string;
+    costo_unitario?: number;
+    observaciones?: string;
+    razon_uso?: string;
+    usado_por?: number;
+    realizado_por?: number;
 }
 
 export interface AjusteInventarioDto {
@@ -287,6 +305,56 @@ export class InventarioService {
         });
     }
 
+    /**
+     * Recalcula total_componentes, subtotal y total_general de una Orden de Servicio
+     * dentro de una transacción activa (Zero-Trust).
+     */
+    async recalcularTotalesOrden(tx: any, idOrden: number) {
+        const agg = await tx.componentes_usados.aggregate({
+            where: { id_orden_servicio: idOrden },
+            _sum: { costo_total: true },
+        });
+        const nuevoTotalComponentes = Number(agg?._sum?.costo_total ?? 0);
+
+        const ordenActual = await tx.ordenes_servicio.findUnique({
+            where: { id_orden_servicio: idOrden },
+            select: {
+                total_servicios: true,
+                total_gastos: true,
+                descuento_valor: true,
+                iva_porcentaje: true,
+            },
+        });
+
+        const totalServicios = Number(ordenActual?.total_servicios ?? 0);
+        const totalGastos = Number(ordenActual?.total_gastos ?? 0);
+        const descuentoValor = Number(ordenActual?.descuento_valor ?? 0);
+        const ivaPorcentaje = Number(ordenActual?.iva_porcentaje ?? 0);
+
+        const nuevoSubtotal = totalServicios + nuevoTotalComponentes + totalGastos;
+        const baseGravable = Math.max(0, nuevoSubtotal - descuentoValor);
+        const nuevoIvaValor = ivaPorcentaje > 0 ? Number(((baseGravable * ivaPorcentaje) / 100).toFixed(2)) : 0;
+        const nuevoTotalGeneral = Number((baseGravable + nuevoIvaValor).toFixed(2));
+
+        await tx.ordenes_servicio.update({
+            where: { id_orden_servicio: idOrden },
+            data: {
+                total_componentes: new Decimal(nuevoTotalComponentes.toFixed(2)),
+                subtotal: new Decimal(nuevoSubtotal.toFixed(2)),
+                iva_valor: new Decimal(nuevoIvaValor.toFixed(2)),
+                total_general: new Decimal(nuevoTotalGeneral.toFixed(2)),
+                fecha_modificacion: new Date(),
+            },
+        });
+
+        return {
+            total_componentes: nuevoTotalComponentes,
+            total_servicios: totalServicios,
+            total_gastos: totalGastos,
+            total_general: nuevoTotalGeneral,
+        };
+    }
+
     async registrarSalida(dto: SalidaInventarioDto) {
         if (dto.cantidad <= 0) {
             throw new BadRequestException('La cantidad debe ser mayor a 0');
@@ -300,39 +368,83 @@ export class InventarioService {
                 throw new NotFoundException(`Componente ${dto.id_componente} no encontrado`);
             }
 
-            const stockActual = componente.stock_actual || 0;
+            const stockActual = componente.stock_actual ?? 0;
             if (stockActual < dto.cantidad) {
                 throw new BadRequestException(`Stock insuficiente en el sistema. Disponible: ${stockActual}, Solicitado: ${dto.cantidad}`);
             }
 
             const idUbicacion = dto.id_ubicacion || 1;
+            const idOrdenServicio = dto.id_orden_servicio ? Number(dto.id_orden_servicio) : null;
 
-            // 1. Obtener lotes disponibles para descontar por FIFO/FEFO
-            let lotesDisponibles = [];
+            let ordenVinculada: any = null;
+            if (idOrdenServicio && idOrdenServicio > 0) {
+                ordenVinculada = await tx.ordenes_servicio.findUnique({
+                    where: { id_orden_servicio: idOrdenServicio },
+                    include: { estados_orden: true },
+                });
+                if (!ordenVinculada) {
+                    throw new NotFoundException(`Orden de Servicio #${idOrdenServicio} no encontrada`);
+                }
+                if (ordenVinculada.estados_orden?.codigo_estado === 'CANCELADA') {
+                    throw new BadRequestException(`No se pueden despachar repuestos a una orden CANCELADA (${ordenVinculada.numero_orden})`);
+                }
+            }
+
+            // 1. Obtener lotes disponibles para descontar por FIFO/FEFO (priorizando los de la bodega origen)
+            let lotesDisponibles: any[] = [];
             if (dto.id_lote) {
                 const loteEspecifico = await tx.lotes_componentes.findUnique({
                     where: { id_lote: dto.id_lote },
                 });
                 if (!loteEspecifico || Number(loteEspecifico.cantidad_actual) < dto.cantidad) {
-                    throw new BadRequestException(`El lote seleccionado no tiene existencias suficientes (${loteEspecifico?.cantidad_actual || 0} disponibles)`);
+                    throw new BadRequestException(`El lote seleccionado no tiene existencias suficientes (${loteEspecifico?.cantidad_actual ?? 0} disponibles)`);
                 }
                 lotesDisponibles = [loteEspecifico];
             } else {
-                lotesDisponibles = await tx.lotes_componentes.findMany({
+                const todosLotes = await tx.lotes_componentes.findMany({
                     where: {
                         id_componente: dto.id_componente,
                         estado_lote: 'DISPONIBLE',
                         cantidad_actual: { gt: 0 },
+                    },
+                    include: {
+                        movimientos_inventario: {
+                            orderBy: { fecha_movimiento: 'desc' },
+                            take: 1,
+                            select: { id_ubicacion: true },
+                        },
                     },
                     orderBy: [
                         { fecha_vencimiento: 'asc' },
                         { fecha_ingreso: 'asc' },
                     ],
                 });
+
+                const lotesEnBodega = todosLotes.filter(
+                    (l) => (l.movimientos_inventario?.[0]?.id_ubicacion || 1) === idUbicacion
+                );
+                const lotesOtrasBodegas = todosLotes.filter(
+                    (l) => (l.movimientos_inventario?.[0]?.id_ubicacion || 1) !== idUbicacion
+                );
+
+                // Validar stock específico en la bodega seleccionada si existen lotes
+                if (todosLotes.length > 0) {
+                    const stockEnBodegaSeleccionada = lotesEnBodega.reduce(
+                        (acc, l) => acc + Number(l.cantidad_actual ?? 0),
+                        0
+                    );
+                    if (stockEnBodegaSeleccionada < dto.cantidad) {
+                        throw new BadRequestException(
+                            `Stock insuficiente en la bodega seleccionada. Disponible en bodega: ${stockEnBodegaSeleccionada}, Solicitado: ${dto.cantidad}`
+                        );
+                    }
+                }
+
+                lotesDisponibles = [...lotesEnBodega, ...lotesOtrasBodegas];
             }
 
             let cantidadPendiente = dto.cantidad;
-            let ultimoLoteImpactado = null;
+            let ultimoLoteImpactado: any = null;
 
             for (const lote of lotesDisponibles) {
                 if (cantidadPendiente <= 0) break;
@@ -353,20 +465,47 @@ export class InventarioService {
             }
 
             // 2. Movimiento inmutable de inventario (Kardex)
+            const costoUnitarioAplicado =
+                dto.costo_unitario !== undefined && dto.costo_unitario !== null
+                    ? Number(dto.costo_unitario)
+                    : Number(componente.precio_compra ?? 0);
+            const costoTotalAplicado = Number((costoUnitarioAplicado * dto.cantidad).toFixed(2));
+
+            // Mapear motivo a un valor válido de origen_movimiento_inventario_enum
+            const ORIGENES_VALIDOS = new Set([
+                'COMPRA',
+                'CONSUMO_OS',
+                'REMISION',
+                'DEVOLUCION',
+                'CONTEO_FISICO',
+                'MERMA',
+                'CORRECCION_ERROR',
+                'INVENTARIO_INICIAL',
+            ]);
+            const origenKardex = idOrdenServicio
+                ? 'CONSUMO_OS'
+                : dto.motivo && ORIGENES_VALIDOS.has(dto.motivo)
+                ? (dto.motivo as any)
+                : 'CONSUMO_OS';
+
+            const justificacionFinal = ordenVinculada
+                ? dto.justificacion || `Despacho a Orden de Servicio ${ordenVinculada.numero_orden}`
+                : dto.justificacion || dto.motivo || 'Salida de almacén';
+
             const nuevoStock = stockActual - dto.cantidad;
             const movimiento = await tx.movimientos_inventario.create({
                 data: {
                     tipo_movimiento: 'SALIDA',
-                    origen_movimiento: dto.id_orden_servicio ? 'CONSUMO_OS' : (dto.motivo as any || 'CONSUMO_OS'),
+                    origen_movimiento: origenKardex,
                     id_componente: dto.id_componente,
                     cantidad: new Decimal(-dto.cantidad),
-                    costo_unitario: componente.precio_compra,
+                    costo_unitario: new Decimal(costoUnitarioAplicado.toFixed(2)),
                     id_ubicacion: idUbicacion,
                     id_lote: ultimoLoteImpactado?.id_lote || null,
-                    id_orden_servicio: dto.id_orden_servicio || null,
+                    id_orden_servicio: idOrdenServicio || null,
                     id_remision: dto.id_remision || null,
-                    justificacion: dto.justificacion || dto.motivo || 'Salida de almacén',
-                    observaciones: dto.observaciones || `Despacho de ${dto.cantidad} unidades`,
+                    justificacion: justificacionFinal,
+                    observaciones: dto.observaciones || `Despacho de ${dto.cantidad} ${componente.unidad_medida || 'UND'}${ordenVinculada ? ' para ' + ordenVinculada.numero_orden : ''}`,
                     realizado_por: dto.realizado_por || 1,
                     fecha_movimiento: new Date(),
                 },
@@ -383,7 +522,7 @@ export class InventarioService {
             });
 
             // 4. Alerta de stock bajo si aplica
-            const stockMinimo = componente.stock_minimo || 0;
+            const stockMinimo = componente.stock_minimo ?? 0;
             if (nuevoStock <= stockMinimo) {
                 await tx.alertas_stock.create({
                     data: {
@@ -396,10 +535,47 @@ export class InventarioService {
                 });
             }
 
+            // 5. INTEGRACIÓN BIDIRECCIONAL WMS ⇄ ÓRDENES DE SERVICIO
+            // Si la salida está vinculada a una Orden de Servicio, registrar en componentes_usados y recalcular totales
+            let componenteUsadoCreado: any = null;
+            let totalesOrden: any = null;
+
+            if (idOrdenServicio && ordenVinculada) {
+                componenteUsadoCreado = await tx.componentes_usados.create({
+                    data: {
+                        id_orden_servicio: idOrdenServicio,
+                        id_componente: dto.id_componente,
+                        id_tipo_componente: componente.id_tipo_componente || null,
+                        id_ubicacion: idUbicacion,
+                        id_lote: ultimoLoteImpactado?.id_lote || null,
+                        id_movimiento_inventario: movimiento.id_movimiento,
+                        descripcion: (componente.descripcion_corta || componente.referencia_fabricante || 'Repuesto de almacén').substring(0, 200),
+                        referencia_manual: (componente.codigo_interno || componente.referencia_fabricante || '').substring(0, 100) || null,
+                        marca_manual: componente.marca ? componente.marca.substring(0, 100) : null,
+                        cantidad: new Decimal(dto.cantidad),
+                        unidad: (componente.unidad_medida || 'UND').substring(0, 20),
+                        costo_unitario: new Decimal(costoUnitarioAplicado.toFixed(2)),
+                        costo_total: new Decimal(costoTotalAplicado.toFixed(2)),
+                        origen_componente: 'BODEGA',
+                        observaciones: dto.observaciones || dto.justificacion || `Despachado de almacén a ${ordenVinculada.numero_orden}`,
+                        usado_por: dto.id_tecnico || ordenVinculada.id_tecnico_asignado || null,
+                        registrado_por: dto.realizado_por || 1,
+                        fecha_uso: new Date(),
+                        fecha_registro: new Date(),
+                    },
+                });
+
+                totalesOrden = await this.recalcularTotalesOrden(tx, idOrdenServicio);
+            }
+
             return {
                 success: true,
-                mensaje: `Salida de ${dto.cantidad} unidades registrada con éxito`,
+                mensaje: ordenVinculada
+                    ? `Despacho de ${dto.cantidad} ${componente.unidad_medida || 'UND'} imputado a ${ordenVinculada.numero_orden} exitosamente`
+                    : `Salida de ${dto.cantidad} unidades registrada con éxito`,
                 movimiento,
+                componente_usado: componenteUsadoCreado,
+                totales_orden: totalesOrden,
                 stock_anterior: stockActual,
                 stock_actual: nuevoStock,
             };
@@ -1753,6 +1929,369 @@ export class InventarioService {
                 fecha_resolucion: new Date(),
                 observaciones: observaciones || 'Resuelta desde el panel de inventario',
             },
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INTEGRACIÓN BIDIRECCIONAL WMS ⇄ ÓRDENES DE SERVICIO (/ordenes/[id])
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    async listarComponentesOrden(idOrden: number) {
+        const items = await this.prisma.componentes_usados.findMany({
+            where: { id_orden_servicio: idOrden },
+            include: {
+                catalogo_componentes: {
+                    select: {
+                        id_componente: true,
+                        codigo_interno: true,
+                        referencia_fabricante: true,
+                        descripcion_corta: true,
+                        marca: true,
+                        unidad_medida: true,
+                        stock_actual: true,
+                        precio_compra: true,
+                    },
+                },
+                ubicaciones_bodega: {
+                    select: {
+                        id_ubicacion: true,
+                        codigo_ubicacion: true,
+                        zona: true,
+                    },
+                },
+                lotes_componentes: {
+                    select: {
+                        id_lote: true,
+                        codigo_lote: true,
+                        fecha_vencimiento: true,
+                        estado_lote: true,
+                    },
+                },
+                movimientos_inventario: {
+                    select: {
+                        id_movimiento: true,
+                        tipo_movimiento: true,
+                        origen_movimiento: true,
+                        fecha_movimiento: true,
+                        justificacion: true,
+                    },
+                },
+                empleados: {
+                    include: {
+                        persona: {
+                            select: {
+                                primer_nombre: true,
+                                primer_apellido: true,
+                                nombre_completo: true,
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: [
+                { fecha_uso: 'desc' },
+                { id_componente_usado: 'desc' },
+            ],
+        });
+
+        const userIds = Array.from(
+            new Set(items.map((i) => i.registrado_por).filter((id): id is number => typeof id === 'number'))
+        );
+        const usuarios =
+            userIds.length > 0
+                ? await this.prisma.usuarios.findMany({
+                      where: { id_usuario: { in: userIds } },
+                      select: {
+                          id_usuario: true,
+                          username: true,
+                          email: true,
+                          persona: {
+                              select: {
+                                  primer_nombre: true,
+                                  primer_apellido: true,
+                                  nombre_completo: true,
+                                  razon_social: true,
+                              },
+                          },
+                      },
+                  })
+                : [];
+        const userMap = new Map(usuarios.map((u) => [u.id_usuario, u]));
+
+        const data = items.map((item) => {
+            const cat = item.catalogo_componentes;
+            const ub = item.ubicaciones_bodega;
+            const lote = item.lotes_componentes;
+            const mov = item.movimientos_inventario;
+            const uReg = item.registrado_por ? userMap.get(item.registrado_por) : null;
+
+            const cantidadNum = Number(item.cantidad ?? 0);
+            const costoUnitNum = Number(item.costo_unitario ?? cat?.precio_compra ?? 0);
+            const costoTotalNum =
+                item.costo_total !== null && item.costo_total !== undefined
+                    ? Number(item.costo_total)
+                    : Number((cantidadNum * costoUnitNum).toFixed(2));
+
+            return {
+                id_componente_usado: item.id_componente_usado,
+                id_orden_servicio: item.id_orden_servicio,
+                id_componente: item.id_componente,
+                sku: cat?.codigo_interno || item.referencia_manual || (item.id_componente ? `ART-${item.id_componente}` : 'MANUAL'),
+                referencia_fabricante: cat?.referencia_fabricante || item.referencia_manual || null,
+                descripcion: item.descripcion || cat?.descripcion_corta || 'Repuesto / Insumo',
+                marca: cat?.marca || item.marca_manual || null,
+                cantidad: cantidadNum,
+                unidad: item.unidad || cat?.unidad_medida || 'UND',
+                costo_unitario: costoUnitNum,
+                costo_total: costoTotalNum,
+                origen_componente: item.origen_componente || 'BODEGA',
+                id_ubicacion: item.id_ubicacion || ub?.id_ubicacion || null,
+                bodega_codigo: ub?.codigo_ubicacion || (item.origen_componente === 'BODEGA' ? 'BOD-CENTRAL' : null),
+                bodega_nombre: ub?.zona || (item.origen_componente === 'BODEGA' ? 'Bodega Central Taller' : null),
+                id_lote: item.id_lote || lote?.id_lote || null,
+                codigo_lote: lote?.codigo_lote || null,
+                fecha_vencimiento_lote: lote?.fecha_vencimiento || null,
+                id_movimiento_inventario: item.id_movimiento_inventario || mov?.id_movimiento || null,
+                fecha_uso: item.fecha_uso || item.fecha_registro,
+                observaciones: item.observaciones || null,
+                registrado_por_nombre: this.sanitizarNombreResponsable(uReg),
+            };
+        });
+
+        const costoTotalBodega = data
+            .filter((d) => d.origen_componente === 'BODEGA')
+            .reduce((acc, d) => acc + d.costo_total, 0);
+        const costoTotalCompraDirecta = data
+            .filter((d) => d.origen_componente !== 'BODEGA')
+            .reduce((acc, d) => acc + d.costo_total, 0);
+        const unidadesTotales = data.reduce((acc, d) => acc + d.cantidad, 0);
+
+        return {
+            success: true,
+            data,
+            resumen: {
+                total_items: data.length,
+                unidades_totales: Number(unidadesTotales.toFixed(2)),
+                costo_total_bodega: Number(costoTotalBodega.toFixed(2)),
+                costo_total_compra_directa: Number(costoTotalCompraDirecta.toFixed(2)),
+                costo_total_general: Number((costoTotalBodega + costoTotalCompraDirecta).toFixed(2)),
+            },
+        };
+    }
+
+    async despacharComponenteOrden(idOrden: number, dto: DespacharComponenteOrdenDto) {
+        if (!dto.cantidad || Number(dto.cantidad) <= 0) {
+            throw new BadRequestException('La cantidad a despachar debe ser mayor a 0');
+        }
+
+        const origen = dto.origen_componente || 'BODEGA';
+
+        if (origen === 'BODEGA') {
+            if (!dto.id_componente) {
+                throw new BadRequestException('Debe seleccionar un componente del Catálogo Maestro para despachar desde Bodega');
+            }
+
+            return this.registrarSalida({
+                id_componente: Number(dto.id_componente),
+                cantidad: Number(dto.cantidad),
+                costo_unitario: dto.costo_unitario !== undefined ? Number(dto.costo_unitario) : undefined,
+                id_ubicacion: dto.id_ubicacion ? Number(dto.id_ubicacion) : 1,
+                id_lote: dto.id_lote ? Number(dto.id_lote) : undefined,
+                id_orden_servicio: idOrden,
+                id_tecnico: dto.usado_por,
+                motivo: 'CONSUMO_OS',
+                justificacion: dto.observaciones || `Despacho de almacén a OS #${idOrden}`,
+                observaciones: dto.observaciones,
+                realizado_por: dto.realizado_por || 1,
+            });
+        }
+
+        // Flujo COMPRA_DIRECTA / CLIENTE / GARANTIA (No descuenta stock de almacén)
+        return this.prisma.$transaction(async (tx) => {
+            const orden = await tx.ordenes_servicio.findUnique({
+                where: { id_orden_servicio: idOrden },
+                include: { estados_orden: true },
+            });
+            if (!orden) {
+                throw new NotFoundException(`Orden de Servicio #${idOrden} no encontrada`);
+            }
+            if (orden.estados_orden?.codigo_estado === 'CANCELADA') {
+                throw new BadRequestException(`No se pueden imputar repuestos a una orden CANCELADA (${orden.numero_orden})`);
+            }
+
+            let compCat: any = null;
+            if (dto.id_componente) {
+                compCat = await tx.catalogo_componentes.findUnique({
+                    where: { id_componente: Number(dto.id_componente) },
+                });
+            }
+
+            const descFinal = (dto.descripcion?.trim() || compCat?.descripcion_corta || 'Insumo de compra directa').substring(0, 200);
+            const costoUnit = Number(dto.costo_unitario ?? compCat?.precio_compra ?? 0);
+            const cantidad = Number(dto.cantidad);
+            const costoTotal = Number((costoUnit * cantidad).toFixed(2));
+
+            const creado = await tx.componentes_usados.create({
+                data: {
+                    id_orden_servicio: idOrden,
+                    id_componente: dto.id_componente ? Number(dto.id_componente) : null,
+                    id_tipo_componente: compCat?.id_tipo_componente || null,
+                    descripcion: descFinal,
+                    referencia_manual: (dto.referencia_manual || compCat?.codigo_interno || compCat?.referencia_fabricante || '').substring(0, 100) || null,
+                    marca_manual: (dto.marca_manual || compCat?.marca || '').substring(0, 100) || null,
+                    cantidad: new Decimal(cantidad),
+                    unidad: (dto.unidad || compCat?.unidad_medida || 'UND').substring(0, 20),
+                    costo_unitario: new Decimal(costoUnit.toFixed(2)),
+                    costo_total: new Decimal(costoTotal.toFixed(2)),
+                    origen_componente: origen as any,
+                    observaciones: dto.observaciones || `Imputación directa (${origen}) en ${orden.numero_orden}`,
+                    usado_por: dto.usado_por || orden.id_tecnico_asignado || null,
+                    registrado_por: dto.realizado_por || 1,
+                    fecha_uso: new Date(),
+                    fecha_registro: new Date(),
+                },
+            });
+
+            const totales = await this.recalcularTotalesOrden(tx, idOrden);
+
+            return {
+                success: true,
+                mensaje: `Insumo (${origen}) registrado en ${orden.numero_orden} exitosamente`,
+                componente_usado: creado,
+                totales_orden: totales,
+            };
+        });
+    }
+
+    async reintegrarComponenteOrden(
+        idOrden: number,
+        idComponenteUsado: number,
+        usuarioId: number = 1,
+        motivo?: string
+    ) {
+        return this.prisma.$transaction(async (tx) => {
+            const compUsado = await tx.componentes_usados.findUnique({
+                where: { id_componente_usado: idComponenteUsado },
+                include: {
+                    catalogo_componentes: true,
+                },
+            });
+
+            if (!compUsado || compUsado.id_orden_servicio !== idOrden) {
+                throw new NotFoundException(
+                    `Registro de repuesto #${idComponenteUsado} no encontrado en la Orden #${idOrden}`
+                );
+            }
+
+            const orden = await tx.ordenes_servicio.findUnique({
+                where: { id_orden_servicio: idOrden },
+                select: { id_orden_servicio: true, numero_orden: true },
+            });
+
+            const cantidadReintegrar = Number(compUsado.cantidad ?? 0);
+            let movimientoReverso: any = null;
+            let reintegradoBodega = false;
+
+            // Si provino de BODEGA y tiene componente de catálogo asociado, revertir inventario y Kardex
+            if (compUsado.origen_componente === 'BODEGA' && compUsado.id_componente && cantidadReintegrar > 0) {
+                const componente = await tx.catalogo_componentes.findUnique({
+                    where: { id_componente: compUsado.id_componente },
+                });
+
+                if (componente) {
+                    const idUbicacionDestino = compUsado.id_ubicacion || 1;
+                    let idLoteRestaurado = compUsado.id_lote || null;
+
+                    // 1. Restaurar cantidad en el lote origen (o en el lote más reciente del componente)
+                    if (idLoteRestaurado) {
+                        const loteOrigen = await tx.lotes_componentes.findUnique({
+                            where: { id_lote: idLoteRestaurado },
+                        });
+                        if (loteOrigen) {
+                            const nuevaCantLote = Number(loteOrigen.cantidad_actual ?? 0) + cantidadReintegrar;
+                            await tx.lotes_componentes.update({
+                                where: { id_lote: loteOrigen.id_lote },
+                                data: {
+                                    cantidad_actual: new Decimal(nuevaCantLote),
+                                    estado_lote: nuevaCantLote > 0 ? 'DISPONIBLE' : loteOrigen.estado_lote,
+                                },
+                            });
+                        } else {
+                            idLoteRestaurado = null;
+                        }
+                    }
+
+                    if (!idLoteRestaurado) {
+                        const loteFallback = await tx.lotes_componentes.findFirst({
+                            where: { id_componente: compUsado.id_componente },
+                            orderBy: { fecha_ingreso: 'desc' },
+                        });
+                        if (loteFallback) {
+                            const nuevaCantLote = Number(loteFallback.cantidad_actual ?? 0) + cantidadReintegrar;
+                            await tx.lotes_componentes.update({
+                                where: { id_lote: loteFallback.id_lote },
+                                data: {
+                                    cantidad_actual: new Decimal(nuevaCantLote),
+                                    estado_lote: nuevaCantLote > 0 ? 'DISPONIBLE' : loteFallback.estado_lote,
+                                },
+                            });
+                            idLoteRestaurado = loteFallback.id_lote;
+                        }
+                    }
+
+                    // 2. Incrementar stock_actual en catalogo_componentes
+                    const stockAnterior = componente.stock_actual ?? 0;
+                    const nuevoStock = Math.round(stockAnterior + cantidadReintegrar);
+                    await tx.catalogo_componentes.update({
+                        where: { id_componente: compUsado.id_componente },
+                        data: {
+                            stock_actual: nuevoStock,
+                            fecha_modificacion: new Date(),
+                            modificado_por: usuarioId || 1,
+                        },
+                    });
+
+                    // 3. Crear contra-asiento inmutable en movimientos_inventario (Kardex)
+                    movimientoReverso = await tx.movimientos_inventario.create({
+                        data: {
+                            tipo_movimiento: 'ENTRADA',
+                            origen_movimiento: 'DEVOLUCION',
+                            id_componente: compUsado.id_componente,
+                            cantidad: new Decimal(cantidadReintegrar),
+                            costo_unitario: compUsado.costo_unitario ?? componente.precio_compra ?? new Decimal(0),
+                            id_ubicacion: idUbicacionDestino,
+                            id_lote: idLoteRestaurado,
+                            id_orden_servicio: idOrden,
+                            justificacion:
+                                motivo ||
+                                `Reintegro a almacén por reversión en ${orden?.numero_orden || 'OS-' + idOrden}`,
+                            observaciones: `Devolución al almacén de ${cantidadReintegrar} ${compUsado.unidad || 'UND'} (${compUsado.descripcion}) desde ${orden?.numero_orden || 'OS-' + idOrden}`,
+                            realizado_por: usuarioId || 1,
+                            fecha_movimiento: new Date(),
+                        },
+                    });
+
+                    reintegradoBodega = true;
+                }
+            }
+
+            // 4. Eliminar el registro de componentes_usados
+            await tx.componentes_usados.delete({
+                where: { id_componente_usado: idComponenteUsado },
+            });
+
+            // 5. Recalcular totales de la Orden de Servicio
+            const totales = await this.recalcularTotalesOrden(tx, idOrden);
+
+            return {
+                success: true,
+                mensaje: reintegradoBodega
+                    ? `Repuesto reintegrado al almacén (${cantidadReintegrar} ${compUsado.unidad || 'UND'}) y descontado de ${orden?.numero_orden || 'la orden'}`
+                    : `Registro de insumo eliminado de ${orden?.numero_orden || 'la orden'}`,
+                reintegrado_bodega: reintegradoBodega,
+                movimiento_reverso: movimientoReverso,
+                totales_orden: totales,
+            };
         });
     }
 }

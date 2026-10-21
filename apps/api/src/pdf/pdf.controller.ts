@@ -275,6 +275,14 @@ export class PdfController {
           },
         },
         sedes_cliente: true,
+        componentes_usados: {
+          include: {
+            catalogo_componentes: true,
+            ubicaciones_bodega: true,
+            lotes_componentes: true,
+          },
+          orderBy: { id_componente_usado: 'asc' },
+        },
       },
     }) as any; // Cast as any para Prisma includes complejos
 
@@ -646,6 +654,14 @@ export class PdfController {
         : undefined,
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
       observaciones_tecnico: orden.observaciones_tecnico || undefined,
+      repuestosWms: (orden.componentes_usados || []).map((cu: any) => {
+        const sku = cu.catalogo_componentes?.codigo_interno || cu.referencia_manual || '';
+        const desc = cu.descripcion || cu.catalogo_componentes?.descripcion_corta || 'Repuesto';
+        const cant = Number(cu.cantidad ?? 1);
+        const und = cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND';
+        const lote = cu.lotes_componentes?.codigo_lote ? ` • Lote ${cu.lotes_componentes.codigo_lote}` : '';
+        return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote})`;
+      }),
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
       equiposOrden,
@@ -1291,6 +1307,14 @@ export class PdfController {
           },
         },
         sedes_cliente: true,
+        componentes_usados: {
+          include: {
+            catalogo_componentes: true,
+            ubicaciones_bodega: true,
+            lotes_componentes: true,
+          },
+          orderBy: { id_componente_usado: 'asc' },
+        },
       },
     }) as any;
 
@@ -1661,6 +1685,14 @@ export class PdfController {
         : undefined,
       observaciones: orden.observaciones_cierre || orden.observaciones || '',
       observaciones_tecnico: orden.observaciones_tecnico || undefined,
+      repuestosWms: (orden.componentes_usados || []).map((cu: any) => {
+        const sku = cu.catalogo_componentes?.codigo_interno || cu.referencia_manual || '';
+        const desc = cu.descripcion || cu.catalogo_componentes?.descripcion_corta || 'Repuesto';
+        const cant = Number(cu.cantidad ?? 1);
+        const und = cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND';
+        const lote = cu.lotes_componentes?.codigo_lote ? ` • Lote ${cu.lotes_componentes.codigo_lote}` : '';
+        return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote})`;
+      }),
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
       esMultiEquipo,
       actividadesPorEquipo,

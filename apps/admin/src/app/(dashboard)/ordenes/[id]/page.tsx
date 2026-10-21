@@ -31,12 +31,21 @@ import {
     useEvidenciasOrden,
     useFirmasOrden,
     useMedicionesCompletasOrden,
+    useAddComponenteOrden,
+    useComponentesOrden,
     useOrden,
+    useRemoveComponenteOrden,
     useRemoveServicioOrden,
     useServiciosComerciales,
     useServiciosOrden,
-    useTecnicosSelector
+    useTecnicosSelector,
+    type ComponenteUsadoOrden
 } from '@/features/ordenes';
+import {
+    useBodegas,
+    useComponentesStock,
+    type ComponenteStock,
+} from '@/features/inventario/api/inventario-motor.service';
 import { ActividadCardAdvanced, ResumenEstados } from '@/features/ordenes/components/actividad-card-advanced';
 import { EdicionTecnicoSection } from '@/features/ordenes/components/edicion-tecnico-section';
 import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gallery';
@@ -79,15 +88,20 @@ import {
     Search,
     Settings,
     ShieldCheck,
+    Layers,
+    Package,
+    RotateCcw,
     Tag,
     Trash2,
     User,
+    Warehouse,
     Wrench,
+    X,
     XCircle
 } from 'lucide-react';
-import { getSession } from 'next-auth/react';
+import { getSession, useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
 import { buildInformeFilename, descargarInformePorOrdenAutenticado } from '@/lib/pdf-naming';
@@ -1102,10 +1116,33 @@ function TabEjecucion({ orden }: { orden: Orden }) {
 
 function TabFinanciero({ orden }: { orden: Orden }) {
     const [isAddServicioOpen, setIsAddServicioOpen] = useState(false);
+    const [isDespacharRepuestoOpen, setIsDespacharRepuestoOpen] = useState(false);
+    const [reintegrandoId, setReintegrandoId] = useState<number | null>(null);
+
     const { data: serviciosData, isLoading } = useServiciosOrden(orden.id_orden_servicio);
+    const { data: componentesData, isLoading: isLoadingComponentes } = useComponentesOrden(orden.id_orden_servicio);
     const removeServicio = useRemoveServicioOrden();
+    const removeComponente = useRemoveComponenteOrden();
 
     const servicios = serviciosData?.data || [];
+    const componentes = componentesData?.data || [];
+    const itemsBodegaCount = componentes.filter((c) => c.origen_componente === 'BODEGA').length;
+    const itemsCompraDirectaCount = componentes.filter((c) => c.origen_componente !== 'BODEGA').length;
+    const resumenComp = componentesData?.resumen || {
+        total_items: componentes.length,
+        unidades_totales: componentes.reduce((s, c) => s + Number(c.cantidad || 0), 0),
+        costo_total_bodega: 0,
+        costo_total_compra_directa: 0,
+        costo_total_general: Number(orden.total_componentes) || 0,
+    };
+
+    const totalServiciosVivo = Number(orden.total_servicios) || 0;
+    const totalComponentesVivo =
+        componentesData?.resumen !== undefined
+            ? Number(componentesData.resumen.costo_total_general || 0)
+            : Number(orden.total_componentes) || 0;
+    const totalGastosVivo = Number(orden.total_gastos) || 0;
+    const totalGeneralVivo = totalServiciosVivo + totalComponentesVivo + totalGastosVivo;
 
     const handleRemove = async (idDetalle: number) => {
         if (window.confirm('¿Deseas eliminar este servicio de la orden?')) {
@@ -1116,26 +1153,221 @@ function TabFinanciero({ orden }: { orden: Orden }) {
         }
     };
 
+    const handleReintegrarComponente = async (comp: ComponenteUsadoOrden) => {
+        const esBodega = comp.origen_componente === 'BODEGA' && comp.id_componente;
+        const msg = esBodega
+            ? `¿Confirmas el REINTEGRO FÍSICO de ${comp.cantidad} ${comp.unidad || 'UND'} de "${comp.descripcion}" a la bodega ${comp.bodega_codigo || 'WMS'}?
+
+Esta operación restaurará el stock en catálogo/lote, asentará una ENTRADA por DEVOLUCIÓN en el Kardex y descontará ${Number(comp.costo_total || 0).toLocaleString('es-CO')} COP de la orden.`
+            : `¿Deseas eliminar el insumo de compra directa "${comp.descripcion}" y descontar ${Number(comp.costo_total || 0).toLocaleString('es-CO')} COP de la orden?`;
+        if (!window.confirm(msg)) return;
+        try {
+            setReintegrandoId(comp.id_componente_usado);
+            await removeComponente.mutateAsync({
+                idOrden: orden.id_orden_servicio,
+                idUso: comp.id_componente_usado,
+                motivo: `Reintegro desde Orden ${orden.numero_orden}`,
+            });
+        } finally {
+            setReintegrandoId(null);
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Resumen financiero */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 shadow-sm">
                     <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">Servicios</p>
-                    <p className="text-2xl font-bold text-blue-900">${(Number(orden.total_servicios) || 0).toLocaleString('es-CO')}</p>
+                    <p className="text-2xl font-bold text-blue-900">${totalServiciosVivo.toLocaleString('es-CO')}</p>
                 </div>
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100 shadow-sm">
-                    <p className="text-xs font-bold text-green-600 uppercase tracking-widest mb-1">Componentes</p>
-                    <p className="text-2xl font-bold text-green-900">${(Number(orden.total_componentes) || 0).toLocaleString('es-CO')}</p>
+                <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">Repuestos & WMS</p>
+                        <span className="text-[10px] font-bold bg-white text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                            {resumenComp.total_items} ítems
+                        </span>
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-950">${totalComponentesVivo.toLocaleString('es-CO')}</p>
                 </div>
                 <div className="bg-orange-50 rounded-xl p-4 border border-orange-100 shadow-sm">
                     <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-1">Gastos</p>
-                    <p className="text-2xl font-bold text-orange-900">${(Number(orden.total_gastos) || 0).toLocaleString('es-CO')}</p>
+                    <p className="text-2xl font-bold text-orange-900">${totalGastosVivo.toLocaleString('es-CO')}</p>
                 </div>
                 <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 shadow-sm ring-2 ring-purple-200">
                     <p className="text-xs font-bold text-purple-600 uppercase tracking-widest mb-1">Total General</p>
-                    <p className="text-2xl font-bold text-purple-900">${(Number(orden.total_general) || 0).toLocaleString('es-CO')}</p>
+                    <p className="text-2xl font-bold text-purple-900">${totalGeneralVivo.toLocaleString('es-CO')}</p>
                 </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════════════════════════
+                SECCIÓN ENTERPRISE: REPUESTOS & INSUMOS CONSUMIDOS (TRAZABILIDAD WMS)
+                ═══════════════════════════════════════════════════════════════════════════ */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                                <Package className="h-5 w-5 text-amber-600" />
+                                Repuestos & Insumos Utilizados (Integración WMS)
+                            </h4>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                Bodega WMS: {itemsBodegaCount}
+                            </span>
+                            {itemsCompraDirectaCount > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    Compra Directa: {itemsCompraDirectaCount}
+                                </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                Total Unid.: {resumenComp.unidades_totales}
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            Despacho directo desde almacén multi-bodega con regla FIFO/FEFO, asiento automático en Kardex e imputación financiera a la orden
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsDespacharRepuestoOpen(true)}
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Despachar Repuesto WMS
+                    </button>
+                </div>
+
+                {isLoadingComponentes ? (
+                    <div className="flex justify-center py-10">
+                        <Loader2 className="h-7 w-7 animate-spin text-amber-600" />
+                    </div>
+                ) : componentes.length === 0 ? (
+                    <div className="text-center py-10 px-4 text-slate-500">
+                        <Package className="h-11 w-11 mx-auto mb-2.5 text-slate-300" />
+                        <p className="font-semibold text-slate-700 text-sm">No hay repuestos ni insumos imputados a esta orden</p>
+                        <p className="text-xs text-slate-500 mt-0.5 max-w-md mx-auto">
+                            Utilice el botón <strong>Despachar Repuesto WMS</strong> para descargar materiales de bodega (con trazabilidad de lote y Kardex) o registrar una compra directa en campo.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                    <th className="px-4 py-3">Código / Repuesto</th>
+                                    <th className="px-4 py-3">Origen / Bodega & Lote</th>
+                                    <th className="px-4 py-3">Trazabilidad Kardex</th>
+                                    <th className="px-4 py-3 text-right">Cant.</th>
+                                    <th className="px-4 py-3 text-right">Costo Unit.</th>
+                                    <th className="px-4 py-3 text-right text-emerald-700">Subtotal</th>
+                                    <th className="px-4 py-3 text-right">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {componentes.map((c) => {
+                                    const isReintegrando = reintegrandoId === c.id_componente_usado;
+                                    return (
+                                        <tr key={c.id_componente_usado} className="hover:bg-slate-50/70 transition-colors">
+                                            <td className="px-4 py-3.5">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {c.id_componente ? (
+                                                        <a
+                                                            href={`/inventario/${c.id_componente}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            title="Abrir ficha maestra en Inventario WMS"
+                                                            className="inline-flex items-center gap-1 font-mono text-xs font-bold text-slate-800 bg-slate-100 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300 px-2 py-0.5 rounded border border-slate-200 transition-colors"
+                                                        >
+                                                            {c.sku || `ART-${c.id_componente}`}
+                                                            <ExternalLink className="h-3 w-3 opacity-70" />
+                                                        </a>
+                                                    ) : (
+                                                        <span className="font-mono text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                            EXTERNO
+                                                        </span>
+                                                    )}
+                                                    <span className="text-sm font-bold text-slate-900">{c.descripcion}</span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                                    {c.referencia_fabricante && c.referencia_fabricante !== 'S/R'
+                                                        ? `Ref: ${c.referencia_fabricante}`
+                                                        : 'Ref: Estándar'}
+                                                    {c.marca && c.marca !== 'GENÉRICO' ? ` • Marca: ${c.marca}` : ''}
+                                                    {c.observaciones ? ` • Nota: ${c.observaciones}` : ''}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3.5">
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    {c.origen_componente === 'BODEGA' ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                                            <Warehouse className="h-3 w-3" />
+                                                            {c.bodega_codigo ? `[${c.bodega_codigo}] ${c.bodega_nombre || 'Almacén'}` : 'BODEGA WMS'}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                            COMPRA DIRECTA CAMPO
+                                                        </span>
+                                                    )}
+                                                    {c.codigo_lote && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                                                            <Layers className="h-3 w-3 text-amber-700" />
+                                                            Lote: {c.codigo_lote}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3.5">
+                                                {c.id_movimiento_inventario ? (
+                                                    <div className="space-y-0.5">
+                                                        <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                                            KARDEX #{c.id_movimiento_inventario}
+                                                        </span>
+                                                        {c.fecha_uso && (
+                                                            <p className="text-[10px] text-slate-400">
+                                                                {new Date(c.fecha_uso).toLocaleString('es-CO')}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[11px] text-slate-400 italic">Imputación contable directa</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right text-sm font-bold text-slate-900">
+                                                {Number(c.cantidad)} <span className="text-[10px] font-semibold text-slate-500">{c.unidad || 'UND'}</span>
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right text-sm font-mono text-slate-700">
+                                                ${Number(c.costo_unitario || 0).toLocaleString('es-CO')}
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right text-sm font-mono font-bold text-emerald-800">
+                                                ${Number(c.costo_total || 0).toLocaleString('es-CO')}
+                                            </td>
+                                            <td className="px-4 py-3.5 text-right">
+                                                <button
+                                                    type="button"
+                                                    disabled={isReintegrando}
+                                                    onClick={() => handleReintegrarComponente(c)}
+                                                    title={
+                                                        c.origen_componente === 'BODEGA'
+                                                            ? 'Reintegrar repuesto al almacén WMS y revertir cargo en la orden'
+                                                            : 'Eliminar registro de compra directa'
+                                                    }
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                                                >
+                                                    {isReintegrando ? (
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <RotateCcw className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {c.origen_componente === 'BODEGA' ? 'Reintegrar' : 'Quitar'}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
 
             {/* Detalle de servicios */}
@@ -1212,6 +1444,624 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                     idOrden={orden.id_orden_servicio}
                 />
             )}
+
+            {/* Modal Enterprise para despachar repuesto WMS o compra directa a la orden */}
+            {isDespacharRepuestoOpen && (
+                <ModalDespacharRepuestoOrden
+                    isOpen={isDespacharRepuestoOpen}
+                    onClose={() => setIsDespacharRepuestoOpen(false)}
+                    orden={orden}
+                />
+            )}
+        </div>
+    );
+}
+
+function ModalDespacharRepuestoOrden({
+    isOpen,
+    onClose,
+    orden,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    orden: Orden;
+}) {
+    const { data: session } = useSession();
+    const usuarioId = Number((session?.user as any)?.id) || 1;
+
+    const [origen, setOrigen] = useState<'BODEGA' | 'COMPRA_DIRECTA'>('BODEGA');
+    const [busqueda, setBusqueda] = useState('');
+    const [componenteSeleccionado, setComponenteSeleccionado] = useState<ComponenteStock | null>(null);
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    const [bodegaSalida, setBodegaSalida] = useState<string>('');
+    const [loteSalida, setLoteSalida] = useState<string>('');
+    const [cantidad, setCantidad] = useState<string>('1');
+    const [costoUnitario, setCostoUnitario] = useState<string>('');
+    const [descripcionDirecta, setDescripcionDirecta] = useState<string>('');
+    const [observaciones, setObservaciones] = useState<string>('');
+    const [error, setError] = useState<string | null>(null);
+
+    const { data: componentesData, isLoading: isLoadingComp } = useComponentesStock({
+        busqueda: busqueda || undefined,
+        limit: 12,
+    });
+    const { data: bodegas = [] } = useBodegas();
+    const addComponenteMutation = useAddComponenteOrden();
+
+    // Bodegas efectivas del componente con resolución Zero-Trust (.bodegas o .lotes_activos)
+    const bodegasEfectivas = useMemo(() => {
+        if (componenteSeleccionado?.bodegas && componenteSeleccionado.bodegas.length > 0) {
+            return componenteSeleccionado.bodegas;
+        }
+        if (componenteSeleccionado?.lotes_activos && componenteSeleccionado.lotes_activos.length > 0) {
+            const bMap = new Map<number, { id_ubicacion: number; codigo: string; nombre: string; stock: number }>();
+            for (const l of componenteSeleccionado.lotes_activos) {
+                const cod = l.bodega_codigo || (l as any).bodega || 'BOD-CENTRAL';
+                const idU = l.id_ubicacion || (cod === 'BOD-FLUIDOS' ? 2 : cod === 'MOVIL-01' ? 3 : 1);
+                const nom = l.bodega_nombre || (l as any).zona || (idU === 2 ? 'Almacén de Lubricantes y Químicos' : idU === 3 ? 'Unidad Móvil' : 'Bodega Central Taller');
+                const exist = bMap.get(idU) || { id_ubicacion: idU, codigo: cod, nombre: nom, stock: 0 };
+                exist.stock += Number(l.cantidad_actual || 0);
+                bMap.set(idU, exist);
+            }
+            return Array.from(bMap.values());
+        }
+        if (componenteSeleccionado && componenteSeleccionado.stock_actual > 0) {
+            return [{
+                id_ubicacion: 1,
+                codigo: 'BOD-CENTRAL',
+                nombre: 'Bodega Central Taller',
+                stock: componenteSeleccionado.stock_actual,
+            }];
+        }
+        return [];
+    }, [componenteSeleccionado]);
+
+    const lotesActivosEfectivos = useMemo(() => {
+        if (!componenteSeleccionado?.lotes_activos) return [];
+        return componenteSeleccionado.lotes_activos.map((l: any) => {
+            const cod = l.bodega_codigo || l.bodega || 'BOD-CENTRAL';
+            const idU = l.id_ubicacion || (cod === 'BOD-FLUIDOS' ? 2 : cod === 'MOVIL-01' ? 3 : 1);
+            return {
+                ...l,
+                id_ubicacion: idU,
+                bodega_codigo: cod,
+                bodega_nombre: l.bodega_nombre || l.zona || 'Bodega Central Taller',
+            };
+        });
+    }, [componenteSeleccionado]);
+
+    // Auto-seleccionar la primera bodega con stock > 0 cuando se elige un componente
+    useEffect(() => {
+        if (!isOpen || bodegas.length === 0) return;
+        const defaultId = bodegas[0].id_ubicacion.toString();
+        if (!componenteSeleccionado) {
+            if (!bodegaSalida) setBodegaSalida(defaultId);
+            return;
+        }
+        const bList = (componenteSeleccionado.bodegas && componenteSeleccionado.bodegas.length > 0)
+            ? componenteSeleccionado.bodegas
+            : bodegasEfectivas;
+        const conSaldo = bList.find((b) => b.stock > 0);
+        const bestId = conSaldo ? conSaldo.id_ubicacion.toString() : defaultId;
+        setBodegaSalida(bestId);
+        setLoteSalida('');
+        const precioRef = componenteSeleccionado.precio_compra ?? componenteSeleccionado.precio_venta ?? 0;
+        setCostoUnitario(precioRef > 0 ? precioRef.toString() : '');
+    }, [isOpen, componenteSeleccionado, bodegasEfectivas, bodegas]);
+
+    if (!isOpen) return null;
+
+    const bodegaSalidaId = parseInt(bodegaSalida, 10);
+    const stockEnBodegaSalida =
+        bodegasEfectivas.find((b) => b.id_ubicacion === bodegaSalidaId)?.stock ?? 0;
+
+    const cantidadNum = parseFloat(cantidad) || 0;
+    const costoNum = parseFloat(costoUnitario) || 0;
+    const subtotalEstimado = cantidadNum * costoNum;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+
+        if (cantidadNum <= 0) {
+            setError('La cantidad debe ser mayor a 0');
+            return;
+        }
+
+        if (origen === 'BODEGA') {
+            if (!componenteSeleccionado) {
+                setError('Debe seleccionar un artículo del catálogo maestro WMS');
+                return;
+            }
+            if (cantidadNum > stockEnBodegaSalida) {
+                const bodNom = bodegas.find((b) => b.id_ubicacion === bodegaSalidaId)?.zona || 'la bodega seleccionada';
+                setError(`Stock insuficiente en ${bodNom}. Disponible: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}`);
+                return;
+            }
+
+            try {
+                await addComponenteMutation.mutateAsync({
+                    idOrden: orden.id_orden_servicio,
+                    data: {
+                        id_componente: componenteSeleccionado.id_componente,
+                        cantidad: cantidadNum,
+                        origen_componente: 'BODEGA',
+                        id_ubicacion: bodegaSalida ? parseInt(bodegaSalida, 10) : undefined,
+                        id_lote: loteSalida ? parseInt(loteSalida, 10) : undefined,
+                        costo_unitario: costoNum > 0 ? costoNum : undefined,
+                        observaciones: observaciones.trim() || undefined,
+                        realizado_por: usuarioId,
+                    },
+                });
+                onClose();
+            } catch (err: any) {
+                setError(err?.response?.data?.message || 'Error al despachar repuesto del almacén');
+            }
+        } else {
+            if (!descripcionDirecta.trim() && !componenteSeleccionado) {
+                setError('Debe ingresar la descripción del repuesto o insumo adquirido en campo');
+                return;
+            }
+            try {
+                await addComponenteMutation.mutateAsync({
+                    idOrden: orden.id_orden_servicio,
+                    data: {
+                        id_componente: componenteSeleccionado?.id_componente,
+                        descripcion: descripcionDirecta.trim() || componenteSeleccionado?.nombre || componenteSeleccionado?.referencia,
+                        cantidad: cantidadNum,
+                        origen_componente: 'COMPRA_DIRECTA',
+                        costo_unitario: costoNum,
+                        observaciones: observaciones.trim() || undefined,
+                        realizado_por: usuarioId,
+                    },
+                });
+                onClose();
+            } catch (err: any) {
+                setError(err?.response?.data?.message || 'Error al registrar compra directa en la orden');
+            }
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
+
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden">
+                {/* Header Corporativo */}
+                <div className="flex items-center justify-between px-5 py-3.5 bg-white border-b border-slate-200 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg border bg-amber-50 text-amber-700 border-amber-200">
+                            <Package className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base font-bold text-slate-900">
+                                    Despachar Repuesto / Insumo a Orden
+                                </h2>
+                                <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                                    {orden.numero_orden}
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Descarga en tiempo real de bodega con regla FIFO, asiento en Kardex e imputación financiera
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                {/* Cuerpo con Scroll Interno */}
+                <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <div className="p-5 overflow-y-auto space-y-4 flex-1">
+                        {/* Selector Segmentado de Origen */}
+                        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOrigen('BODEGA');
+                                    setError(null);
+                                }}
+                                className={cn(
+                                    'flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                                    origen === 'BODEGA'
+                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                )}
+                            >
+                                <Warehouse className="h-3.5 w-3.5 text-amber-600" />
+                                <span>Despacho desde Almacén WMS (Kardex & FIFO)</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOrigen('COMPRA_DIRECTA');
+                                    setError(null);
+                                }}
+                                className={cn(
+                                    'flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                                    origen === 'COMPRA_DIRECTA'
+                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                                        : 'text-slate-600 hover:text-slate-900'
+                                )}
+                            >
+                                <DollarSign className="h-3.5 w-3.5 text-blue-600" />
+                                <span>Compra Directa en Campo (Solo Costeo OT)</span>
+                            </button>
+                        </div>
+
+                        {error && (
+                            <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                                <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                                <span>{error}</span>
+                            </div>
+                        )}
+
+                        {origen === 'BODEGA' ? (
+                            <>
+                                {/* Selector de Componente del Catálogo WMS */}
+                                <div className="space-y-1">
+                                    <label className="block text-xs font-semibold text-slate-700 uppercase">
+                                        Artículo / Repuesto del Catálogo WMS *
+                                    </label>
+                                    {componenteSeleccionado ? (
+                                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl shadow-2xs space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono text-xs font-bold text-slate-800 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300/60">
+                                                        {componenteSeleccionado.codigo || `ART-${componenteSeleccionado.id_componente}`}
+                                                    </span>
+                                                    <p className="text-sm font-bold text-slate-900">
+                                                        {componenteSeleccionado.nombre || componenteSeleccionado.referencia}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setComponenteSeleccionado(null);
+                                                        setBusqueda('');
+                                                    }}
+                                                    className="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs shrink-0 cursor-pointer"
+                                                >
+                                                    Cambiar artículo
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-slate-500">
+                                                Ref: <span className="font-semibold text-slate-700">{componenteSeleccionado.referencia}</span> | Marca: <span className="font-semibold text-slate-700">{componenteSeleccionado.marca || 'N/A'}</span>
+                                            </p>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <span className="text-slate-500 font-medium">Stock Global:</span>
+                                                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                    {componenteSeleccionado.stock_actual} {componenteSeleccionado.unidad || 'UND'}
+                                                </span>
+                                                {componenteSeleccionado.precio_compra && componenteSeleccionado.precio_compra > 0 && (
+                                                    <span className="text-slate-400 text-[11px]">
+                                                        • Costo catálogo: ${Number(componenteSeleccionado.precio_compra).toLocaleString('es-CO')} COP
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {bodegasEfectivas.length > 0 && (
+                                                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
+                                                    <span className="text-[11px] text-slate-500 font-medium">Desglose por Bodega:</span>
+                                                    {bodegasEfectivas.map((b) => (
+                                                        <span
+                                                            key={b.id_ubicacion}
+                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] text-slate-700 shadow-2xs"
+                                                        >
+                                                            <span className="font-semibold text-slate-500">{b.codigo}:</span>
+                                                            <span className="font-bold text-slate-900">{b.stock}</span>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar por código (ART-2026), referencia o descripción (Ej: Aceite, Filtro)..."
+                                                    value={busqueda}
+                                                    onChange={(e) => {
+                                                        setBusqueda(e.target.value);
+                                                        setShowDropdown(true);
+                                                    }}
+                                                    onFocus={() => setShowDropdown(true)}
+                                                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                                                />
+                                            </div>
+
+                                            {showDropdown && (
+                                                <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                                                    {isLoadingComp ? (
+                                                        <div className="p-3 text-xs text-slate-500 flex items-center justify-center gap-2">
+                                                            <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                                                            Consultando catálogo WMS...
+                                                        </div>
+                                                    ) : (componentesData?.data || []).length === 0 ? (
+                                                        <p className="p-3 text-xs text-slate-500 text-center">No se encontraron componentes</p>
+                                                    ) : (
+                                                        (componentesData?.data || []).map((comp) => (
+                                                            <button
+                                                                key={comp.id_componente}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setComponenteSeleccionado(comp);
+                                                                    setShowDropdown(false);
+                                                                }}
+                                                                className="w-full text-left p-2.5 hover:bg-amber-50/50 border-b border-slate-100 flex items-center justify-between transition-colors cursor-pointer"
+                                                            >
+                                                                <div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                                            {comp.codigo || `ART-${comp.id_componente}`}
+                                                                        </span>
+                                                                        <p className="text-xs font-bold text-slate-900">{comp.nombre || comp.referencia}</p>
+                                                                    </div>
+                                                                    <p className="text-[11px] text-slate-500 mt-0.5">REF: {comp.referencia} • Marca: {comp.marca || 'S/M'}</p>
+                                                                </div>
+                                                                <div className="text-right shrink-0 ml-3">
+                                                                    <span className={cn(
+                                                                        'text-xs font-bold block',
+                                                                        comp.stock_actual > 0 ? 'text-emerald-700' : 'text-rose-600'
+                                                                    )}>
+                                                                        Stock: {comp.stock_actual} {comp.unidad || 'UND'}
+                                                                    </span>
+                                                                    {comp.precio_compra ? (
+                                                                        <span className="text-[10px] text-slate-400 font-mono">${Number(comp.precio_compra).toLocaleString('es-CO')}</span>
+                                                                    ) : null}
+                                                                </div>
+                                                            </button>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Banner de Lotes Físicos Disponibles (FIFO/FEFO) */}
+                                {lotesActivosEfectivos.length > 0 && (
+                                    <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-bold text-amber-900 flex items-center gap-1.5">
+                                                <Layers className="h-3.5 w-3.5 text-amber-700" />
+                                                Lotes Físicos Disponibles (Sugerencia FIFO/FEFO)
+                                            </span>
+                                            <span className="text-[10px] text-amber-800 font-semibold uppercase">
+                                                {lotesActivosEfectivos.length} {lotesActivosEfectivos.length === 1 ? 'lote' : 'lotes'}
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                            {lotesActivosEfectivos.map((lote) => (
+                                                <span
+                                                    key={lote.id_lote}
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-200 rounded font-mono text-[11px] text-slate-800 shadow-2xs"
+                                                >
+                                                    <strong>{lote.codigo_lote}</strong>: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'}
+                                                    {lote.fecha_vencimiento && (
+                                                        <span className="text-[10px] text-slate-400 font-sans">
+                                                            (Vence: {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')})
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Bodega Origen y Cantidad */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                            Bodega Origen *
+                                        </label>
+                                        <select
+                                            value={bodegaSalida}
+                                            onChange={(e) => {
+                                                setBodegaSalida(e.target.value);
+                                                setLoteSalida('');
+                                            }}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500 truncate"
+                                            required
+                                        >
+                                            {bodegas.map((b) => {
+                                                const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                                return (
+                                                    <option key={b.id_ubicacion} value={b.id_ubicacion}>
+                                                        [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                            Cantidad a Despachar *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="any"
+                                            max={stockEnBodegaSalida > 0 ? stockEnBodegaSalida : 1}
+                                            disabled={!!componenteSeleccionado && stockEnBodegaSalida <= 0}
+                                            value={cantidad}
+                                            onChange={(e) => setCantidad(e.target.value)}
+                                            className={cn(
+                                                'w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-amber-500',
+                                                componenteSeleccionado && stockEnBodegaSalida <= 0
+                                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                                    : 'border-slate-300'
+                                            )}
+                                            required
+                                        />
+                                        {componenteSeleccionado && (
+                                            <span className={cn(
+                                                'text-[11px] font-medium mt-1 block',
+                                                stockEnBodegaSalida > 0 ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'
+                                            )}>
+                                                {stockEnBodegaSalida > 0
+                                                    ? `✓ Disponible en bodega: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}`
+                                                    : `⚠️ Sin existencias en esta bodega (${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}). Despacho no disponible.`}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Selector de Lote FIFO y Costo Unitario */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                            Lote a Despachar (FIFO)
+                                        </label>
+                                        <select
+                                            value={loteSalida}
+                                            onChange={(e) => setLoteSalida(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500"
+                                        >
+                                            <option value="">-- Regla Automática FIFO / FEFO (Recomendado) --</option>
+                                            {lotesActivosEfectivos
+                                                .filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10))
+                                                .map((lote) => (
+                                                    <option key={lote.id_lote} value={lote.id_lote}>
+                                                        [{lote.codigo_lote}] Disp: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'} {lote.fecha_vencimiento ? `• Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}` : ''}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                            Costo Unitario Imputado ($)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            placeholder="Automático según catálogo"
+                                            value={costoUnitario}
+                                            onChange={(e) => setCostoUnitario(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-amber-500"
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                        Descripción del Repuesto / Insumo Adquirido en Campo *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: Abrazadera industrial 4 pulgadas en acero inoxidable (Factura POS #981)"
+                                        value={descripcionDirecta}
+                                        onChange={(e) => setDescripcionDirecta(e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                            Cantidad *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="any"
+                                            value={cantidad}
+                                            onChange={(e) => setCantidad(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-blue-500"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                            Costo Unitario ($) *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            placeholder="0"
+                                            value={costoUnitario}
+                                            onChange={(e) => setCostoUnitario(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                Observaciones / Soporte Técnico
+                            </label>
+                            <input
+                                type="text"
+                                placeholder="Ej: Reemplazo preventivo durante mantenimiento de 250h..."
+                                value={observaciones}
+                                onChange={(e) => setObservaciones(e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                            />
+                        </div>
+
+                        {/* Preview Financiero de Imputación */}
+                        <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between">
+                            <div>
+                                <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                                    Impacto Financiero en {orden.numero_orden}
+                                </p>
+                                <p className="text-xs text-emerald-700 mt-0.5">
+                                    {origen === 'BODEGA'
+                                        ? 'Descuenta existencias físicas, genera asiento CONSUMO_OS en Kardex y suma al total de la orden'
+                                        : 'Imputación contable directa al costo de componentes de la orden'}
+                                </p>
+                            </div>
+                            <div className="text-right shrink-0 ml-3">
+                                <span className="text-[10px] font-bold text-emerald-700 uppercase block">Subtotal a Imputar</span>
+                                <span className="text-lg font-black font-mono text-emerald-950">
+                                    ${subtotalEstimado.toLocaleString('es-CO')} COP
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer Sticky */}
+                    <div className="px-5 py-3 bg-slate-50/90 backdrop-blur-xs border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200/60 rounded-lg font-medium transition-colors cursor-pointer"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={addComponenteMutation.isPending || (origen === 'BODEGA' && !!componenteSeleccionado && stockEnBodegaSalida <= 0)}
+                            className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                            {addComponenteMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Check className="h-4 w-4" />
+                            )}
+                            Confirmar Despacho a {orden.numero_orden}
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 }
