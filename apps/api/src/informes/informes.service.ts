@@ -65,7 +65,8 @@ export class InformesService {
    * - fechaDesde / fechaHasta: rango de fecha de generación
    * - tipoServicio: filtrar por tipo de servicio de la orden
    * - estadoInforme: filtrar por estado (GENERADO = sin registro en informes, o BORRADOR/REVISADO/APROBADO/ENVIADO)
-   * - busqueda: texto libre (busca en numero_documento, numero_orden, nombre cliente, NIT)
+   * - busqueda: texto libre (busca en numero_documento, numero_orden, numero_informe,
+   *   cliente/sede, NIT, equipo, tipo de servicio y técnico; ignora acentos)
    * - page / limit: paginación server-side (default 50)
    */
   async findAllReportes(filters: {
@@ -120,17 +121,46 @@ export class InformesService {
       }
 
       if (filters.busqueda) {
-        const searchParam = `%${filters.busqueda.trim()}%`;
-        conditions.push(`(
-          dg.numero_documento ILIKE $${idx} OR
-          os.numero_orden ILIKE $${idx} OR
-          COALESCE(p.primer_nombre, '') ILIKE $${idx} OR
-          COALESCE(p.primer_apellido, '') ILIKE $${idx} OR
-          COALESCE(p.razon_social, '') ILIKE $${idx} OR
-          COALESCE(p.numero_identificacion, '') ILIKE $${idx}
-        )`);
-        params.push(searchParam);
-        idx++;
+        const searchTerm = filters.busqueda
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+        if (searchTerm) {
+          const searchParam = `%${searchTerm}%`;
+
+          // ✅ FIX 21-OCT-2026: La búsqueda debe cubrir TODO lo que se muestra en la
+          // tabla (cliente/sede, equipo, tipo de servicio, técnico), no solo el
+          // nombre fiscal del cliente. Antes, buscar "JARDIN BOTANICO" devolvía 0
+          // aunque esa sede aparecía en la columna Cliente.
+          // Se normalizan acentos para que "maquinas" encuentre "Máquinas".
+          const normalized = (column: string) =>
+            `translate(lower(COALESCE(${column}, '')), 'áéíóúüñ', 'aeiouun')`;
+
+          conditions.push(`(
+            ${normalized('dg.numero_documento')} ILIKE $${idx} OR
+            ${normalized('os.numero_orden')} ILIKE $${idx} OR
+            ${normalized('i.numero_informe')} ILIKE $${idx} OR
+            ${normalized('p.primer_nombre')} ILIKE $${idx} OR
+            ${normalized('p.primer_apellido')} ILIKE $${idx} OR
+            ${normalized('p.razon_social')} ILIKE $${idx} OR
+            ${normalized('p.numero_identificacion')} ILIKE $${idx} OR
+            ${normalized('c.nombre_sede')} ILIKE $${idx} OR
+            ${normalized('sc.nombre_sede')} ILIKE $${idx} OR
+            ${normalized('e.codigo_equipo')} ILIKE $${idx} OR
+            ${normalized('e.nombre_equipo')} ILIKE $${idx} OR
+            ${normalized('e.numero_serie_equipo')} ILIKE $${idx} OR
+            ${normalized('te.nombre_tipo')} ILIKE $${idx} OR
+            ${normalized('ts.nombre_tipo')} ILIKE $${idx} OR
+            ${normalized('ts.codigo_tipo')} ILIKE $${idx} OR
+            ${normalized('pt.primer_nombre')} ILIKE $${idx} OR
+            ${normalized('pt.primer_apellido')} ILIKE $${idx}
+          )`);
+
+          params.push(searchParam);
+          idx++;
+        }
       }
 
       const whereClause = conditions.join(' AND ');
