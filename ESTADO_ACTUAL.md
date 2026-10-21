@@ -3,6 +3,7 @@
 **Fecha de Actualización:** 21 de Octubre de 2026  
 **Versión:** 5.4 Release Candidate (RC-3 - Zero-Trust Certified)  
 **Últimos Commits Clave:** 
+- `fix(wms-ordenes)`: Corrección de error HTTP 400 en `recalcularTotalesOrden` (saneamiento de campos Prisma en `ordenes_servicio`), autocierre click-outside del buscador de repuestos, validación reactiva con tope máximo de existencias y estilización corporativa premium de selectores de bodega y lote FIFO.
 - `feat(wms-ordenes)`: Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`), despacho por bodega/lote FIFO, reversión atómica en Kardex, selector predictivo de OT e impresión en PDF oficial.
 - `d59d83f` / `b852ef8`: `fix(wms): correccion bug falsy zero en modales multi-bodega, preseleccion inteligente con stock, saneamiento kardex historico y footer sticky`
 - `b0abaa9`: `fix(inventario): corregir alias getComponentesStock en InventarioService y solventar HTTP 500`

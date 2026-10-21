@@ -321,27 +321,17 @@ export class InventarioService {
             select: {
                 total_servicios: true,
                 total_gastos: true,
-                descuento_valor: true,
-                iva_porcentaje: true,
             },
         });
 
         const totalServicios = Number(ordenActual?.total_servicios ?? 0);
         const totalGastos = Number(ordenActual?.total_gastos ?? 0);
-        const descuentoValor = Number(ordenActual?.descuento_valor ?? 0);
-        const ivaPorcentaje = Number(ordenActual?.iva_porcentaje ?? 0);
-
-        const nuevoSubtotal = totalServicios + nuevoTotalComponentes + totalGastos;
-        const baseGravable = Math.max(0, nuevoSubtotal - descuentoValor);
-        const nuevoIvaValor = ivaPorcentaje > 0 ? Number(((baseGravable * ivaPorcentaje) / 100).toFixed(2)) : 0;
-        const nuevoTotalGeneral = Number((baseGravable + nuevoIvaValor).toFixed(2));
+        const nuevoTotalGeneral = Number((totalServicios + nuevoTotalComponentes + totalGastos).toFixed(2));
 
         await tx.ordenes_servicio.update({
             where: { id_orden_servicio: idOrden },
             data: {
                 total_componentes: new Decimal(nuevoTotalComponentes.toFixed(2)),
-                subtotal: new Decimal(nuevoSubtotal.toFixed(2)),
-                iva_valor: new Decimal(nuevoIvaValor.toFixed(2)),
                 total_general: new Decimal(nuevoTotalGeneral.toFixed(2)),
                 fecha_modificacion: new Date(),
             },

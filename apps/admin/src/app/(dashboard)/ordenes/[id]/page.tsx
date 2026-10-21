@@ -74,6 +74,7 @@ import {
     Camera,
     Check,
     CheckCircle2,
+    ChevronDown,
     Clock,
     DollarSign,
     Download,
@@ -101,7 +102,7 @@ import {
 } from 'lucide-react';
 import { getSession, useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api/client';
 import { buildInformeFilename, descargarInformePorOrdenAutenticado } from '@/lib/pdf-naming';
@@ -1473,6 +1474,7 @@ function ModalDespacharRepuestoOrden({
     const [busqueda, setBusqueda] = useState('');
     const [componenteSeleccionado, setComponenteSeleccionado] = useState<ComponenteStock | null>(null);
     const [showDropdown, setShowDropdown] = useState(false);
+    const searchDropdownRef = useRef<HTMLDivElement>(null);
 
     const [bodegaSalida, setBodegaSalida] = useState<string>('');
     const [loteSalida, setLoteSalida] = useState<string>('');
@@ -1488,6 +1490,21 @@ function ModalDespacharRepuestoOrden({
     });
     const { data: bodegas = [] } = useBodegas();
     const addComponenteMutation = useAddComponenteOrden();
+
+    // Click outside listener para contraer el dropdown de búsqueda de artículos
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (searchDropdownRef.current && !searchDropdownRef.current.contains(event.target as Node)) {
+                setShowDropdown(false);
+            }
+        }
+        if (showDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showDropdown]);
 
     // Bodegas efectivas del componente con resolución Zero-Trust (.bodegas o .lotes_activos)
     const bodegasEfectivas = useMemo(() => {
@@ -1548,6 +1565,14 @@ function ModalDespacharRepuestoOrden({
         setLoteSalida('');
         const precioRef = componenteSeleccionado.precio_compra ?? componenteSeleccionado.precio_venta ?? 0;
         setCostoUnitario(precioRef > 0 ? precioRef.toString() : '');
+
+        // Validar saldo inicial para cantidad
+        const maxStockDisp = conSaldo ? conSaldo.stock : (bodegasEfectivas.find(b => b.id_ubicacion === parseInt(bestId, 10))?.stock ?? 0);
+        if (maxStockDisp > 0) {
+            setCantidad('1');
+        } else {
+            setCantidad('0');
+        }
     }, [isOpen, componenteSeleccionado, bodegasEfectivas, bodegas]);
 
     if (!isOpen) return null;
@@ -1559,6 +1584,28 @@ function ModalDespacharRepuestoOrden({
     const cantidadNum = parseFloat(cantidad) || 0;
     const costoNum = parseFloat(costoUnitario) || 0;
     const subtotalEstimado = cantidadNum * costoNum;
+    const cantidadExcedida = origen === 'BODEGA' && !!componenteSeleccionado && (stockEnBodegaSalida <= 0 || cantidadNum > stockEnBodegaSalida);
+
+    // Control reactivo estricto de la cantidad ingresada
+    const handleCantidadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const valStr = e.target.value;
+        if (valStr === '') {
+            setCantidad('');
+            setError(null);
+            return;
+        }
+        const valNum = parseFloat(valStr);
+        if (origen === 'BODEGA' && componenteSeleccionado && stockEnBodegaSalida > 0) {
+            if (valNum > stockEnBodegaSalida) {
+                setCantidad(stockEnBodegaSalida.toString());
+                setError(`Cantidad limitada al stock disponible en bodega (${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'})`);
+                toast.warning(`Stock máximo disponible: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}`);
+                return;
+            }
+        }
+        setError(null);
+        setCantidad(valStr);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1594,6 +1641,7 @@ function ModalDespacharRepuestoOrden({
                         realizado_por: usuarioId,
                     },
                 });
+                toast.success('Repuesto despachado y vinculado a la orden exitosamente');
                 onClose();
             } catch (err: any) {
                 setError(err?.response?.data?.message || 'Error al despachar repuesto del almacén');
@@ -1616,6 +1664,7 @@ function ModalDespacharRepuestoOrden({
                         realizado_por: usuarioId,
                     },
                 });
+                toast.success('Insumo de compra directa imputado a la orden exitosamente');
                 onClose();
             } catch (err: any) {
                 setError(err?.response?.data?.message || 'Error al registrar compra directa en la orden');
@@ -1631,7 +1680,7 @@ function ModalDespacharRepuestoOrden({
                 {/* Header Corporativo */}
                 <div className="flex items-center justify-between px-5 py-3.5 bg-white border-b border-slate-200 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg border bg-amber-50 text-amber-700 border-amber-200">
+                        <div className="p-2 rounded-xl border bg-amber-50 text-amber-700 border-amber-200 shadow-2xs">
                             <Package className="h-5 w-5" />
                         </div>
                         <div>
@@ -1661,7 +1710,7 @@ function ModalDespacharRepuestoOrden({
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
                     <div className="p-5 overflow-y-auto space-y-4 flex-1">
                         {/* Selector Segmentado de Origen */}
-                        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -1669,13 +1718,13 @@ function ModalDespacharRepuestoOrden({
                                     setError(null);
                                 }}
                                 className={cn(
-                                    'flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                                    'flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer',
                                     origen === 'BODEGA'
                                         ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
                                         : 'text-slate-600 hover:text-slate-900'
                                 )}
                             >
-                                <Warehouse className="h-3.5 w-3.5 text-amber-600" />
+                                <Warehouse className="h-4 w-4 text-amber-600" />
                                 <span>Despacho desde Almacén WMS (Kardex & FIFO)</span>
                             </button>
                             <button
@@ -1685,33 +1734,33 @@ function ModalDespacharRepuestoOrden({
                                     setError(null);
                                 }}
                                 className={cn(
-                                    'flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                                    'flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer',
                                     origen === 'COMPRA_DIRECTA'
                                         ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
                                         : 'text-slate-600 hover:text-slate-900'
                                 )}
                             >
-                                <DollarSign className="h-3.5 w-3.5 text-blue-600" />
+                                <DollarSign className="h-4 w-4 text-blue-600" />
                                 <span>Compra Directa en Campo (Solo Costeo OT)</span>
                             </button>
                         </div>
 
                         {error && (
-                            <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                            <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 shadow-2xs">
                                 <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
-                                <span>{error}</span>
+                                <span className="font-medium text-xs leading-relaxed">{error}</span>
                             </div>
                         )}
 
                         {origen === 'BODEGA' ? (
                             <>
-                                {/* Selector de Componente del Catálogo WMS */}
-                                <div className="space-y-1">
-                                    <label className="block text-xs font-semibold text-slate-700 uppercase">
+                                {/* Selector de Componente del Catálogo WMS con Auto-cierre */}
+                                <div className="space-y-1.5">
+                                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
                                         Artículo / Repuesto del Catálogo WMS *
                                     </label>
                                     {componenteSeleccionado ? (
-                                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl shadow-2xs space-y-2">
+                                        <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl shadow-2xs space-y-2">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-mono text-xs font-bold text-slate-800 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300/60">
@@ -1726,6 +1775,7 @@ function ModalDespacharRepuestoOrden({
                                                     onClick={() => {
                                                         setComponenteSeleccionado(null);
                                                         setBusqueda('');
+                                                        setShowDropdown(false);
                                                     }}
                                                     className="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs shrink-0 cursor-pointer"
                                                 >
@@ -1762,9 +1812,9 @@ function ModalDespacharRepuestoOrden({
                                             )}
                                         </div>
                                     ) : (
-                                        <div className="relative">
+                                        <div ref={searchDropdownRef} className="relative">
                                             <div className="relative">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                                 <input
                                                     type="text"
                                                     placeholder="Buscar por código (ART-2026), referencia o descripción (Ej: Aceite, Filtro)..."
@@ -1774,19 +1824,22 @@ function ModalDespacharRepuestoOrden({
                                                         setShowDropdown(true);
                                                     }}
                                                     onFocus={() => setShowDropdown(true)}
-                                                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Escape') setShowDropdown(false);
+                                                    }}
+                                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 shadow-2xs transition-all hover:border-slate-400"
                                                 />
                                             </div>
 
                                             {showDropdown && (
-                                                <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                                                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100">
                                                     {isLoadingComp ? (
-                                                        <div className="p-3 text-xs text-slate-500 flex items-center justify-center gap-2">
+                                                        <div className="p-4 text-xs text-slate-500 flex items-center justify-center gap-2">
                                                             <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
                                                             Consultando catálogo WMS...
                                                         </div>
                                                     ) : (componentesData?.data || []).length === 0 ? (
-                                                        <p className="p-3 text-xs text-slate-500 text-center">No se encontraron componentes</p>
+                                                        <p className="p-4 text-xs text-slate-500 text-center font-medium">No se encontraron componentes</p>
                                                     ) : (
                                                         (componentesData?.data || []).map((comp) => (
                                                             <button
@@ -1796,14 +1849,16 @@ function ModalDespacharRepuestoOrden({
                                                                     setComponenteSeleccionado(comp);
                                                                     setShowDropdown(false);
                                                                 }}
-                                                                className="w-full text-left p-2.5 hover:bg-amber-50/50 border-b border-slate-100 flex items-center justify-between transition-colors cursor-pointer"
+                                                                className="w-full text-left p-3 hover:bg-amber-50/60 flex items-center justify-between transition-colors cursor-pointer group"
                                                             >
                                                                 <div>
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 group-hover:bg-white px-2 py-0.5 rounded border border-slate-200">
                                                                             {comp.codigo || `ART-${comp.id_componente}`}
                                                                         </span>
-                                                                        <p className="text-xs font-bold text-slate-900">{comp.nombre || comp.referencia}</p>
+                                                                        <p className="text-xs font-bold text-slate-900 group-hover:text-amber-900 transition-colors">
+                                                                            {comp.nombre || comp.referencia}
+                                                                        </p>
                                                                     </div>
                                                                     <p className="text-[11px] text-slate-500 mt-0.5">REF: {comp.referencia} • Marca: {comp.marca || 'S/M'}</p>
                                                                 </div>
@@ -1829,13 +1884,13 @@ function ModalDespacharRepuestoOrden({
 
                                 {/* Banner de Lotes Físicos Disponibles (FIFO/FEFO) */}
                                 {lotesActivosEfectivos.length > 0 && (
-                                    <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                                    <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs space-y-2 shadow-2xs">
                                         <div className="flex items-center justify-between">
                                             <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                                                <Layers className="h-3.5 w-3.5 text-amber-700" />
+                                                <Layers className="h-4 w-4 text-amber-700" />
                                                 Lotes Físicos Disponibles (Sugerencia FIFO/FEFO)
                                             </span>
-                                            <span className="text-[10px] text-amber-800 font-semibold uppercase">
+                                            <span className="text-[10px] text-amber-800 font-bold bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200 uppercase">
                                                 {lotesActivosEfectivos.length} {lotesActivosEfectivos.length === 1 ? 'lote' : 'lotes'}
                                             </span>
                                         </div>
@@ -1843,9 +1898,9 @@ function ModalDespacharRepuestoOrden({
                                             {lotesActivosEfectivos.map((lote) => (
                                                 <span
                                                     key={lote.id_lote}
-                                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-200 rounded font-mono text-[11px] text-slate-800 shadow-2xs"
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-amber-200 rounded-lg font-mono text-[11px] text-slate-800 shadow-2xs"
                                                 >
-                                                    <strong>{lote.codigo_lote}</strong>: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'}
+                                                    <strong className="text-amber-950">{lote.codigo_lote}</strong>: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'}
                                                     {lote.fecha_vencimiento && (
                                                         <span className="text-[10px] text-slate-400 font-sans">
                                                             (Vence: {new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')})
@@ -1858,35 +1913,57 @@ function ModalDespacharRepuestoOrden({
                                 )}
 
                                 {/* Bodega Origen y Cantidad */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                                             Bodega Origen *
                                         </label>
-                                        <select
-                                            value={bodegaSalida}
-                                            onChange={(e) => {
-                                                setBodegaSalida(e.target.value);
-                                                setLoteSalida('');
-                                            }}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500 truncate"
-                                            required
-                                        >
-                                            {bodegas.map((b) => {
-                                                const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
-                                                return (
-                                                    <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                        [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
+                                        <div className="relative">
+                                            <select
+                                                value={bodegaSalida}
+                                                onChange={(e) => {
+                                                    const newBodId = e.target.value;
+                                                    setBodegaSalida(newBodId);
+                                                    setLoteSalida('');
+                                                    const newStock = bodegasEfectivas.find((b) => b.id_ubicacion === parseInt(newBodId, 10))?.stock ?? 0;
+                                                    if (parseFloat(cantidad) > newStock && newStock > 0) {
+                                                        setCantidad(newStock.toString());
+                                                    }
+                                                }}
+                                                className="w-full pl-3.5 pr-9 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all appearance-none cursor-pointer truncate"
+                                                required
+                                            >
+                                                {bodegas.map((b) => {
+                                                    const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                                    return (
+                                                        <option key={b.id_ubicacion} value={b.id_ubicacion} className="text-slate-800 py-1 font-medium">
+                                                            [{b.codigo_ubicacion}] • {b.zona || 'Bodega'} (Disp: {s} {componenteSeleccionado?.unidad || 'UND'})
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
+                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-slate-400" />
+                                        </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                                            Cantidad a Despachar *
-                                        </label>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                                Cantidad a Despachar *
+                                            </label>
+                                            {componenteSeleccionado && stockEnBodegaSalida > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCantidad(stockEnBodegaSalida.toString());
+                                                        setError(null);
+                                                    }}
+                                                    className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer shadow-2xs"
+                                                >
+                                                    Usar Máx ({stockEnBodegaSalida})
+                                                </button>
+                                            )}
+                                        </div>
                                         <input
                                             type="number"
                                             min="0.01"
@@ -1894,52 +1971,67 @@ function ModalDespacharRepuestoOrden({
                                             max={stockEnBodegaSalida > 0 ? stockEnBodegaSalida : 1}
                                             disabled={!!componenteSeleccionado && stockEnBodegaSalida <= 0}
                                             value={cantidad}
-                                            onChange={(e) => setCantidad(e.target.value)}
+                                            onChange={handleCantidadChange}
                                             className={cn(
-                                                'w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-amber-500',
+                                                'w-full px-3.5 py-2.5 border rounded-xl text-sm font-semibold shadow-2xs transition-all focus:outline-none focus:ring-2',
                                                 componenteSeleccionado && stockEnBodegaSalida <= 0
                                                     ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                                                    : 'border-slate-300'
+                                                    : cantidadNum > stockEnBodegaSalida && origen === 'BODEGA' && !!componenteSeleccionado
+                                                    ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:ring-rose-500/30 focus:border-rose-500'
+                                                    : 'border-slate-300 bg-white text-slate-900 hover:border-slate-400 focus:ring-amber-500/30 focus:border-amber-500'
                                             )}
                                             required
                                         />
                                         {componenteSeleccionado && (
-                                            <span className={cn(
-                                                'text-[11px] font-medium mt-1 block',
-                                                stockEnBodegaSalida > 0 ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'
-                                            )}>
-                                                {stockEnBodegaSalida > 0
-                                                    ? `✓ Disponible en bodega: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}`
-                                                    : `⚠️ Sin existencias en esta bodega (${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}). Despacho no disponible.`}
-                                            </span>
+                                            <div className="mt-1 flex items-center justify-between text-[11px]">
+                                                {stockEnBodegaSalida > 0 ? (
+                                                    <span className={cn(
+                                                        'font-semibold flex items-center gap-1',
+                                                        cantidadNum > stockEnBodegaSalida ? 'text-rose-600' : 'text-emerald-700'
+                                                    )}>
+                                                        {cantidadNum > stockEnBodegaSalida
+                                                            ? `⚠️ La cantidad no puede exceder el stock disponible (${stockEnBodegaSalida})`
+                                                            : `✓ Disponible en bodega: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}`}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-rose-600 font-semibold flex items-center gap-1">
+                                                        ⚠️ Sin existencias en esta bodega (0 {componenteSeleccionado.unidad || 'UND'}). Despacho no disponible.
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
 
                                 {/* Selector de Lote FIFO y Costo Unitario */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                                             Lote a Despachar (FIFO)
                                         </label>
-                                        <select
-                                            value={loteSalida}
-                                            onChange={(e) => setLoteSalida(e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500"
-                                        >
-                                            <option value="">-- Regla Automática FIFO / FEFO (Recomendado) --</option>
-                                            {lotesActivosEfectivos
-                                                .filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10))
-                                                .map((lote) => (
-                                                    <option key={lote.id_lote} value={lote.id_lote}>
-                                                        [{lote.codigo_lote}] Disp: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'} {lote.fecha_vencimiento ? `• Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}` : ''}
-                                                    </option>
-                                                ))}
-                                        </select>
+                                        <div className="relative">
+                                            <select
+                                                value={loteSalida}
+                                                onChange={(e) => setLoteSalida(e.target.value)}
+                                                className="w-full pl-3.5 pr-9 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all appearance-none cursor-pointer truncate"
+                                            >
+                                                <option value="" className="text-slate-700 py-1 font-medium">
+                                                    -- Regla Automática FIFO / FEFO (Recomendado) --
+                                                </option>
+                                                {lotesActivosEfectivos
+                                                    .filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10))
+                                                    .map((lote) => (
+                                                        <option key={lote.id_lote} value={lote.id_lote} className="text-slate-800 py-1 font-medium">
+                                                            [{lote.codigo_lote}] Disp: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'} {lote.fecha_vencimiento ? `• Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}` : ''}
+                                                        </option>
+                                                    ))}
+                                            </select>
+                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-slate-400" />
+                                        </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                                             Costo Unitario Imputado ($)
                                         </label>
                                         <input
@@ -1949,7 +2041,7 @@ function ModalDespacharRepuestoOrden({
                                             placeholder="Automático según catálogo"
                                             value={costoUnitario}
                                             onChange={(e) => setCostoUnitario(e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-amber-500"
+                                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold font-mono text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
                                         />
                                     </div>
                                 </div>
@@ -1957,7 +2049,7 @@ function ModalDespacharRepuestoOrden({
                         ) : (
                             <>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                                         Descripción del Repuesto / Insumo Adquirido en Campo *
                                     </label>
                                     <input
@@ -1965,14 +2057,14 @@ function ModalDespacharRepuestoOrden({
                                         placeholder="Ej: Abrazadera industrial 4 pulgadas en acero inoxidable (Factura POS #981)"
                                         value={descripcionDirecta}
                                         onChange={(e) => setDescripcionDirecta(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-2xs hover:border-slate-400 transition-all"
                                         required
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 gap-3.5">
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                                             Cantidad *
                                         </label>
                                         <input
@@ -1981,12 +2073,12 @@ function ModalDespacharRepuestoOrden({
                                             step="any"
                                             value={cantidad}
                                             onChange={(e) => setCantidad(e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                                             Costo Unitario ($) *
                                         </label>
                                         <input
@@ -1996,7 +2088,7 @@ function ModalDespacharRepuestoOrden({
                                             placeholder="0"
                                             value={costoUnitario}
                                             onChange={(e) => setCostoUnitario(e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold font-mono text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
                                             required
                                         />
                                     </div>
@@ -2005,7 +2097,7 @@ function ModalDespacharRepuestoOrden({
                         )}
 
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                                 Observaciones / Soporte Técnico
                             </label>
                             <input
@@ -2013,12 +2105,12 @@ function ModalDespacharRepuestoOrden({
                                 placeholder="Ej: Reemplazo preventivo durante mantenimiento de 250h..."
                                 value={observaciones}
                                 onChange={(e) => setObservaciones(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
                             />
                         </div>
 
                         {/* Preview Financiero de Imputación */}
-                        <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between">
+                        <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between shadow-2xs">
                             <div>
                                 <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
                                     Impacto Financiero en {orden.numero_orden}
@@ -2039,18 +2131,18 @@ function ModalDespacharRepuestoOrden({
                     </div>
 
                     {/* Footer Sticky */}
-                    <div className="px-5 py-3 bg-slate-50/90 backdrop-blur-xs border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
+                    <div className="px-5 py-3.5 bg-slate-50/90 backdrop-blur-xs border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200/60 rounded-lg font-medium transition-colors cursor-pointer"
+                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200/60 rounded-xl font-medium transition-colors cursor-pointer"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
-                            disabled={addComponenteMutation.isPending || (origen === 'BODEGA' && !!componenteSeleccionado && stockEnBodegaSalida <= 0)}
-                            className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                            disabled={addComponenteMutation.isPending || cantidadNum <= 0 || (origen === 'BODEGA' && (!componenteSeleccionado || cantidadExcedida))}
+                            className="px-5 py-2.5 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         >
                             {addComponenteMutation.isPending ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
