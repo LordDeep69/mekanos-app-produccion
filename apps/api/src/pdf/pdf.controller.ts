@@ -660,7 +660,13 @@ export class PdfController {
         const cant = Number(cu.cantidad ?? 1);
         const und = cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND';
         const lote = cu.lotes_componentes?.codigo_lote ? ` • Lote ${cu.lotes_componentes.codigo_lote}` : '';
-        return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote})`;
+        const origenTag =
+          cu.origen_componente === 'CLIENTE'
+            ? ' • Suministrado por Cliente'
+            : cu.origen_componente === 'COMPRA_DIRECTA'
+              ? ' • Compra Directa'
+              : '';
+        return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote}${origenTag})`;
       }),
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
@@ -1691,7 +1697,13 @@ export class PdfController {
         const cant = Number(cu.cantidad ?? 1);
         const und = cu.unidad || cu.catalogo_componentes?.unidad_medida || 'UND';
         const lote = cu.lotes_componentes?.codigo_lote ? ` • Lote ${cu.lotes_componentes.codigo_lote}` : '';
-        return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote})`;
+        const origenTag =
+          cu.origen_componente === 'CLIENTE'
+            ? ' • Suministrado por Cliente'
+            : cu.origen_componente === 'COMPRA_DIRECTA'
+              ? ' • Compra Directa'
+              : '';
+        return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote}${origenTag})`;
       }),
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
       esMultiEquipo,

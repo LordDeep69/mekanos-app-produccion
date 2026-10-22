@@ -22,12 +22,15 @@ export interface BomBodegaStock {
   stock: number;
 }
 
+export type RolRepuestoBom = 'TITULAR' | 'ALTERNATIVO';
+
 export interface BomItem {
   id_componente_equipo: number;
   id_componente: number;
   categoria_aplicacion: string;
   aplicacion_label: string;
   posicion_descripcion: string;
+  rol_repuesto?: RolRepuestoBom;
   cantidad_requerida: number;
   faltante: number;
   frecuencia_cambio_horas: number | null;
@@ -39,6 +42,7 @@ export interface BomItem {
   marca: string | null;
   unidad: string;
   precio_compra: number;
+  precio_venta?: number;
   stock_actual: number;
   stock_minimo: number;
   estado_stock: EstadoStockBom;
@@ -90,6 +94,10 @@ export interface FichaLogisticaEquipo {
   resumen: {
     total_ordenes: number;
     total_bom: number;
+    bom_titulares?: number;
+    bom_alternativos?: number;
+    bom_en_bodega?: number;
+    bom_bajo_pedido?: number;
     bom_con_kit_completo: number;
     bom_insuficientes: number;
     bom_agotados: number;
@@ -104,6 +112,7 @@ export interface FichaLogisticaEquipo {
 export interface VincularBomPayload {
   id_componente: number;
   categoria_aplicacion: string;
+  rol_repuesto?: RolRepuestoBom;
   cantidad_requerida: number;
   frecuencia_cambio_horas?: number | null;
   notas_tecnicas?: string | null;
@@ -111,6 +120,7 @@ export interface VincularBomPayload {
 
 export interface ActualizarBomPayload {
   categoria_aplicacion?: string;
+  rol_repuesto?: RolRepuestoBom;
   cantidad_requerida?: number;
   frecuencia_cambio_horas?: number | null;
   notas_tecnicas?: string | null;

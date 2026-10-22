@@ -2016,11 +2016,15 @@ export class InventarioService {
             const uReg = item.registrado_por ? userMap.get(item.registrado_por) : null;
 
             const cantidadNum = Number(item.cantidad ?? 0);
-            const costoUnitNum = Number(item.costo_unitario ?? cat?.precio_compra ?? 0);
-            const costoTotalNum =
-                item.costo_total !== null && item.costo_total !== undefined
-                    ? Number(item.costo_total)
-                    : Number((cantidadNum * costoUnitNum).toFixed(2));
+            const esSuministroCliente = item.origen_componente === 'CLIENTE';
+            const costoUnitNum = esSuministroCliente
+                ? 0
+                : Number(item.costo_unitario ?? cat?.precio_compra ?? 0);
+            const costoTotalNum = esSuministroCliente
+                ? 0
+                : item.costo_total !== null && item.costo_total !== undefined
+                  ? Number(item.costo_total)
+                  : Number((cantidadNum * costoUnitNum).toFixed(2));
 
             return {
                 id_componente_usado: item.id_componente_usado,
@@ -2061,6 +2065,9 @@ export class InventarioService {
             data,
             resumen: {
                 total_items: data.length,
+                items_bodega: data.filter((d) => d.origen_componente === 'BODEGA').length,
+                items_compra_directa: data.filter((d) => d.origen_componente === 'COMPRA_DIRECTA').length,
+                items_cliente: data.filter((d) => d.origen_componente === 'CLIENTE').length,
                 unidades_totales: Number(unidadesTotales.toFixed(2)),
                 costo_total_bodega: Number(costoTotalBodega.toFixed(2)),
                 costo_total_compra_directa: Number(costoTotalCompraDirecta.toFixed(2)),
@@ -2116,10 +2123,18 @@ export class InventarioService {
                 });
             }
 
-            const descFinal = (dto.descripcion?.trim() || compCat?.descripcion_corta || 'Insumo de compra directa').substring(0, 200);
-            const costoUnit = Number(dto.costo_unitario ?? compCat?.precio_compra ?? 0);
+            const esCliente = origen === 'CLIENTE';
+            const descFinal = (
+                dto.descripcion?.trim() ||
+                compCat?.descripcion_corta ||
+                (esCliente ? 'Repuesto suministrado por el cliente' : 'Insumo de compra directa / registro')
+            ).substring(0, 200);
+            const costoUnit = esCliente ? 0 : Number(dto.costo_unitario ?? compCat?.precio_compra ?? 0);
             const cantidad = Number(dto.cantidad);
-            const costoTotal = Number((costoUnit * cantidad).toFixed(2));
+            const costoTotal = esCliente ? 0 : Number((costoUnit * cantidad).toFixed(2));
+            const obsDefecto = esCliente
+                ? `Suministrado por el cliente (Trazabilidad técnica sin costo Mekanos en ${orden.numero_orden})`
+                : `Solo registro / Compra directa (Sin descuento WMS en ${orden.numero_orden})`;
 
             const creado = await tx.componentes_usados.create({
                 data: {
@@ -2134,7 +2149,7 @@ export class InventarioService {
                     costo_unitario: new Decimal(costoUnit.toFixed(2)),
                     costo_total: new Decimal(costoTotal.toFixed(2)),
                     origen_componente: origen as any,
-                    observaciones: dto.observaciones || `Imputación directa (${origen}) en ${orden.numero_orden}`,
+                    observaciones: dto.observaciones || obsDefecto,
                     usado_por: dto.usado_por || orden.id_tecnico_asignado || null,
                     registrado_por: dto.realizado_por || 1,
                     fecha_uso: new Date(),

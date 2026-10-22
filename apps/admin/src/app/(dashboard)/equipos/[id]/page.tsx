@@ -802,14 +802,15 @@ export default function EquipoDetallePage() {
   const datosEspecificos = (equipo.datos_especificos || {}) as Record<string, any>;
   const motor = (datosEspecificos?.motor || null) as Record<string, any> | null;
 
-  // Cálculos de KPIs en vivo
+  // Cálculos de KPIs en vivo (Filosofía de Referenciación Zero-Stress)
   const horasActualesNum = Number(equipo.horas_actuales || 0);
   const totalOrdenes = fichaLogistica?.resumen?.total_ordenes ?? 0;
   const totalBom = fichaLogistica?.resumen?.total_bom ?? 0;
   const bomCompatibles = fichaLogistica?.repuestos_compatibles || [];
-  const bomConKitCompleto = bomCompatibles.filter((b) => b.stock_actual >= b.cantidad_requerida).length;
-  const bomInsuficientes = bomCompatibles.filter((b) => b.stock_actual > 0 && b.stock_actual < b.cantidad_requerida).length;
-  const bomAgotados = bomCompatibles.filter((b) => b.stock_actual <= 0).length;
+  const bomTitulares = bomCompatibles.filter((b) => b.rol_repuesto !== 'ALTERNATIVO').length;
+  const bomAlternativos = bomCompatibles.filter((b) => b.rol_repuesto === 'ALTERNATIVO').length;
+  const bomEnBodega = bomCompatibles.filter((b) => b.stock_actual > 0).length;
+  const bomBajoPedido = bomCompatibles.filter((b) => b.stock_actual <= 0).length;
   const totalInstalados = fichaLogistica?.resumen?.total_lineas_instaladas ?? 0;
   const inversionRepuestos = fichaLogistica?.resumen?.total_inversion_repuestos ?? 0;
   const ultimaOrden = fichaLogistica?.ordenes?.[0] || null;
@@ -980,7 +981,7 @@ export default function EquipoDetallePage() {
           </p>
         </button>
 
-        {/* KPI 3: Kit BOM */}
+        {/* KPI 3: Kit BOM (Referenciación Técnica & Comercial Zero-Stress) */}
         <button
           type="button"
           onClick={() => setActiveTab('repuestos')}
@@ -992,11 +993,11 @@ export default function EquipoDetallePage() {
             </span>
             <div className={cn(
               'p-1.5 rounded-lg border',
-              totalBom > 0 && bomConKitCompleto === totalBom
+              totalBom === 0
+                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                : bomBajoPedido === 0
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : bomAgotados > 0
-                ? 'bg-rose-50 text-rose-700 border-rose-200'
-                : 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-blue-50 text-blue-700 border-blue-200'
             )}>
               <Boxes className="h-4 w-4" />
             </div>
@@ -1007,21 +1008,21 @@ export default function EquipoDetallePage() {
               'text-xs font-bold px-2 py-0.5 rounded border whitespace-nowrap',
               totalBom === 0
                 ? 'bg-slate-100 text-slate-600 border-slate-200'
-                : bomConKitCompleto === totalBom
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : 'bg-amber-50 text-amber-900 border-amber-300'
+                : bomAlternativos > 0
+                ? 'bg-blue-50 text-blue-800 border-blue-200'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
             )}>
               {totalBom === 0
-                ? 'Sin kit'
-                : `${bomConKitCompleto}/${totalBom} kit completo`}
+                ? 'Sin referencias'
+                : bomAlternativos > 0
+                ? `${bomTitulares} Titular${bomTitulares === 1 ? '' : 'es'} • ${bomAlternativos} Homólogo${bomAlternativos === 1 ? '' : 's'}`
+                : `${totalBom} Referencia${totalBom === 1 ? '' : 's'} Homologada${totalBom === 1 ? '' : 's'}`}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1 truncate">
             {totalBom === 0
-              ? 'Click para homologar repuestos compatibles'
-              : bomConKitCompleto === totalBom
-              ? '✓ Stock suficiente en almacén WMS'
-              : `${bomInsuficientes > 0 ? `${bomInsuficientes} stock insuficiente` : ''}${bomInsuficientes > 0 && bomAgotados > 0 ? ' • ' : ''}${bomAgotados > 0 ? `${bomAgotados} agotados` : ''}`}
+              ? 'Click para referenciar repuestos del Catálogo Maestro'
+              : `${bomEnBodega} en bodega • ${bomBajoPedido} bajo pedido / cotizar`}
           </p>
         </button>
 

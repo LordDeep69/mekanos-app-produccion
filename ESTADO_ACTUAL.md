@@ -1,8 +1,24 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 22 de Octubre de 2026  
-**Versión:** 5.6 Release Candidate (RC-6 - Trazabilidad EAM 360° & Mediciones Zero-Trust)  
+**Versión:** 5.7 Release Candidate (RC-7 - Arquitectura de Dominio WMS ⇄ EAM: Referenciación Técnica vs Consumo Físico)  
 **Últimos Commits Clave:** 
+- `feat(wms-eam-dominio)`: Separación arquitectónica definitiva entre **Referenciación Técnica y Comercial** (`Artículo ➔ Equipo` en `/equipos/[id]`) y **Despacho / Consumo de Almacén** (`Artículo ➔ Orden de Servicio` en `/ordenes/[id]`):
+  - **Arquetipo 1 — Referenciación en Equipo (BOM 360°):**
+    - Referenciación técnica/comercial para cotización y compras: vincular un artículo no exige ni valida stock hoy.
+    - Clasificación nativa `TITULAR` vs `ALTERNATIVO` (Homólogo) en `componentes_equipo`: la ausencia de stock en un homólogo alternativo no contamina la disponibilidad ni alarma al kit.
+    - Filosofía Zero-Stress: erradicación de alarmas rojas (`🚨 AGOTADO`), sustituidas por badges neutrales informativos `Bajo Pedido / Cotizar (0 en bodega)`.
+    - KPI superior del BOM (`KIT DE REPUESTOS`): reporta `X Titulares • Y Homólogos` y `X en bodega • Y bajo pedido`.
+    - Visualización de Precios de Venta y Costo de Referencia (`precio_compra` y `precio_venta`) en la matriz BOM para cotización inmediata.
+    - Botón `🛒 Crear OC` sobrio y profesional.
+  - **Arquetipo 2 — Selector de 3 Modalidades en Órdenes de Servicio (`/ordenes/[id]`):**
+    - `1. Descuento Bodega WMS`: Descuenta stock físico de almacén y lote bajo regla FIFO, genera movimiento `SALIDA / CONSUMO_OS` en Kardex e imputa costo a la OT.
+    - `2. Solo Registro / Compra Directa`: Permite asociar cualquier artículo del Catálogo Maestro o tipear manual, imputa costo a la OT y al historial del activo, sin tocar existencias de bodega ni Kardex.
+    - `3. Suministro Cliente`: Registra el repuesto para trazabilidad técnica e historial clínico con costo $0 para Mekanos, documentado en la OT, Informe PDF e Historial del Equipo.
+    - Barra de sugerencias BOM de 1-click y buscador del Catálogo Maestro universales para las 3 modalidades, con auto-conmutación inteligente a `COMPRA_DIRECTA` si se selecciona un ítem BOM sin saldo en bodega.
+  - **Saneamiento Forense en Base de Datos & Next.js:**
+    - Erradicación del typo de siglo (`0017-01-02` y `0002-01-01` renderizados como `1917` y `1902`) corregidos a `2017` y `2020` en `equipos` (id 351 `GEN-EDIF-T86FEH`, 299 `GEN-UNIT-JM7XS2`, 211 `BOM-TAKU-2JRO0F`).
+    - Etiquetado masivo de `rol_repuesto` (`TITULAR` / `ALTERNATIVO`) en `componentes_equipo`.
 - `feat(equipos-bom)`: Remediación forense integral Zero-Trust del Parque EAM 360° y Matriz BOM (`/equipos` y `/equipos/[id]`):
   - Detección precisa de suficiencia de stock BOM (`stock_actual` vs `cantidad_requerida`) con estados `OK` (Cubre Kit), `INSUFICIENTE` (Faltan Z) y `AGOTADO`, botón `🛒 Pedir OC` y KPI superior de kit completo.
   - Inferencia inteligente de categoría de aplicación en modal de vinculación BOM a partir del nombre/descripción del artículo.

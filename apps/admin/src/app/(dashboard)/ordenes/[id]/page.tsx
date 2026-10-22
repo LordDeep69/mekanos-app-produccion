@@ -1134,7 +1134,8 @@ function TabFinanciero({ orden }: { orden: Orden }) {
     const servicios = serviciosData?.data || [];
     const componentes = componentesData?.data || [];
     const itemsBodegaCount = componentes.filter((c) => c.origen_componente === 'BODEGA').length;
-    const itemsCompraDirectaCount = componentes.filter((c) => c.origen_componente !== 'BODEGA').length;
+    const itemsCompraDirectaCount = componentes.filter((c) => c.origen_componente === 'COMPRA_DIRECTA').length;
+    const itemsClienteCount = componentes.filter((c) => c.origen_componente === 'CLIENTE').length;
     const resumenComp = componentesData?.resumen || {
         total_items: componentes.length,
         unidades_totales: componentes.reduce((s, c) => s + Number(c.cantidad || 0), 0),
@@ -1179,7 +1180,9 @@ function TabFinanciero({ orden }: { orden: Orden }) {
             toast.success(
                 esBodega
                     ? `Repuesto reintegrado a ${comp.bodega_codigo || 'Bodega WMS'} con contra-asiento en Kardex`
-                    : 'Registro de compra directa eliminado de la orden'
+                    : comp.origen_componente === 'CLIENTE'
+                    ? 'Registro de repuesto suministrado por cliente retirado de la orden'
+                    : 'Registro de compra directa retirado de la orden'
             );
             setComponenteAReintegrar(null);
         } catch (err: any) {
@@ -1230,14 +1233,19 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                         <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-bold text-slate-900 flex items-center gap-2">
                                 <Package className="h-5 w-5 text-amber-600" />
-                                Repuestos & Insumos Utilizados (Integración WMS)
+                                Repuestos & Insumos de la Orden (WMS / Registro / Cliente)
                             </h4>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                                 Bodega WMS: {itemsBodegaCount}
                             </span>
                             {itemsCompraDirectaCount > 0 && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                    Compra Directa: {itemsCompraDirectaCount}
+                                    Registro / Compra Directa: {itemsCompraDirectaCount}
+                                </span>
+                            )}
+                            {itemsClienteCount > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-800 border border-violet-200">
+                                    Suministro Cliente: {itemsClienteCount}
                                 </span>
                             )}
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
@@ -1254,18 +1262,18 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                             )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                            Despacho directo desde almacén multi-bodega con regla FIFO/FEFO, asiento automático en Kardex e imputación financiera a la orden
+                            Elija si el artículo aplica descuento físico de stock (Bodega WMS + Kardex), si es solo registro/compra directa sin tocar inventario, o suministrado por el cliente
                         </p>
                     </div>
                     <button
                         type="button"
                         disabled={esOrdenCancelada}
                         onClick={() => setIsDespacharRepuestoOpen(true)}
-                        title={esOrdenCancelada ? 'No se pueden despachar repuestos a una orden cancelada' : 'Despachar repuesto de almacén o imputar compra directa'}
+                        title={esOrdenCancelada ? 'No se pueden asociar repuestos a una orden cancelada' : 'Despachar de bodega WMS, registrar compra directa o suministro del cliente'}
                         className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Plus className="h-4 w-4" />
-                        Despachar Repuesto WMS
+                        Despachar / Registrar Repuesto
                     </button>
                 </div>
 
@@ -1276,9 +1284,9 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                 ) : componentes.length === 0 ? (
                     <div className="text-center py-10 px-4 text-slate-500">
                         <Package className="h-11 w-11 mx-auto mb-2.5 text-slate-300" />
-                        <p className="font-semibold text-slate-700 text-sm">No hay repuestos ni insumos imputados a esta orden</p>
+                        <p className="font-semibold text-slate-700 text-sm">No hay repuestos ni insumos asociados a esta orden</p>
                         <p className="text-xs text-slate-500 mt-0.5 max-w-md mx-auto">
-                            Utilice el botón <strong>Despachar Repuesto WMS</strong> para descargar materiales de bodega (con trazabilidad de lote y Kardex) o registrar una compra directa en campo.
+                            Utilice <strong>Despachar / Registrar Repuesto</strong> para descargar materiales de bodega (con Kardex), registrar un repuesto sin descuento de stock o documentar un insumo suministrado por el cliente.
                         </p>
                     </div>
                 ) : (
@@ -1287,8 +1295,8 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                             <thead>
                                 <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
                                     <th className="px-4 py-3">Código / Repuesto</th>
-                                    <th className="px-4 py-3">Origen / Bodega & Lote</th>
-                                    <th className="px-4 py-3">Trazabilidad Kardex</th>
+                                    <th className="px-4 py-3">Modalidad / Bodega & Lote</th>
+                                    <th className="px-4 py-3">Efecto en Inventario / Kardex</th>
                                     <th className="px-4 py-3 text-right">Cant.</th>
                                     <th className="px-4 py-3 text-right">Costo Unit.</th>
                                     <th className="px-4 py-3 text-right text-emerald-700">Subtotal</th>
@@ -1298,6 +1306,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                             <tbody className="divide-y divide-slate-100">
                                 {componentes.map((c) => {
                                     const isReintegrando = reintegrandoId === c.id_componente_usado;
+                                    const esCliente = c.origen_componente === 'CLIENTE';
                                     return (
                                         <tr key={c.id_componente_usado} className="hover:bg-slate-50/70 transition-colors">
                                             <td className="px-4 py-3.5">
@@ -1315,7 +1324,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                                                         </a>
                                                     ) : (
                                                         <span className="font-mono text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                                            EXTERNO
+                                                            MANUAL
                                                         </span>
                                                     )}
                                                     <span className="text-sm font-bold text-slate-900">{c.descripcion}</span>
@@ -1335,9 +1344,13 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                                                             <Warehouse className="h-3 w-3" />
                                                             {c.bodega_codigo ? `[${c.bodega_codigo}] ${c.bodega_nombre || 'Almacén'}` : 'BODEGA WMS'}
                                                         </span>
+                                                    ) : esCliente ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-violet-50 text-violet-800 border border-violet-200">
+                                                            SUMINISTRADO POR CLIENTE
+                                                        </span>
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                                            COMPRA DIRECTA CAMPO
+                                                            REGISTRO / COMPRA DIRECTA
                                                         </span>
                                                     )}
                                                     {c.codigo_lote && (
@@ -1360,18 +1373,32 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                                                             </p>
                                                         )}
                                                     </div>
+                                                ) : esCliente ? (
+                                                    <span className="text-[11px] text-violet-700 font-medium">
+                                                        Trazabilidad técnica (Sin descuento WMS)
+                                                    </span>
                                                 ) : (
-                                                    <span className="text-[11px] text-slate-400 italic">Imputación contable directa</span>
+                                                    <span className="text-[11px] text-slate-500 italic">
+                                                        Sin descuento de stock WMS
+                                                    </span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3.5 text-right text-sm font-bold text-slate-900">
                                                 {Number(c.cantidad)} <span className="text-[10px] font-semibold text-slate-500">{c.unidad || 'UND'}</span>
                                             </td>
                                             <td className="px-4 py-3.5 text-right text-sm font-mono text-slate-700">
-                                                ${Number(c.costo_unitario || 0).toLocaleString('es-CO')}
+                                                {esCliente ? (
+                                                    <span className="text-xs text-violet-700 font-semibold">$0</span>
+                                                ) : (
+                                                    `$${Number(c.costo_unitario || 0).toLocaleString('es-CO')}`
+                                                )}
                                             </td>
                                             <td className="px-4 py-3.5 text-right text-sm font-mono font-bold text-emerald-800">
-                                                ${Number(c.costo_total || 0).toLocaleString('es-CO')}
+                                                {esCliente ? (
+                                                    <span className="text-xs font-semibold text-violet-700">$0 (Cliente)</span>
+                                                ) : (
+                                                    `$${Number(c.costo_total || 0).toLocaleString('es-CO')}`
+                                                )}
                                             </td>
                                             <td className="px-4 py-3.5 text-right">
                                                 <button
@@ -1381,7 +1408,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                                                     title={
                                                         c.origen_componente === 'BODEGA'
                                                             ? 'Reintegrar repuesto al almacén WMS y revertir cargo en la orden'
-                                                            : 'Eliminar registro de compra directa'
+                                                            : 'Quitar registro de la orden (no afecta stock de bodega)'
                                                     }
                                                     className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
                                                 >
@@ -1390,7 +1417,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                                                     ) : (
                                                         <RotateCcw className="h-3.5 w-3.5" />
                                                     )}
-                                                    {c.origen_componente === 'BODEGA' ? 'Reintegrar' : 'Quitar'}
+                                                    {c.origen_componente === 'BODEGA' ? 'Reintegrar' : 'Quitar Registro'}
                                                 </button>
                                             </td>
                                         </tr>
@@ -1557,7 +1584,7 @@ function ModalConfirmarReintegro({
                         </div>
                         <div>
                             <h3 className="text-base font-bold text-slate-900">
-                                {esBodega ? 'Confirmar Reintegro Físico a Bodega' : 'Eliminar Insumo de Orden'}
+                                {esBodega ? 'Confirmar Reintegro Físico a Bodega' : 'Quitar Registro de la Orden'}
                             </h3>
                             <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-xs text-slate-500">Orden de Servicio:</span>
@@ -1596,19 +1623,21 @@ function ModalConfirmarReintegro({
                         {/* Metadatos Logísticos */}
                         <div className="grid grid-cols-2 gap-2.5 pt-2.5 border-t border-slate-200 text-xs">
                             <div>
-                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Cantidad a Restituir</span>
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Cantidad</span>
                                 <span className="font-bold text-slate-900 text-sm">
                                     {Number(componente.cantidad)} {componente.unidad || 'UND'}
                                 </span>
                             </div>
                             <div>
                                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                                    {esBodega ? 'Bodega Destino' : 'Tipo Imputación'}
+                                    {esBodega ? 'Bodega Destino' : 'Modalidad'}
                                 </span>
                                 <span className="font-semibold text-slate-800 truncate block">
                                     {esBodega
                                         ? `[${componente.bodega_codigo || 'BOD'}] ${componente.bodega_nombre || 'Bodega'}`
-                                        : 'Compra Directa en Campo'}
+                                        : componente.origen_componente === 'CLIENTE'
+                                        ? 'Suministrado por el Cliente ($0)'
+                                        : 'Solo Registro / Compra Directa'}
                                 </span>
                             </div>
                             {componente.codigo_lote && (
@@ -1640,7 +1669,7 @@ function ModalConfirmarReintegro({
                                 </>
                             ) : (
                                 <>
-                                    Esta operación eliminará el registro de insumo imputado y descontará <strong>${costoTotal.toLocaleString('es-CO')} COP</strong> del balance de componentes de la orden.
+                                    Esta operación retirará el registro de la orden (<strong>sin afectar el inventario físico de bodega ni el Kardex</strong>) y ajustará <strong>${costoTotal.toLocaleString('es-CO')} COP</strong> en el balance de la orden.
                                 </>
                             )}
                         </div>
@@ -1773,7 +1802,9 @@ function ModalDespacharRepuestoOrden({
     const { data: session } = useSession();
     const usuarioId = Number((session?.user as any)?.id) || 1;
 
-    const [origen, setOrigen] = useState<'BODEGA' | 'COMPRA_DIRECTA'>('BODEGA');
+    const [origen, setOrigen] = useState<'BODEGA' | 'COMPRA_DIRECTA' | 'CLIENTE'>('BODEGA');
+    const [modoManual, setModoManual] = useState(false);
+    const [avisoAutoCambio, setAvisoAutoCambio] = useState<string | null>(null);
     const [busqueda, setBusqueda] = useState('');
     const [componenteSeleccionado, setComponenteSeleccionado] = useState<ComponenteStock | null>(null);
     const [showDropdown, setShowDropdown] = useState(false);
@@ -1881,19 +1912,18 @@ function ModalDespacharRepuestoOrden({
         setBodegaSalida(bestId);
         setLoteSalida('');
         const precioRef = componenteSeleccionado.precio_compra ?? componenteSeleccionado.precio_venta ?? 0;
-        setCostoUnitario(precioRef > 0 ? precioRef.toString() : '');
+        setCostoUnitario(origen === 'CLIENTE' ? '0' : precioRef > 0 ? precioRef.toString() : '');
 
-        // Validar saldo inicial para cantidad (respetando sugerencia BOM si viene de 1-click)
         const maxStockDisp = conSaldo ? conSaldo.stock : (bodegasEfectivas.find(b => b.id_ubicacion === parseInt(bestId, 10))?.stock ?? 0);
-        if (maxStockDisp > 0) {
-            const sugerida = cantidadSugeridaBomRef.current;
-            if (sugerida && sugerida > 0) {
-                setCantidad(Math.min(sugerida, maxStockDisp).toString());
+        const sugerida = cantidadSugeridaBomRef.current;
+        if (origen === 'BODEGA') {
+            if (maxStockDisp > 0) {
+                setCantidad(sugerida && sugerida > 0 ? Math.min(sugerida, maxStockDisp).toString() : '1');
             } else {
-                setCantidad('1');
+                setCantidad(sugerida && sugerida > 0 ? sugerida.toString() : '1');
             }
         } else {
-            setCantidad('0');
+            setCantidad(sugerida && sugerida > 0 ? sugerida.toString() : '1');
         }
         cantidadSugeridaBomRef.current = null;
     }, [isOpen, componenteSeleccionado, bodegasEfectivas, bodegas]);
@@ -1901,6 +1931,15 @@ function ModalDespacharRepuestoOrden({
     const seleccionarDesdeBom = (bom: BomItem) => {
         const existente = (componentesData?.data || []).find((c) => c.id_componente === bom.id_componente);
         cantidadSugeridaBomRef.current = bom.cantidad_requerida || 1;
+        setModoManual(false);
+        if (bom.stock_actual <= 0 && origen === 'BODEGA') {
+            setOrigen('COMPRA_DIRECTA');
+            setAvisoAutoCambio(
+                `El artículo homologado «${bom.descripcion}» tiene 0 unidades físicas en bodega. Se activó automáticamente la modalidad «Solo Registro / Compra Directa (Sin descuento de stock)» con ${bom.cantidad_requerida} ${bom.unidad}. También puede elegir «Suministrado por el Cliente».`
+            );
+        } else {
+            setAvisoAutoCambio(null);
+        }
         if (existente) {
             setComponenteSeleccionado({
                 ...existente,
@@ -1917,9 +1956,9 @@ function ModalDespacharRepuestoOrden({
                 unidad: bom.unidad || 'UND',
                 stock_actual: bom.stock_actual,
                 stock_minimo: bom.stock_minimo,
-                estado_stock: bom.estado_stock,
+                estado_stock: (bom.estado_stock === 'INSUFICIENTE' ? 'BAJO' : bom.estado_stock) as any,
                 precio_compra: bom.precio_compra,
-                precio_venta: bom.precio_compra,
+                precio_venta: bom.precio_venta ?? bom.precio_compra,
                 valor_inventario: bom.stock_actual * bom.precio_compra,
                 activo: true,
                 bodegas: bom.bodegas || [],
@@ -1937,8 +1976,8 @@ function ModalDespacharRepuestoOrden({
         bodegasEfectivas.find((b) => b.id_ubicacion === bodegaSalidaId)?.stock ?? 0;
 
     const cantidadNum = parseFloat(cantidad) || 0;
-    const costoNum = parseFloat(costoUnitario) || 0;
-    const subtotalEstimado = cantidadNum * costoNum;
+    const costoNum = origen === 'CLIENTE' ? 0 : parseFloat(costoUnitario) || 0;
+    const subtotalEstimado = origen === 'CLIENTE' ? 0 : cantidadNum * costoNum;
     const cantidadExcedida = origen === 'BODEGA' && !!componenteSeleccionado && (stockEnBodegaSalida <= 0 || cantidadNum > stockEnBodegaSalida);
 
     // Control reactivo estricto de la cantidad ingresada
@@ -1973,12 +2012,12 @@ function ModalDespacharRepuestoOrden({
 
         if (origen === 'BODEGA') {
             if (!componenteSeleccionado) {
-                setError('Debe seleccionar un artículo del catálogo maestro WMS');
+                setError('Debe seleccionar un artículo del Catálogo Maestro WMS');
                 return;
             }
             if (cantidadNum > stockEnBodegaSalida) {
                 const bodNom = bodegas.find((b) => b.id_ubicacion === bodegaSalidaId)?.zona || 'la bodega seleccionada';
-                setError(`Stock insuficiente en ${bodNom}. Disponible: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}`);
+                setError(`Stock insuficiente en ${bodNom}. Disponible: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}. Si solo desea registrarlo sin descontar stock, elija «Solo Registro / Compra Directa» o «Suministrado por el Cliente».`);
                 return;
             }
 
@@ -1996,33 +2035,41 @@ function ModalDespacharRepuestoOrden({
                         realizado_por: usuarioId,
                     },
                 });
-                toast.success('Repuesto despachado y vinculado a la orden exitosamente');
+                toast.success('Repuesto despachado de Bodega WMS con asiento en Kardex exitosamente');
                 onClose();
             } catch (err: any) {
                 setError(err?.response?.data?.message || 'Error al despachar repuesto del almacén');
             }
         } else {
-            if (!descripcionDirecta.trim() && !componenteSeleccionado) {
-                setError('Debe ingresar la descripción del repuesto o insumo adquirido en campo');
+            const descResuelta = modoManual
+                ? descripcionDirecta.trim()
+                : (componenteSeleccionado?.nombre || componenteSeleccionado?.referencia || descripcionDirecta.trim());
+            if (!descResuelta && !componenteSeleccionado) {
+                setError('Seleccione un artículo del Catálogo Maestro o escriba la descripción del ítem manual');
                 return;
             }
             try {
                 await addComponenteMutation.mutateAsync({
                     idOrden: orden.id_orden_servicio,
                     data: {
-                        id_componente: componenteSeleccionado?.id_componente,
-                        descripcion: descripcionDirecta.trim() || componenteSeleccionado?.nombre || componenteSeleccionado?.referencia,
+                        id_componente: modoManual ? undefined : componenteSeleccionado?.id_componente,
+                        descripcion: descResuelta,
                         cantidad: cantidadNum,
-                        origen_componente: 'COMPRA_DIRECTA',
-                        costo_unitario: costoNum,
+                        unidad: modoManual ? 'UND' : componenteSeleccionado?.unidad || 'UND',
+                        origen_componente: origen,
+                        costo_unitario: origen === 'CLIENTE' ? 0 : costoNum,
                         observaciones: observaciones.trim() || undefined,
                         realizado_por: usuarioId,
                     },
                 });
-                toast.success('Insumo de compra directa imputado a la orden exitosamente');
+                toast.success(
+                    origen === 'CLIENTE'
+                        ? 'Repuesto suministrado por el cliente registrado para trazabilidad técnica ($0)'
+                        : 'Repuesto registrado en la orden exitosamente (Sin descuento de stock WMS)'
+                );
                 onClose();
             } catch (err: any) {
-                setError(err?.response?.data?.message || 'Error al registrar compra directa en la orden');
+                setError(err?.response?.data?.message || 'Error al registrar el repuesto en la orden');
             }
         }
     };
@@ -2035,20 +2082,27 @@ function ModalDespacharRepuestoOrden({
                 {/* Header Corporativo */}
                 <div className="flex items-center justify-between px-5 py-3.5 bg-white border-b border-slate-200 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl border bg-amber-50 text-amber-700 border-amber-200 shadow-2xs">
+                        <div className={cn(
+                            'p-2 rounded-xl border shadow-2xs',
+                            origen === 'BODEGA'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : origen === 'CLIENTE'
+                                ? 'bg-violet-50 text-violet-700 border-violet-200'
+                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                        )}>
                             <Package className="h-5 w-5" />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
                                 <h2 className="text-base font-bold text-slate-900">
-                                    Despachar Repuesto / Insumo a Orden
+                                    Asociar Repuesto / Insumo a Orden
                                 </h2>
                                 <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
                                     {orden.numero_orden}
                                 </span>
                             </div>
                             <p className="text-xs text-slate-500 mt-0.5">
-                                Descarga en tiempo real de bodega con regla FIFO, asiento en Kardex e imputación financiera
+                                Elija si aplica descuento físico de bodega (WMS + Kardex) o si es solo registro / suministro del cliente
                             </p>
                         </div>
                     </div>
@@ -2064,41 +2118,92 @@ function ModalDespacharRepuestoOrden({
                 {/* Cuerpo con Scroll Interno */}
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
                     <div className="p-5 overflow-y-auto space-y-4 flex-1">
-                        {/* Selector Segmentado de Origen */}
-                        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        {/* Selector Explícito de 3 Modalidades */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
                             <button
                                 type="button"
                                 onClick={() => {
                                     setOrigen('BODEGA');
+                                    setModoManual(false);
+                                    setAvisoAutoCambio(null);
                                     setError(null);
                                 }}
                                 className={cn(
-                                    'flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer',
+                                    'p-2.5 text-left rounded-lg transition-all cursor-pointer border',
                                     origen === 'BODEGA'
-                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                                        : 'text-slate-600 hover:text-slate-900'
+                                        ? 'bg-white text-slate-900 shadow-xs border-amber-300 ring-1 ring-amber-200'
+                                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-white/60'
                                 )}
                             >
-                                <Warehouse className="h-4 w-4 text-amber-600" />
-                                <span>Despacho desde Almacén WMS (Kardex & FIFO)</span>
+                                <div className="flex items-center gap-1.5 text-xs font-bold">
+                                    <Warehouse className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                    <span>1. Descuento Bodega WMS</span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                                    Descuenta stock físico, lote FIFO y Kardex
+                                </p>
                             </button>
+
                             <button
                                 type="button"
                                 onClick={() => {
                                     setOrigen('COMPRA_DIRECTA');
+                                    setAvisoAutoCambio(null);
                                     setError(null);
+                                    if (componenteSeleccionado && (!costoUnitario || costoUnitario === '0')) {
+                                        const refP = componenteSeleccionado.precio_compra ?? 0;
+                                        if (refP > 0) setCostoUnitario(String(refP));
+                                    }
+                                    if (cantidad === '0') setCantidad('1');
                                 }}
                                 className={cn(
-                                    'flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer',
+                                    'p-2.5 text-left rounded-lg transition-all cursor-pointer border',
                                     origen === 'COMPRA_DIRECTA'
-                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                                        : 'text-slate-600 hover:text-slate-900'
+                                        ? 'bg-white text-slate-900 shadow-xs border-blue-300 ring-1 ring-blue-200'
+                                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-white/60'
                                 )}
                             >
-                                <DollarSign className="h-4 w-4 text-blue-600" />
-                                <span>Compra Directa en Campo (Solo Costeo OT)</span>
+                                <div className="flex items-center gap-1.5 text-xs font-bold">
+                                    <DollarSign className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                                    <span>2. Solo Registro / Compra</span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                                    Sin descuento de stock • Imputa costo a la OT
+                                </p>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOrigen('CLIENTE');
+                                    setAvisoAutoCambio(null);
+                                    setError(null);
+                                    setCostoUnitario('0');
+                                    if (cantidad === '0') setCantidad('1');
+                                }}
+                                className={cn(
+                                    'p-2.5 text-left rounded-lg transition-all cursor-pointer border',
+                                    origen === 'CLIENTE'
+                                        ? 'bg-white text-slate-900 shadow-xs border-violet-300 ring-1 ring-violet-200'
+                                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                                )}
+                            >
+                                <div className="flex items-center gap-1.5 text-xs font-bold">
+                                    <ShieldCheck className="h-3.5 w-3.5 text-violet-600 shrink-0" />
+                                    <span>3. Suministro Cliente</span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                                    Solo trazabilidad técnica • Costo $0 Mekanos
+                                </p>
                             </button>
                         </div>
+
+                        {avisoAutoCambio && (
+                            <div className="p-3 text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2 shadow-2xs">
+                                <Package className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                                <span className="font-medium leading-relaxed">{avisoAutoCambio}</span>
+                            </div>
+                        )}
 
                         {error && (
                             <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 shadow-2xs">
@@ -2107,201 +2212,243 @@ function ModalDespacharRepuestoOrden({
                             </div>
                         )}
 
-                        {origen === 'BODEGA' ? (
-                            <>
-                                {/* Sugerencia Inteligente BOM del Equipo */}
-                                {bomCompatible.length > 0 && (
-                                    <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-2">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
-                                                <Layers className="h-3.5 w-3.5 text-blue-600" />
-                                                Kit BOM Compatible con {codigoEquipoPrincipal || 'este Equipo'} ({bomCompatible.length})
-                                            </span>
-                                            {idEquipoPrincipal > 0 && (
-                                                <a
-                                                    href={`/equipos/${idEquipoPrincipal}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-[11px] font-semibold text-blue-700 hover:underline inline-flex items-center gap-1"
-                                                >
-                                                    <span>Ver BOM 360°</span>
-                                                    <ExternalLink className="h-2.5 w-2.5" />
-                                                </a>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {bomCompatible.map((b) => {
-                                                const isSelected = componenteSeleccionado?.id_componente === b.id_componente;
-                                                const tieneStock = b.stock_actual > 0;
-                                                return (
-                                                    <button
-                                                        key={b.id_componente_equipo}
-                                                        type="button"
-                                                        onClick={() => seleccionarDesdeBom(b)}
-                                                        className={cn(
-                                                            'text-left px-2.5 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-2 cursor-pointer',
-                                                            isSelected
-                                                                ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
-                                                                : tieneStock
-                                                                    ? 'bg-white hover:bg-blue-50 text-slate-800 border-slate-200 shadow-2xs'
-                                                                    : 'bg-slate-100 text-slate-400 border-slate-200 opacity-75'
-                                                        )}
-                                                        title={`${b.aplicacion_label}: ${b.descripcion} (Requerido por servicio: ${b.cantidad_requerida} ${b.unidad})`}
-                                                    >
-                                                        <span className={cn(
-                                                            'font-mono text-[10px] font-bold px-1.5 py-0.5 rounded',
-                                                            isSelected ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-700'
-                                                        )}>
-                                                            {b.sku || `ART-${b.id_componente}`}
-                                                        </span>
-                                                        <span className="font-semibold truncate max-w-[165px]">
-                                                            {b.aplicacion_label}
-                                                        </span>
-                                                        <span className={cn(
-                                                            'text-[10px] font-mono font-bold px-1.5 py-0.5 rounded whitespace-nowrap',
-                                                            isSelected
-                                                                ? 'bg-blue-500 text-white'
-                                                                : tieneStock
-                                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                                        )}>
-                                                            Req: {b.cantidad_requerida} • Disp: {b.stock_actual} {b.unidad}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Selector de Componente del Catálogo WMS con Auto-cierre */}
-                                <div className="space-y-1.5">
-                                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        Artículo / Repuesto del Catálogo WMS *
-                                    </label>
-                                    {componenteSeleccionado ? (
-                                        <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl shadow-2xs space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-xs font-bold text-slate-800 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300/60">
-                                                        {componenteSeleccionado.codigo || `ART-${componenteSeleccionado.id_componente}`}
-                                                    </span>
-                                                    <p className="text-sm font-bold text-slate-900">
-                                                        {componenteSeleccionado.nombre || componenteSeleccionado.referencia}
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setComponenteSeleccionado(null);
-                                                        setBusqueda('');
-                                                        setShowDropdown(false);
-                                                    }}
-                                                    className="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs shrink-0 cursor-pointer"
-                                                >
-                                                    Cambiar artículo
-                                                </button>
-                                            </div>
-                                            <p className="text-xs text-slate-500">
-                                                Ref: <span className="font-semibold text-slate-700">{componenteSeleccionado.referencia}</span> | Marca: <span className="font-semibold text-slate-700">{componenteSeleccionado.marca || 'N/A'}</span>
-                                            </p>
-                                            <div className="flex items-center gap-2 text-xs">
-                                                <span className="text-slate-500 font-medium">Stock Global:</span>
-                                                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                                    {componenteSeleccionado.stock_actual} {componenteSeleccionado.unidad || 'UND'}
-                                                </span>
-                                                {componenteSeleccionado.precio_compra && componenteSeleccionado.precio_compra > 0 && (
-                                                    <span className="text-slate-400 text-[11px]">
-                                                        • Costo catálogo: ${Number(componenteSeleccionado.precio_compra).toLocaleString('es-CO')} COP
-                                                    </span>
+                        {/* Sugerencia Inteligente BOM del Equipo (Siempre visible en las 3 modalidades) */}
+                        {bomCompatible.length > 0 && (
+                            <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                                        <Layers className="h-3.5 w-3.5 text-blue-600" />
+                                        Referencias BOM Homologadas de {codigoEquipoPrincipal || 'este Equipo'} ({bomCompatible.length})
+                                    </span>
+                                    {idEquipoPrincipal > 0 && (
+                                        <a
+                                            href={`/equipos/${idEquipoPrincipal}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[11px] font-semibold text-blue-700 hover:underline inline-flex items-center gap-1"
+                                        >
+                                            <span>Ver BOM 360°</span>
+                                            <ExternalLink className="h-2.5 w-2.5" />
+                                        </a>
+                                    )}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {bomCompatible.map((b) => {
+                                        const isSelected = !modoManual && componenteSeleccionado?.id_componente === b.id_componente;
+                                        const tieneStock = b.stock_actual > 0;
+                                        const esAlt = b.rol_repuesto === 'ALTERNATIVO';
+                                        return (
+                                            <button
+                                                key={b.id_componente_equipo}
+                                                type="button"
+                                                onClick={() => seleccionarDesdeBom(b)}
+                                                className={cn(
+                                                    'text-left px-2.5 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-2 cursor-pointer',
+                                                    isSelected
+                                                        ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
+                                                        : 'bg-white hover:bg-blue-50 text-slate-800 border-slate-200 shadow-2xs'
                                                 )}
-                                            </div>
-                                            {bodegasEfectivas.length > 0 && (
-                                                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
-                                                    <span className="text-[11px] text-slate-500 font-medium">Desglose por Bodega:</span>
-                                                    {bodegasEfectivas.map((b) => (
-                                                        <span
-                                                            key={b.id_ubicacion}
-                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] text-slate-700 shadow-2xs"
-                                                        >
-                                                            <span className="font-semibold text-slate-500">{b.codigo}:</span>
-                                                            <span className="font-bold text-slate-900">{b.stock}</span>
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div ref={searchDropdownRef} className="relative">
-                                            <div className="relative">
-                                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                                <input
-                                                    type="text"
-                                                    placeholder="Buscar por código (ART-2026), referencia o descripción (Ej: Aceite, Filtro)..."
-                                                    value={busqueda}
-                                                    onChange={(e) => {
-                                                        setBusqueda(e.target.value);
-                                                        setShowDropdown(true);
-                                                    }}
-                                                    onFocus={() => setShowDropdown(true)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Escape') setShowDropdown(false);
-                                                    }}
-                                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 shadow-2xs transition-all hover:border-slate-400"
-                                                />
-                                            </div>
+                                                title={`${b.aplicacion_label} (${esAlt ? 'Homólogo' : 'Titular'}): ${b.descripcion} • Req: ${b.cantidad_requerida} ${b.unidad}`}
+                                            >
+                                                <span className={cn(
+                                                    'font-mono text-[10px] font-bold px-1.5 py-0.5 rounded',
+                                                    isSelected ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-700'
+                                                )}>
+                                                    {b.sku || `ART-${b.id_componente}`}
+                                                </span>
+                                                <span className="font-semibold truncate max-w-[150px]">
+                                                    {b.aplicacion_label} {esAlt ? '(Homólogo)' : ''}
+                                                </span>
+                                                <span className={cn(
+                                                    'text-[10px] font-mono font-bold px-1.5 py-0.5 rounded whitespace-nowrap',
+                                                    isSelected
+                                                        ? 'bg-blue-500 text-white'
+                                                        : tieneStock
+                                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                                )}>
+                                                    Req: {b.cantidad_requerida} • {tieneStock ? `Bodega: ${b.stock_actual}` : 'Bajo pedido (0)'}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
-                                            {showDropdown && (
-                                                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100">
-                                                    {isLoadingComp ? (
-                                                        <div className="p-4 text-xs text-slate-500 flex items-center justify-center gap-2">
-                                                            <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
-                                                            Consultando catálogo WMS...
-                                                        </div>
-                                                    ) : (componentesData?.data || []).length === 0 ? (
-                                                        <p className="p-4 text-xs text-slate-500 text-center font-medium">No se encontraron componentes</p>
-                                                    ) : (
-                                                        (componentesData?.data || []).map((comp) => (
-                                                            <button
-                                                                key={comp.id_componente}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setComponenteSeleccionado(comp);
-                                                                    setShowDropdown(false);
-                                                                }}
-                                                                className="w-full text-left p-3 hover:bg-amber-50/60 flex items-center justify-between transition-colors cursor-pointer group"
-                                                            >
-                                                                <div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 group-hover:bg-white px-2 py-0.5 rounded border border-slate-200">
-                                                                            {comp.codigo || `ART-${comp.id_componente}`}
-                                                                        </span>
-                                                                        <p className="text-xs font-bold text-slate-900 group-hover:text-amber-900 transition-colors">
-                                                                            {comp.nombre || comp.referencia}
-                                                                        </p>
-                                                                    </div>
-                                                                    <p className="text-[11px] text-slate-500 mt-0.5">REF: {comp.referencia} • Marca: {comp.marca || 'S/M'}</p>
-                                                                </div>
-                                                                <div className="text-right shrink-0 ml-3">
-                                                                    <span className={cn(
-                                                                        'text-xs font-bold block',
-                                                                        comp.stock_actual > 0 ? 'text-emerald-700' : 'text-rose-600'
-                                                                    )}>
-                                                                        Stock: {comp.stock_actual} {comp.unidad || 'UND'}
-                                                                    </span>
-                                                                    {comp.precio_compra ? (
-                                                                        <span className="text-[10px] text-slate-400 font-mono">${Number(comp.precio_compra).toLocaleString('es-CO')}</span>
-                                                                    ) : null}
-                                                                </div>
-                                                            </button>
-                                                        ))
-                                                    )}
+                        {/* Buscador Universal del Catálogo Maestro o Ítem Manual */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    {modoManual
+                                        ? 'Descripción Manual del Repuesto / Insumo *'
+                                        : 'Artículo del Catálogo Maestro *'}
+                                </label>
+                                {origen !== 'BODEGA' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setModoManual((v) => !v);
+                                            setError(null);
+                                        }}
+                                        className="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer"
+                                    >
+                                        {modoManual
+                                            ? '← Buscar en el Catálogo Maestro'
+                                            : '¿No está en catálogo? Escribir ítem manual'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {modoManual && origen !== 'BODEGA' ? (
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Abrazadera industrial 4 pulgadas en acero inoxidable (Factura POS #981)"
+                                    value={descripcionDirecta}
+                                    onChange={(e) => setDescripcionDirecta(e.target.value)}
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-2xs hover:border-slate-400 transition-all"
+                                    required
+                                />
+                            ) : componenteSeleccionado ? (
+                                <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl shadow-2xs space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono text-xs font-bold text-slate-800 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300/60">
+                                                {componenteSeleccionado.codigo || `ART-${componenteSeleccionado.id_componente}`}
+                                            </span>
+                                            <p className="text-sm font-bold text-slate-900">
+                                                {componenteSeleccionado.nombre || componenteSeleccionado.referencia}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setComponenteSeleccionado(null);
+                                                setBusqueda('');
+                                                setShowDropdown(false);
+                                            }}
+                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs shrink-0 cursor-pointer"
+                                        >
+                                            Cambiar artículo
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                        Ref: <span className="font-semibold text-slate-700">{componenteSeleccionado.referencia}</span> | Marca: <span className="font-semibold text-slate-700">{componenteSeleccionado.marca || 'N/A'}</span>
+                                    </p>
+                                    <div className="flex items-center gap-2 text-xs flex-wrap">
+                                        <span className="text-slate-500 font-medium">En Almacén WMS:</span>
+                                        <span className={cn(
+                                            'font-bold px-2 py-0.5 rounded border',
+                                            componenteSeleccionado.stock_actual > 0
+                                                ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                                                : 'text-slate-700 bg-slate-100 border-slate-200'
+                                        )}>
+                                            {componenteSeleccionado.stock_actual} {componenteSeleccionado.unidad || 'UND'}
+                                        </span>
+                                        {componenteSeleccionado.precio_compra && componenteSeleccionado.precio_compra > 0 && (
+                                            <span className="text-slate-500 text-[11px]">
+                                                • Costo catálogo: <strong>${Number(componenteSeleccionado.precio_compra).toLocaleString('es-CO')} COP</strong>
+                                            </span>
+                                        )}
+                                    </div>
+                                    {origen === 'BODEGA' && bodegasEfectivas.length > 0 && (
+                                        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
+                                            <span className="text-[11px] text-slate-500 font-medium">Desglose por Bodega:</span>
+                                            {bodegasEfectivas.map((b) => (
+                                                <span
+                                                    key={b.id_ubicacion}
+                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] text-slate-700 shadow-2xs"
+                                                >
+                                                    <span className="font-semibold text-slate-500">{b.codigo}:</span>
+                                                    <span className="font-bold text-slate-900">{b.stock}</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div ref={searchDropdownRef} className="relative">
+                                    <div className="relative">
+                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar en Catálogo Maestro por código (ART-2026), referencia o nombre..."
+                                            value={busqueda}
+                                            onChange={(e) => {
+                                                setBusqueda(e.target.value);
+                                                setShowDropdown(true);
+                                            }}
+                                            onFocus={() => setShowDropdown(true)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Escape') setShowDropdown(false);
+                                            }}
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 shadow-2xs transition-all hover:border-slate-400"
+                                        />
+                                    </div>
+
+                                    {showDropdown && (
+                                        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+                                            {isLoadingComp ? (
+                                                <div className="p-4 text-xs text-slate-500 flex items-center justify-center gap-2">
+                                                    <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                                                    Consultando Catálogo Maestro...
                                                 </div>
+                                            ) : (componentesData?.data || []).length === 0 ? (
+                                                <p className="p-4 text-xs text-slate-500 text-center font-medium">No se encontraron componentes</p>
+                                            ) : (
+                                                (componentesData?.data || []).map((comp) => (
+                                                    <button
+                                                        key={comp.id_componente}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (comp.stock_actual <= 0 && origen === 'BODEGA') {
+                                                                setOrigen('COMPRA_DIRECTA');
+                                                                setAvisoAutoCambio(
+                                                                    `El artículo «${comp.nombre || comp.referencia}» tiene 0 unidades en bodega; se seleccionó automáticamente «Solo Registro / Compra Directa (Sin descuento de stock)».`
+                                                                );
+                                                            } else {
+                                                                setAvisoAutoCambio(null);
+                                                            }
+                                                            setComponenteSeleccionado(comp);
+                                                            setShowDropdown(false);
+                                                        }}
+                                                        className="w-full text-left p-3 hover:bg-amber-50/60 flex items-center justify-between transition-colors cursor-pointer group"
+                                                    >
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 group-hover:bg-white px-2 py-0.5 rounded border border-slate-200">
+                                                                    {comp.codigo || `ART-${comp.id_componente}`}
+                                                                </span>
+                                                                <p className="text-xs font-bold text-slate-900 group-hover:text-amber-900 transition-colors">
+                                                                    {comp.nombre || comp.referencia}
+                                                                </p>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-500 mt-0.5">REF: {comp.referencia} • Marca: {comp.marca || 'S/M'}</p>
+                                                        </div>
+                                                        <div className="text-right shrink-0 ml-3">
+                                                            <span className={cn(
+                                                                'text-xs font-bold block',
+                                                                comp.stock_actual > 0 ? 'text-emerald-700' : 'text-blue-700'
+                                                            )}>
+                                                                {comp.stock_actual > 0
+                                                                    ? `En bodega: ${comp.stock_actual} ${comp.unidad || 'UND'}`
+                                                                    : '0 en bodega (Solo registro)'}
+                                                            </span>
+                                                            {comp.precio_compra ? (
+                                                                <span className="text-[10px] text-slate-400 font-mono">${Number(comp.precio_compra).toLocaleString('es-CO')}</span>
+                                                            ) : null}
+                                                        </div>
+                                                    </button>
+                                                ))
                                             )}
                                         </div>
                                     )}
                                 </div>
+                            )}
+                        </div>
 
+                        {origen === 'BODEGA' ? (
+                            <>
                                 {/* Banner de Lotes Físicos Disponibles (FIFO/FEFO) */}
                                 {lotesActivosEfectivos.length > 0 && (
                                     <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs space-y-2 shadow-2xs">
@@ -2418,8 +2565,8 @@ function ModalDespacharRepuestoOrden({
                                                             : `✓ Disponible en bodega: ${stockEnBodegaSalida} ${componenteSeleccionado.unidad || 'UND'}`}
                                                     </span>
                                                 ) : (
-                                                    <span className="text-rose-600 font-semibold flex items-center gap-1">
-                                                        ⚠️ Sin existencias en esta bodega (0 {componenteSeleccionado.unidad || 'UND'}). Despacho no disponible.
+                                                    <span className="text-blue-700 font-semibold flex items-center gap-1">
+                                                        0 en esta bodega — cambie a «Solo Registro / Compra» o «Suministro Cliente» arriba.
                                                     </span>
                                                 )}
                                             </div>
@@ -2471,40 +2618,32 @@ function ModalDespacharRepuestoOrden({
                                 </div>
                             </>
                         ) : (
-                            <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                                        Descripción del Repuesto / Insumo Adquirido en Campo *
+                                        Cantidad Utilizada / Registrada * {componenteSeleccionado?.unidad ? `(${componenteSeleccionado.unidad})` : ''}
                                     </label>
                                     <input
-                                        type="text"
-                                        placeholder="Ej: Abrazadera industrial 4 pulgadas en acero inoxidable (Factura POS #981)"
-                                        value={descripcionDirecta}
-                                        onChange={(e) => setDescripcionDirecta(e.target.value)}
-                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-2xs hover:border-slate-400 transition-all"
+                                        type="number"
+                                        min="0.01"
+                                        step="any"
+                                        value={cantidad}
+                                        onChange={(e) => setCantidad(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
                                         required
                                     />
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-3.5">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                                            Cantidad *
-                                        </label>
-                                        <input
-                                            type="number"
-                                            min="0.01"
-                                            step="any"
-                                            value={cantidad}
-                                            onChange={(e) => setCantidad(e.target.value)}
-                                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                                            Costo Unitario ($) *
-                                        </label>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                                        {origen === 'CLIENTE'
+                                            ? 'Costo Imputado a Mekanos ($)'
+                                            : 'Costo Unitario Imputado ($) *'}
+                                    </label>
+                                    {origen === 'CLIENTE' ? (
+                                        <div className="w-full px-3.5 py-2.5 bg-violet-50/70 border border-violet-200 rounded-xl text-xs font-bold font-mono text-violet-800">
+                                            $0 COP (Suministrado por el cliente)
+                                        </div>
+                                    ) : (
                                         <input
                                             type="number"
                                             min="0"
@@ -2515,9 +2654,9 @@ function ModalDespacharRepuestoOrden({
                                             className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold font-mono text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
                                             required
                                         />
-                                    </div>
+                                    )}
                                 </div>
-                            </>
+                            </div>
                         )}
 
                         <div>
@@ -2533,21 +2672,48 @@ function ModalDespacharRepuestoOrden({
                             />
                         </div>
 
-                        {/* Preview Financiero de Imputación */}
-                        <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between shadow-2xs">
+                        {/* Preview Financiero e Impacto en Inventario */}
+                        <div className={cn(
+                            'p-4 rounded-xl flex items-center justify-between shadow-2xs border',
+                            origen === 'BODEGA'
+                                ? 'bg-emerald-50/80 border-emerald-200'
+                                : origen === 'CLIENTE'
+                                ? 'bg-violet-50/80 border-violet-200'
+                                : 'bg-blue-50/80 border-blue-200'
+                        )}>
                             <div>
-                                <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
-                                    Impacto Financiero en {orden.numero_orden}
-                                </p>
-                                <p className="text-xs text-emerald-700 mt-0.5">
+                                <p className={cn(
+                                    'text-[11px] font-bold uppercase tracking-wider',
+                                    origen === 'BODEGA' ? 'text-emerald-800' : origen === 'CLIENTE' ? 'text-violet-800' : 'text-blue-800'
+                                )}>
                                     {origen === 'BODEGA'
-                                        ? 'Descuenta existencias físicas, genera asiento CONSUMO_OS en Kardex y suma al total de la orden'
-                                        : 'Imputación contable directa al costo de componentes de la orden'}
+                                        ? `Impacto WMS & Financiero en ${orden.numero_orden}`
+                                        : origen === 'CLIENTE'
+                                        ? `Trazabilidad Técnica (Suministro Cliente) en ${orden.numero_orden}`
+                                        : `Registro sin Descuento de Stock en ${orden.numero_orden}`}
+                                </p>
+                                <p className={cn(
+                                    'text-xs mt-0.5',
+                                    origen === 'BODEGA' ? 'text-emerald-700' : origen === 'CLIENTE' ? 'text-violet-700' : 'text-blue-700'
+                                )}>
+                                    {origen === 'BODEGA'
+                                        ? 'Descuenta existencias físicas de bodega/lote, genera asiento CONSUMO_OS en Kardex y suma al total de la orden'
+                                        : origen === 'CLIENTE'
+                                        ? 'No descuenta stock de almacén ni suma cobro de Mekanos ($0); queda documentado en la OT, Informe PDF e Historial del Equipo'
+                                        : 'No descuenta stock físico de bodega ni afecta Kardex; imputa el costo a la orden y al Historial Clínico del Equipo'}
                                 </p>
                             </div>
                             <div className="text-right shrink-0 ml-3">
-                                <span className="text-[10px] font-bold text-emerald-700 uppercase block">Subtotal a Imputar</span>
-                                <span className="text-lg font-black font-mono text-emerald-950">
+                                <span className={cn(
+                                    'text-[10px] font-bold uppercase block',
+                                    origen === 'BODEGA' ? 'text-emerald-700' : origen === 'CLIENTE' ? 'text-violet-700' : 'text-blue-700'
+                                )}>
+                                    Subtotal a Imputar
+                                </span>
+                                <span className={cn(
+                                    'text-lg font-black font-mono',
+                                    origen === 'BODEGA' ? 'text-emerald-950' : origen === 'CLIENTE' ? 'text-violet-950' : 'text-blue-950'
+                                )}>
                                     ${subtotalEstimado.toLocaleString('es-CO')} COP
                                 </span>
                             </div>
@@ -2566,14 +2732,25 @@ function ModalDespacharRepuestoOrden({
                         <button
                             type="submit"
                             disabled={addComponenteMutation.isPending || cantidadNum <= 0 || (origen === 'BODEGA' && (!componenteSeleccionado || cantidadExcedida))}
-                            className="px-5 py-2.5 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                            className={cn(
+                                'px-5 py-2.5 text-sm font-semibold text-white rounded-xl flex items-center gap-2 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer',
+                                origen === 'BODEGA'
+                                    ? 'bg-amber-600 hover:bg-amber-700'
+                                    : origen === 'CLIENTE'
+                                    ? 'bg-violet-600 hover:bg-violet-700'
+                                    : 'bg-blue-600 hover:bg-blue-700'
+                            )}
                         >
                             {addComponenteMutation.isPending ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                                 <Check className="h-4 w-4" />
                             )}
-                            Confirmar Despacho a {orden.numero_orden}
+                            {origen === 'BODEGA'
+                                ? `Despachar de Bodega a ${orden.numero_orden}`
+                                : origen === 'CLIENTE'
+                                ? `Registrar Suministro Cliente en ${orden.numero_orden}`
+                                : `Registrar en ${orden.numero_orden} (Sin Descuento Stock)`}
                         </button>
                     </div>
                 </form>

@@ -1460,12 +1460,19 @@ export class EquiposGestionService {
     }
 
     const categoria = specs.categoria_aplicacion || 'REPUESTO_GENERAL';
+    const esAlternativoPorNota = /alternativ|homolog|opcional|reemplazo/i.test(rel.notas || '');
+    const rolRepuesto: 'TITULAR' | 'ALTERNATIVO' =
+      specs.rol_repuesto === 'ALTERNATIVO' || (!specs.rol_repuesto && esAlternativoPorNota)
+        ? 'ALTERNATIVO'
+        : 'TITULAR';
+
     return {
       id_componente_equipo: rel.id_componente_equipo,
       id_componente: rel.id_componente,
       categoria_aplicacion: categoria,
       aplicacion_label: EquiposGestionService.BOM_APLICACIONES[categoria]?.label || rel.posicion_descripcion,
       posicion_descripcion: rel.posicion_descripcion,
+      rol_repuesto: rolRepuesto,
       cantidad_requerida: cantidadRequerida,
       faltante,
       frecuencia_cambio_horas: specs.frecuencia_cambio_horas != null ? Number(specs.frecuencia_cambio_horas) : null,
@@ -1477,6 +1484,7 @@ export class EquiposGestionService {
       marca: c?.marca ?? rel.marca_manual ?? null,
       unidad: c?.unidad_medida ?? 'UND',
       precio_compra: Number(c?.precio_compra ?? 0),
+      precio_venta: Number(c?.precio_venta ?? 0),
       stock_actual: stockActual,
       stock_minimo: stockMinimo,
       estado_stock: estadoStock,
@@ -1605,6 +1613,10 @@ export class EquiposGestionService {
       resumen: {
         total_ordenes: ordenes.length,
         total_bom: bom.length,
+        bom_titulares: bom.filter((b) => b.rol_repuesto !== 'ALTERNATIVO').length,
+        bom_alternativos: bom.filter((b) => b.rol_repuesto === 'ALTERNATIVO').length,
+        bom_en_bodega: bom.filter((b) => b.stock_actual > 0).length,
+        bom_bajo_pedido: bom.filter((b) => b.stock_actual <= 0).length,
         bom_con_kit_completo: bom.filter((b) => b.stock_actual >= b.cantidad_requerida).length,
         bom_insuficientes: bom.filter((b) => b.stock_actual > 0 && b.stock_actual < b.cantidad_requerida).length,
         bom_agotados: bom.filter((b) => b.estado_stock === 'AGOTADO').length,
@@ -1639,6 +1651,7 @@ export class EquiposGestionService {
     body: {
       id_componente?: number;
       categoria_aplicacion?: string;
+      rol_repuesto?: 'TITULAR' | 'ALTERNATIVO';
       cantidad_requerida?: number;
       frecuencia_cambio_horas?: number | null;
       notas_tecnicas?: string | null;
@@ -1682,6 +1695,12 @@ export class EquiposGestionService {
     }
 
     const aplicacion = EquiposGestionService.BOM_APLICACIONES[categoria];
+    const notasRaw = body?.notas_tecnicas?.toString().trim() || null;
+    const rolRepuesto: 'TITULAR' | 'ALTERNATIVO' =
+      body?.rol_repuesto === 'ALTERNATIVO' || (!body?.rol_repuesto && /alternativ|homolog|opcional|reemplazo/i.test(notasRaw || ''))
+        ? 'ALTERNATIVO'
+        : 'TITULAR';
+
     const creado = await this.prisma.componentes_equipo.create({
       data: {
         id_equipo: idEquipo,
@@ -1691,10 +1710,11 @@ export class EquiposGestionService {
         unidades_por_cambio: Math.max(1, Math.ceil(cantidad)),
         especificaciones_adicionales: {
           categoria_aplicacion: categoria,
+          rol_repuesto: rolRepuesto,
           cantidad_requerida: cantidad,
           frecuencia_cambio_horas: frecuencia,
         },
-        notas: body?.notas_tecnicas?.toString().trim() || null,
+        notas: notasRaw,
         activo: true,
         creado_por: userId || 1,
       },
@@ -1713,6 +1733,7 @@ export class EquiposGestionService {
     idRelacion: number,
     body: {
       categoria_aplicacion?: string;
+      rol_repuesto?: 'TITULAR' | 'ALTERNATIVO';
       cantidad_requerida?: number;
       frecuencia_cambio_horas?: number | null;
       notas_tecnicas?: string | null;
@@ -1744,6 +1765,13 @@ export class EquiposGestionService {
       throw new BadRequestException('La frecuencia de cambio debe ser un número de horas mayor a 0');
     }
 
+    const notasNuevas = body.notas_tecnicas !== undefined ? (body.notas_tecnicas?.toString().trim() || null) : rel.notas;
+    const rolRepuesto: 'TITULAR' | 'ALTERNATIVO' = body.rol_repuesto
+      ? (body.rol_repuesto === 'ALTERNATIVO' ? 'ALTERNATIVO' : 'TITULAR')
+      : (specsActuales.rol_repuesto === 'ALTERNATIVO' || (!specsActuales.rol_repuesto && /alternativ|homolog|opcional|reemplazo/i.test(notasNuevas || ''))
+          ? 'ALTERNATIVO'
+          : 'TITULAR');
+
     const aplicacion = EquiposGestionService.BOM_APLICACIONES[categoria];
     const actualizado = await this.prisma.componentes_equipo.update({
       where: { id_componente_equipo: idRelacion },
@@ -1754,10 +1782,11 @@ export class EquiposGestionService {
         especificaciones_adicionales: {
           ...specsActuales,
           categoria_aplicacion: categoria,
+          rol_repuesto: rolRepuesto,
           cantidad_requerida: cantidad,
           frecuencia_cambio_horas: frecuencia,
         },
-        notas: body.notas_tecnicas !== undefined ? (body.notas_tecnicas?.toString().trim() || null) : rel.notas,
+        notas: notasNuevas,
         modificado_por: userId || 1,
         fecha_modificacion: new Date(),
       },
