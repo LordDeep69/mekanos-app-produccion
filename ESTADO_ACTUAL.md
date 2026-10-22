@@ -4,17 +4,14 @@
 **Versión:** 5.7 Release Candidate (RC-7 - Arquitectura de Dominio WMS ⇄ EAM: Referenciación Técnica vs Consumo Físico)  
 **Últimos Commits Clave:** 
 - `feat(catalogo-taxonomia)`: Rediseño Enterprise desde Primeros Principios del **Selector Jerárquico de Categorías (`HierarchicalCategorySelect`)**:
-  - **Navegador Miller Columns Dinámico de Profundidad Arbitraria ($N$-Niveles):**
-    - Erradicación definitiva de los 3 selects nativos rígidos y estáticos (`📁`, `↳`, `✓ Nivel terminal alcanzado`) que limitaban la profundidad a 3 niveles y fallaban en categorías de 4 niveles o terminales a nivel 2.
-    - Columnas generadas reactivamente a partir del arreglo de ancestros activos `selectedPath`: se expanden fluidamente a 1, 2, 3 o 4 niveles según la anatomía real de la base de datos (e.g., `Filtros de Aceite` terminal a nivel 2 no genera columnas vacías; `Filtros de Aire` ➔ `FILTRO DE AIRE INTERNO` ➔ `Interno Reciclable` despliega sus 4 columnas de forma elegante).
-  - **Detección y Registro Inmediato en el 1er Clic:**
-    - Hacer clic sobre cualquier categoría en cualquier nivel invoca inmediatamente `onChange(id_categoria, categoria)` validando el schema Zod y sincronizando el asistente de nomenclatura al instante, sin forzar la selección de un nodo hijo.
-  - **Tarjeta Ejecutiva de Resumen & Migas de Pan Interactivas:**
-    - Cabecera resumen que expone la ruta taxonómica completa con iconos contextuales por familia industrial (`Filter`, `Droplets`, `Zap`, `Thermometer`, `Cog`, etc.), código de categoría y botón "Explorar / Cambiar" para abrir y cerrar el workbench.
-  - **Buscador Global Predictivo de Ruta Completa:**
-    - Barra de búsqueda con autocompletado fuzzy sobre toda la jerarquía que salta directamente a la categoría elegida reconstruyendo todas las columnas y su árbol genealógico.
-  - **Alta In-Context de Nuevas Ramas:**
-    - Botón `+ Añadir en este nivel` al pie de cada columna para crear ramas hijas o raíces en caliente con el padre preseleccionado.
+  - **Árbol Jerárquico Vertical con Acordeón Inteligente (Enterprise Tree View):**
+    - Erradicación definitiva de las columnas horizontales y de la barra de scroll lateral que causaba fricción y desbordamiento en pantallas estándar.
+    - El árbol ocupa el 100% del ancho del contenedor del formulario con scroll vertical limpio (`max-h-[380px]`).
+    - Eliminación de la causa raíz del auto-cierre prematuro: el explorador permanece abierto durante la interacción y sólo se colapsa cuando el usuario pulsa `✓ Listo, aplicar selección` o `Ocultar Árbol`.
+    - **Selección Inmediata & Auto-Expansión Progresiva:** Al pulsar cualquier nodo (Nivel 1, 2, 3 o 4), se registra inmediatamente la selección (`onChange`), se valida el formulario Zod, se actualiza el título sugerido y, si posee hijos, se auto-despliegan verticalmente sus subcategorías con guías de nivel sutiles (`border-l-2 border-blue-200`).
+    - **Navegación Fluida de $N$-Niveles:** Soporta ramas terminales tempranas (e.g. *Filtros de Aceite* con badge `Terminal`) y ramas de profundidad extendida (e.g. *Filtros y Filtración* ➔ *Filtros de Aire* ➔ *FILTRO DE AIRE INTERNO* ➔ *Interno Reciclable*) sin scroll horizontal.
+    - **Controles Rápidos de Productividad:** Botones para `Expandir Todo` y `Colapsar`, más buscador global predictivo con salto directo y auto-expansión de ruta.
+    - **Tarjeta Ejecutiva de Resumen:** Migas de pan interactivas con badges, iconos por familia industrial y botón para reabrir el árbol en cualquier momento.
 - `feat(catalogo-alta-premium)`: Elevación a Grado Enterprise del **Alta y Edición de Recursos Maestros** (`articulo-form.tsx`):
   - **Selector Jerárquico en Cascada Multinivel (`HierarchicalCategorySelect`):**
     - Corrección del bug de recursividad en árbol (`node.hijos` vs `node.subcategorias`), habilitando la navegación fluida por todas las subcategorías y sub-hijas.
