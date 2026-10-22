@@ -2090,7 +2090,7 @@ export class InventarioService {
                 id_orden_servicio: idOrden,
                 id_tecnico: dto.usado_por,
                 motivo: 'CONSUMO_OS',
-                justificacion: dto.observaciones || `Despacho de almacén a OS #${idOrden}`,
+                justificacion: dto.observaciones || undefined,
                 observaciones: dto.observaciones,
                 realizado_por: dto.realizado_por || 1,
             });

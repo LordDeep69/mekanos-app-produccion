@@ -766,9 +766,13 @@ export function MovimientoModal({
                                     >
                                         {bodegas.map((b) => {
                                             const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                            const zonaCorta = (b.zona || 'Bodega Principal')
+                                                .replace('Almacén de Lubricantes y Químicos', 'Almacén Lubricantes')
+                                                .replace('Bodega Central Taller', 'Taller Central')
+                                                .replace('Unidad Móvil Servicio', 'Unidad Móvil');
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
+                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {zonaCorta}
                                                 </option>
                                             );
                                         })}
@@ -1011,9 +1015,13 @@ export function MovimientoModal({
                                     >
                                         {bodegas.map((b) => {
                                             const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                            const zonaCorta = (b.zona || 'Bodega Principal')
+                                                .replace('Almacén de Lubricantes y Químicos', 'Almacén Lubricantes')
+                                                .replace('Bodega Central Taller', 'Taller Central')
+                                                .replace('Unidad Móvil Servicio', 'Unidad Móvil');
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
+                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {zonaCorta}
                                                 </option>
                                             );
                                         })}
@@ -1116,9 +1124,13 @@ export function MovimientoModal({
                                     >
                                         {bodegas.map((b) => {
                                             const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                            const zonaCorta = (b.zona || 'Bodega Principal')
+                                                .replace('Almacén de Lubricantes y Químicos', 'Almacén Lubricantes')
+                                                .replace('Bodega Central Taller', 'Taller Central')
+                                                .replace('Unidad Móvil Servicio', 'Unidad Móvil');
                                             return (
                                                 <option key={b.id_ubicacion} value={b.id_ubicacion}>
-                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {b.zona || 'Bodega Principal'}
+                                                    [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {zonaCorta}
                                                 </option>
                                             );
                                         })}

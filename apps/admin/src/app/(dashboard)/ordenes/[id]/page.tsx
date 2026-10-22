@@ -1185,6 +1185,11 @@ function TabFinanciero({ orden }: { orden: Orden }) {
         }
     };
 
+    const esOrdenCancelada = orden.estados_orden?.codigo_estado === 'CANCELADA';
+    const esLiquidacionPostCierre =
+        orden.estados_orden?.codigo_estado === 'COMPLETADA' ||
+        orden.estados_orden?.codigo_estado === 'APROBADA';
+
     return (
         <div className="space-y-6">
             {/* Resumen financiero */}
@@ -1234,6 +1239,15 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                                 Total Unid.: {resumenComp.unidades_totales}
                             </span>
+                            {esLiquidacionPostCierre && (
+                                <span
+                                    title="Habilitado para liquidación administrativa de insumos omitidos en cierre de campo"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                >
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Liquidación Administrativa Activa
+                                </span>
+                            )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
                             Despacho directo desde almacén multi-bodega con regla FIFO/FEFO, asiento automático en Kardex e imputación financiera a la orden
@@ -1241,8 +1255,10 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                     </div>
                     <button
                         type="button"
+                        disabled={esOrdenCancelada}
                         onClick={() => setIsDespacharRepuestoOpen(true)}
-                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+                        title={esOrdenCancelada ? 'No se pueden despachar repuestos a una orden cancelada' : 'Despachar repuesto de almacén o imputar compra directa'}
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Plus className="h-4 w-4" />
                         Despachar Repuesto WMS
@@ -1305,7 +1321,7 @@ function TabFinanciero({ orden }: { orden: Orden }) {
                                                         ? `Ref: ${c.referencia_fabricante}`
                                                         : 'Ref: Estándar'}
                                                     {c.marca && c.marca !== 'GENÉRICO' ? ` • Marca: ${c.marca}` : ''}
-                                                    {c.observaciones ? ` • Nota: ${c.observaciones}` : ''}
+                                                    {c.observaciones ? ` • Nota: ${c.observaciones.replace(/OS #\d+/g, orden.numero_orden)}` : ''}
                                                 </p>
                                             </td>
                                             <td className="px-4 py-3.5">
@@ -2218,9 +2234,13 @@ function ModalDespacharRepuestoOrden({
                                             >
                                                 {bodegas.map((b) => {
                                                     const s = bodegasEfectivas.find((x) => x.id_ubicacion === b.id_ubicacion)?.stock ?? 0;
+                                                    const zonaCorta = (b.zona || 'Bodega')
+                                                        .replace('Almacén de Lubricantes y Químicos', 'Almacén Lubricantes')
+                                                        .replace('Bodega Central Taller', 'Taller Central')
+                                                        .replace('Unidad Móvil Servicio', 'Unidad Móvil');
                                                     return (
                                                         <option key={b.id_ubicacion} value={b.id_ubicacion} className="text-slate-800 py-1 font-medium">
-                                                            [{b.codigo_ubicacion}] • {b.zona || 'Bodega'} (Disp: {s} {componenteSeleccionado?.unidad || 'UND'})
+                                                            [{b.codigo_ubicacion}] (Disp: {s} {componenteSeleccionado?.unidad || 'UND'}) • {zonaCorta}
                                                         </option>
                                                     );
                                                 })}
@@ -2299,13 +2319,13 @@ function ModalDespacharRepuestoOrden({
                                                 className="w-full pl-3.5 pr-9 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all appearance-none cursor-pointer truncate"
                                             >
                                                 <option value="" className="text-slate-700 py-1 font-medium">
-                                                    -- Regla Automática FIFO / FEFO (Recomendado) --
+                                                    Automático FIFO / FEFO (Recomendado)
                                                 </option>
                                                 {lotesActivosEfectivos
                                                     .filter((l) => !bodegaSalida || l.id_ubicacion === parseInt(bodegaSalida, 10))
                                                     .map((lote) => (
                                                         <option key={lote.id_lote} value={lote.id_lote} className="text-slate-800 py-1 font-medium">
-                                                            [{lote.codigo_lote}] Disp: {lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'} {lote.fecha_vencimiento ? `• Vence: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}` : ''}
+                                                            [{lote.codigo_lote}] ({lote.cantidad_actual} {componenteSeleccionado?.unidad || 'UND'}) {lote.fecha_vencimiento ? `• Vto: ${new Date(lote.fecha_vencimiento).toLocaleDateString('es-CO')}` : ''}
                                                         </option>
                                                     ))}
                                             </select>
