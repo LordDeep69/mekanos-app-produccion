@@ -258,6 +258,28 @@ export class EquiposController {
   }
 
   /**
+   * PATCH /api/equipos/:id/componentes-compatibles/:idRelacion
+   * Actualiza aplicación, cantidad requerida, frecuencia o notas de un ítem del BOM
+   */
+  @Patch(':id/componentes-compatibles/:idRelacion')
+  @ApiOperation({ summary: 'Actualizar repuesto vinculado al BOM del equipo' })
+  async actualizarComponenteCompatible(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idRelacion', ParseIntPipe) idRelacion: number,
+    @Body()
+    body: {
+      categoria_aplicacion?: string;
+      cantidad_requerida?: number;
+      frecuencia_cambio_horas?: number | null;
+      notas_tecnicas?: string | null;
+    },
+    @UserId() userId: number,
+  ) {
+    const data = await this.equiposGestionService.actualizarComponenteCompatible(id, idRelacion, body, userId);
+    return { success: true, message: 'Repuesto del BOM actualizado correctamente', data };
+  }
+
+  /**
    * DELETE /api/equipos/:id/componentes-compatibles/:idRelacion
    * Desvincula (lógicamente) un repuesto del BOM del equipo
    */

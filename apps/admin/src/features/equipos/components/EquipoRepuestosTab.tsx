@@ -12,12 +12,14 @@ import { useComponentesStock } from '@/features/inventario/api/inventario-motor.
 import { cn } from '@/lib/utils';
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ExternalLink,
   Layers,
   Link2,
   Loader2,
   Package,
+  Pencil,
   Plus,
   Search,
   ShoppingCart,
@@ -30,6 +32,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   BOM_APLICACIONES,
+  useActualizarBomEquipo,
   useDesvincularBomEquipo,
   useVincularBomEquipo,
   type BomItem,
@@ -40,38 +43,104 @@ const cop = (v: number) => `$${Math.round(v || 0).toLocaleString('es-CO')}`;
 const fecha = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
+/**
+ * Infiere automáticamente la categoría del BOM analizando el nombre/descripción del artículo.
+ */
+function inferirCategoriaDesdeComponente(c: any): string {
+  const texto = `${c.nombre || ''} ${c.referencia || ''} ${c.descripcion || ''}`.toLowerCase();
+  if (texto.includes('filtro') && (texto.includes('aceite') || texto.includes('oil'))) return 'FILTRO_ACEITE';
+  if (
+    texto.includes('filtro') &&
+    (texto.includes('combustible') || texto.includes('diesel') || texto.includes('diésel') || texto.includes('gasolina') || texto.includes('fuel'))
+  )
+    return 'FILTRO_COMBUSTIBLE';
+  if ((texto.includes('separador') || texto.includes('trampa')) && (texto.includes('agua') || texto.includes('water')))
+    return 'FILTRO_SEPARADOR_AGUA';
+  if (texto.includes('filtro') && (texto.includes('aire') || texto.includes('air'))) return 'FILTRO_AIRE';
+  if (
+    (texto.includes('aceite') || texto.includes('lubricante') || texto.includes('deo') || texto.includes('rimula')) &&
+    (texto.includes('15w40') || texto.includes('10w30') || texto.includes('motor') || texto.includes('cárter') || texto.includes('carter'))
+  )
+    return 'LUBRICANTE_MOTOR';
+  if (texto.includes('refrigerante') || texto.includes('coolant') || texto.includes('anticongelante')) return 'REFRIGERANTE';
+  if (texto.includes('correa') || texto.includes('banda') || texto.includes('belt')) return 'CORREA';
+  if (
+    texto.includes('bateria') ||
+    texto.includes('batería') ||
+    texto.includes('acumulador') ||
+    texto.includes('mac') ||
+    texto.includes('willard')
+  )
+    return 'BATERIA';
+  if (texto.includes('sello') || texto.includes('empaquetadura') || texto.includes('retenedor')) return 'SELLO_MECANICO';
+  if (texto.includes('rodamiento') || texto.includes('balinera') || texto.includes('cojinete')) return 'RODAMIENTO';
+  return 'REPUESTO_GENERAL';
+}
+
 function StockBadge({ item }: { item: BomItem }) {
   if (item.estado_stock === 'AGOTADO') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
-        <AlertCircle className="h-3 w-3" /> AGOTADO
-      </span>
+      <div className="flex flex-col gap-1 items-start">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shadow-2xs">
+          <AlertCircle className="h-3 w-3 shrink-0" /> 🚨 AGOTADO
+        </span>
+        <span className="text-[10px] font-medium text-rose-600">
+          Req: <strong>{item.cantidad_requerida} {item.unidad}</strong>
+        </span>
+      </div>
     );
   }
+
+  if (item.estado_stock === 'INSUFICIENTE') {
+    return (
+      <div className="flex flex-col gap-1 items-start">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300 whitespace-nowrap shadow-2xs">
+          <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+          ⚠️ {item.stock_actual} de {item.cantidad_requerida} {item.unidad} (Faltan {item.faltante})
+        </span>
+        {item.bodegas.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {item.bodegas.map((b) => (
+              <span
+                key={b.id_ubicacion}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] text-slate-700 whitespace-nowrap"
+              >
+                <Warehouse className="h-2.5 w-2.5 text-slate-400" />
+                {b.codigo}: <strong>{b.stock}</strong>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1 items-start">
       <span
         className={cn(
-          'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border whitespace-nowrap',
+          'inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold border whitespace-nowrap shadow-2xs',
           item.estado_stock === 'BAJO'
             ? 'bg-amber-50 text-amber-800 border-amber-200'
             : 'bg-emerald-50 text-emerald-800 border-emerald-200'
         )}
       >
-        <CheckCircle2 className="h-3 w-3" />
-        {item.stock_actual} {item.unidad} {item.estado_stock === 'BAJO' ? '• BAJO MÍNIMO' : 'EN ALMACÉN'}
+        <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+        ✓ {item.stock_actual} {item.unidad} EN ALMACÉN • Cubre Kit
       </span>
-      <div className="flex flex-wrap gap-1">
-        {item.bodegas.map((b) => (
-          <span
-            key={b.id_ubicacion}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] text-slate-700 whitespace-nowrap"
-          >
-            <Warehouse className="h-2.5 w-2.5 text-slate-400" />
-            {b.codigo}: <strong>{b.stock}</strong>
-          </span>
-        ))}
-      </div>
+      {item.bodegas.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {item.bodegas.map((b) => (
+            <span
+              key={b.id_ubicacion}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px] text-slate-700 whitespace-nowrap"
+            >
+              <Warehouse className="h-2.5 w-2.5 text-slate-400" />
+              {b.codigo}: <strong>{b.stock}</strong>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -117,6 +186,14 @@ function ModalVincularBom({
   const { data, isLoading } = useComponentesStock({ busqueda: debounced || undefined, limit: 12 });
   const resultados = useMemo(() => data?.data || [], [data]);
 
+  const handleSeleccionarArticulo = (c: any) => {
+    setSeleccionado(c);
+    setShowDropdown(false);
+    // Inferencia inteligente de aplicación
+    const catAuto = inferirCategoriaDesdeComponente(c);
+    setCategoria(catAuto);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -155,7 +232,7 @@ function ModalVincularBom({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col border border-slate-200 overflow-visible">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl border bg-blue-50 text-blue-700 border-blue-200">
@@ -171,8 +248,8 @@ function ModalVincularBom({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="p-5 overflow-y-auto space-y-4 flex-1">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+          <div className="p-5 space-y-4 flex-1">
             {error && (
               <div className="p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -214,7 +291,7 @@ function ModalVincularBom({
                     className={cn(inputCls, 'pl-10')}
                   />
                   {showDropdown && (
-                    <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+                    <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
                       {isLoading ? (
                         <div className="p-4 text-xs text-slate-500 flex items-center justify-center gap-2">
                           <Loader2 className="h-4 w-4 animate-spin" /> Consultando catálogo...
@@ -229,7 +306,7 @@ function ModalVincularBom({
                               key={c.id_componente}
                               type="button"
                               disabled={ya}
-                              onClick={() => { setSeleccionado(c); setShowDropdown(false); }}
+                              onClick={() => handleSeleccionarArticulo(c)}
                               className="w-full text-left p-3 hover:bg-blue-50/60 flex items-center justify-between gap-3 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                             >
                               <div className="min-w-0">
@@ -282,7 +359,7 @@ function ModalVincularBom({
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                 Notas técnicas <span className="text-slate-400 normal-case font-medium">— opcional</span>
               </label>
-              <input type="text" placeholder="Ej: Cárter 16.4 L, SAE 15W40" value={notas} onChange={(e) => setNotas(e.target.value)} className={inputCls} />
+              <input type="text" placeholder="Ej: Cárter 30 L (≈ 7.9 GAL), SAE 15W40" value={notas} onChange={(e) => setNotas(e.target.value)} className={inputCls} />
             </div>
           </div>
 
@@ -306,7 +383,152 @@ function ModalVincularBom({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PESTAÑA 2
+// MODAL: EDITAR REPUESTO VINCULADO AL BOM
+// ═══════════════════════════════════════════════════════════════════════════════
+function ModalEditarBom({
+  idEquipo,
+  item,
+  onClose,
+}: {
+  idEquipo: number;
+  item: BomItem;
+  onClose: () => void;
+}) {
+  const [categoria, setCategoria] = useState(item.categoria_aplicacion || 'REPUESTO_GENERAL');
+  const [cantidad, setCantidad] = useState(String(item.cantidad_requerida || 1));
+  const [frecuencia, setFrecuencia] = useState(item.frecuencia_cambio_horas ? String(item.frecuencia_cambio_horas) : '');
+  const [notas, setNotas] = useState(item.notas_tecnicas || '');
+  const [error, setError] = useState<string | null>(null);
+  const actualizar = useActualizarBomEquipo(idEquipo);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const cant = parseFloat(cantidad);
+    if (!(cant > 0)) {
+      setError('La cantidad requerida debe ser mayor a 0');
+      return;
+    }
+    const frec = frecuencia.trim() === '' ? null : parseInt(frecuencia, 10);
+    if (frec !== null && !(frec > 0)) {
+      setError('La frecuencia debe ser un número de horas mayor a 0');
+      return;
+    }
+
+    try {
+      await actualizar.mutateAsync({
+        idRelacion: item.id_componente_equipo,
+        payload: {
+          categoria_aplicacion: categoria,
+          cantidad_requerida: cant,
+          frecuencia_cambio_horas: frec,
+          notas_tecnicas: notas.trim() || null,
+        },
+      });
+      toast.success('Repuesto del BOM actualizado correctamente');
+      onClose();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'No se pudo actualizar el repuesto');
+    }
+  };
+
+  const inputCls =
+    'w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl border bg-amber-50 text-amber-700 border-amber-200">
+              <Pencil className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Editar Especificación en BOM</h2>
+              <p className="text-xs text-slate-500">Ajusta aplicación, cantidad por servicio, frecuencia o notas de este repuesto</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+          <div className="p-5 space-y-4 flex-1">
+            {error && (
+              <div className="p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span className="font-medium">{error}</span>
+              </div>
+            )}
+
+            {/* Ficha Resumida del Artículo */}
+            <div className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl">
+              <span className="font-mono text-xs font-bold text-slate-800 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300/60">
+                {item.sku || `ART-${item.id_componente}`}
+              </span>
+              <p className="text-sm font-bold text-slate-900 mt-1.5">{item.descripcion}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {item.referencia_fabricante ? `Ref: ${item.referencia_fabricante}` : ''}
+                {item.marca ? ` • Marca: ${item.marca}` : ''}
+                {` • Stock actual en almacén: ${item.stock_actual} ${item.unidad}`}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Aplicación en la máquina *</label>
+                <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={inputCls}>
+                  {BOM_APLICACIONES.map((a) => (
+                    <option key={a.value} value={a.value}>{a.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Cantidad por servicio * ({item.unidad})
+                </label>
+                <input type="number" min="0.01" step="any" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className={inputCls} required />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                Frecuencia de cambio (horas) <span className="text-slate-400 normal-case font-medium">— opcional</span>
+              </label>
+              <input type="number" min="1" step="1" placeholder="Ej: 250" value={frecuencia} onChange={(e) => setFrecuencia(e.target.value)} className={inputCls} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                Notas técnicas <span className="text-slate-400 normal-case font-medium">— opcional</span>
+              </label>
+              <input type="text" placeholder="Ej: Cárter Doosan 30 L (≈ 7.9 GAL), SAE 15W40" value={notas} onChange={(e) => setNotas(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+
+          <div className="px-5 py-3 bg-slate-50/90 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={actualizar.isPending}
+              className="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {actualizar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+              Guardar Cambios
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PESTAÑA 2: BOM & HISTORIAL CLÍNICO
 // ═══════════════════════════════════════════════════════════════════════════════
 export function EquipoRepuestosTab({
   idEquipo,
@@ -322,12 +544,18 @@ export function EquipoRepuestosTab({
   onRetry: () => void;
 }) {
   const [showVincular, setShowVincular] = useState(false);
+  const [aEditar, setAEditar] = useState<BomItem | null>(null);
   const [aDesvincular, setADesvincular] = useState<BomItem | null>(null);
   const desvincular = useDesvincularBomEquipo(idEquipo);
 
   const bom = ficha?.repuestos_compatibles ?? [];
   const instalados = ficha?.repuestos_instalados ?? [];
   const yaVinculados = useMemo(() => new Set(bom.map((b) => b.id_componente)), [bom]);
+
+  // Indicadores de Kit Completo vs Insuficiente vs Agotado
+  const bomConKitCompleto = useMemo(() => bom.filter((b) => b.stock_actual >= b.cantidad_requerida).length, [bom]);
+  const bomInsuficientes = useMemo(() => bom.filter((b) => b.stock_actual > 0 && b.stock_actual < b.cantidad_requerida).length, [bom]);
+  const bomAgotados = useMemo(() => bom.filter((b) => b.stock_actual <= 0).length, [bom]);
 
   if (isLoading) {
     return (
@@ -373,9 +601,22 @@ export function EquipoRepuestosTab({
               <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
                 {bom.length} {bom.length === 1 ? 'ítem' : 'ítems'}
               </span>
-              {ficha.resumen.bom_agotados > 0 && (
+
+              {bom.length > 0 && bomConKitCompleto === bom.length && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  ✓ Kit 100% Cubierto ({bomConKitCompleto}/{bom.length})
+                </span>
+              )}
+
+              {bomInsuficientes > 0 && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                  ⚠️ {bomInsuficientes} insuficiente{bomInsuficientes > 1 ? 's' : ''}
+                </span>
+              )}
+
+              {bomAgotados > 0 && (
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                  {ficha.resumen.bom_agotados} agotado{ficha.resumen.bom_agotados > 1 ? 's' : ''}
+                  🚨 {bomAgotados} agotado{bomAgotados > 1 ? 's' : ''}
                 </span>
               )}
             </div>
@@ -452,13 +693,21 @@ export function EquipoRepuestosTab({
                         </Link>
                         {b.estado_stock !== 'OK' && (
                           <Link
-                            href={`/compras/ordenes/nueva?componenteId=${b.id_componente}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg whitespace-nowrap"
-                            title="Crear orden de compra para reponer"
+                            href={`/compras/ordenes/nueva?componenteId=${b.id_componente}&cantidad=${b.faltante || b.cantidad_requerida}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg whitespace-nowrap shadow-2xs"
+                            title={`Crear orden de compra para reponer (Faltan: ${b.faltante || b.cantidad_requerida} ${b.unidad})`}
                           >
-                            <ShoppingCart className="h-3.5 w-3.5" /> Pedir
+                            <ShoppingCart className="h-3.5 w-3.5 text-amber-700" /> Pedir OC
                           </Link>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setAEditar(b)}
+                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
+                          title="Editar especificación en el BOM"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => setADesvincular(b)}
@@ -585,6 +834,10 @@ export function EquipoRepuestosTab({
 
       {showVincular && (
         <ModalVincularBom idEquipo={idEquipo} yaVinculados={yaVinculados} onClose={() => setShowVincular(false)} />
+      )}
+
+      {aEditar && (
+        <ModalEditarBom idEquipo={idEquipo} item={aEditar} onClose={() => setAEditar(null)} />
       )}
 
       {aDesvincular && (

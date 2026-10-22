@@ -806,7 +806,10 @@ export default function EquipoDetallePage() {
   const horasActualesNum = Number(equipo.horas_actuales || 0);
   const totalOrdenes = fichaLogistica?.resumen?.total_ordenes ?? 0;
   const totalBom = fichaLogistica?.resumen?.total_bom ?? 0;
-  const bomConStock = (fichaLogistica?.repuestos_compatibles || []).filter((b) => b.stock_actual > 0).length;
+  const bomCompatibles = fichaLogistica?.repuestos_compatibles || [];
+  const bomConKitCompleto = bomCompatibles.filter((b) => b.stock_actual >= b.cantidad_requerida).length;
+  const bomInsuficientes = bomCompatibles.filter((b) => b.stock_actual > 0 && b.stock_actual < b.cantidad_requerida).length;
+  const bomAgotados = bomCompatibles.filter((b) => b.stock_actual <= 0).length;
   const totalInstalados = fichaLogistica?.resumen?.total_lineas_instaladas ?? 0;
   const inversionRepuestos = fichaLogistica?.resumen?.total_inversion_repuestos ?? 0;
   const ultimaOrden = fichaLogistica?.ordenes?.[0] || null;
@@ -987,18 +990,38 @@ export default function EquipoDetallePage() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Kit de Repuestos (BOM)
             </span>
-            <div className="p-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">
+            <div className={cn(
+              'p-1.5 rounded-lg border',
+              totalBom > 0 && bomConKitCompleto === totalBom
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : bomAgotados > 0
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            )}>
               <Boxes className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black text-slate-900">{totalBom}</span>
-            <span className="text-xs font-semibold text-emerald-700">
-              {bomConStock}/{totalBom} con stock WMS
+            <span className={cn(
+              'text-xs font-bold px-2 py-0.5 rounded border whitespace-nowrap',
+              totalBom === 0
+                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                : bomConKitCompleto === totalBom
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-amber-50 text-amber-900 border-amber-300'
+            )}>
+              {totalBom === 0
+                ? 'Sin kit'
+                : `${bomConKitCompleto}/${totalBom} kit completo`}
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Filtros, fluidos, correas y repuestos compatibles
+          <p className="text-[11px] text-slate-500 mt-1 truncate">
+            {totalBom === 0
+              ? 'Click para homologar repuestos compatibles'
+              : bomConKitCompleto === totalBom
+              ? '✓ Stock suficiente en almacén WMS'
+              : `${bomInsuficientes > 0 ? `${bomInsuficientes} stock insuficiente` : ''}${bomInsuficientes > 0 && bomAgotados > 0 ? ' • ' : ''}${bomAgotados > 0 ? `${bomAgotados} agotados` : ''}`}
           </p>
         </button>
 

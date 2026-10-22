@@ -257,21 +257,32 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
   const motor = (equipo.motor || datosEsp.motor || null) as Record<string, any> | null;
 
   const potenciaTexto = useMemo(() => {
-    if (datosEsp.potencia_kva) return `${datosEsp.potencia_kva} kVA`;
-    if (datosEsp.potencia_kw) return `${datosEsp.potencia_kw} kW`;
-    if (datosEsp.potencia_hidraulica_kw) return `${datosEsp.potencia_hidraulica_kw} kW`;
-    if (motor?.potencia_hp) return `${motor.potencia_hp} HP`;
-    if (motor?.potencia_kw) return `${motor.potencia_kw} kW`;
+    const kva = Number(datosEsp.potencia_kva);
+    if (Number.isFinite(kva) && kva > 0) return `${kva} kVA`;
+    const kw = Number(datosEsp.potencia_kw);
+    if (Number.isFinite(kw) && kw > 0) return `${kw} kW`;
+    const hidKw = Number(datosEsp.potencia_hidraulica_kw);
+    if (Number.isFinite(hidKw) && hidKw > 0) return `${hidKw} kW`;
+    const hp = Number(motor?.potencia_hp);
+    if (Number.isFinite(hp) && hp > 0) return `${hp} HP`;
+    const mkw = Number(motor?.potencia_kw);
+    if (Number.isFinite(mkw) && mkw > 0) return `${mkw} kW`;
     return null;
   }, [datosEsp, motor]);
 
   const motorTexto = useMemo(() => {
-    if (!motor?.marca_motor || motor.marca_motor === 'GENERICO') return null;
-    const mod = motor.modelo_motor && motor.modelo_motor !== 'N/A' ? ` ${motor.modelo_motor}` : '';
-    return `${motor.marca_motor}${mod}`;
+    const marca = motor?.marca_motor?.toString().trim();
+    if (!marca || marca.toUpperCase() === 'GENERICO' || marca.toUpperCase() === 'N/A' || marca === '0' || marca.toLowerCase() === 'null') return null;
+    const modelo = motor?.modelo_motor?.toString().trim();
+    const mod = modelo && modelo.toUpperCase() !== 'N/A' && modelo !== '0' && modelo.toLowerCase() !== 'null' ? ` ${modelo}` : '';
+    return `${marca}${mod}`;
   }, [motor]);
 
-  const rpmTexto = motor?.velocidad_nominal_rpm ? `${motor.velocidad_nominal_rpm} RPM` : null;
+  const rpmTexto = useMemo(() => {
+    const rpm = Number(motor?.velocidad_nominal_rpm);
+    return Number.isFinite(rpm) && rpm > 0 ? `${rpm} RPM` : null;
+  }, [motor]);
+
   const horasNum = Number(equipo.horas_actuales || 0);
 
   return (
@@ -396,8 +407,8 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
                 </span>
               )}
               {motorTexto && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 text-slate-700 border border-slate-200/80 rounded text-[11px] font-medium truncate max-w-[170px]" title={`Motor: ${motorTexto}`}>
-                  <Fuel className="h-3 w-3 text-blue-500 shrink-0" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 text-slate-700 border border-slate-200/80 rounded text-[11px] font-medium truncate max-w-[170px]" title={`Motor / Impulsor: ${motorTexto}`}>
+                  <Settings className="h-3 w-3 text-slate-500 shrink-0" />
                   <span className="truncate">{motorTexto}</span>
                 </span>
               )}
@@ -588,6 +599,7 @@ export default function EquiposPage() {
   const totalParque = resumen?.total_parque ?? pagination?.total ?? 0;
   const totalGeneradores = resumen?.generadores ?? 0;
   const totalBombas = resumen?.bombas ?? 0;
+  const totalOtros = resumen?.otros ?? Math.max(0, totalParque - totalGeneradores - totalBombas);
   const totalOperativos = resumen?.operativos ?? 0;
   const pctOperativo = totalParque > 0 ? Math.round((totalOperativos / totalParque) * 100) : 100;
 
@@ -648,10 +660,8 @@ export default function EquiposPage() {
             <span className="text-2xl font-black text-slate-900">{totalParque.toLocaleString()}</span>
             <span className="text-xs font-medium text-slate-500">equipos</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {resumen?.criticidad_alta
-              ? `${resumen.criticidad_alta} activos de criticidad alta/crítica`
-              : 'Base instalada bajo gestión Mekanos'}
+          <p className="text-[11px] text-slate-500 mt-1 truncate" title={`${totalGeneradores} Generadores • ${totalBombas} Bombas • ${totalOtros} Otros Activos (Total: ${totalParque})`}>
+            <strong>{totalGeneradores}</strong> Gen • <strong>{totalBombas}</strong> Bombas • <strong>{totalOtros}</strong> Otros
           </p>
         </button>
 
@@ -681,7 +691,7 @@ export default function EquiposPage() {
             <span className="text-xs font-semibold text-amber-700">Generadores</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Click para filtrar grupos electrógenos
+            {totalParque > 0 ? `${Math.round((totalGeneradores / totalParque) * 100)}% del parque • ` : ''}Grupos electrógenos
           </p>
         </button>
 
@@ -711,7 +721,7 @@ export default function EquiposPage() {
             <span className="text-xs font-semibold text-blue-700">Bombas</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            Hidroneumáticos, red contraincendios y eyectoras
+            {totalParque > 0 ? `${Math.round((totalBombas / totalParque) * 100)}% del parque • ` : ''}Presión y red de agua
           </p>
         </button>
 

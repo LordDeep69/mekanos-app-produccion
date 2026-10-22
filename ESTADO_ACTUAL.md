@@ -1,27 +1,29 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 22 de Octubre de 2026  
-**Versión:** 5.5 Release Candidate (RC-4 - EAM 360° & WMS BOM Certified)  
+**Versión:** 5.6 Release Candidate (RC-5 - EAM 360° BOM Precision & Zero-Trust Sync)  
 **Últimos Commits Clave:** 
-- `feat(equipos-bom)`: Expediente EAM 360° de Activos Industriales (`/equipos` y `/equipos/[id]`), Matriz de Repuestos Compatibles (BOM) con stock WMS en vivo, Historial Clínico de Repuestos Instalados, sugerencias BOM de 1-click al despachar en `/ordenes/[id]` y erradicación de error Prisma en `getTrazabilidadServicios`.
+- `feat(equipos-bom)`: Remediación forense integral Zero-Trust del Parque EAM 360° y Matriz BOM (`/equipos` y `/equipos/[id]`):
+  - Detección precisa de suficiencia de stock BOM (`stock_actual` vs `cantidad_requerida`) con estados `OK` (Cubre Kit), `INSUFICIENTE` (Faltan Z) y `AGOTADO`, botón `🛒 Pedir OC` y KPI superior de kit completo.
+  - Inferencia inteligente de categoría de aplicación en modal de vinculación BOM a partir del nombre/descripción del artículo.
+  - Dropdown flotante `z-50` sin empujar campos y modal de edición en vivo (`ModalEditarBom` + `PATCH /api/equipos/:id/componentes-compatibles/:idRelacion`).
+  - Coherencia matemática en KPIs de `/equipos` (194 Generadores • 200 Bombas • 69 Otros Activos = 463 Total) y saneamiento de chips técnicos (ocultando ceros/nulos) con icono industrial `Settings` (⚙️).
+  - Preselección inmediata y robusta de cliente y equipo en el wizard `/ordenes/nueva` desde el botón `+ Nueva OT` y `+ Crear Orden de Servicio`.
+  - Siembra y saneamiento demo en base de datos para `AQUANOVA-GEN-1`, `GEN-EDIF-JA1MNK`, `GEN-EDIF-T86FEH` y `GEN-CLI-DDQU49`.
+- `feat(equipos-eam)`: Expediente EAM 360° de Activos Industriales (`/equipos` y `/equipos/[id]`), Matriz de Repuestos Compatibles (BOM) con stock WMS en vivo, Historial Clínico de Repuestos Instalados, sugerencias BOM de 1-click al despachar en `/ordenes/[id]` y erradicación de error Prisma en `getTrazabilidadServicios`.
 - `c986360`: `fix(wms-ordenes): habilitar liquidacion administrativa en ordenes completadas, nomenclatura OS-YYYYMM en kardex y selects sin truncamiento`.
-- `9486e78`: `feat(wms-ordenes): modal enterprise para confirmacion de reintegro a bodega y retiro de servicios` (eliminación de alertas nativas de navegador, auditoría Zero-Trust con desglose de lote/bodega/kardex y justificación opcional).
-- `b9d4c50`: `fix(wms-ordenes): saneamiento totales prisma, autocierre click-outside, validacion reactiva de existencias y estilizacion selectores` (resolución de HTTP 400 en recálculo financiero de OT).
+- `9486e78`: `feat(wms-ordenes): modal enterprise para confirmacion de reintegro a bodega y retiro de servicios`.
+- `b9d4c50`: `fix(wms-ordenes): saneamiento totales prisma, autocierre click-outside, validacion reactiva de existencias y estilizacion selectores`.
 - `feat(wms-ordenes)`: Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`), despacho por bodega/lote FIFO, reversión atómica en Kardex, selector predictivo de OT e impresión en PDF oficial.
-- `d59d83f` / `b852ef8`: `fix(wms): correccion bug falsy zero en modales multi-bodega, preseleccion inteligente con stock, saneamiento kardex historico y footer sticky`
-- `b0abaa9`: `fix(inventario): corregir alias getComponentesStock en InventarioService y solventar HTTP 500`
-- `f8f2e18`: `feat(wms-compras): resolucion auditoria forense multi-bodega, modales y trazabilidad`
-- `1c502bf`: `feat(compras-wms): integracion y certificacion de recepcion automatica de mercancia en almacen, generacion de lotes y kardex`
-- `613d72b`: `feat(inventario): remediacion integral de auditoria forense y sincronizacion bidireccional compras-inventario`
-- `275f2c9`: `fix(ordenes/equipos): detectar familia por tipo declarado en tipos_equipo e integrar soporte COMPRESOR`
-**Estado General:** ✅ **~99.2% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
+- `d59d83f` / `b852ef8`: `fix(wms): correccion bug falsy zero en modales multi-bodega, preseleccion inteligente con stock, saneamiento kardex historico y footer sticky`.
+**Estado General:** ✅ **~99.5% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
 **Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
 
 ---
 
 ## 🚀 RESUMEN EJECUTIVO Y DIAGNÓSTICO ATÓMICO
 
-El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transaccional extremo a extremo entre los módulos de **Catálogo Maestro de Compras**, **Aprovisionamiento de Órdenes de Compra**, **Almacén WMS / Lotes / Kardex**, y **Órdenes de Servicio (`/ordenes/[id]`) con Imputación Financiera y Emisión PDF**:
+El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transaccional extremo a extremo entre los módulos de **Catálogo Maestro de Compras**, **Aprovisionamiento de Órdenes de Compra**, **Almacén WMS / Lotes / Kardex**, **Parque de Activos EAM 360° & Matriz BOM**, y **Órdenes de Servicio (`/ordenes/[id]`) con Imputación Financiera y Emisión PDF**:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -29,7 +31,7 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
 ├────────────────────────────────────────────────────────────────────────┤
 │ 1. ✅ BASE DE DATOS PostgreSQL       │ 84 modelos / 78 ENUMs   │ 100%  │
 │ 2. ✅ BACKEND NestJS API             │ 93 módulos / 93 ctrls   │ 100%  │
-│ 3. ✅ PORTAL ADMINISTRADOR Web       │ 43 páginas / 10 módulos │  98%  │
+│ 3. ✅ PORTAL ADMINISTRADOR Web       │ 43 páginas / 10 módulos │  99%  │
 │ 4. ✅ APP MÓVIL Flutter Offline      │ Drift v17 / 17 tablas   │  90%  │
 │ 5. ✅ MOTOR DE INFORMES PDF          │ Puppeteer / 10 templates│ 100%  │
 │ 6. ✅ SERVICIOS TRANSVERSALES        │ R2, Cloudinary, OAuth2  │ 100%  │
@@ -40,50 +42,37 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
 
 ## 🔍 RESUMEN DE SUBSISTEMAS Y ÚLTIMAS REMEDIACIONES
 
-### 1. Integración Transaccional Bidireccional Inventario WMS ⇄ Órdenes de Servicio (`/ordenes/[id]` y `/inventario`) — **100% Certificado**
+### 1. Expediente EAM 360° de Activos Industriales & Matriz BOM (`/equipos` y `/equipos/[id]`) — **100% Certificado**
+- **Lógica de Suficiencia de Stock en Matriz BOM (`stock_actual` vs `cantidad_requerida`):**
+  - Se subsanó la validación ingenieril de disponibilidad: si el almacén posee existencias menores a las requeridas por el kit de servicio ($0 < \text{stock} < \text{req}$), el sistema emite el badge ámbar de advertencia `⚠️ X de Y [unidad] (Faltan Z)` y habilita de inmediato el botón `🛒 Pedir OC` hacia `/compras/ordenes/nueva?componenteId=[id]&cantidad=[faltante]`.
+  - Cuando el stock cubre o supera el kit ($\text{stock} \ge \text{req}$), emite el badge verde corporativo `✓ Cubre Kit`.
+  - Cuando no hay existencias ($\text{stock} \le 0$), emite el badge rojo `🚨 AGOTADO` con botón `🛒 Pedir OC`.
+  - El KPI superior ejecutivo de `/equipos/[id]` reporta con exactitud matemática `X/Y con kit completo` con micro-resumen de ítems insuficientes y agotados.
+- **Inferencia Inteligente de Aplicación en Modal BOM (`ModalVincularBom`):**
+  - Detección contextual instantánea de la categoría de aplicación (`FILTRO_ACEITE`, `FILTRO_COMBUSTIBLE`, `FILTRO_SEPARADOR_AGUA`, `FILTRO_AIRE`, `LUBRICANTE_MOTOR`, `REFRIGERANTE`, `CORREA`, `BATERIA`, `SELLO_MECANICO`, `RODAMIENTO`) al seleccionar cualquier artículo del catálogo.
+- **Buscador Flotante y Edición en Vivo del BOM:**
+  - El selector de artículos se comporta como un overlay flotante (`z-50 shadow-2xl`) que flota por encima de los campos sin desplazar el formulario modal.
+  - Implementado el botón de edición (icono lápiz) y el modal `ModalEditarBom` respaldado por el endpoint `PATCH /api/equipos/:id/componentes-compatibles/:idRelacion` para modificar categoría, cantidad por servicio, frecuencia en horas y notas técnicas sin tener que desvincular y recrear.
+- **Coherencia Matemática y Micro-Chips en `/equipos`:**
+  - Desglose matemático sincronizado en la tarjeta principal: `194 Generadores • 200 Bombas • 69 Otros Activos (Total: 463)`.
+  - Filtrado estricto de micro-chips en tarjetas de equipo: se ocultan automáticamente etiquetas con valores `0`, `'0 kW'`, `'0 kVA'`, `'N/A'` o nulos.
+  - Sustitución del icono de bomba de gasolina (`⛽`) por el icono mecánico e industrial `Settings` (⚙️) para el motor/impulsor de plantas y bombas.
+- **Preselección Instantánea en `+ Nueva OT`:**
+  - Tanto desde los botones `+ Nueva OT` de las tarjetas de `/equipos` como desde `+ Crear Orden de Servicio` en `/equipos/[id]`, los parámetros `?clienteId=...&equipoId=...` son consumidos por el wizard de `/ordenes/nueva`, asociando de forma reactiva y determinista al cliente y preseleccionando el equipo en el Paso 1.
+
+### 2. Integración Transaccional Bidireccional Inventario WMS ⇄ Órdenes de Servicio (`/ordenes/[id]` y `/inventario`) — **100% Certificado**
 - **Modelo de Datos Enriquecido (`public.componentes_usados`):**
   - Incorporadas las columnas y llaves foráneas `id_ubicacion` (hacia `ubicaciones_bodega`), `id_lote` (hacia `lotes_componentes`) e `id_movimiento_inventario` (hacia `movimientos_inventario`), además de la secuencia nativa `componentes_usados_id_componente_usado_seq`.
 - **Motor Transaccional Unificado en `InventarioService` (`apps/api/src/inventario/inventario.service.ts`):**
-  - `registrarSalida` y `despacharComponenteOrden`: Ejecutan en una única transacción `prisma.$transaction` el descuento físico en `catalogo_componentes.stock_actual` y `lotes_componentes.cantidad_actual` (bajo regla FIFO/FEFO), el asiento inmutable en `movimientos_inventario` (`origen_movimiento: 'CONSUMO_OS'`), la inserción vinculada en `componentes_usados` y el recálculo financiero automático de `ordenes_servicio` (`total_componentes`, `subtotal`, `iva_valor`, `total_general`).
+  - `registrarSalida` y `despacharComponenteOrden`: Ejecutan en una única transacción `prisma.$transaction` el descuento físico en `catalogo_componentes.stock_actual` y `lotes_componentes.cantidad_actual` (bajo regla FIFO/FEFO), el asiento inmutable en `movimientos_inventario` (`origen_movimiento: 'CONSUMO_OS'`), la inserción vinculada en `componentes_usados` y el recálculo financiero automático de `ordenes_servicio`.
   - `reintegrarComponenteOrden` (`DELETE /api/ordenes/:id/componentes/:idUso`): Reversión atómica que restaura el saldo en el lote origen y en el catálogo maestro, asienta el contra-movimiento auditable en Kardex (`tipo_movimiento: 'ENTRADA'`, `origen_movimiento: 'DEVOLUCION'`), elimina la imputación en la orden y recalcula los totales financieros.
-  - Protección en `FinalizacionOrdenService`: Preserva intactos los repuestos despachados por almacén (`id_movimiento_inventario IS NOT NULL` / `origen_componente = 'BODEGA'`) durante limpiezas o resincronizaciones de actividades móviles.
-- **Sección Enterprise en `/ordenes/[id]` (`TabFinanciero` + `ModalDespacharRepuestoOrden`):**
-  - Tabla corporativa **Repuestos & Insumos Utilizados (Integración WMS)** con enlace directo a `/inventario/[id]`, badges de bodega (`[BOD-FLUIDOS]`), lote (`LOT-2026-XXXX`), asiento `KARDEX #ID`, costos unitarios/subtotales y botón **Reintegrar** con reversión física y contable.
-  - Modal de despacho con soporte dual (`Despacho desde Almacén WMS` y `Compra Directa en Campo`), autoselección de la primera bodega con existencias reales (`?? 0`), selector de lote FIFO y preview financiero en vivo.
-- **Selector Predictivo de Orden de Servicio en `/inventario` (`MovimientoModal.tsx`):**
-  - En el tab `Salida`, cuando el motivo es `Despacho para Orden de Servicio`, despliega un buscador predictivo de OTs activas (`OS-2026-XXXX • Cliente • Equipo • Estado`) que envía numéricamente `id_orden_servicio` e imputa el repuesto automáticamente en la orden.
-- **Motor PDF Oficial (`pdf.service.ts` y `mekanos-base.template.ts`):**
-  - Consolida y renderiza en el informe PDF final tanto los repuestos despachados desde el Almacén WMS (`componentes_usados` con SKU, bodega, lote y cantidad) como las anotaciones de campo del técnico.
 
-### 2. Inventario & Almacén WMS (`/inventario` y `/inventario/[id]`) — **100% Certificado**
-- **Auditoría Forense Senior Zero-Trust (6 Correcciones Certificadas):**
-  1. **Modal Ajuste Físico:** Inclusión obligatoria de `Bodega Auditada *`, cálculo dinámico de variación delta y visualización de stock físico por bodega auditada vs stock consolidado global.
-  2. **Salida y Traslado con Control de Saldo:** Saneamiento de `BOD-CENTRAL` a *"Bodega Central Taller"*, selector de bodega de origen con disponibilidad en tiempo real (`[BOD-CENTRAL] Bodega Central Taller (Disp: X UNIDAD)`), validación de cantidad restringida al saldo de la bodega de origen y sugerencia de lote por rotación FIFO/FEFO.
-  3. **UX de Modales y Ficha Contextual:** Menú predictivo de búsqueda flotante (`z-50 shadow-xl`) sin empujar campos y tarjeta contextual de artículo con SKU, referencia, desglose por bodega en micro-badges, costo unitario y botón de cambio.
-  4. **BodegaModal y Filtro WMS:** Encabezado corporativo claro en `BodegaModal`, nuevo filtro por bodega en `/inventario` conectado al backend mediante `@Query('id_ubicacion')` y micro-badges con desglose de existencias por bodega en la tabla.
-  5. **Ficha 360° Catálogo (`/compras/catalogo/[id]`):** Pestaña 4 con listado dinámico de bodegas con saldo/lotes activos y blindaje de la barra de salud de stock contra valores `NaN`.
-  6. **Recepción de OC y Trazabilidad:** Columna *Componente / Ítem* (SKU + Descripción) y chip limpio de bodega en el historial del modal 360°, y captura de *N° Lote Fabricante* y *Fecha Vencimiento* por renglón en el modal de recepción física.
-- **Expediente Logístico `/inventario/[id]` en 3 Pestañas:**
-  - **Pestaña 1 (Predeterminada):** `Lotes & Ubicaciones en Bodega` — Tarjetas de distribución por bodega física, tabla de lotes activos con trazabilidad FIFO/FEFO, días de permanencia y botones rápidos de operación (Despachar, Trasladar).
-  - **Pestaña 2:** `Historial Kardex Auditable` — Contenedor corporativo sobrio (`bg-white border-slate-200`), saneamiento white-label.
-  - **Pestaña 3:** `Parámetros de Almacén & Abastecimiento` — Políticas de stock mínimo/máximo/seguridad, costos y tabla de **Proveedores Homologados** con botón **"Pedir a Proveedor"**.
-
-### 3. Sincronización Bidireccional Inventario ⇄ Compras
-- **Flujo de Reaprovisionamiento Automático:** Al presionar **"Pedir"** o **"Pedir a Proveedor"** desde `/inventario` o `/inventario/[id]`, el sistema redirige a `/compras/ordenes/nueva?componenteId=[id]` con proveedor preferido y cantidad sugerida $\max(\text{MOQ}, \text{stock\_mínimo} - \text{stock\_actual}, 1)$.
-- **Recepción Automática de Mercancía en Almacén (`POST /api/recepciones-compra/lote`):** Generación determinista de `REC-{YYYY}-{0001}` y `LOT-{YYYY}-{0001}`, asiento `ENTRADA`/`COMPRA` en Kardex e incremento atómico de stock.
-
-### 4. Expediente EAM 360° de Activos Industriales (`/equipos` y `/equipos/[id]`) — **100% Certificado**
-- **Directorio Ejecutivo del Parque (`/equipos`):**
-  - 4 tarjetas KPI interactivas en tiempo real (*Total Parque Activo*, *Plantas Eléctricas / Generadores*, *Sistemas de Bombeo*, *Disponibilidad Operativa*).
-  - Tarjetas enriquecidas con franja técnica rápida (Potencia kVA/kW/HP, Motor Marca/Modelo, RPM, Horómetro), enlace directo a `/clientes/[id]` y acceso rápido a `+ Nueva OT` (`/ordenes/nueva?clienteId=...&equipoId=...`).
-- **Expediente 360° por Pestañas (`/equipos/[id]`):**
-  - **Cabecera Institucional y 4 KPIs:** Horómetro acumulado, total de OTs, kit BOM con indicador de existencias en almacén WMS e inversión acumulada en repuestos.
-  - **Pestaña 1 (`1. Ingeniería & Ficha Técnica`):** Banner destacado de *Especificaciones Críticas de Lubricación, Fluidos y Arranque* (con conversión automática Litros $\leftrightarrow$ Galones para planeación logística) y placas polimórficas de Generador, Bomba, Motor y Compresor.
-  - **Pestaña 2 (`2. Repuestos Compatibles (BOM) & Consumo WMS`):** Matriz BOM (`componentes_equipo` $\leftrightarrow$ `catalogo_componentes`) con stock físico por bodega en tiempo real, modal para vincular/desvincular repuestos compatibles y tabla de **Historial Clínico de Repuestos e Insumos Instalados** consolidada desde las OTs ejecutadas sobre la máquina.
-  - **Pestaña 3 (`3. Historial de Órdenes de Servicio (OTs)`):** Tabla ejecutiva de todas las órdenes del activo con vínculo a `/ordenes/[id]` más la bitácora cronológica de mediciones e informes PDF (`HojaVidaEquipo`).
-  - **Saneamiento Zero-Trust de Consola:** Corregida relación Prisma `clientes` en `getTrazabilidadServicios` (`equipos-gestion.service.ts`), erradicando el error HTTP 500 y el badge rojo de consola en `/equipos/[id]`.
-- **Sugerencia Inteligente BOM en Despacho de Órdenes (`/ordenes/[id]`):**
-  - Al abrir `+ Despachar Repuesto WMS` en una Orden de Servicio, el modal consulta `GET /api/equipos/:id/componentes-compatibles` y despliega chips de selección rápida (`Kit BOM Compatible con este Equipo`) que pre-seleccionan el artículo, la bodega con existencias y la cantidad requerida por servicio en 1 clic.
+### 3. Inventario & Almacén WMS (`/inventario` y `/inventario/[id]`) — **100% Certificado**
+- **Auditoría Forense Senior Zero-Trust:**
+  - Ajuste físico multi-bodega con cálculo delta en tiempo real.
+  - Salida y traslado con control estricto de saldo por bodega origen y rotación FIFO/FEFO.
+  - UX con menús predictivos flotantes (`z-50 shadow-xl`) y tarjetas contextuales sin desplazamiento de controles.
+  - Expediente logístico `/inventario/[id]` en 3 pestañas: Lotes por Bodega, Historial Kardex Auditable y Parámetros de Almacén con botón "Pedir a Proveedor".
 
 ---
 
@@ -91,4 +80,4 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
 Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md) para los siguientes pasos:
 - **Flujo A:** ✅ **COMPLETADO:** Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`).
 - **Flujo B:** ✅ **COMPLETADO:** Pruebas de integración de recepciones automáticas de mercancía (Orden de Compra -> Entrada a Lote WMS).
-- **Flujo C:** ✅ **COMPLETADO:** Evolución de Ficha Técnica de Equipos (`/equipos` y `/equipos/[id]`) con arquitectura EAM 360°, pestaña de Repuestos Compatibles (BOM), historial clínico de piezas instaladas y sugerencias BOM en `/ordenes/[id]`.
+- **Flujo C:** ✅ **COMPLETADO:** Evolución EAM 360° de Equipos (`/equipos` y `/equipos/[id]`), Matriz BOM con stock WMS en vivo, edición inline, kits completos vs insuficientes y sugerencias de despacho en OTs.

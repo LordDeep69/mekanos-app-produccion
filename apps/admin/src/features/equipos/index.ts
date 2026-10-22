@@ -31,13 +31,15 @@ export * from './types';
 export {
   BOM_APLICACIONES,
   equiposBomService,
+  useActualizarBomEquipo,
   useComponentesCompatiblesEquipo,
   useDesvincularBomEquipo,
   useFichaLogisticaEquipo,
   useVincularBomEquipo,
+  type ActualizarBomPayload,
   type BomItem,
+  type EstadoStockBom,
   type FichaLogisticaEquipo,
   type OrdenEquipoResumen,
   type RepuestoInstalado,
 } from './lib/equipos-bom.service';
-

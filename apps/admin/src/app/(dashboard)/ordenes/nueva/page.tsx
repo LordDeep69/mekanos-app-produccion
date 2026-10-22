@@ -44,6 +44,7 @@ import {
     type TecnicoSelector,
     type TipoServicio,
 } from '@/features/ordenes';
+import { useEquipo } from '@/features/equipos';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import {
     clasificarServicioCorrectivo,
@@ -207,6 +208,52 @@ function PasoContexto({
             }
         }
     }, [data.clienteId, data.clienteSeleccionado, clientes, onChange]);
+
+    // Carga directa del equipo para preselección instantánea Zero-Trust
+    const { data: preselectEquipoData } = useEquipo(preselectEquipoId || 0);
+
+    useEffect(() => {
+        if (!preselectEquipoId || !preselectEquipoData?.data) return;
+        const eqData = preselectEquipoData.data;
+
+        // Auto-asignar cliente si venía ausente o incompleto
+        if ((!data.clienteId || !data.clienteSeleccionado) && eqData.cliente) {
+            onChange({
+                clienteId: eqData.cliente.id_cliente,
+                clienteSeleccionado: {
+                    id_cliente: eqData.cliente.id_cliente,
+                    codigo_cliente: eqData.cliente.codigo_cliente,
+                    nombre_comercial: eqData.cliente.nombre,
+                    razon_social: eqData.cliente.nombre,
+                    numero_identificacion: eqData.cliente.numero_documento || '',
+                    total_equipos: 1,
+                } as any,
+            });
+        }
+
+        // Preseleccionar el equipo inmediatamente en el wizard
+        if (data.equiposSeleccionados.length === 0) {
+            const eqItem: EquipoSelector = {
+                id_equipo: eqData.id_equipo,
+                codigo_equipo: eqData.codigo_equipo,
+                nombre_equipo: eqData.nombre_equipo,
+                tipo: eqData.tipo,
+                tipo_equipo: eqData.tipo,
+                marca: eqData.marca,
+                modelo: eqData.modelo,
+                serie: eqData.numero_serie_equipo || '',
+                ubicacion: eqData.ubicacion_texto || '',
+                estado: eqData.estado_equipo,
+                horas_actuales: Number(eqData.horas_actuales || 0),
+                id_sede: eqData.id_sede,
+                sede: eqData.sede?.nombre || '',
+                id_tipo_equipo: eqData.id_tipo_equipo,
+                tipos_equipo: eqData.tipos_equipo,
+            };
+            onChange({ equiposSeleccionados: [eqItem] });
+            setPreselectEquipoId(null);
+        }
+    }, [preselectEquipoId, preselectEquipoData, data.clienteId, data.clienteSeleccionado, data.equiposSeleccionados.length, onChange]);
 
     useEffect(() => {
         if (preselectEquipoId && equipos.length > 0 && data.equiposSeleccionados.length === 0) {

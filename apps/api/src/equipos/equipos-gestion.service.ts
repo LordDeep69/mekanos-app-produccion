@@ -1420,7 +1420,20 @@ export class EquiposGestionService {
     const specs = (rel.especificaciones_adicionales || {}) as Record<string, any>;
     const stockActual = Number(c?.stock_actual ?? 0);
     const stockMinimo = Number(c?.stock_minimo ?? 0);
-    const estadoStock = stockActual <= 0 ? 'AGOTADO' : stockMinimo > 0 && stockActual <= stockMinimo ? 'BAJO' : 'OK';
+    const cantidadRequerida = Number(specs.cantidad_requerida ?? rel.unidades_por_cambio ?? 1);
+    const faltante = Math.max(0, Math.round((cantidadRequerida - stockActual) * 100) / 100);
+
+    let estadoStock: 'OK' | 'BAJO' | 'INSUFICIENTE' | 'AGOTADO';
+    if (stockActual <= 0) {
+      estadoStock = 'AGOTADO';
+    } else if (stockActual < cantidadRequerida) {
+      estadoStock = 'INSUFICIENTE';
+    } else if (stockMinimo > 0 && stockActual <= stockMinimo) {
+      estadoStock = 'BAJO';
+    } else {
+      estadoStock = 'OK';
+    }
+
     const categoria = specs.categoria_aplicacion || 'REPUESTO_GENERAL';
     return {
       id_componente_equipo: rel.id_componente_equipo,
@@ -1428,7 +1441,8 @@ export class EquiposGestionService {
       categoria_aplicacion: categoria,
       aplicacion_label: EquiposGestionService.BOM_APLICACIONES[categoria]?.label || rel.posicion_descripcion,
       posicion_descripcion: rel.posicion_descripcion,
-      cantidad_requerida: Number(specs.cantidad_requerida ?? rel.unidades_por_cambio ?? 1),
+      cantidad_requerida: cantidadRequerida,
+      faltante,
       frecuencia_cambio_horas: specs.frecuencia_cambio_horas != null ? Number(specs.frecuencia_cambio_horas) : null,
       notas_tecnicas: rel.notas,
       fecha_ultimo_cambio: rel.fecha_ultimo_cambio,
@@ -1566,6 +1580,8 @@ export class EquiposGestionService {
       resumen: {
         total_ordenes: ordenes.length,
         total_bom: bom.length,
+        bom_con_kit_completo: bom.filter((b) => b.stock_actual >= b.cantidad_requerida).length,
+        bom_insuficientes: bom.filter((b) => b.stock_actual > 0 && b.stock_actual < b.cantidad_requerida).length,
         bom_agotados: bom.filter((b) => b.estado_stock === 'AGOTADO').length,
         bom_bajo_minimo: bom.filter((b) => b.estado_stock === 'BAJO').length,
         total_lineas_instaladas: repuestosInstalados.length,
@@ -1661,6 +1677,69 @@ export class EquiposGestionService {
     });
 
     return this.mapearBomItem(creado);
+  }
+
+  /**
+   * PATCH /api/equipos/:id/componentes-compatibles/:idRelacion
+   * Actualiza aplicación, cantidad requerida, frecuencia o notas técnicas de un ítem del BOM.
+   */
+  async actualizarComponenteCompatible(
+    idEquipo: number,
+    idRelacion: number,
+    body: {
+      categoria_aplicacion?: string;
+      cantidad_requerida?: number;
+      frecuencia_cambio_horas?: number | null;
+      notas_tecnicas?: string | null;
+    },
+    userId: number,
+  ) {
+    const rel = await this.prisma.componentes_equipo.findFirst({
+      where: { id_componente_equipo: idRelacion, id_equipo: idEquipo, activo: { not: false } },
+      include: { catalogo_componentes: true },
+    });
+    if (!rel) {
+      throw new NotFoundException('El vínculo BOM no existe o ya fue desvinculado');
+    }
+
+    const specsActuales = (rel.especificaciones_adicionales || {}) as Record<string, any>;
+    const categoria = body.categoria_aplicacion && EquiposGestionService.BOM_APLICACIONES[body.categoria_aplicacion]
+      ? body.categoria_aplicacion
+      : specsActuales.categoria_aplicacion || 'REPUESTO_GENERAL';
+
+    const cantidad = body.cantidad_requerida !== undefined ? Number(body.cantidad_requerida) : Number(specsActuales.cantidad_requerida ?? rel.unidades_por_cambio ?? 1);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      throw new BadRequestException('La cantidad requerida por servicio debe ser mayor a 0');
+    }
+
+    const frecuencia = body.frecuencia_cambio_horas !== undefined
+      ? (body.frecuencia_cambio_horas === null || (body.frecuencia_cambio_horas as any) === '' ? null : Number(body.frecuencia_cambio_horas))
+      : (specsActuales.frecuencia_cambio_horas != null ? Number(specsActuales.frecuencia_cambio_horas) : null);
+    if (frecuencia !== null && (!Number.isFinite(frecuencia) || frecuencia <= 0)) {
+      throw new BadRequestException('La frecuencia de cambio debe ser un número de horas mayor a 0');
+    }
+
+    const aplicacion = EquiposGestionService.BOM_APLICACIONES[categoria];
+    const actualizado = await this.prisma.componentes_equipo.update({
+      where: { id_componente_equipo: idRelacion },
+      data: {
+        id_tipo_componente: aplicacion?.tipo ?? rel.id_tipo_componente,
+        posicion_descripcion: aplicacion?.label || rel.posicion_descripcion,
+        unidades_por_cambio: Math.max(1, Math.ceil(cantidad)),
+        especificaciones_adicionales: {
+          ...specsActuales,
+          categoria_aplicacion: categoria,
+          cantidad_requerida: cantidad,
+          frecuencia_cambio_horas: frecuencia,
+        },
+        notas: body.notas_tecnicas !== undefined ? (body.notas_tecnicas?.toString().trim() || null) : rel.notas,
+        modificado_por: userId || 1,
+        fecha_modificacion: new Date(),
+      },
+      include: EquiposGestionService.BOM_INCLUDE,
+    });
+
+    return this.mapearBomItem(actualizado);
   }
 
   /**

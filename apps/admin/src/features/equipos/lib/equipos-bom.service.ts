@@ -6,13 +6,14 @@
  *  - GET    /equipos/:id/ficha-logistica
  *  - GET    /equipos/:id/componentes-compatibles
  *  - POST   /equipos/:id/componentes-compatibles
+ *  - PATCH  /equipos/:id/componentes-compatibles/:idRelacion
  *  - DELETE /equipos/:id/componentes-compatibles/:idRelacion
  */
 
 import { apiClient } from '@/lib/api/client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-export type EstadoStockBom = 'OK' | 'BAJO' | 'AGOTADO';
+export type EstadoStockBom = 'OK' | 'BAJO' | 'INSUFICIENTE' | 'AGOTADO';
 
 export interface BomBodegaStock {
   id_ubicacion: number;
@@ -28,6 +29,7 @@ export interface BomItem {
   aplicacion_label: string;
   posicion_descripcion: string;
   cantidad_requerida: number;
+  faltante: number;
   frecuencia_cambio_horas: number | null;
   notas_tecnicas: string | null;
   fecha_ultimo_cambio: string | null;
@@ -88,6 +90,8 @@ export interface FichaLogisticaEquipo {
   resumen: {
     total_ordenes: number;
     total_bom: number;
+    bom_con_kit_completo: number;
+    bom_insuficientes: number;
     bom_agotados: number;
     bom_bajo_minimo: number;
     total_lineas_instaladas: number;
@@ -101,6 +105,13 @@ export interface VincularBomPayload {
   id_componente: number;
   categoria_aplicacion: string;
   cantidad_requerida: number;
+  frecuencia_cambio_horas?: number | null;
+  notas_tecnicas?: string | null;
+}
+
+export interface ActualizarBomPayload {
+  categoria_aplicacion?: string;
+  cantidad_requerida?: number;
   frecuencia_cambio_horas?: number | null;
   notas_tecnicas?: string | null;
 }
@@ -148,6 +159,14 @@ export const equiposBomService = {
     return res.data.data;
   },
 
+  async actualizar(id: number, idRelacion: number, payload: ActualizarBomPayload): Promise<BomItem> {
+    const res = await apiClient.patch<{ success: boolean; data: BomItem }>(
+      `/equipos/${id}/componentes-compatibles/${idRelacion}`,
+      payload
+    );
+    return res.data.data;
+  },
+
   async desvincular(id: number, idRelacion: number): Promise<void> {
     await apiClient.delete(`/equipos/${id}/componentes-compatibles/${idRelacion}`);
   },
@@ -175,6 +194,18 @@ export function useVincularBomEquipo(idEquipo: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: VincularBomPayload) => equiposBomService.vincular(idEquipo, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: equiposBomKeys.ficha(idEquipo) });
+      qc.invalidateQueries({ queryKey: equiposBomKeys.compatibles(idEquipo) });
+    },
+  });
+}
+
+export function useActualizarBomEquipo(idEquipo: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ idRelacion, payload }: { idRelacion: number; payload: ActualizarBomPayload }) =>
+      equiposBomService.actualizar(idEquipo, idRelacion, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: equiposBomKeys.ficha(idEquipo) });
       qc.invalidateQueries({ queryKey: equiposBomKeys.compatibles(idEquipo) });
