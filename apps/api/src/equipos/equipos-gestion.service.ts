@@ -1316,13 +1316,18 @@ export class EquiposGestionService {
         },
         mediciones_servicio: {
           where: {
-            id_equipo: idEquipo,
+            OR: [
+              { id_orden_equipo: null },
+              { ordenes_equipos: { id_equipo: idEquipo } },
+            ],
           },
           select: {
             id_medicion: true,
-            valor_medido: true,
-            es_critico: true,
+            valor_numerico: true,
+            valor_texto: true,
+            unidad_medida: true,
             fuera_de_rango: true,
+            nivel_alerta: true,
             parametros_medicion: {
               select: {
                 nombre_parametro: true,
@@ -1350,6 +1355,26 @@ export class EquiposGestionService {
       },
     });
 
+    const intervenciones = ordenes.map((orden) => ({
+      ...orden,
+      diagnostico_tecnico: orden.observaciones_tecnico || orden.observaciones_cierre || null,
+      mediciones_servicio: (orden.mediciones_servicio || []).map((m) => ({
+        id_medicion: m.id_medicion,
+        valor_medido:
+          m.valor_numerico !== null && m.valor_numerico !== undefined
+            ? Number(m.valor_numerico)
+            : (m.valor_texto ?? ''),
+        es_critico: m.nivel_alerta === 'CRITICO',
+        fuera_de_rango: Boolean(m.fuera_de_rango),
+        parametros_medicion: m.parametros_medicion
+          ? {
+              nombre_parametro: m.parametros_medicion.nombre_parametro,
+              unidad_medida: m.unidad_medida || m.parametros_medicion.unidad_medida || '',
+            }
+          : undefined,
+      })),
+    }));
+
     return {
       equipo: {
         id_equipo: equipo.id_equipo,
@@ -1363,8 +1388,8 @@ export class EquiposGestionService {
           equipo.clientes?.persona?.razon_social ||
           equipo.clientes?.persona?.nombre_completo,
       },
-      total_intervenciones: ordenes.length,
-      intervenciones: ordenes,
+      total_intervenciones: intervenciones.length,
+      intervenciones,
     };
   }
 

@@ -1,7 +1,7 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 22 de Octubre de 2026  
-**Versión:** 5.6 Release Candidate (RC-5 - EAM 360° BOM Precision & Zero-Trust Sync)  
+**Versión:** 5.6 Release Candidate (RC-6 - Trazabilidad EAM 360° & Mediciones Zero-Trust)  
 **Últimos Commits Clave:** 
 - `feat(equipos-bom)`: Remediación forense integral Zero-Trust del Parque EAM 360° y Matriz BOM (`/equipos` y `/equipos/[id]`):
   - Detección precisa de suficiencia de stock BOM (`stock_actual` vs `cantidad_requerida`) con estados `OK` (Cubre Kit), `INSUFICIENTE` (Faltan Z) y `AGOTADO`, botón `🛒 Pedir OC` y KPI superior de kit completo.
