@@ -61,11 +61,13 @@ export interface FusionarMarcasPayload {
 export type TipoMagnitud = 'CANTIDAD' | 'VOLUMEN' | 'LONGITUD' | 'MASA' | 'CONJUNTO';
 
 export interface UnidadMedida {
-  codigo_unidad: string;
+  codigo: string;
+  codigo_unidad?: string;
   nombre: string;
   simbolo: string;
   tipo_magnitud: TipoMagnitud;
-  factor_conversion_base: number;
+  permite_decimales?: boolean;
+  factor_conversion_base?: number;
   activo: boolean;
 }
 

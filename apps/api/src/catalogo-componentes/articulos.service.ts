@@ -85,7 +85,148 @@ export class ArticulosService {
       nextVal = 1;
     }
 
-    return `ART-${year}-${String(nextVal).padStart(4, '0')}`;
+    // Zero-Trust: garantizar que no colisione con ningún código interno manual
+    let candidato = `ART-${year}-${String(nextVal).padStart(4, '0')}`;
+    let existe = await tx.catalogo_componentes.findFirst({
+      where: { codigo_interno: { equals: candidato, mode: 'insensitive' } },
+    });
+
+    while (existe) {
+      nextVal++;
+      candidato = `ART-${year}-${String(nextVal).padStart(4, '0')}`;
+      existe = await tx.catalogo_componentes.findFirst({
+        where: { codigo_interno: { equals: candidato, mode: 'insensitive' } },
+      });
+      await tx.$executeRawUnsafe(`
+        UPDATE sequence_counter
+        SET current_value = ${nextVal}, updated_at = NOW()
+        WHERE type = 'ART' AND year = ${year};
+      `);
+    }
+
+    return candidato;
+  }
+
+  /**
+   * Obtiene el siguiente SKU sugerido sin bloquear ni consumir la secuencia.
+   */
+  async obtenerSiguienteSku(): Promise<{
+    siguiente_codigo: string;
+    correlativo: number;
+    prefijo: string;
+    anio: number;
+  }> {
+    const year = new Date().getFullYear();
+    const seq = await this.prisma.sequence_counter.findFirst({
+      where: { type: 'ART', year },
+    });
+    let nextVal = Number(seq?.current_value || 0) + 1;
+
+    const articulosAnio = await this.prisma.catalogo_componentes.findMany({
+      where: {
+        codigo_interno: {
+          startsWith: `ART-${year}-`,
+        },
+      },
+      select: { codigo_interno: true },
+    });
+
+    for (const art of articulosAnio) {
+      if (art.codigo_interno) {
+        const parts = art.codigo_interno.split('-');
+        if (parts.length === 3) {
+          const num = parseInt(parts[2], 10);
+          if (!isNaN(num) && num >= nextVal) {
+            nextVal = num + 1;
+          }
+        }
+      }
+    }
+
+    let candidato = `ART-${year}-${String(nextVal).padStart(4, '0')}`;
+    let existe = await this.prisma.catalogo_componentes.findFirst({
+      where: { codigo_interno: { equals: candidato, mode: 'insensitive' } },
+    });
+
+    while (existe) {
+      nextVal++;
+      candidato = `ART-${year}-${String(nextVal).padStart(4, '0')}`;
+      existe = await this.prisma.catalogo_componentes.findFirst({
+        where: { codigo_interno: { equals: candidato, mode: 'insensitive' } },
+      });
+    }
+
+    return {
+      siguiente_codigo: candidato,
+      correlativo: nextVal,
+      prefijo: 'ART',
+      anio: year,
+    };
+  }
+
+  /**
+   * Valida en tiempo real si un código interno o SKU está disponible o ya existe.
+   */
+  async validarCodigoInterno(
+    codigo: string,
+    idComponenteActual?: number,
+  ): Promise<{
+    disponible: boolean;
+    codigo: string;
+    motivo: string;
+    articulo_existente?: {
+      id_componente: number;
+      descripcion_corta: string | null;
+      referencia_fabricante: string;
+      codigo_interno: string | null;
+    };
+  }> {
+    const clean = codigo?.trim();
+    if (!clean) {
+      return {
+        disponible: true,
+        codigo: '',
+        motivo: 'Código vacío (se auto-generará si se deja en blanco)',
+      };
+    }
+
+    const where = {
+      codigo_interno: {
+        equals: clean,
+        mode: 'insensitive' as const,
+      },
+    } as any;
+
+    if (idComponenteActual) {
+      where.id_componente = { not: idComponenteActual };
+    }
+
+    const existente = await this.prisma.catalogo_componentes.findFirst({
+      where,
+      select: {
+        id_componente: true,
+        descripcion_corta: true,
+        referencia_fabricante: true,
+        codigo_interno: true,
+      },
+    });
+
+    if (existente) {
+      return {
+        disponible: false,
+        codigo: clean,
+        motivo: `El código "${clean}" ya se encuentra asignado a: ${
+          existente.descripcion_corta || existente.referencia_fabricante
+        } (ID #${existente.id_componente})`,
+        articulo_existente: existente,
+      };
+    }
+
+    return {
+      disponible: true,
+      codigo: clean,
+      motivo: 'Código único y disponible para su asignación.',
+    };
   }
 
   /** IDs de una categoría y todos sus descendientes (tabla pequeña: recorrido en memoria). */

@@ -3,6 +3,26 @@
 **Fecha de Actualización:** 22 de Octubre de 2026  
 **Versión:** 5.7 Release Candidate (RC-7 - Arquitectura de Dominio WMS ⇄ EAM: Referenciación Técnica vs Consumo Físico)  
 **Últimos Commits Clave:** 
+- `feat(catalogo-alta-premium)`: Elevación a Grado Enterprise del **Alta y Edición de Recursos Maestros** (`articulo-form.tsx`):
+  - **Selector Jerárquico en Cascada Multinivel (`HierarchicalCategorySelect`):**
+    - Corrección del bug de recursividad en árbol (`node.hijos` vs `node.subcategorias`), habilitando la navegación fluida por todas las subcategorías y sub-hijas.
+    - Implementación del modo `variant="cascading"`: Selección multinivel guiada: Nivel 1 (Familia Raíz) ➔ Nivel 2 (Subcategoría / Sistema) ➔ Nivel 3 (Sub-hija / Especificación dinámica si aplica).
+    - Migas de pan reactivas (`Breadcrumbs`) con ruta materializada completa (`FILTROS Y FILTRACIÓN › FILTROS DE ACEITE`).
+    - Alternancia a un click con buscador global directo por texto plano.
+    - Alta in-context de categorías/subcategorías con preselección del nodo padre activo.
+  - **Selector Premium de Unidades de Medida (`UnidadesMedidaSelect`):**
+    - Sustitución de select plano nativo por Popover Combobox con búsqueda instantánea por símbolo ISO y nombre.
+    - Agrupación por magnitud física con badges e iconos (`🔢 Conteo`, `🧪 Volumen`, `📏 Longitud`, `⚖️ Masa`, `📦 Conjunto`).
+    - Preselección automática inteligente por defecto a `UND` (Unidad) en modo creación.
+    - Chip técnico de precisión (`Entero` vs `Permite decimales`).
+  - **Autogeneración Inteligente y Validación en Tiempo Real de SKU / Código Interno:**
+    - Endpoints NestJS: `GET /api/catalogo-componentes/siguiente-sku` y `GET /api/catalogo-componentes/validar-codigo`.
+    - Botón `⚡ Auto-generar SKU` para cálculo de correlativo formal `ART-YYYY-XXXX` libre de colisiones.
+    - Prefetch automático al montar en modo creación para que el campo aparezca pre-poblado y validado.
+    - Validación debounced en vivo mientras se tipea, con alertas visuales de unicidad y protección contra duplicados.
+  - **Asistente de Nomenclatura Estándar & Selector Comercial:**
+    - Sugeridor de título estandarizado `descripcion_corta` (`Categoría + Marca + Referencia`, ej: `FILTRO DE ACEITE BALDWIN B96`).
+    - Selector táctil de Tipo Comercial (`⭐ Original / OEM`, `🛡️ Homologado`, `⚙️ Genérico`).
 - `feat(wms-eam-dominio)`: Separación arquitectónica definitiva entre **Referenciación Técnica y Comercial** (`Artículo ➔ Equipo` en `/equipos/[id]`) y **Despacho / Consumo de Almacén** (`Artículo ➔ Orden de Servicio` en `/ordenes/[id]`):
   - **Arquetipo 1 — Referenciación en Equipo (BOM 360°):**
     - Referenciación técnica/comercial para cotización y compras: vincular un artículo no exige ni valida stock hoy.

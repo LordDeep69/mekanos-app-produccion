@@ -91,6 +91,35 @@ export class CatalogoComponentesController {
    * DETALLE COMPLETO DE UN ARTÍCULO (INCLUYE PROVEEDORES Y BITÁCORA)
    * =========================================================================
    */
+  /**
+   * =========================================================================
+   * GENERACIÓN Y VALIDACIÓN INTELIGENTE DE SKU / CÓDIGO INTERNO
+   * =========================================================================
+   */
+  @Get('siguiente-sku')
+  @ApiOperation({
+    summary: 'Obtener el siguiente SKU sugerido sin colisiones',
+    description: 'Calcula el próximo código formal correlativo basándose en sequence_counter y los registros existentes del año actual.',
+  })
+  async getSiguienteSku() {
+    return this.articulosService.obtenerSiguienteSku();
+  }
+
+  @Get('validar-codigo')
+  @ApiOperation({
+    summary: 'Validar disponibilidad de un código interno o SKU en tiempo real',
+    description: 'Comprueba si un código interno ya existe en el catálogo maestro, excluyendo opcionalmente el artículo actual en edición.',
+  })
+  @ApiQuery({ name: 'codigo', required: true, type: String })
+  @ApiQuery({ name: 'id_componente', required: false, type: Number })
+  async validarCodigo(
+    @Query('codigo') codigo: string,
+    @Query('id_componente') idComponente?: string,
+  ) {
+    const id = idComponente ? parseInt(idComponente, 10) : undefined;
+    return this.articulosService.validarCodigoInterno(codigo, id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener ficha técnica y comercial completa de un artículo' })
   async findOne(@Param('id', ParseIntPipe) id: number) {

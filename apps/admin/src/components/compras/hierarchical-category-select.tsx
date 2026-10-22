@@ -4,8 +4,15 @@
  * MEKANOS S.A.S - Portal Admin
  * Selector Jerárquico de Categorías Taxonómicas (HierarchicalCategorySelect)
  * 
- * Permite selección en cascada / árbol indentado, búsqueda rápida por `ruta_jerarquica`
- * y creación in-context de familias y subfamilias con preselección del padre.
+ * Modos de Operación:
+ * 1. 'cascading' (Recomendado para Formularios de Alta):
+ *    - Selección multinivel guiada: Nivel 1 (Familia) ➔ Nivel 2 (Subcategoría) ➔ Nivel 3 (Sub-hija / Detalle).
+ *    - Ruta jerárquica visualizada en migas de pan (Breadcrumbs).
+ *    - Creación in-context de subcategorías con padre preseleccionado.
+ *    - Alternancia rápida con buscador global directo por texto plano.
+ * 
+ * 2. 'combobox' (Recomendado para Barras de Filtros y Espacios Compactos):
+ *    - Menú desplegable flotante con árbol indentado y búsqueda rápida.
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -21,6 +28,8 @@ import {
   Search,
   Sparkles,
   X,
+  Layers,
+  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -49,6 +58,7 @@ export interface HierarchicalCategorySelectProps {
   className?: string;
   id?: string;
   showClearButton?: boolean;
+  variant?: 'combobox' | 'cascading';
 }
 
 // Interfaz para aplanar el árbol manteniendo metadatos visuales
@@ -57,17 +67,23 @@ interface FlatCategoryItem extends CategoriaNodo {
   indent: number;
 }
 
+function getChildren(node: CategoriaNodo): CategoriaNodo[] {
+  return node.subcategorias || (node as any).hijos || [];
+}
+
 function flattenTree(nodes: CategoriaNodo[], indent = 0): FlatCategoryItem[] {
   const result: FlatCategoryItem[] = [];
   for (const node of nodes) {
-    const hasChildren = Array.isArray(node.hijos) && node.hijos.length > 0;
+    const children = getChildren(node);
+    const hasChildren = Array.isArray(children) && children.length > 0;
     result.push({
       ...node,
       indent,
       hasChildren,
+      subcategorias: children,
     });
-    if (hasChildren && node.hijos) {
-      result.push(...flattenTree(node.hijos, indent + 1));
+    if (hasChildren) {
+      result.push(...flattenTree(children, indent + 1));
     }
   }
   return result;
@@ -81,12 +97,23 @@ export function HierarchicalCategorySelect({
   className,
   id,
   showClearButton = true,
+  variant = 'combobox',
 }: HierarchicalCategorySelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  // Datos del árbol y lista plana
   const [arbol, setArbol] = useState<CategoriaNodo[]>([]);
   const [selectedCat, setSelectedCat] = useState<CategoriaNodo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Estados para modo 'combobox'
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  // Estados para modo 'cascading'
+  const [selectedL1, setSelectedL1] = useState<number | null>(null);
+  const [selectedL2, setSelectedL2] = useState<number | null>(null);
+  const [selectedL3, setSelectedL3] = useState<number | null>(null);
+  const [searchDirecto, setSearchDirecto] = useState('');
+  const [modoBuscadorDirecto, setModoBuscadorDirecto] = useState(false);
 
   // Estado del modal de creación in-context
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,7 +130,7 @@ export function HierarchicalCategorySelect({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Cargar árbol de categorías
-  const cargarArbol = async (preserveValue?: number | null) => {
+  const cargarArbol = async () => {
     try {
       setIsLoading(true);
       const data = await comprasService.getCategoriasArbol();
@@ -127,19 +154,50 @@ export function HierarchicalCategorySelect({
     return flattenTree(arbol);
   }, [arbol]);
 
-  // Sincronizar selección actual con el valor externo `value`
-  useEffect(() => {
-    if (value) {
-      const encontrada = flatList.find((c) => c.id_categoria === value);
-      if (encontrada) {
-        setSelectedCat(encontrada);
-      }
-    } else {
-      setSelectedCat(null);
+  // Mapa rápido por ID
+  const mapPorId = useMemo(() => {
+    const map = new Map<number, CategoriaNodo>();
+    for (const item of flatList) {
+      map.set(item.id_categoria, item);
     }
-  }, [value, flatList]);
+    return map;
+  }, [flatList]);
 
-  // Cierre por click exterior
+  // Sincronizar selección actual con el valor externo `value` y auto-poblar los niveles de la cascada
+  useEffect(() => {
+    if (value && mapPorId.has(value)) {
+      const encontrada = mapPorId.get(value)!;
+      setSelectedCat(encontrada);
+
+      // Reconstruir la ruta de ancestros para fijar los selects de la cascada
+      if (encontrada.nivel === 1) {
+        setSelectedL1(encontrada.id_categoria);
+        setSelectedL2(null);
+        setSelectedL3(null);
+      } else if (encontrada.nivel === 2) {
+        setSelectedL1(encontrada.id_padre);
+        setSelectedL2(encontrada.id_categoria);
+        setSelectedL3(null);
+      } else if (encontrada.nivel >= 3) {
+        const padre = encontrada.id_padre ? mapPorId.get(encontrada.id_padre) : null;
+        if (padre) {
+          setSelectedL1(padre.id_padre);
+          setSelectedL2(padre.id_categoria);
+          setSelectedL3(encontrada.id_categoria);
+        } else {
+          setSelectedL2(encontrada.id_padre);
+          setSelectedL3(encontrada.id_categoria);
+        }
+      }
+    } else if (!value) {
+      setSelectedCat(null);
+      setSelectedL1(null);
+      setSelectedL2(null);
+      setSelectedL3(null);
+    }
+  }, [value, mapPorId]);
+
+  // Cierre por click exterior en modo combobox
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -152,30 +210,113 @@ export function HierarchicalCategorySelect({
     };
   }, []);
 
+  // Opciones disponibles para cada nivel en modo Cascada
+  const opcionesL1 = useMemo(() => {
+    return arbol;
+  }, [arbol]);
+
+  const opcionesL2 = useMemo(() => {
+    if (!selectedL1) return [];
+    const nodoL1 = arbol.find((n) => n.id_categoria === selectedL1);
+    return nodoL1 ? getChildren(nodoL1) : [];
+  }, [arbol, selectedL1]);
+
+  const opcionesL3 = useMemo(() => {
+    if (!selectedL2) return [];
+    const nodoL2 = flatList.find((n) => n.id_categoria === selectedL2);
+    return nodoL2 ? getChildren(nodoL2) : [];
+  }, [flatList, selectedL2]);
+
   // Filtrado por búsqueda de texto plano sobre ruta_jerarquica o nombre
   const filteredList = useMemo(() => {
-    if (!search.trim()) return flatList;
-    const query = search.toLowerCase().trim();
+    const q = (variant === 'cascading' ? searchDirecto : search).toLowerCase().trim();
+    if (!q) return flatList;
     return flatList.filter(
       (cat) =>
-        cat.nombre.toLowerCase().includes(query) ||
-        (cat.ruta_jerarquica && cat.ruta_jerarquica.toLowerCase().includes(query)) ||
-        (cat.codigo_categoria && cat.codigo_categoria.toLowerCase().includes(query))
+        cat.nombre.toLowerCase().includes(q) ||
+        (cat.ruta_jerarquica && cat.ruta_jerarquica.toLowerCase().includes(q)) ||
+        (cat.codigo_categoria && cat.codigo_categoria.toLowerCase().includes(q))
     );
-  }, [flatList, search]);
+  }, [flatList, search, searchDirecto, variant]);
 
-  const handleSelect = (cat: CategoriaNodo) => {
-    setSelectedCat(cat);
-    onChange(cat.id_categoria, cat);
-    setIsOpen(false);
-    setSearch('');
+  // Manejadores de selección en modo Cascada
+  const handleSelectL1 = (idL1: number | null) => {
+    setSelectedL1(idL1);
+    setSelectedL2(null);
+    setSelectedL3(null);
+    if (idL1) {
+      const cat = mapPorId.get(idL1);
+      const hijos = cat ? getChildren(cat) : [];
+      // Si la raíz no tiene hijos, es terminal y se asigna directamente
+      if (hijos.length === 0) {
+        setSelectedCat(cat || null);
+        onChange(idL1, cat || null);
+      } else {
+        // Tiene hijos: esperamos selección de L2 para precisión
+        setSelectedCat(null);
+        onChange(null, null);
+      }
+    } else {
+      setSelectedCat(null);
+      onChange(null, null);
+    }
   };
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleSelectL2 = (idL2: number | null) => {
+    setSelectedL2(idL2);
+    setSelectedL3(null);
+    if (idL2) {
+      const cat = mapPorId.get(idL2);
+      const hijos = cat ? getChildren(cat) : [];
+      // Si L2 no tiene hijos, es el nodo terminal
+      if (hijos.length === 0) {
+        setSelectedCat(cat || null);
+        onChange(idL2, cat || null);
+      } else {
+        // Si tiene hijos, se puede seleccionar L2 provisionalmente
+        setSelectedCat(cat || null);
+        onChange(idL2, cat || null);
+      }
+    } else if (selectedL1) {
+      const catL1 = mapPorId.get(selectedL1);
+      setSelectedCat(catL1 || null);
+      onChange(selectedL1, catL1 || null);
+    } else {
+      setSelectedCat(null);
+      onChange(null, null);
+    }
+  };
+
+  const handleSelectL3 = (idL3: number | null) => {
+    setSelectedL3(idL3);
+    if (idL3) {
+      const cat = mapPorId.get(idL3);
+      setSelectedCat(cat || null);
+      onChange(idL3, cat || null);
+    } else if (selectedL2) {
+      const catL2 = mapPorId.get(selectedL2);
+      setSelectedCat(catL2 || null);
+      onChange(selectedL2, catL2 || null);
+    }
+  };
+
+  const handleSelectDirecto = (cat: CategoriaNodo) => {
+    setSelectedCat(cat);
+    onChange(cat.id_categoria, cat);
+    setModoBuscadorDirecto(false);
+    setSearchDirecto('');
+    setIsOpen(false);
+  };
+
+  const handleClear = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setSelectedCat(null);
+    setSelectedL1(null);
+    setSelectedL2(null);
+    setSelectedL3(null);
     onChange(null, null);
     setSearch('');
+    setSearchDirecto('');
   };
 
   // Abrir modal de creación con padre opcional
@@ -199,7 +340,6 @@ export function HierarchicalCategorySelect({
       return;
     }
 
-    // Generar código si viene vacío
     let codigo = modalForm.codigo_categoria?.trim();
     if (!codigo) {
       codigo = modalForm.nombre
@@ -222,7 +362,6 @@ export function HierarchicalCategorySelect({
         description: `Ruta: ${nueva.ruta_jerarquica || nueva.nombre}`,
       });
 
-      // Recargar árbol y autoseleccionar
       const nuevoArbol = await comprasService.getCategoriasArbol();
       setArbol(nuevoArbol);
       setSelectedCat(nueva);
@@ -238,6 +377,312 @@ export function HierarchicalCategorySelect({
     }
   };
 
+  // ============================================================================
+  // RENDER MODO 1: CASCADA INTELIGENTE (variant === 'cascading')
+  // ============================================================================
+  if (variant === 'cascading') {
+    return (
+      <div className={cn('space-y-3 w-full', className)}>
+        {/* Barra Superior de Control: Breadcrumb / Estado y Switch a Búsqueda Rápida */}
+        <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg border border-blue-100 bg-blue-50/40 text-xs">
+          <div className="flex items-center gap-2 overflow-hidden truncate">
+            <Layers className="h-4 w-4 text-blue-600 shrink-0" />
+            {selectedCat ? (
+              <div className="flex flex-wrap items-center gap-1.5 font-medium text-gray-800">
+                <span className="text-gray-500 font-normal">Clasificación:</span>
+                <span className="font-semibold text-blue-900 bg-blue-100/70 px-2 py-0.5 rounded text-[11px] font-mono">
+                  {selectedCat.ruta_jerarquica || selectedCat.nombre}
+                </span>
+                <Badge variant="outline" className="text-[10px] bg-white border-blue-200 text-blue-700">
+                  Nivel {selectedCat.nivel}
+                </Badge>
+              </div>
+            ) : (
+              <span className="text-gray-500 italic">
+                Selecciona la familia y subcategoría correspondiente al recurso
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setModoBuscadorDirecto(!modoBuscadorDirecto)}
+              className="text-xs text-blue-700 hover:text-blue-900 font-semibold underline flex items-center gap-1"
+            >
+              <Search className="h-3 w-3" />
+              {modoBuscadorDirecto ? 'Ver selectores en cascada' : 'Buscar por nombre directo'}
+            </button>
+            {selectedCat && showClearButton && !disabled && (
+              <button
+                type="button"
+                onClick={() => handleClear()}
+                className="text-[11px] text-gray-400 hover:text-red-600 p-1 rounded hover:bg-white transition-colors"
+                title="Limpiar taxonomía"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Alternativa: Buscador Directo Global */}
+        {modoBuscadorDirecto ? (
+          <div className="relative rounded-lg border border-blue-200 bg-white p-3 shadow-sm space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                value={searchDirecto}
+                onChange={(e) => setSearchDirecto(e.target.value)}
+                placeholder="Escribe el nombre de la categoría (ej: Aceite, Filtro, Correa, Batería)..."
+                className="pl-9 text-xs"
+                autoFocus
+              />
+            </div>
+
+            <div className="max-h-48 overflow-y-auto space-y-1 text-xs">
+              {filteredList.map((cat) => (
+                <button
+                  key={cat.id_categoria}
+                  type="button"
+                  onClick={() => handleSelectDirecto(cat)}
+                  className="w-full text-left px-3 py-1.5 rounded-md hover:bg-blue-50 flex items-center justify-between group transition-colors"
+                >
+                  <div className="flex flex-col truncate">
+                    <span className="font-semibold text-gray-900">{cat.nombre}</span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      {cat.ruta_jerarquica}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-mono group-hover:bg-blue-100">
+                    Nivel {cat.nivel}
+                  </Badge>
+                </button>
+              ))}
+              {filteredList.length === 0 && (
+                <div className="py-4 text-center text-gray-400 text-xs">
+                  No se encontraron categorías coincidentes.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Selectores en Cascada Multinivel (Paso 1, 2 y 3) */
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Nivel 1: Familia Principal */}
+            <div className="space-y-1">
+              <Label className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">
+                  1
+                </span>
+                Categoría Principal (Familia) <span className="text-red-500">*</span>
+              </Label>
+              <select
+                value={selectedL1 || ''}
+                onChange={(e) => handleSelectL1(e.target.value ? Number(e.target.value) : null)}
+                disabled={disabled || isLoading}
+                className="w-full h-9 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">-- Seleccionar Familia Raíz --</option>
+                {opcionesL1.map((cat) => (
+                  <option key={cat.id_categoria} value={cat.id_categoria}>
+                    📁 {cat.nombre} {cat.total_articulos ? `(${cat.total_articulos} art.)` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Nivel 2: Subcategoría */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">
+                    2
+                  </span>
+                  Subcategoría / Sistema
+                </Label>
+                {selectedL1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCreateModal(selectedL1)}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
+                  >
+                    <Plus className="h-3 w-3" /> Nueva
+                  </button>
+                )}
+              </div>
+              <select
+                value={selectedL2 || ''}
+                onChange={(e) => handleSelectL2(e.target.value ? Number(e.target.value) : null)}
+                disabled={disabled || !selectedL1 || opcionesL2.length === 0}
+                className="w-full h-9 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="">
+                  {!selectedL1
+                    ? '-- Selecciona Familia Primero --'
+                    : opcionesL2.length === 0
+                    ? '-- Sin subcategorías registradas --'
+                    : '-- Seleccionar Subcategoría --'}
+                </option>
+                {opcionesL2.map((cat) => (
+                  <option key={cat.id_categoria} value={cat.id_categoria}>
+                    ↳ {cat.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Nivel 3: Sub-hija / Clase Específica (Dinámico) */}
+            <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">
+                    3
+                  </span>
+                  Sub-hija / Especificación
+                </Label>
+                {selectedL2 && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCreateModal(selectedL2)}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
+                  >
+                    <Plus className="h-3 w-3" /> Añadir hija
+                  </button>
+                )}
+              </div>
+              <select
+                value={selectedL3 || ''}
+                onChange={(e) => handleSelectL3(e.target.value ? Number(e.target.value) : null)}
+                disabled={disabled || !selectedL2 || opcionesL3.length === 0}
+                className="w-full h-9 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="">
+                  {!selectedL2
+                    ? '-- Esperando Subcategoría --'
+                    : opcionesL3.length === 0
+                    ? '✓ Nivel terminal alcanzado'
+                    : '-- [ General / Toda la Subcategoría ] --'}
+                </option>
+                {opcionesL3.map((cat) => (
+                  <option key={cat.id_categoria} value={cat.id_categoria}>
+                    └── {cat.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Creación In-Context */}
+        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+          <DialogContent className="sm:max-w-md bg-white border border-gray-200 shadow-xl">
+            <form onSubmit={handleSubmitCreate}>
+              <DialogHeader className="border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2 text-blue-600">
+                  <Sparkles className="h-5 w-5" />
+                  <DialogTitle className="text-base font-bold text-gray-900">
+                    Nueva Categoría Taxonómica
+                  </DialogTitle>
+                </div>
+                <DialogDescription className="text-xs text-gray-500">
+                  Crea una nueva clasificación en el catálogo maestro.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4 text-xs">
+                {/* Categoría Padre */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="modal-cat-padre" className="font-semibold text-gray-800">
+                    Categoría Padre (Nivel Superior)
+                  </Label>
+                  <select
+                    id="modal-cat-padre"
+                    value={modalPadreId || ''}
+                    onChange={(e) =>
+                      setModalPadreId(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">[ Ninguna - Categoría Raíz Nivel 1 ]</option>
+                    {flatList.map((cat) => (
+                      <option key={cat.id_categoria} value={cat.id_categoria}>
+                        {'— '.repeat(cat.nivel - 1)} {cat.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Nombre de la Categoría */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="modal-cat-nombre" className="font-semibold text-gray-800">
+                    Nombre de la Categoría <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="modal-cat-nombre"
+                    type="text"
+                    required
+                    value={modalForm.nombre}
+                    onChange={(e) => setModalForm({ ...modalForm, nombre: e.target.value })}
+                    placeholder="Ej: FILTROS DE ACEITE"
+                    className="bg-white text-xs uppercase"
+                  />
+                </div>
+
+                {/* Código de Categoría */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="modal-cat-codigo" className="font-semibold text-gray-800">
+                    Código Mnemotécnico (Opcional)
+                  </Label>
+                  <Input
+                    id="modal-cat-codigo"
+                    type="text"
+                    value={modalForm.codigo_categoria || ''}
+                    onChange={(e) =>
+                      setModalForm({ ...modalForm, codigo_categoria: e.target.value.toUpperCase() })
+                    }
+                    placeholder="Ej: CAT-FIL-ACE"
+                    className="bg-white text-xs font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="border-t border-gray-100 pt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsModalOpen(false)}
+                  disabled={isCreating}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isCreating}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Guardando...
+                    </>
+                  ) : (
+                    'Guardar Categoría'
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // RENDER MODO 2: COMBOBOX POPOVER (variant === 'combobox')
+  // ============================================================================
   return (
     <div ref={containerRef} className={cn('relative w-full', className)}>
       {/* Gatillo / Botón Principal */}
@@ -329,7 +774,7 @@ export function HierarchicalCategorySelect({
               <div className="space-y-0.5">
                 {filteredList.map((cat) => {
                   const isSelected = selectedCat?.id_categoria === cat.id_categoria;
-                  const indentPixels = (cat.nivel ?? cat.indent ?? 0) * 16;
+                  const indentPixels = (cat.nivel ? cat.nivel - 1 : cat.indent ?? 0) * 16;
 
                   return (
                     <div
@@ -343,11 +788,11 @@ export function HierarchicalCategorySelect({
                     >
                       <button
                         type="button"
-                        onClick={() => handleSelect(cat)}
+                        onClick={() => handleSelectDirecto(cat)}
                         style={{ paddingLeft: `${indentPixels}px` }}
                         className="flex flex-1 items-center gap-1.5 text-left truncate"
                       >
-                        {cat.nivel > 0 ? (
+                        {cat.nivel > 1 ? (
                           <span className="text-gray-300 font-mono text-[11px] select-none">└─</span>
                         ) : (
                           <Folder className="h-3.5 w-3.5 text-blue-600 shrink-0" />
@@ -415,7 +860,7 @@ export function HierarchicalCategorySelect({
         </div>
       )}
 
-      {/* Mini-Modal Accesible (Radix Dialog) de Creación In-Context */}
+      {/* Modal Accesible de Creación In-Context */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-gray-200 shadow-xl">
           <form onSubmit={handleSubmitCreate}>
@@ -432,13 +877,12 @@ export function HierarchicalCategorySelect({
             </DialogHeader>
 
             <div className="space-y-4 py-4 text-xs">
-              {/* Categoría Padre */}
               <div className="space-y-1.5">
-                <Label htmlFor="cat-padre" className="font-semibold text-gray-800">
+                <Label htmlFor="cat-padre-cb" className="font-semibold text-gray-800">
                   Categoría Padre (Nivel Superior)
                 </Label>
                 <select
-                  id="cat-padre"
+                  id="cat-padre-cb"
                   value={modalPadreId || ''}
                   onChange={(e) =>
                     setModalPadreId(e.target.value ? Number(e.target.value) : null)
@@ -448,98 +892,66 @@ export function HierarchicalCategorySelect({
                   <option value="">[ Ninguna - Categoría Raíz Nivel 1 ]</option>
                   {flatList.map((cat) => (
                     <option key={cat.id_categoria} value={cat.id_categoria}>
-                      {'\u00A0'.repeat((cat.nivel ?? 0) * 4)}
-                      {cat.nivel > 0 ? '└ ' : ''}
-                      {cat.nombre} ({cat.codigo_categoria})
+                      {'— '.repeat(cat.nivel - 1)} {cat.nombre}
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-gray-400">
-                  {modalPadreId
-                    ? 'La nueva subcategoría heredará la ruta jerárquica del padre seleccionado.'
-                    : 'Será una familia principal del catálogo.'}
-                </p>
               </div>
 
-              {/* Nombre de la Categoría */}
               <div className="space-y-1.5">
-                <Label htmlFor="cat-nombre" className="font-semibold text-gray-800">
+                <Label htmlFor="cat-nombre-cb" className="font-semibold text-gray-800">
                   Nombre de la Categoría <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  id="cat-nombre"
-                  value={modalForm.nombre}
-                  onChange={(e) =>
-                    setModalForm({ ...modalForm, nombre: e.target.value.toUpperCase() })
-                  }
-                  placeholder="Ej: FILTROS DE ACEITE, LUBRICANTES SINTÉTICOS"
-                  className="text-xs font-semibold uppercase bg-white"
+                  id="cat-nombre-cb"
+                  type="text"
                   required
-                  autoFocus
+                  value={modalForm.nombre}
+                  onChange={(e) => setModalForm({ ...modalForm, nombre: e.target.value })}
+                  placeholder="Ej: FILTROS DE ACEITE"
+                  className="bg-white text-xs uppercase"
                 />
               </div>
 
-              {/* Código sugerido */}
               <div className="space-y-1.5">
-                <Label htmlFor="cat-codigo" className="font-medium text-gray-700">
-                  Código Técnico (Opcional)
+                <Label htmlFor="cat-codigo-cb" className="font-semibold text-gray-800">
+                  Código Mnemotécnico (Opcional)
                 </Label>
                 <Input
-                  id="cat-codigo"
+                  id="cat-codigo-cb"
+                  type="text"
                   value={modalForm.codigo_categoria || ''}
                   onChange={(e) =>
-                    setModalForm({
-                      ...modalForm,
-                      codigo_categoria: e.target.value.toUpperCase().replace(/\s+/g, '_'),
-                    })
+                    setModalForm({ ...modalForm, codigo_categoria: e.target.value.toUpperCase() })
                   }
-                  placeholder="Ej: FLT_ACEITE (Se autogenera si se omite)"
-                  className="text-xs font-mono uppercase bg-white"
-                />
-              </div>
-
-              {/* Descripción */}
-              <div className="space-y-1.5">
-                <Label htmlFor="cat-desc" className="font-medium text-gray-700">
-                  Descripción o Criterio de Inclusión (Opcional)
-                </Label>
-                <Textarea
-                  id="cat-desc"
-                  rows={2}
-                  value={modalForm.descripcion || ''}
-                  onChange={(e) =>
-                    setModalForm({ ...modalForm, descripcion: e.target.value })
-                  }
-                  placeholder="Alcance técnico o tipos de repuestos clasificados aquí..."
-                  className="text-xs bg-white"
+                  placeholder="Ej: CAT-FIL-ACE"
+                  className="bg-white text-xs font-mono uppercase"
                 />
               </div>
             </div>
 
-            <DialogFooter className="border-t border-gray-100 pt-3 gap-2">
+            <DialogFooter className="border-t border-gray-100 pt-3">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setIsModalOpen(false)}
                 disabled={isCreating}
-                className="text-xs"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 size="sm"
-                disabled={isCreating || !modalForm.nombre.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                disabled={isCreating}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {isCreating ? (
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Creando...
-                  </span>
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Guardando...
+                  </>
                 ) : (
-                  '+ Crear y Seleccionar'
+                  'Guardar Categoría'
                 )}
               </Button>
             </DialogFooter>

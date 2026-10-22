@@ -315,12 +315,51 @@ export const comprasService = {
   async getUnidadesMedida(tipo_magnitud?: string): Promise<UnidadMedida[]> {
     try {
       const params = tipo_magnitud ? `?tipo_magnitud=${tipo_magnitud}` : '';
-      const response = await apiClient.get<UnidadMedida[]>(`/unidades-medida${params}`);
-      return Array.isArray(response.data) ? response.data : [];
+      const response = await apiClient.get<any[]>(`/unidades-medida${params}`);
+      const data = Array.isArray(response.data) ? response.data : [];
+      return data.map((u) => ({
+        ...u,
+        codigo: u.codigo || u.codigo_unidad,
+        codigo_unidad: u.codigo || u.codigo_unidad,
+      }));
     } catch (e) {
       console.error('Error al obtener unidades de medida:', e);
       return [];
     }
+  },
+
+  /**
+   * Obtener siguiente SKU sugerido sin colisión
+   */
+  async getSiguienteSku(): Promise<{
+    siguiente_codigo: string;
+    correlativo: number;
+    prefijo: string;
+    anio: number;
+  }> {
+    const response = await apiClient.get('/catalogo-componentes/siguiente-sku');
+    return response.data;
+  },
+
+  /**
+   * Validar disponibilidad de un código interno o SKU en tiempo real
+   */
+  async validarCodigoInterno(codigo: string, idComponente?: number): Promise<{
+    disponible: boolean;
+    codigo: string;
+    motivo: string;
+    articulo_existente?: {
+      id_componente: number;
+      descripcion_corta: string | null;
+      referencia_fabricante: string;
+      codigo_interno: string | null;
+    };
+  }> {
+    const params = new URLSearchParams();
+    params.append('codigo', codigo);
+    if (idComponente) params.append('id_componente', String(idComponente));
+    const response = await apiClient.get(`/catalogo-componentes/validar-codigo?${params.toString()}`);
+    return response.data;
   },
 
   /**

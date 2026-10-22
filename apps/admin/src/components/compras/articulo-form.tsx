@@ -30,8 +30,13 @@ import {
   Trash2,
   Truck,
   Wrench,
+  Loader2,
+  RefreshCw,
+  FolderTree,
+  X,
 } from 'lucide-react';
 
+import { toast } from 'sonner';
 import { comprasService } from '@/lib/api/compras.service';
 import { ArticuloMaestro, DestinoArticulo, ProveedorCompleto } from '@/types/compras.types';
 import { Button } from '@/components/ui/button';
@@ -43,6 +48,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { ComboboxWithCreate } from '@/components/ui/combobox-with-create';
 import { HierarchicalCategorySelect } from '@/components/compras/hierarchical-category-select';
+import { cn } from '@/lib/utils';
 import { UnidadesMedidaSelect } from '@/components/compras/unidades-medida-select';
 
 // ============================================================================
@@ -71,7 +77,7 @@ const proveedorInicialSchema = z.object({
 
 export const articuloFormSchema = z
   .object({
-    id_categoria: z.coerce.number({ invalid_type_error: 'Selecciona una categoría taxonómica' }).min(1, 'Selecciona una categoría taxonómica'),
+    id_categoria: z.coerce.number().min(1, 'Selecciona una categoría taxonómica'),
     codigo_interno: z.string().optional(),
     referencia_fabricante: z.string().min(2, 'La referencia neutral del fabricante es obligatoria'),
     marca: z.string().optional(),
@@ -251,7 +257,7 @@ export function ArticuloForm({
     control,
     formState: { errors },
   } = useForm<ArticuloFormValues>({
-    resolver: zodResolver(articuloFormSchema),
+    resolver: zodResolver(articuloFormSchema) as any,
     defaultValues: {
       destino_articulo: initialData?.destino_articulo || 'INSUMO_SERVICIO',
       id_categoria: initialData?.id_categoria || undefined,
@@ -280,7 +286,7 @@ export function ArticuloForm({
         ? Number(initialData.margen_utilidad_porcentaje)
         : 40,
       moneda: initialData?.moneda || 'COP',
-      observaciones: initialData?.observaciones || '',
+      observaciones: (initialData as any)?.observaciones || '',
       notas_instalacion: initialData?.notas_instalacion || '',
       proveedores_iniciales: [],
     },
@@ -301,8 +307,8 @@ export function ArticuloForm({
     async function loadAux() {
       try {
         if (mode === 'create') {
-          const resProv = await comprasService.getProveedores({ limit: 100 });
-          setProveedores(resProv.proveedores || []);
+          const resProv = await comprasService.getProveedores();
+          setProveedores(Array.isArray(resProv) ? resProv : (resProv as any)?.proveedores || []);
         }
       } catch (e) {
         console.error('Error cargando proveedores auxiliares:', e);
@@ -312,6 +318,110 @@ export function ArticuloForm({
     }
     loadAux();
   }, [mode]);
+
+  // Estados para SKU autogenerado y validación de unicidad en tiempo real
+  const [skuValidando, setSkuValidando] = useState(false);
+  const [skuEstado, setSkuEstado] = useState<{
+    disponible: boolean;
+    mensaje: string;
+    codigo?: string;
+  } | null>(null);
+  const [generandoSku, setGenerandoSku] = useState(false);
+  const [nombreCategoriaActiva, setNombreCategoriaActiva] = useState<string>('');
+
+  // En modo create: autogenerar SKU en montaje si el campo está vacío
+  useEffect(() => {
+    let isMounted = true;
+    async function initSku() {
+      if (mode === 'create' && !initialData?.codigo_interno && !watch('codigo_interno')) {
+        try {
+          setGenerandoSku(true);
+          const res = await comprasService.getSiguienteSku();
+          if (isMounted && res?.siguiente_codigo) {
+            setValue('codigo_interno', res.siguiente_codigo, { shouldValidate: true });
+            setSkuEstado({
+              disponible: true,
+              mensaje: `SKU disponible (${res.siguiente_codigo})`,
+              codigo: res.siguiente_codigo,
+            });
+          }
+        } catch (e) {
+          console.error('Error al inicializar SKU correlativo:', e);
+        } finally {
+          if (isMounted) setGenerandoSku(false);
+        }
+      }
+    }
+    initSku();
+    return () => {
+      isMounted = false;
+    };
+  }, [mode, initialData]);
+
+  // Manejador manual del botón ⚡ Auto-generar SKU
+  const handleGenerarSku = async () => {
+    try {
+      setGenerandoSku(true);
+      const res = await comprasService.getSiguienteSku();
+      if (res?.siguiente_codigo) {
+        setValue('codigo_interno', res.siguiente_codigo, { shouldValidate: true });
+        setSkuEstado({
+          disponible: true,
+          mensaje: `SKU autogenerado sugerido (${res.siguiente_codigo})`,
+          codigo: res.siguiente_codigo,
+        });
+        toast.success(`SKU generado: ${res.siguiente_codigo}`, {
+          description: 'Código correlativo formal asignado sin colisiones.',
+        });
+      }
+    } catch (e) {
+      console.error('Error generando SKU:', e);
+      toast.error('No se pudo generar el siguiente SKU');
+    } finally {
+      setGenerandoSku(false);
+    }
+  };
+
+  // Debounced validación de unicidad cuando el usuario escribe manualmente en codigo_interno
+  const codigoInternoWatch = watch('codigo_interno');
+  useEffect(() => {
+    if (!codigoInternoWatch || !codigoInternoWatch.trim()) {
+      setSkuEstado(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        setSkuValidando(true);
+        const res = await comprasService.validarCodigoInterno(
+          codigoInternoWatch.trim(),
+          initialData?.id_componente
+        );
+        setSkuEstado({
+          disponible: res.disponible,
+          mensaje: res.motivo,
+          codigo: codigoInternoWatch.trim(),
+        });
+      } catch (e) {
+        console.error('Error validando código interno:', e);
+      } finally {
+        setSkuValidando(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [codigoInternoWatch, initialData?.id_componente]);
+
+  // Asistente para sugerir título comercial estándar
+  const refFabricanteWatch = watch('referencia_fabricante');
+  const marcaWatch = watch('marca');
+  const tituloSugerido = useMemo(() => {
+    const cat = nombreCategoriaActiva.trim();
+    const marca = (marcaWatch || '').trim();
+    const ref = (refFabricanteWatch || '').trim();
+    if (!ref) return '';
+    const parts = [cat, marca, ref].filter(Boolean);
+    return parts.join(' ').toUpperCase();
+  }, [nombreCategoriaActiva, marcaWatch, refFabricanteWatch]);
 
   // Selección de Arquetipo
   const handleSelectArquetipo = (tipo: DestinoArticulo) => {
@@ -443,50 +553,115 @@ export function ArticuloForm({
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <Card className="border border-gray-200 shadow-sm bg-white">
         <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
-          <CardTitle className="text-base font-bold text-gray-900 flex items-center gap-2">
-            <Package className="h-5 w-5 text-blue-600" />
-            Identidad Técnica y Taxonomía Jerárquica
+          <CardTitle className="text-base font-bold text-gray-900 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-blue-600" />
+              Identidad Técnica y Taxonomía Jerárquica
+            </div>
+            <Badge variant="outline" className="text-[11px] font-mono border-blue-200 text-blue-700 bg-blue-50/50">
+              Taxonomía Multinivel EAM
+            </Badge>
           </CardTitle>
           <CardDescription className="text-xs text-gray-500">
-            Define la clasificación oficial, códigos de referencia y títulos de búsqueda.
+            Define la clasificación oficial, códigos de referencia y títulos de búsqueda estandarizados.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Categoría Taxonómica */}
-            <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
-              <Label htmlFor="id_categoria" className="text-xs font-semibold text-gray-700">
-                Categoría Taxonómica <span className="text-red-500">*</span>
+          {/* Categoría Taxonómica Jerárquica (Ancho Completo para Flujo en Cascada Guiada) */}
+          <div className="space-y-1.5 border-b border-gray-100 pb-5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="id_categoria" className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                <FolderTree className="h-4 w-4 text-blue-600" />
+                Taxonomía y Clasificación del Recurso <span className="text-red-500">*</span>
               </Label>
-              <HierarchicalCategorySelect
-                id="id_categoria"
-                value={watch('id_categoria')}
-                onChange={(idCat) => {
-                  setValue('id_categoria', idCat as any, { shouldValidate: true });
-                }}
-                placeholder="Seleccionar familia / subfamilia..."
-              />
-              {errors.id_categoria && (
-                <p className="text-xs text-red-500">{errors.id_categoria.message}</p>
-              )}
+              <span className="text-[11px] text-gray-400">
+                Selección multinivel (Familia ➔ Subcategoría ➔ Sub-hija)
+              </span>
             </div>
+            <HierarchicalCategorySelect
+              id="id_categoria"
+              variant="cascading"
+              value={watch('id_categoria')}
+              onChange={(idCat, catObj) => {
+                setValue('id_categoria', idCat as any, { shouldValidate: true });
+                if (catObj?.nombre) {
+                  setNombreCategoriaActiva(catObj.nombre);
+                } else if (!idCat) {
+                  setNombreCategoriaActiva('');
+                }
+              }}
+              placeholder="Seleccionar familia / subfamilia..."
+            />
+            {errors.id_categoria && (
+              <p className="text-xs text-red-500">{errors.id_categoria.message}</p>
+            )}
+          </div>
 
-            {/* Código Interno / SKU Maestro */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Código Interno / SKU Maestro con Auto-generador y Validación en Tiempo Real */}
             <div className="space-y-1.5">
-              <Label htmlFor="codigo_interno" className="text-xs font-semibold text-gray-700">
-                Código Interno / SKU Formal (Opcional)
-              </Label>
-              <Input
-                id="codigo_interno"
-                placeholder={mode === 'create' ? 'Auto-generado (ART-2026-XXXX)' : 'Ej: ART-2026-0001'}
-                {...register('codigo_interno')}
-                className="bg-white font-mono text-xs"
-              />
-              <p className="text-[11px] text-gray-400">
-                {mode === 'create'
-                  ? 'Si se omite, el sistema generará automáticamente un SKU formal correlativo.'
-                  : 'Identificador único del recurso.'}
-              </p>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="codigo_interno" className="text-xs font-semibold text-gray-700">
+                  Código Interno / SKU Formal
+                </Label>
+                {mode === 'create' && (
+                  <button
+                    type="button"
+                    onClick={handleGenerarSku}
+                    disabled={generandoSku}
+                    className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
+                    title="Generar correlativo garantizado ART-YYYY-XXXX"
+                  >
+                    {generandoSku ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3 w-3" />
+                    )}
+                    <span>⚡ Auto-generar SKU</span>
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Input
+                  id="codigo_interno"
+                  placeholder={mode === 'create' ? 'Auto-generado (ART-2026-XXXX)' : 'Ej: ART-2026-0001'}
+                  {...register('codigo_interno')}
+                  className={cn(
+                    'bg-white font-mono text-xs uppercase pr-8',
+                    skuEstado?.disponible === true && 'border-emerald-500 focus-visible:ring-emerald-500',
+                    skuEstado?.disponible === false && 'border-red-500 focus-visible:ring-red-500'
+                  )}
+                />
+                <div className="absolute right-2.5 top-2.5">
+                  {skuValidando && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
+                  {!skuValidando && skuEstado?.disponible === true && (
+                    <Check className="h-3.5 w-3.5 text-emerald-600 stroke-[3]" />
+                  )}
+                  {!skuValidando && skuEstado?.disponible === false && (
+                    <X className="h-3.5 w-3.5 text-red-600 stroke-[3]" />
+                  )}
+                </div>
+              </div>
+              {/* Badge de validación de unicidad en tiempo real */}
+              {skuEstado ? (
+                <div
+                  className={cn(
+                    'text-[11px] flex items-center gap-1.5 p-1.5 rounded font-mono',
+                    skuEstado.disponible
+                      ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                      : 'text-red-700 bg-red-50 border border-red-200'
+                  )}
+                >
+                  <span>{skuEstado.disponible ? '✓' : '⚠️'}</span>
+                  <span className="truncate">{skuEstado.mensaje}</span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-gray-400">
+                  {mode === 'create'
+                    ? 'Correlativo único para Kardex y trazabilidad.'
+                    : 'Identificador único del recurso.'}
+                </p>
+              )}
             </div>
 
             {/* Referencia Neutral del Fabricante */}
@@ -496,9 +671,9 @@ export function ArticuloForm({
               </Label>
               <Input
                 id="referencia_fabricante"
-                placeholder="Ej: W712/95, 6PK1195, LF16015"
+                placeholder="Ej: B96, W712/95, 6PK1195, LF16015"
                 {...register('referencia_fabricante')}
-                className="bg-white font-mono font-medium text-xs"
+                className="bg-white font-mono font-medium text-xs uppercase"
               />
               {errors.referencia_fabricante && (
                 <p className="text-xs text-red-500">{errors.referencia_fabricante.message}</p>
@@ -522,7 +697,7 @@ export function ArticuloForm({
               />
             </div>
 
-            {/* Unidad de Medida */}
+            {/* Unidad de Medida Normalizada */}
             <div className="space-y-1.5">
               <Label htmlFor="codigo_unidad_medida" className="text-xs font-semibold text-gray-700">
                 Unidad de Medida
@@ -530,6 +705,7 @@ export function ArticuloForm({
               <UnidadesMedidaSelect
                 id="codigo_unidad_medida"
                 value={watch('codigo_unidad_medida') || undefined}
+                defaultToUnd={mode === 'create'}
                 onChange={(codigo, unidadObj) => {
                   setValue('codigo_unidad_medida', codigo || null);
                   if (unidadObj?.nombre) {
@@ -539,33 +715,65 @@ export function ArticuloForm({
               />
             </div>
 
-            {/* Tipo Comercial */}
-            <div className="space-y-1.5">
+            {/* Tipo Comercial con Selector Visual de Pills */}
+            <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
               <Label htmlFor="tipo_comercial" className="text-xs font-semibold text-gray-700">
-                Tipo Comercial
+                Tipo Comercial de la Pieza
               </Label>
-              <select
-                id="tipo_comercial"
-                {...register('tipo_comercial')}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="ORIGINAL">Original / OEM</option>
-                <option value="HOMOLOGADO">Homologado / Certificado</option>
-                <option value="GENERICO">Genérico / Aftermarket</option>
-              </select>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'ORIGINAL', label: 'Original / OEM', icon: '⭐', desc: 'Pieza de fábrica' },
+                  { id: 'HOMOLOGADO', label: 'Homologado', icon: '🛡️', desc: 'Certificado OEM' },
+                  { id: 'GENERICO', label: 'Genérico', icon: '⚙️', desc: 'Aftermarket' },
+                ].map((tc) => {
+                  const isSelected = watch('tipo_comercial') === tc.id;
+                  return (
+                    <button
+                      key={tc.id}
+                      type="button"
+                      onClick={() => setValue('tipo_comercial', tc.id as any)}
+                      className={cn(
+                        'flex flex-col items-center justify-center p-2 rounded-lg border text-xs transition-all text-center',
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50/80 text-blue-900 font-bold ring-2 ring-blue-500/20 shadow-sm'
+                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50/80'
+                      )}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>{tc.icon}</span>
+                        <span className="font-semibold text-xs">{tc.label}</span>
+                      </div>
+                      <span className="text-[10px] text-gray-400 mt-0.5">{tc.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* Título Comercial y Descripción Corta */}
+          {/* Título Comercial y Descripción Corta con Asistente Inteligente */}
           <div className="space-y-1.5">
-            <Label htmlFor="descripcion_corta" className="text-xs font-semibold text-gray-700">
-              Descripción Corta / Título Comercial <span className="text-red-500">*</span>
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="descripcion_corta" className="text-xs font-semibold text-gray-700">
+                Descripción Corta / Título Comercial <span className="text-red-500">*</span>
+              </Label>
+              {tituloSugerido && watch('descripcion_corta') !== tituloSugerido && (
+                <button
+                  type="button"
+                  onClick={() => setValue('descripcion_corta', tituloSugerido, { shouldValidate: true })}
+                  className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
+                  title="Aplicar nomenclatura industrial estandarizada"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Sugerir: "{tituloSugerido}"</span>
+                </button>
+              )}
+            </div>
             <Input
               id="descripcion_corta"
-              placeholder="Ej: Filtro de Aceite Blindado para Motor Diésel Cummins ISX"
+              placeholder="Ej: FILTRO DE ACEITE BALDWIN B96"
               {...register('descripcion_corta')}
-              className="bg-white text-xs font-medium"
+              className="bg-white text-xs font-medium uppercase"
             />
             {errors.descripcion_corta && (
               <p className="text-xs text-red-500">{errors.descripcion_corta.message}</p>
@@ -587,7 +795,7 @@ export function ArticuloForm({
           </div>
         </CardContent>
       </Card>
-
+      
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* SECCIÓN 3: PRECIOS, COSTO Y MATEMÁTICA FINANCIERA (MARKUP VS MARGEN) */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}

@@ -100,6 +100,10 @@ export class CategoriasComponenteService {
       }
     }
 
+    for (const nodo of mapaNodos.values()) {
+      (nodo as any).hijos = nodo.subcategorias;
+    }
+
     // 3. Propagar acumulado de artículos recursivamente hacia los padres
     const acumularArticulos = (nodo: CategoriaNodo): number => {
       let sumaTotal = nodo.articulos_directos || 0;
