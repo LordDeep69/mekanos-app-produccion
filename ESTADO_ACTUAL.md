@@ -4,14 +4,14 @@
 **Versión:** 5.7 Release Candidate (RC-7 - Arquitectura de Dominio WMS ⇄ EAM: Referenciación Técnica vs Consumo Físico)  
 **Últimos Commits Clave:** 
 - `feat(catalogo-taxonomia)`: Rediseño Enterprise desde Primeros Principios del **Selector Jerárquico de Categorías (`HierarchicalCategorySelect`)**:
-  - **Árbol Jerárquico Vertical con Acordeón Inteligente (Enterprise Tree View):**
-    - Erradicación definitiva de las columnas horizontales y de la barra de scroll lateral que causaba fricción y desbordamiento en pantallas estándar.
-    - El árbol ocupa el 100% del ancho del contenedor del formulario con scroll vertical limpio (`max-h-[380px]`).
-    - Eliminación de la causa raíz del auto-cierre prematuro: el explorador permanece abierto durante la interacción y sólo se colapsa cuando el usuario pulsa `✓ Listo, aplicar selección` o `Ocultar Árbol`.
-    - **Selección Inmediata & Auto-Expansión Progresiva:** Al pulsar cualquier nodo (Nivel 1, 2, 3 o 4), se registra inmediatamente la selección (`onChange`), se valida el formulario Zod, se actualiza el título sugerido y, si posee hijos, se auto-despliegan verticalmente sus subcategorías con guías de nivel sutiles (`border-l-2 border-blue-200`).
-    - **Navegación Fluida de $N$-Niveles:** Soporta ramas terminales tempranas (e.g. *Filtros de Aceite* con badge `Terminal`) y ramas de profundidad extendida (e.g. *Filtros y Filtración* ➔ *Filtros de Aire* ➔ *FILTRO DE AIRE INTERNO* ➔ *Interno Reciclable*) sin scroll horizontal.
-    - **Controles Rápidos de Productividad:** Botones para `Expandir Todo` y `Colapsar`, más buscador global predictivo con salto directo y auto-expansión de ruta.
-    - **Tarjeta Ejecutiva de Resumen:** Migas de pan interactivas con badges, iconos por familia industrial y botón para reabrir el árbol en cualquier momento.
+  - **Navegación Enfocada Progresiva & Selección Exclusiva (Zero-Saturación):**
+    - Erradicación de la sobrecarga visual de árboles saturados y de columnas horizontales: la interfaz se enfoca exclusivamente en el nivel activo.
+    - **Paso 1 (Familias Raíz):** Se presentan únicamente las 9 Familias Principales de Nivel 1.
+    - **Paso 2 (Enfoque Exclusivo en Subcategorías):** Al pulsar una familia (e.g. *Filtros y Filtración*), se registra la selección de inmediato (`onChange`), se actualizan las migas de pan superiores y la lista oculta todas las demás familias, desplegando exclusivamente las 6 subcategorías directas de esa familia.
+    - **Paso 3+ (Descenso a $N$-Niveles):** Si se selecciona una subcategoría con hijos (e.g. *Filtros de Aire*), la vista avanza exclusivamente a sus hijas (*FILTRO DE AIRE INTERNO* ➔ *Interno Reciclable*). Si es terminal (e.g. *Filtros de Aceite*), se resalta con badge `Terminal` y estado `✓ Asignada`.
+    - **Navegación Bidireccional Fluida:** Botón `← Volver` para subir un nivel, más migas de pan interactivas como "máquina del tiempo" para saltar a cualquier nivel superior con un solo clic.
+    - **Buscador Predictivo Global:** Búsqueda textual instantánea con salto directo al nodo y auto-posicionamiento en su vista enfocada.
+    - **Alta In-Context de Ramas:** Creación rápida en caliente con el padre activo preseleccionado.
 - `feat(catalogo-alta-premium)`: Elevación a Grado Enterprise del **Alta y Edición de Recursos Maestros** (`articulo-form.tsx`):
   - **Selector Jerárquico en Cascada Multinivel (`HierarchicalCategorySelect`):**
     - Corrección del bug de recursividad en árbol (`node.hijos` vs `node.subcategorias`), habilitando la navegación fluida por todas las subcategorías y sub-hijas.

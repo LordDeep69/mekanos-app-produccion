@@ -4,24 +4,23 @@
  * MEKANOS S.A.S - Portal Admin
  * Selector Jerárquico de Categorías Taxonómicas Enterprise (HierarchicalCategorySelect)
  * 
- * Arquitectura de Navegación Vertical con Árbol Acordeón (Enterprise Tree View):
- * - Cero scroll horizontal: todo el flujo se despliega verticalmente respetando el ancho del formulario.
- * - Soporta profundidad arbitraria N (Nivel 1 ➔ Nivel 2 ➔ Nivel 3 ➔ Nivel 4+).
- * - Selección inmediata en el 1er clic: registra y valida el formulario al instante.
- * - Despliegue guiado con líneas de nivel e indentación sutil.
- * - NO se cierra automáticamente durante la navegación interactiva.
- * - Buscador global directo con sugerencias de ruta completa y auto-expansión.
- * - Tarjeta ejecutiva de resumen con migas de pan interactivas.
- * - Alta in-context de familias y subfamilias con padre preseleccionado.
+ * Arquitectura de Navegación Enfocada Progresiva (Exclusive Drill-Down Focus):
+ * - Selección Exclusiva y Vista Limpia: al seleccionar una categoría, se oculta el resto de
+ *   ramas para eliminar saturación y se muestran exclusivamente sus hijas directas.
+ * - Registro Inmediato en el 1er Clic: la selección queda validada y activa en el formulario al instante.
+ * - Migas de Pan Interactivas como "Máquina del Tiempo": saltar a cualquier nivel previo con un clic.
+ * - Botón de Retorno Fluido (`← Volver a [Nivel Previo]`).
+ * - Soporte para N-Niveles arbitrarios (Familia ➔ Subcategoría ➔ Sub-hija ➔ Terminal).
+ * - Buscador Global Predictivo con salto directo a la ruta seleccionada.
+ * - Alta in-context con padre preseleccionado.
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
+  ArrowLeft,
   Check,
-  ChevronDown,
   ChevronRight,
   ChevronsUpDown,
-  Folder,
   FolderPlus,
   FolderTree,
   Loader2,
@@ -41,8 +40,6 @@ import {
   Boxes,
   Tag,
   CheckCircle2,
-  UnfoldVertical,
-  FoldVertical,
   CornerDownRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -136,8 +133,8 @@ export function HierarchicalCategorySelect({
   // Ruta activa de ancestros: [idL1, idL2, idL3, ...]
   const [selectedPath, setSelectedPath] = useState<number[]>([]);
 
-  // Conjunto de IDs de nodos expandidos en el árbol vertical
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  // Nivel / Padre enfocado actualmente en la lista. Si es null, mostramos las Raíces (Nivel 1).
+  const [currentParentId, setCurrentParentId] = useState<number | null>(null);
 
   // Estados de visualización del explorador
   const [isExploradorAbierto, setIsExploradorAbierto] = useState(true);
@@ -198,7 +195,7 @@ export function HierarchicalCategorySelect({
     return map;
   }, [flatList]);
 
-  // 2. Sincronizar selección y auto-expandir ancestros sin auto-cerrar el explorador
+  // 2. Sincronizar selección y ruta activa
   useEffect(() => {
     if (value && mapPorId.has(value)) {
       const encontrada = mapPorId.get(value)!;
@@ -213,16 +210,10 @@ export function HierarchicalCategorySelect({
       }
       setSelectedPath(path);
 
-      // Auto-expandir todos los ancestros de la categoría seleccionada
-      setExpandedIds((prev) => {
-        const next = new Set(prev);
-        path.forEach((id) => next.add(id));
-        return next;
-      });
-
-      // Solo en el primer montaje con valor inicial (ej. edición de artículo) se colapsa.
-      // Durante interacción del usuario, NUNCA se cierra automáticamente.
+      // Si es el primer montaje con valor inicial (ej. editando artículo existente),
+      // enfocamos el padre de este artículo y colapsamos.
       if (!initialMountedRef.current) {
+        setCurrentParentId(encontrada.id_padre || null);
         setIsExploradorAbierto(false);
         initialMountedRef.current = true;
       }
@@ -230,6 +221,7 @@ export function HierarchicalCategorySelect({
       setSelectedCat(null);
       setSelectedPath([]);
       if (!initialMountedRef.current) {
+        setCurrentParentId(null);
         setIsExploradorAbierto(true);
         initialMountedRef.current = true;
       }
@@ -250,41 +242,34 @@ export function HierarchicalCategorySelect({
     };
   }, []);
 
-  // 3. Manejadores de Interacción del Árbol Vertical
-  const toggleExpand = (idCategoria: number) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(idCategoria)) {
-        next.delete(idCategoria);
-      } else {
-        next.add(idCategoria);
-      }
-      return next;
-    });
-  };
+  // 3. Obtener el listado de categorías a mostrar según el enfoque actual
+  const currentParentNode = useMemo(() => {
+    if (currentParentId === null) return null;
+    return mapPorId.get(currentParentId) || null;
+  }, [currentParentId, mapPorId]);
 
-  const expandirTodo = () => {
-    const allIdsWithChildren = new Set<number>();
-    for (const item of flatList) {
-      if (item.hasChildren) {
-        allIdsWithChildren.add(item.id_categoria);
-      }
+  const itemsEnfoqueActual = useMemo(() => {
+    if (currentParentId === null) {
+      // Nivel 1: Familias Principales
+      return arbol;
     }
-    setExpandedIds(allIdsWithChildren);
-  };
-
-  const colapsarTodo = () => {
-    // Mantener únicamente expandidos los ancestros de la selección actual
-    const keep = new Set<number>();
-    if (selectedPath.length > 0) {
-      selectedPath.forEach((id) => keep.add(id));
+    if (currentParentNode) {
+      return getChildren(currentParentNode);
     }
-    setExpandedIds(keep);
-  };
+    return [];
+  }, [currentParentId, currentParentNode, arbol]);
 
-  // Manejador al hacer clic en un nodo: SELECCIONA AL INSTANTE Y AUTO-EXPANDE SI TIENE HIJOS
-  const handleSelectNode = (cat: CategoriaNodo) => {
-    // Reconstruir la ruta ascendente
+  // Nivel que se está visualizando (1 si es raíz, o nivel del padre + 1)
+  const nivelVisualizado = useMemo(() => {
+    if (!currentParentNode) return 1;
+    return currentParentNode.nivel + 1;
+  }, [currentParentNode]);
+
+  // 4. Manejador al seleccionar un ítem en la lista enfocada:
+  // - Si tiene hijos: REGISTRA LA SELECCIÓN y AVANZA de nivel (mostrando solo sus hijas directas).
+  // - Si no tiene hijos (terminal): REGISTRA LA SELECCIÓN y la mantiene seleccionada.
+  const handleSelectItem = (cat: CategoriaNodo) => {
+    // Reconstruir la ruta hasta este nodo
     const path: number[] = [];
     let curr: CategoriaNodo | undefined = cat;
     while (curr) {
@@ -294,21 +279,64 @@ export function HierarchicalCategorySelect({
     setSelectedPath(path);
     setSelectedCat(cat);
 
-    // Si tiene hijos, asegurar que esté expandido para ver sus subcategorías inmediatamente
+    // REGISTRO Y VALIDACIÓN INMEDIATA EN EL FORMULARIO
+    onChange(cat.id_categoria, cat);
+
     const hijos = getChildren(cat);
     if (hijos && hijos.length > 0) {
-      setExpandedIds((prev) => {
-        const next = new Set(prev);
-        path.forEach((id) => next.add(id));
-        return next;
-      });
+      // Avanzar el foco exclusivamente a sus hijas directas
+      setCurrentParentId(cat.id_categoria);
     }
-
-    // REGISTRO Y VALIDACIÓN INMEDIATA (¡El explorador permanece abierto!)
-    onChange(cat.id_categoria, cat);
   };
 
-  // 4. Manejo del Buscador Global Directo
+  // 5. Navegación hacia atrás (Volver un nivel)
+  const handleVolverNivel = () => {
+    if (!currentParentNode) return;
+    const nuevoPadreId = currentParentNode.id_padre || null;
+    setCurrentParentId(nuevoPadreId);
+
+    // Si volvemos, el nodo seleccionado activo pasa a ser el padre al que regresamos
+    if (nuevoPadreId && mapPorId.has(nuevoPadreId)) {
+      const nuevoCat = mapPorId.get(nuevoPadreId)!;
+      setSelectedCat(nuevoCat);
+      onChange(nuevoCat.id_categoria, nuevoCat);
+
+      const path: number[] = [];
+      let curr: CategoriaNodo | undefined = nuevoCat;
+      while (curr) {
+        path.unshift(curr.id_categoria);
+        curr = curr.id_padre ? mapPorId.get(curr.id_padre) : undefined;
+      }
+      setSelectedPath(path);
+    }
+  };
+
+  // Saltar directamente a cualquier nivel desde las migas de pan
+  const handleJumpToLevel = (cat: CategoriaNodo) => {
+    setSelectedCat(cat);
+    onChange(cat.id_categoria, cat);
+
+    const path: number[] = [];
+    let curr: CategoriaNodo | undefined = cat;
+    while (curr) {
+      path.unshift(curr.id_categoria);
+      curr = curr.id_padre ? mapPorId.get(curr.id_padre) : undefined;
+    }
+    setSelectedPath(path);
+
+    const hijos = getChildren(cat);
+    if (hijos && hijos.length > 0) {
+      // Si tiene hijos, enfocar sus hijas
+      setCurrentParentId(cat.id_categoria);
+    } else {
+      // Si es terminal, enfocar el contenedor de sus hermanos
+      setCurrentParentId(cat.id_padre || null);
+    }
+
+    setIsExploradorAbierto(true);
+  };
+
+  // 6. Manejo del Buscador Global Directo
   const resultadosBusqueda = useMemo(() => {
     const q = searchGlobal.toLowerCase().trim();
     if (!q) return [];
@@ -332,12 +360,12 @@ export function HierarchicalCategorySelect({
     setSelectedPath(path);
     setSelectedCat(cat);
 
-    // Expandir toda la rama hasta este nodo
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      path.forEach((id) => next.add(id));
-      return next;
-    });
+    const hijos = getChildren(cat);
+    if (hijos && hijos.length > 0) {
+      setCurrentParentId(cat.id_categoria);
+    } else {
+      setCurrentParentId(cat.id_padre || null);
+    }
 
     onChange(cat.id_categoria, cat);
     setSearchGlobal('');
@@ -348,12 +376,13 @@ export function HierarchicalCategorySelect({
     if (e) e.stopPropagation();
     setSelectedCat(null);
     setSelectedPath([]);
+    setCurrentParentId(null);
     onChange(null, null);
     setSearchGlobal('');
     setIsExploradorAbierto(true);
   };
 
-  // 5. Modal de creación in-context
+  // 7. Modal de creación in-context
   const handleOpenCreateModal = (padreId: number | null = null) => {
     setModalPadreId(padreId);
     setModalForm({
@@ -398,7 +427,7 @@ export function HierarchicalCategorySelect({
       const nuevoArbol = await comprasService.getCategoriasArbol();
       setArbol(nuevoArbol);
 
-      // Reconstruir camino y auto-seleccionar la nueva categoría
+      // Reconstruir camino y auto-seleccionar
       const path: number[] = [];
       let curr: CategoriaNodo | undefined = nueva;
       while (curr) {
@@ -407,13 +436,7 @@ export function HierarchicalCategorySelect({
       }
       setSelectedPath(path);
       setSelectedCat(nueva);
-
-      // Auto-expandir sus ancestros
-      setExpandedIds((prev) => {
-        const next = new Set(prev);
-        path.forEach((id) => next.add(id));
-        return next;
-      });
+      setCurrentParentId(nueva.id_padre || null);
 
       onChange(nueva.id_categoria, nueva);
       setIsModalOpen(false);
@@ -426,7 +449,7 @@ export function HierarchicalCategorySelect({
     }
   };
 
-  // Reconstrucción de la ruta visual de migas de pan (Breadcrumbs)
+  // Migas de pan de ancestros activos
   const rutaBreadcrumbs = useMemo(() => {
     return selectedPath
       .map((id) => mapPorId.get(id))
@@ -434,176 +457,7 @@ export function HierarchicalCategorySelect({
   }, [selectedPath, mapPorId]);
 
   // ============================================================================
-  // COMPONENTE RECURSIVO: NODO DEL ÁRBOL VERTICAL (TreeNode)
-  // ============================================================================
-  const renderTreeNode = (node: CategoriaNodo, depth = 0) => {
-    const hijos = getChildren(node);
-    const hasChildren = Array.isArray(hijos) && hijos.length > 0;
-    const isExpanded = expandedIds.has(node.id_categoria);
-    const isSelected = selectedCat?.id_categoria === node.id_categoria;
-    const isInPath = selectedPath.includes(node.id_categoria);
-    const IconComp = getCategoryIcon(node.nombre, node.nivel);
-
-    return (
-      <div key={node.id_categoria} className="space-y-1">
-        {/* FILA DEL NODO */}
-        <div
-          className={cn(
-            'group flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-all border',
-            isSelected
-              ? 'bg-blue-600 text-white font-semibold border-blue-600 shadow-sm ring-2 ring-blue-500/20'
-              : isInPath
-              ? 'bg-blue-50/70 border-blue-200 text-blue-950 font-medium'
-              : 'bg-white hover:bg-gray-50/90 border-gray-100 hover:border-gray-200 text-gray-800'
-          )}
-          style={{ marginLeft: `${depth * 18}px` }}
-        >
-          {/* LADO IZQUIERDO: Chevron + Icono + Nombre + Badges */}
-          <div
-            className="flex items-center gap-2 truncate cursor-pointer flex-1 min-w-0"
-            onClick={() => handleSelectNode(node)}
-          >
-            {/* Botón Expander Chevron */}
-            {hasChildren ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleExpand(node.id_categoria);
-                }}
-                className={cn(
-                  'flex h-5 w-5 items-center justify-center rounded-md transition-transform shrink-0',
-                  isSelected
-                    ? 'text-white hover:bg-blue-700'
-                    : 'text-gray-500 hover:bg-gray-200 hover:text-gray-900',
-                  isExpanded && 'rotate-90'
-                )}
-                title={isExpanded ? 'Colapsar subcategorías' : 'Expandir subcategorías'}
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <span className="w-5 shrink-0 flex items-center justify-center">
-                <span
-                  className={cn(
-                    'h-1.5 w-1.5 rounded-full',
-                    isSelected ? 'bg-white' : 'bg-gray-300'
-                  )}
-                />
-              </span>
-            )}
-
-            {/* Icono de Categoría */}
-            <div
-              className={cn(
-                'flex h-6 w-6 items-center justify-center rounded-lg shrink-0',
-                isSelected
-                  ? 'bg-blue-500 text-white'
-                  : node.nivel === 1
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'bg-gray-100 text-gray-600'
-              )}
-            >
-              <IconComp className="h-3.5 w-3.5" />
-            </div>
-
-            {/* Nombre de la Categoría */}
-            <span className="truncate font-semibold text-xs tracking-tight">
-              {node.nombre}
-            </span>
-
-            {/* Badge de Nivel */}
-            <Badge
-              variant="outline"
-              className={cn(
-                'text-[10px] px-1.5 py-0 font-mono shrink-0 hidden sm:inline-flex',
-                isSelected
-                  ? 'bg-blue-700 border-blue-500 text-white'
-                  : 'bg-gray-50 border-gray-200 text-gray-500'
-              )}
-            >
-              Nivel {node.nivel}
-            </Badge>
-
-            {/* Badge de Subcategorías Hijas */}
-            {hasChildren && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  'text-[10px] px-1.5 py-0 font-mono shrink-0',
-                  isSelected
-                    ? 'bg-blue-700 border-blue-500 text-white'
-                    : 'bg-blue-50/80 border-blue-200 text-blue-700 font-semibold'
-                )}
-              >
-                {hijos.length} {hijos.length === 1 ? 'subcat' : 'subcats'}
-              </Badge>
-            )}
-
-            {/* Badge de Terminal si no tiene hijos */}
-            {!hasChildren && node.nivel > 1 && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  'text-[9px] px-1.5 py-0 font-mono shrink-0 hidden sm:inline-flex',
-                  isSelected
-                    ? 'bg-emerald-600 text-white border-emerald-500'
-                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                )}
-              >
-                Terminal
-              </Badge>
-            )}
-          </div>
-
-          {/* LADO DERECHO: Checkmark / Elegir + Botón Crear Subcategoría */}
-          <div className="flex items-center gap-1.5 shrink-0 ml-2">
-            {isSelected ? (
-              <span className="flex items-center gap-1 text-[11px] font-bold text-white bg-blue-700 px-2 py-0.5 rounded-md shadow-2xs">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-                <span>Asignada</span>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handleSelectNode(node)}
-                className="opacity-0 group-hover:opacity-100 text-[11px] font-semibold text-blue-600 hover:text-blue-800 px-2 py-0.5 rounded hover:bg-blue-50 transition-all"
-              >
-                Elegir
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleOpenCreateModal(node.id_categoria);
-              }}
-              className={cn(
-                'p-1 rounded-md transition-colors',
-                isSelected
-                  ? 'text-blue-200 hover:text-white hover:bg-blue-700'
-                  : 'text-gray-400 hover:text-blue-700 hover:bg-blue-50'
-              )}
-              title={`Añadir subcategoría dentro de "${node.nombre}"`}
-            >
-              <FolderPlus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* SUBCATEGORÍAS HIJAS (INDENTADAS VERTICALMENTE CON GUÍA) */}
-        {hasChildren && isExpanded && (
-          <div className="relative pl-3 space-y-1 my-1 border-l-2 border-blue-200/70 ml-4">
-            {hijos.map((hijo) => renderTreeNode(hijo, depth + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // ============================================================================
-  // RENDER MODO 1: ÁRBOL ACORDEÓN VERTICAL ENTERPRISE (variant === 'cascading')
+  // RENDER MODO 1: DRILL-DOWN EXCLUSIVO ENTERPRISE (variant === 'cascading')
   // ============================================================================
   if (variant === 'cascading') {
     return (
@@ -612,7 +466,7 @@ export function HierarchicalCategorySelect({
         {selectedCat && (
           <div className="relative overflow-hidden rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 via-white to-blue-50/40 p-3.5 shadow-xs transition-all">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              {/* Información y Migas de Pan */}
+              {/* Información y Migas de Pan Interactivas */}
               <div className="space-y-1.5 min-w-0">
                 <div className="flex items-center gap-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
@@ -633,7 +487,7 @@ export function HierarchicalCategorySelect({
                   )}
                 </div>
 
-                {/* Migas de pan visuales con navegación interactiva */}
+                {/* Migas de pan clicables que funcionan como saltos rápidos en el árbol */}
                 <div className="flex flex-wrap items-center gap-1.5 text-xs">
                   {rutaBreadcrumbs.map((node, idx) => {
                     const isLast = idx === rutaBreadcrumbs.length - 1;
@@ -641,16 +495,17 @@ export function HierarchicalCategorySelect({
                       <React.Fragment key={node.id_categoria}>
                         <button
                           type="button"
-                          onClick={() => handleSelectNode(node)}
+                          onClick={() => handleJumpToLevel(node)}
                           className={cn(
-                            'font-semibold px-2 py-0.5 rounded-md transition-colors text-left',
+                            'font-semibold px-2 py-0.5 rounded-md transition-colors text-left flex items-center gap-1',
                             isLast
                               ? 'bg-blue-600 text-white font-bold shadow-xs'
-                              : 'bg-white border border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50/50'
+                              : 'bg-white border border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50/60'
                           )}
-                          title={`Cambiar selección a "${node.nombre}"`}
+                          title={`Ir a ${node.nombre}`}
                         >
-                          {node.nombre}
+                          <span>{node.nombre}</span>
+                          {isLast && <Check className="h-3 w-3 stroke-[3]" />}
                         </button>
                         {!isLast && <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />}
                       </React.Fragment>
@@ -668,7 +523,7 @@ export function HierarchicalCategorySelect({
                   onClick={() => setIsExploradorAbierto(!isExploradorAbierto)}
                   className="h-8 text-xs font-semibold text-blue-700 border-blue-200 bg-white hover:bg-blue-50"
                 >
-                  {isExploradorAbierto ? 'Ocultar Árbol' : 'Explorar / Cambiar'}
+                  {isExploradorAbierto ? 'Ocultar Navegador' : 'Explorar / Cambiar'}
                 </Button>
                 {showClearButton && !disabled && (
                   <Button
@@ -677,7 +532,7 @@ export function HierarchicalCategorySelect({
                     size="sm"
                     onClick={handleClear}
                     className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                    title="Quitar clasificación"
+                    title="Reiniciar selección y volver a Familias Principales"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -687,12 +542,11 @@ export function HierarchicalCategorySelect({
           </div>
         )}
 
-        {/* ÁRBOL ACORDEÓN VERTICAL ENTERPRISE (100% ANCHO, CERO SCROLL HORIZONTAL) */}
+        {/* WORKBENCH DE NAVEGACIÓN ENFOCADA Y EXCLUSIVA */}
         {isExploradorAbierto && (
           <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-3.5 shadow-xs space-y-3 animate-in fade-in-0 duration-200">
-            {/* Cabecera con Buscador Global Directo y Controles de Expansión */}
+            {/* Cabecera con Buscador Global Directo */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-              {/* Buscador predictivo global */}
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <Input
@@ -755,55 +609,174 @@ export function HierarchicalCategorySelect({
                 )}
               </div>
 
-              {/* Controles Rápidos: Expandir/Colapsar y Nueva Raíz */}
+              {/* Botón de Creación en este nivel */}
               <div className="flex items-center gap-1.5 shrink-0">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={expandirTodo}
-                  className="h-9 px-2 text-[11px] font-semibold text-gray-600 bg-white border-gray-300 hover:bg-gray-100"
-                  title="Desplegar todas las subcategorías"
-                >
-                  <UnfoldVertical className="h-3.5 w-3.5 mr-1" />
-                  <span className="hidden sm:inline">Expandir Todo</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={colapsarTodo}
-                  className="h-9 px-2 text-[11px] font-semibold text-gray-600 bg-white border-gray-300 hover:bg-gray-100"
-                  title="Colapsar ramas secundarias"
-                >
-                  <FoldVertical className="h-3.5 w-3.5 mr-1" />
-                  <span className="hidden sm:inline">Colapsar</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleOpenCreateModal(null)}
+                  onClick={() => handleOpenCreateModal(currentParentId)}
                   className="h-9 text-xs font-semibold text-blue-700 bg-white border-gray-300 hover:bg-blue-50 shadow-xs"
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  <span>Nueva Raíz</span>
+                  <span>
+                    {currentParentId === null
+                      ? 'Nueva Familia Raíz'
+                      : 'Nueva Subcategoría'}
+                  </span>
                 </Button>
               </div>
             </div>
 
-            {/* CONTENEDOR VERTICAL DEL ÁRBOL JERÁRQUICO */}
-            <div className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-2xs">
+            {/* BARRA DE ENFOQUE Y RETORNO (Sólo visible cuando no estamos en la raíz) */}
+            {currentParentNode && (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-blue-50/80 border border-blue-200 text-xs">
+                <div className="flex items-center gap-2 truncate">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleVolverNivel}
+                    className="h-7 px-2.5 text-xs font-bold text-blue-700 bg-white border-blue-300 hover:bg-blue-100/70 shadow-2xs flex items-center gap-1"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span>Volver</span>
+                  </Button>
+                  <div className="truncate">
+                    <span className="text-[11px] text-gray-500 font-medium">Subcategorías de: </span>
+                    <span className="font-bold text-blue-950 uppercase">{currentParentNode.nombre}</span>
+                  </div>
+                </div>
+
+                <Badge variant="outline" className="text-[10px] bg-white border-blue-300 text-blue-700 font-mono shrink-0">
+                  Nivel {nivelVisualizado} ({itemsEnfoqueActual.length})
+                </Badge>
+              </div>
+            )}
+
+            {/* LISTA EXCLUSIVA Y LIMPIA DE CATEGORÍAS (SIN SATURACIÓN) */}
+            <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-2xs">
               {isLoading ? (
                 <div className="py-12 text-center text-gray-500">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-blue-600" />
                   <p className="mt-2 text-xs font-medium text-gray-600">
-                    Cargando estructura taxonómica del catálogo...
+                    Cargando catálogo taxonómico...
                   </p>
                 </div>
+              ) : itemsEnfoqueActual.length > 0 ? (
+                <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
+                  {itemsEnfoqueActual.map((cat) => {
+                    const isSelected = selectedCat?.id_categoria === cat.id_categoria;
+                    const isInPath = selectedPath.includes(cat.id_categoria);
+                    const hijos = getChildren(cat);
+                    const hasChildren = Array.isArray(hijos) && hijos.length > 0;
+                    const IconComp = getCategoryIcon(cat.nombre, cat.nivel);
+
+                    return (
+                      <div
+                        key={cat.id_categoria}
+                        onClick={() => handleSelectItem(cat)}
+                        className={cn(
+                          'group flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition-all',
+                          isSelected
+                            ? 'bg-blue-600 text-white font-semibold border-blue-600 shadow-sm ring-2 ring-blue-500/20'
+                            : isInPath
+                            ? 'bg-blue-50/70 border-blue-200 text-blue-950 font-medium'
+                            : 'bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-800'
+                        )}
+                      >
+                        {/* Lado Izquierdo: Icono + Nombre + Badges */}
+                        <div className="flex items-center gap-2.5 truncate flex-1 min-w-0">
+                          <div
+                            className={cn(
+                              'flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-colors',
+                              isSelected
+                                ? 'bg-blue-500 text-white'
+                                : cat.nivel === 1
+                                ? 'bg-blue-50 text-blue-600'
+                                : 'bg-gray-100 text-gray-600'
+                            )}
+                          >
+                            <IconComp className="h-4 w-4" />
+                          </div>
+
+                          <div className="flex flex-col truncate">
+                            <span className="font-semibold text-xs tracking-tight truncate">
+                              {cat.nombre}
+                            </span>
+                            {cat.codigo_categoria && (
+                              <span
+                                className={cn(
+                                  'text-[10px] font-mono',
+                                  isSelected ? 'text-blue-100' : 'text-gray-400'
+                                )}
+                              >
+                                {cat.codigo_categoria}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Lado Derecho: Indicadores de Acción y Jerarquía */}
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          {isSelected && (
+                            <span className="flex items-center gap-1 text-[11px] font-bold text-white bg-blue-700 px-2 py-0.5 rounded-md shadow-2xs">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+                              <span>Asignada</span>
+                            </span>
+                          )}
+
+                          {hasChildren ? (
+                            <div className="flex items-center gap-1">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  'text-[10px] px-1.5 py-0 font-mono',
+                                  isSelected
+                                    ? 'bg-blue-700 border-blue-500 text-white'
+                                    : 'bg-blue-50 border-blue-200 text-blue-700 font-semibold'
+                                )}
+                              >
+                                {hijos.length} {hijos.length === 1 ? 'subcat' : 'subcats'}
+                              </Badge>
+                              <ChevronRight
+                                className={cn(
+                                  'h-4 w-4 transition-transform group-hover:translate-x-0.5',
+                                  isSelected ? 'text-white' : 'text-gray-400 group-hover:text-blue-600'
+                                )}
+                              />
+                            </div>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'text-[9px] px-1.5 py-0 font-mono',
+                                isSelected
+                                  ? 'bg-emerald-600 text-white border-emerald-500'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              )}
+                            >
+                              Terminal
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                <div className="max-h-[380px] overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
-                  {arbol.map((raiz) => renderTreeNode(raiz, 0))}
+                <div className="py-8 text-center text-gray-500 text-xs space-y-2">
+                  <p>No hay subcategorías registradas en este nivel.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenCreateModal(currentParentId)}
+                    className="h-7 text-xs text-blue-700 border-blue-200"
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Crear primera subcategoría aquí
+                  </Button>
                 </div>
               )}
             </div>
@@ -819,7 +792,7 @@ export function HierarchicalCategorySelect({
                   </span>
                 ) : (
                   <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-medium">
-                    Haz clic en una categoría o subcategoría para seleccionarla de inmediato
+                    Haz clic en una categoría para asignarla de inmediato
                   </span>
                 )}
               </div>
