@@ -3,6 +3,18 @@
 **Fecha de Actualización:** 22 de Octubre de 2026  
 **Versión:** 5.7 Release Candidate (RC-7 - Arquitectura de Dominio WMS ⇄ EAM: Referenciación Técnica vs Consumo Físico)  
 **Últimos Commits Clave:** 
+- `feat(catalogo-taxonomia)`: Rediseño Enterprise desde Primeros Principios del **Selector Jerárquico de Categorías (`HierarchicalCategorySelect`)**:
+  - **Navegador Miller Columns Dinámico de Profundidad Arbitraria ($N$-Niveles):**
+    - Erradicación definitiva de los 3 selects nativos rígidos y estáticos (`📁`, `↳`, `✓ Nivel terminal alcanzado`) que limitaban la profundidad a 3 niveles y fallaban en categorías de 4 niveles o terminales a nivel 2.
+    - Columnas generadas reactivamente a partir del arreglo de ancestros activos `selectedPath`: se expanden fluidamente a 1, 2, 3 o 4 niveles según la anatomía real de la base de datos (e.g., `Filtros de Aceite` terminal a nivel 2 no genera columnas vacías; `Filtros de Aire` ➔ `FILTRO DE AIRE INTERNO` ➔ `Interno Reciclable` despliega sus 4 columnas de forma elegante).
+  - **Detección y Registro Inmediato en el 1er Clic:**
+    - Hacer clic sobre cualquier categoría en cualquier nivel invoca inmediatamente `onChange(id_categoria, categoria)` validando el schema Zod y sincronizando el asistente de nomenclatura al instante, sin forzar la selección de un nodo hijo.
+  - **Tarjeta Ejecutiva de Resumen & Migas de Pan Interactivas:**
+    - Cabecera resumen que expone la ruta taxonómica completa con iconos contextuales por familia industrial (`Filter`, `Droplets`, `Zap`, `Thermometer`, `Cog`, etc.), código de categoría y botón "Explorar / Cambiar" para abrir y cerrar el workbench.
+  - **Buscador Global Predictivo de Ruta Completa:**
+    - Barra de búsqueda con autocompletado fuzzy sobre toda la jerarquía que salta directamente a la categoría elegida reconstruyendo todas las columnas y su árbol genealógico.
+  - **Alta In-Context de Nuevas Ramas:**
+    - Botón `+ Añadir en este nivel` al pie de cada columna para crear ramas hijas o raíces en caliente con el padre preseleccionado.
 - `feat(catalogo-alta-premium)`: Elevación a Grado Enterprise del **Alta y Edición de Recursos Maestros** (`articulo-form.tsx`):
   - **Selector Jerárquico en Cascada Multinivel (`HierarchicalCategorySelect`):**
     - Corrección del bug de recursividad en árbol (`node.hijos` vs `node.subcategorias`), habilitando la navegación fluida por todas las subcategorías y sub-hijas.
