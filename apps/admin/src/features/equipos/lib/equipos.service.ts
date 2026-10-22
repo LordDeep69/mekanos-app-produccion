@@ -12,8 +12,23 @@ import type {
   CreateEquipoResponse,
   EquipoDetalle,
   EquiposListadoResponse,
+  RegistrarLecturaResponse,
+  UpdateDatosEspecificosPayload,
   UpdateEquipoPayload
 } from '../types';
+
+export interface ClienteOption {
+  id_cliente: number;
+  codigo_cliente?: string;
+  nombre_comercial?: string;
+  persona?: {
+    razon_social?: string;
+    nombre_comercial?: string;
+    primer_nombre?: string;
+    primer_apellido?: string;
+    numero_identificacion?: string;
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SERVICIO EQUIPOS
@@ -95,6 +110,20 @@ export const equiposService = {
   ): Promise<CambiarEstadoResponse> {
     const response = await apiClient.patch<CambiarEstadoResponse>(
       `/equipos/${id}/cambiar-estado`,
+      payload
+    );
+    return response.data;
+  },
+
+  /**
+   * ✅ 08-ENE-2026: Registrar lectura de horómetro
+   */
+  async registrarLecturaHorometro(
+    id: number,
+    payload: { horas_lectura: number; observaciones?: string }
+  ): Promise<RegistrarLecturaResponse> {
+    const response = await apiClient.post<RegistrarLecturaResponse>(
+      `/equipos/${id}/lectura-horometro`,
       payload
     );
     return response.data;

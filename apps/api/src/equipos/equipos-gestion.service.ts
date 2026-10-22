@@ -7,7 +7,7 @@
  * 3. Todo en una transacción atómica
  */
 
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException, Optional } from '@nestjs/common';
 import {
   Prisma,
   aplicacion_bomba_enum,
@@ -468,11 +468,25 @@ export class EquiposGestionService {
         };
       }
 
-      // Filtro por tipo (GENERADOR, BOMBA)
+      // Filtro por tipo (GENERADOR, BOMBA, COMPRESOR, MOTOR)
       if (tipo === 'GENERADOR') {
         where.equipos_generador = { isNot: null };
       } else if (tipo === 'BOMBA') {
         where.equipos_bomba = { isNot: null };
+      } else if (tipo === 'COMPRESOR') {
+        where.tipos_equipo = { codigo_tipo: { in: ['COMP', 'COMPRESOR'] } };
+      } else if (tipo === 'MOTOR') {
+        where.equipos_motor = { isNot: null };
+        where.equipos_generador = { is: null };
+        where.equipos_bomba = { is: null };
+      }
+
+      // Base filter for global park KPI summary (ignores search/tipo/estado filter so KPIs show the park overview)
+      const baseParkWhere: any = { activo: true };
+      if (id_cliente) baseParkWhere.id_cliente = id_cliente;
+      if (id_sede) baseParkWhere.id_sede = id_sede;
+      if (idAsesorAsignado) {
+        baseParkWhere.clientes = { id_asesor_asignado: idAsesorAsignado };
       }
 
       // Búsqueda por código, nombre, número de serie o cliente
@@ -483,6 +497,7 @@ export class EquiposGestionService {
           { nombre_equipo: { contains: searchTerm, mode: 'insensitive' } },
           { numero_serie_equipo: { contains: searchTerm, mode: 'insensitive' } },
           { clientes: { persona: { razon_social: { contains: searchTerm, mode: 'insensitive' } } } },
+          { clientes: { persona: { nombre_comercial: { contains: searchTerm, mode: 'insensitive' } } } },
           { clientes: { persona: { primer_nombre: { contains: searchTerm, mode: 'insensitive' } } } },
         ];
       }
@@ -492,7 +507,17 @@ export class EquiposGestionService {
       if (sortBy === 'nombre') orderBy = { nombre_equipo: sortOrder };
       if (sortBy === 'fecha') orderBy = { fecha_creacion: sortOrder };
 
-      const [equipos, total] = await Promise.all([
+      const [
+        equipos,
+        total,
+        totalParque,
+        totalGeneradores,
+        totalBombas,
+        totalOperativos,
+        totalEnReparacion,
+        totalFueraServicio,
+        totalCriticidadAlta,
+      ] = await Promise.all([
         this.prisma.equipos.findMany({
           where,
           skip,
@@ -516,13 +541,20 @@ export class EquiposGestionService {
           orderBy,
         }),
         this.prisma.equipos.count({ where }),
+        this.prisma.equipos.count({ where: baseParkWhere }),
+        this.prisma.equipos.count({ where: { ...baseParkWhere, equipos_generador: { isNot: null } } }),
+        this.prisma.equipos.count({ where: { ...baseParkWhere, equipos_bomba: { isNot: null } } }),
+        this.prisma.equipos.count({ where: { ...baseParkWhere, estado_equipo: 'OPERATIVO' } }),
+        this.prisma.equipos.count({ where: { ...baseParkWhere, estado_equipo: 'EN_REPARACION' } }),
+        this.prisma.equipos.count({ where: { ...baseParkWhere, estado_equipo: 'FUERA_SERVICIO' } }),
+        this.prisma.equipos.count({ where: { ...baseParkWhere, criticidad: { in: ['ALTA', 'CRITICA'] } } }),
       ]);
 
       const data = equipos.map((eq) => {
         const persona = eq.clientes?.persona;
         // Priorizar Nombre sobre Razón Social si existe (Consistente con solicitud del usuario)
         const nombrePersona = `${persona?.primer_nombre || ''} ${persona?.primer_apellido || ''}`.trim();
-        const nombreCliente = nombrePersona || persona?.razon_social || 'Sin nombre';
+        const nombreCliente = nombrePersona || persona?.razon_social || persona?.nombre_comercial || 'Sin nombre';
 
         // Determinar tipo según tabla hija y asegurar id_tipo_equipo
         let tipoEquipo: string = eq.tipos_equipo?.codigo_tipo || 'DESCONOCIDO';
@@ -542,12 +574,17 @@ export class EquiposGestionService {
         } else if (eq.equipos_bomba) {
           tipoEquipo = 'BOMBA';
           datosEspecificos = { ...eq.equipos_bomba, motor: eq.equipos_motor };
+        } else if (eq.equipos_motor) {
+          tipoEquipo = 'MOTOR';
+          datosEspecificos = { motor: eq.equipos_motor };
         }
 
         return {
           id_equipo: eq.id_equipo,
           codigo_equipo: eq.codigo_equipo,
           nombre_equipo: eq.nombre_equipo,
+          numero_serie_equipo: eq.numero_serie_equipo,
+          horas_actuales: eq.horas_actuales ? Number(eq.horas_actuales) : 0,
           tipo: tipoEquipo,
           id_tipo_equipo: eq.id_tipo_equipo, // Crucial para filtrado frontend
           tipos_equipo: eq.tipos_equipo,     // Crucial para metadatos frontend
@@ -562,12 +599,23 @@ export class EquiposGestionService {
             ? { id_sede: eq.sedes_cliente.id_sede, nombre: eq.sedes_cliente.nombre_sede }
             : null,
           fecha_creacion: eq.fecha_creacion,
+          motor: eq.equipos_motor,
           datos_especificos: datosEspecificos,
         };
       });
 
       return {
         data,
+        resumen: {
+          total_parque: totalParque,
+          generadores: totalGeneradores,
+          bombas: totalBombas,
+          otros: Math.max(0, totalParque - totalGeneradores - totalBombas),
+          operativos: totalOperativos,
+          en_reparacion: totalEnReparacion,
+          fuera_servicio: totalFueraServicio,
+          criticidad_alta: totalCriticidadAlta,
+        },
         pagination: {
           total,
           page,
@@ -1184,7 +1232,7 @@ export class EquiposGestionService {
       where: { id_equipo: idEquipo },
       include: {
         tipos_equipo: true,
-        cliente: {
+        clientes: {
           include: {
             persona: true,
           },
@@ -1307,13 +1355,336 @@ export class EquiposGestionService {
         id_equipo: equipo.id_equipo,
         codigo_equipo: equipo.codigo_equipo,
         nombre_equipo: equipo.nombre_equipo,
-        tipo: equipo.tipo,
+        tipo: equipo.tipos_equipo?.codigo_tipo || 'GENERADOR',
         horas_actuales: equipo.horas_actuales,
         ubicacion_texto: equipo.ubicacion_texto,
-        cliente_nombre: equipo.cliente?.persona?.nombre_comercial || equipo.cliente?.persona?.razon_social || equipo.cliente?.persona?.nombre_completo,
+        cliente_nombre:
+          equipo.clientes?.persona?.nombre_comercial ||
+          equipo.clientes?.persona?.razon_social ||
+          equipo.clientes?.persona?.nombre_completo,
       },
       total_intervenciones: ordenes.length,
       intervenciones: ordenes,
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXPEDIENTE LOGÍSTICO 360° DEL ACTIVO: BOM + HISTORIAL WMS + ÓRDENES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Catálogo cerrado de aplicaciones del BOM. Cada aplicación se mapea a un
+   * `tipos_componente` real (FK obligatoria de `componentes_equipo`).
+   */
+  private static readonly BOM_APLICACIONES: Record<string, { label: string; tipo?: number }> = {
+    FILTRO_ACEITE: { label: 'Filtro de Aceite', tipo: 3 },
+    FILTRO_COMBUSTIBLE: { label: 'Filtro de Combustible', tipo: 2 },
+    FILTRO_SEPARADOR_AGUA: { label: 'Filtro Separador de Agua', tipo: 4 },
+    FILTRO_AIRE: { label: 'Filtro de Aire', tipo: 1 },
+    LUBRICANTE_MOTOR: { label: 'Aceite de Motor', tipo: 11 },
+    REFRIGERANTE: { label: 'Refrigerante', tipo: 12 },
+    CORREA: { label: 'Correa', tipo: 5 },
+    BATERIA: { label: 'Batería de Arranque', tipo: 7 },
+    SELLO_MECANICO: { label: 'Sello Mecánico', tipo: 8 },
+    RODAMIENTO: { label: 'Rodamiento / Cojinete', tipo: 10 },
+    REPUESTO_GENERAL: { label: 'Repuesto General' },
+  };
+
+  /**
+   * Resuelve el stock físico por bodega de un artículo a partir de sus lotes
+   * activos y la última ubicación de cada lote (misma regla que el módulo WMS).
+   */
+  private resolverStockPorBodega(componente: any) {
+    const mapa = new Map<number, { id_ubicacion: number; codigo: string; nombre: string; stock: number }>();
+    for (const lote of componente?.lotes_componentes || []) {
+      const mov = lote.movimientos_inventario?.[0];
+      const ubi = mov?.ubicaciones_bodega;
+      const idUbi = ubi?.id_ubicacion ?? mov?.id_ubicacion ?? 1;
+      const actual = mapa.get(idUbi) || {
+        id_ubicacion: idUbi,
+        codigo: ubi?.codigo_ubicacion || 'BOD-CENTRAL',
+        nombre: ubi?.zona || 'Bodega Central Taller',
+        stock: 0,
+      };
+      actual.stock += Number(lote.cantidad_actual ?? 0);
+      mapa.set(idUbi, actual);
+    }
+    if (mapa.size === 0 && (componente?.stock_actual ?? 0) > 0) {
+      mapa.set(1, { id_ubicacion: 1, codigo: 'BOD-CENTRAL', nombre: 'Bodega Central Taller', stock: Number(componente.stock_actual) });
+    }
+    return Array.from(mapa.values()).filter((b) => b.stock > 0);
+  }
+
+  private mapearBomItem(rel: any) {
+    const c = rel.catalogo_componentes;
+    const specs = (rel.especificaciones_adicionales || {}) as Record<string, any>;
+    const stockActual = Number(c?.stock_actual ?? 0);
+    const stockMinimo = Number(c?.stock_minimo ?? 0);
+    const estadoStock = stockActual <= 0 ? 'AGOTADO' : stockMinimo > 0 && stockActual <= stockMinimo ? 'BAJO' : 'OK';
+    const categoria = specs.categoria_aplicacion || 'REPUESTO_GENERAL';
+    return {
+      id_componente_equipo: rel.id_componente_equipo,
+      id_componente: rel.id_componente,
+      categoria_aplicacion: categoria,
+      aplicacion_label: EquiposGestionService.BOM_APLICACIONES[categoria]?.label || rel.posicion_descripcion,
+      posicion_descripcion: rel.posicion_descripcion,
+      cantidad_requerida: Number(specs.cantidad_requerida ?? rel.unidades_por_cambio ?? 1),
+      frecuencia_cambio_horas: specs.frecuencia_cambio_horas != null ? Number(specs.frecuencia_cambio_horas) : null,
+      notas_tecnicas: rel.notas,
+      fecha_ultimo_cambio: rel.fecha_ultimo_cambio,
+      sku: c?.codigo_interno ?? null,
+      referencia_fabricante: c?.referencia_fabricante ?? null,
+      descripcion: c?.descripcion_corta ?? rel.referencia_manual ?? 'Artículo sin descripción',
+      marca: c?.marca ?? rel.marca_manual ?? null,
+      unidad: c?.unidad_medida ?? 'UND',
+      precio_compra: Number(c?.precio_compra ?? 0),
+      stock_actual: stockActual,
+      stock_minimo: stockMinimo,
+      estado_stock: estadoStock,
+      bodegas: c ? this.resolverStockPorBodega(c) : [],
+    };
+  }
+
+  private static readonly BOM_INCLUDE = {
+    catalogo_componentes: {
+      include: {
+        lotes_componentes: {
+          where: { cantidad_actual: { gt: 0 } },
+          include: {
+            movimientos_inventario: {
+              take: 1,
+              orderBy: { fecha_movimiento: 'desc' as const },
+              include: { ubicaciones_bodega: true },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  /**
+   * GET /api/equipos/:id/ficha-logistica
+   * Consolida en una sola lectura: BOM compatible con stock WMS en vivo,
+   * historial de repuestos instalados (componentes_usados vía OTs) y OTs del equipo.
+   */
+  async getFichaLogistica(idEquipo: number) {
+    const equipo = await this.prisma.equipos.findUnique({
+      where: { id_equipo: idEquipo },
+      select: { id_equipo: true, codigo_equipo: true },
+    });
+    if (!equipo) {
+      throw new NotFoundException(`Equipo con ID ${idEquipo} no encontrado`);
+    }
+
+    const [bomRows, ordenes] = await Promise.all([
+      this.prisma.componentes_equipo.findMany({
+        where: { id_equipo: idEquipo, activo: { not: false } },
+        include: EquiposGestionService.BOM_INCLUDE,
+        orderBy: [{ posicion_descripcion: 'asc' }, { id_componente_equipo: 'asc' }],
+      }),
+      this.prisma.ordenes_servicio.findMany({
+        where: {
+          OR: [{ id_equipo: idEquipo }, { ordenes_equipos: { some: { id_equipo: idEquipo } } }],
+        },
+        orderBy: [{ fecha_programada: 'desc' }, { id_orden_servicio: 'desc' }],
+        select: {
+          id_orden_servicio: true,
+          numero_orden: true,
+          fecha_programada: true,
+          fecha_creacion: true,
+          fecha_fin_real: true,
+          prioridad: true,
+          total_general: true,
+          estados_orden: { select: { codigo_estado: true, nombre_estado: true, color_hex: true } },
+          tipos_servicio: { select: { nombre_tipo: true, categoria: true } },
+          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+            select: { persona: { select: { nombre_completo: true, primer_nombre: true, primer_apellido: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const idsOrdenes = ordenes.map((o) => o.id_orden_servicio);
+    const usados = idsOrdenes.length
+      ? await this.prisma.componentes_usados.findMany({
+          where: { id_orden_servicio: { in: idsOrdenes } },
+          orderBy: [{ fecha_uso: 'desc' }, { id_componente_usado: 'desc' }],
+          include: {
+            ordenes_servicio: { select: { numero_orden: true } },
+            catalogo_componentes: { select: { codigo_interno: true, marca: true, referencia_fabricante: true } },
+            ubicaciones_bodega: { select: { codigo_ubicacion: true, zona: true } },
+            lotes_componentes: { select: { codigo_lote: true } },
+          },
+        })
+      : [];
+
+    const repuestosInstalados = usados.map((u) => ({
+      id_componente_usado: u.id_componente_usado,
+      fecha_uso: u.fecha_uso,
+      id_orden_servicio: u.id_orden_servicio,
+      numero_orden: u.ordenes_servicio?.numero_orden ?? null,
+      id_componente: u.id_componente,
+      sku: u.catalogo_componentes?.codigo_interno ?? null,
+      descripcion: u.descripcion,
+      marca: u.catalogo_componentes?.marca ?? u.marca_manual ?? null,
+      cantidad: Number(u.cantidad ?? 0),
+      unidad: u.unidad ?? 'UND',
+      costo_unitario: Number(u.costo_unitario ?? 0),
+      costo_total: Number(u.costo_total ?? 0),
+      origen_componente: u.origen_componente,
+      bodega_codigo: u.ubicaciones_bodega?.codigo_ubicacion ?? null,
+      bodega_nombre: u.ubicaciones_bodega?.zona ?? null,
+      codigo_lote: u.lotes_componentes?.codigo_lote ?? null,
+      id_movimiento_inventario: u.id_movimiento_inventario,
+    }));
+
+    const bom = bomRows.map((r) => this.mapearBomItem(r));
+
+    return {
+      id_equipo: equipo.id_equipo,
+      codigo_equipo: equipo.codigo_equipo,
+      repuestos_compatibles: bom,
+      repuestos_instalados: repuestosInstalados,
+      ordenes: ordenes.map((o) => {
+        const p = o.empleados_ordenes_servicio_id_tecnico_asignadoToempleados?.persona;
+        return {
+          id_orden_servicio: o.id_orden_servicio,
+          numero_orden: o.numero_orden,
+          fecha_programada: o.fecha_programada,
+          fecha_creacion: o.fecha_creacion,
+          fecha_fin_real: o.fecha_fin_real,
+          prioridad: o.prioridad,
+          total_general: Number(o.total_general ?? 0),
+          estado_codigo: o.estados_orden?.codigo_estado ?? null,
+          estado_nombre: o.estados_orden?.nombre_estado ?? null,
+          estado_color: o.estados_orden?.color_hex ?? null,
+          tipo_servicio: o.tipos_servicio?.nombre_tipo ?? null,
+          categoria_servicio: o.tipos_servicio?.categoria ?? null,
+          tecnico: p?.nombre_completo || [p?.primer_nombre, p?.primer_apellido].filter(Boolean).join(' ') || null,
+        };
+      }),
+      resumen: {
+        total_ordenes: ordenes.length,
+        total_bom: bom.length,
+        bom_agotados: bom.filter((b) => b.estado_stock === 'AGOTADO').length,
+        bom_bajo_minimo: bom.filter((b) => b.estado_stock === 'BAJO').length,
+        total_lineas_instaladas: repuestosInstalados.length,
+        total_unidades_instaladas: repuestosInstalados.reduce((s, r) => s + r.cantidad, 0),
+        total_inversion_repuestos: repuestosInstalados.reduce((s, r) => s + r.costo_total, 0),
+        ultimo_cambio: repuestosInstalados[0]?.fecha_uso ?? null,
+      },
+    };
+  }
+
+  /**
+   * BOM compacto de un equipo para sugerencias en el despacho de OTs.
+   * GET /api/equipos/:id/componentes-compatibles
+   */
+  async getComponentesCompatibles(idEquipo: number) {
+    const rows = await this.prisma.componentes_equipo.findMany({
+      where: { id_equipo: idEquipo, activo: { not: false } },
+      include: EquiposGestionService.BOM_INCLUDE,
+      orderBy: { id_componente_equipo: 'asc' },
+    });
+    return rows.map((r) => this.mapearBomItem(r));
+  }
+
+  /**
+   * POST /api/equipos/:id/componentes-compatibles
+   * Vincula un artículo del Catálogo Maestro al BOM del equipo.
+   */
+  async vincularComponenteCompatible(
+    idEquipo: number,
+    body: {
+      id_componente?: number;
+      categoria_aplicacion?: string;
+      cantidad_requerida?: number;
+      frecuencia_cambio_horas?: number | null;
+      notas_tecnicas?: string | null;
+    },
+    userId: number,
+  ) {
+    const idComponente = Number(body?.id_componente);
+    if (!Number.isInteger(idComponente) || idComponente <= 0) {
+      throw new BadRequestException('Debe seleccionar un artículo del Catálogo Maestro');
+    }
+    const categoria = body?.categoria_aplicacion && EquiposGestionService.BOM_APLICACIONES[body.categoria_aplicacion]
+      ? body.categoria_aplicacion
+      : 'REPUESTO_GENERAL';
+    const cantidad = Number(body?.cantidad_requerida ?? 1);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      throw new BadRequestException('La cantidad requerida por servicio debe ser mayor a 0');
+    }
+    const frecuencia =
+      body?.frecuencia_cambio_horas === null || body?.frecuencia_cambio_horas === undefined || (body.frecuencia_cambio_horas as any) === ''
+        ? null
+        : Number(body.frecuencia_cambio_horas);
+    if (frecuencia !== null && (!Number.isFinite(frecuencia) || frecuencia <= 0)) {
+      throw new BadRequestException('La frecuencia de cambio debe ser un número de horas mayor a 0');
+    }
+
+    const [equipo, componente, duplicado] = await Promise.all([
+      this.prisma.equipos.findUnique({ where: { id_equipo: idEquipo }, select: { id_equipo: true } }),
+      this.prisma.catalogo_componentes.findUnique({
+        where: { id_componente: idComponente },
+        select: { id_componente: true, id_tipo_componente: true, descripcion_corta: true, codigo_interno: true },
+      }),
+      this.prisma.componentes_equipo.findFirst({
+        where: { id_equipo: idEquipo, id_componente: idComponente, activo: { not: false } },
+        select: { id_componente_equipo: true },
+      }),
+    ]);
+    if (!equipo) throw new NotFoundException(`Equipo con ID ${idEquipo} no encontrado`);
+    if (!componente) throw new NotFoundException(`Artículo ${idComponente} no existe en el Catálogo Maestro`);
+    if (duplicado) {
+      throw new ConflictException(`El artículo ${componente.codigo_interno} ya está vinculado al BOM de este equipo`);
+    }
+
+    const aplicacion = EquiposGestionService.BOM_APLICACIONES[categoria];
+    const creado = await this.prisma.componentes_equipo.create({
+      data: {
+        id_equipo: idEquipo,
+        id_componente: idComponente,
+        id_tipo_componente: aplicacion.tipo ?? componente.id_tipo_componente ?? 1,
+        posicion_descripcion: aplicacion.label,
+        unidades_por_cambio: Math.max(1, Math.ceil(cantidad)),
+        especificaciones_adicionales: {
+          categoria_aplicacion: categoria,
+          cantidad_requerida: cantidad,
+          frecuencia_cambio_horas: frecuencia,
+        },
+        notas: body?.notas_tecnicas?.toString().trim() || null,
+        activo: true,
+        creado_por: userId || 1,
+      },
+      include: EquiposGestionService.BOM_INCLUDE,
+    });
+
+    return this.mapearBomItem(creado);
+  }
+
+  /**
+   * DELETE /api/equipos/:id/componentes-compatibles/:idRelacion
+   * Desvinculación lógica (conserva la auditoría del vínculo).
+   */
+  async desvincularComponenteCompatible(idEquipo: number, idRelacion: number, userId: number) {
+    const rel = await this.prisma.componentes_equipo.findFirst({
+      where: { id_componente_equipo: idRelacion, id_equipo: idEquipo, activo: { not: false } },
+      select: { id_componente_equipo: true },
+    });
+    if (!rel) {
+      throw new NotFoundException('El vínculo BOM no existe o ya fue desvinculado');
+    }
+    await this.prisma.componentes_equipo.update({
+      where: { id_componente_equipo: idRelacion },
+      data: {
+        activo: false,
+        fecha_desactivacion: new Date(),
+        motivo_desactivacion: 'Desvinculado manualmente del BOM desde el portal',
+        modificado_por: userId || 1,
+        fecha_modificacion: new Date(),
+      },
+    });
+    return { id_componente_equipo: idRelacion, desvinculado: true };
   }
 }

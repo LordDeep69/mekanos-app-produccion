@@ -1,8 +1,10 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
-**Fecha de Actualización:** 21 de Octubre de 2026  
-**Versión:** 5.4 Release Candidate (RC-3 - Zero-Trust Certified)  
+**Fecha de Actualización:** 22 de Octubre de 2026  
+**Versión:** 5.5 Release Candidate (RC-4 - EAM 360° & WMS BOM Certified)  
 **Últimos Commits Clave:** 
+- `feat(equipos-bom)`: Expediente EAM 360° de Activos Industriales (`/equipos` y `/equipos/[id]`), Matriz de Repuestos Compatibles (BOM) con stock WMS en vivo, Historial Clínico de Repuestos Instalados, sugerencias BOM de 1-click al despachar en `/ordenes/[id]` y erradicación de error Prisma en `getTrazabilidadServicios`.
+- `c986360`: `fix(wms-ordenes): habilitar liquidacion administrativa en ordenes completadas, nomenclatura OS-YYYYMM en kardex y selects sin truncamiento`.
 - `9486e78`: `feat(wms-ordenes): modal enterprise para confirmacion de reintegro a bodega y retiro de servicios` (eliminación de alertas nativas de navegador, auditoría Zero-Trust con desglose de lote/bodega/kardex y justificación opcional).
 - `b9d4c50`: `fix(wms-ordenes): saneamiento totales prisma, autocierre click-outside, validacion reactiva de existencias y estilizacion selectores` (resolución de HTTP 400 en recálculo financiero de OT).
 - `feat(wms-ordenes)`: Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`), despacho por bodega/lote FIFO, reversión atómica en Kardex, selector predictivo de OT e impresión en PDF oficial.
@@ -12,7 +14,7 @@
 - `1c502bf`: `feat(compras-wms): integracion y certificacion de recepcion automatica de mercancia en almacen, generacion de lotes y kardex`
 - `613d72b`: `feat(inventario): remediacion integral de auditoria forense y sincronizacion bidireccional compras-inventario`
 - `275f2c9`: `fix(ordenes/equipos): detectar familia por tipo declarado en tipos_equipo e integrar soporte COMPRESOR`
-**Estado General:** ✅ **~98.5% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
+**Estado General:** ✅ **~99.2% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
 **Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
 
 ---
@@ -70,8 +72,18 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
 - **Flujo de Reaprovisionamiento Automático:** Al presionar **"Pedir"** o **"Pedir a Proveedor"** desde `/inventario` o `/inventario/[id]`, el sistema redirige a `/compras/ordenes/nueva?componenteId=[id]` con proveedor preferido y cantidad sugerida $\max(\text{MOQ}, \text{stock\_mínimo} - \text{stock\_actual}, 1)$.
 - **Recepción Automática de Mercancía en Almacén (`POST /api/recepciones-compra/lote`):** Generación determinista de `REC-{YYYY}-{0001}` y `LOT-{YYYY}-{0001}`, asiento `ENTRADA`/`COMPRA` en Kardex e incremento atómico de stock.
 
-### 4. Soporte de Familias de Equipos y Órdenes (`/equipos` y `/ordenes`)
-- Naturaleza **COMPRESOR** completamente integrada en backend y frontend (código autogenerado, parámetros de medición, discriminadores de servicio preventivo y compatibilidad en wizard).
+### 4. Expediente EAM 360° de Activos Industriales (`/equipos` y `/equipos/[id]`) — **100% Certificado**
+- **Directorio Ejecutivo del Parque (`/equipos`):**
+  - 4 tarjetas KPI interactivas en tiempo real (*Total Parque Activo*, *Plantas Eléctricas / Generadores*, *Sistemas de Bombeo*, *Disponibilidad Operativa*).
+  - Tarjetas enriquecidas con franja técnica rápida (Potencia kVA/kW/HP, Motor Marca/Modelo, RPM, Horómetro), enlace directo a `/clientes/[id]` y acceso rápido a `+ Nueva OT` (`/ordenes/nueva?clienteId=...&equipoId=...`).
+- **Expediente 360° por Pestañas (`/equipos/[id]`):**
+  - **Cabecera Institucional y 4 KPIs:** Horómetro acumulado, total de OTs, kit BOM con indicador de existencias en almacén WMS e inversión acumulada en repuestos.
+  - **Pestaña 1 (`1. Ingeniería & Ficha Técnica`):** Banner destacado de *Especificaciones Críticas de Lubricación, Fluidos y Arranque* (con conversión automática Litros $\leftrightarrow$ Galones para planeación logística) y placas polimórficas de Generador, Bomba, Motor y Compresor.
+  - **Pestaña 2 (`2. Repuestos Compatibles (BOM) & Consumo WMS`):** Matriz BOM (`componentes_equipo` $\leftrightarrow$ `catalogo_componentes`) con stock físico por bodega en tiempo real, modal para vincular/desvincular repuestos compatibles y tabla de **Historial Clínico de Repuestos e Insumos Instalados** consolidada desde las OTs ejecutadas sobre la máquina.
+  - **Pestaña 3 (`3. Historial de Órdenes de Servicio (OTs)`):** Tabla ejecutiva de todas las órdenes del activo con vínculo a `/ordenes/[id]` más la bitácora cronológica de mediciones e informes PDF (`HojaVidaEquipo`).
+  - **Saneamiento Zero-Trust de Consola:** Corregida relación Prisma `clientes` en `getTrazabilidadServicios` (`equipos-gestion.service.ts`), erradicando el error HTTP 500 y el badge rojo de consola en `/equipos/[id]`.
+- **Sugerencia Inteligente BOM en Despacho de Órdenes (`/ordenes/[id]`):**
+  - Al abrir `+ Despachar Repuesto WMS` en una Orden de Servicio, el modal consulta `GET /api/equipos/:id/componentes-compatibles` y despliega chips de selección rápida (`Kit BOM Compatible con este Equipo`) que pre-seleccionan el artículo, la bodega con existencias y la cantidad requerida por servicio en 1 clic.
 
 ---
 
@@ -79,4 +91,4 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
 Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md) para los siguientes pasos:
 - **Flujo A:** ✅ **COMPLETADO:** Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`).
 - **Flujo B:** ✅ **COMPLETADO:** Pruebas de integración de recepciones automáticas de mercancía (Orden de Compra -> Entrada a Lote WMS).
-- **Flujo C:** Evolución de Ficha Técnica de Equipos (`/equipos/[id]`) con pestaña de Repuestos Compatibles (BOM) e historial de piezas instaladas por máquina.
+- **Flujo C:** ✅ **COMPLETADO:** Evolución de Ficha Técnica de Equipos (`/equipos` y `/equipos/[id]`) con arquitectura EAM 360°, pestaña de Repuestos Compatibles (BOM), historial clínico de piezas instaladas y sugerencias BOM en `/ordenes/[id]`.

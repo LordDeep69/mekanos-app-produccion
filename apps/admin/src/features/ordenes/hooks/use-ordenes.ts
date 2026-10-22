@@ -259,6 +259,7 @@ export function useAddComponenteOrden() {
             queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
             queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
             queryClient.invalidateQueries({ queryKey: ['inventario'] });
+            queryClient.invalidateQueries({ queryKey: ['equipos'] });
             toast.success(res?.mensaje || 'Repuesto despachado e imputado a la orden');
         },
         onError: (error: any) => {
@@ -280,6 +281,7 @@ export function useRemoveComponenteOrden() {
             queryClient.invalidateQueries({ queryKey: [...COMPONENTES_ORDEN_KEY, idOrden] });
             queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, idOrden] });
             queryClient.invalidateQueries({ queryKey: ['inventario'] });
+            queryClient.invalidateQueries({ queryKey: ['equipos'] });
             toast.success(res?.mensaje || 'Repuesto reintegrado al almacén exitosamente');
         },
         onError: (error: any) => {

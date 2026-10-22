@@ -215,6 +215,64 @@ export class EquiposController {
   }
 
   /**
+   * GET /api/equipos/:id/ficha-logistica
+   * Expediente 360° del activo: BOM + stock WMS, historial de repuestos instalados y OTs
+   */
+  @Get(':id/ficha-logistica')
+  @ApiOperation({ summary: 'BOM, historial de repuestos instalados y OTs del equipo' })
+  async getFichaLogistica(@Param('id', ParseIntPipe) id: number) {
+    const data = await this.equiposGestionService.getFichaLogistica(id);
+    return { success: true, data };
+  }
+
+  /**
+   * GET /api/equipos/:id/componentes-compatibles
+   * BOM compacto con stock en vivo (sugerencias en despacho de OTs)
+   */
+  @Get(':id/componentes-compatibles')
+  @ApiOperation({ summary: 'Repuestos compatibles (BOM) del equipo con stock WMS' })
+  async getComponentesCompatibles(@Param('id', ParseIntPipe) id: number) {
+    const data = await this.equiposGestionService.getComponentesCompatibles(id);
+    return { success: true, data };
+  }
+
+  /**
+   * POST /api/equipos/:id/componentes-compatibles
+   * Vincula un artículo del Catálogo Maestro al BOM del equipo
+   */
+  @Post(':id/componentes-compatibles')
+  @ApiOperation({ summary: 'Vincular repuesto compatible al BOM del equipo' })
+  async vincularComponenteCompatible(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: {
+      id_componente: number;
+      categoria_aplicacion?: string;
+      cantidad_requerida?: number;
+      frecuencia_cambio_horas?: number | null;
+      notas_tecnicas?: string | null;
+    },
+    @UserId() userId: number,
+  ) {
+    const data = await this.equiposGestionService.vincularComponenteCompatible(id, body, userId);
+    return { success: true, message: 'Repuesto vinculado al BOM del equipo', data };
+  }
+
+  /**
+   * DELETE /api/equipos/:id/componentes-compatibles/:idRelacion
+   * Desvincula (lógicamente) un repuesto del BOM del equipo
+   */
+  @Delete(':id/componentes-compatibles/:idRelacion')
+  @ApiOperation({ summary: 'Desvincular repuesto compatible del BOM del equipo' })
+  async desvincularComponenteCompatible(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('idRelacion', ParseIntPipe) idRelacion: number,
+    @UserId() userId: number,
+  ) {
+    const data = await this.equiposGestionService.desvincularComponenteCompatible(id, idRelacion, userId);
+    return { success: true, message: 'Repuesto desvinculado del BOM', data };
+  }
+
+  /**
    * GET /api/equipos/:id
    * Obtener un equipo por ID
    */

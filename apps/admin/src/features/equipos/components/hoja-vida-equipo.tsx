@@ -51,34 +51,34 @@ export function HojaVidaEquipo({ equipoId }: HojaVidaEquipoProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header y Resumen de Métricas */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 rounded-2xl p-5 text-white shadow-lg">
+      {/* Header y Resumen de Métricas (Corporate Light Mode) */}
+      <div className="bg-white rounded-xl p-4 lg:p-5 border border-slate-200 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-blue-500/20 border border-blue-400/30 rounded-xl text-blue-400">
-              <History className="h-6 w-6" />
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-600">
+              <History className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                Hoja de Vida de Mantenimiento
-                <Badge variant="outline" className="bg-blue-900/50 text-blue-300 border-blue-700 text-xs">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                Bitácora Cronológica de Intervenciones Técnicas
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-bold">
                   {intervenciones.length} intervenciones
                 </Badge>
               </h3>
-              <p className="text-xs text-slate-300">
-                Historial cronológico completo de intervenciones, servicios ejecutados y mediciones técnicas.
+              <p className="text-xs text-slate-500 mt-0.5">
+                Línea de tiempo detallada con diagnósticos, actividades ejecutadas, mediciones de campo e informes PDF.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 bg-slate-800/80 p-3 rounded-xl border border-slate-700">
-            <div className="text-center px-2 border-r border-slate-700">
-              <p className="text-[10px] text-slate-400 uppercase font-bold">Preventivos</p>
-              <p className="text-lg font-bold text-blue-400">{totalPreventivos}</p>
+          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
+            <div className="text-center pr-3 border-r border-slate-200">
+              <p className="text-[10px] text-slate-500 uppercase font-bold">Preventivos</p>
+              <p className="text-base font-black text-blue-700">{totalPreventivos}</p>
             </div>
-            <div className="text-center px-2">
-              <p className="text-[10px] text-slate-400 uppercase font-bold">Correctivos</p>
-              <p className="text-lg font-bold text-orange-400">{totalCorrectivos}</p>
+            <div className="text-center pl-1">
+              <p className="text-[10px] text-slate-500 uppercase font-bold">Correctivos</p>
+              <p className="text-base font-black text-amber-700">{totalCorrectivos}</p>
             </div>
           </div>
         </div>

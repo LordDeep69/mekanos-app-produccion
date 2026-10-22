@@ -170,6 +170,7 @@ function PasoContexto({
 }) {
     const [busquedaCliente, setBusquedaCliente] = useState('');
     const [busquedaEquipo, setBusquedaEquipo] = useState('');
+    const [preselectEquipoId, setPreselectEquipoId] = useState<number | null>(null);
 
     // ✅ FIX 06-AGO-2026: Mini-filtro PREVEN/CORR en "Últimas selecciones"
     // (los correctivos puntuales de 1-2 equipos ensucian la lista; por defecto PREVEN.)
@@ -182,6 +183,40 @@ function PasoContexto({
 
     const { clientes, sedes, equipos, isLoadingClientes, isFetchingClientes, isLoadingSedes, isLoadingEquipos } =
         useCascadaClienteEquipo(data.clienteId, data.sedeId, busquedaCliente);
+
+    // Preselección desde query params (?clienteId=...&equipoId=...) al venir desde /equipos/[id]
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const cId = params.get('clienteId');
+        const eId = params.get('equipoId');
+        if (cId && !data.clienteId) {
+            onChange({ clienteId: Number(cId) });
+        }
+        if (eId) {
+            setPreselectEquipoId(Number(eId));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        if (data.clienteId && !data.clienteSeleccionado && clientes.length > 0) {
+            const found = clientes.find((c) => c.id_cliente === data.clienteId);
+            if (found) {
+                onChange({ clienteSeleccionado: found });
+            }
+        }
+    }, [data.clienteId, data.clienteSeleccionado, clientes, onChange]);
+
+    useEffect(() => {
+        if (preselectEquipoId && equipos.length > 0 && data.equiposSeleccionados.length === 0) {
+            const eq = equipos.find((e) => e.id_equipo === preselectEquipoId);
+            if (eq) {
+                onChange({ equiposSeleccionados: [eq] });
+                setPreselectEquipoId(null);
+            }
+        }
+    }, [preselectEquipoId, equipos, data.equiposSeleccionados.length, onChange]);
 
     // ✅ FIX 06-AGO-2026: Últimas selecciones de equipos del cliente (y tipo de servicio si ya se eligió)
     const { data: ultimasSelecciones = [], isLoading: isLoadingSelecciones } =

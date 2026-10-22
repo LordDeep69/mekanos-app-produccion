@@ -46,6 +46,10 @@ import {
     useComponentesStock,
     type ComponenteStock,
 } from '@/features/inventario/api/inventario-motor.service';
+import {
+    useComponentesCompatiblesEquipo,
+    type BomItem,
+} from '@/features/equipos';
 import { ActividadCardAdvanced, ResumenEstados } from '@/features/ordenes/components/actividad-card-advanced';
 import { EdicionTecnicoSection } from '@/features/ordenes/components/edicion-tecnico-section';
 import { EvidenciasGallery } from '@/features/ordenes/components/evidencias-gallery';
@@ -1782,6 +1786,20 @@ function ModalDespacharRepuestoOrden({
     const [descripcionDirecta, setDescripcionDirecta] = useState<string>('');
     const [observaciones, setObservaciones] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
+    const cantidadSugeridaBomRef = useRef<number | null>(null);
+
+    const idEquipoPrincipal =
+        (orden as any).id_equipo ||
+        orden.equipos?.id_equipo ||
+        orden.ordenes_equipos?.[0]?.equipo?.id_equipo ||
+        (orden.ordenes_equipos?.[0] as any)?.id_equipo ||
+        0;
+    const codigoEquipoPrincipal =
+        orden.equipos?.codigo_equipo ||
+        orden.ordenes_equipos?.[0]?.equipo?.codigo_equipo ||
+        null;
+
+    const { data: bomCompatible = [] } = useComponentesCompatiblesEquipo(Number(idEquipoPrincipal));
 
     const { data: componentesData, isLoading: isLoadingComp } = useComponentesStock({
         busqueda: busqueda || undefined,
@@ -1865,14 +1883,52 @@ function ModalDespacharRepuestoOrden({
         const precioRef = componenteSeleccionado.precio_compra ?? componenteSeleccionado.precio_venta ?? 0;
         setCostoUnitario(precioRef > 0 ? precioRef.toString() : '');
 
-        // Validar saldo inicial para cantidad
+        // Validar saldo inicial para cantidad (respetando sugerencia BOM si viene de 1-click)
         const maxStockDisp = conSaldo ? conSaldo.stock : (bodegasEfectivas.find(b => b.id_ubicacion === parseInt(bestId, 10))?.stock ?? 0);
         if (maxStockDisp > 0) {
-            setCantidad('1');
+            const sugerida = cantidadSugeridaBomRef.current;
+            if (sugerida && sugerida > 0) {
+                setCantidad(Math.min(sugerida, maxStockDisp).toString());
+            } else {
+                setCantidad('1');
+            }
         } else {
             setCantidad('0');
         }
+        cantidadSugeridaBomRef.current = null;
     }, [isOpen, componenteSeleccionado, bodegasEfectivas, bodegas]);
+
+    const seleccionarDesdeBom = (bom: BomItem) => {
+        const existente = (componentesData?.data || []).find((c) => c.id_componente === bom.id_componente);
+        cantidadSugeridaBomRef.current = bom.cantidad_requerida || 1;
+        if (existente) {
+            setComponenteSeleccionado({
+                ...existente,
+                bodegas: bom.bodegas && bom.bodegas.length > 0 ? bom.bodegas : existente.bodegas,
+            });
+        } else {
+            setComponenteSeleccionado({
+                id_componente: bom.id_componente,
+                codigo: bom.sku || `ART-${bom.id_componente}`,
+                referencia: bom.referencia_fabricante || '',
+                nombre: bom.descripcion,
+                marca: bom.marca || '',
+                categoria: bom.aplicacion_label,
+                unidad: bom.unidad || 'UND',
+                stock_actual: bom.stock_actual,
+                stock_minimo: bom.stock_minimo,
+                estado_stock: bom.estado_stock,
+                precio_compra: bom.precio_compra,
+                precio_venta: bom.precio_compra,
+                valor_inventario: bom.stock_actual * bom.precio_compra,
+                activo: true,
+                bodegas: bom.bodegas || [],
+                lotes_activos: [],
+            });
+        }
+        setShowDropdown(false);
+        setError(null);
+    };
 
     if (!isOpen) return null;
 
@@ -2053,6 +2109,71 @@ function ModalDespacharRepuestoOrden({
 
                         {origen === 'BODEGA' ? (
                             <>
+                                {/* Sugerencia Inteligente BOM del Equipo */}
+                                {bomCompatible.length > 0 && (
+                                    <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                                                <Layers className="h-3.5 w-3.5 text-blue-600" />
+                                                Kit BOM Compatible con {codigoEquipoPrincipal || 'este Equipo'} ({bomCompatible.length})
+                                            </span>
+                                            {idEquipoPrincipal > 0 && (
+                                                <a
+                                                    href={`/equipos/${idEquipoPrincipal}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-[11px] font-semibold text-blue-700 hover:underline inline-flex items-center gap-1"
+                                                >
+                                                    <span>Ver BOM 360°</span>
+                                                    <ExternalLink className="h-2.5 w-2.5" />
+                                                </a>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {bomCompatible.map((b) => {
+                                                const isSelected = componenteSeleccionado?.id_componente === b.id_componente;
+                                                const tieneStock = b.stock_actual > 0;
+                                                return (
+                                                    <button
+                                                        key={b.id_componente_equipo}
+                                                        type="button"
+                                                        onClick={() => seleccionarDesdeBom(b)}
+                                                        className={cn(
+                                                            'text-left px-2.5 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-2 cursor-pointer',
+                                                            isSelected
+                                                                ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
+                                                                : tieneStock
+                                                                    ? 'bg-white hover:bg-blue-50 text-slate-800 border-slate-200 shadow-2xs'
+                                                                    : 'bg-slate-100 text-slate-400 border-slate-200 opacity-75'
+                                                        )}
+                                                        title={`${b.aplicacion_label}: ${b.descripcion} (Requerido por servicio: ${b.cantidad_requerida} ${b.unidad})`}
+                                                    >
+                                                        <span className={cn(
+                                                            'font-mono text-[10px] font-bold px-1.5 py-0.5 rounded',
+                                                            isSelected ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-700'
+                                                        )}>
+                                                            {b.sku || `ART-${b.id_componente}`}
+                                                        </span>
+                                                        <span className="font-semibold truncate max-w-[165px]">
+                                                            {b.aplicacion_label}
+                                                        </span>
+                                                        <span className={cn(
+                                                            'text-[10px] font-mono font-bold px-1.5 py-0.5 rounded whitespace-nowrap',
+                                                            isSelected
+                                                                ? 'bg-blue-500 text-white'
+                                                                : tieneStock
+                                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                                        )}>
+                                                            Req: {b.cantidad_requerida} • Disp: {b.stock_actual} {b.unidad}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Selector de Componente del Catálogo WMS con Auto-cierre */}
                                 <div className="space-y-1.5">
                                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">

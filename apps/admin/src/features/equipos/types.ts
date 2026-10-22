@@ -1,4 +1,4 @@
-﻿/**
+/**
  * TIPOS DE EQUIPOS - MEKANOS S.A.S
  * 
  * Tipos TypeScript para el módulo de gestión de equipos.
@@ -78,6 +78,9 @@ export interface EquipoListItem {
   id_equipo: number;
   codigo_equipo: string;
   nombre_equipo: string | null;
+  numero_serie_equipo?: string | null;
+  horas_actuales?: number | string | null;
+  activo?: boolean;
   tipo: TipoEquipo;
   estado_equipo: EstadoEquipo;
   criticidad: Criticidad;
@@ -496,6 +499,16 @@ export interface RegistrarLecturaResponse {
 
 export interface EquiposListadoResponse {
   data: EquipoListItem[];
+  resumen?: {
+    total_parque: number;
+    generadores: number;
+    bombas: number;
+    otros: number;
+    operativos: number;
+    en_reparacion: number;
+    fuera_servicio: number;
+    criticidad_alta: number;
+  };
   pagination: {
     total: number;
     page: number;

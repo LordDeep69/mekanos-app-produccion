@@ -501,8 +501,8 @@ export default function DetalleComponentePage() {
                                                         {lote.zona && <span className="text-[11px] text-slate-400">({lote.zona})</span>}
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs border border-emerald-100">
+                                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                    <span className="inline-block whitespace-nowrap font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs border border-emerald-100">
                                                         {lote.cantidad_actual} {componente.unidad_medida || 'UND'}
                                                     </span>
                                                 </td>

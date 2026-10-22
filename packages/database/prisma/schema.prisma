@@ -381,7 +381,7 @@ model clientes {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model componentes_equipo {
-  id_componente_equipo         Int                   @id
+  id_componente_equipo         Int                   @id @default(autoincrement())
   id_equipo                    Int
   id_tipo_componente           Int
   id_componente                Int?
