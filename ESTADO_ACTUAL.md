@@ -1,8 +1,21 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
-**Fecha de Actualización:** 22 de Octubre de 2026  
-**Versión:** 5.7 Release Candidate (RC-7 - Arquitectura de Dominio WMS ⇄ EAM: Referenciación Técnica vs Consumo Físico)  
+**Fecha de Actualización:** 23 de Octubre de 2026  
+**Versión:** 5.8 Release Candidate (RC-8 - Selector Combobox Popover Enterprise en Catálogo Maestro y Alta de Repuestos)  
 **Últimos Commits Clave:** 
+- `feat(catalogo-nuevo)`: Adopción del Selector Combobox Popover Puntual con Drill-Down Exclusivo y Modal In-Context en Alta de Repuestos (`/compras/catalogo/nuevo`):
+  - **Experiencia de Usuario Punctual & Zero-Stress:**
+    - Sustitución del panel en cascada por el selector Combobox Popover de 40px en reposo, homologando la experiencia validada y elogiada en `/compras/catalogo`.
+    - Presentación ejecutiva en línea única: icono contextual de familia, ruta jerárquica limpia (`FILTROS Y FILTRACIÓN › FILTROS DE ACEITE`), badge de nivel (`N2`), badge de código mnemotécnico y botón `✕` para reiniciar.
+  - **Popover Flotante `z-50` de Precisión:**
+    - Activación bajo demanda exclusivamente al hacer clic en el campo o navegar por teclado.
+    - Ancho ergonómico optimizado (`min-w-[320px] sm:w-[480px]`) que no desplaza ni empuja los campos inferiores (SKU, Marca, Referencia).
+    - Buscador predictivo global con filtrado instantáneo y dropdown de coincidencias.
+    - Navegación enfoca exclusiva (Nivel 1 ➔ Nivel 2 ➔ Nivel 3) con cabecera de nivel, botón `← Volver` y botón `✓ Asignar esta`.
+    - Asignación inmediata al formulario con cierre automático al seleccionar una categoría terminal.
+  - **Modal In-Context de Creación Integrado (`+ Nueva Subcategoría` / `+ Nueva Familia`):**
+    - Botón de creación directa en el pie del popover para registrar nuevas clasificaciones en caliente sin perder el foco ni los datos del repuesto.
+    - Preselección automática del nodo padre activo en el modal.
 - `feat(taxonomia-filtro-toolbar)`: Activación Bajo Demanda ("El Cuadro") & Homologación en Catálogo Maestro (`/compras/catalogo`):
   - **Activación Bajo Demanda de "El Cuadro":**
     - "El cuadro" del navegador taxonómico ahora sólo se refleja cuando el buscador o selector tiene el clic activado, manteniéndose limpio y oculto en estado de reposo tanto en formularios como en barras de filtros.
