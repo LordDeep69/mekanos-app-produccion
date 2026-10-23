@@ -1422,6 +1422,7 @@ export class ArticulosService {
       }),
       this.prisma.catalogo_componentes.groupBy({
         by: ['destino_articulo'],
+        where: { activo: true },
         _count: { id_componente: true },
       }),
       this.prisma.catalogo_componentes.findMany({
