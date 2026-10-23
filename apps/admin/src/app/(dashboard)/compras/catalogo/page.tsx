@@ -400,6 +400,7 @@ function CatalogoComprasContent() {
               onChange={(idCat) => actualizarFiltro({ categoria: idCat ? String(idCat) : '' })}
               placeholder="Filtrar por categoría..."
               showClearButton={true}
+              variant="combobox"
             />
           </div>
 

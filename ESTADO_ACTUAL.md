@@ -3,6 +3,14 @@
 **Fecha de Actualización:** 22 de Octubre de 2026  
 **Versión:** 5.7 Release Candidate (RC-7 - Arquitectura de Dominio WMS ⇄ EAM: Referenciación Técnica vs Consumo Físico)  
 **Últimos Commits Clave:** 
+- `feat(taxonomia-filtro-toolbar)`: Activación Bajo Demanda ("El Cuadro") & Homologación en Catálogo Maestro (`/compras/catalogo`):
+  - **Activación Bajo Demanda de "El Cuadro":**
+    - "El cuadro" del navegador taxonómico ahora sólo se refleja cuando el buscador o selector tiene el clic activado, manteniéndose limpio y oculto en estado de reposo tanto en formularios como en barras de filtros.
+    - Cierre automático al hacer clic fuera del componente o al completar la selección de una rama terminal.
+  - **Homologación de Toolbar en Catálogo Maestro (`/compras/catalogo`):**
+    - Implementación de `HierarchicalCategorySelect` en modo `variant="combobox"` para la barra de herramientas del catálogo.
+    - Disparador compacto de 40px (`h-10`) con chip de categoría seleccionada, badge de nivel y botón de limpieza `✕`.
+    - Popover flotante `z-50` con navegación enfocada exclusiva (Nivel 1 ➔ Nivel 2 ➔ Nivel 3) que nunca rompe la cuadrícula ni empuja la tabla de datos hacia abajo.
 - `feat(catalogo-taxonomia)`: Rediseño Enterprise desde Primeros Principios del **Selector Jerárquico de Categorías (`HierarchicalCategorySelect`)**:
   - **Navegación Enfocada Progresiva & Selección Exclusiva (Zero-Saturación):**
     - Erradicación de la sobrecarga visual de árboles saturados y de columnas horizontales: la interfaz se enfoca exclusivamente en el nivel activo.

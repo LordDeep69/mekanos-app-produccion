@@ -4,15 +4,16 @@
  * MEKANOS S.A.S - Portal Admin
  * Selector Jerárquico de Categorías Taxonómicas Enterprise (HierarchicalCategorySelect)
  * 
- * Arquitectura de Navegación Enfocada Progresiva (Exclusive Drill-Down Focus):
- * - Selección Exclusiva y Vista Limpia: al seleccionar una categoría, se oculta el resto de
- *   ramas para eliminar saturación y se muestran exclusivamente sus hijas directas.
- * - Registro Inmediato en el 1er Clic: la selección queda validada y activa en el formulario al instante.
- * - Migas de Pan Interactivas como "Máquina del Tiempo": saltar a cualquier nivel previo con un clic.
- * - Botón de Retorno Fluido (`← Volver a [Nivel Previo]`).
- * - Soporte para N-Niveles arbitrarios (Familia ➔ Subcategoría ➔ Sub-hija ➔ Terminal).
- * - Buscador Global Predictivo con salto directo a la ruta seleccionada.
- * - Alta in-context con padre preseleccionado.
+ * Arquitectura de Navegación Enfocada Progresiva (Exclusive Drill-Down Focus & Popover Control):
+ * - Activación Bajo Demanda: "El cuadro" de categorías sólo se refleja cuando el buscador/selector
+ *   tiene el clic activado, manteniéndose oculto en reposo para preservar la limpieza visual.
+ * - Cierre Limpio por Clic Exterior: al hacer clic fuera del componente, el cuadro se repliega automáticamente.
+ * - Modo Cascada ('cascading'): para formularios extensos (alta/edición de artículos), con tarjeta resumen ejecutiva.
+ * - Modo Combobox ('combobox'): para barras de filtros y toolbars compactas (catálogo maestro, órdenes),
+ *   con popover flotante z-50 que nunca desborda ni desconfigura la cuadrícula de la tabla.
+ * - Selección Exclusiva y Navegación sin Saturación: muestra únicamente el nivel activo.
+ * - Registro Inmediato en Cada Clic: sincronización instantánea con el formulario / query params.
+ * - Buscador Predictivo Global con resolución de ruta completa.
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -40,7 +41,6 @@ import {
   Boxes,
   Tag,
   CheckCircle2,
-  CornerDownRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -136,17 +136,14 @@ export function HierarchicalCategorySelect({
   // Nivel / Padre enfocado actualmente en la lista. Si es null, mostramos las Raíces (Nivel 1).
   const [currentParentId, setCurrentParentId] = useState<number | null>(null);
 
-  // Estados de visualización del explorador
-  const [isExploradorAbierto, setIsExploradorAbierto] = useState(true);
-  const initialMountedRef = useRef(false);
+  // Estados de visualización del explorador:
+  // EL CUADRO INICIA OCULTO (false) y sólo se refleja cuando el usuario activa el clic.
+  const [isExploradorAbierto, setIsExploradorAbierto] = useState(false);
+  const [isOpenCombobox, setIsOpenCombobox] = useState(false);
 
   // Estados de búsqueda
   const [searchGlobal, setSearchGlobal] = useState('');
   const [mostrarResultadosBusqueda, setMostrarResultadosBusqueda] = useState(false);
-
-  // Estados para modo combobox alternativo
-  const [isOpenCombobox, setIsOpenCombobox] = useState(false);
-  const [searchCombobox, setSearchCombobox] = useState('');
 
   // Modal in-context de creación
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -209,29 +206,19 @@ export function HierarchicalCategorySelect({
         curr = curr.id_padre ? mapPorId.get(curr.id_padre) : undefined;
       }
       setSelectedPath(path);
-
-      // Si es el primer montaje con valor inicial (ej. editando artículo existente),
-      // enfocamos el padre de este artículo y colapsamos.
-      if (!initialMountedRef.current) {
-        setCurrentParentId(encontrada.id_padre || null);
-        setIsExploradorAbierto(false);
-        initialMountedRef.current = true;
-      }
+      setCurrentParentId(encontrada.id_padre || null);
     } else if (!value) {
       setSelectedCat(null);
       setSelectedPath([]);
-      if (!initialMountedRef.current) {
-        setCurrentParentId(null);
-        setIsExploradorAbierto(true);
-        initialMountedRef.current = true;
-      }
+      setCurrentParentId(null);
     }
   }, [value, mapPorId]);
 
-  // Cierre por click fuera en modo combobox
+  // 3. Cierre limpio por clic fuera del componente (Tanto para cascading como combobox)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsExploradorAbierto(false);
         setIsOpenCombobox(false);
         setMostrarResultadosBusqueda(false);
       }
@@ -242,7 +229,7 @@ export function HierarchicalCategorySelect({
     };
   }, []);
 
-  // 3. Obtener el listado de categorías a mostrar según el enfoque actual
+  // 4. Obtener el listado de categorías a mostrar según el enfoque actual
   const currentParentNode = useMemo(() => {
     if (currentParentId === null) return null;
     return mapPorId.get(currentParentId) || null;
@@ -250,7 +237,6 @@ export function HierarchicalCategorySelect({
 
   const itemsEnfoqueActual = useMemo(() => {
     if (currentParentId === null) {
-      // Nivel 1: Familias Principales
       return arbol;
     }
     if (currentParentNode) {
@@ -259,17 +245,15 @@ export function HierarchicalCategorySelect({
     return [];
   }, [currentParentId, currentParentNode, arbol]);
 
-  // Nivel que se está visualizando (1 si es raíz, o nivel del padre + 1)
   const nivelVisualizado = useMemo(() => {
     if (!currentParentNode) return 1;
     return currentParentNode.nivel + 1;
   }, [currentParentNode]);
 
-  // 4. Manejador al seleccionar un ítem en la lista enfocada:
+  // 5. Manejador al seleccionar un ítem en la lista enfocada:
   // - Si tiene hijos: REGISTRA LA SELECCIÓN y AVANZA de nivel (mostrando solo sus hijas directas).
-  // - Si no tiene hijos (terminal): REGISTRA LA SELECCIÓN y la mantiene seleccionada.
-  const handleSelectItem = (cat: CategoriaNodo) => {
-    // Reconstruir la ruta hasta este nodo
+  // - Si no tiene hijos (terminal): REGISTRA LA SELECCIÓN y CIERRA "EL CUADRO".
+  const handleSelectItem = (cat: CategoriaNodo, isFromCombobox = false) => {
     const path: number[] = [];
     let curr: CategoriaNodo | undefined = cat;
     while (curr) {
@@ -279,23 +263,45 @@ export function HierarchicalCategorySelect({
     setSelectedPath(path);
     setSelectedCat(cat);
 
-    // REGISTRO Y VALIDACIÓN INMEDIATA EN EL FORMULARIO
+    // REGISTRO Y VALIDACIÓN INMEDIATA EN EL FORMULARIO / URL
     onChange(cat.id_categoria, cat);
 
     const hijos = getChildren(cat);
     if (hijos && hijos.length > 0) {
       // Avanzar el foco exclusivamente a sus hijas directas
       setCurrentParentId(cat.id_categoria);
+    } else {
+      // Si es terminal, damos por completada la selección y replegamos el cuadro
+      if (isFromCombobox) {
+        setIsOpenCombobox(false);
+      } else {
+        setIsExploradorAbierto(false);
+      }
     }
   };
 
-  // 5. Navegación hacia atrás (Volver un nivel)
+  // Manejador para aplicar categoría intermedia (ej. filtrar por "Filtros y Filtración" completo)
+  const handleAplicarCategoriaPadre = (cat: CategoriaNodo, isFromCombobox = false) => {
+    const path: number[] = [];
+    let curr: CategoriaNodo | undefined = cat;
+    while (curr) {
+      path.unshift(curr.id_categoria);
+      curr = curr.id_padre ? mapPorId.get(curr.id_padre) : undefined;
+    }
+    setSelectedPath(path);
+    setSelectedCat(cat);
+    onChange(cat.id_categoria, cat);
+
+    if (isFromCombobox) setIsOpenCombobox(false);
+    else setIsExploradorAbierto(false);
+  };
+
+  // 6. Navegación hacia atrás (Volver un nivel)
   const handleVolverNivel = () => {
     if (!currentParentNode) return;
     const nuevoPadreId = currentParentNode.id_padre || null;
     setCurrentParentId(nuevoPadreId);
 
-    // Si volvemos, el nodo seleccionado activo pasa a ser el padre al que regresamos
     if (nuevoPadreId && mapPorId.has(nuevoPadreId)) {
       const nuevoCat = mapPorId.get(nuevoPadreId)!;
       setSelectedCat(nuevoCat);
@@ -326,17 +332,15 @@ export function HierarchicalCategorySelect({
 
     const hijos = getChildren(cat);
     if (hijos && hijos.length > 0) {
-      // Si tiene hijos, enfocar sus hijas
       setCurrentParentId(cat.id_categoria);
     } else {
-      // Si es terminal, enfocar el contenedor de sus hermanos
       setCurrentParentId(cat.id_padre || null);
     }
 
     setIsExploradorAbierto(true);
   };
 
-  // 6. Manejo del Buscador Global Directo
+  // 7. Manejo del Buscador Global Directo
   const resultadosBusqueda = useMemo(() => {
     const q = searchGlobal.toLowerCase().trim();
     if (!q) return [];
@@ -350,7 +354,7 @@ export function HierarchicalCategorySelect({
       .slice(0, 8);
   }, [flatList, searchGlobal]);
 
-  const handleSelectBusquedaDirecta = (cat: CategoriaNodo) => {
+  const handleSelectBusquedaDirecta = (cat: CategoriaNodo, isFromCombobox = false) => {
     const path: number[] = [];
     let curr: CategoriaNodo | undefined = cat;
     while (curr) {
@@ -365,6 +369,8 @@ export function HierarchicalCategorySelect({
       setCurrentParentId(cat.id_categoria);
     } else {
       setCurrentParentId(cat.id_padre || null);
+      if (isFromCombobox) setIsOpenCombobox(false);
+      else setIsExploradorAbierto(false);
     }
 
     onChange(cat.id_categoria, cat);
@@ -379,10 +385,9 @@ export function HierarchicalCategorySelect({
     setCurrentParentId(null);
     onChange(null, null);
     setSearchGlobal('');
-    setIsExploradorAbierto(true);
   };
 
-  // 7. Modal de creación in-context
+  // 8. Modal de creación in-context
   const handleOpenCreateModal = (padreId: number | null = null) => {
     setModalPadreId(padreId);
     setModalForm({
@@ -461,9 +466,9 @@ export function HierarchicalCategorySelect({
   // ============================================================================
   if (variant === 'cascading') {
     return (
-      <div ref={containerRef} className={cn('space-y-3 w-full', className)}>
+      <div ref={containerRef} className={cn('space-y-3 w-full relative', className)}>
         {/* TARJETA DE RESUMEN EJECUTIVO (SIEMPRE VISIBLE CUANDO HAY SELECCIÓN) */}
-        {selectedCat && (
+        {selectedCat ? (
           <div className="relative overflow-hidden rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 via-white to-blue-50/40 p-3.5 shadow-xs transition-all">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               {/* Información y Migas de Pan Interactivas */}
@@ -520,7 +525,13 @@ export function HierarchicalCategorySelect({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsExploradorAbierto(!isExploradorAbierto)}
+                  onClick={() => {
+                    const willOpen = !isExploradorAbierto;
+                    setIsExploradorAbierto(willOpen);
+                    if (willOpen) {
+                      setTimeout(() => searchInputRef.current?.focus(), 50);
+                    }
+                  }}
                   className="h-8 text-xs font-semibold text-blue-700 border-blue-200 bg-white hover:bg-blue-50"
                 >
                   {isExploradorAbierto ? 'Ocultar Navegador' : 'Explorar / Cambiar'}
@@ -540,11 +551,51 @@ export function HierarchicalCategorySelect({
               </div>
             </div>
           </div>
+        ) : (
+          /* GATILLO INICIAL LIMPIO: SÓLO SE REFLEJA EL CUADRO AL HACER CLIC */
+          !isExploradorAbierto && (
+            <div
+              id={id}
+              tabIndex={disabled ? -1 : 0}
+              onClick={() => {
+                if (!disabled) {
+                  setIsExploradorAbierto(true);
+                  setTimeout(() => searchInputRef.current?.focus(), 50);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (!disabled) {
+                    setIsExploradorAbierto(true);
+                    setTimeout(() => searchInputRef.current?.focus(), 50);
+                  }
+                }
+              }}
+              className={cn(
+                'flex items-center justify-between rounded-xl border border-gray-300 bg-white px-3.5 py-2.5 text-xs shadow-xs transition-all group',
+                disabled
+                  ? 'opacity-50 cursor-not-allowed bg-gray-50'
+                  : 'cursor-pointer hover:border-blue-500 hover:bg-blue-50/20'
+              )}
+            >
+              <div className="flex items-center gap-2.5 text-gray-400 group-hover:text-gray-600">
+                <Search className="h-4 w-4 text-blue-600 shrink-0" />
+                <span className="font-medium text-xs text-gray-600">
+                  {placeholder || 'Haz clic aquí para buscar o seleccionar categoría taxonómica...'}
+                </span>
+              </div>
+              <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 shrink-0 font-medium">
+                Explorar categorías ▾
+              </Badge>
+            </div>
+          )
         )}
 
         {/* WORKBENCH DE NAVEGACIÓN ENFOCADA Y EXCLUSIVA */}
+        {/* SÓLO SE REFLEJA CUANDO EL BUSCADOR/SELECTOR TIENE EL CLIC ACTIVADO */}
         {isExploradorAbierto && (
-          <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-3.5 shadow-xs space-y-3 animate-in fade-in-0 duration-200">
+          <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-3.5 shadow-sm space-y-3 animate-in fade-in-0 duration-200">
             {/* Cabecera con Buscador Global Directo */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
               <div className="relative flex-1">
@@ -562,6 +613,7 @@ export function HierarchicalCategorySelect({
                   }}
                   placeholder="🔍 Buscar categoría por nombre o ruta (ej: Aceite, Batería, Filtro Aire)..."
                   className="pl-9 pr-8 h-9 text-xs bg-white border-gray-300 focus:border-blue-500 shadow-xs"
+                  autoFocus
                 />
                 {searchGlobal && (
                   <button
@@ -586,7 +638,7 @@ export function HierarchicalCategorySelect({
                       <button
                         key={res.id_categoria}
                         type="button"
-                        onClick={() => handleSelectBusquedaDirecta(res)}
+                        onClick={() => handleSelectBusquedaDirecta(res, false)}
                         className="w-full text-left p-2 rounded-lg hover:bg-blue-50/80 flex items-center justify-between group transition-colors"
                       >
                         <div className="flex flex-col truncate pr-2">
@@ -648,9 +700,21 @@ export function HierarchicalCategorySelect({
                   </div>
                 </div>
 
-                <Badge variant="outline" className="text-[10px] bg-white border-blue-300 text-blue-700 font-mono shrink-0">
-                  Nivel {nivelVisualizado} ({itemsEnfoqueActual.length})
-                </Badge>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAplicarCategoriaPadre(currentParentNode, false)}
+                    className="h-7 px-2 text-[11px] text-blue-700 hover:bg-blue-100 font-semibold"
+                    title={`Asignar directamente "${currentParentNode.nombre}"`}
+                  >
+                    ✓ Usar esta familia
+                  </Button>
+                  <Badge variant="outline" className="text-[10px] bg-white border-blue-300 text-blue-700 font-mono">
+                    Nivel {nivelVisualizado} ({itemsEnfoqueActual.length})
+                  </Badge>
+                </div>
               </div>
             )}
 
@@ -675,7 +739,7 @@ export function HierarchicalCategorySelect({
                     return (
                       <div
                         key={cat.id_categoria}
-                        onClick={() => handleSelectItem(cat)}
+                        onClick={() => handleSelectItem(cat, false)}
                         className={cn(
                           'group flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition-all',
                           isSelected
@@ -917,21 +981,15 @@ export function HierarchicalCategorySelect({
   }
 
   // ============================================================================
-  // RENDER MODO 2: COMBOBOX FLOTANTE COMPACTO (variant === 'combobox')
+  // RENDER MODO 2: COMBOBOX / POPOVER COMPACTO PARA TOOLBARS (variant === 'combobox')
   // ============================================================================
-  const filteredListCombobox = useMemo(() => {
-    const q = searchCombobox.toLowerCase().trim();
-    if (!q) return flatList;
-    return flatList.filter(
-      (cat) =>
-        cat.nombre.toLowerCase().includes(q) ||
-        (cat.ruta_jerarquica && cat.ruta_jerarquica.toLowerCase().includes(q)) ||
-        (cat.codigo_categoria && cat.codigo_categoria.toLowerCase().includes(q))
-    );
-  }, [flatList, searchCombobox]);
+  const IconSelected = selectedCat
+    ? getCategoryIcon(selectedCat.nombre, selectedCat.nivel)
+    : FolderTree;
 
   return (
     <div ref={containerRef} className={cn('relative w-full', className)}>
+      {/* BOTÓN DISPARADOR / GATILLO DE 40PX ALINEADO A TOOLBAR */}
       <div
         id={id}
         tabIndex={disabled ? -1 : 0}
@@ -939,46 +997,54 @@ export function HierarchicalCategorySelect({
         aria-expanded={isOpenCombobox}
         onClick={() => {
           if (!disabled) {
-            setIsOpenCombobox(!isOpenCombobox);
+            const willOpen = !isOpenCombobox;
+            setIsOpenCombobox(willOpen);
+            if (willOpen) {
+              setTimeout(() => searchInputRef.current?.focus(), 50);
+            }
           }
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            if (!disabled) setIsOpenCombobox(true);
+            if (!disabled) {
+              setIsOpenCombobox(true);
+              setTimeout(() => searchInputRef.current?.focus(), 50);
+            }
           }
         }}
         className={cn(
-          'flex min-h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-xs shadow-xs ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2',
-          disabled ? 'cursor-not-allowed opacity-50 bg-gray-50' : 'cursor-pointer hover:border-gray-400',
-          isOpenCombobox && 'border-blue-500 ring-1 ring-blue-500'
+          'flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-xs shadow-2xs transition-all',
+          disabled
+            ? 'cursor-not-allowed opacity-50 bg-gray-50 border-gray-200'
+            : 'cursor-pointer bg-white hover:border-blue-400',
+          isOpenCombobox && 'border-blue-500 ring-2 ring-blue-500/20',
+          selectedCat ? 'border-blue-300 bg-blue-50/40' : 'border-gray-300'
         )}
       >
         <div className="flex items-center gap-2 overflow-hidden truncate">
-          <FolderTree className="h-4 w-4 shrink-0 text-blue-600" />
+          <IconSelected className={cn('h-4 w-4 shrink-0', selectedCat ? 'text-blue-600' : 'text-gray-400')} />
           {selectedCat ? (
-            <div className="flex flex-col truncate text-left">
-              <span className="font-semibold text-gray-900 text-xs truncate">
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="font-semibold text-gray-900 truncate">
                 {selectedCat.nombre}
               </span>
-              {selectedCat.ruta_jerarquica && (
-                <span className="text-[10px] text-gray-400 font-mono truncate">
-                  {selectedCat.ruta_jerarquica}
-                </span>
-              )}
+              <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 bg-white text-blue-700 border-blue-200 shrink-0">
+                N{selectedCat.nivel}
+              </Badge>
             </div>
           ) : (
-            <span className="text-gray-400 text-xs">{placeholder}</span>
+            <span className="text-gray-500 text-xs truncate">{placeholder}</span>
           )}
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0 ml-1">
           {selectedCat && showClearButton && !disabled && (
             <button
               type="button"
               onClick={handleClear}
-              className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-              title="Quitar categoría seleccionada"
+              className="rounded-full p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+              title="Quitar filtro de categoría"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -987,71 +1053,165 @@ export function HierarchicalCategorySelect({
         </div>
       </div>
 
+      {/* POPOVER FLOTANTE Z-50 (SÓLO SE REFLEJA CUANDO EL SELECTOR TIENE EL CLIC ACTIVADO) */}
       {isOpenCombobox && (
-        <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-xl animate-in fade-in-0 zoom-in-95">
-          <div className="p-2 border-b border-gray-100 bg-gray-50/50">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
-              <Input
-                type="text"
-                value={searchCombobox}
-                onChange={(e) => setSearchCombobox(e.target.value)}
-                placeholder="Buscar por nombre o ruta jerárquica..."
-                className="pl-8 pr-3 h-8 text-xs bg-white border-gray-200"
-                autoFocus
-              />
-            </div>
+        <div className="absolute z-50 left-0 right-0 mt-1 min-w-[320px] max-w-[420px] rounded-xl border border-gray-200 bg-white p-3 shadow-xl animate-in fade-in-0 zoom-in-95 space-y-2.5">
+          {/* Buscador superior predictivo */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+            <Input
+              ref={searchInputRef}
+              type="text"
+              value={searchGlobal}
+              onChange={(e) => {
+                setSearchGlobal(e.target.value);
+                setMostrarResultadosBusqueda(true);
+              }}
+              onFocus={() => {
+                if (searchGlobal.trim()) setMostrarResultadosBusqueda(true);
+              }}
+              placeholder="Buscar por nombre o ruta..."
+              className="pl-8 pr-7 h-8 text-xs bg-gray-50/50 border-gray-200 focus:bg-white"
+              autoFocus
+            />
+            {searchGlobal && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchGlobal('');
+                  setMostrarResultadosBusqueda(false);
+                }}
+                className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {/* Resultados flotantes de búsqueda rápida */}
+            {mostrarResultadosBusqueda && resultadosBusqueda.length > 0 && (
+              <div className="absolute z-50 left-0 right-0 mt-1 rounded-xl border border-gray-200 bg-white p-1 shadow-lg max-h-52 overflow-y-auto">
+                {resultadosBusqueda.map((res) => (
+                  <button
+                    key={res.id_categoria}
+                    type="button"
+                    onClick={() => handleSelectBusquedaDirecta(res, true)}
+                    className="w-full text-left p-1.5 rounded-lg hover:bg-blue-50 text-xs flex items-center justify-between group"
+                  >
+                    <span className="font-semibold text-gray-800 truncate pr-2 group-hover:text-blue-900">
+                      {res.nombre}
+                    </span>
+                    <Badge variant="outline" className="text-[9px] font-mono shrink-0">
+                      N{res.nivel}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="max-h-72 overflow-y-auto p-1.5 text-xs space-y-0.5">
+          {/* Cabecera de Nivel y Botón Volver */}
+          {currentParentNode ? (
+            <div className="flex items-center justify-between p-1.5 rounded-lg bg-blue-50/70 border border-blue-200 text-xs">
+              <button
+                type="button"
+                onClick={handleVolverNivel}
+                className="flex items-center gap-1 font-bold text-blue-700 hover:text-blue-900"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                <span>Volver</span>
+              </button>
+              <span className="font-semibold text-[11px] text-gray-700 truncate max-w-[180px]">
+                {currentParentNode.nombre}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleAplicarCategoriaPadre(currentParentNode, true)}
+                className="text-[10px] text-blue-700 hover:underline font-bold"
+              >
+                ✓ Aplicar esta
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase px-1">
+              <span>Familias Principales ({arbol.length})</span>
+            </div>
+          )}
+
+          {/* Listado Drill-down de Categorías */}
+          <div className="max-h-56 overflow-y-auto space-y-1 p-0.5">
             {isLoading ? (
-              <div className="py-6 text-center text-gray-500">
-                <Loader2 className="mx-auto h-5 w-5 animate-spin text-blue-600" />
-                <p className="mt-2 text-xs">Cargando categorías...</p>
+              <div className="py-6 text-center text-gray-400 text-xs">
+                <Loader2 className="mx-auto h-4 w-4 animate-spin text-blue-600 mb-1" />
+                Cargando categorías...
               </div>
-            ) : filteredListCombobox.length > 0 ? (
-              filteredListCombobox.map((cat) => {
+            ) : itemsEnfoqueActual.length > 0 ? (
+              itemsEnfoqueActual.map((cat) => {
                 const isSelected = selectedCat?.id_categoria === cat.id_categoria;
-                const indentPixels = (cat.nivel ? cat.nivel - 1 : cat.indent ?? 0) * 16;
+                const hijos = getChildren(cat);
+                const hasChildren = Array.isArray(hijos) && hijos.length > 0;
                 const IconComp = getCategoryIcon(cat.nombre, cat.nivel);
 
                 return (
                   <button
                     key={cat.id_categoria}
                     type="button"
-                    onClick={() => {
-                      setSelectedCat(cat);
-                      onChange(cat.id_categoria, cat);
-                      setIsOpenCombobox(false);
-                    }}
-                    style={{ paddingLeft: `${Math.max(8, indentPixels)}px` }}
+                    onClick={() => handleSelectItem(cat, true)}
                     className={cn(
-                      'w-full flex items-center justify-between rounded-lg py-1.5 px-2.5 transition-colors text-left group',
-                      isSelected ? 'bg-blue-50 text-blue-900 font-bold' : 'hover:bg-gray-100 text-gray-700'
+                      'w-full flex items-center justify-between p-2 rounded-lg text-xs text-left transition-colors group',
+                      isSelected
+                        ? 'bg-blue-600 text-white font-semibold'
+                        : 'hover:bg-gray-100 text-gray-800'
                     )}
                   >
-                    <div className="flex items-center gap-1.5 truncate">
-                      {cat.nivel > 1 ? (
-                        <CornerDownRight className="h-3.5 w-3.5 text-gray-300 shrink-0 select-none" />
-                      ) : (
-                        <IconComp className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                      )}
+                    <div className="flex items-center gap-2 truncate">
+                      <IconComp className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'text-white' : 'text-blue-600')} />
                       <span className="truncate">{cat.nombre}</span>
-                      {cat.codigo_categoria && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono text-gray-400 border-gray-200 ml-1">
-                          {cat.codigo_categoria}
-                        </Badge>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      {hasChildren ? (
+                        <div className="flex items-center gap-0.5">
+                          <span className={cn('text-[10px] font-mono', isSelected ? 'text-blue-200' : 'text-gray-400')}>
+                            {hijos.length}
+                          </span>
+                          <ChevronRight className={cn('h-3 w-3', isSelected ? 'text-white' : 'text-gray-400 group-hover:text-blue-600')} />
+                        </div>
+                      ) : (
+                        isSelected && <Check className="h-3.5 w-3.5 text-white" />
                       )}
                     </div>
-                    {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
                   </button>
                 );
               })
             ) : (
-              <div className="py-6 text-center text-gray-500 text-xs">
-                No se encontraron categorías para "{searchCombobox}"
+              <div className="py-6 text-center text-gray-400 text-xs">
+                Sin subcategorías en este nivel
               </div>
             )}
+          </div>
+
+          {/* Pie del Popover */}
+          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+            {selectedCat ? (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="text-[11px] text-red-600 hover:underline font-medium"
+              >
+                Limpiar filtro
+              </button>
+            ) : (
+              <span className="text-[10px] text-gray-400">Selecciona para filtrar</span>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setIsOpenCombobox(false)}
+              className="h-7 text-xs px-2"
+            >
+              Cerrar
+            </Button>
           </div>
         </div>
       )}
