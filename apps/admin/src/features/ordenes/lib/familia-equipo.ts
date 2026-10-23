@@ -20,6 +20,7 @@ type ServicioClasificable = {
     nombre_servicio?: string;
     codigo_tipo?: string;
     nombre_tipo?: string;
+    categoria?: string;
     id_tipo_equipo?: number | null;
     tipos_equipo?: { codigo_tipo?: string; nombre_tipo?: string } | null;
 };
@@ -110,6 +111,7 @@ export function esServicioCompatibleConFamilia(
 
     const cod = (service.codigo_tipo || '').toUpperCase();
     const nom = (service.nombre_tipo || '').toUpperCase();
+    const cat = (service.categoria || '').toUpperCase();
     const codEq = (service.tipos_equipo?.codigo_tipo || '').toUpperCase();
     const idEq = service.id_tipo_equipo;
 
@@ -131,7 +133,14 @@ export function esServicioCompatibleConFamilia(
         return true;
     }
     if (familia === 'COMPRESOR') {
-        if (esGen || esBom || esMot) return false;
+        if (esGen || esMot) return false;
+        // Los compresores comparten protocolos hidroneumáticos/presión con bombas:
+        // admiten servicios específicos de compresor Y correctivos de bomba (BOM_CORR).
+        // Se excluyen preventivos de bomba específicos (ej. BOM_PREV_A) para preservar
+        // el preventivo propio de compresor (COMP_PREV_A).
+        if (esBom && !(cod.includes('CORR') || cat === 'CORRECTIVO' || nom.includes('CORRECTIVO'))) {
+            return false;
+        }
         return true;
     }
     return true;
@@ -154,10 +163,13 @@ export function clasificarServicioCorrectivo(s: ServicioClasificable): 'GENERADO
         return 'GENERADOR';
     }
     if (
-        idEq === 2 || idEq === 5 ||
+        idEq === 2 || idEq === 5 || idEq === 20 ||
         codEq.includes('BOM') || nomEq.includes('BOMBA') ||
+        codEq.includes('COMP') || nomEq.includes('COMPRESOR') ||
         cod.startsWith('BOM-') || cod.includes('-BOMB') ||
+        cod.startsWith('COMP-') || cod.includes('-COMP') ||
         nom.includes('BOMBA') || nom.includes('BOMBEO') ||
+        nom.includes('COMPRESOR') || nom.includes('AIRE COMPRIMIDO') ||
         nom.includes('HIDRONEUMÁTICO') || nom.includes('HIDRONEUMATICO') ||
         nom.includes('PRESOSTATO') || nom.includes('IMPULSOR') || nom.includes('SELLO MECÁNICO')
     ) {

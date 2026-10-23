@@ -570,14 +570,14 @@ function PasoAlcance({
     const [busquedaCorrectivo, setBusquedaCorrectivo] = useState('');
 
     // Estado del filtro de correctivos: por defecto "FAMILIA_Y_GLOBAL" para evitar errores de asignación cruzada
-    const defaultTab = (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR')
+    const defaultTab = (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR')
         ? 'FAMILIA_Y_GLOBAL'
         : 'TODOS';
     const [filtroTab, setFiltroTab] = useState<string>(defaultTab);
 
     // Sincronizar tab cuando cambia la familia del equipo
     useEffect(() => {
-        if (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR') {
+        if (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR') {
             setFiltroTab('FAMILIA_Y_GLOBAL');
         } else {
             setFiltroTab('TODOS');
@@ -620,8 +620,9 @@ function PasoAlcance({
     const serviciosFiltrados = useMemo(() => {
         const list = (serviciosComerciales || []).filter((s) => {
             const cat = clasificarServicioCorrectivo(s);
-            if (filtroTab === 'FAMILIA_Y_GLOBAL') return cat === familiaEfectiva || cat === 'GLOBAL';
-            if (filtroTab === 'SOLO_FAMILIA') return cat === familiaEfectiva;
+            const esFamiliaMatch = cat === familiaEfectiva || (familiaEfectiva === 'COMPRESOR' && cat === 'BOMBA');
+            if (filtroTab === 'FAMILIA_Y_GLOBAL') return esFamiliaMatch || cat === 'GLOBAL';
+            if (filtroTab === 'SOLO_FAMILIA') return esFamiliaMatch;
             if (filtroTab === 'SOLO_GLOBAL') return cat === 'GLOBAL';
             if (filtroTab === 'GEN') return cat === 'GENERADOR';
             if (filtroTab === 'BOM') return cat === 'BOMBA';
@@ -820,7 +821,7 @@ function PasoAlcance({
                                         Ver Todo
                                     </button>
                                 </>
-                            ) : familiaEfectiva === 'BOMBA' ? (
+                            ) : (familiaEfectiva === 'BOMBA' || familiaEfectiva === 'COMPRESOR') ? (
                                 <>
                                     <button
                                         type="button"
@@ -831,9 +832,9 @@ function PasoAlcance({
                                                 ? 'bg-orange-600 text-white shadow-sm'
                                                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
                                         )}
-                                        title="Servicios propios de Bomba y los que aplican a todos los equipos"
+                                        title="Servicios propios de Bomba / Compresor y los que aplican a todos los equipos"
                                     >
-                                        Bomba + Generales
+                                        {familiaEfectiva === 'COMPRESOR' ? 'Compresor / Bomba + Generales' : 'Bomba + Generales'}
                                     </button>
                                     <button
                                         type="button"
@@ -844,9 +845,9 @@ function PasoAlcance({
                                                 ? 'bg-orange-600 text-white shadow-sm'
                                                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
                                         )}
-                                        title="Solo intervenciones específicas de bombas hidráulicas"
+                                        title="Solo intervenciones específicas de bombas y compresores"
                                     >
-                                        Solo Bomba
+                                        {familiaEfectiva === 'COMPRESOR' ? 'Solo Compresor / Bomba' : 'Solo Bomba'}
                                     </button>
                                     <button
                                         type="button"
