@@ -1,8 +1,12 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 23 de Octubre de 2026  
-**Versión:** 5.8 Release Candidate (RC-8 - Selector Combobox Popover Enterprise en Catálogo Maestro y Alta de Repuestos)  
+**Versión:** 5.9 Release Candidate (RC-9 - Consistencia Matemática de KPIs & Blindaje Transaccional WMS ⇄ EAM)  
 **Últimos Commits Clave:** 
+- `fix(catalogo-kpis)`: Saneamiento de Agregación SQL/Prisma en Catálogo Maestro (`articulos.service.ts`):
+  - **Resolución de la Discrepancia 24 vs 25:**
+    - Causa Forense Confirmada: La función `getResumen()` realizaba el conteo total con filtro `{ where: { activo: true } }` (obteniendo 24 artículos), pero la consulta de agrupación `groupBy({ by: ['destino_articulo'] })` omitía la cláusula `where`, contabilizando un artículo de prueba legado e inactivo (`id_componente: 1`, `LEGACY-CMP-001`, `Componente legado histórico (Archivado)` con `activo: false` y `destino_articulo: 'INSUMO_SERVICIO'`).
+    - Corrección Aplicada: Se incorporó la condición estricta `where: { activo: true }` a `groupBy`, garantizando que tanto la tarjeta KPI *Total Recursos* (24) como la tarjeta *Insumos de Servicio* (24) y las píldoras de filtrado muestren cifras 100% consistentes y matemáticamente simétricas.
 - `feat(catalogo-nuevo)`: Adopción del Selector Combobox Popover Puntual con Drill-Down Exclusivo y Modal In-Context en Alta de Repuestos (`/compras/catalogo/nuevo`):
   - **Experiencia de Usuario Punctual & Zero-Stress:**
     - Sustitución del panel en cascada por el selector Combobox Popover de 40px en reposo, homologando la experiencia validada y elogiada en `/compras/catalogo`.
