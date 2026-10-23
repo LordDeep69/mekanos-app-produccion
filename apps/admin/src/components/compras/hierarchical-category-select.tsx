@@ -124,7 +124,7 @@ export function HierarchicalCategorySelect({
   className,
   id,
   showClearButton = true,
-  variant = 'cascading',
+  variant = 'combobox',
 }: HierarchicalCategorySelectProps) {
   const [arbol, setArbol] = useState<CategoriaNodo[]>([]);
   const [selectedCat, setSelectedCat] = useState<CategoriaNodo | null>(null);
@@ -217,6 +217,7 @@ export function HierarchicalCategorySelect({
   // 3. Cierre limpio por clic fuera del componente (Tanto para cascading como combobox)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (isModalOpen) return;
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsExploradorAbierto(false);
         setIsOpenCombobox(false);
@@ -227,7 +228,7 @@ export function HierarchicalCategorySelect({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isModalOpen]);
 
   // 4. Obtener el listado de categorías a mostrar según el enfoque actual
   const currentParentNode = useMemo(() => {
@@ -874,347 +875,383 @@ export function HierarchicalCategorySelect({
             </div>
           </div>
         )}
-
-        {/* MODAL IN-CONTEXT DE CREACIÓN */}
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="sm:max-w-md bg-white border border-gray-200 shadow-xl">
-            <form onSubmit={handleSubmitCreate}>
-              <DialogHeader className="border-b border-gray-100 pb-3">
-                <div className="flex items-center gap-2 text-blue-600">
-                  <Sparkles className="h-5 w-5" />
-                  <DialogTitle className="text-base font-bold text-gray-900">
-                    Nueva Categoría Taxonómica
-                  </DialogTitle>
-                </div>
-                <DialogDescription className="text-xs text-gray-500">
-                  Crea una nueva clasificación en el catálogo maestro.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4 py-4 text-xs">
-                {/* Categoría Padre */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="modal-cat-padre" className="font-semibold text-gray-800">
-                    Categoría Padre (Nivel Superior)
-                  </Label>
-                  <select
-                    id="modal-cat-padre"
-                    value={modalPadreId || ''}
-                    onChange={(e) =>
-                      setModalPadreId(e.target.value ? Number(e.target.value) : null)
-                    }
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="">[ Ninguna - Categoría Raíz Nivel 1 ]</option>
-                    {flatList.map((cat) => (
-                      <option key={cat.id_categoria} value={cat.id_categoria}>
-                        {'— '.repeat(cat.nivel - 1)} {cat.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Nombre de la Categoría */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="modal-cat-nombre" className="font-semibold text-gray-800">
-                    Nombre de la Categoría <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="modal-cat-nombre"
-                    type="text"
-                    required
-                    value={modalForm.nombre}
-                    onChange={(e) => setModalForm({ ...modalForm, nombre: e.target.value })}
-                    placeholder="Ej: FILTROS DE ACEITE"
-                    className="bg-white text-xs uppercase"
-                  />
-                </div>
-
-                {/* Código de Categoría */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="modal-cat-codigo" className="font-semibold text-gray-800">
-                    Código Mnemotécnico (Opcional)
-                  </Label>
-                  <Input
-                    id="modal-cat-codigo"
-                    type="text"
-                    value={modalForm.codigo_categoria || ''}
-                    onChange={(e) =>
-                      setModalForm({ ...modalForm, codigo_categoria: e.target.value.toUpperCase() })
-                    }
-                    placeholder="Ej: CAT-FIL-ACE"
-                    className="bg-white text-xs font-mono uppercase"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="border-t border-gray-100 pt-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsModalOpen(false)}
-                  disabled={isCreating}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={isCreating}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {isCreating ? (
-                    <>
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Guardando...
-                    </>
-                  ) : (
-                    'Guardar Categoría'
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
       </div>
     );
   }
 
   // ============================================================================
-  // RENDER MODO 2: COMBOBOX / POPOVER COMPACTO PARA TOOLBARS (variant === 'combobox')
+  // RENDER MODO 2: COMBOBOX / POPOVER COMPACTO PARA TOOLBARS Y FORMULARIOS (variant === 'combobox')
   // ============================================================================
   const IconSelected = selectedCat
     ? getCategoryIcon(selectedCat.nombre, selectedCat.nivel)
     : FolderTree;
 
+  const displayRuta = selectedCat
+    ? (selectedCat.ruta_jerarquica || selectedCat.nombre).replace(/\s*>\s*/g, ' › ')
+    : '';
+
   return (
-    <div ref={containerRef} className={cn('relative w-full', className)}>
-      {/* BOTÓN DISPARADOR / GATILLO DE 40PX ALINEADO A TOOLBAR */}
-      <div
-        id={id}
-        tabIndex={disabled ? -1 : 0}
-        role="combobox"
-        aria-expanded={isOpenCombobox}
-        onClick={() => {
-          if (!disabled) {
-            const willOpen = !isOpenCombobox;
-            setIsOpenCombobox(willOpen);
-            if (willOpen) {
-              setTimeout(() => searchInputRef.current?.focus(), 50);
-            }
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
+    <>
+      <div ref={containerRef} className={cn('relative w-full', className)}>
+        {/* BOTÓN DISPARADOR / GATILLO DE 40PX ALINEADO A INPUT FORMULARIO / TOOLBAR */}
+        <div
+          id={id}
+          tabIndex={disabled ? -1 : 0}
+          role="combobox"
+          aria-expanded={isOpenCombobox}
+          onClick={() => {
             if (!disabled) {
-              setIsOpenCombobox(true);
-              setTimeout(() => searchInputRef.current?.focus(), 50);
+              const willOpen = !isOpenCombobox;
+              setIsOpenCombobox(willOpen);
+              if (willOpen) {
+                setTimeout(() => searchInputRef.current?.focus(), 50);
+              }
             }
-          }
-        }}
-        className={cn(
-          'flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-xs shadow-2xs transition-all',
-          disabled
-            ? 'cursor-not-allowed opacity-50 bg-gray-50 border-gray-200'
-            : 'cursor-pointer bg-white hover:border-blue-400',
-          isOpenCombobox && 'border-blue-500 ring-2 ring-blue-500/20',
-          selectedCat ? 'border-blue-300 bg-blue-50/40' : 'border-gray-300'
-        )}
-      >
-        <div className="flex items-center gap-2 overflow-hidden truncate">
-          <IconSelected className={cn('h-4 w-4 shrink-0', selectedCat ? 'text-blue-600' : 'text-gray-400')} />
-          {selectedCat ? (
-            <div className="flex items-center gap-1.5 truncate">
-              <span className="font-semibold text-gray-900 truncate">
-                {selectedCat.nombre}
-              </span>
-              <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 bg-white text-blue-700 border-blue-200 shrink-0">
-                N{selectedCat.nivel}
-              </Badge>
-            </div>
-          ) : (
-            <span className="text-gray-500 text-xs truncate">{placeholder}</span>
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              if (!disabled) {
+                setIsOpenCombobox(true);
+                setTimeout(() => searchInputRef.current?.focus(), 50);
+              }
+            }
+          }}
+          className={cn(
+            'flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-xs shadow-2xs transition-all',
+            disabled
+              ? 'cursor-not-allowed opacity-50 bg-gray-50 border-gray-200'
+              : 'cursor-pointer bg-white hover:border-blue-400',
+            isOpenCombobox && 'border-blue-500 ring-2 ring-blue-500/20',
+            selectedCat ? 'border-blue-300 bg-blue-50/30' : 'border-gray-300'
           )}
-        </div>
+        >
+          <div className="flex items-center gap-2 overflow-hidden truncate">
+            <IconSelected className={cn('h-4 w-4 shrink-0', selectedCat ? 'text-blue-600' : 'text-gray-400')} />
+            {selectedCat ? (
+              <div
+                className="flex items-center gap-1.5 truncate"
+                title={selectedCat.ruta_jerarquica || selectedCat.nombre}
+              >
+                <span className="font-semibold text-gray-900 truncate">
+                  {displayRuta}
+                </span>
+                <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-white text-blue-700 border-blue-200 shrink-0">
+                  N{selectedCat.nivel}
+                </Badge>
+                {selectedCat.codigo_categoria && (
+                  <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-gray-50 text-gray-600 border-gray-200 shrink-0 hidden md:inline-flex">
+                    {selectedCat.codigo_categoria}
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <span className="text-gray-500 text-xs truncate">{placeholder}</span>
+            )}
+          </div>
 
-        <div className="flex items-center gap-1 shrink-0 ml-1">
-          {selectedCat && showClearButton && !disabled && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="rounded-full p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-              title="Quitar filtro de categoría"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <ChevronsUpDown className="h-4 w-4 shrink-0 text-gray-400" />
-        </div>
-      </div>
-
-      {/* POPOVER FLOTANTE Z-50 (SÓLO SE REFLEJA CUANDO EL SELECTOR TIENE EL CLIC ACTIVADO) */}
-      {isOpenCombobox && (
-        <div className="absolute z-50 left-0 right-0 mt-1 min-w-[320px] max-w-[420px] rounded-xl border border-gray-200 bg-white p-3 shadow-xl animate-in fade-in-0 zoom-in-95 space-y-2.5">
-          {/* Buscador superior predictivo */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
-            <Input
-              ref={searchInputRef}
-              type="text"
-              value={searchGlobal}
-              onChange={(e) => {
-                setSearchGlobal(e.target.value);
-                setMostrarResultadosBusqueda(true);
-              }}
-              onFocus={() => {
-                if (searchGlobal.trim()) setMostrarResultadosBusqueda(true);
-              }}
-              placeholder="Buscar por nombre o ruta..."
-              className="pl-8 pr-7 h-8 text-xs bg-gray-50/50 border-gray-200 focus:bg-white"
-              autoFocus
-            />
-            {searchGlobal && (
+          <div className="flex items-center gap-1 shrink-0 ml-1">
+            {selectedCat && showClearButton && !disabled && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearchGlobal('');
-                  setMostrarResultadosBusqueda(false);
-                }}
-                className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                onClick={handleClear}
+                className="rounded-full p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                title="Quitar categoría"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
-
-            {/* Resultados flotantes de búsqueda rápida */}
-            {mostrarResultadosBusqueda && resultadosBusqueda.length > 0 && (
-              <div className="absolute z-50 left-0 right-0 mt-1 rounded-xl border border-gray-200 bg-white p-1 shadow-lg max-h-52 overflow-y-auto">
-                {resultadosBusqueda.map((res) => (
-                  <button
-                    key={res.id_categoria}
-                    type="button"
-                    onClick={() => handleSelectBusquedaDirecta(res, true)}
-                    className="w-full text-left p-1.5 rounded-lg hover:bg-blue-50 text-xs flex items-center justify-between group"
-                  >
-                    <span className="font-semibold text-gray-800 truncate pr-2 group-hover:text-blue-900">
-                      {res.nombre}
-                    </span>
-                    <Badge variant="outline" className="text-[9px] font-mono shrink-0">
-                      N{res.nivel}
-                    </Badge>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Cabecera de Nivel y Botón Volver */}
-          {currentParentNode ? (
-            <div className="flex items-center justify-between p-1.5 rounded-lg bg-blue-50/70 border border-blue-200 text-xs">
-              <button
-                type="button"
-                onClick={handleVolverNivel}
-                className="flex items-center gap-1 font-bold text-blue-700 hover:text-blue-900"
-              >
-                <ArrowLeft className="h-3 w-3" />
-                <span>Volver</span>
-              </button>
-              <span className="font-semibold text-[11px] text-gray-700 truncate max-w-[180px]">
-                {currentParentNode.nombre}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleAplicarCategoriaPadre(currentParentNode, true)}
-                className="text-[10px] text-blue-700 hover:underline font-bold"
-              >
-                ✓ Aplicar esta
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase px-1">
-              <span>Familias Principales ({arbol.length})</span>
-            </div>
-          )}
-
-          {/* Listado Drill-down de Categorías */}
-          <div className="max-h-56 overflow-y-auto space-y-1 p-0.5">
-            {isLoading ? (
-              <div className="py-6 text-center text-gray-400 text-xs">
-                <Loader2 className="mx-auto h-4 w-4 animate-spin text-blue-600 mb-1" />
-                Cargando categorías...
-              </div>
-            ) : itemsEnfoqueActual.length > 0 ? (
-              itemsEnfoqueActual.map((cat) => {
-                const isSelected = selectedCat?.id_categoria === cat.id_categoria;
-                const hijos = getChildren(cat);
-                const hasChildren = Array.isArray(hijos) && hijos.length > 0;
-                const IconComp = getCategoryIcon(cat.nombre, cat.nivel);
-
-                return (
-                  <button
-                    key={cat.id_categoria}
-                    type="button"
-                    onClick={() => handleSelectItem(cat, true)}
-                    className={cn(
-                      'w-full flex items-center justify-between p-2 rounded-lg text-xs text-left transition-colors group',
-                      isSelected
-                        ? 'bg-blue-600 text-white font-semibold'
-                        : 'hover:bg-gray-100 text-gray-800'
-                    )}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <IconComp className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'text-white' : 'text-blue-600')} />
-                      <span className="truncate">{cat.nombre}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0 ml-1">
-                      {hasChildren ? (
-                        <div className="flex items-center gap-0.5">
-                          <span className={cn('text-[10px] font-mono', isSelected ? 'text-blue-200' : 'text-gray-400')}>
-                            {hijos.length}
-                          </span>
-                          <ChevronRight className={cn('h-3 w-3', isSelected ? 'text-white' : 'text-gray-400 group-hover:text-blue-600')} />
-                        </div>
-                      ) : (
-                        isSelected && <Check className="h-3.5 w-3.5 text-white" />
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="py-6 text-center text-gray-400 text-xs">
-                Sin subcategorías en este nivel
-              </div>
-            )}
-          </div>
-
-          {/* Pie del Popover */}
-          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-            {selectedCat ? (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="text-[11px] text-red-600 hover:underline font-medium"
-              >
-                Limpiar filtro
-              </button>
-            ) : (
-              <span className="text-[10px] text-gray-400">Selecciona para filtrar</span>
-            )}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setIsOpenCombobox(false)}
-              className="h-7 text-xs px-2"
-            >
-              Cerrar
-            </Button>
+            <ChevronsUpDown className="h-4 w-4 shrink-0 text-gray-400" />
           </div>
         </div>
-      )}
-    </div>
+
+        {/* POPOVER FLOTANTE Z-50 (SÓLO SE REFLEJA CUANDO EL SELECTOR TIENE EL CLIC ACTIVADO) */}
+        {isOpenCombobox && (
+          <div className="absolute z-50 left-0 mt-1 w-full min-w-[320px] sm:w-[480px] max-w-full rounded-xl border border-gray-200 bg-white p-3 shadow-xl animate-in fade-in-0 zoom-in-95 space-y-2.5">
+            {/* Buscador superior predictivo */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+              <Input
+                ref={searchInputRef}
+                type="text"
+                value={searchGlobal}
+                onChange={(e) => {
+                  setSearchGlobal(e.target.value);
+                  setMostrarResultadosBusqueda(true);
+                }}
+                onFocus={() => {
+                  if (searchGlobal.trim()) setMostrarResultadosBusqueda(true);
+                }}
+                placeholder="Buscar por nombre o ruta (ej: Filtro Aceite, Batería)..."
+                className="pl-8 pr-7 h-8 text-xs bg-gray-50/50 border-gray-200 focus:bg-white"
+                autoFocus
+              />
+              {searchGlobal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchGlobal('');
+                    setMostrarResultadosBusqueda(false);
+                  }}
+                  className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {/* Resultados flotantes de búsqueda rápida */}
+              {mostrarResultadosBusqueda && resultadosBusqueda.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 mt-1 rounded-xl border border-gray-200 bg-white p-1 shadow-lg max-h-52 overflow-y-auto">
+                  {resultadosBusqueda.map((res) => (
+                    <button
+                      key={res.id_categoria}
+                      type="button"
+                      onClick={() => handleSelectBusquedaDirecta(res, true)}
+                      className="w-full text-left p-1.5 rounded-lg hover:bg-blue-50 text-xs flex items-center justify-between group"
+                    >
+                      <div className="flex flex-col truncate pr-2">
+                        <span className="font-semibold text-gray-800 truncate group-hover:text-blue-900">
+                          {res.nombre}
+                        </span>
+                        <span className="text-[10px] text-gray-400 truncate font-mono">
+                          {res.ruta_jerarquica || res.nombre}
+                        </span>
+                      </div>
+                      <Badge variant="outline" className="text-[9px] font-mono shrink-0">
+                        N{res.nivel}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Cabecera de Nivel y Botón Volver */}
+            {currentParentNode ? (
+              <div className="flex items-center justify-between p-1.5 rounded-lg bg-blue-50/70 border border-blue-200 text-xs">
+                <button
+                  type="button"
+                  onClick={handleVolverNivel}
+                  className="flex items-center gap-1 font-bold text-blue-700 hover:text-blue-900"
+                >
+                  <ArrowLeft className="h-3 w-3" />
+                  <span>Volver</span>
+                </button>
+                <span className="font-semibold text-[11px] text-gray-700 truncate max-w-[180px]">
+                  {currentParentNode.nombre}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleAplicarCategoriaPadre(currentParentNode, true)}
+                  className="text-[10px] text-blue-700 hover:underline font-bold"
+                >
+                  ✓ Asignar esta
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase px-1">
+                <span>Familias Principales ({arbol.length})</span>
+                <span className="text-[10px] font-normal lowercase text-gray-400">clic para explorar</span>
+              </div>
+            )}
+
+            {/* Listado Drill-down de Categorías */}
+            <div className="max-h-56 overflow-y-auto space-y-1 p-0.5">
+              {isLoading ? (
+                <div className="py-6 text-center text-gray-400 text-xs">
+                  <Loader2 className="mx-auto h-4 w-4 animate-spin text-blue-600 mb-1" />
+                  Cargando categorías...
+                </div>
+              ) : itemsEnfoqueActual.length > 0 ? (
+                itemsEnfoqueActual.map((cat) => {
+                  const isSelected = selectedCat?.id_categoria === cat.id_categoria;
+                  const hijos = getChildren(cat);
+                  const hasChildren = Array.isArray(hijos) && hijos.length > 0;
+                  const IconComp = getCategoryIcon(cat.nombre, cat.nivel);
+
+                  return (
+                    <button
+                      key={cat.id_categoria}
+                      type="button"
+                      onClick={() => handleSelectItem(cat, true)}
+                      className={cn(
+                        'w-full flex items-center justify-between p-2 rounded-lg text-xs text-left transition-colors group',
+                        isSelected
+                          ? 'bg-blue-600 text-white font-semibold'
+                          : 'hover:bg-gray-100 text-gray-800'
+                      )}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <IconComp className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'text-white' : 'text-blue-600')} />
+                        <span className="truncate">{cat.nombre}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 ml-1">
+                        {hasChildren ? (
+                          <div className="flex items-center gap-0.5">
+                            <span className={cn('text-[10px] font-mono', isSelected ? 'text-blue-200' : 'text-gray-400')}>
+                              {hijos.length}
+                            </span>
+                            <ChevronRight className={cn('h-3 w-3', isSelected ? 'text-white' : 'text-gray-400 group-hover:text-blue-600')} />
+                          </div>
+                        ) : (
+                          isSelected && <Check className="h-3.5 w-3.5 text-white" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="py-6 text-center text-gray-400 text-xs">
+                  Sin subcategorías en este nivel
+                </div>
+              )}
+            </div>
+
+            {/* Pie del Popover con Creación In-Context y Cierre Limpio */}
+            <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                {selectedCat ? (
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="text-[11px] text-red-600 hover:underline font-medium"
+                  >
+                    Limpiar selección
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-gray-400">Selecciona para asignar</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleOpenCreateModal(currentParentId)}
+                  className="h-7 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 px-2"
+                  title={currentParentId === null ? 'Crear nueva familia principal' : `Crear subcategoría dentro de ${currentParentNode?.nombre}`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>{currentParentId === null ? 'Nueva Familia' : 'Nueva Subcategoría'}</span>
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsOpenCombobox(false)}
+                  className="h-7 text-xs px-2.5"
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL IN-CONTEXT DE CREACIÓN COMPARTIDO */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white border border-gray-200 shadow-xl">
+          <form onSubmit={handleSubmitCreate}>
+            <DialogHeader className="border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2 text-blue-600">
+                <Sparkles className="h-5 w-5" />
+                <DialogTitle className="text-base font-bold text-gray-900">
+                  Nueva Categoría Taxonómica
+                </DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-gray-500">
+                Crea una nueva clasificación en el catálogo maestro.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4 text-xs">
+              {/* Categoría Padre */}
+              <div className="space-y-1.5">
+                <Label htmlFor="modal-cat-padre" className="font-semibold text-gray-800">
+                  Categoría Padre (Nivel Superior)
+                </Label>
+                <select
+                  id="modal-cat-padre"
+                  value={modalPadreId || ''}
+                  onChange={(e) =>
+                    setModalPadreId(e.target.value ? Number(e.target.value) : null)
+                  }
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">[ Ninguna - Categoría Raíz Nivel 1 ]</option>
+                  {flatList.map((cat) => (
+                    <option key={cat.id_categoria} value={cat.id_categoria}>
+                      {'— '.repeat(cat.nivel - 1)} {cat.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Nombre de la Categoría */}
+              <div className="space-y-1.5">
+                <Label htmlFor="modal-cat-nombre" className="font-semibold text-gray-800">
+                  Nombre de la Categoría <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="modal-cat-nombre"
+                  type="text"
+                  required
+                  value={modalForm.nombre}
+                  onChange={(e) => setModalForm({ ...modalForm, nombre: e.target.value })}
+                  placeholder="Ej: FILTROS DE ACEITE"
+                  className="bg-white text-xs uppercase"
+                />
+              </div>
+
+              {/* Código de Categoría */}
+              <div className="space-y-1.5">
+                <Label htmlFor="modal-cat-codigo" className="font-semibold text-gray-800">
+                  Código Mnemotécnico (Opcional)
+                </Label>
+                <Input
+                  id="modal-cat-codigo"
+                  type="text"
+                  value={modalForm.codigo_categoria || ''}
+                  onChange={(e) =>
+                    setModalForm({ ...modalForm, codigo_categoria: e.target.value.toUpperCase() })
+                  }
+                  placeholder="Ej: CAT-FIL-ACE"
+                  className="bg-white text-xs font-mono uppercase"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="border-t border-gray-100 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsModalOpen(false)}
+                disabled={isCreating}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isCreating}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  'Guardar Categoría'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -567,7 +567,7 @@ export function ArticuloForm({
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
-          {/* Categoría Taxonómica Jerárquica (Ancho Completo para Flujo en Cascada Guiada) */}
+          {/* Categoría Taxonómica Jerárquica (Selector Combobox Puntual con Drill-Down Exclusivo) */}
           <div className="space-y-1.5 border-b border-gray-100 pb-5">
             <div className="flex items-center justify-between">
               <Label htmlFor="id_categoria" className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
@@ -575,12 +575,12 @@ export function ArticuloForm({
                 Taxonomía y Clasificación del Recurso <span className="text-red-500">*</span>
               </Label>
               <span className="text-[11px] text-gray-400">
-                Selección multinivel (Familia ➔ Subcategoría ➔ Sub-hija)
+                Selección puntual multinivel (Familia ➔ Subcategoría ➔ Terminal)
               </span>
             </div>
             <HierarchicalCategorySelect
               id="id_categoria"
-              variant="cascading"
+              variant="combobox"
               value={watch('id_categoria')}
               onChange={(idCat, catObj) => {
                 setValue('id_categoria', idCat as any, { shouldValidate: true });
