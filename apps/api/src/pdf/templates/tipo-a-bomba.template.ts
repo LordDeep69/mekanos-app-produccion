@@ -19,9 +19,11 @@ import {
   EvidenciasPorEquipoPDF,
   formatearFechaServicio,
   generarChecklistMultiEquipo,
+  generarDatosClienteConFichaTecnica,
   generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
+  generarSeccionRepuestosSegregados,
   LoteGaleriaPDF,
   MEKANOS_COLORS
 } from './mekanos-base.template';

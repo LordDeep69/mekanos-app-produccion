@@ -1893,9 +1893,9 @@ export class PdfController {
     this.logger.log(`📧 Verificando envío de email: enviarEmail=${dto.enviarEmail}, clienteEmail=${clienteEmail}`);
 
     if (dto.enviarEmail && clienteEmail) {
+      const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
       try {
         this.logger.log(`📧 Preparando envío de email a ${clienteEmail}...`);
-        const asunto = dto.asuntoEmail || `Informe de Mantenimiento - ${orden.numero_orden}`;
         const mensaje = dto.mensajeEmail || `Adjunto encontrará el informe de mantenimiento de la orden ${orden.numero_orden}.`;
 
         const tipoServicioDetallado = orden.tipos_servicio?.nombre_tipo || 'Mantenimiento';
