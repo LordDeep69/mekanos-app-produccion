@@ -87,6 +87,54 @@ export const generarHeaderConLogo = (
 `;
 };
 
+export interface RepuestoUtilizadoPDF {
+  sku?: string;
+  descripcion: string;
+  marca?: string;
+  modelo?: string;
+  cantidad: number;
+  unidad: string;
+  origen: 'BODEGA' | 'CLIENTE' | 'COMPRA_DIRECTA';
+  lote?: string;
+  ubicacionBodega?: string;
+  estadoRetirado?: string;
+  observaciones?: string;
+}
+
+export interface DatosEquipoDetalladoPDF {
+  codigoEquipo: string;
+  nombreEquipo?: string;
+  tipoEquipo: string;
+  tipoEquipoNombre?: string;
+  marca: string;
+  modelo?: string;
+  serie: string;
+  ubicacion?: string;
+  sede?: string;
+  cliente: string;
+  clienteNit?: string;
+  direccion?: string;
+  ciudad?: string;
+
+  // Placa técnica de Generador / Motor
+  potenciaKva?: string | number;
+  potenciaKw?: string | number;
+  potenciaHp?: string | number;
+  voltaje?: string | number;
+  frecuencia?: string | number;
+  fases?: string | number;
+  rpm?: string | number;
+
+  // Placa Bomba
+  tipoBomba?: string;
+  caudalGpm?: string | number;
+  presionPsi?: string | number;
+
+  // Horómetros
+  horometroIntervencion?: number | string;
+  horometroAcumulado?: number | string;
+}
+
 export interface DatosOrdenPDF {
   // Datos del cliente
   cliente: string;
@@ -143,6 +191,8 @@ export interface DatosOrdenPDF {
 
   // ✅ INTEGRACIÓN WMS: Repuestos e insumos registrados en componentes_usados (Almacén / Compra Directa)
   repuestosWms?: string[];
+  repuestosDetallados?: RepuestoUtilizadoPDF[];
+  equipoDetalle?: DatosEquipoDetalladoPDF;
 
   // Firmas
   firmaTecnico?: string;
@@ -403,13 +453,17 @@ export const baseStyles = `
   .firmas-container,
   .simbologia-grid,
   .mediciones-grid,
-  .info-grid {
+  .info-grid,
+  .ficha-tecnica-box,
+  .repuestos-bloque,
+  .repuestos-disclaimer-legal {
     page-break-inside: avoid;
     break-inside: avoid;
   }
   
   /* Las filas individuales de tabla NO deben cortarse */
-  .checklist-table tr {
+  .checklist-table tr,
+  .repuestos-tabla tr {
     page-break-inside: avoid;
     break-inside: avoid;
   }
@@ -438,6 +492,100 @@ export const baseStyles = `
   .evidencia-item-compacto {
     page-break-inside: avoid;
     break-inside: avoid;
+  }
+  
+  /* Estilos especializados de Repuestos y Trazabilidad WMS */
+  .repuestos-seccion {
+    page-break-inside: auto;
+    break-inside: auto;
+    margin-bottom: 15px;
+  }
+  
+  .repuestos-bloque {
+    margin-bottom: 12px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  .repuestos-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9px;
+  }
+  
+  .repuestos-tabla th {
+    padding: 5px 6px;
+    font-weight: 600;
+    text-align: left;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  
+  .repuestos-tabla td {
+    padding: 5px 6px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+  }
+  
+  .repuestos-tabla tr:nth-child(even) td {
+    background-color: #f8fafc;
+  }
+  
+  .repuestos-sku-badge {
+    font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 1px 5px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  
+  .repuestos-lote-badge {
+    font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
+    font-size: 8px;
+    background: #f1f5f9;
+    color: #334155;
+    padding: 1px 5px;
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
+    display: inline-block;
+    font-weight: 600;
+  }
+  
+  .repuestos-garantia-nota {
+    font-size: 8px;
+    color: #166534;
+    background: #f0fdf4;
+    border-top: 1px solid #bbf7d0;
+    padding: 5px 8px;
+    line-height: 1.35;
+  }
+  
+  .repuestos-disclaimer-legal {
+    font-size: 8px;
+    color: #92400e;
+    background: #fefce8;
+    border-top: 1px solid #fef08a;
+    padding: 6px 8px;
+    line-height: 1.35;
+    text-align: justify;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  .repuestos-directa-nota {
+    font-size: 8px;
+    color: #1e40af;
+    background: #eff6ff;
+    border-top: 1px solid #bfdbfe;
+    padding: 5px 8px;
+    line-height: 1.35;
   }
   
   .header {
@@ -1711,4 +1859,341 @@ export const optimizarEvidencias = (evidencias: (string | EvidenciaPDF)[]): (str
       url: optimizarUrlCloudinary(ev.url),
     };
   });
+};
+
+/**
+ * ✅ FICHA TÉCNICA Y DATOS DE SERVICIO ENRIQUECIDOS
+ * Renderiza los datos del cliente, sede, técnico y la ficha técnica de ingeniería del activo
+ */
+export const generarDatosClienteConFichaTecnica = (
+  datos: DatosOrdenPDF,
+  opciones?: {
+    extraHtml?: string;
+  }
+): string => {
+  const eq = datos.equipoDetalle;
+  const clienteNombre = eq?.cliente || datos.cliente || 'N/A';
+  const clienteNit = eq?.clienteNit || '';
+  const direccion = eq?.direccion || datos.direccion || 'N/A';
+  const sede = eq?.sede || datos.sede || '';
+  const ubicacion = eq?.ubicacion || '';
+  const codigoEquipo = eq?.codigoEquipo || '';
+  const nombreEquipo = eq?.nombreEquipo || '';
+  const tipoEquipo = eq?.tipoEquipoNombre || eq?.tipoEquipo || datos.tipoEquipo || 'EQUIPO';
+  const marca = eq?.marca || datos.marcaEquipo || 'N/A';
+  const serie = eq?.serie || datos.serieEquipo || 'N/A';
+  const modelo = eq?.modelo || '';
+  
+  // Placa técnica de ingeniería
+  const potencia = eq?.potenciaKva
+    ? `${eq.potenciaKva} kVA${eq.potenciaKw ? ` / ${eq.potenciaKw} kW` : ''}`
+    : (eq?.potenciaHp ? `${eq.potenciaHp} HP` : (eq?.potenciaKw ? `${eq.potenciaKw} kW` : ''));
+  const tension = eq?.voltaje
+    ? `${eq.voltaje}${eq.frecuencia ? ` · ${eq.frecuencia}` : ''}${eq.fases ? ` · ${eq.fases}` : ''}`
+    : (eq?.frecuencia ? `${eq.frecuencia}` : '');
+  const rpm = eq?.rpm ? `${eq.rpm}` : '';
+  const horometroInterv = eq?.horometroIntervencion != null
+    ? `${eq.horometroIntervencion} h`
+    : (datos.datosModulo?.horasTrabajo != null ? `${datos.datosModulo.horasTrabajo} h` : '');
+  const horometroAcum = eq?.horometroAcumulado != null ? `${eq.horometroAcumulado} h` : '';
+
+  return `
+  <div class="section ficha-tecnica-box" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 12px;">
+    <div class="section-title">DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO</div>
+    
+    <!-- Fila Cliente & Ubicación -->
+    <div class="info-grid">
+      <div class="info-item">
+        <span class="info-label">Cliente / Razón Social</span>
+        <span class="info-value" style="font-weight: 600;">
+          ${clienteNombre}
+          ${clienteNit ? `<span style="font-size: 8.5px; color: #64748b; font-weight: normal; margin-left: 4px;">(${clienteNit})</span>` : ''}
+        </span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Sede / Ubicación Física</span>
+        <span class="info-value">
+          ${sede ? `<strong>${sede}</strong> &bull; ` : ''}${direccion}
+          ${ubicacion ? `<div style="font-size: 8px; color: #475569; margin-top: 1px;">📍 ${ubicacion}</div>` : ''}
+        </span>
+      </div>
+    </div>
+
+    <!-- Fila Tiempos y Personal -->
+    <div class="info-grid info-grid-4" style="margin-top: 6px;">
+      <div class="info-item">
+        <span class="info-label">Fecha</span>
+        <span class="info-value">${formatearFechaServicio(datos)}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Técnico de Servicio</span>
+        <span class="info-value">${datos.tecnico || 'N/A'}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">H. Entrada</span>
+        <span class="info-value">${datos.horaEntrada || '-'}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">H. Salida</span>
+        <span class="info-value">${datos.horaSalida || '-'}</span>
+      </div>
+    </div>
+
+    <!-- Bloque Placa Técnica del Activo -->
+    <div style="margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 4px; background: #ffffff; overflow: hidden;">
+      <div style="background: #f1f5f9; padding: 4px 8px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${codigoEquipo ? `<span style="background: #244673; color: #ffffff; font-family: monospace; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px;">${codigoEquipo}</span>` : ''}
+          <span style="font-weight: 700; font-size: 10px; color: #1e293b;">
+            ${nombreEquipo || `${tipoEquipo} ${marca}`}
+          </span>
+        </div>
+        <span style="font-size: 8px; font-weight: 700; color: #3290A6; text-transform: uppercase;">
+          ${tipoEquipo}
+        </span>
+      </div>
+
+      <div style="padding: 5px 8px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 9px;">
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase;">Marca / Modelo</span>
+          <span style="color: #0f172a; font-weight: 600;">${marca}${modelo ? ` / ${modelo}` : ''}</span>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase;">N° de Serie</span>
+          <span style="color: #0f172a; font-family: monospace; font-weight: 600;">${serie}</span>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase;">Potencia / Capacidad</span>
+          <span style="color: #0f172a; font-weight: 600;">${potencia || '-'}</span>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 7.5px; color: #64748b; font-weight: 600; text-transform: uppercase;">Tensión / Velocidad</span>
+          <span style="color: #0f172a; font-weight: 600;">${tension || (rpm ? `${rpm}` : '-')}</span>
+        </div>
+        
+        ${horometroInterv || horometroAcum ? `
+        <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
+          <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">⏱️ Horómetro Intervención</span>
+          <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroInterv || horometroAcum}</span>
+        </div>
+        <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
+          <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">📊 Horómetro Acumulado (Hoja de Vida)</span>
+          <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroAcum || horometroInterv || '-'}</span>
+        </div>
+        ` : ''}
+      </div>
+    </div>
+
+    ${opciones?.extraHtml || ''}
+  </div>
+  `;
+};
+
+/**
+ * ✅ SECCIÓN DE REPUESTOS, INSUMOS Y FLUIDOS SEGREGADOS
+ * Segrega taxativamente en 3 modalidades:
+ * - Tabla A: Almacén Mekanos (Garantía WMS y Lote)
+ * - Tabla B: Suministro Cliente (Trazabilidad con Exención de Responsabilidad Legal)
+ * - Tabla C: Adquisiciones Directas en Campo / Compras Locales
+ */
+export const generarSeccionRepuestosSegregados = (
+  repuestosDetallados?: RepuestoUtilizadoPDF[],
+  repuestosWms?: string[],
+  tipoServicio?: string,
+): string => {
+  const tieneDetallados = Boolean(repuestosDetallados && repuestosDetallados.length > 0);
+  const tieneLegacy = Boolean(repuestosWms && repuestosWms.length > 0);
+
+  if (!tieneDetallados && !tieneLegacy) {
+    if (tipoServicio === 'PREVENTIVO_B' || tipoServicio === 'CORRECTIVO') {
+      return `
+        <div class="section repuestos-seccion" style="page-break-inside: avoid; break-inside: avoid;">
+          <div class="section-title">REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO</div>
+          <div style="background: #f8fafc; border: 1px dashed #cbd5e1; padding: 10px; border-radius: 4px; text-align: center; color: #64748b; font-size: 9px;">
+            No se registraron consumos ni sustitución de repuestos, lubricantes ni fluidos en la presente orden de servicio.
+          </div>
+        </div>
+      `;
+    }
+    return '';
+  }
+
+  // Fallback si solo existen cadenas legacy
+  if (!tieneDetallados && tieneLegacy) {
+    const rows = (repuestosWms || []).map((r, idx) => `
+      <tr>
+        <td style="text-align: center; width: 6%;">${idx + 1}</td>
+        <td>${r}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <div class="section repuestos-seccion" style="page-break-inside: auto; break-inside: auto;">
+        <div class="section-title">REPUESTOS, INSUMOS Y FLUIDOS REGISTRADOS</div>
+        <table class="repuestos-tabla" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #244673; color: #ffffff;">
+              <th style="width: 6%; text-align: center;">#</th>
+              <th>Descripción del Repuesto / Fluido / Suministro</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Segregación estructurada en las 3 modalidades canónicas
+  const items = repuestosDetallados || [];
+  const itemsBodega = items.filter(r => r.origen === 'BODEGA');
+  const itemsCliente = items.filter(r => r.origen === 'CLIENTE');
+  const itemsCompraDirecta = items.filter(r => r.origen === 'COMPRA_DIRECTA');
+
+  let html = `
+    <div class="section repuestos-seccion" style="page-break-inside: auto; break-inside: auto;">
+      <div class="section-title">TRAZABILIDAD DE REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO</div>
+  `;
+
+  // TABLA A: BODEGA MEKANOS (GARANTÍA WMS)
+  if (itemsBodega.length > 0) {
+    const rowsBodega = itemsBodega.map((item, idx) => `
+      <tr>
+        <td style="text-align: center; width: 5%;">${idx + 1}</td>
+        <td style="width: 18%;">
+          <span class="repuestos-sku-badge">${item.sku || 'ART-WMS'}</span>
+        </td>
+        <td style="width: 42%;">
+          <strong>${item.descripcion}</strong>
+          ${item.marca ? `<span style="font-size: 8px; color: #475569; display: block;">Marca: ${item.marca}${item.modelo ? ` · Mod: ${item.modelo}` : ''}</span>` : ''}
+          ${item.observaciones ? `<span style="font-size: 8px; color: #64748b; display: block; font-style: italic;">Detalle: ${item.observaciones}</span>` : ''}
+        </td>
+        <td style="text-align: center; width: 12%; font-weight: 600;">${item.cantidad} ${item.unidad}</td>
+        <td style="text-align: center; width: 23%;">
+          ${item.lote ? `<span class="repuestos-lote-badge">🏷️ Lote: ${item.lote}</span>` : '<span style="color: #94a3b8; font-size: 8px;">Almacén Central</span>'}
+          ${item.ubicacionBodega ? `<div style="font-size: 7.5px; color: #64748b;">${item.ubicacionBodega}</div>` : ''}
+        </td>
+      </tr>
+    `).join('');
+
+    html += `
+      <div class="repuestos-bloque" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 10px;">
+        <div style="background: #244673; color: #ffffff; padding: 4px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+          <span>📦 A. SUMINISTRO MEKANOS S.A.S. — ALMACÉN CENTRAL (GARANTÍA OFICIAL WMS)</span>
+          <span style="background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 2px; font-size: 7.5px;">GARANTÍA OFICIAL</span>
+        </div>
+        <table class="repuestos-tabla" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #f1f5f9; color: #334155; font-size: 8px;">
+              <th style="padding: 4px 6px; text-align: center; width: 5%;">#</th>
+              <th style="padding: 4px 6px; width: 18%;">SKU / Código</th>
+              <th style="padding: 4px 6px; width: 42%;">Descripción & Marca</th>
+              <th style="padding: 4px 6px; text-align: center; width: 12%;">Cantidad</th>
+              <th style="padding: 4px 6px; text-align: center; width: 23%;">Trazabilidad Lote</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsBodega}
+          </tbody>
+        </table>
+        <div class="repuestos-garantia-nota">
+          ✓ Componentes originales y fluidos de alta especificación suministrados desde almacén central Mekanos S.A.S. bajo control de lote y con garantía oficial de servicio.
+        </div>
+      </div>
+    `;
+  }
+
+  // TABLA B: SUMINISTRO CLIENTE (EXCLUSIÓN DE RESPONSABILIDAD)
+  if (itemsCliente.length > 0) {
+    const rowsCliente = itemsCliente.map((item, idx) => `
+      <tr>
+        <td style="text-align: center; width: 5%;">${idx + 1}</td>
+        <td style="width: 50%;">
+          <strong>${item.descripcion}</strong>
+          ${item.marca || item.sku ? `<span style="font-size: 8px; color: #475569; display: block;">Ref/Marca: ${item.sku ? item.sku + ' ' : ''}${item.marca || ''}</span>` : ''}
+          ${item.observaciones ? `<span style="font-size: 8px; color: #64748b; display: block; font-style: italic;">Detalle: ${item.observaciones}</span>` : ''}
+        </td>
+        <td style="text-align: center; width: 15%; font-weight: 600;">${item.cantidad} ${item.unidad}</td>
+        <td style="text-align: center; width: 30%;">
+          <span style="background: #fef3c7; color: #92400e; font-size: 8px; font-weight: 600; padding: 2px 6px; border-radius: 3px; display: inline-block;">
+            ${item.estadoRetirado || 'Suministrado por Cliente'}
+          </span>
+        </td>
+      </tr>
+    `).join('');
+
+    html += `
+      <div class="repuestos-bloque" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 10px;">
+        <div style="background: #b45309; color: #ffffff; padding: 4px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+          <span>👤 B. REPUESTOS E INSUMOS PROVISTOS POR EL CLIENTE (TRAZABILIDAD EN HOJA DE VIDA)</span>
+          <span style="background: rgba(255,255,255,0.25); padding: 1px 6px; border-radius: 2px; font-size: 7.5px;">EXTERNO</span>
+        </div>
+        <table class="repuestos-tabla" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #fefce8; color: #713f12; font-size: 8px;">
+              <th style="padding: 4px 6px; text-align: center; width: 5%;">#</th>
+              <th style="padding: 4px 6px; width: 50%;">Descripción & Referencia</th>
+              <th style="padding: 4px 6px; text-align: center; width: 15%;">Cantidad</th>
+              <th style="padding: 4px 6px; text-align: center; width: 30%;">Condición de Recepción</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsCliente}
+          </tbody>
+        </table>
+        <div class="repuestos-disclaimer-legal">
+          <strong>DECLARACIÓN DE SUMINISTRO EXTERNO:</strong> Los materiales y/o fluidos detallados en esta tabla fueron provistos directamente por el cliente a su solicitud para trazabilidad técnica en la hoja de vida del equipo. Mekanos S.A.S. certifica la correcta ejecución técnica de su montaje o aplicación, pero no otorga garantía sobre la procedencia, calidad, idoneidad ni fallas mecánicas derivadas de piezas o fluidos no provistos por nuestro almacén.
+        </div>
+      </div>
+    `;
+  }
+
+  // TABLA C: COMPRA DIRECTA EN CAMPO
+  if (itemsCompraDirecta.length > 0) {
+    const rowsCompra = itemsCompraDirecta.map((item, idx) => `
+      <tr>
+        <td style="text-align: center; width: 5%;">${idx + 1}</td>
+        <td style="width: 50%;">
+          <strong>${item.descripcion}</strong>
+          ${item.marca || item.sku ? `<span style="font-size: 8px; color: #475569; display: block;">Ref/Marca: ${item.sku ? item.sku + ' ' : ''}${item.marca || ''}</span>` : ''}
+          ${item.observaciones ? `<span style="font-size: 8px; color: #64748b; display: block; font-style: italic;">Justificación: ${item.observaciones}</span>` : ''}
+        </td>
+        <td style="text-align: center; width: 15%; font-weight: 600;">${item.cantidad} ${item.unidad}</td>
+        <td style="text-align: center; width: 30%;">
+          <span style="background: #dbeafe; color: #1e40af; font-size: 8px; font-weight: 600; padding: 2px 6px; border-radius: 3px; display: inline-block;">
+            Adquisición en Sitio
+          </span>
+        </td>
+      </tr>
+    `).join('');
+
+    html += `
+      <div class="repuestos-bloque" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 10px;">
+        <div style="background: #1e40af; color: #ffffff; padding: 4px 8px; font-size: 9px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+          <span>🛒 C. ADQUISICIONES DIRECTAS EN CAMPO / COMPRAS LOCALES</span>
+          <span style="background: rgba(255,255,255,0.25); padding: 1px 6px; border-radius: 2px; font-size: 7.5px;">COMPRA LOCAL</span>
+        </div>
+        <table class="repuestos-tabla" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #eff6ff; color: #1e3a8a; font-size: 8px;">
+              <th style="padding: 4px 6px; text-align: center; width: 5%;">#</th>
+              <th style="padding: 4px 6px; width: 50%;">Descripción & Referencia</th>
+              <th style="padding: 4px 6px; text-align: center; width: 15%;">Cantidad</th>
+              <th style="padding: 4px 6px; text-align: center; width: 30%;">Modalidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsCompra}
+          </tbody>
+        </table>
+        <div class="repuestos-directa-nota">
+          ✓ Materiales y repuestos adquiridos localmente para atención de contingencia en sitio autorizada por el cliente.
+        </div>
+      </div>
+    `;
+  }
+
+  html += `</div>`;
+  return html;
 };

@@ -139,7 +139,7 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
   )}
     
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
-    ${generarDatosCliente(datos)}
+    ${generarDatosClienteConFichaTecnica(datos)}
     
     <!-- BANNER TIPO B -->
     <div class="tipo-b-banner">
@@ -152,6 +152,9 @@ export const generarTipoBGeneradorHTML = (datos: DatosOrdenPDF): string => {
       ? generarSeccionInsumosMultiEquipo(datos.evidenciasPorEquipo)
       : generarSeccionInsumos(datos.evidencias)
     }
+    
+    <!-- SECCIÓN DE REPUESTOS, FILTROS Y FLUIDOS DE SERVICIO (TIPO B) -->
+    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_B')}
     
     <!-- LISTA DE ACTIVIDADES DE MANTENIMIENTO -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->

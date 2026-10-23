@@ -1,8 +1,30 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
 **Fecha de Actualización:** 23 de Octubre de 2026  
-**Versión:** 5.9 Release Candidate (RC-9 - Consistencia Matemática de KPIs & Blindaje Transaccional WMS ⇄ EAM)  
+**Versión:** 6.0 Release Candidate (RC-10 - Blindaje Jurídico y Ficha Técnica de Ingeniería en Motor de Informes Técnicos PDF Puppeteer)  
 **Últimos Commits Clave:** 
+- `feat(pdf-engine)`: Blindaje Jurídico, Segregación Taxativa de Repuestos WMS/Cliente y Enriquecimiento de Ficha Técnica en el **Motor de Informes Técnicos PDF** (`pdf.controller.ts`, `pdf.service.ts`, `mekanos-base.template.ts` y las 4 plantillas de servicio):
+  - **Segregación Taxativa en 3 Modalidades de Repuestos y Fluidos:**
+    - **Tabla A (Suministro Mekanos S.A.S. - Almacén Central / Garantía WMS):** Despachos con `origen_componente = 'BODEGA'`. Detalla SKU / Código de catálogo (`ART-2026-XXXX`), descripción técnica, marca/modelo, cantidad, unidad de medida, badge de Lote de trazabilidad (`LOT-2026-XXXX`) y ubicación en bodega. Incluye nota al pie de certificación de calidad y garantía oficial de repuesto y fluido.
+    - **Tabla B (Repuestos e Insumos Provistos por el Cliente - Trazabilidad en Hoja de Vida):** Registro con `origen_componente = 'CLIENTE'`. Detalla descripción, referencia/marca aportada, cantidad, unidad y condición de recepción. Incorpora de forma taxativa la **Cláusula de Exención de Responsabilidad Civil y Garantía**:
+      > *"DECLARACIÓN DE SUMINISTRO EXTERNO: Los materiales y/o fluidos detallados en esta tabla fueron provistos directamente por el cliente a su solicitud para trazabilidad técnica en la hoja de vida del equipo. Mekanos S.A.S. certifica la correcta ejecución técnica de su montaje o aplicación, pero no otorga garantía sobre la procedencia, calidad, idoneidad ni fallas mecánicas derivadas de piezas o fluidos no provistos por nuestro almacén."*
+    - **Tabla C (Adquisiciones Directas en Campo / Compras Locales):** Registro con `origen_componente = 'COMPRA_DIRECTA'`. Detalla ítem, referencia/proveedor, cantidad, unidad y nota de atención de contingencia autorizada en sitio.
+    - Fallback elegante para órdenes sin consumo de repuestos (badge informativo neutro en Preventivo B y Correctivo) y retrocompatibilidad total con cadenas legacy de texto plano.
+  - **Enriquecimiento Integral de la Ficha Técnica del Activo en el Encabezado:**
+    - Componente unificado `generarDatosClienteConFichaTecnica`:
+      - **Cliente y Emplazamiento:** Razón Social, NIT / Documento de identidad, Sede, Dirección física detallada y Ubicación técnica / Cuarto de máquinas (`📍 CUARTO DE MÁQUINAS`).
+      - **Tiempos de Servicio:** Fecha del servicio (con manejo de entrada/salida si ocurrió en días distintos), Técnico asignado, Hora de entrada y Hora de salida.
+      - **Ficha Técnica de Placa:** Badge distintivo con código de activo (`GEN-EDIF-T86FEH` / `BOM-EDIF-XXXX`), denominación oficial del equipo, tipo de equipo, marca y modelo (generador, motor o bomba), número de serie oficial, potencia nominal (`kVA / kW` o `HP`), tensión / frecuencia / fases (`220/127V · 60 Hz · 3F`), velocidad nominal (`RPM`).
+      - **Horometría Doble:** Horómetro de intervención (horas registradas en la orden) y Horómetro acumulado total en hoja de vida del equipo.
+  - **Control Estricto de Saltos de Página Industrial (`page-break-inside: avoid`):**
+    - Reglas CSS de impresión en `baseStyles` protegiendo filas de tablas (`tr`), bloques de repuestos, disclaimer legal, ficha técnica, evidencias fotográficas y firmas contra quiebres de página indeseados.
+  - **Actualización Homogénea en las 4 Plantillas Oficiales de Reporte Técnico:**
+    - `tipo-correctivo.template.ts` (Mantenimiento Correctivo Multi-Equipo y Mono-Equipo).
+    - `tipo-a-generador.template.ts` (Preventivo Tipo A - Generadores Eléctricos).
+    - `tipo-b-generador.template.ts` (Preventivo Tipo B - Generadores Eléctricos con Cambio de Filtros y Fluidos).
+    - `tipo-a-bomba.template.ts` (Preventivo Tipo A - Sistemas de Bombeo).
+  - **Canalización Transaccional en Backend (`pdf.controller.ts` & `finalizacion-orden.service.ts`):**
+    - Métodos extractores `extraerRepuestosDetallados` y `extraerEquipoDetallado` integrados tanto en los endpoints de preview/descarga/regeneración como en el flujo de cierre final de orden y subida a Cloudflare R2.
 - `fix(catalogo-kpis)`: Saneamiento de Agregación SQL/Prisma en Catálogo Maestro (`articulos.service.ts`):
   - **Resolución de la Discrepancia 24 vs 25:**
     - Causa Forense Confirmada: La función `getResumen()` realizaba el conteo total con filtro `{ where: { activo: true } }` (obteniendo 24 artículos), pero la consulta de agrupación `groupBy({ by: ['destino_articulo'] })` omitía la cláusula `where`, contabilizando un artículo de prueba legado e inactivo (`id_componente: 1`, `LEGACY-CMP-001`, `Componente legado histórico (Archivado)` con `activo: false` y `destino_articulo: 'INSUMO_SERVICIO'`).

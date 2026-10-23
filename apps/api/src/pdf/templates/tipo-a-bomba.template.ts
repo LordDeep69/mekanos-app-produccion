@@ -108,7 +108,7 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
   )}
     
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
-    ${generarDatosCliente(datos)}
+    ${generarDatosClienteConFichaTecnica(datos)}
     
     <!-- CHECKLIST DE BOMBAS -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
@@ -123,6 +123,9 @@ export const generarTipoABombaHTML = (datos: DatosOrdenPDF): string => {
       ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
       : '' // Las mediciones se incluyen en generarChecklistBombas para órdenes simples
     }
+    
+    <!-- SECCIÓN REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO (SI APLICA) -->
+    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_A')}
     
     <!-- SIMBOLOGÍA -->
     ${generarSimbologia()}

@@ -37,7 +37,7 @@ import { EmailService } from '../email/email.service';
 import { R2StorageService } from '../storage/r2-storage.service';
 import { buildInformeFilename } from './pdf-naming.helper';
 import { PdfService, TipoInforme } from './pdf.service';
-import { DatosOrdenPDF } from './templates';
+import { DatosOrdenPDF, RepuestoUtilizadoPDF, DatosEquipoDetalladoPDF } from './templates';
 
 /**
  * DTO para regenerar PDF y enviarlo por email
@@ -668,6 +668,8 @@ export class PdfController {
               : '';
         return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote}${origenTag})`;
       }),
+      repuestosDetallados: this.extraerRepuestosDetallados(orden),
+      equipoDetalle: this.extraerEquipoDetallado(orden, this.extraerDatosModulo(orden.mediciones_servicio)),
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
       equiposOrden,
@@ -1705,6 +1707,8 @@ export class PdfController {
               : '';
         return `${sku ? '[' + sku + '] ' : ''}${desc} (Cant: ${cant} ${und}${lote}${origenTag})`;
       }),
+      repuestosDetallados: this.extraerRepuestosDetallados(orden),
+      equipoDetalle: this.extraerEquipoDetallado(orden, this.extraerDatosModulo(orden.mediciones_servicio)),
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
       esMultiEquipo,
       actividadesPorEquipo,
@@ -2358,10 +2362,8 @@ export class PdfController {
   /**
    * Extrae datos del módulo de control de las mediciones
    */
-  private extraerDatosModulo(_mediciones: any[]): DatosOrdenPDF['datosModulo'] {
-    // TODO: Implementar extracción de datos específicos del módulo de control
-    // Por ahora retorna undefined para usar valores por defecto
-    return undefined;
+  private extraerDatosModulo(mediciones: any[]): DatosOrdenPDF['datosModulo'] {
+    return this.extraerDatosModuloReal(mediciones);
   }
 
   /**
@@ -2414,6 +2416,132 @@ export class PdfController {
    * ✅ FIX 19-ENE-2026: Extrae datos del módulo de control de las mediciones (implementación real)
    * Mapea los parámetros de medición a los campos del módulo de control del PDF
    */
+
+  /**
+   * ✅ INTEGRACIÓN WMS / EAM: Extrae repuestos estructurados segregados por origen
+   */
+  private extraerRepuestosDetallados(orden: any): RepuestoUtilizadoPDF[] {
+    if (!orden.componentes_usados || orden.componentes_usados.length === 0) {
+      return [];
+    }
+    return orden.componentes_usados.map((cu: any) => {
+      const cat = cu.catalogo_componentes;
+      const sku = cat?.codigo_interno || cu.referencia_manual || '';
+      const desc = cu.descripcion || cat?.descripcion_corta || cat?.nombre || 'Repuesto';
+      const marca = cat?.marca || cu.marca_manual || '';
+      const modelo = cat?.modelo || '';
+      const cant = Number(cu.cantidad ?? 1);
+      const und = cu.unidad || cat?.unidad_medida || 'UND';
+      const origen = (cu.origen_componente as 'BODEGA' | 'CLIENTE' | 'COMPRA_DIRECTA') || 'BODEGA';
+      const lote = cu.lotes_componentes?.codigo_lote || undefined;
+      const ubicacion = cu.ubicaciones_bodega?.codigo_ubicacion || undefined;
+      const estadoRetirado = cu.estado_componente_retirado || undefined;
+      const observaciones = cu.observaciones || undefined;
+
+      return {
+        sku,
+        descripcion: desc,
+        marca,
+        modelo,
+        cantidad: cant,
+        unidad: und,
+        origen,
+        lote,
+        ubicacionBodega: ubicacion,
+        estadoRetirado,
+        observaciones,
+      };
+    });
+  }
+
+  /**
+   * ✅ ENRIQUECIMIENTO FICHA TÉCNICA: Extrae datos técnicos de placa del activo
+   */
+  private extraerEquipoDetallado(orden: any, datosModulo?: any): DatosEquipoDetalladoPDF | undefined {
+    const eq = orden.equipos;
+    if (!eq) return undefined;
+
+    const gen = eq.equipos_generador;
+    const mot = eq.equipos_motor;
+    const bom = eq.equipos_bomba;
+    const tipoEq = eq.tipos_equipo?.nombre || 'EQUIPO';
+
+    const clientePersona = orden.clientes?.persona;
+    const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
+    const clienteNombre = orden.clientes?.nombre_sede
+      ? `${clienteNombreBase} - ${orden.clientes.nombre_sede}`
+      : clienteNombreBase;
+    const clienteNit = clientePersona?.numero_documento
+      ? `${clientePersona.tipo_documento || 'NIT'}: ${clientePersona.numero_documento}`
+      : undefined;
+    const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
+    const ciudad = orden.sedes_cliente?.ciudad || clientePersona?.ciudad || undefined;
+    const sede = orden.sedes_cliente?.nombre_sede || orden.clientes?.nombre_sede || undefined;
+
+    let marca = 'N/A';
+    let serie = eq.numero_serie_equipo || 'N/A';
+    let modelo: string | undefined = undefined;
+
+    if (gen) {
+      marca = gen.marca_generador || mot?.marca_motor || 'N/A';
+      serie = gen.numero_serie_generador || eq.numero_serie_equipo || 'N/A';
+      modelo = gen.modelo_generador || undefined;
+    } else if (bom) {
+      marca = bom.marca_bomba || 'N/A';
+      serie = bom.numero_serie_bomba || eq.numero_serie_equipo || 'N/A';
+      modelo = bom.modelo_bomba || undefined;
+    } else if (mot) {
+      marca = mot.marca_motor || 'N/A';
+      serie = mot.numero_serie_motor || eq.numero_serie_equipo || 'N/A';
+      modelo = mot.modelo_motor || undefined;
+    } else {
+      marca = eq.nombre_equipo || 'N/A';
+    }
+
+    const potenciaKva = gen?.potencia_kva ? Number(gen.potencia_kva) : undefined;
+    const potenciaKw = gen?.potencia_kw ? Number(gen.potencia_kw) : (mot?.potencia_kw ? Number(mot.potencia_kw) : undefined);
+    const potenciaHp = mot?.potencia_hp ? Number(mot.potencia_hp) : (bom?.potencia_hidraulica_kw ? Number(bom.potencia_hidraulica_kw) : undefined);
+    const voltaje = gen?.voltaje_salida || (datosModulo?.voltaje ? `${datosModulo.voltaje} V` : undefined);
+    const frecuencia = gen?.frecuencia_hz ? `${gen.frecuencia_hz} Hz` : (datosModulo?.frecuencia ? `${datosModulo.frecuencia} Hz` : undefined);
+    const fases = gen?.numero_fases ? `${gen.numero_fases}F` : undefined;
+    const rpm = mot?.velocidad_nominal_rpm ? `${mot.velocidad_nominal_rpm} RPM` : (datosModulo?.rpm ? `${datosModulo.rpm} RPM` : undefined);
+
+    const tipoBomba = bom?.tipo_bomba || undefined;
+    const caudalGpm = bom?.caudal_maximo_m3h ? `${bom.caudal_maximo_m3h} m³/h` : undefined;
+    const presionPsi = bom?.altura_presion_trabajo_m ? `${bom.altura_presion_trabajo_m} m` : undefined;
+
+    const horometroInterv = datosModulo?.horasTrabajo ?? orden.horometro_final ?? orden.horometro_inicial ?? undefined;
+    const horometroAcum = eq.horas_actuales ? Number(eq.horas_actuales) : undefined;
+
+    return {
+      codigoEquipo: eq.codigo_equipo || 'S/C',
+      nombreEquipo: eq.nombre_equipo || undefined,
+      tipoEquipo: tipoEq,
+      tipoEquipoNombre: eq.tipos_equipo?.nombre || tipoEq,
+      marca,
+      modelo,
+      serie,
+      ubicacion: eq.ubicacion_texto || undefined,
+      sede,
+      cliente: clienteNombre,
+      clienteNit,
+      direccion: clienteDireccion,
+      ciudad,
+      potenciaKva,
+      potenciaKw,
+      potenciaHp,
+      voltaje,
+      frecuencia,
+      fases,
+      rpm,
+      tipoBomba,
+      caudalGpm,
+      presionPsi,
+      horometroIntervencion: horometroInterv != null ? Number(horometroInterv) : undefined,
+      horometroAcumulado: horometroAcum != null ? Number(horometroAcum) : undefined,
+    };
+  }
+
   private extraerDatosModuloReal(mediciones: any[]): DatosOrdenPDF['datosModulo'] {
     if (!mediciones || mediciones.length === 0) return undefined;
 

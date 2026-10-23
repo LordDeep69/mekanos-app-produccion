@@ -449,6 +449,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       cargoTecnico: datos.cargoTecnico,
       nombreCliente: datos.nombreCliente,
       cargoCliente: datos.cargoCliente,
+      repuestosDetallados: datos.repuestosDetallados,
+      equipoDetalle: datos.equipoDetalle,
     };
   }
 

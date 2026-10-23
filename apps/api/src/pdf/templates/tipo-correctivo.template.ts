@@ -20,6 +20,10 @@
 
 import {
   ActividadesPorEquipoPDF,
+  generarDatosClienteConFichaTecnica,
+  generarSeccionRepuestosSegregados,
+  RepuestoUtilizadoPDF,
+  DatosEquipoDetalladoPDF,
   baseStyles,
   EquipoOrdenPDF,
   EvidenciasPorEquipoPDF,
@@ -148,6 +152,8 @@ export interface DatosCorrectivoOrdenPDF {
   // Cada entrada contiene los campos dedos de correctivo (estadoInicial, problema, etc.)
   // extraidos de las actividades de ese equipo específico.
   datosPorEquipo?: DatosEstructuradosCorrectivoPorEquipo[];
+  repuestosDetallados?: RepuestoUtilizadoPDF[];
+  equipoDetalle?: DatosEquipoDetalladoPDF;
 }
 
 /**
@@ -380,6 +386,7 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
     !esTextoVacioOSinContenido(datos.diagnosticoTecnico) ||
     (datos.sistemasAfectados && datos.sistemasAfectados.length > 0);
   const tieneRepuestosOMateriales =
+    (datos.repuestosDetallados && datos.repuestosDetallados.length > 0) ||
     (datos.repuestosUtilizados && datos.repuestosUtilizados.length > 0) ||
     (datos.materialesUtilizados && datos.materialesUtilizados.length > 0);
   const tieneTrabajosRealizados = !esTextoVacioOSinContenido(datos.trabajosRealizados);
@@ -472,54 +479,17 @@ const generarHeader = (datos: DatosCorrectivoOrdenPDF): string =>
     datos.numeroOrden,
   );
 
-const generarDatosCliente = (datos: DatosCorrectivoOrdenPDF): string => `
-    <div class="section">
-        <div class="section-title">DATOS DEL CLIENTE Y SERVICIO</div>
-        <div class="info-grid">
-            <div class="info-item">
-                <span class="info-label">Cliente</span>
-                <span class="info-value">${datos.cliente}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Marca del Equipo</span>
-                <span class="info-value">${datos.marcaEquipo}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">N° de Serie</span>
-                <span class="info-value">${datos.serieEquipo}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Dirección</span>
-                <span class="info-value">${datos.direccion}</span>
-            </div>
-        </div>
-        <div class="info-grid info-grid-4" style="margin-top: 8px;">
-            <div class="info-item">
-                <span class="info-label">Fecha</span>
-                <span class="info-value">${formatearFechaServicio(datos)}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Técnico</span>
-                <span class="info-value">${datos.tecnico}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">H. Entrada</span>
-                <span class="info-value">${datos.horaEntrada}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">H. Salida</span>
-                <span class="info-value">${datos.horaSalida}</span>
-            </div>
-        </div>
-        ${datos.estadoInicial ? `
-        <div class="corr-estado-inicial-bar">
-            <span class="corr-estado-label">ESTADO INICIAL DEL EQUIPO:</span>
-            <span class="corr-estado-badge corr-estado-inicial">${datos.estadoInicial}</span>
-        </div>
-        ${renderObsAux(datos.obsEstadoInicial)}
-        ` : ''}
+const generarDatosCliente = (datos: DatosCorrectivoOrdenPDF): string => {
+  const extraEstadoInicial = datos.estadoInicial ? `
+    <div class="corr-estado-inicial-bar" style="margin-top: 6px; padding: 4px 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; display: flex; align-items: center; justify-content: space-between;">
+      <span class="corr-estado-label" style="font-weight: 700; font-size: 8.5px; color: #991b1b;">ESTADO INICIAL DEL EQUIPO:</span>
+      <span class="corr-estado-badge corr-estado-inicial" style="background: #dc2626; color: #ffffff; padding: 2px 8px; border-radius: 3px; font-weight: 700; font-size: 9px;">${datos.estadoInicial}</span>
     </div>
-`;
+    ${renderObsAux(datos.obsEstadoInicial)}
+  ` : '';
+
+  return generarDatosClienteConFichaTecnica(datos as any, { extraHtml: extraEstadoInicial });
+};
 
 const generarDatosModulo = (datos: DatosCorrectivoOrdenPDF): string => {
   const modulo = datos.datosModulo || {};
@@ -708,6 +678,13 @@ const generarTrabajosRealizados = (datos: DatosCorrectivoOrdenPDF): string => {
 };
 
 const generarRepuestosYMateriales = (datos: DatosCorrectivoOrdenPDF): string => {
+  if (datos.repuestosDetallados && datos.repuestosDetallados.length > 0) {
+    return `
+      ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosUtilizados, 'CORRECTIVO')}
+      ${renderObsAux(datos.obsRepuestos)}
+      ${renderObsAux(datos.obsMateriales)}
+    `;
+  }
   const repuestos = (datos.repuestosUtilizados || []).filter(r => !esTextoVacioOSinContenido(r));
   const materiales = (datos.materialesUtilizados || []).filter(m => !esTextoVacioOSinContenido(m));
   const rows: string[] = [];

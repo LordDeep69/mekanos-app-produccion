@@ -69,7 +69,7 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
   )}
     
     <!-- DATOS DEL CLIENTE Y SERVICIO -->
-    ${generarDatosCliente(datos)}
+    ${generarDatosClienteConFichaTecnica(datos)}
     
     <!-- LISTA DE ACTIVIDADES DE INSPECCIÓN -->
     <!-- ✅ MULTI-EQUIPOS: Usar tabla dinámica si hay múltiples equipos -->
@@ -87,6 +87,9 @@ export const generarTipoAGeneradorHTML = (datos: DatosOrdenPDF): string => {
     
     <!-- REGISTRO DE DATOS DEL MÓDULO DE CONTROL -->
     ${generarDatosModulo(datos)}
+    
+    <!-- SECCIÓN REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO (SI APLICA) -->
+    ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, 'PREVENTIVO_A')}
     
     <!-- GENERAL: Solo para órdenes de un solo equipo (ya está incluido en checklist multi-equipo) -->
     ${!esMultiEquipo ? generarSeccionGeneral(actividadesPorSistema['GENERAL'] || []) : ''}
