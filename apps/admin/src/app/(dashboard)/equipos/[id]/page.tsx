@@ -14,6 +14,7 @@
 'use client';
 
 import {
+  EquipoPendientesTab,
   EquipoRepuestosTab,
   HojaVidaEquipo,
   useCambiarEstadoEquipo,
@@ -746,7 +747,7 @@ function FichaTecnicaBomba({ datos, motor }: { datos: any; motor: any }) {
 // VISTA PRINCIPAL DEL EXPEDIENTE 360° (/equipos/[id])
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type ActiveTab = 'ficha' | 'repuestos' | 'ordenes';
+type ActiveTab = 'ficha' | 'repuestos' | 'ordenes' | 'pendientes';
 
 export default function EquipoDetallePage() {
   const params = useParams();
@@ -1115,6 +1116,20 @@ export default function EquipoDetallePage() {
           >
             {totalOrdenes}
           </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('pendientes')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer',
+            activeTab === 'pendientes'
+              ? 'bg-amber-600 text-white shadow-2xs'
+              : 'text-slate-600 hover:bg-slate-100',
+          )}
+        >
+          <ClipboardList className="h-4 w-4" />
+          <span>4. Hallazgos & Pendientes Técnicos</span>
         </button>
       </div>
 
@@ -1558,6 +1573,13 @@ export default function EquipoDetallePage() {
           {/* Línea de Tiempo Técnica (Mediciones, Actividades y PDFs) */}
           <HojaVidaEquipo equipoId={id} />
         </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* PESTAÑA 4: HALLAZGOS Y PENDIENTES TÉCNICOS POR ACTIVO                  */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'pendientes' && (
+        <EquipoPendientesTab idEquipo={id} codigoEquipo={equipo.codigo_equipo} />
       )}
 
       {/* Modales Operativos */}

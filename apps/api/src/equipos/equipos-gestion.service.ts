@@ -1820,4 +1820,77 @@ export class EquiposGestionService {
     });
     return { id_componente_equipo: idRelacion, desvinculado: true };
   }
+
+  /**
+   * Obtener pendientes técnicos históricos y activos de un equipo (Trazabilidad EAM)
+   */
+  async getPendientesEquipo(idEquipo: number, estadoFiltro?: string) {
+    const where: any = { id_equipo: idEquipo };
+    if (estadoFiltro && estadoFiltro !== 'TODOS') {
+      where.estado = estadoFiltro;
+    }
+
+    const items = await this.prisma.ordenes_pendientes.findMany({
+      where,
+      orderBy: { fecha_creacion: 'desc' },
+      include: {
+        ordenes_servicio: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+            estados_orden: {
+              select: {
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
+          },
+        },
+        ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            orden_secuencia: true,
+            nombre_sistema: true,
+          },
+        },
+        catalogo_pendientes: true,
+        empleados_ordenes_pendientes_creado_porToempleados: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+        empleados_ordenes_pendientes_resuelto_porToempleados: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const activos = items.filter((p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION');
+    const resueltos = items.filter((p) => p.estado === 'RESUELTO');
+    const cancelados = items.filter((p) => p.estado === 'CANCELADO');
+
+    return {
+      total: items.length,
+      activosCount: activos.length,
+      resueltosCount: resueltos.length,
+      canceladosCount: cancelados.length,
+      items,
+    };
+  }
+
 }

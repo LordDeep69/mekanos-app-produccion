@@ -6,6 +6,7 @@
 export { ConfigParametrosEditor } from './components/ConfigParametrosEditor';
 export { EquipoForm } from './components/EquipoForm';
 export { EquipoRepuestosTab } from './components/EquipoRepuestosTab';
+export { EquipoPendientesTab } from './components/EquipoPendientesTab';
 export { HojaVidaEquipo } from './components/hoja-vida-equipo';
 
 // Servicios y hooks

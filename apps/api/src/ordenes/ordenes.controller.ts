@@ -1798,6 +1798,37 @@ export class OrdenesController {
   // GESTIÓN DE PENDIENTES TÉCNICOS POR ORDEN
   // ==========================================================================
 
+  @Get('catalogo-pendientes/categorias')
+  @ApiOperation({ summary: 'Obtener categorías únicas existentes del catálogo de pendientes' })
+  async getCategoriasCatalogoPendientes() {
+    const defaultCategorias = [
+      'ELECTRICO',
+      'MECANICO',
+      'COMBUSTIBLE',
+      'HIDRAULICO',
+      'ELECTRONICO',
+      'INSTRUMENTACION',
+      'LIMPIEZA',
+      'GENERAL',
+    ];
+
+    const records = await this.prisma.catalogo_pendientes.findMany({
+      where: { categoria: { not: null } },
+      select: { categoria: true },
+      distinct: ['categoria'],
+    });
+
+    const dbCategorias = records
+      .map((r) => r.categoria?.trim().toUpperCase())
+      .filter((c): c is string => Boolean(c));
+
+    const setCategorias = new Set([...defaultCategorias, ...dbCategorias]);
+    return {
+      success: true,
+      data: Array.from(setCategorias).sort(),
+    };
+  }
+
   @Get('catalogo-pendientes')
   @ApiOperation({ summary: 'Obtener catálogo de pendientes técnicos' })
   async getCatalogoPendientes(
@@ -1987,6 +2018,13 @@ export class OrdenesController {
             nombre_equipo: true,
           },
         },
+        ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            orden_secuencia: true,
+            nombre_sistema: true,
+          },
+        },
         catalogo_pendientes: true,
       },
     });
@@ -2032,12 +2070,25 @@ export class OrdenesController {
     }
 
     let idEquipo = body.idEquipo;
-    if (!idEquipo && body.idOrdenEquipo && orden.ordenes_equipos) {
-      const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === body.idOrdenEquipo);
-      if (oe?.id_equipo) idEquipo = oe.id_equipo;
+    let idOrdenEquipo = body.idOrdenEquipo || null;
+
+    if (idOrdenEquipo && orden.ordenes_equipos) {
+      const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === idOrdenEquipo);
+      if (oe?.id_equipo) {
+        idEquipo = oe.id_equipo;
+      }
+    } else if (idEquipo && orden.ordenes_equipos) {
+      const oe = orden.ordenes_equipos.find((e: any) => e.id_equipo === idEquipo);
+      if (oe) {
+        idOrdenEquipo = oe.id_orden_equipo;
+      }
     }
+
     if (!idEquipo) {
       idEquipo = orden.id_equipo;
+    }
+    if (!idOrdenEquipo && orden.ordenes_equipos && orden.ordenes_equipos.length === 1) {
+      idOrdenEquipo = orden.ordenes_equipos[0].id_orden_equipo;
     }
 
     let idEmpleado: number | null = null;
@@ -2063,7 +2114,7 @@ export class OrdenesController {
         id_orden_servicio: idOrden,
         id_cliente: orden.id_cliente,
         id_equipo: idEquipo,
-        id_orden_equipo: body.idOrdenEquipo || null,
+        id_orden_equipo: idOrdenEquipo || null,
         id_pendiente_catalogo: body.idPendienteCatalogo || null,
         descripcion: body.descripcion.trim(),
         origen: origenVal,
@@ -2079,6 +2130,13 @@ export class OrdenesController {
             id_equipo: true,
             codigo_equipo: true,
             nombre_equipo: true,
+          },
+        },
+        ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            orden_secuencia: true,
+            nombre_sistema: true,
           },
         },
         catalogo_pendientes: true,

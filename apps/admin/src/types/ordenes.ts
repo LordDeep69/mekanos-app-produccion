@@ -369,6 +369,16 @@ export interface OrdenPendiente {
     fecha_resolucion?: string | null;
     resuelto_por?: number | null;
     observaciones_resolucion?: string | null;
+    ordenes_equipos?: {
+        id_orden_equipo: number;
+        orden_secuencia?: number;
+        nombre_sistema?: string | null;
+        equipos?: {
+            id_equipo: number;
+            codigo_equipo?: string;
+            nombre_equipo?: string;
+        };
+    } | null;
     equipos?: {
         id_equipo: number;
         codigo_equipo?: string;

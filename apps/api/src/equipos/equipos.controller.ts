@@ -429,5 +429,23 @@ export class EquiposController {
       data: resultado,
     };
   }
+
+  /**
+   * GET /api/equipos/:id/pendientes
+   * Obtiene la trazabilidad completa de hallazgos y pendientes técnicos del equipo
+   */
+  @Get(':id/pendientes')
+  @ApiOperation({ summary: 'Obtener historial de pendientes y hallazgos técnicos del equipo' })
+  async getPendientesEquipo(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('estado') estado?: string,
+  ) {
+    const data = await this.equiposGestionService.getPendientesEquipo(id, estado);
+    return {
+      success: true,
+      data,
+    };
+  }
+
 }
 

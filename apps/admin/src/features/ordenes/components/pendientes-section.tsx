@@ -50,6 +50,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [searchCatalogo, setSearchCatalogo] = useState('');
     const [catFiltro, setCatFiltro] = useState('TODAS');
+    const [categoriasList, setCategoriasList] = useState<string[]>(['TODAS', 'ELECTRICO', 'MECANICO', 'COMBUSTIBLE', 'HIDRAULICO', 'ELECTRONICO', 'INSTRUMENTACION', 'GENERAL']);
 
     // Sync state with props
     useEffect(() => {
@@ -62,6 +63,14 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     useEffect(() => {
         if (isAddModalOpen && catalogoItems.length === 0) {
             setLoadingCatalogo(true);
+            apiClient.get('/ordenes/catalogo-pendientes/categorias')
+                .then((res) => {
+                    if (res.data?.success && Array.isArray(res.data.data)) {
+                        setCategoriasList(['TODAS', ...res.data.data]);
+                    }
+                })
+                .catch(() => {});
+
             apiClient.get('/ordenes/catalogo-pendientes')
                 .then((res) => {
                     const data = res.data;
@@ -272,7 +281,12 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                             const prioridadClase = getPrioridadColor(p.prioridad);
 
                             // Equipo display
-                            const nombreEquipo = p.equipos?.nombre_equipo || p.equipos?.codigo_equipo;
+                            // Resolucion precisa multiequipo
+                            const oeRel = orden.ordenes_equipos?.find((e: any) => e.id_orden_equipo === p.id_orden_equipo);
+                            const ordenSec = oeRel?.orden_secuencia || p.ordenes_equipos?.orden_secuencia;
+                            const sistName = oeRel?.nombre_sistema || p.ordenes_equipos?.nombre_sistema;
+                            const eqBaseName = p.equipos?.nombre_equipo || p.equipos?.codigo_equipo || oeRel?.equipos?.nombre_equipo;
+                            const badgeEquipoLabel = ordenSec ? `#${ordenSec} · ${sistName || eqBaseName || 'Equipo'}` : eqBaseName;
 
                             return (
                                 <div
@@ -309,6 +323,12 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                 <span className="px-2 py-0.5 rounded-md text-[11px] bg-gray-100 text-gray-600 font-medium">
                                                     {p.origen === 'CATALOGO' ? 'Catálogo' : 'Manual'}
                                                 </span>
+                                                {badgeEquipoLabel && (
+                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
+                                                        <Wrench className="h-3 w-3 text-blue-600" />
+                                                        {badgeEquipoLabel}
+                                                    </span>
+                                                )}
                                             </div>
 
                                             {/* Acciones */}
@@ -350,10 +370,11 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                     {/* Footer con metadata y botón para resolver */}
                                     <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 text-xs text-gray-500">
                                         <div className="flex flex-col gap-0.5">
-                                            {nombreEquipo && (
+                                            {p.empleados_ordenes_pendientes_creado_porToempleados?.persona && (
                                                 <span className="flex items-center gap-1 font-medium text-gray-700">
-                                                    <Wrench className="h-3 w-3 text-blue-600" />
-                                                    {nombreEquipo}
+                                                    <User className="h-3 w-3 text-gray-400" />
+                                                    {p.empleados_ordenes_pendientes_creado_porToempleados.persona.nombre_completo ||
+                                                     p.empleados_ordenes_pendientes_creado_porToempleados.persona.primer_nombre}
                                                 </span>
                                             )}
                                             <span className="flex items-center gap-1 text-[11px] text-gray-400">
@@ -414,6 +435,47 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                         </div>
 
                         <form onSubmit={handleCreatePendiente} className="p-6 space-y-4">
+                            {/* Selector Prominente Multiequipo */}
+                            {orden.ordenes_equipos && orden.ordenes_equipos.length > 1 && (
+                                <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                                            <Wrench className="h-3.5 w-3.5 text-blue-700" />
+                                            ¿A qué equipo corresponde este pendiente? *
+                                        </label>
+                                        <span className="text-[11px] font-semibold text-blue-700">
+                                            {orden.ordenes_equipos.length} equipos en orden
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {orden.ordenes_equipos.map((oe: any) => {
+                                            const isSelected = idOrdenEquipo === oe.id_orden_equipo;
+                                            const label = oe.nombre_sistema || oe.equipos?.nombre_equipo || oe.equipos?.codigo_equipo || `Equipo ${oe.orden_secuencia}`;
+                                            return (
+                                                <button
+                                                    key={oe.id_orden_equipo}
+                                                    type="button"
+                                                    onClick={() => setIdOrdenEquipo(oe.id_orden_equipo)}
+                                                    className={cn(
+                                                        'p-2.5 rounded-lg text-left text-xs font-semibold transition-all border flex items-center justify-between gap-2 cursor-pointer',
+                                                        isSelected
+                                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                                            : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-blue-50/40'
+                                                    )}
+                                                >
+                                                    <div className="min-w-0">
+                                                        <span className={cn('text-[10px] block font-mono uppercase', isSelected ? 'text-blue-100' : 'text-gray-400')}>
+                                                            #{oe.orden_secuencia} {oe.equipos?.codigo_equipo ? `· ${oe.equipos.codigo_equipo}` : ''}
+                                                        </span>
+                                                        <span className="truncate block font-bold">{label}</span>
+                                                    </div>
+                                                    {isSelected && <CheckCircle2 className="h-4 w-4 text-white shrink-0" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                             {errorMsg && (
                                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
                                     <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -479,7 +541,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
                                         {/* Filtros por Categoría */}
                                         <div className="flex flex-wrap gap-1">
-                                            {['TODAS', 'GENERADOR', 'BOMBA', 'ELECTRICO', 'MECANICO', 'GENERAL'].map((cat) => (
+                                            {categoriasList.map((cat) => (
                                                 <button
                                                     key={cat}
                                                     type="button"
@@ -589,25 +651,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                     </select>
                                 </div>
 
-                                {orden.ordenes_equipos && orden.ordenes_equipos.length > 1 && (
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                                            Equipo Vinculado
-                                        </label>
-                                        <select
-                                            value={idOrdenEquipo || ''}
-                                            onChange={(e) => setIdOrdenEquipo(e.target.value ? Number(e.target.value) : null)}
-                                            className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
-                                        >
-                                            <option value="">Equipo Principal</option>
-                                            {orden.ordenes_equipos.map((oe: any) => (
-                                                <option key={oe.id_orden_equipo} value={oe.id_orden_equipo}>
-                                                    {oe.equipos?.nombre_equipo || oe.equipos?.codigo_equipo || `Equipo ${oe.orden_secuencia}`}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
+                                
                             </div>
 
                             {/* Observaciones */}

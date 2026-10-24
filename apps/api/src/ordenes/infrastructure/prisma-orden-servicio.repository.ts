@@ -285,6 +285,13 @@ export class PrismaOrdenServicioRepository {
             nombre_equipo: true,
           },
         },
+        ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            orden_secuencia: true,
+            nombre_sistema: true,
+          },
+        },
         catalogo_pendientes: true,
         empleados_ordenes_pendientes_creado_porToempleados: {
           include: {
@@ -732,7 +739,14 @@ export class PrismaOrdenServicioRepository {
                 nombre_equipo: true,
               },
             },
-            catalogo_pendientes: true,
+            ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            orden_secuencia: true,
+            nombre_sistema: true,
+          },
+        },
+        catalogo_pendientes: true,
             empleados_ordenes_pendientes_creado_porToempleados: {
               include: {
                 persona: {
