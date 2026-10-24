@@ -1073,12 +1073,14 @@ export class SyncService {
       });
 
       pendientesDownload = pendientes.map((p) => ({
+        id: p.id_pendiente_catalogo,
         idPendienteCatalogo: p.id_pendiente_catalogo,
         codigo: p.codigo ?? undefined,
         descripcion: p.descripcion,
         categoria: p.categoria ?? undefined,
         idTipoEquipo: p.id_tipo_equipo ?? undefined,
         ordenVisual: p.orden_visual ?? 0,
+        activo: p.activo ?? true,
       }));
     } else {
       this.logger.log('[Sync Delta] Omitiendo catálogos (ya sincronizados)');

@@ -17,6 +17,7 @@ import {
     X,
     ExternalLink
 } from 'lucide-react';
+import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
 import type { Orden, OrdenPendiente } from '@/types/ordenes';
 import { getPendienteEstadoColor, getPrioridadColor } from '@/types/ordenes';
@@ -47,6 +48,8 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     const [observaciones, setObservaciones] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [searchCatalogo, setSearchCatalogo] = useState('');
+    const [catFiltro, setCatFiltro] = useState('TODAS');
 
     // Sync state with props
     useEffect(() => {
@@ -59,10 +62,10 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     useEffect(() => {
         if (isAddModalOpen && catalogoItems.length === 0) {
             setLoadingCatalogo(true);
-            fetch('/api/ordenes/catalogo-pendientes')
-                .then((res) => res.json())
-                .then((data) => {
-                    if (data.success && data.data) {
+            apiClient.get('/ordenes/catalogo-pendientes')
+                .then((res) => {
+                    const data = res.data;
+                    if (data?.success && data?.data) {
                         setCatalogoItems(data.data);
                     }
                 })
@@ -88,21 +91,16 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
         setIsSubmitting(true);
         try {
-            const res = await fetch(`/api/ordenes/${orden.id_orden_servicio}/pendientes`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    descripcion: desc,
-                    idPendienteCatalogo: selectedCatalogoId,
-                    idOrdenEquipo: idOrdenEquipo || undefined,
-                    prioridad,
-                    observaciones: observaciones.trim() || undefined,
-                }),
+            const res = await apiClient.post(`/ordenes/${orden.id_orden_servicio}/pendientes`, {
+                descripcion: desc,
+                idPendienteCatalogo: selectedCatalogoId || undefined,
+                idOrdenEquipo: idOrdenEquipo || undefined,
+                prioridad,
+                observaciones: observaciones.trim() || undefined,
             });
-
-            const data = await res.json();
-            if (!res.ok || !data.success) {
-                throw new Error(data.message || 'Error registrando pendiente');
+            const data = res.data;
+            if (!data?.success) {
+                throw new Error(data?.message || 'Error registrando pendiente');
             }
 
             setPendientes((prev) => [...prev, data.data]);
@@ -122,18 +120,13 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         if (!selectedPendiente) return;
         setIsSubmitting(true);
         try {
-            const res = await fetch(`/api/ordenes/pendientes/${selectedPendiente.id_orden_pendiente}/estado`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    estado: resolucionEstado,
-                    observaciones_resolucion: resolucionNotas.trim() || undefined,
-                }),
+            const res = await apiClient.patch(`/ordenes/pendientes/${selectedPendiente.id_orden_pendiente}/estado`, {
+                estado: resolucionEstado,
+                observaciones_resolucion: resolucionNotas.trim() || undefined,
             });
-
-            const data = await res.json();
-            if (!res.ok || !data.success) {
-                throw new Error(data.message || 'Error actualizando estado');
+            const data = res.data;
+            if (!data?.success) {
+                throw new Error(data?.message || 'Error actualizando estado');
             }
 
             setPendientes((prev) =>
@@ -155,10 +148,8 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     const handleDelete = async (id: number) => {
         if (!confirm('¿Está seguro de eliminar este pendiente técnico?')) return;
         try {
-            const res = await fetch(`/api/ordenes/pendientes/${id}`, {
-                method: 'DELETE',
-            });
-            if (res.ok) {
+            const res = await apiClient.delete(`/ordenes/pendientes/${id}`);
+            if (res.data?.success || res.status === 200) {
                 setPendientes((prev) => prev.filter((p) => p.id_orden_pendiente !== id));
                 onUpdate?.();
             }
@@ -430,35 +421,138 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                 </div>
                             )}
 
-                            {/* Selección de Catálogo */}
+                            {/* Selección de Catálogo Maestro */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                                    Seleccionar del Catálogo Estándar
-                                </label>
-                                {loadingCatalogo ? (
-                                    <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
-                                        <Loader2 className="h-4 w-4 animate-spin" /> Cargando catálogo...
-                                    </div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        Catálogo de Plantillas Frecuentes
+                                    </label>
+                                    <span className="text-[11px] font-semibold text-gray-400">
+                                        {catalogoItems.length} plantillas disponibles
+                                    </span>
+                                </div>
+
+                                {selectedCatalogoId ? (
+                                    (() => {
+                                        const sel = catalogoItems.find((c) => c.id_pendiente_catalogo === selectedCatalogoId);
+                                        return (
+                                            <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-300 rounded-xl flex items-start justify-between gap-3 shadow-xs">
+                                                <div className="flex items-start gap-2.5 min-w-0">
+                                                    <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-amber-200/90 text-amber-900 border border-amber-300 uppercase tracking-wider shrink-0 mt-0.5">
+                                                        {sel?.categoria || 'GENERAL'}
+                                                    </span>
+                                                    <div className="min-w-0">
+                                                        {sel?.codigo && (
+                                                            <div className="text-[11px] font-mono font-bold text-amber-800">
+                                                                {sel.codigo}
+                                                            </div>
+                                                        )}
+                                                        <p className="text-xs font-semibold text-gray-900 line-clamp-2">
+                                                            {sel?.descripcion}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedCatalogoId(null);
+                                                    }}
+                                                    className="text-xs font-bold text-amber-800 hover:text-amber-950 underline flex items-center gap-1 shrink-0 px-2 py-1 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer"
+                                                >
+                                                    <X className="h-3.5 w-3.5" /> Cambiar
+                                                </button>
+                                            </div>
+                                        );
+                                    })()
                                 ) : (
-                                    <select
-                                        value={selectedCatalogoId || ''}
-                                        onChange={(e) => {
-                                            const val = e.target.value ? Number(e.target.value) : null;
-                                            setSelectedCatalogoId(val);
-                                            if (val) {
-                                                const cat = catalogoItems.find((c) => c.id_pendiente_catalogo === val);
-                                                if (cat) setDescripcionManual(cat.descripcion);
-                                            }
-                                        }}
-                                        className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
-                                    >
-                                        <option value="">-- O elija un pendiente predefinido --</option>
-                                        {catalogoItems.map((cat) => (
-                                            <option key={cat.id_pendiente_catalogo} value={cat.id_pendiente_catalogo}>
-                                                [{cat.categoria || 'GENERAL'}] {cat.descripcion}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="space-y-2.5 border border-gray-200 rounded-xl p-3 bg-gray-50/60">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                            <input
+                                                type="text"
+                                                value={searchCatalogo}
+                                                onChange={(e) => setSearchCatalogo(e.target.value)}
+                                                placeholder="Buscar por palabra clave o código (ej: Batería, Fuga, Filtro, Radiador)..."
+                                                className="w-full text-xs pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-gray-400"
+                                            />
+                                        </div>
+
+                                        {/* Filtros por Categoría */}
+                                        <div className="flex flex-wrap gap-1">
+                                            {['TODAS', 'GENERADOR', 'BOMBA', 'ELECTRICO', 'MECANICO', 'GENERAL'].map((cat) => (
+                                                <button
+                                                    key={cat}
+                                                    type="button"
+                                                    onClick={() => setCatFiltro(cat)}
+                                                    className={cn(
+                                                        'px-2 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer',
+                                                        catFiltro === cat
+                                                            ? 'bg-amber-600 text-white shadow-xs'
+                                                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                                                    )}
+                                                >
+                                                    {cat}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Lista de Plantillas */}
+                                        <div className="max-h-40 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-lg bg-white shadow-inner">
+                                            {loadingCatalogo ? (
+                                                <div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-500">
+                                                    <Loader2 className="h-4 w-4 animate-spin text-amber-600" /> Cargando catálogo...
+                                                </div>
+                                            ) : (() => {
+                                                const items = catalogoItems.filter((item) => {
+                                                    const matchCat = catFiltro === 'TODAS' || item.categoria === catFiltro;
+                                                    const matchSearch =
+                                                        !searchCatalogo.trim() ||
+                                                        item.descripcion?.toLowerCase().includes(searchCatalogo.toLowerCase()) ||
+                                                        item.codigo?.toLowerCase().includes(searchCatalogo.toLowerCase());
+                                                    return matchCat && matchSearch;
+                                                });
+
+                                                if (items.length === 0) {
+                                                    return (
+                                                        <div className="py-5 text-center text-xs text-gray-400">
+                                                            No se encontraron plantillas coincidentes. Puede redactar abajo directamente.
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return items.map((item) => (
+                                                    <button
+                                                        key={item.id_pendiente_catalogo}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedCatalogoId(item.id_pendiente_catalogo);
+                                                            setDescripcionManual(item.descripcion);
+                                                        }}
+                                                        className="w-full text-left p-2.5 hover:bg-amber-50/70 transition-colors flex items-center justify-between gap-2 group cursor-pointer"
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                                                                    {item.categoria || 'GENERAL'}
+                                                                </span>
+                                                                {item.codigo && (
+                                                                    <span className="text-[10px] font-mono text-gray-500 font-semibold">
+                                                                        {item.codigo}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs font-medium text-gray-800 line-clamp-1 group-hover:text-amber-900">
+                                                                {item.descripcion}
+                                                            </p>
+                                                        </div>
+                                                        <span className="text-[11px] font-bold text-amber-700 opacity-0 group-hover:opacity-100 shrink-0">
+                                                            + Seleccionar
+                                                        </span>
+                                                    </button>
+                                                ));
+                                            })()}
+                                        </div>
+                                    </div>
                                 )}
                             </div>
 

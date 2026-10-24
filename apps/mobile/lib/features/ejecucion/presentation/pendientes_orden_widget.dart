@@ -303,6 +303,169 @@ class _PendientesOrdenWidgetState
     }
   }
 
+  Future<void> _abrirSelectorCatalogo() async {
+    String categoriaFiltro = 'TODAS';
+    String busqueda = '';
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final itemsFiltrados = _catalogo.where((item) {
+            final matchCat = categoriaFiltro == 'TODAS' || item.categoria == categoriaFiltro;
+            final matchSearch = busqueda.isEmpty ||
+                item.descripcion.toLowerCase().contains(busqueda.toLowerCase()) ||
+                (item.codigo?.toLowerCase().contains(busqueda.toLowerCase()) ?? false);
+            return matchCat && matchSearch;
+          }).toList();
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.75,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (context, scrollController) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.menu_book_rounded, color: Colors.amber.shade800, size: 22),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Catálogo de Pendientes',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.amber.shade300),
+                          ),
+                          child: Text(
+                            '${itemsFiltrados.length} disponibles',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      onChanged: (val) => setModalState(() => busqueda = val.trim()),
+                      decoration: InputDecoration(
+                        hintText: 'Buscar en catálogo (batería, fuga, filtro...)...',
+                        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: ['TODAS', 'GENERADOR', 'BOMBA', 'ELECTRICO', 'MECANICO', 'GENERAL'].map((cat) {
+                          final isSelected = categoriaFiltro == cat;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: FilterChip(
+                              label: Text(cat, style: TextStyle(fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                              selected: isSelected,
+                              onSelected: (_) => setModalState(() => categoriaFiltro = cat),
+                              backgroundColor: Colors.grey.shade100,
+                              selectedColor: Colors.amber.shade200,
+                              checkmarkColor: Colors.amber.shade900,
+                              labelStyle: TextStyle(color: isSelected ? Colors.amber.shade900 : Colors.black87),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: itemsFiltrados.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No se encontraron plantillas coincidentes',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                              ),
+                            )
+                          : ListView.separated(
+                              controller: scrollController,
+                              itemCount: itemsFiltrados.length,
+                              separatorBuilder: (_, _) => Divider(height: 1, color: Colors.grey.shade200),
+                              itemBuilder: (context, index) {
+                                final item = itemsFiltrados[index];
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  leading: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber.shade300),
+                                    ),
+                                    child: Text(
+                                      item.categoria ?? 'GENERAL',
+                                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                    ),
+                                  ),
+                                  title: Text(item.descripcion, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                  subtitle: item.codigo != null
+                                      ? Text(item.codigo!, style: TextStyle(fontSize: 10, color: Colors.grey.shade500))
+                                      : null,
+                                  trailing: FilledButton.tonal(
+                                    style: FilledButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      backgroundColor: Colors.amber.shade100,
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(ctx);
+                                      _agregarPendienteCatalogo(item);
+                                    },
+                                    child: const Text('Agregar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Color _getColorPrioridad(String prioridad) {
     switch (prioridad.toUpperCase()) {
       case 'URGENTE':
@@ -400,7 +563,7 @@ class _PendientesOrdenWidgetState
           ),
           const SizedBox(height: 14),
 
-          // Search / Autocomplete Bar + Botón (+)
+          // Search / Autocomplete Bar + Botón Catálogo + Botón (+)
           Row(
             children: [
               Expanded(
@@ -418,6 +581,61 @@ class _PendientesOrdenWidgetState
                   onSelected: (PendientesCatalogoData seleccion) {
                     _agregarPendienteCatalogo(seleccion);
                   },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 8,
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.white,
+                        shadowColor: Colors.black26,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: 250,
+                            maxWidth: MediaQuery.of(context).size.width - 48,
+                          ),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+                            itemBuilder: (context, index) {
+                              final item = options.elementAt(index);
+                              return ListTile(
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                                leading: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.amber.shade300),
+                                  ),
+                                  child: Text(
+                                    item.categoria ?? 'GENERAL',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.amber.shade900,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  item.descripcion,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                                ),
+                                subtitle: item.codigo != null
+                                    ? Text(item.codigo!, style: TextStyle(fontSize: 10, color: Colors.grey.shade500))
+                                    : null,
+                                onTap: () => onSelected(item),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                   fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                     return TextField(
                       controller: controller,
@@ -426,6 +644,11 @@ class _PendientesOrdenWidgetState
                         hintText: 'Buscar sugerencia en catálogo...',
                         hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                         prefixIcon: Icon(Icons.search, size: 18, color: Colors.amber.shade800),
+                        suffixIcon: IconButton(
+                          icon: Icon(Icons.menu_book_rounded, size: 18, color: Colors.amber.shade800),
+                          tooltip: 'Explorar catálogo',
+                          onPressed: _abrirSelectorCatalogo,
+                        ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -446,7 +669,21 @@ class _PendientesOrdenWidgetState
                   },
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+              // Botón Catálogo
+              Material(
+                color: Colors.amber.shade100,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  onTap: _abrirSelectorCatalogo,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    child: Icon(Icons.menu_book_rounded, color: Colors.amber.shade900, size: 20),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               // Botón (+) para personalizado
               Material(
                 color: Colors.amber.shade700,
@@ -455,12 +692,12 @@ class _PendientesOrdenWidgetState
                   onTap: _abrirDialogoNuevoPendiente,
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
-                    padding: const EdgeInsets.all(11),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.add, color: Colors.white, size: 20),
-                        SizedBox(width: 4),
+                        Icon(Icons.add, color: Colors.white, size: 18),
+                        SizedBox(width: 2),
                         Text(
                           'Nuevo',
                           style: TextStyle(

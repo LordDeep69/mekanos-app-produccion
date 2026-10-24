@@ -1794,6 +1794,327 @@ export class OrdenesController {
     };
   }
 
+  // ==========================================================================
+  // GESTIÓN DE PENDIENTES TÉCNICOS POR ORDEN
+  // ==========================================================================
+
+  @Get('catalogo-pendientes')
+  @ApiOperation({ summary: 'Obtener catálogo de pendientes técnicos' })
+  async getCatalogoPendientes(
+    @Query('idTipoEquipo') idTipoEquipo?: string,
+    @Query('categoria') categoria?: string,
+    @Query('incluirInactivos') incluirInactivos?: string,
+    @Query('busqueda') busqueda?: string,
+  ) {
+    const where: any = {};
+    if (incluirInactivos !== 'true') {
+      where.activo = true;
+    }
+    if (idTipoEquipo) {
+      where.OR = [
+        { id_tipo_equipo: parseInt(idTipoEquipo, 10) },
+        { id_tipo_equipo: null },
+      ];
+    }
+    if (categoria && categoria !== 'TODAS') {
+      where.categoria = categoria;
+    }
+    if (busqueda?.trim()) {
+      where.descripcion = {
+        contains: busqueda.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    const items = await this.prisma.catalogo_pendientes.findMany({
+      where,
+      orderBy: [
+        { orden_visual: 'asc' },
+        { descripcion: 'asc' },
+      ],
+      include: {
+        tipos_equipo: {
+          select: {
+            id_tipo_equipo: true,
+            nombre_tipo: true,
+          },
+        },
+        _count: {
+          select: { ordenes_pendientes: true },
+        },
+      },
+    });
+
+    return { success: true, data: items };
+  }
+
+  @Post('catalogo-pendientes')
+  @ApiOperation({ summary: 'Crear nuevo ítem en el catálogo de pendientes técnicos' })
+  async createCatalogoPendiente(
+    @Body() body: {
+      descripcion: string;
+      codigo?: string;
+      categoria?: string;
+      idTipoEquipo?: number | null;
+      ordenVisual?: number;
+      activo?: boolean;
+    },
+  ) {
+    if (!body.descripcion?.trim()) {
+      throw new BadRequestException('La descripción es obligatoria');
+    }
+    const created = await this.prisma.catalogo_pendientes.create({
+      data: {
+        descripcion: body.descripcion.trim(),
+        codigo: body.codigo?.trim() || null,
+        categoria: body.categoria?.trim() || 'GENERAL',
+        id_tipo_equipo: body.idTipoEquipo ? Number(body.idTipoEquipo) : null,
+        orden_visual: body.ordenVisual !== undefined ? Number(body.ordenVisual) : 0,
+        activo: body.activo !== undefined ? Boolean(body.activo) : true,
+      },
+      include: {
+        tipos_equipo: {
+          select: {
+            id_tipo_equipo: true,
+            nombre_tipo: true,
+          },
+        },
+      },
+    });
+    return { success: true, data: created };
+  }
+
+  @Put('catalogo-pendientes/:id')
+  @ApiOperation({ summary: 'Actualizar ítem del catálogo de pendientes técnicos' })
+  async updateCatalogoPendiente(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: {
+      descripcion?: string;
+      codigo?: string;
+      categoria?: string;
+      idTipoEquipo?: number | null;
+      ordenVisual?: number;
+      activo?: boolean;
+    },
+  ) {
+    const data: any = {};
+    if (body.descripcion !== undefined) data.descripcion = body.descripcion.trim();
+    if (body.codigo !== undefined) data.codigo = body.codigo?.trim() || null;
+    if (body.categoria !== undefined) data.categoria = body.categoria?.trim() || 'GENERAL';
+    if (body.idTipoEquipo !== undefined) data.id_tipo_equipo = body.idTipoEquipo ? Number(body.idTipoEquipo) : null;
+    if (body.ordenVisual !== undefined) data.orden_visual = Number(body.ordenVisual);
+    if (body.activo !== undefined) data.activo = Boolean(body.activo);
+
+    const updated = await this.prisma.catalogo_pendientes.update({
+      where: { id_pendiente_catalogo: id },
+      data,
+      include: {
+        tipos_equipo: {
+          select: {
+            id_tipo_equipo: true,
+            nombre_tipo: true,
+          },
+        },
+      },
+    });
+    return { success: true, data: updated };
+  }
+
+  @Delete('catalogo-pendientes/:id')
+  @ApiOperation({ summary: 'Eliminar o desactivar ítem del catálogo de pendientes técnicos' })
+  async deleteCatalogoPendiente(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('hard') hard?: string,
+  ) {
+    const usoCount = await this.prisma.ordenes_pendientes.count({
+      where: { id_pendiente_catalogo: id },
+    });
+
+    if (usoCount > 0 || hard !== 'true') {
+      await this.prisma.catalogo_pendientes.update({
+        where: { id_pendiente_catalogo: id },
+        data: { activo: false },
+      });
+      return { success: true, message: 'Ítem desactivado exitosamente', desactivado: true };
+    } else {
+      await this.prisma.catalogo_pendientes.delete({
+        where: { id_pendiente_catalogo: id },
+      });
+      return { success: true, message: 'Ítem eliminado definitivamente', eliminado: true };
+    }
+  }
+
+  @Patch('pendientes/:id/estado')
+  @ApiOperation({ summary: 'Actualizar estado de un pendiente técnico' })
+  async updateEstadoPendiente(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO'; observaciones_resolucion?: string },
+    @CurrentUser() user: any,
+  ) {
+    const pendiente = await this.prisma.ordenes_pendientes.findUnique({
+      where: { id_orden_pendiente: id },
+    });
+
+    if (!pendiente) {
+      throw new NotFoundException(`Pendiente con ID ${id} no encontrado`);
+    }
+
+    const esResuelto = body.estado === 'RESUELTO';
+    const esCancelado = body.estado === 'CANCELADO';
+
+    let idEmpleadoResuelve: number | null = null;
+    if (user?.id_usuario) {
+      const emp = await this.prisma.empleados.findFirst({
+        where: { persona: { usuarios: { id_usuario: user.id_usuario } } },
+        select: { id_empleado: true },
+      });
+      idEmpleadoResuelve = emp?.id_empleado || null;
+    }
+
+    const updated = await this.prisma.ordenes_pendientes.update({
+      where: { id_orden_pendiente: id },
+      data: {
+        estado: body.estado,
+        observaciones_resolucion: body.observaciones_resolucion !== undefined ? body.observaciones_resolucion : pendiente.observaciones_resolucion,
+        fecha_resolucion: (esResuelto || esCancelado) ? new Date() : null,
+        resuelto_por: (esResuelto || esCancelado) ? idEmpleadoResuelve : null,
+      },
+      include: {
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+          },
+        },
+        catalogo_pendientes: true,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Pendiente actualizado a estado ${body.estado}`,
+      data: updated,
+    };
+  }
+
+  @Post(':id/pendientes')
+  @ApiOperation({ summary: 'Registrar un nuevo pendiente para una orden desde portal' })
+  async createPendienteOrden(
+    @Param('id', ParseIntPipe) idOrden: number,
+    @Body() body: {
+      descripcion: string;
+      idPendienteCatalogo?: number;
+      idEquipo?: number;
+      idOrdenEquipo?: number;
+      // ✅ origen_pendiente_enum = CATALOGO | PERSONALIZADO | MANUAL.
+      // La firma solo declaraba CATALOGO | MANUAL y luego comparaba contra
+      // 'PERSONALIZADO', un valor que TypeScript marcaba como imposible.
+      origen?: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
+      prioridad?: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+      observaciones?: string;
+    },
+    @CurrentUser() user: any,
+  ) {
+    if (!body.descripcion?.trim()) {
+      throw new BadRequestException('La descripción del pendiente es requerida');
+    }
+
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: idOrden },
+      include: {
+        ordenes_equipos: true,
+      },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden con ID ${idOrden} no encontrada`);
+    }
+
+    let idEquipo = body.idEquipo;
+    if (!idEquipo && body.idOrdenEquipo && orden.ordenes_equipos) {
+      const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === body.idOrdenEquipo);
+      if (oe?.id_equipo) idEquipo = oe.id_equipo;
+    }
+    if (!idEquipo) {
+      idEquipo = orden.id_equipo;
+    }
+
+    let idEmpleado: number | null = null;
+    if (user?.id_usuario) {
+      const emp = await this.prisma.empleados.findFirst({
+        where: { persona: { usuarios: { id_usuario: user.id_usuario } } },
+        select: { id_empleado: true },
+      });
+      idEmpleado = emp?.id_empleado || null;
+    }
+
+    let origenVal: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO' = 'CATALOGO';
+    if (body.origen === 'PERSONALIZADO') {
+      origenVal = 'PERSONALIZADO';
+    } else if (body.origen === 'MANUAL') {
+      origenVal = 'MANUAL';
+    } else if (!body.idPendienteCatalogo) {
+      origenVal = 'MANUAL';
+    }
+
+    const created = await this.prisma.ordenes_pendientes.create({
+      data: {
+        id_orden_servicio: idOrden,
+        id_cliente: orden.id_cliente,
+        id_equipo: idEquipo,
+        id_orden_equipo: body.idOrdenEquipo || null,
+        id_pendiente_catalogo: body.idPendienteCatalogo || null,
+        descripcion: body.descripcion.trim(),
+        origen: origenVal,
+        prioridad: body.prioridad || 'NORMAL',
+        estado: 'PENDIENTE',
+        observaciones: body.observaciones?.trim() || null,
+        creado_por: idEmpleado,
+        fecha_creacion: new Date(),
+      },
+      include: {
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+          },
+        },
+        catalogo_pendientes: true,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Pendiente creado correctamente',
+      data: created,
+    };
+  }
+
+  @Delete('pendientes/:id')
+  @ApiOperation({ summary: 'Eliminar un pendiente técnico' })
+  async deletePendiente(
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const pendiente = await this.prisma.ordenes_pendientes.findUnique({
+      where: { id_orden_pendiente: id },
+    });
+
+    if (!pendiente) {
+      throw new NotFoundException(`Pendiente con ID ${id} no encontrado`);
+    }
+
+    await this.prisma.ordenes_pendientes.delete({
+      where: { id_orden_pendiente: id },
+    });
+
+    return {
+      success: true,
+      message: `Pendiente con ID ${id} eliminado`,
+    };
+  }
+
   /**
    * GET /api/ordenes/estados-debug
    * DEBUG: Listar estados
@@ -3354,327 +3675,6 @@ export class OrdenesController {
         numero: ordenDestino.numero_orden,
       },
       estadisticas: resultado,
-    };
-  }
-
-  // ==========================================================================
-  // GESTIÓN DE PENDIENTES TÉCNICOS POR ORDEN
-  // ==========================================================================
-
-  @Get('catalogo-pendientes')
-  @ApiOperation({ summary: 'Obtener catálogo de pendientes técnicos' })
-  async getCatalogoPendientes(
-    @Query('idTipoEquipo') idTipoEquipo?: string,
-    @Query('categoria') categoria?: string,
-    @Query('incluirInactivos') incluirInactivos?: string,
-    @Query('busqueda') busqueda?: string,
-  ) {
-    const where: any = {};
-    if (incluirInactivos !== 'true') {
-      where.activo = true;
-    }
-    if (idTipoEquipo) {
-      where.OR = [
-        { id_tipo_equipo: parseInt(idTipoEquipo, 10) },
-        { id_tipo_equipo: null },
-      ];
-    }
-    if (categoria && categoria !== 'TODAS') {
-      where.categoria = categoria;
-    }
-    if (busqueda?.trim()) {
-      where.descripcion = {
-        contains: busqueda.trim(),
-        mode: 'insensitive',
-      };
-    }
-
-    const items = await this.prisma.catalogo_pendientes.findMany({
-      where,
-      orderBy: [
-        { orden_visual: 'asc' },
-        { descripcion: 'asc' },
-      ],
-      include: {
-        tipos_equipo: {
-          select: {
-            id_tipo_equipo: true,
-            nombre_tipo: true,
-          },
-        },
-        _count: {
-          select: { ordenes_pendientes: true },
-        },
-      },
-    });
-
-    return { success: true, data: items };
-  }
-
-  @Post('catalogo-pendientes')
-  @ApiOperation({ summary: 'Crear nuevo ítem en el catálogo de pendientes técnicos' })
-  async createCatalogoPendiente(
-    @Body() body: {
-      descripcion: string;
-      codigo?: string;
-      categoria?: string;
-      idTipoEquipo?: number | null;
-      ordenVisual?: number;
-      activo?: boolean;
-    },
-  ) {
-    if (!body.descripcion?.trim()) {
-      throw new BadRequestException('La descripción es obligatoria');
-    }
-    const created = await this.prisma.catalogo_pendientes.create({
-      data: {
-        descripcion: body.descripcion.trim(),
-        codigo: body.codigo?.trim() || null,
-        categoria: body.categoria?.trim() || 'GENERAL',
-        id_tipo_equipo: body.idTipoEquipo ? Number(body.idTipoEquipo) : null,
-        orden_visual: body.ordenVisual !== undefined ? Number(body.ordenVisual) : 0,
-        activo: body.activo !== undefined ? Boolean(body.activo) : true,
-      },
-      include: {
-        tipos_equipo: {
-          select: {
-            id_tipo_equipo: true,
-            nombre_tipo: true,
-          },
-        },
-      },
-    });
-    return { success: true, data: created };
-  }
-
-  @Put('catalogo-pendientes/:id')
-  @ApiOperation({ summary: 'Actualizar ítem del catálogo de pendientes técnicos' })
-  async updateCatalogoPendiente(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: {
-      descripcion?: string;
-      codigo?: string;
-      categoria?: string;
-      idTipoEquipo?: number | null;
-      ordenVisual?: number;
-      activo?: boolean;
-    },
-  ) {
-    const data: any = {};
-    if (body.descripcion !== undefined) data.descripcion = body.descripcion.trim();
-    if (body.codigo !== undefined) data.codigo = body.codigo?.trim() || null;
-    if (body.categoria !== undefined) data.categoria = body.categoria?.trim() || 'GENERAL';
-    if (body.idTipoEquipo !== undefined) data.id_tipo_equipo = body.idTipoEquipo ? Number(body.idTipoEquipo) : null;
-    if (body.ordenVisual !== undefined) data.orden_visual = Number(body.ordenVisual);
-    if (body.activo !== undefined) data.activo = Boolean(body.activo);
-
-    const updated = await this.prisma.catalogo_pendientes.update({
-      where: { id_pendiente_catalogo: id },
-      data,
-      include: {
-        tipos_equipo: {
-          select: {
-            id_tipo_equipo: true,
-            nombre_tipo: true,
-          },
-        },
-      },
-    });
-    return { success: true, data: updated };
-  }
-
-  @Delete('catalogo-pendientes/:id')
-  @ApiOperation({ summary: 'Eliminar o desactivar ítem del catálogo de pendientes técnicos' })
-  async deleteCatalogoPendiente(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('hard') hard?: string,
-  ) {
-    const usoCount = await this.prisma.ordenes_pendientes.count({
-      where: { id_pendiente_catalogo: id },
-    });
-
-    if (usoCount > 0 || hard !== 'true') {
-      await this.prisma.catalogo_pendientes.update({
-        where: { id_pendiente_catalogo: id },
-        data: { activo: false },
-      });
-      return { success: true, message: 'Ítem desactivado exitosamente', desactivado: true };
-    } else {
-      await this.prisma.catalogo_pendientes.delete({
-        where: { id_pendiente_catalogo: id },
-      });
-      return { success: true, message: 'Ítem eliminado definitivamente', eliminado: true };
-    }
-  }
-
-  @Patch('pendientes/:id/estado')
-  @ApiOperation({ summary: 'Actualizar estado de un pendiente técnico' })
-  async updateEstadoPendiente(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO'; observaciones_resolucion?: string },
-    @CurrentUser() user: any,
-  ) {
-    const pendiente = await this.prisma.ordenes_pendientes.findUnique({
-      where: { id_orden_pendiente: id },
-    });
-
-    if (!pendiente) {
-      throw new NotFoundException(`Pendiente con ID ${id} no encontrado`);
-    }
-
-    const esResuelto = body.estado === 'RESUELTO';
-    const esCancelado = body.estado === 'CANCELADO';
-
-    let idEmpleadoResuelve: number | null = null;
-    if (user?.id_usuario) {
-      const emp = await this.prisma.empleados.findFirst({
-        where: { persona: { usuarios: { id_usuario: user.id_usuario } } },
-        select: { id_empleado: true },
-      });
-      idEmpleadoResuelve = emp?.id_empleado || null;
-    }
-
-    const updated = await this.prisma.ordenes_pendientes.update({
-      where: { id_orden_pendiente: id },
-      data: {
-        estado: body.estado,
-        observaciones_resolucion: body.observaciones_resolucion !== undefined ? body.observaciones_resolucion : pendiente.observaciones_resolucion,
-        fecha_resolucion: (esResuelto || esCancelado) ? new Date() : null,
-        resuelto_por: (esResuelto || esCancelado) ? idEmpleadoResuelve : null,
-      },
-      include: {
-        equipos: {
-          select: {
-            id_equipo: true,
-            codigo_equipo: true,
-            nombre_equipo: true,
-          },
-        },
-        catalogo_pendientes: true,
-      },
-    });
-
-    return {
-      success: true,
-      message: `Pendiente actualizado a estado ${body.estado}`,
-      data: updated,
-    };
-  }
-
-  @Post(':id/pendientes')
-  @ApiOperation({ summary: 'Registrar un nuevo pendiente para una orden desde portal' })
-  async createPendienteOrden(
-    @Param('id', ParseIntPipe) idOrden: number,
-    @Body() body: {
-      descripcion: string;
-      idPendienteCatalogo?: number;
-      idEquipo?: number;
-      idOrdenEquipo?: number;
-      // ✅ origen_pendiente_enum = CATALOGO | PERSONALIZADO | MANUAL.
-      // La firma solo declaraba CATALOGO | MANUAL y luego comparaba contra
-      // 'PERSONALIZADO', un valor que TypeScript marcaba como imposible.
-      origen?: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
-      prioridad?: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
-      observaciones?: string;
-    },
-    @CurrentUser() user: any,
-  ) {
-    if (!body.descripcion?.trim()) {
-      throw new BadRequestException('La descripción del pendiente es requerida');
-    }
-
-    const orden = await this.prisma.ordenes_servicio.findUnique({
-      where: { id_orden_servicio: idOrden },
-      include: {
-        ordenes_equipos: true,
-      },
-    });
-
-    if (!orden) {
-      throw new NotFoundException(`Orden con ID ${idOrden} no encontrada`);
-    }
-
-    let idEquipo = body.idEquipo;
-    if (!idEquipo && body.idOrdenEquipo && orden.ordenes_equipos) {
-      const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === body.idOrdenEquipo);
-      if (oe?.id_equipo) idEquipo = oe.id_equipo;
-    }
-    if (!idEquipo) {
-      idEquipo = orden.id_equipo;
-    }
-
-    let idEmpleado: number | null = null;
-    if (user?.id_usuario) {
-      const emp = await this.prisma.empleados.findFirst({
-        where: { persona: { usuarios: { id_usuario: user.id_usuario } } },
-        select: { id_empleado: true },
-      });
-      idEmpleado = emp?.id_empleado || null;
-    }
-
-    let origenVal: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO' = 'CATALOGO';
-    if (body.origen === 'PERSONALIZADO') {
-      origenVal = 'PERSONALIZADO';
-    } else if (body.origen === 'MANUAL') {
-      origenVal = 'MANUAL';
-    } else if (!body.idPendienteCatalogo) {
-      origenVal = 'MANUAL';
-    }
-
-    const created = await this.prisma.ordenes_pendientes.create({
-      data: {
-        id_orden_servicio: idOrden,
-        id_cliente: orden.id_cliente,
-        id_equipo: idEquipo,
-        id_orden_equipo: body.idOrdenEquipo || null,
-        id_pendiente_catalogo: body.idPendienteCatalogo || null,
-        descripcion: body.descripcion.trim(),
-        origen: origenVal,
-        prioridad: body.prioridad || 'NORMAL',
-        estado: 'PENDIENTE',
-        observaciones: body.observaciones?.trim() || null,
-        creado_por: idEmpleado,
-        fecha_creacion: new Date(),
-      },
-      include: {
-        equipos: {
-          select: {
-            id_equipo: true,
-            codigo_equipo: true,
-            nombre_equipo: true,
-          },
-        },
-        catalogo_pendientes: true,
-      },
-    });
-
-    return {
-      success: true,
-      message: 'Pendiente creado correctamente',
-      data: created,
-    };
-  }
-
-  @Delete('pendientes/:id')
-  @ApiOperation({ summary: 'Eliminar un pendiente técnico' })
-  async deletePendiente(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    const pendiente = await this.prisma.ordenes_pendientes.findUnique({
-      where: { id_orden_pendiente: id },
-    });
-
-    if (!pendiente) {
-      throw new NotFoundException(`Pendiente con ID ${id} no encontrado`);
-    }
-
-    await this.prisma.ordenes_pendientes.delete({
-      where: { id_orden_pendiente: id },
-    });
-
-    return {
-      success: true,
-      message: `Pendiente con ID ${id} eliminado`,
     };
   }
 

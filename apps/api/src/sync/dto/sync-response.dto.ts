@@ -501,6 +501,9 @@ export class SyncTipoServicioDto {
  * Pendiente del catálogo sugerido para download
  */
 export class SyncPendienteCatalogoDto {
+  @ApiPropertyOptional()
+  id?: number;
+
   @ApiProperty()
   idPendienteCatalogo: number;
 
@@ -518,6 +521,9 @@ export class SyncPendienteCatalogoDto {
 
   @ApiProperty()
   ordenVisual: number;
+
+  @ApiPropertyOptional()
+  activo?: boolean;
 }
 
 /**

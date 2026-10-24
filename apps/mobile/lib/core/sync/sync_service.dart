@@ -425,15 +425,29 @@ class SyncService {
     int count = 0;
     await _db.transaction(() async {
       for (final item in items) {
+        if (item is! Map) continue;
+        final rawId = item['id'] ?? item['idPendienteCatalogo'] ?? item['id_pendiente_catalogo'];
+        final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '') ?? 0;
+        if (id == 0) continue;
+
+        final rawTipo = item['idTipoEquipo'] ?? item['id_tipo_equipo'];
+        final idTipo = rawTipo is int ? rawTipo : int.tryParse(rawTipo?.toString() ?? '');
+
+        final rawOrden = item['ordenVisual'] ?? item['orden_visual'];
+        final ordenVisual = rawOrden is int ? rawOrden : int.tryParse(rawOrden?.toString() ?? '') ?? 0;
+
+        final rawActivo = item['activo'];
+        final activo = rawActivo is bool ? rawActivo : (rawActivo?.toString().toLowerCase() != 'false');
+
         await _db.upsertPendienteCatalogo(
           PendientesCatalogoCompanion(
-            id: Value(item['id'] as int),
+            id: Value(id),
             codigo: Value(item['codigo'] as String?),
             descripcion: Value(item['descripcion'] as String? ?? ''),
             categoria: Value(item['categoria'] as String? ?? 'GENERAL'),
-            idTipoEquipo: Value(item['idTipoEquipo'] as int?),
-            activo: Value(item['activo'] as bool? ?? true),
-            ordenVisual: Value(item['ordenVisual'] as int? ?? 0),
+            idTipoEquipo: Value(idTipo),
+            activo: Value(activo),
+            ordenVisual: Value(ordenVisual),
             lastSyncedAt: Value(DateTime.now()),
           ),
         );
