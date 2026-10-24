@@ -1,5 +1,36 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
+## 🚀 ÚLTIMO COMMIT Y RESOLUCIÓN ARQUITECTÓNICA (24 DE OCTUBRE DE 2026)
+### Commit `7e211c7`: Blindaje Integral del Módulo de Pendientes Técnicos (Backend ⇄ Admin Portal ⇄ Mobile App)
+
+1. **Causa Raíz Nuclear Resuelta en Backend (`apps/api/src/ordenes/ordenes.controller.ts`):**
+   - **Diagnóstico:** En NestJS/Express, las rutas declaradas bajo el mismo prefijo se evalúan en estricto orden secuencial. La ruta paramétrica genérica `@Get(':id')` (definida en la línea 1914) precedía la definición de las rutas estáticas de `@Get('catalogo-pendientes')`.
+   - **Impacto:** Cualquier petición GET a `/api/ordenes/catalogo-pendientes` era capturada por `@Get(':id')` con `id = "catalogo-pendientes"`. El handler ejecutaba `parseInt("catalogo-pendientes", 10)` resultando en `NaN`, lo que provocaba que Prisma lanzara `PRISMA_CLIENT_VALIDATION: Argument id_orden_servicio is missing` devolviendo un HTTP 400 Bad Request.
+   - **Corrección:** Se reubicó quirúrgicamente todo el bloque de gestión de pendientes y catálogo maestro (`catalogo-pendientes` GET/POST/PUT/DELETE, `pendientes/:id/estado` PATCH y `pendientes/:id` DELETE) inmediatamente antes de `@Get('estados-debug')` (línea 1797), garantizando precedencia absoluta sobre `@Get(':id')`.
+
+2. **Sincronización Móvil Tolerante y Retrocompatible (`sync.service.ts`, `sync-response.dto.ts` & `sync_service.dart`):**
+   - **Diagnóstico:** El backend emitía en el objeto de descarga `idPendienteCatalogo`, pero omitía la clave `id`. En la aplicación móvil, `_processPendientesCatalogo` ejecutaba `id: Value(item['id'] as int)`. Al ser `null`, Dart lanzaba `TypeError: Null is not a subtype of type int`, abortando la inserción de las 25 plantillas pre-sembradas en la base de datos local Drift/SQLite y dejando la tabla local vacía.
+   - **Corrección en Backend:** `SyncPendienteCatalogoDto` y el mapeo en `SyncService` ahora emiten simétricamente `id`, `idPendienteCatalogo` y `activo`.
+   - **Corrección en Mobile:** `_processPendientesCatalogo` se blindó con lectura defensiva: `item['id'] ?? item['idPendienteCatalogo'] ?? item['id_pendiente_catalogo']`, parseo seguro contra enteros o strings y valores por defecto automáticos.
+
+3. **Selector Premium en Portal Admin (`apps/admin/src/features/ordenes/components/pendientes-section.tsx`):**
+   - **Diagnóstico:** El componente invocaba `fetch('/api/ordenes/...')` directamente en el navegador del cliente. Al no existir rutas internas de Next.js en Vercel ni cabeceras Bearer token inyectadas, las peticiones fallaban o retornaban respuestas vacías. Además, el selector era un simple `<select>` HTML sin diseño ni capacidades de búsqueda.
+   - **Corrección:**
+     - Migración total de todas las operaciones a `apiClient` (`GET /ordenes/catalogo-pendientes`, `POST /ordenes/:id/pendientes`, `PATCH /ordenes/pendientes/:id/estado`, `DELETE /ordenes/pendientes/:id`), garantizando base URL dinámica (`NEXT_PUBLIC_API_URL`) e inyección automática de JWT.
+     - Rediseño prémium del selector con:
+       - Buscador reactivo por palabra clave o código mnemotécnico (`PEND-GEN-BAT`, `PEND-GEN-FUG-RAD`, etc.).
+       - Chips de filtrado por categoría (`TODAS`, `GENERADOR`, `BOMBA`, `ELECTRICO`, `MECANICO`, `GENERAL`).
+       - Dropdown scrollable con diseño de tarjetas, insignias de categoría y botón `+ Seleccionar`.
+       - Tarjeta de previsualización de plantilla seleccionada con botón rápido `Cambiar / Desvincular`.
+
+4. **Experiencia de Usuario en Campo en App Mobile (`apps/mobile/lib/features/ejecucion/presentation/pendientes_orden_widget.dart`):**
+   - **Diagnóstico:** El widget dependía exclusivamente de `Autocomplete`, el cual no desplegaba sugerencias si el texto estaba vacío o si la tabla local no tenía registros cargados.
+   - **Corrección:**
+     - Se dotó a `Autocomplete` de un `optionsViewBuilder` estilizado con elevación, bordes redondeados, badges por categoría y restricciones de altura máxima.
+     - Se integró un modal de exploración de catálogo (`_abrirSelectorCatalogo`) accesible mediante botón dedicado e icono en el campo de búsqueda, permitiendo al técnico filtrar por categorías, buscar rápidamente y agregar plantillas estándar con un solo toque.
+
+---
+
 **Fecha de Actualización:** 23 de Octubre de 2026  
 **Versión:** 6.0 Release Candidate (RC-10 - Blindaje Jurídico y Ficha Técnica de Ingeniería en Motor de Informes Técnicos PDF Puppeteer)  
 **Últimos Commits Clave:** 
