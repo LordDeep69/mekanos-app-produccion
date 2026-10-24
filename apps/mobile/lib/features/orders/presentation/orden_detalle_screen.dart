@@ -44,17 +44,17 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         .read(databaseProvider)
         .watchPermisoEdicionTecnico(widget.idOrdenLocal)
         .listen((permite) async {
-      if (!mounted || _detalle == null) return;
-      if (_detalle!.permiteEdicionTecnico == permite) return;
+          if (!mounted || _detalle == null) return;
+          if (_detalle!.permiteEdicionTecnico == permite) return;
 
-      final actualizado = await ref
-          .read(ordenRepositoryProvider)
-          .getDetalleCompleto(widget.idOrdenLocal);
+          final actualizado = await ref
+              .read(ordenRepositoryProvider)
+              .getDetalleCompleto(widget.idOrdenLocal);
 
-      if (mounted && actualizado != null) {
-        setState(() => _detalle = actualizado);
-      }
-    });
+          if (mounted && actualizado != null) {
+            setState(() => _detalle = actualizado);
+          }
+        });
   }
 
   @override
@@ -138,9 +138,7 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
     if (!permite) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'El administrador revocó la edición de esta orden.',
-          ),
+          content: Text('El administrador revocó la edición de esta orden.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -176,10 +174,10 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
       // esta orden COMPLETADA. CERRADA/CANCELADA nunca muestran la barra.
       bottomNavigationBar: _detalle != null
           ? (!_detalle!.estaFinalizada
-              ? _buildBottomBar()
-              : (_detalle!.puedeEditarTecnico
-                  ? _buildResubirBar()
-                  : const SizedBox.shrink()))
+                ? _buildBottomBar()
+                : (_detalle!.puedeEditarTecnico
+                      ? _buildResubirBar()
+                      : const SizedBox.shrink()))
           : null,
     );
   }
@@ -794,25 +792,6 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 🧪 BOTÓN TEST TEMPORAL - LOG TEST DE ESCRITURA
-            ElevatedButton.icon(
-              onPressed: () => _testIniciarEjecucion(),
-              icon: const Icon(Icons.science),
-              label: const Text(
-                '🧪 TEST INICIAR (LOG)',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
             // Botón principal
             ElevatedButton.icon(
               onPressed: () => _iniciarYNavegar(),
@@ -971,30 +950,6 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         ),
       );
       _loadDetalleOrden();
-    }
-  }
-
-  /// Iniciar ejecución de la orden
-  Future<void> _testIniciarEjecucion() async {
-    final service = ref.read(ejecucionServiceProvider);
-    final resultado = await service.iniciarEjecucion(widget.idOrdenLocal);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            resultado.exito
-                ? '✅ ${resultado.actividadesInstanciadas} actividades instanciadas'
-                : '❌ ${resultado.error}',
-          ),
-          backgroundColor: resultado.exito ? Colors.green : Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-
-      if (resultado.exito && !resultado.yaExistia) {
-        _loadDetalleOrden();
-      }
     }
   }
 
@@ -1297,6 +1252,10 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
           ),
         );
         _loadDetalleOrden(); // Recargar al volver
+        if (mounted) {
+          // ✅ 24-OCT-2026: refrescar estadísticas del Home tras finalizar
+          ref.invalidate(quickStatsProvider);
+        }
       }
       return null; // No navegar a ejecución
     }
@@ -1340,6 +1299,9 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         ),
       );
       _loadDetalleOrden();
+      if (mounted) {
+        ref.invalidate(quickStatsProvider);
+      }
     }
   }
 

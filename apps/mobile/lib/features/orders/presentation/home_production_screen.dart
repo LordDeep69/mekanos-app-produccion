@@ -196,10 +196,7 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      user?.email ?? '',
-                      style: theme.textTheme.bodySmall,
-                    ),
+                    Text(user?.email ?? '', style: theme.textTheme.bodySmall),
                     Text(
                       'Rol: ${user?.rol ?? ''}',
                       style: theme.textTheme.bodySmall,
@@ -352,11 +349,16 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
     // ✅ SYNC MANUAL: Toda la tarjeta es clickeable para ir a "Órdenes por Subir"
     return Card(
       child: InkWell(
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PendingSyncScreen()),
           );
+          // ✅ 24-OCT-2026: al volver de subir órdenes, refrescar estadísticas
+          // (las subidas individuales no cambian el syncState global).
+          if (mounted) {
+            ref.invalidate(quickStatsProvider);
+          }
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -429,6 +431,43 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
                       ),
                     ),
                   ],
+                ),
+              ],
+
+              // ✅ 24-OCT-2026: contador real de órdenes nuevas descargadas
+              if (!syncState.isSyncing && syncState.newOrdersCount > 0) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.download_done,
+                        size: 14,
+                        color: Colors.green.shade700,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '${syncState.newOrdersCount} orden(es) '
+                          'sincronizada(s) en la última sync',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
 

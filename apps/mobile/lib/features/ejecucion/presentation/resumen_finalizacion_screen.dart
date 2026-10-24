@@ -1015,50 +1015,56 @@ class _ResumenFinalizacionScreenState
   void _mostrarExitoOnline(SyncUploadResult resultado) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '¡Servicio Completado!',
-                style: TextStyle(fontSize: 18),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Row(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _esMultiEquipo
-                    ? 'El servicio con ${_equipos.length} equipos ha sido finalizado y sincronizado con el servidor.'
-                    : 'El servicio ha sido finalizado y sincronizado correctamente con el servidor.',
-                style: const TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              _buildResultadoItem(
-                Icons.cloud_done,
-                'Servidor',
-                'Sincronizado ✅',
+              Icon(Icons.check_circle, color: Colors.green, size: 28),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '¡Servicio Completado!',
+                  style: TextStyle(fontSize: 18),
+                ),
               ),
             ],
           ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop(); // Volver a orden_detalle
-              Navigator.of(context).pop(); // Volver a lista de órdenes
-            },
-            child: const Text('ACEPTAR'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _esMultiEquipo
+                      ? 'El servicio con ${_equipos.length} equipos ha sido finalizado y sincronizado con el servidor.'
+                      : 'El servicio ha sido finalizado y sincronizado correctamente con el servidor.',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                _buildResultadoItem(
+                  Icons.cloud_done,
+                  'Servidor',
+                  'Sincronizado ✅',
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop(); // Cierra el diálogo
+                // ✅ 24-OCT-2026: volver al detalle de la orden para que se
+                // recargue y muestre el estado COMPLETADA (antes se hacía un
+                // pop extra que saltaba al listado).
+                Navigator.of(context).pop();
+              },
+              child: const Text('ACEPTAR'),
+            ),
+          ],
+        ),
       ),
     );
   }

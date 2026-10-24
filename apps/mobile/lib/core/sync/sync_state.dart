@@ -98,6 +98,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   // Key para guardar última sync en SharedPreferences
   static const _lastSyncKey = 'last_sync_at';
   static const _initialSyncDoneKey = 'initial_sync_done';
+  static const _lastCatalogsSyncKey = 'last_catalogs_sync_at';
 
   SyncStateNotifier(
     this._syncService,
@@ -175,6 +176,30 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
     }
   }
 
+  /// ✅ 24-OCT-2026: Los catálogos son casi estáticos; refrescarlos en cada
+  /// smart sync agregaba segundos al final de cada sincronización.
+  /// Se refrescan como máximo una vez cada 24h.
+  Future<bool> _debenRefrescarCatalogos() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastMillis = prefs.getInt(_lastCatalogsSyncKey);
+      if (lastMillis == null) return true;
+      final ultima = DateTime.fromMillisecondsSinceEpoch(lastMillis);
+      return DateTime.now().difference(ultima).inHours >= 24;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _saveCatalogsSync(DateTime fecha) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_lastCatalogsSyncKey, fecha.millisecondsSinceEpoch);
+    } catch (e) {
+      debugPrint('Error guardando última sync de catálogos: $e');
+    }
+  }
+
   /// Ejecutar sincronización manual
   ///
   /// [forceFull] - Forzar sync completo ignorando última sincronización
@@ -209,29 +234,47 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
         debugPrint('🧠 [SYNC] Usando SMART SYNC (comparación inteligente)');
 
         state = state.copyWith(
-          progress: 0.2,
+          progress: 0.02,
           currentStep: 'Comparando con servidor...',
         );
 
         final smartResult = await _smartSyncService.sincronizarInteligente(
           tecnicoId,
           limit: 500,
+          onProgress: (smartProgress) {
+            if (!state.isSyncing) return;
+            state = state.copyWith(
+              progress: smartProgress.porcentaje.clamp(0.0, 1.0).toDouble(),
+              currentStep: smartProgress.mensaje,
+            );
+          },
         );
 
-        try {
-          state = state.copyWith(
-            progress: 0.85,
-            currentStep: 'Actualizando catálogos...',
-          );
+        // ✅ 24-OCT-2026: los catálogos solo se refrescan una vez al día.
+        // Antes se pedía fullCatalogs=true en CADA smart sync, lo que
+        // retrasaba el estado "completado" sin aportar datos nuevos.
+        if (await _debenRefrescarCatalogos()) {
+          try {
+            state = state.copyWith(
+              progress: 0.92,
+              currentStep: 'Actualizando catálogos...',
+            );
 
-          await _syncService.downloadData(
-            tecnicoId,
-            since: DateTime.now().toUtc(),
-            fullCatalogs: true,
-          );
-        } catch (e) {
-          debugPrint(
-            '⚠️ [SYNC] Error refrescando catálogos post smart sync: $e',
+            await _syncService.downloadData(
+              tecnicoId,
+              since: DateTime.now().toUtc(),
+              fullCatalogs: true,
+            );
+            await _saveCatalogsSync(DateTime.now().toUtc());
+          } catch (e) {
+            debugPrint(
+              '⚠️ [SYNC] Error refrescando catálogos post smart sync: $e',
+            );
+          }
+        } else {
+          state = state.copyWith(
+            progress: 0.96,
+            currentStep: 'Finalizando sincronización...',
           );
         }
 
@@ -306,6 +349,7 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
           final syncTime = result.serverTimestamp ?? DateTime.now().toUtc();
           await _saveLastSync(syncTime);
           await _markInitialSyncDone(); // Marcar que ya se hizo sync inicial
+          await _saveCatalogsSync(syncTime); // Catálogos recién descargados
 
           state = state.copyWith(
             status: SyncStatus.success,

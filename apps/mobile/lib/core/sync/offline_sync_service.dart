@@ -524,29 +524,48 @@ class OfflineSyncService {
   ///
   /// ✅ FIX 18-DIC-2025: Mantener estado EN_PROCESO durante toda la operación
   /// para que la UI muestre el spinner y el técnico vea que está subiendo
+  /// ✅ FIX 24-OCT-2026: emitir siempre un evento final de progreso. Antes,
+  /// los retornos tempranos (sin conexión / orden inexistente) dejaban el
+  /// diálogo de la UI en "cargando" para siempre.
   Future<bool> reintentarOrden(int idOrdenLocal) async {
-    final online = await _connectivity.checkConnection();
-    if (!online) return false;
+    try {
+      final online = await _connectivity.checkConnection();
+      if (!online) {
+        _progressNotifier.error(
+          'Sin conexión a internet. Intenta de nuevo cuando tengas señal.',
+        );
+        return false;
+      }
 
-    final orden = await (_db.select(
-      _db.ordenesPendientesSync,
-    )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).getSingleOrNull();
+      final orden = await (_db.select(
+        _db.ordenesPendientesSync,
+      )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).getSingleOrNull();
 
-    if (orden == null) return false;
+      if (orden == null) {
+        _progressNotifier.error(
+          'La orden ya no está pendiente de sincronización.',
+        );
+        return false;
+      }
 
-    // ✅ Marcar como EN_PROCESO inmediatamente (NO PENDIENTE)
-    // Esto mantiene la orden visible en la UI con estado "Subiendo..."
-    await (_db.update(
-      _db.ordenesPendientesSync,
-    )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).write(
-      const OrdenesPendientesSyncCompanion(
-        estadoSync: Value('EN_PROCESO'),
-        ultimoError: Value(null),
-      ),
-    );
+      // ✅ Marcar como EN_PROCESO inmediatamente (NO PENDIENTE)
+      // Esto mantiene la orden visible en la UI con estado "Subiendo..."
+      await (_db.update(
+        _db.ordenesPendientesSync,
+      )..where((o) => o.idOrdenLocal.equals(idOrdenLocal))).write(
+        const OrdenesPendientesSyncCompanion(
+          estadoSync: Value('EN_PROCESO'),
+          ultimoError: Value(null),
+        ),
+      );
 
-    // Procesar SOLO esta orden (no toda la cola)
-    return await _procesarOrdenIndividual(orden);
+      // Procesar SOLO esta orden (no toda la cola)
+      return await _procesarOrdenIndividual(orden);
+    } catch (e) {
+      debugPrint('❌ [SYNC-INDIVIDUAL] Error en reintentarOrden: $e');
+      _progressNotifier.error('No se pudo iniciar la sincronización: $e');
+      return false;
+    }
   }
 
   /// Procesa una orden individual sin pasar por procesarCola()
@@ -745,9 +764,13 @@ class OfflineSyncService {
       }
 
       // Verificar si el backend procesó durante timeout
+      // ✅ 24-OCT-2026: en SOLO_DATOS no hay PDF/email, así que verificar de
+      // inmediato y luego con esperas cortas (~10s total, antes 30s).
       for (int intento = 1; intento <= 3; intento++) {
         debugPrint('🔍 [SYNC-INDIVIDUAL] Verificación intento $intento/3...');
-        await Future.delayed(Duration(seconds: intento * 5));
+        if (intento > 1) {
+          await Future.delayed(Duration(seconds: intento * 2)); // 4s, 6s
+        }
         final verificacion = await _verificarOrdenYaCompletada(
           orden.idOrdenBackend,
         );

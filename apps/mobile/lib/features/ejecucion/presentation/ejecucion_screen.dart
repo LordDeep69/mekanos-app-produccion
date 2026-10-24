@@ -650,9 +650,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   ) {
     // Contar completadas en este sistema
     // ✅ FIX CONTEO: Mismo criterio que el contador global (`completada`)
-    final completadasSistema = actividades
-        .where((a) => a.completada)
-        .length;
+    final completadasSistema = actividades.where((a) => a.completada).length;
     final esTodoCompletado = completadasSistema == actividades.length;
 
     return Column(
@@ -3817,9 +3815,9 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
   /// porque el administrador revocó el permiso mientras editaba.
   Future<bool> _verificarPermisoAntesDeResubir() async {
     final db = ref.read(databaseProvider);
-    final orden = await (db.select(db.ordenes)
-          ..where((o) => o.idLocal.equals(widget.idOrdenLocal)))
-        .getSingleOrNull();
+    final orden = await (db.select(
+      db.ordenes,
+    )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
 
     final idBackend = orden?.idBackend;
     if (idBackend == null) return false;
@@ -4180,57 +4178,61 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '¡Servicio Completado!',
-                style: TextStyle(fontSize: 18),
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Row(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'El servicio ha sido finalizado y sincronizado correctamente con el servidor.',
-                style: TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              _buildResultadoItem(
-                Icons.photo,
-                'Evidencias',
-                '$evidenciasCount subidas',
-              ),
-              _buildResultadoItem(
-                Icons.gesture,
-                'Firmas',
-                '$firmasCount registradas',
-              ),
-              _buildResultadoItem(
-                Icons.cloud_done,
-                'Servidor',
-                'Sincronizado ✅',
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 28),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '¡Servicio Completado!',
+                  style: TextStyle(fontSize: 18),
+                ),
               ),
             ],
           ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop(); // Volver a lista de órdenes
-            },
-            child: const Text('ACEPTAR'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'El servicio ha sido finalizado y sincronizado correctamente con el servidor.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                _buildResultadoItem(
+                  Icons.photo,
+                  'Evidencias',
+                  '$evidenciasCount subidas',
+                ),
+                _buildResultadoItem(
+                  Icons.gesture,
+                  'Firmas',
+                  '$firmasCount registradas',
+                ),
+                _buildResultadoItem(
+                  Icons.cloud_done,
+                  'Servidor',
+                  'Sincronizado ✅',
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop(); // Volver a lista de órdenes
+              },
+              child: const Text('ACEPTAR'),
+            ),
+          ],
+        ),
       ),
     );
   }

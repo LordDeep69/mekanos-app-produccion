@@ -88,7 +88,9 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         data: (pendientes) =>
             pendientes.isNotEmpty && isOnline && pendientes.length > 1
             ? FloatingActionButton.extended(
-                onPressed: _isSyncingAll ? null : _syncAll,
+                onPressed: (_isSyncingAll || _syncingOrders.isNotEmpty)
+                    ? null
+                    : _syncAll,
                 icon: _isSyncingAll
                     ? const SizedBox(
                         width: 20,
@@ -426,7 +428,12 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       child: ElevatedButton.icon(
-                        onPressed: (isOnline && !isSyncingThis && !isEnProceso)
+                        onPressed:
+                            (isOnline &&
+                                !isSyncingThis &&
+                                !isEnProceso &&
+                                _syncingOrders.isEmpty &&
+                                !_isSyncingAll)
                             ? () => _subirOrdenIndividual(orden.idOrdenLocal)
                             : null,
                         style: ElevatedButton.styleFrom(
@@ -509,8 +516,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       final success = await offlineSync.reintentarOrden(idOrdenLocal);
 
       if (mounted) {
-        // El diálogo se cierra solo cuando el progreso llega a completado/error
-        // Refrescar lista
+        // Refrescar lista de pendientes
         ref.invalidate(pendingSyncListProvider);
 
         // Mostrar snackbar adicional si hay error
@@ -530,6 +536,12 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
           );
         }
       }
+    } catch (e) {
+      // ✅ 24-OCT-2026: garantizar que el diálogo nunca quede "cargando".
+      debugPrint('❌ [SYNC-INDIVIDUAL] Error no controlado: $e');
+      ref
+          .read(syncProgressProvider.notifier)
+          .error('Error inesperado al subir la orden: $e');
     } finally {
       if (mounted) {
         setState(() => _syncingOrders.remove(idOrdenLocal));
@@ -671,7 +683,9 @@ class _SyncProgressDialog extends ConsumerWidget {
                 const SizedBox(height: 16),
               ],
 
-              // Lista de pasos con estados - Usando pasos visibles simplificados
+              // Lista de pasos con estados - SOLO_DATOS: sin PDF ni email.
+              // El backend emite estos pasos como "Omitido" en este modo, así
+              // que mostrarlos aquí solo confundía al técnico.
               _buildStepItem(
                 step: SyncStep.preparando,
                 progress: progress,
@@ -691,16 +705,6 @@ class _SyncProgressDialog extends ConsumerWidget {
                 step: SyncStep.firmas,
                 progress: progress,
                 icon: Icons.draw,
-              ),
-              _buildStepItem(
-                step: SyncStep.generando_pdf,
-                progress: progress,
-                icon: Icons.picture_as_pdf,
-              ),
-              _buildStepItem(
-                step: SyncStep.enviando_email,
-                progress: progress,
-                icon: Icons.email,
               ),
 
               // Mensaje de error si hay
@@ -752,7 +756,8 @@ class _SyncProgressDialog extends ConsumerWidget {
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          '¡Orden sincronizada correctamente! PDF generado y email enviado.',
+                          'Datos sincronizados correctamente. '
+                          'Ya puedes consultar la orden en el servidor.',
                           style: TextStyle(fontSize: 12),
                         ),
                       ),
@@ -795,7 +800,6 @@ class _SyncProgressDialog extends ConsumerWidget {
     final isCompleted = progress.pasosCompletados.contains(step);
     final isActive = progress.pasoActual == step;
     final isError = progress.pasoActual == SyncStep.error && isActive;
-    final isPending = !isCompleted && !isActive;
 
     Color color;
     Widget leading;

@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 
 import '../api/api_client.dart';
 import '../database/app_database.dart';
@@ -13,6 +16,43 @@ import 'connectivity_service.dart';
 import 'offline_sync_service.dart';
 import 'sync_notification_service.dart';
 import 'sync_progress.dart';
+
+/// ✅ 24-OCT-2026: Compresión previa a la subida.
+/// Las fotos se capturan a 1920x1080, pero una orden con 20 evidencias puede
+/// superar 10-15 MB de JSON Base64. Recompimir antes de enviar reduce el
+/// payload ~3x y evita que la subida dependa de la velocidad de carga del
+/// técnico. Las firmas PNG no se tocan para no perder transparencia.
+const int _maxUploadDimension = 1600;
+const int _jpegUploadQuality = 75;
+const int _compressThresholdBytes = 300 * 1024;
+const int _maxConvertidosEnParalelo = 3;
+
+/// Comprime una imagen en un isolate para no bloquear el hilo de UI.
+/// Retorna null si el formato no es decodificable (se envía el original).
+Uint8List? _comprimirImagenParaSubida(Uint8List bytes) {
+  try {
+    final original = img.decodeImage(bytes);
+    if (original == null) return null;
+
+    var imagen = original;
+    final ladoMayor = math.max(original.width, original.height);
+    if (ladoMayor > _maxUploadDimension) {
+      final escala = _maxUploadDimension / ladoMayor;
+      imagen = img.copyResize(
+        original,
+        width: (original.width * escala).round(),
+        height: (original.height * escala).round(),
+        interpolation: img.Interpolation.linear,
+      );
+    }
+
+    return Uint8List.fromList(
+      img.encodeJpg(imagen, quality: _jpegUploadQuality),
+    );
+  } catch (_) {
+    return null;
+  }
+}
 
 /// ✅ FIX 03-FEB-2026: Helper para combinar valor principal + observación técnico
 /// Mantiene compatibilidad con backend que espera formato: "VALOR|||ObsTecnico"
@@ -114,6 +154,7 @@ class SyncUploadService {
     String? emailAdicional,
     String? razonFalla,
     String modo = 'SOLO_DATOS',
+
     /// ✅ 19-OCT-2026: true cuando la orden YA estaba COMPLETADA y el
     /// administrador autorizó su corrección. Cambia el manejo de errores:
     /// no se infiere éxito por el estado previo ni se encola a ciegas.
@@ -129,6 +170,22 @@ class SyncUploadService {
       // ✅ 19-DIC-2025: Iniciar progreso
       _progressNotifier.iniciar(idOrdenBackend);
       _progressNotifier.avanzar(SyncStep.preparando);
+
+      // ✅ 24-OCT-2026: fallar rápido sin conexión ANTES de leer/comprimir
+      // fotos. Antes se construía todo el payload Base64 para luego abortar.
+      final isOnlineInicial = await _connectivity.checkConnection();
+      if (!isOnlineInicial) {
+        _progressNotifier.error('Sin conexión a internet');
+        return SyncUploadResult(
+          success: false,
+          mensaje:
+              'No hay conexión a internet.\n\n'
+              'Tus datos están guardados localmente de forma segura. '
+              'Intenta finalizar de nuevo cuando tengas conexión.',
+          error: 'NO_CONNECTION',
+          guardadoOffline: false,
+        );
+      }
 
       final ordenLocal = await _db.getOrdenById(idOrdenLocal);
       if (ordenLocal != null && modoResubida) {
@@ -320,11 +377,10 @@ class SyncUploadService {
         '⚡ [PERF] Convirtiendo ${evidencias.length} evidencias a Base64 EN PARALELO...',
       );
 
-      // Convertir TODAS las imágenes en paralelo
-      final base64Futures = evidencias.map(
-        (ev) => _imageToBase64(ev.rutaLocal),
+      // Convertir imágenes con concurrencia limitada (memoria controlada)
+      final base64Results = await _convertirEvidencias(
+        evidencias.map((ev) => ev.rutaLocal).toList(),
       );
-      final base64Results = await Future.wait(base64Futures);
 
       final evidenciasPayload = <Map<String, dynamic>>[];
       for (int i = 0; i < evidencias.length; i++) {
@@ -453,15 +509,19 @@ class SyncUploadService {
 
       // 5.5 Recopilar pendientes técnicos registrados para esta orden
       final pendientes = await _db.getPendientesByOrden(idOrdenLocal);
-      final pendientesPayload = pendientes.map((p) => <String, dynamic>{
-        'descripcion': p.descripcion,
-        'idPendienteCatalogo': p.idPendienteCatalogo,
-        'idEquipo': p.idEquipo,
-        'idOrdenEquipo': p.idOrdenEquipo,
-        'origen': p.origen,
-        'prioridad': p.prioridad,
-        'observaciones': p.observaciones,
-      }).toList();
+      final pendientesPayload = pendientes
+          .map(
+            (p) => <String, dynamic>{
+              'descripcion': p.descripcion,
+              'idPendienteCatalogo': p.idPendienteCatalogo,
+              'idEquipo': p.idEquipo,
+              'idOrdenEquipo': p.idOrdenEquipo,
+              'origen': p.origen,
+              'prioridad': p.prioridad,
+              'observaciones': p.observaciones,
+            },
+          )
+          .toList();
 
       // 6. Construir payload completo
       // ✅ MULTI-EQUIPOS: Incluir estructura agrupada por equipo
@@ -471,8 +531,7 @@ class SyncUploadService {
         'firmas': firmasPayload,
         'actividades': actividadesPayload,
         'mediciones': medicionesPayload,
-        if (pendientesPayload.isNotEmpty)
-          'pendientes': pendientesPayload,
+        if (pendientesPayload.isNotEmpty) 'pendientes': pendientesPayload,
         'observaciones': observaciones,
         'horaEntrada': horaEntrada,
         'horaSalida': horaSalida,
@@ -713,9 +772,7 @@ class SyncUploadService {
                       'Tus cambios quedaron guardados en el dispositivo.'
                 : 'El administrador no autorizó (o revocó) la edición de esta orden.\n\n'
                       'Tus cambios quedaron guardados en el dispositivo, pero no se subieron.',
-            error: status == 401
-                ? 'SESION_EXPIRADA'
-                : 'EDICION_NO_AUTORIZADA',
+            error: status == 401 ? 'SESION_EXPIRADA' : 'EDICION_NO_AUTORIZADA',
             guardadoOffline: false,
           );
         }
@@ -740,8 +797,10 @@ class SyncUploadService {
           );
         }
 
-        // CRÍTICO: El backend puede estar procesando aún (toma ~25s)
-        // Esperar y verificar múltiples veces antes de decidir si guardar en cola
+        // CRÍTICO: El backend puede estar procesando aún.
+        // ✅ 24-OCT-2026: En modo SOLO_DATOS ya no se genera PDF/email, por lo
+        // que la verificación es mucho más rápida. Se consulta de inmediato y
+        // luego con esperas cortas (total ~10s en lugar de 30s).
         Map<String, dynamic>? verificacionFinal;
         bool yaCompletada = false;
         for (int intento = 1; intento <= 3; intento++) {
@@ -749,8 +808,9 @@ class SyncUploadService {
             '🔍 [SYNC] Verificación idempotencia intento $intento/3...',
           );
 
-          // Esperar antes de verificar (el backend puede estar procesando)
-          await Future.delayed(Duration(seconds: intento * 5)); // 5s, 10s, 15s
+          if (intento > 1) {
+            await Future.delayed(Duration(seconds: intento * 2)); // 4s, 6s
+          }
 
           verificacionFinal = await _verificarOrdenYaCompletadaEnBackend(
             idOrdenBackend,
@@ -761,13 +821,16 @@ class SyncUploadService {
           if (yaCompletada) break;
         }
 
+        // ✅ El SSE pudo cortarse, pero el backend SÍ completó la orden.
+        // Marcar como sincronizada y NO encolar (evita duplicados).
         if (yaCompletada) {
-          // El backend YA procesó la orden - NO guardar en cola
           debugPrint('✅ [SYNC] Backend ya procesó - NO guardar en cola');
+          _progressNotifier.completar();
           try {
             await _marcarOrdenSincronizada(
               idOrdenLocal,
               urlPdf: verificacionFinal?['pdfUrl'] as String?,
+              esResubida: modoResubida,
             );
           } catch (_) {}
           return SyncUploadResult(
@@ -776,12 +839,16 @@ class SyncUploadService {
           );
         }
 
-        // Si realmente no se completó después de 30s de espera, guardar en cola
+        // Si realmente no se completó, guardar en cola
         debugPrint('📥 [SYNC] Guardando en cola para retry posterior');
         await _offlineSync.guardarEnCola(
           idOrdenLocal: idOrdenLocal,
           idOrdenBackend: idOrdenBackend,
           payload: payload,
+        );
+        _progressNotifier.error(
+          'No se pudo confirmar la sincronización. '
+          'Se reintentará automáticamente.',
         );
         return SyncUploadResult(
           success: false,
@@ -794,6 +861,8 @@ class SyncUploadService {
       }
     } catch (e) {
       debugPrint('❌ [SYNC] Error inesperado: $e');
+      // ✅ 24-OCT-2026: reflejar el fallo en el diálogo de progreso.
+      _progressNotifier.error('Error inesperado: $e');
 
       // ✅ 19-OCT-2026: una resubida fallida no se encola. La orden ya está
       // COMPLETADA y el técnico puede reintentar desde la pantalla.
@@ -882,19 +951,56 @@ class SyncUploadService {
     );
   }
 
-  /// Convierte una imagen local a Base64
-  /// Incluye logging detallado para debugging de evidencias faltantes
+  /// Convierte una imagen local a Base64.
+  ///
+  /// ✅ 24-OCT-2026: Si la foto es grande se redimensiona/recomprime en un
+  /// isolate antes de codificar. Esto reduce drásticamente el tamaño del
+  /// payload y el tiempo total de subida. Las firmas (.png) se envían tal cual.
   Future<String?> _imageToBase64(String rutaLocal) async {
     try {
       final file = File(rutaLocal);
-      if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        return base64Encode(bytes);
+      if (!await file.exists()) return null;
+
+      var bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return null;
+
+      final esPng = rutaLocal.toLowerCase().endsWith('.png');
+      if (!esPng && bytes.length > _compressThresholdBytes) {
+        final comprimido = await compute(_comprimirImagenParaSubida, bytes);
+        if (comprimido != null && comprimido.isNotEmpty) {
+          debugPrint(
+            '🗜️ [SYNC] Imagen comprimida: '
+            '${(bytes.length / 1024).round()} KB → '
+            '${(comprimido.length / 1024).round()} KB',
+          );
+          bytes = comprimido;
+        }
       }
-      return null;
+
+      return base64Encode(bytes);
     } catch (e) {
+      debugPrint('⚠️ [SYNC] Error convirtiendo imagen $rutaLocal: $e');
       return null;
     }
+  }
+
+  /// Convierte evidencias a Base64 con concurrencia limitada.
+  /// Evita leer 20+ fotos completas en memoria al mismo tiempo.
+  Future<List<String?>> _convertirEvidencias(List<String> rutas) async {
+    final resultados = List<String?>.filled(rutas.length, null);
+    var siguiente = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final indice = siguiente++;
+        if (indice >= rutas.length) return;
+        resultados[indice] = await _imageToBase64(rutas[indice]);
+      }
+    }
+
+    final workers = math.min(_maxConvertidosEnParalelo, rutas.length);
+    await Future.wait(List.generate(workers, (_) => worker()));
+    return resultados;
   }
 
   /// Mapea el estado de medición al nivel de alerta del backend
@@ -1142,72 +1248,68 @@ class SyncUploadService {
         debugPrint('❌ [SSE] Stream es null');
         return _SSEResult(
           success: false,
-          error: 'No se recibió stream del servidor',
+          error: 'No se recibió respuesta del servidor',
         );
       }
 
       debugPrint('📡 [SSE] Stream obtenido, comenzando a leer eventos...');
 
-      // Variables para acumular el resultado final
-      Map<String, dynamic>? resultadoFinal;
-      String? ultimoError;
+      // ✅ 24-OCT-2026: lector robusto. Antes se decodificaba cada chunk por
+      // separado: un evento partido entre chunks (o una tilde cortada) rompía
+      // el stream y se perdía el progreso (el diálogo quedaba en "Validando").
+      final lectura = await leerEventosSse(
+        stream,
+        onEvento: _progressNotifier.procesarEventoBackend,
+        stallTimeout: const Duration(seconds: 45),
+        limiteTotal: const Duration(minutes: 8),
+      );
+      debugPrint(
+        '📡 [SSE] Fin de stream: eventos=${lectura.eventosRecibidos}, '
+        'stall=${lectura.abortadoPorStall}, limite=${lectura.abortadoPorLimite}, '
+        'streamError=${lectura.errorDeStream}',
+      );
 
-      // Leer el stream línea por línea
-      await for (final chunk in stream) {
-        final lines = utf8.decode(chunk).split('\n');
-
-        for (final line in lines) {
-          if (line.startsWith('data: ')) {
-            final jsonStr = line.substring(6).trim();
-            if (jsonStr.isEmpty) continue;
-
-            try {
-              final evento = json.decode(jsonStr) as Map<String, dynamic>;
-              debugPrint(
-                '📡 [SSE] Evento recibido: ${evento['step']} - ${evento['status']}',
-              );
-
-              // Procesar el evento en el notifier
-              _progressNotifier.procesarEventoBackend(evento);
-
-              // Si es el resultado final, guardarlo
-              if (evento['step'] == 'result' && evento['data'] != null) {
-                resultadoFinal = evento['data'] as Map<String, dynamic>;
-                debugPrint(
-                  '📡 [SSE] ✅ Resultado final recibido: ${resultadoFinal.keys}',
-                );
-                if (resultadoFinal['datos'] != null) {
-                  final datos = resultadoFinal['datos'] as Map<String, dynamic>;
-                  debugPrint('📡 [SSE] Datos internos: ${datos.keys}');
-                  debugPrint(
-                    '📡 [SSE] Evidencias: ${datos['evidencias']?.length ?? 0}',
-                  );
-                  debugPrint(
-                    '📡 [SSE] Firmas: ${datos['firmas']?.length ?? 0}',
-                  );
-                }
-              }
-
-              // Si es error, guardarlo
-              if (evento['status'] == 'error') {
-                ultimoError = evento['message'] as String?;
-              }
-            } catch (e) {
-              debugPrint('⚠️ [SSE] Error parseando evento: $e');
-            }
-          }
-        }
+      if (lectura.ultimoError != null) {
+        return _SSEResult(success: false, error: lectura.ultimoError);
       }
 
-      // Verificar resultado
-      if (ultimoError != null) {
-        return _SSEResult(success: false, error: ultimoError);
-      }
-
-      if (resultadoFinal != null) {
+      if (lectura.resultadoFinal != null) {
         return _SSEResult(
-          success: resultadoFinal['success'] as bool? ?? true,
-          datos: resultadoFinal['datos'] as Map<String, dynamic>?,
+          success: lectura.resultadoFinal!['success'] as bool? ?? true,
+          datos: (lectura.resultadoFinal!['datos'] as Map?)
+              ?.cast<String, dynamic>(),
+        );
+      }
+
+      // ✅ 24-OCT-2026: el stream terminó anormalmente (stall, límite o corte
+      // de red). NO reenviar a ciegas: primero verificar si el backend
+      // alcanzó a procesar la orden (idempotencia).
+      if (lectura.terminoAnormal || lectura.resultadoFinal == null) {
+        try {
+          final verificacion = await _verificarOrdenYaCompletadaEnBackend(
+            idOrdenBackend,
+          );
+          if (verificacion['completada'] == true) {
+            debugPrint('✅ [SSE] Backend SÍ completó la orden pese al corte');
+            final urlPdf = verificacion['pdfUrl'] as String?;
+            return _SSEResult(
+              success: true,
+              datos: urlPdf != null
+                  ? {
+                      'documento': {'url': urlPdf},
+                    }
+                  : null,
+            );
+          }
+        } catch (e) {
+          debugPrint('⚠️ [SSE] No se pudo verificar idempotencia: $e');
+        }
+
+        return _SSEResult(
+          success: false,
+          error: (lectura.abortadoPorStall || lectura.abortadoPorLimite)
+              ? 'TIMEOUT_SSE'
+              : 'CONEXION_PERDIDA_SSE',
         );
       }
 
@@ -1232,7 +1334,8 @@ class SyncUploadService {
       return _fallbackEnvioTradicional(idOrdenBackend, payload);
     } catch (e) {
       debugPrint('❌ [SSE] Error inesperado: $e');
-      return _SSEResult(success: false, error: e.toString());
+      // ✅ 24-OCT-2026: nunca exponer el texto crudo de la excepción.
+      return _SSEResult(success: false, error: mensajeAmigable(e));
     }
   }
 

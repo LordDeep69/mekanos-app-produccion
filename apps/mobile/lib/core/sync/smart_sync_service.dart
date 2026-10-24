@@ -14,6 +14,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
@@ -76,8 +77,7 @@ class OrdenResumen {
       idEquipo: json['id_equipo'] as int?,
       idTipoServicio: json['id_tipo_servicio'] as int?,
       esEstadoFinal: json['esEstadoFinal'] as bool? ?? false,
-      permiteEdicionTecnico:
-          json['permiteEdicionTecnico'] as bool? ?? false,
+      permiteEdicionTecnico: json['permiteEdicionTecnico'] as bool? ?? false,
     );
   }
 }
@@ -111,9 +111,31 @@ class SmartSyncResult {
   }
 }
 
+/// Progreso granular del Smart Sync para alimentar la UI.
+///
+/// `porcentaje` va de 0.0 a 1.0 e incluye el contador de órdenes procesadas,
+/// de modo que el técnico vea avance real aunque la descarga tarde.
+class SmartSyncProgress {
+  final String mensaje;
+  final double porcentaje;
+
+  const SmartSyncProgress(this.mensaje, this.porcentaje);
+}
+
+/// Callback opcional para reportar avance durante el Smart Sync.
+typedef SmartSyncProgressCallback = void Function(SmartSyncProgress progress);
+
 // ============================================================================
 // SERVICIO
 // ============================================================================
+
+/// Máximo de órdenes nuevas que se descargan simultáneamente.
+/// Mantiene 3 requests en vuelo: suficiente para acelerar sin saturar la red
+/// del técnico ni la conexión a Supabase.
+const int _descargasParalelas = 3;
+
+/// Timeout por orden para evitar que una request colgada bloquee el sync.
+const Duration _timeoutDescargaOrden = Duration(seconds: 45);
 
 class SmartSyncService {
   final ApiClient _apiClient;
@@ -187,6 +209,7 @@ class SmartSyncService {
   Future<SmartSyncResult> sincronizarInteligente(
     int tecnicoId, {
     int limit = 500,
+    SmartSyncProgressCallback? onProgress,
   }) async {
     debugPrint(
       '🧠 [SMART SYNC] Iniciando para técnico $tecnicoId (limit: $limit)',
@@ -206,10 +229,14 @@ class SmartSyncService {
       debugPrint(
         '🧠 [SMART SYNC] Paso 1: Obteniendo resúmenes del servidor...',
       );
+      onProgress?.call(
+        const SmartSyncProgress('Comparando con el servidor...', 0.05),
+      );
 
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
         '/sync/compare/$tecnicoId',
         queryParameters: {'limit': limit},
+        options: Options(receiveTimeout: const Duration(seconds: 60)),
       );
 
       if (response.data == null) {
@@ -301,8 +328,7 @@ class SmartSyncService {
         // ✅ 19-OCT-2026 (2): las órdenes finales solo admiten actualización
         // ligera de estado/PDF. NUNCA se descargan desde el resumen.
         if (ordenServidor.esEstadoFinal) {
-          final idEstadoLocalEsperado =
-              estadosMap[ordenServidor.estadoCodigo];
+          final idEstadoLocalEsperado = estadosMap[ordenServidor.estadoCodigo];
 
           if (idEstadoLocalEsperado != null &&
               ordenLocal.idEstado != idEstadoLocalEsperado) {
@@ -332,8 +358,7 @@ class SmartSyncService {
             '(local=${ordenLocal.idEstado}, servidor=$idEstadoLocalEsperado [${ordenServidor.estadoCodigo}])',
           );
           aDescargar.add(ordenServidor);
-        } else if (ordenServidor.urlPdf != null &&
-            ordenLocal.urlPdf == null) {
+        } else if (ordenServidor.urlPdf != null && ordenLocal.urlPdf == null) {
           // Servidor tiene PDF pero local no → DESCARGAR
           debugPrint(
             '   📥 ${ordenServidor.numeroOrden}: PDF disponible en servidor',
@@ -426,6 +451,7 @@ class SmartSyncService {
           '🗑️ [SMART SYNC] ${candidatasVerificacion.length} órdenes activas no en servidor, verificando existencia...',
         );
 
+        var verificadas = 0;
         for (final orden in candidatasVerificacion) {
           try {
             final sigueAsignada = await _verificarOrdenAsignadaATecnico(
@@ -449,6 +475,14 @@ class SmartSyncService {
           } catch (e) {
             debugPrint('   ❌ Error verificando ${orden.numeroOrden}: $e');
           }
+
+          verificadas++;
+          onProgress?.call(
+            SmartSyncProgress(
+              'Revisando órdenes ($verificadas/${candidatasVerificacion.length})...',
+              0.2 + 0.1 * (verificadas / candidatasVerificacion.length),
+            ),
+          );
         }
       }
 
@@ -459,79 +493,119 @@ class SmartSyncService {
       );
 
       // =====================================================================
-      // PASO 5: SYNC LIGERO - Actualizar estado desde resumen (SIN HTTP extra)
+      // PASO 5: ACTUALIZAR EXISTENTES Y DESCARGAR NUEVAS
       // =====================================================================
       if (aDescargar.isNotEmpty) {
         debugPrint(
-          '🧠 [SMART SYNC] Paso 4: Actualizando ${aDescargar.length} órdenes desde resumen (SYNC LIGERO)...',
+          '🧠 [SMART SYNC] Paso 4: Procesando ${aDescargar.length} órdenes...',
         );
 
+        // 5A: órdenes ya existentes → actualización ligera desde el resumen.
+        // Sin HTTP extra: solo estado, PDF y nombre del cliente.
+        final nuevas = <OrdenResumen>[];
+
         for (final ordenResumen in aDescargar) {
-          try {
-            final ordenLocal = mapaLocal[ordenResumen.id];
-            final idEstadoLocal = estadosMap[ordenResumen.estadoCodigo];
+          final ordenLocal = mapaLocal[ordenResumen.id];
+          final idEstadoLocal = estadosMap[ordenResumen.estadoCodigo];
 
-            if (ordenLocal != null && idEstadoLocal != null) {
-              // ORDEN EXISTENTE: Solo actualizar estado y PDF (sin HTTP)
-              // ✅ LOGGING: Verificar si urlPdf viene del servidor
-              debugPrint(
-                '   📄 ${ordenResumen.numeroOrden} urlPdf del servidor: ${ordenResumen.urlPdf ?? "NULL"}',
-              );
-              await _db.updateOrdenEstadoYPdf(
-                ordenLocal.idLocal,
-                idEstadoLocal,
-                ordenResumen.urlPdf,
-              );
+          if (ordenLocal != null && idEstadoLocal != null) {
+            // ORDEN EXISTENTE: Solo actualizar estado y PDF (sin HTTP)
+            // ✅ LOGGING: Verificar si urlPdf viene del servidor
+            debugPrint(
+              '   📄 ${ordenResumen.numeroOrden} urlPdf del servidor: ${ordenResumen.urlPdf ?? "NULL"}',
+            );
+            await _db.updateOrdenEstadoYPdf(
+              ordenLocal.idLocal,
+              idEstadoLocal,
+              ordenResumen.urlPdf,
+            );
 
-              // ✅ 03-ENE-2026: Asegurar que el nombre del cliente se actualice con la prioridad correcta
-              if (ordenResumen.idCliente != null &&
-                  ordenResumen.nombreCliente != null) {
-                await _db.upsertCliente(
-                  ClientesCompanion(
-                    id: Value(ordenResumen.idCliente!),
-                    nombre: Value(ordenResumen.nombreCliente!),
-                    lastSyncedAt: Value(DateTime.now()),
-                  ),
-                );
-              }
-
-              ordenesDescargadas.add(ordenResumen.numeroOrden);
-              descargadas++;
-              debugPrint(
-                '   ✅ ${ordenResumen.numeroOrden} estado actualizado (LIGERO) - PDF: ${ordenResumen.urlPdf != null ? "SÍ" : "NO"}',
-              );
-            } else if (ordenLocal == null && idEstadoLocal != null) {
-              // ORDEN NUEVA: Descargar orden completa para asegurar dependencias (FKs)
-              debugPrint(
-                '   📥 ${ordenResumen.numeroOrden}: Descargando orden completa para evitar fallas de FK',
-              );
-              final fullData = await _descargarOrdenCompleta(ordenResumen.id);
-              if (fullData != null) {
-                await _guardarOrdenEnLocal(fullData, estadosMap, mapaLocal);
-                ordenesDescargadas.add(ordenResumen.numeroOrden);
-                descargadas++;
-                debugPrint(
-                  '   ✅ ${ordenResumen.numeroOrden} creada (COMPLETA)',
-                );
-              } else {
-                // Fallback a creación básica si falla la descarga completa
-                await _crearOrdenDesdeResumen(ordenResumen, idEstadoLocal);
-                ordenesDescargadas.add(ordenResumen.numeroOrden);
-                descargadas++;
-                debugPrint(
-                  '   ⚠️ ${ordenResumen.numeroOrden} creada (BÁSICA - Falló descarga completa)',
-                );
-              }
-            } else {
-              errores++;
-              mensajesError.add(
-                '${ordenResumen.numeroOrden}: Estado no encontrado',
+            // ✅ 03-ENE-2026: Asegurar que el nombre del cliente se actualice con la prioridad correcta
+            if (ordenResumen.idCliente != null &&
+                ordenResumen.nombreCliente != null) {
+              await _db.upsertCliente(
+                ClientesCompanion(
+                  id: Value(ordenResumen.idCliente!),
+                  nombre: Value(ordenResumen.nombreCliente!),
+                  lastSyncedAt: Value(DateTime.now()),
+                ),
               );
             }
-          } catch (e) {
+
+            ordenesDescargadas.add(ordenResumen.numeroOrden);
+            descargadas++;
+            debugPrint(
+              '   ✅ ${ordenResumen.numeroOrden} estado actualizado (LIGERO) - PDF: ${ordenResumen.urlPdf != null ? "SÍ" : "NO"}',
+            );
+          } else if (ordenLocal == null && idEstadoLocal != null) {
+            // ORDEN NUEVA: se descarga después, en lotes paralelos.
+            nuevas.add(ordenResumen);
+          } else {
             errores++;
-            mensajesError.add('${ordenResumen.numeroOrden}: $e');
-            debugPrint('   ❌ ${ordenResumen.numeroOrden}: $e');
+            mensajesError.add(
+              '${ordenResumen.numeroOrden}: Estado no encontrado',
+            );
+          }
+        }
+
+        // 5B: órdenes nuevas → descarga paralela acotada.
+        // Cada orden crea cliente/equipo/tipoServicio/orden-equipos (FKs), por
+        // lo que antes se hacía una por una y era el cuello de botella real.
+        if (nuevas.isNotEmpty) {
+          debugPrint(
+            '   📥 Descargando ${nuevas.length} órdenes nuevas en lotes de '
+            '$_descargasParalelas...',
+          );
+          var procesadas = 0;
+
+          for (
+            var inicio = 0;
+            inicio < nuevas.length;
+            inicio += _descargasParalelas
+          ) {
+            final lote = nuevas.sublist(
+              inicio,
+              math.min(inicio + _descargasParalelas, nuevas.length),
+            );
+
+            await Future.wait(
+              lote.map((ordenResumen) async {
+                final idEstadoLocal = estadosMap[ordenResumen.estadoCodigo]!;
+                try {
+                  final fullData = await _descargarOrdenCompleta(
+                    ordenResumen.id,
+                  );
+                  if (fullData != null) {
+                    await _guardarOrdenEnLocal(fullData, estadosMap, mapaLocal);
+                    ordenesDescargadas.add(ordenResumen.numeroOrden);
+                    descargadas++;
+                    debugPrint(
+                      '   ✅ ${ordenResumen.numeroOrden} creada (COMPLETA)',
+                    );
+                  } else {
+                    // Fallback a creación básica si falla la descarga completa
+                    await _crearOrdenDesdeResumen(ordenResumen, idEstadoLocal);
+                    ordenesDescargadas.add(ordenResumen.numeroOrden);
+                    descargadas++;
+                    debugPrint(
+                      '   ⚠️ ${ordenResumen.numeroOrden} creada (BÁSICA - Falló descarga completa)',
+                    );
+                  }
+                } catch (e) {
+                  errores++;
+                  mensajesError.add('${ordenResumen.numeroOrden}: $e');
+                  debugPrint('   ❌ ${ordenResumen.numeroOrden}: $e');
+                }
+              }),
+            );
+
+            procesadas += lote.length;
+            onProgress?.call(
+              SmartSyncProgress(
+                'Descargando órdenes ($procesadas/${nuevas.length})...',
+                0.3 + 0.65 * (procesadas / nuevas.length),
+              ),
+            );
           }
         }
       }
@@ -587,6 +661,7 @@ class SmartSyncService {
     try {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
         '/sync/orden/$ordenId',
+        options: Options(receiveTimeout: _timeoutDescargaOrden),
       );
       return response.data;
     } catch (e) {
@@ -808,6 +883,7 @@ class SmartSyncService {
     try {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
         '/ordenes/$idBackend',
+        options: Options(receiveTimeout: const Duration(seconds: 30)),
       );
       if (response.statusCode == 404) {
         return false;
