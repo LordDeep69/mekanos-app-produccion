@@ -204,3 +204,30 @@ Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Us
 - **Flujo A:** ✅ **COMPLETADO:** Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`).
 - **Flujo B:** ✅ **COMPLETADO:** Pruebas de integración de recepciones automáticas de mercancía (Orden de Compra -> Entrada a Lote WMS).
 - **Flujo C:** ✅ **COMPLETADO:** Evolución EAM 360° de Equipos (`/equipos` y `/equipos/[id]`), Matriz BOM con stock WMS en vivo, edición inline, kits completos vs insuficientes y sugerencias de despacho en OTs.
+
+
+---
+
+## 🏛️ GESTIÓN INTELIGENTE Y TRAZABILIDAD MULTI-EQUIPO DE PENDIENTES TÉCNICOS (COMMIT c6c5c37) — **100% CERTIFICADO**
+
+### 1. Formulario Estratégico y Categorías Dinámicas en Catálogo Maestro (`/configuracion/catalogos/pendientes`)
+- **Categorías Vivas en Base de Datos:** Eliminado el texto libre hardcodeado. Se consulta `GET /api/ordenes/catalogo-pendientes/categorias` que extrae dinámicamente las categorías reales existentes en la base de datos (`ELECTRICO`, `MECANICO`, `COMBUSTIBLE`, `HIDRAULICO`, `ELECTRONICO`, `INSTRUMENTACION`, `LIMPIEZA`, `GENERAL`), enriquecido con selector táctil de badges e iconos vectoriales.
+- **Creación In-Context (`+ Nueva Categoría`):** Modal interactivo que permite añadir nuevas familias en caliente sin salir del flujo de trabajo, formateándolas en mayúsculas y asignándolas de inmediato.
+- **Tipos de Equipo Dinámicos:** Lectura directa desde `tipos_equipo` de la base de datos relacional (Generador Eléctrico, Bomba Hidráulica, Compresor de Aire, Motor Industrial, etc.), con opción explícita `🌐 Aplica Universalmente a Todo Tipo de Activo`.
+- **Autogenerador Mnemotécnico Anti-Colisión:** Algoritmo en tiempo real con patrón `PEND-[PREFIJO]-[SLUG]-[SUFFIX]` que sugiere códigos inteligentes basados en la descripción y tipo de equipo (ej: `PEND-GEN-BAT-ARR`, `PEND-BOM-FUG-SEL-MEC`) con verificación instantánea de unicidad (`✓ Código único verificado` vs `⚠️ Código ya en uso`).
+
+### 2. Modal Ergonómico Dedicado en App Mobile (`apps/mobile` - Flutter)
+- **Sustitución del Widget Apretado Inline:** En la pantalla de ejecución (`ejecucion_screen.dart`), se despliega una **Tarjeta Ejecutiva Limpia** con badge de conteo y botón prominente `[+ Registrar / Gestionar Pendientes]`.
+- **Modal Sheet de Alta Comodidad (90% de pantalla):**
+  - **Selector Multi-Equipo en Cabecera Sticky:** Si la orden comprende múltiples máquinas, el técnico selecciona primero a cuál corresponde el pendiente mediante chips táctiles grandes (`#1 · Bomba Jockey`, `#2 · Bomba Principal`).
+  - **Pestaña 1 - Catálogo Sugerido:** Buscador reactivo, carrusel horizontal de categorías, tarjetas de plantillas con selector rápido de prioridad (`NORMAL`, `ALTA`, `URGENTE`) y botón de adición a 1-tap con retroalimentación inmediata.
+  - **Pestaña 2 - Hallazgo Personalizado:** Formulario táctil espacioso con selector de prioridad, campo de descripción multilínea y notas de referencia para cotización posterior.
+
+### 3. Arquitectura y Trazabilidad Multi-Equipo (`ordenes_pendientes` ⇄ `equipos` ⇄ `ordenes_equipos`)
+- **Binding Atómico de Integridad Referencial:**
+  - En `POST /api/ordenes/:id/pendientes`, se resuelve y vincula obligatoriamente `id_orden_equipo` junto con `id_equipo`, asociando el hallazgo a la máquina específica dentro de órdenes de batería o estaciones de bombeo.
+  - Respuesta enriquecida con relación `ordenes_equipos: { select: { id_orden_equipo, orden_secuencia, nombre_sistema } }`.
+- **Trazabilidad en Hoja de Vida (`GET /api/equipos/:id/pendientes`):**
+  - Endpoint de consulta EAM que reporta `total`, `activosCount`, `resueltosCount`, `canceladosCount` y la lista completa de pendientes asociados al activo a lo largo de su ciclo de vida.
+- **Pestaña 4 en Expediente 360° (`/equipos/[id]`):**
+  - Incorporada la pestaña **"4. Hallazgos & Pendientes Técnicos"** (`EquipoPendientesTab`), con tarjetas KPI de abiertos vs resueltos, filtros por estado, buscador y enlaces directos a las Órdenes de Servicio de origen para auditoría y cotización post-servicio.
