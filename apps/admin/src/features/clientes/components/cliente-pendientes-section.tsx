@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
-import { getPendienteEstadoColor, getPrioridadColor } from '@/types/ordenes';
+import { getPendienteEstadoColor, getPendienteEstadoLabel, getPrioridadColor } from '@/types/ordenes';
 
 interface ClientePendientesSectionProps {
     clienteId: number;
@@ -252,7 +252,7 @@ export function ClientePendientesSection({
                                                         getPendienteEstadoColor(p.estado)
                                                     )}
                                                 >
-                                                    {p.estado}
+                                                    {getPendienteEstadoLabel(p.estado)}
                                                 </span>
                                                 <span
                                                     className={cn(

@@ -13,7 +13,9 @@ import {
     ExternalLink,
     Globe,
     Loader2,
+    MapPin,
     Plus,
+    RotateCcw,
     Search,
     Square,
     Target,
@@ -25,7 +27,12 @@ import {
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
 import type { Orden, OrdenPendiente } from '@/types/ordenes';
-import { getPendienteEstadoColor, getPrioridadColor } from '@/types/ordenes';
+import {
+    getPendienteEstadoColor,
+    getPendienteEstadoLabel,
+    getPrioridadColor,
+} from '@/types/ordenes';
+import { ProgramarVisitaModal } from './hilo-continuidad-caso';
 
 interface PendientesSectionProps {
     orden: Orden;
@@ -33,18 +40,41 @@ interface PendientesSectionProps {
 }
 
 export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
-    const [pendientes, setPendientes] = useState<OrdenPendiente[]>(
-        orden.ordenes_pendientes || []
-    );
-    const [pendientesAsignados, setPendientesAsignados] = useState<OrdenPendiente[]>(
-        orden.pendientes_asignados_resolver || []
-    );
+    // Unificar todos los pendientes del Caso (hilo_caso.pendientes_caso + ordenes_pendientes + pendientes_asignados_resolver)
+    const initialUnificados = useMemo(() => {
+        const map = new Map<number, OrdenPendiente>();
+        const list = [
+            ...(orden.hilo_caso?.pendientes_caso || []),
+            ...(orden.ordenes_pendientes || []),
+            ...(orden.pendientes_asignados_resolver || []),
+        ];
+        for (const p of list) {
+            if (p && p.id_orden_pendiente) {
+                map.set(p.id_orden_pendiente, p);
+            }
+        }
+        return Array.from(map.values()).sort(
+            (a, b) => a.id_orden_pendiente - b.id_orden_pendiente
+        );
+    }, [
+        orden.hilo_caso?.pendientes_caso,
+        orden.ordenes_pendientes,
+        orden.pendientes_asignados_resolver,
+    ]);
+
+    const [pendientes, setPendientes] = useState<OrdenPendiente[]>(initialUnificados);
     const [filtroEstado, setFiltroEstado] = useState<string>('TODOS');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
     const [selectedPendiente, setSelectedPendiente] = useState<OrdenPendiente | null>(null);
     const [resolucionNotas, setResolucionNotas] = useState('');
-    const [resolucionEstado, setResolucionEstado] = useState<'RESUELTO' | 'EN_GESTION' | 'CANCELADO'>('RESUELTO');
+    const [resolucionEstado, setResolucionEstado] = useState<
+        'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO'
+    >('RESUELTO');
+
+    // Modal para crear visita desde un pendiente específico
+    const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+    const [followUpInitialIds, setFollowUpInitialIds] = useState<number[] | undefined>(undefined);
 
     // Add Form State
     const [catalogoItems, setCatalogoItems] = useState<any[]>([]);
@@ -106,13 +136,8 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
     // Sync state with props
     useEffect(() => {
-        if (orden.ordenes_pendientes) {
-            setPendientes(orden.ordenes_pendientes);
-        }
-        if (orden.pendientes_asignados_resolver) {
-            setPendientesAsignados(orden.pendientes_asignados_resolver);
-        }
-    }, [orden.ordenes_pendientes, orden.pendientes_asignados_resolver]);
+        setPendientes(initialUnificados);
+    }, [initialUnificados]);
 
     // Cargar catálogo de pendientes al abrir modal
     useEffect(() => {
@@ -213,10 +238,11 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
             if (tipoAlcance === 'CLIENTE') {
                 payload.esGeneral = true;
-                payload.idEquipo = null;
+                payload.idEquipo = listaEquipos[0]?.idEquipo || orden.id_equipo || undefined;
                 payload.idOrdenEquipo = null;
             } else if (tipoAlcance === 'SERVICIO') {
                 payload.esGeneral = true;
+                payload.idEquipo = listaEquipos[0]?.idEquipo || orden.id_equipo || undefined;
                 payload.idOrdenEquipo = undefined;
             } else {
                 if (selectedEquiposIds.length > 0) {
@@ -264,11 +290,16 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 `/ordenes/pendientes/${selectedPendiente.id_orden_pendiente}/estado`,
                 {
                     estado: resolucionEstado,
-                    observaciones_resolucion: resolucionNotas.trim() || undefined,
+                    observaciones_resolucion:
+                        resolucionEstado === 'PENDIENTE'
+                            ? null
+                            : resolucionNotas.trim() || undefined,
                     id_orden_resolucion:
                         resolucionEstado === 'RESUELTO'
-                            ? selectedPendiente.id_orden_resolucion || orden.id_orden_servicio
-                            : undefined,
+                            ? orden.id_orden_servicio
+                            : resolucionEstado === 'PENDIENTE'
+                            ? null
+                            : selectedPendiente.id_orden_resolucion || orden.id_orden_servicio,
                 }
             );
             const data = res.data;
@@ -278,12 +309,9 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
             setPendientes((prev) =>
                 prev.map((p) =>
-                    p.id_orden_pendiente === selectedPendiente.id_orden_pendiente ? data.data : p
-                )
-            );
-            setPendientesAsignados((prev) =>
-                prev.map((p) =>
-                    p.id_orden_pendiente === selectedPendiente.id_orden_pendiente ? data.data : p
+                    p.id_orden_pendiente === selectedPendiente.id_orden_pendiente
+                        ? { ...p, ...data.data, ordenes_servicio: p.ordenes_servicio }
+                        : p
                 )
             );
             setIsResolveModalOpen(false);
@@ -297,7 +325,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         }
     };
 
-    const handleResolverAsignadoDirecto = async (p: OrdenPendiente) => {
+    const handleResolverDirecto = async (p: OrdenPendiente) => {
         setIsSubmitting(true);
         try {
             const res = await apiClient.patch(`/ordenes/pendientes/${p.id_orden_pendiente}/estado`, {
@@ -305,18 +333,45 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 id_orden_resolucion: orden.id_orden_servicio,
                 observaciones_resolucion:
                     p.observaciones_resolucion ||
-                    `Resuelto satisfactoriamente durante la ejecución de la visita ${orden.numero_orden}`,
+                    `Resuelto satisfactoriamente en Visita #${orden.numero_visita_caso || 1} (${orden.numero_orden})`,
             });
             if (res.data?.success) {
-                setPendientesAsignados((prev) =>
+                setPendientes((prev) =>
                     prev.map((item) =>
-                        item.id_orden_pendiente === p.id_orden_pendiente ? res.data.data : item
+                        item.id_orden_pendiente === p.id_orden_pendiente
+                            ? { ...item, ...res.data.data, ordenes_servicio: item.ordenes_servicio }
+                            : item
                     )
                 );
                 onUpdate?.();
             }
         } catch (err) {
-            console.error('Error resolviendo pendiente asignado:', err);
+            console.error('Error resolviendo pendiente:', err);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleReabrirDirecto = async (p: OrdenPendiente) => {
+        setIsSubmitting(true);
+        try {
+            const res = await apiClient.patch(`/ordenes/pendientes/${p.id_orden_pendiente}/estado`, {
+                estado: 'PENDIENTE',
+                id_orden_resolucion: null,
+                observaciones_resolucion: '',
+            });
+            if (res.data?.success) {
+                setPendientes((prev) =>
+                    prev.map((item) =>
+                        item.id_orden_pendiente === p.id_orden_pendiente
+                            ? { ...item, ...res.data.data, ordenes_servicio: item.ordenes_servicio }
+                            : item
+                    )
+                );
+                onUpdate?.();
+            }
+        } catch (err) {
+            console.error('Error reabriendo pendiente:', err);
         } finally {
             setIsSubmitting(false);
         }
@@ -335,63 +390,85 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         }
     };
 
+    const pendientesActivosCaso = useMemo(
+        () => pendientes.filter((p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'),
+        [pendientes]
+    );
+    const totalPendientesActivos = pendientesActivosCaso.length;
+    const totalPendientesResueltos = useMemo(
+        () => pendientes.filter((p) => p.estado === 'RESUELTO').length,
+        [pendientes]
+    );
+
     const pendientesFiltrados = pendientes.filter((p) => {
         if (filtroEstado === 'TODOS') return true;
+        if (filtroEstado === 'ACTIVOS') {
+            return p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION';
+        }
         return p.estado === filtroEstado;
     });
 
-    const totalPendientesActivos = pendientes.filter(
-        (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'
-    ).length;
-
-    const rootOrderId =
-        orden.hilo_caso?.id_orden_raiz || orden.id_orden_padre || orden.id_orden_servicio;
-    const idCliente = orden.clientes?.id_cliente || orden.id_cliente;
+    const numVisitaActual = orden.numero_visita_caso || 1;
+    const esMultivisita =
+        Boolean(orden.hilo_caso?.es_multivisita) ||
+        Boolean(orden.id_orden_padre) ||
+        numVisitaActual > 1;
 
     return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
             {/* ═══════════════════════════════════════════════════════════════════ */}
-            {/* BLOQUE A (CLOSED-LOOP): PENDIENTES ASIGNADOS PARA RESOLVER EN ESTA VISITA */}
+            {/* BLOQUE A (CLOSED-LOOP): PENDIENTES ACTIVOS DEL CASO POR RESOLVER    */}
             {/* ═══════════════════════════════════════════════════════════════════ */}
-            {pendientesAsignados.length > 0 && (
+            {pendientesActivosCaso.length > 0 && (
                 <div className="p-5 bg-gradient-to-r from-indigo-50 via-blue-50/60 to-emerald-50/40 border-b border-indigo-200">
-                    <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                         <div className="flex items-center gap-2.5">
                             <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
                                 <Target className="h-4 w-4" />
                             </div>
                             <div>
-                                <h4 className="text-sm font-extrabold text-indigo-950 flex items-center gap-2">
-                                    <span>Pendientes Asignados para Resolver en esta Visita</span>
-                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
-                                        {pendientesAsignados.filter((p) => p.estado === 'RESUELTO').length} /{' '}
-                                        {pendientesAsignados.length} resueltos
+                                <h4 className="text-sm font-extrabold text-indigo-950 flex items-center gap-2 flex-wrap">
+                                    <span>
+                                        Pendientes Activos del Caso por Resolver en Visita #{numVisitaActual}
+                                    </span>
+                                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+                                        {pendientesActivosCaso.length} activo(s) • {totalPendientesResueltos} resuelto(s) en el caso
                                     </span>
                                 </h4>
                                 <p className="text-xs text-indigo-700/80">
-                                    Hallazgos provenientes de visitas anteriores vinculados a esta orden para cierre de ciclo.
+                                    Marque en 1 clic los hallazgos que hayan quedado solucionados durante esta visita o programe una nueva visita de seguimiento.
                                 </p>
                             </div>
                         </div>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setFollowUpInitialIds(
+                                    pendientesActivosCaso.map((p) => p.id_orden_pendiente)
+                                );
+                                setFollowUpModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
+                        >
+                            <CornerDownRight className="h-3.5 w-3.5" />
+                            <span>Programar Visita con estos {pendientesActivosCaso.length} Pendientes</span>
+                        </button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {pendientesAsignados.map((p) => {
-                            const yaResuelto = p.estado === 'RESUELTO';
-                            const numOrigen = p.ordenes_servicio?.numero_orden;
+                        {pendientesActivosCaso.map((p) => {
+                            const numOrigen = p.ordenes_servicio?.numero_orden || orden.numero_orden;
+                            const numVisitaOrigen = p.ordenes_servicio?.numero_visita_caso || 1;
                             const codEq = p.equipos?.codigo_equipo;
+                            const alcance = p.alcance || 'EQUIPO';
                             return (
                                 <div
                                     key={p.id_orden_pendiente}
-                                    className={cn(
-                                        'p-3.5 rounded-xl border flex flex-col justify-between gap-2.5 transition-all',
-                                        yaResuelto
-                                            ? 'bg-emerald-50/80 border-emerald-300'
-                                            : 'bg-white border-indigo-200 shadow-2xs'
-                                    )}
+                                    className="p-3.5 rounded-xl border bg-white border-indigo-200 shadow-2xs flex flex-col justify-between gap-2.5 transition-all"
                                 >
                                     <div>
-                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                        <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 <span
                                                     className={cn(
@@ -399,25 +476,30 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                         getPendienteEstadoColor(p.estado)
                                                     )}
                                                 >
-                                                    {p.estado}
+                                                    {getPendienteEstadoLabel(p.estado)}
                                                 </span>
                                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                                                    Alcance: {p.alcance || 'EQUIPO'}
+                                                    {alcance === 'CLIENTE'
+                                                        ? '🏢 Cliente / Sede'
+                                                        : alcance === 'SERVICIO'
+                                                        ? '🛠️ Servicio'
+                                                        : `🔧 ${codEq || 'Equipo'}`}
                                                 </span>
-                                                {codEq && (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                                                        {codEq}
-                                                    </span>
-                                                )}
                                             </div>
-                                            {p.ordenes_servicio && (
+                                            {p.ordenes_servicio ? (
                                                 <Link
                                                     href={`/ordenes/${p.ordenes_servicio.id_orden_servicio}`}
                                                     className="text-[11px] font-mono font-bold text-indigo-700 hover:underline flex items-center gap-1"
                                                 >
-                                                    <span>Origen: {numOrigen}</span>
+                                                    <span>
+                                                        📍 Origen: Visita #{numVisitaOrigen} • {numOrigen}
+                                                    </span>
                                                     <ExternalLink className="h-2.5 w-2.5" />
                                                 </Link>
+                                            ) : (
+                                                <span className="text-[11px] font-mono font-bold text-indigo-700">
+                                                    📍 Origen: Visita #{numVisitaOrigen} • {numOrigen}
+                                                </span>
                                             )}
                                         </div>
                                         <p className="text-xs font-bold text-slate-900">{p.descripcion}</p>
@@ -426,34 +508,21 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                         )}
                                     </div>
 
-                                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/70">
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 gap-2">
                                         <span className="text-[11px] text-slate-500">
-                                            {yaResuelto ? '✅ Ciclo cerrado en esta visita' : '⏳ En ejecución en esta visita'}
+                                            {p.orden_resolucion
+                                                ? `🎯 Asignado a ${p.orden_resolucion.numero_orden} (Visita #${p.orden_resolucion.numero_visita_caso || numVisitaActual})`
+                                                : '⏳ Pendiente de resolución'}
                                         </span>
-                                        {!yaResuelto ? (
-                                            <button
-                                                type="button"
-                                                disabled={isSubmitting}
-                                                onClick={() => handleResolverAsignadoDirecto(p)}
-                                                className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                                            >
-                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                                <span>Marcar como Resuelto</span>
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setSelectedPendiente(p);
-                                                    setResolucionEstado('RESUELTO');
-                                                    setResolucionNotas(p.observaciones_resolucion || '');
-                                                    setIsResolveModalOpen(true);
-                                                }}
-                                                className="text-[11px] font-semibold text-emerald-800 hover:underline cursor-pointer"
-                                            >
-                                                Editar nota
-                                            </button>
-                                        )}
+                                        <button
+                                            type="button"
+                                            disabled={isSubmitting}
+                                            onClick={() => handleResolverDirecto(p)}
+                                            className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                                        >
+                                            <CheckCircle2 className="h-3.5 w-3.5" />
+                                            <span>✓ Marcar Resuelto en Visita #{numVisitaActual}</span>
+                                        </button>
                                     </div>
                                 </div>
                             );
@@ -462,7 +531,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 </div>
             )}
 
-            {/* Header de la Sección */}
+            {/* Header de la Matriz Completa */}
             <div className="p-6 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl">
@@ -471,19 +540,22 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                     <div>
                         <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-lg font-bold text-gray-900">
-                                Hallazgos y Pendientes Originados en esta Visita (360°)
+                                {esMultivisita
+                                    ? 'Matriz Completa de Hallazgos y Pendientes del Caso (360°)'
+                                    : 'Hallazgos y Pendientes Técnicos del Caso (360°)'}
                             </h3>
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                {pendientes.length} total
+                                {pendientes.length} totales
                             </span>
-                            {totalPendientesActivos > 0 && (
-                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                                    {totalPendientesActivos} activo{totalPendientesActivos > 1 ? 's' : ''}
-                                </span>
-                            )}
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                {totalPendientesActivos} activo{totalPendientesActivos === 1 ? '' : 's'}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                                {totalPendientesResueltos} resuelto{totalPendientesResueltos === 1 ? '' : 's'}
+                            </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            Trazabilidad multinivel (Equipo • Cliente/Sede • Continuidad del Servicio) y encadenamiento con futuras visitas
+                            Vista unificada de todos los hallazgos del expediente con su visita de origen y visita de resolución.
                         </p>
                     </div>
                 </div>
@@ -503,26 +575,27 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-gray-400 font-medium">Filtrar:</span>
-                    {(['TODOS', 'PENDIENTE', 'EN_GESTION', 'RESUELTO', 'CANCELADO'] as const).map((est) => (
+                    {(
+                        [
+                            { id: 'TODOS', label: `Todos (${pendientes.length})` },
+                            { id: 'ACTIVOS', label: `Activos (${totalPendientesActivos})` },
+                            { id: 'PENDIENTE', label: 'Abiertos' },
+                            { id: 'EN_GESTION', label: 'En Gestión' },
+                            { id: 'RESUELTO', label: `Resueltos (${totalPendientesResueltos})` },
+                            { id: 'CANCELADO', label: 'Cancelados' },
+                        ] as const
+                    ).map((est) => (
                         <button
-                            key={est}
-                            onClick={() => setFiltroEstado(est)}
+                            key={est.id}
+                            onClick={() => setFiltroEstado(est.id)}
                             className={cn(
                                 'px-3 py-1 rounded-lg font-medium transition-all cursor-pointer',
-                                filtroEstado === est
+                                filtroEstado === est.id
                                     ? 'bg-amber-600 text-white shadow-sm'
                                     : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                             )}
                         >
-                            {est === 'TODOS'
-                                ? 'Todos'
-                                : est === 'PENDIENTE'
-                                ? 'Pendientes'
-                                : est === 'EN_GESTION'
-                                ? 'En Gestión'
-                                : est === 'RESUELTO'
-                                ? 'Resueltos'
-                                : 'Cancelados'}
+                            {est.label}
                         </button>
                     ))}
                 </div>
@@ -538,10 +611,10 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                     <div className="text-center py-10 px-4 bg-gray-50/50 rounded-xl border-2 border-dashed border-gray-200">
                         <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2 opacity-80" />
                         <h4 className="text-sm font-bold text-gray-800">
-                            Sin Pendientes Originados en esta Orden
+                            Sin Pendientes Registrados en este Caso
                         </h4>
                         <p className="text-xs text-gray-500 max-w-md mx-auto mt-1 mb-4">
-                            Esta orden no dejó hallazgos técnicos, requerimientos locativos de cliente ni trabajos inconclusos pendientes.
+                            Este expediente no registra hallazgos técnicos, requerimientos locativos de cliente ni trabajos pendientes.
                         </p>
                         <button
                             onClick={handleOpenAddModal}
@@ -573,13 +646,15 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                 ? `#${ordenSec} · ${eqCode}${eqName}`
                                 : `${eqCode}${eqName}`;
 
-                            const crearVisitaHref = `/ordenes/nueva?ordenPadreId=${rootOrderId}&ordenOrigenId=${orden.id_orden_servicio}${
-                                idCliente ? `&clienteId=${idCliente}` : ''
-                            }${
-                                p.id_equipo || orden.id_equipo
-                                    ? `&equipoId=${p.id_equipo || orden.id_equipo}`
-                                    : ''
-                            }&tipoVisita=CORRECTIVO_DERIVADO&pendientesIds=${p.id_orden_pendiente}`;
+                            const numOrdenOrigen =
+                                p.ordenes_servicio?.numero_orden ||
+                                orden.hilo_caso?.numero_orden_raiz ||
+                                orden.numero_orden;
+                            const numVisitaOrigen = p.ordenes_servicio?.numero_visita_caso || 1;
+                            const idOrdenOrigen =
+                                p.ordenes_servicio?.id_orden_servicio ||
+                                p.id_orden_servicio ||
+                                orden.id_orden_servicio;
 
                             return (
                                 <div
@@ -603,7 +678,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                         estadoClase
                                                     )}
                                                 >
-                                                    {p.estado}
+                                                    {getPendienteEstadoLabel(p.estado)}
                                                 </span>
                                                 <span
                                                     className={cn(
@@ -657,32 +732,57 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                             </p>
                                         )}
 
-                                        {/* Vínculo a Orden de Resolución (Closed-Loop) */}
-                                        {p.orden_resolucion && (
-                                            <div className="mt-2 p-2 rounded-lg bg-indigo-50/80 border border-indigo-200 flex items-center justify-between text-xs">
-                                                <span className="text-indigo-900 font-semibold flex items-center gap-1">
-                                                    <CornerDownRight className="h-3.5 w-3.5 text-indigo-600" />
-                                                    {isResuelto ? 'Resuelto en visita:' : 'Asignado a visita:'}
+                                        {/* Trazabilidad de Origen y Resolución en el Hilo */}
+                                        <div className="mt-2.5 space-y-1.5">
+                                            <div className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+                                                <span className="text-slate-600 font-semibold flex items-center gap-1">
+                                                    <MapPin className="h-3 w-3 text-slate-500" />
+                                                    Origen del hallazgo:
                                                 </span>
                                                 <Link
-                                                    href={`/ordenes/${p.orden_resolucion.id_orden_servicio}`}
-                                                    className="font-mono font-bold text-indigo-700 hover:underline flex items-center gap-1"
+                                                    href={`/ordenes/${idOrdenOrigen}`}
+                                                    className="font-mono font-bold text-slate-800 hover:text-indigo-700 hover:underline flex items-center gap-1"
                                                 >
                                                     <span>
-                                                        {p.orden_resolucion.numero_orden} (Visita #
-                                                        {p.orden_resolucion.numero_visita_caso || 2})
+                                                        Visita #{numVisitaOrigen} • {numOrdenOrigen}
                                                     </span>
                                                     <ExternalLink className="h-3 w-3" />
                                                 </Link>
                                             </div>
-                                        )}
+
+                                            {p.orden_resolucion && (
+                                                <div
+                                                    className={cn(
+                                                        'px-2.5 py-1.5 rounded-lg border flex items-center justify-between text-xs',
+                                                        isResuelto
+                                                            ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                                                            : 'bg-indigo-50/80 border-indigo-200 text-indigo-900'
+                                                    )}
+                                                >
+                                                    <span className="font-semibold flex items-center gap-1">
+                                                        <CornerDownRight className="h-3.5 w-3.5" />
+                                                        {isResuelto ? 'Resuelto en:' : 'En gestión en:'}
+                                                    </span>
+                                                    <Link
+                                                        href={`/ordenes/${p.orden_resolucion.id_orden_servicio}`}
+                                                        className="font-mono font-bold hover:underline flex items-center gap-1"
+                                                    >
+                                                        <span>
+                                                            Visita #{p.orden_resolucion.numero_visita_caso || 2} •{' '}
+                                                            {p.orden_resolucion.numero_orden}
+                                                        </span>
+                                                        <ExternalLink className="h-3 w-3" />
+                                                    </Link>
+                                                </div>
+                                            )}
+                                        </div>
 
                                         {/* Resolución si existe */}
                                         {p.observaciones_resolucion && (
                                             <div className="mt-2 text-xs bg-emerald-50 text-emerald-800 p-2 rounded-lg border border-emerald-200">
                                                 <p className="font-semibold flex items-center gap-1">
                                                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                                    Resolución:
+                                                    Nota de Resolución:
                                                 </p>
                                                 <p className="mt-0.5">{p.observaciones_resolucion}</p>
                                             </div>
@@ -707,16 +807,20 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                             </span>
                                         </div>
 
-                                        <div className="flex items-center gap-1.5">
-                                            {!isResuelto && !isCancelado && !p.orden_resolucion && (
-                                                <Link
-                                                    href={crearVisitaHref}
-                                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-semibold rounded-lg border border-indigo-200 transition-colors flex items-center gap-1"
-                                                    title="Programar una visita encadenada para resolver este pendiente"
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            {!isResuelto && !isCancelado && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setFollowUpInitialIds([p.id_orden_pendiente]);
+                                                        setFollowUpModalOpen(true);
+                                                    }}
+                                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-semibold rounded-lg border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                                    title="Programar una visita de seguimiento para resolver este pendiente"
                                                 >
                                                     <CornerDownRight className="h-3 w-3" />
                                                     <span>Crear Visita</span>
-                                                </Link>
+                                                </button>
                                             )}
 
                                             {!isResuelto && !isCancelado ? (
@@ -732,17 +836,29 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                     Gestionar Estado
                                                 </button>
                                             ) : (
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedPendiente(p);
-                                                        setResolucionEstado(p.estado as any);
-                                                        setResolucionNotas(p.observaciones_resolucion || '');
-                                                        setIsResolveModalOpen(true);
-                                                    }}
-                                                    className="px-2 py-0.5 text-gray-500 hover:text-gray-800 text-[11px] font-medium underline cursor-pointer"
-                                                >
-                                                    Ver / Editar Estado
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSubmitting}
+                                                        onClick={() => handleReabrirDirecto(p)}
+                                                        className="px-2 py-0.5 bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 rounded border border-slate-200 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                                        title="Reabrir este pendiente si el problema volvió a presentarse"
+                                                    >
+                                                        <RotateCcw className="h-3 w-3" />
+                                                        <span>Reabrir</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedPendiente(p);
+                                                            setResolucionEstado(p.estado as any);
+                                                            setResolucionNotas(p.observaciones_resolucion || '');
+                                                            setIsResolveModalOpen(true);
+                                                        }}
+                                                        className="px-2 py-0.5 text-gray-500 hover:text-gray-800 text-[11px] font-medium underline cursor-pointer"
+                                                    >
+                                                        Editar Estado
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -752,6 +868,14 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                     </div>
                 )}
             </div>
+
+            {/* Modal In-Context para Crear Visita de Seguimiento */}
+            <ProgramarVisitaModal
+                orden={orden}
+                isOpen={followUpModalOpen}
+                onClose={() => setFollowUpModalOpen(false)}
+                initialPendientesIds={followUpInitialIds}
+            />
 
             {/* Modal: Agregar Nuevo Pendiente (3 Alcances: EQUIPO, CLIENTE, SERVICIO) */}
             {isAddModalOpen && (
@@ -1168,7 +1292,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 </div>
             )}
 
-            {/* Modal: Gestionar / Resolver Pendiente */}
+            {/* Modal: Gestionar / Resolver / Reabrir Pendiente */}
             {isResolveModalOpen && selectedPendiente && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -1202,10 +1326,13 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                 <select
                                     value={resolucionEstado}
                                     onChange={(e) => setResolucionEstado(e.target.value as any)}
-                                    className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                    className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-semibold"
                                 >
+                                    <option value="PENDIENTE">
+                                        Pendiente (Abierto / Reabrir hallazgo)
+                                    </option>
                                     <option value="EN_GESTION">
-                                        En Gestión (Cotizando / Asignado a orden de seguimiento)
+                                        En Gestión (Cotizando / Asignado a visita de seguimiento)
                                     </option>
                                     <option value="RESUELTO">Resuelto (Ejecutado o corregido)</option>
                                     <option value="CANCELADO">Cancelado (No aplica o desestimado)</option>

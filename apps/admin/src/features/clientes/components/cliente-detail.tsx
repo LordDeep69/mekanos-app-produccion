@@ -1108,14 +1108,6 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
                 equiposCliente={cliente.equipos || []}
               />
             </div>
-
-            {/* TARJETA 6: BACKLOG CENTRAL DE PENDIENTES 360° (CLIENTE / EQUIPO / SERVICIO) */}
-            <div className="md:col-span-2">
-              <ClientePendientesSection
-                clienteId={clienteId}
-                equiposCliente={cliente.equipos || []}
-              />
-            </div>
           </div>
         </TabsContent>
 

@@ -1,239 +1,267 @@
 /**
  * MEKANOS S.A.S - Portal Admin
- * Historial de Estados de Orden
- * 
- * Timeline visual de cambios de estado de la orden.
+ * Componente: HistorialEstados
+ *
+ * Muestra la línea de tiempo de cambios de estado de una orden de servicio.
+ * Endpoint: GET /api/historial-estados-orden/orden/:idOrden
  */
 
 'use client';
 
-import { apiClient } from '@/lib/api/client';
-import { cn } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { getSession } from 'next-auth/react';
 import {
-    AlertCircle,
-    ArrowRight,
-    Calendar,
-    CheckCircle2,
     Clock,
-    History,
-    Loader2,
-    PlayCircle,
+    CheckCircle2,
+    Play,
+    AlertCircle,
+    XCircle,
+    FileCheck,
+    Calendar,
     User,
-    XCircle
+    MessageSquare,
+    Loader2,
+    ChevronDown,
+    ChevronUp,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-interface HistorialEstado {
-    id_historial: number;
-    id_orden_servicio: number;
-    estado_anterior?: string;
-    estado_nuevo: string;
-    fecha_cambio: string;
-    observaciones?: string;
-    cambiado_por?: {
-        id_empleado: number;
-        persona?: {
-            primer_nombre?: string;
-            primer_apellido?: string;
-        };
-    };
+interface HistorialItem {
+    id_historial?: number;
+    idHistorial?: number;
+    id_orden_servicio?: number;
+    idOrdenServicio?: number;
+    estado_anterior?: string | null;
+    estado_nuevo?: string;
+    estadoAnterior?: {
+        idEstado?: number;
+        codigoEstado?: string;
+        nombreEstado?: string;
+    } | null;
+    estadoNuevo?: {
+        idEstado?: number;
+        codigoEstado?: string;
+        nombreEstado?: string;
+    } | null;
+    motivo?: string | null;
+    motivo_cambio?: string | null;
+    motivoCambio?: string | null;
+    observaciones?: string | null;
+    fecha_cambio?: string;
+    fechaCambio?: string;
+    usuario?: {
+        id_usuario?: number;
+        nombre?: string;
+        email?: string;
+    } | null;
+    usuarioRealizador?: {
+        idUsuario?: number;
+        email?: string;
+    } | null;
 }
 
 interface HistorialEstadosProps {
     idOrden: number;
 }
 
-function getEstadoIcon(estado?: string) {
-    switch (estado) {
-        case 'PROGRAMADA':
-            return Calendar;
-        case 'ASIGNADA':
-            return User;
-        case 'EN_PROCESO':
-            return PlayCircle;
-        case 'COMPLETADA':
-            return CheckCircle2;
-        case 'APROBADA':
-            return CheckCircle2;
-        case 'CANCELADA':
-            return XCircle;
-        case 'EN_ESPERA_REPUESTO':
-            return Clock;
-        default:
-            return AlertCircle;
-    }
-}
+const ESTADO_CONFIG: Record<string, { label: string; color: string; bgColor: string; icon: React.ElementType }> = {
+    PROGRAMADA: { label: 'Programada', color: 'text-blue-600', bgColor: 'bg-blue-100', icon: Calendar },
+    ASIGNADA: { label: 'Asignada', color: 'text-purple-600', bgColor: 'bg-purple-100', icon: User },
+    EN_PROCESO: { label: 'En Proceso', color: 'text-yellow-600', bgColor: 'bg-yellow-100', icon: Play },
+    EN_ESPERA_REPUESTO: { label: 'Espera Repuesto', color: 'text-orange-600', bgColor: 'bg-orange-100', icon: AlertCircle },
+    COMPLETADA: { label: 'Completada', color: 'text-green-600', bgColor: 'bg-green-100', icon: CheckCircle2 },
+    APROBADA: { label: 'Aprobada', color: 'text-emerald-600', bgColor: 'bg-emerald-100', icon: FileCheck },
+    CANCELADA: { label: 'Cancelada', color: 'text-red-600', bgColor: 'bg-red-100', icon: XCircle },
+};
 
-function getEstadoColor(estado?: string) {
-    switch (estado) {
-        case 'PROGRAMADA':
-            return 'bg-blue-100 text-blue-700 border-blue-200';
-        case 'ASIGNADA':
-            return 'bg-indigo-100 text-indigo-700 border-indigo-200';
-        case 'EN_PROCESO':
-            return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-        case 'COMPLETADA':
-            return 'bg-green-100 text-green-700 border-green-200';
-        case 'APROBADA':
-            return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-        case 'CANCELADA':
-            return 'bg-red-100 text-red-700 border-red-200';
-        case 'EN_ESPERA_REPUESTO':
-            return 'bg-orange-100 text-orange-700 border-orange-200';
-        default:
-            return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
-}
-
-function getEstadoLabel(estado?: string) {
-    const labels: Record<string, string> = {
-        PROGRAMADA: 'Programada',
-        ASIGNADA: 'Asignada',
-        EN_PROCESO: 'En Proceso',
-        EN_ESPERA_REPUESTO: 'Espera Repuesto',
-        COMPLETADA: 'Completada',
-        APROBADA: 'Aprobada',
-        CANCELADA: 'Cancelada',
-    };
-    return labels[estado || ''] || estado || 'Desconocido';
-}
-
-function HistorialItem({ item, isFirst, isLast }: { item: HistorialEstado; isFirst: boolean; isLast: boolean }) {
-    const Icon = getEstadoIcon(item.estado_nuevo);
-    const fechaCambio = new Date(item.fecha_cambio).toLocaleString('es-CO', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-    });
-
-    const nombreUsuario = item.cambiado_por?.persona
-        ? `${item.cambiado_por.persona.primer_nombre || ''} ${item.cambiado_por.persona.primer_apellido || ''}`.trim()
-        : 'Sistema';
-
-    return (
-        <div className="relative flex gap-4">
-            {/* Línea conectora */}
-            {!isLast && (
-                <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-gray-200" />
-            )}
-
-            {/* Icono */}
-            <div className={cn(
-                "relative z-10 flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center border-2",
-                getEstadoColor(item.estado_nuevo)
-            )}>
-                <Icon className="h-5 w-5" />
-            </div>
-
-            {/* Contenido */}
-            <div className="flex-1 pb-6">
-                <div className="flex items-start justify-between gap-2">
-                    <div>
-                        {/* Transición de estados */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {item.estado_anterior && (
-                                <>
-                                    <span className={cn(
-                                        "px-2 py-0.5 rounded-full text-xs font-bold border",
-                                        getEstadoColor(item.estado_anterior)
-                                    )}>
-                                        {getEstadoLabel(item.estado_anterior)}
-                                    </span>
-                                    <ArrowRight className="h-3 w-3 text-gray-400" />
-                                </>
-                            )}
-                            <span className={cn(
-                                "px-2 py-0.5 rounded-full text-xs font-bold border",
-                                getEstadoColor(item.estado_nuevo)
-                            )}>
-                                {getEstadoLabel(item.estado_nuevo)}
-                            </span>
-                        </div>
-
-                        {/* Usuario y fecha */}
-                        <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
-                            <span className="flex items-center gap-1">
-                                <User className="h-3 w-3" />
-                                {nombreUsuario}
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {fechaCambio}
-                            </span>
-                        </div>
-                    </div>
-
-                    {isFirst && (
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full uppercase">
-                            Actual
-                        </span>
-                    )}
-                </div>
-
-                {/* Observaciones */}
-                {item.observaciones && (
-                    <p className="mt-2 text-sm text-gray-600 bg-gray-50 rounded-lg p-2 border border-gray-100">
-                        {item.observaciones}
-                    </p>
-                )}
-            </div>
-        </div>
-    );
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export function HistorialEstados({ idOrden }: HistorialEstadosProps) {
-    const { data, isLoading, error } = useQuery({
-        queryKey: ['orden-historial', idOrden],
-        queryFn: async () => {
-            const res = await apiClient.get(`/historial-estados-orden/orden/${idOrden}`);
-            return res.data;
-        },
-        enabled: !!idOrden,
-    });
+    const [historial, setHistorial] = useState<HistorialItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isExpanded, setIsExpanded] = useState(false);
 
-    const historial: HistorialEstado[] = data?.data || [];
+    useEffect(() => {
+        async function fetchHistorial() {
+            try {
+                const session = await getSession();
+                const token = (session as any)?.accessToken;
+
+                const response = await fetch(`${API_URL}/historial-estados-orden/orden/${idOrden}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setHistorial(Array.isArray(data) ? data : data.data || []);
+                }
+            } catch (error) {
+                console.error('Error fetching historial:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        if (idOrden) {
+            fetchHistorial();
+        }
+    }, [idOrden]);
+
+    if (isLoading) {
+        return (
+            <div className="bg-gray-50 rounded-lg p-4 flex items-center justify-center gap-2 text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Cargando historial...</span>
+            </div>
+        );
+    }
+
+    if (historial.length === 0) {
+        return null;
+    }
+
+    const itemsToShow = isExpanded ? historial : historial.slice(0, 3);
 
     return (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-slate-50 flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-gray-600 to-slate-700 rounded-xl shadow-sm">
-                    <History className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                    <h4 className="font-bold text-gray-900">Historial de Estados</h4>
-                    <p className="text-xs text-gray-500">{historial.length} cambios registrados</p>
-                </div>
+        <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-gray-600" />
+                    Historial de Estados ({historial.length})
+                </h4>
+                {historial.length > 3 && (
+                    <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                    >
+                        {isExpanded ? (
+                            <>
+                                Ver menos <ChevronUp className="h-4 w-4" />
+                            </>
+                        ) : (
+                            <>
+                                Ver todos ({historial.length}) <ChevronDown className="h-4 w-4" />
+                            </>
+                        )}
+                    </button>
+                )}
             </div>
 
-            {/* Contenido */}
-            <div className="p-4">
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                    </div>
-                ) : error ? (
-                    <div className="text-center py-8 text-gray-400">
-                        <AlertCircle className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">Error al cargar historial</p>
-                    </div>
-                ) : historial.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400">
-                        <History className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm font-medium">Sin historial de cambios</p>
-                        <p className="text-xs mt-1">Los cambios de estado aparecerán aquí</p>
-                    </div>
-                ) : (
-                    <div className="space-y-0">
-                        {historial.map((item, index) => (
-                            <HistorialItem
-                                key={item.id_historial ?? `hist-${index}`}
-                                item={item}
-                                isFirst={index === 0}
-                                isLast={index === historial.length - 1}
-                            />
-                        ))}
-                    </div>
-                )}
+            <div className="relative">
+                {/* Línea vertical */}
+                <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-gray-200" />
+
+                <div className="space-y-4">
+                    {itemsToShow.map((item, index) => {
+                        const codigoNuevo =
+                            item.estado_nuevo ||
+                            item.estadoNuevo?.codigoEstado ||
+                            item.estadoNuevo?.nombreEstado ||
+                            'PROGRAMADA';
+                        const nombreNuevo =
+                            item.estadoNuevo?.nombreEstado ||
+                            ESTADO_CONFIG[codigoNuevo]?.label ||
+                            codigoNuevo;
+
+                        const codigoAnterior =
+                            item.estado_anterior ||
+                            item.estadoAnterior?.codigoEstado ||
+                            item.estadoAnterior?.nombreEstado ||
+                            null;
+                        const nombreAnterior = codigoAnterior
+                            ? item.estadoAnterior?.nombreEstado ||
+                              ESTADO_CONFIG[codigoAnterior]?.label ||
+                              codigoAnterior
+                            : null;
+
+                        const config = ESTADO_CONFIG[codigoNuevo] || {
+                            label: nombreNuevo,
+                            color: 'text-gray-600',
+                            bgColor: 'bg-gray-100',
+                            icon: Clock,
+                        };
+                        const Icon = config.icon;
+                        const isFirst = index === 0;
+
+                        const rawFecha = item.fecha_cambio || item.fechaCambio;
+                        const parsedDate = rawFecha ? new Date(rawFecha) : null;
+                        const fechaStr =
+                            parsedDate && !isNaN(parsedDate.getTime())
+                                ? parsedDate.toLocaleString('es-CO', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                  })
+                                : 'Fecha registrada';
+
+                        const motivoTexto =
+                            item.motivo || item.motivo_cambio || item.motivoCambio || null;
+                        const usuarioNombre =
+                            item.usuario?.nombre ||
+                            item.usuario?.email ||
+                            item.usuarioRealizador?.email ||
+                            null;
+
+                        return (
+                            <div
+                                key={item.id_historial || item.idHistorial || index}
+                                className="relative flex gap-4 pl-2"
+                            >
+                                {/* Icono en la línea */}
+                                <div
+                                    className={cn(
+                                        'relative z-10 flex items-center justify-center w-6 h-6 rounded-full',
+                                        config.bgColor,
+                                        isFirst && 'ring-2 ring-offset-2 ring-blue-500'
+                                    )}
+                                >
+                                    <Icon className={cn('h-3.5 w-3.5', config.color)} />
+                                </div>
+
+                                {/* Contenido */}
+                                <div className="flex-1 bg-white rounded-lg p-3 shadow-xs border border-gray-100">
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span
+                                                className={cn(
+                                                    'px-2 py-0.5 rounded-full text-xs font-medium',
+                                                    config.bgColor,
+                                                    config.color
+                                                )}
+                                            >
+                                                {config.label}
+                                            </span>
+                                            {nombreAnterior && (
+                                                <span className="text-xs text-gray-400">
+                                                    ← desde {nombreAnterior}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className="text-xs text-gray-400">{fechaStr}</span>
+                                    </div>
+
+                                    {(motivoTexto || item.observaciones) && (
+                                        <div className="mt-2 text-sm text-gray-600 flex items-start gap-1.5">
+                                            <MessageSquare className="h-3.5 w-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                                            <span>{motivoTexto || item.observaciones}</span>
+                                        </div>
+                                    )}
+
+                                    {usuarioNombre && (
+                                        <div className="mt-1 text-xs text-gray-400 flex items-center gap-1">
+                                            <User className="h-3 w-3" />
+                                            <span>Por: {usuarioNombre}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );

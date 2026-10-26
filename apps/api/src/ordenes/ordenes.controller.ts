@@ -2241,7 +2241,7 @@ export class OrdenesController {
 
     if (alcanceResuelto === 'CLIENTE') {
       idOrdenEquipo = null;
-      idEquipo = body.idEquipo ?? null;
+      idEquipo = body.idEquipo !== undefined ? body.idEquipo : orden.id_equipo;
     } else if (alcanceResuelto === 'SERVICIO' || body.esGeneral === true) {
       idOrdenEquipo = null;
       idEquipo = body.idEquipo !== undefined ? body.idEquipo : orden.id_equipo;
@@ -2381,6 +2381,7 @@ export class OrdenesController {
           select: {
             id_orden_servicio: true,
             numero_orden: true,
+            id_orden_padre: true,
             fecha_programada: true,
             tipo_visita: true,
             numero_visita_caso: true,

@@ -80,6 +80,7 @@ import {
     Check,
     CheckCircle2,
     ChevronDown,
+    ClipboardList,
     Clock,
     DollarSign,
     Download,
@@ -117,7 +118,7 @@ import { useInvalidarReportes } from '@/features/reportes/hooks/use-reportes';
 // TIPOS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type TabId = 'general' | 'ejecucion' | 'financiero' | 'documentos';
+type TabId = 'general' | 'ejecucion' | 'pendientes' | 'financiero' | 'documentos';
 
 interface TabConfig {
     id: TabId;
@@ -128,6 +129,7 @@ interface TabConfig {
 const TABS: TabConfig[] = [
     { id: 'general', label: 'General', icon: FileText },
     { id: 'ejecucion', label: 'Ejecución', icon: Play },
+    { id: 'pendientes', label: 'Pendientes & Hallazgos', icon: ClipboardList },
     { id: 'financiero', label: 'Financiero', icon: DollarSign },
     { id: 'documentos', label: 'Documentos', icon: Camera },
 ];
@@ -495,14 +497,14 @@ function TabGeneral({ orden }: { orden: Orden }) {
                 </div>
             )}
 
+            {/* Matriz Completa de Pendientes y Hallazgos del Caso */}
+            <PendientesSection orden={orden} />
+
             {/* Observaciones de Cierre - Editables por Admin */}
             <ObservacionesCierreSection orden={orden} />
 
             {/* ✅ 19-OCT-2026: Autorización de edición técnica para orden COMPLETADA */}
             <EdicionTecnicoSection orden={orden} />
-
-            {/* Pendientes Técnicos por Orden de Servicio */}
-            <PendientesSection orden={orden} />
 
             {/* Historial de Estados */}
             <HistorialEstados idOrden={orden.id_orden_servicio} />
@@ -3965,7 +3967,10 @@ export default function OrdenDetallePage() {
             )}
 
             {/* ✅ HILO DE CONTINUIDAD DEL CASO (Visita 1 ──▶ Visita N) */}
-            <HiloContinuidadCaso orden={orden} />
+            <HiloContinuidadCaso
+                orden={orden}
+                onOpenPendientesTab={() => setActiveTab('pendientes')}
+            />
 
             {/* ✅ FEATURE ESTILO SYTEX: Panel de Telemetría y Lectura en Tiempo Real */}
             <ProgresoRegistroTelemetria
@@ -3977,23 +3982,46 @@ export default function OrdenDetallePage() {
 
             {/* Tabs */}
             <div className="border-b border-gray-200">
-                <nav className="flex gap-4 -mb-px">
+                <nav className="flex gap-4 -mb-px overflow-x-auto">
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab.id;
                         const Icon = tab.icon;
+                        const totalCasoPendientes =
+                            orden.hilo_caso?.pendientes_totales ??
+                            (orden.ordenes_pendientes?.length || 0);
+                        const activosCasoPendientes =
+                            orden.hilo_caso?.pendientes_abiertos ??
+                            (orden.ordenes_pendientes || []).filter(
+                                (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'
+                            ).length;
+
                         return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={cn(
-                                    'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                                    'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer',
                                     isActive
                                         ? 'border-blue-600 text-blue-600'
                                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                 )}
                             >
                                 <Icon className="h-4 w-4" />
-                                {tab.label}
+                                <span>{tab.label}</span>
+                                {tab.id === 'pendientes' && totalCasoPendientes > 0 && (
+                                    <span
+                                        className={cn(
+                                            'px-2 py-0.5 rounded-full text-[11px] font-bold',
+                                            activosCasoPendientes > 0
+                                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                        )}
+                                    >
+                                        {activosCasoPendientes > 0
+                                            ? `${activosCasoPendientes} activos / ${totalCasoPendientes}`
+                                            : `${totalCasoPendientes}`}
+                                    </span>
+                                )}
                             </button>
                         );
                     })}
@@ -4004,6 +4032,7 @@ export default function OrdenDetallePage() {
             <div className="min-h-[400px]">
                 {activeTab === 'general' && <TabGeneral orden={orden} />}
                 {activeTab === 'ejecucion' && <TabEjecucion orden={orden} />}
+                {activeTab === 'pendientes' && <PendientesSection orden={orden} />}
                 {activeTab === 'financiero' && <TabFinanciero orden={orden} />}
                 {activeTab === 'documentos' && <TabDocumentos orden={orden} />}
             </div>

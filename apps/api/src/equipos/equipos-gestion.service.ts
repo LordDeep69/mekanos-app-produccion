@@ -1825,7 +1825,13 @@ export class EquiposGestionService {
    * Obtener pendientes técnicos históricos y activos de un equipo (Trazabilidad EAM)
    */
   async getPendientesEquipo(idEquipo: number, estadoFiltro?: string) {
-    const where: any = { id_equipo: idEquipo };
+    const where: any = {
+      OR: [
+        { id_equipo: idEquipo },
+        { ordenes_servicio: { id_equipo: idEquipo } },
+        { ordenes_servicio: { ordenes_equipos: { some: { id_equipo: idEquipo } } } },
+      ],
+    };
     if (estadoFiltro && estadoFiltro !== 'TODOS') {
       where.estado = estadoFiltro;
     }

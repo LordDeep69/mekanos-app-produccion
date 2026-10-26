@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
+  Building2,
   CheckCircle2,
   ClipboardList,
   Clock,
   CornerDownRight,
   ExternalLink,
+  Globe,
   Loader2,
   Plus,
   RefreshCw,
@@ -19,7 +21,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
-import { getPendienteEstadoColor, getPrioridadColor } from '@/types/ordenes';
+import { getPendienteEstadoColor, getPendienteEstadoLabel, getPrioridadColor } from '@/types/ordenes';
 
 interface EquipoPendientesTabProps {
   idEquipo: number;
@@ -335,7 +337,7 @@ export function EquipoPendientesTab({
                           estadoClase
                         )}
                       >
-                        {p.estado}
+                        {getPendienteEstadoLabel(p.estado)}
                       </span>
                       <span
                         className={cn(
@@ -345,10 +347,20 @@ export function EquipoPendientesTab({
                       >
                         {p.prioridad}
                       </span>
-                      {ordenSec && (
+                      {p.alcance === 'CLIENTE' ? (
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1">
+                          <Building2 className="h-3 w-3 text-purple-600" />
+                          Cliente / Sede
+                        </span>
+                      ) : p.alcance === 'SERVICIO' ? (
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                          <Globe className="h-3 w-3 text-amber-600" />
+                          Continuidad Servicio
+                        </span>
+                      ) : (
                         <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
                           <Wrench className="h-3 w-3 text-blue-600" />
-                          #{ordenSec} {sistName ? `· ${sistName}` : ''}
+                          {ordenSec ? `#${ordenSec} ${sistName ? `· ${sistName}` : ''}` : 'Equipo'}
                         </span>
                       )}
                     </div>

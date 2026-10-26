@@ -99,6 +99,7 @@ export interface HiloCaso {
     pendientes_resueltos: number;
     pendientes_en_gestion: number;
     pendientes_abiertos: number;
+    pendientes_caso?: OrdenPendiente[];
     visitas: HiloCasoVisita[];
 }
 
@@ -133,23 +134,6 @@ export interface Orden {
     // ✅ FIX 23-SEP-2026: Total de pendientes técnicos para badge en lista
     total_pendientes?: number;
     ordenes_pendientes?: OrdenPendiente[];
-    pendientes_asignados_resolver?: OrdenPendiente[];
-
-    // ✅ Encadenamiento Fractal (Visita 1 -> Visita N)
-    id_cliente?: number;
-    id_equipo?: number;
-    id_orden_padre?: number | null;
-    tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string | null;
-    numero_visita_caso?: number | null;
-    orden_padre?: {
-        id_orden_servicio: number;
-        numero_orden: string;
-        fecha_programada?: string;
-        tipo_visita?: string;
-        numero_visita_caso?: number;
-        estados_orden?: EstadoOrden;
-    } | null;
-    hilo_caso?: HiloCaso;
     pendientes_asignados_resolver?: OrdenPendiente[];
 
     // ✅ Encadenamiento Fractal (Visita 1 -> Visita N)
@@ -501,3 +485,23 @@ export function getPendienteEstadoColor(estado: string): string {
     return colores[estado] || 'bg-gray-100 text-gray-800';
 }
 
+
+export function getPendienteEstadoLabel(estado?: string): string {
+    const labels: Record<string, string> = {
+        PENDIENTE: 'Pendiente',
+        EN_GESTION: 'En Gestión',
+        RESUELTO: 'Resuelto',
+        CANCELADO: 'Cancelado',
+    };
+    return labels[estado || ''] || estado || 'Pendiente';
+}
+
+export function getTipoVisitaLabel(tipo?: string | null): string {
+    const labels: Record<string, string> = {
+        INICIAL: 'Visita Inicial',
+        CONTINUACION: 'Continuación Operativa',
+        CORRECTIVO_DERIVADO: 'Correctivo Derivado',
+        GARANTIA: 'Visita por Garantía',
+    };
+    return labels[tipo || 'INICIAL'] || tipo || 'Visita Inicial';
+}

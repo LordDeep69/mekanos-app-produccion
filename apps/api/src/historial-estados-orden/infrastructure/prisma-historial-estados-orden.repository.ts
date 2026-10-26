@@ -9,12 +9,20 @@ export class PrismaHistorialEstadosOrdenRepository
 {
   constructor(private readonly prisma: PrismaService) {}
 
-  // INCLUDE para lista (orden + estado_nuevo)
+  // INCLUDE para lista (orden + estado_anterior + estado_nuevo + usuario)
   private readonly INCLUDE_RELATIONS_LIST = {
     ordenes_servicio: {
       select: {
         id_orden_servicio: true,
         numero_orden: true,
+      },
+    },
+    estados_orden_historial_estados_orden_id_estado_anteriorToestados_orden: {
+      select: {
+        id_estado: true,
+        codigo_estado: true,
+        nombre_estado: true,
+        color_hex: true,
       },
     },
     estados_orden_historial_estados_orden_id_estado_nuevoToestados_orden: {
@@ -23,6 +31,12 @@ export class PrismaHistorialEstadosOrdenRepository
         codigo_estado: true,
         nombre_estado: true,
         color_hex: true,
+      },
+    },
+    usuarios: {
+      select: {
+        id_usuario: true,
+        email: true,
       },
     },
   };

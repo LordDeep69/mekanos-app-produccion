@@ -548,6 +548,32 @@ export class PrismaOrdenServicioRepository {
             estado: 'EN_GESTION',
           },
         });
+      } else if (rootOrderId) {
+        // 🛡️ BLINDAJE AUTOMÁTICO DE HERENCIA: Si es una visita de seguimiento (rootOrderId != null)
+        // y no se enviaron IDs explícitos de pendientes, heredar automáticamente todos los pendientes
+        // abiertos (PENDIENTE o EN_GESTION) pertenecientes al hilo raíz del caso.
+        const ordenesDelCaso = await tx.ordenes_servicio.findMany({
+          where: {
+            OR: [
+              { id_orden_servicio: rootOrderId },
+              { id_orden_padre: rootOrderId },
+            ],
+          },
+          select: { id_orden_servicio: true },
+        });
+        const idsOrdenesCaso = ordenesDelCaso.map((o) => o.id_orden_servicio);
+        if (idsOrdenesCaso.length > 0) {
+          await tx.ordenes_pendientes.updateMany({
+            where: {
+              id_orden_servicio: { in: idsOrdenesCaso },
+              estado: { in: ['PENDIENTE', 'EN_GESTION'] },
+            },
+            data: {
+              id_orden_resolucion: savedOrden.id_orden_servicio,
+              estado: 'EN_GESTION',
+            },
+          });
+        }
       }
 
       // ✅ Retornar directamente sin consulta adicional
@@ -981,11 +1007,81 @@ export class PrismaOrdenServicioRepository {
           { id_orden_resolucion: { in: visitasIds } },
         ],
       },
-      select: {
-        id_orden_pendiente: true,
-        estado: true,
-        alcance: true,
-        prioridad: true,
+      include: {
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+          },
+        },
+        ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            orden_secuencia: true,
+            nombre_sistema: true,
+          },
+        },
+        catalogo_pendientes: true,
+        ordenes_servicio: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            estados_orden: {
+              select: {
+                id_estado: true,
+                codigo_estado: true,
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
+          },
+        },
+        orden_resolucion: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            estados_orden: {
+              select: {
+                id_estado: true,
+                codigo_estado: true,
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
+          },
+        },
+        empleados_ordenes_pendientes_creado_porToempleados: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+        empleados_ordenes_pendientes_resuelto_porToempleados: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        id_orden_pendiente: 'asc' as const,
       },
     });
 
@@ -999,6 +1095,7 @@ export class PrismaOrdenServicioRepository {
       pendientes_resueltos: pendientesCaso.filter((p) => p.estado === 'RESUELTO').length,
       pendientes_en_gestion: pendientesCaso.filter((p) => p.estado === 'EN_GESTION').length,
       pendientes_abiertos: pendientesCaso.filter((p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION').length,
+      pendientes_caso: pendientesCaso,
       visitas: visitas.map((v, idx) => ({
         ...v,
         numero_visita_caso: v.numero_visita_caso || (idx + 1),

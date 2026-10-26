@@ -231,10 +231,17 @@ function PasoContexto({
                     if (!ord) return;
                     const rootId = ord.id_orden_padre || ord.id_orden_servicio;
                     const rootNum = ord.orden_padre?.numero_orden || ord.numero_orden;
+                    const pCaso = (ord.hilo_caso?.pendientes_caso || ord.ordenes_pendientes || []).filter(
+                        (p: any) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'
+                    );
+                    const autoPIds = pIdsStr
+                        ? pIdsStr.split(',').map(Number).filter(Boolean)
+                        : pCaso.map((p: any) => p.id_orden_pendiente);
                     const nextUpdates: Partial<WizardData> = {
                         idOrdenPadre: rootId,
                         numeroOrdenPadre: rootNum,
                         tipoVisita: tVisita || 'CORRECTIVO_DERIVADO',
+                        idsPendientesAResolver: autoPIds,
                     };
                     if (!cId && (ord.clientes?.id_cliente || ord.id_cliente)) {
                         nextUpdates.clienteId = ord.clientes?.id_cliente || ord.id_cliente;
@@ -287,6 +294,30 @@ function PasoContexto({
             : [...actuales, idPendiente];
         onChange({ idsPendientesAResolver: nuevos });
     };
+
+    const casosAbiertosDetectados = useMemo(() => {
+        const map = new Map<number, { idOrdenRaiz: number; numeroOrdenRaiz: string; pendientesIds: number[]; descripciones: string[] }>();
+        for (const p of pendientesDetectados) {
+            const os = p.ordenes_servicio;
+            if (!os) continue;
+            const rootId = os.id_orden_padre || os.id_orden_servicio;
+            const rootNum = os.numero_orden.replace(/-V\d+$/, '');
+            if (!map.has(rootId)) {
+                map.set(rootId, {
+                    idOrdenRaiz: rootId,
+                    numeroOrdenRaiz: rootNum,
+                    pendientesIds: [],
+                    descripciones: [],
+                });
+            }
+            const entry = map.get(rootId)!;
+            if (!entry.pendientesIds.includes(p.id_orden_pendiente)) {
+                entry.pendientesIds.push(p.id_orden_pendiente);
+                entry.descripciones.push(p.descripcion);
+            }
+        }
+        return Array.from(map.values());
+    }, [pendientesDetectados]);
 
     useEffect(() => {
         if (data.clienteId && !data.clienteSeleccionado && clientes.length > 0) {
@@ -695,6 +726,316 @@ function PasoContexto({
                     )}
                 </div>
             </div>
+
+            {/* ✅ BLOQUE 3: SELECTOR EXPLÍCITO DE CONTINUIDAD DEL CASO Y PENDIENTES ABIERTOS */}
+            {data.clienteId && (
+                <div className="pt-6 border-t border-slate-200 space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <label className="flex items-center gap-2 text-sm font-bold text-slate-800 uppercase tracking-wider">
+                                <Layers className="h-4 w-4 text-indigo-600" />
+                                Escenario / Continuidad del Caso y Pendientes Abiertos
+                            </label>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Defina si esta orden abre un nuevo caso base (Visita #1) o si se encadena como seguimiento a un caso abierto existente.
+                            </p>
+                        </div>
+                        {loadingPendientes && (
+                            <span className="text-xs text-indigo-600 flex items-center gap-1.5 font-semibold">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Consultando pendientes activos...
+                            </span>
+                        )}
+                    </div>
+
+                    {/* 3 Opciones de Continuidad */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {/* Opción A: Nuevo Caso Base (Visita #1) */}
+                        <button
+                            type="button"
+                            onClick={() =>
+                                onChange({
+                                    idOrdenPadre: undefined,
+                                    numeroOrdenPadre: undefined,
+                                    tipoVisita: 'INICIAL',
+                                })
+                            }
+                            className={cn(
+                                'p-4 rounded-2xl border-2 text-left transition-all flex flex-col justify-between gap-2 cursor-pointer',
+                                !data.idOrdenPadre && (data.idsPendientesAResolver?.length || 0) === 0
+                                    ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-500/30 shadow-xs'
+                                    : !data.idOrdenPadre
+                                    ? 'border-blue-400 bg-blue-50/40'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                            )}
+                        >
+                            <div>
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-blue-100 text-blue-800">
+                                        Opción A • Visita #1
+                                    </span>
+                                    {!data.idOrdenPadre && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />}
+                                </div>
+                                <p className="font-bold text-slate-900 text-xs">
+                                    Orden Estándar / Nuevo Escenario Base
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                    Inicia un nuevo expediente raíz independiente (ej. Mantenimiento Preventivo programado o nueva solicitud).
+                                </p>
+                            </div>
+                        </button>
+
+                        {/* Opción B: Vincular a Caso Abierto Existente */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (casosAbiertosDetectados.length > 0) {
+                                    const primero = casosAbiertosDetectados[0];
+                                    onChange({
+                                        idOrdenPadre: primero.idOrdenRaiz,
+                                        numeroOrdenPadre: primero.numeroOrdenRaiz,
+                                        tipoVisita: 'CORRECTIVO_DERIVADO',
+                                        idsPendientesAResolver: primero.pendientesIds,
+                                    });
+                                } else if (ultimasSelecciones.length > 0) {
+                                    const ult = ultimasSelecciones[0];
+                                    onChange({
+                                        idOrdenPadre: ult.id_orden_servicio,
+                                        numeroOrdenPadre: ult.numero_orden,
+                                        tipoVisita: 'CONTINUACION',
+                                    });
+                                } else {
+                                    toast.info('Seleccione abajo la orden o pendientes a vincular.');
+                                }
+                            }}
+                            className={cn(
+                                'p-4 rounded-2xl border-2 text-left transition-all flex flex-col justify-between gap-2 cursor-pointer',
+                                Boolean(data.idOrdenPadre)
+                                    ? 'border-indigo-600 bg-indigo-50/80 ring-1 ring-indigo-500/30 shadow-xs'
+                                    : 'border-slate-200 bg-white hover:border-indigo-300'
+                            )}
+                        >
+                            <div>
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">
+                                        Opción B • Seguimiento
+                                    </span>
+                                    {Boolean(data.idOrdenPadre) && (
+                                        <CheckCircle2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                                    )}
+                                </div>
+                                <p className="font-bold text-slate-900 text-xs">
+                                    Vincular como Nueva Visita a Caso Abierto
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                    Encadena esta orden a un caso raíz previo y hereda automáticamente sus pendientes activos.
+                                </p>
+                            </div>
+                            {casosAbiertosDetectados.length > 0 && (
+                                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md self-start">
+                                    {casosAbiertosDetectados.length} caso(s) con pendientes abiertos
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Opción C: Visita Independiente sin arrastrar pendientes */}
+                        <button
+                            type="button"
+                            onClick={() =>
+                                onChange({
+                                    idOrdenPadre: undefined,
+                                    numeroOrdenPadre: undefined,
+                                    tipoVisita: 'INICIAL',
+                                    idsPendientesAResolver: [],
+                                })
+                            }
+                            className={cn(
+                                'p-4 rounded-2xl border-2 text-left transition-all flex flex-col justify-between gap-2 cursor-pointer',
+                                !data.idOrdenPadre &&
+                                    pendientesDetectados.length > 0 &&
+                                    (data.idsPendientesAResolver?.length || 0) === 0
+                                    ? 'border-emerald-600 bg-emerald-50/60'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                            )}
+                        >
+                            <div>
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-slate-100 text-slate-700">
+                                        Opción C • Aislada
+                                    </span>
+                                </div>
+                                <p className="font-bold text-slate-900 text-xs">
+                                    Visita Independiente (Sin arrastrar pendientes)
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                    Crea la orden limpia sin vincular los pendientes abiertos actuales de la sede o del equipo.
+                                </p>
+                            </div>
+                        </button>
+                    </div>
+
+                    {/* Selector de Caso Raíz si hay casos detectados o últimas órdenes */}
+                    {(casosAbiertosDetectados.length > 0 || Boolean(data.idOrdenPadre)) && (
+                        <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-200 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <span className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider">
+                                    Casos Abiertos Detectados para este Cliente / Equipo:
+                                </span>
+                                {data.idOrdenPadre && (
+                                    <span className="text-xs font-mono font-bold text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-200">
+                                        Vinculado a Caso Raíz: {data.numeroOrdenPadre || `#${data.idOrdenPadre}`}
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {casosAbiertosDetectados.map((caso) => {
+                                    const isSel = data.idOrdenPadre === caso.idOrdenRaiz;
+                                    return (
+                                        <button
+                                            key={caso.idOrdenRaiz}
+                                            type="button"
+                                            onClick={() =>
+                                                onChange({
+                                                    idOrdenPadre: caso.idOrdenRaiz,
+                                                    numeroOrdenPadre: caso.numeroOrdenRaiz,
+                                                    tipoVisita: 'CORRECTIVO_DERIVADO',
+                                                    idsPendientesAResolver: caso.pendientesIds,
+                                                })
+                                            }
+                                            className={cn(
+                                                'p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-3 cursor-pointer',
+                                                isSel
+                                                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                                                    : 'bg-white text-slate-800 border-indigo-200 hover:border-indigo-400'
+                                            )}
+                                        >
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono font-extrabold text-xs">
+                                                        Caso {caso.numeroOrdenRaiz}
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'px-2 py-0.5 rounded-full text-[10px] font-bold',
+                                                            isSel
+                                                                ? 'bg-white/20 text-white'
+                                                                : 'bg-amber-100 text-amber-800'
+                                                        )}
+                                                    >
+                                                        {caso.pendientesIds.length} pendiente(s) abierto(s)
+                                                    </span>
+                                                </div>
+                                                <p
+                                                    className={cn(
+                                                        'text-[11px] truncate mt-0.5',
+                                                        isSel ? 'text-indigo-100' : 'text-slate-500'
+                                                    )}
+                                                >
+                                                    {caso.descripciones[0]}
+                                                </p>
+                                            </div>
+                                            <span className="text-xs font-bold shrink-0">
+                                                {isSel ? '✓ Vinculado' : 'Vincular →'}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Matriz Interactiva de Pendientes Abiertos para Incluir en esta Orden */}
+                    {pendientesDetectados.length > 0 && (
+                        <div className="p-4 rounded-2xl bg-amber-50/40 border border-amber-200 space-y-3">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-extrabold text-amber-950 uppercase tracking-wider">
+                                        🎯 Pendientes Abiertos Disponibles para Resolver en esta Orden
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-600 text-white">
+                                        {(data.idsPendientesAResolver || []).length} / {pendientesDetectados.length} seleccionados
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            onChange({
+                                                idsPendientesAResolver: pendientesDetectados.map(
+                                                    (p) => p.id_orden_pendiente
+                                                ),
+                                            })
+                                        }
+                                        className="font-bold text-amber-800 hover:underline cursor-pointer"
+                                    >
+                                        Seleccionar todos
+                                    </button>
+                                    <span className="text-slate-300">|</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => onChange({ idsPendientesAResolver: [] })}
+                                        className="font-medium text-slate-500 hover:underline cursor-pointer"
+                                    >
+                                        Ninguno
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                                {pendientesDetectados.map((p) => {
+                                    const checked = (data.idsPendientesAResolver || []).includes(
+                                        p.id_orden_pendiente
+                                    );
+                                    const alcance = p.alcance || 'EQUIPO';
+                                    return (
+                                        <div
+                                            key={p.id_orden_pendiente}
+                                            onClick={() => togglePendienteResolver(p.id_orden_pendiente)}
+                                            className={cn(
+                                                'p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 cursor-pointer select-none',
+                                                checked
+                                                    ? 'bg-white border-amber-500 shadow-xs ring-1 ring-amber-500/30'
+                                                    : 'bg-white/60 border-slate-200 opacity-75 hover:opacity-100'
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    'w-4 h-4 rounded mt-0.5 flex items-center justify-center border shrink-0',
+                                                    checked
+                                                        ? 'bg-amber-600 border-amber-600 text-white'
+                                                        : 'border-slate-300 bg-white'
+                                                )}
+                                            >
+                                                {checked && <Check className="h-3 w-3 stroke-[3]" />}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                                                        {alcance === 'CLIENTE'
+                                                            ? '🏢 Cliente / Sede'
+                                                            : alcance === 'SERVICIO'
+                                                            ? '🛠️ Servicio'
+                                                            : `🔧 ${p.equipos?.codigo_equipo || 'Equipo'}`}
+                                                    </span>
+                                                    {p.ordenes_servicio?.numero_orden && (
+                                                        <span className="text-[10px] font-mono font-bold text-indigo-700">
+                                                            Origen: {p.ordenes_servicio.numero_orden}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs font-bold text-slate-900 leading-snug">
+                                                    {p.descripcion}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -1234,7 +1575,14 @@ function PasoAsignacion({
     data: WizardData;
     onChange: (updates: Partial<WizardData>) => void;
 }) {
-    const { data: tecnicos, isLoading } = useTecnicosSelector();
+    const { data: tecnicosRaw, isLoading } = useTecnicosSelector();
+    const tecnicos = useMemo(() => {
+        return (tecnicosRaw || []).filter((t: any) => {
+            const nombre = getTecnicoLabel(t).toUpperCase();
+            if (nombre.includes('KARL MAX') || nombre.includes('SHERLOCK HOLMES')) return false;
+            return true;
+        });
+    }, [tecnicosRaw]);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1275,6 +1623,34 @@ function ResumenOrden({ data }: { data: WizardData }) {
                 <ClipboardList className="h-4 w-4" /> Resumen de Orden
             </h4>
             <div className="space-y-4 text-sm">
+                <div className="p-3 rounded-2xl bg-slate-800/90 border border-slate-700 space-y-1.5">
+                    <p className="text-indigo-400 text-[10px] uppercase font-bold tracking-wider">
+                        Continuidad del Caso
+                    </p>
+                    {data.idOrdenPadre ? (
+                        <div>
+                            <p className="font-mono font-extrabold text-indigo-300 text-xs">
+                                🔗 Vinculada a {data.numeroOrdenPadre || `#${data.idOrdenPadre}`}
+                            </p>
+                            <p className="text-[11px] text-slate-300 mt-0.5">
+                                {data.tipoVisita === 'GARANTIA'
+                                    ? 'Visita por Garantía'
+                                    : data.tipoVisita === 'CONTINUACION'
+                                    ? 'Continuación Operativa'
+                                    : 'Correctivo Derivado'}
+                            </p>
+                        </div>
+                    ) : (
+                        <p className="font-bold text-emerald-300 text-xs">
+                            🆕 Caso Raíz Nuevo (Visita #1)
+                        </p>
+                    )}
+                    {(data.idsPendientesAResolver?.length || 0) > 0 && (
+                        <p className="text-[11px] font-bold text-amber-300 pt-1 border-t border-slate-700">
+                            🎯 {data.idsPendientesAResolver!.length} pendiente(s) heredado(s) a resolver
+                        </p>
+                    )}
+                </div>
                 <div>
                     <p className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Cliente</p>
                     <p
