@@ -1882,16 +1882,48 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             Text('Lectura Horómetro'),
           ],
         ),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            labelText: 'Horas de trabajo',
-            hintText: 'Ej: 12345.5',
-            suffixText: 'hrs',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Horas de trabajo',
+                hintText: 'Ej: 12345.5',
+                suffixText: 'hrs',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Si el panel está quemado, apagado o ilegible, ingresa 0. La orden guardará tu observación y el equipo conservará su histórico acumulado.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blue.shade900,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(

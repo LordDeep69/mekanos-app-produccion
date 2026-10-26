@@ -2478,7 +2478,21 @@ export class FinalizacionOrdenService {
 
             // 2. Validación Zero Trust: Evitar horómetro en reversa si ya existían horas mayores registradas
             if (referenciaHoras > 0 && horas < referenciaHoras) {
-                this.logger.warn(`⚠️ Intento de registrar horómetro menor al actual (${horas} < ${referenciaHoras}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se mantendrán las horas mayores.`);
+                this.logger.warn(`⚠️ Intento de registrar horómetro menor al actual (${horas} < ${referenciaHoras}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se mantendrán las horas mayores en la hoja de vida.`);
+                // Registrar en bitácora para auditoría de campo, pero SIN modificar equipos.horas_actuales
+                await this.prisma.lecturas_horometro.create({
+                    data: {
+                        id_equipo: idEquipo,
+                        id_orden_servicio: idOrden,
+                        horas_lectura: horas,
+                        fecha_lectura: new Date(),
+                        tipo_lectura: 'MANTENIMIENTO',
+                        horas_transcurridas: 0,
+                        dias_transcurridos: null,
+                        registrado_por: usuarioId,
+                        observaciones: `Lectura de campo (${horas}h) menor al acumulado (${referenciaHoras}h). Registrado como referencia de campo sin alterar horas acumuladas del equipo.`,
+                    },
+                });
                 return;
             }
 
@@ -2487,6 +2501,31 @@ export class FinalizacionOrdenService {
                 ? Math.floor((new Date().getTime() - new Date(ultimaLectura.fecha_lectura).getTime()) / (1000 * 60 * 60 * 24))
                 : null;
 
+            // 2.1 Validación de Plausibilidad Física (Anti-Outliers de digitación)
+            // Un equipo no puede operar más de 24 horas por día.
+            // Si pasaron D días, el máximo incremento físico posible es (D + 3) * 24 horas (mínimo 250h de margen)
+            const limiteFisicoHoras = diasTranscurridos != null 
+                ? Math.max(250, (diasTranscurridos + 3) * 24)
+                : 5000;
+            
+            const esSaltoAnomalo = horasTranscurridas != null && horasTranscurridas > limiteFisicoHoras;
+            if (esSaltoAnomalo) {
+                this.logger.warn(`⚠️ Salto anómalo de horómetro detectado (+${horasTranscurridas}h en ${diasTranscurridos} días, límite físico: ${limiteFisicoHoras}h) en equipo ${equipo?.codigo_equipo || idEquipo}. Se audita sin alterar hoja de vida.`);
+                await this.prisma.lecturas_horometro.create({
+                    data: {
+                        id_equipo: idEquipo,
+                        id_orden_servicio: idOrden,
+                        horas_lectura: horas,
+                        fecha_lectura: new Date(),
+                        tipo_lectura: 'MANTENIMIENTO',
+                        horas_transcurridas: horasTranscurridas,
+                        dias_transcurridos: diasTranscurridos,
+                        registrado_por: usuarioId,
+                        observaciones: `⚠️ ALERTA OUTLIER: Incremento de ${horasTranscurridas}h en ${diasTranscurridos} días supera el límite físico (${limiteFisicoHoras}h). Registrado para auditoría técnica sin alterar horas acumuladas.`,
+                    },
+                });
+                return;
+            }
             // 3. Registrar nueva lectura en tabla histórica
             await this.prisma.lecturas_horometro.create({
                 data: {
