@@ -130,6 +130,8 @@ bool _pareceTecnico(String t) {
       caseSensitive: false,
     ),
     RegExp(r'\b(TypeError|ReferenceError)\b'),
+    // `toString()` de cualquier excepción Dart: "NombreDeClase: detalle".
+    RegExp(r'^\s*_?[A-Z][A-Za-z0-9_$]*\s*:\s'),
   ];
   return patrones.any((p) => p.hasMatch(t));
 }

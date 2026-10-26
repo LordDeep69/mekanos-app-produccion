@@ -90,12 +90,13 @@
 
 **Fecha de Actualización:** 23 de Octubre de 2026  
 **Versión:** 6.0 Release Candidate (RC-10 - Blindaje Jurídico y Ficha Técnica de Ingeniería en Motor de Informes Técnicos PDF Puppeteer)  
-**Últimos Commits Clave:** 
+**Últimos Commits Clave:**
+
 - `feat(pdf-engine)`: Blindaje Jurídico, Segregación Taxativa de Repuestos WMS/Cliente y Enriquecimiento de Ficha Técnica en el **Motor de Informes Técnicos PDF** (`pdf.controller.ts`, `pdf.service.ts`, `mekanos-base.template.ts` y las 4 plantillas de servicio):
   - **Segregación Taxativa en 3 Modalidades de Repuestos y Fluidos:**
     - **Tabla A (Suministro Mekanos S.A.S. - Almacén Central / Garantía WMS):** Despachos con `origen_componente = 'BODEGA'`. Detalla SKU / Código de catálogo (`ART-2026-XXXX`), descripción técnica, marca/modelo, cantidad, unidad de medida, badge de Lote de trazabilidad (`LOT-2026-XXXX`) y ubicación en bodega. Incluye nota al pie de certificación de calidad y garantía oficial de repuesto y fluido.
     - **Tabla B (Repuestos e Insumos Provistos por el Cliente - Trazabilidad en Hoja de Vida):** Registro con `origen_componente = 'CLIENTE'`. Detalla descripción, referencia/marca aportada, cantidad, unidad y condición de recepción. Incorpora de forma taxativa la **Cláusula de Exención de Responsabilidad Civil y Garantía**:
-      > *"DECLARACIÓN DE SUMINISTRO EXTERNO: Los materiales y/o fluidos detallados en esta tabla fueron provistos directamente por el cliente a su solicitud para trazabilidad técnica en la hoja de vida del equipo. Mekanos S.A.S. certifica la correcta ejecución técnica de su montaje o aplicación, pero no otorga garantía sobre la procedencia, calidad, idoneidad ni fallas mecánicas derivadas de piezas o fluidos no provistos por nuestro almacén."*
+      > _"DECLARACIÓN DE SUMINISTRO EXTERNO: Los materiales y/o fluidos detallados en esta tabla fueron provistos directamente por el cliente a su solicitud para trazabilidad técnica en la hoja de vida del equipo. Mekanos S.A.S. certifica la correcta ejecución técnica de su montaje o aplicación, pero no otorga garantía sobre la procedencia, calidad, idoneidad ni fallas mecánicas derivadas de piezas o fluidos no provistos por nuestro almacén."_
     - **Tabla C (Adquisiciones Directas en Campo / Compras Locales):** Registro con `origen_componente = 'COMPRA_DIRECTA'`. Detalla ítem, referencia/proveedor, cantidad, unidad y nota de atención de contingencia autorizada en sitio.
     - Fallback elegante para órdenes sin consumo de repuestos (badge informativo neutro en Preventivo B y Correctivo) y retrocompatibilidad total con cadenas legacy de texto plano.
   - **Enriquecimiento Integral de la Ficha Técnica del Activo en el Encabezado:**
@@ -116,7 +117,7 @@
 - `fix(catalogo-kpis)`: Saneamiento de Agregación SQL/Prisma en Catálogo Maestro (`articulos.service.ts`):
   - **Resolución de la Discrepancia 24 vs 25:**
     - Causa Forense Confirmada: La función `getResumen()` realizaba el conteo total con filtro `{ where: { activo: true } }` (obteniendo 24 artículos), pero la consulta de agrupación `groupBy({ by: ['destino_articulo'] })` omitía la cláusula `where`, contabilizando un artículo de prueba legado e inactivo (`id_componente: 1`, `LEGACY-CMP-001`, `Componente legado histórico (Archivado)` con `activo: false` y `destino_articulo: 'INSUMO_SERVICIO'`).
-    - Corrección Aplicada: Se incorporó la condición estricta `where: { activo: true }` a `groupBy`, garantizando que tanto la tarjeta KPI *Total Recursos* (24) como la tarjeta *Insumos de Servicio* (24) y las píldoras de filtrado muestren cifras 100% consistentes y matemáticamente simétricas.
+    - Corrección Aplicada: Se incorporó la condición estricta `where: { activo: true }` a `groupBy`, garantizando que tanto la tarjeta KPI _Total Recursos_ (24) como la tarjeta _Insumos de Servicio_ (24) y las píldoras de filtrado muestren cifras 100% consistentes y matemáticamente simétricas.
 - `feat(catalogo-nuevo)`: Adopción del Selector Combobox Popover Puntual con Drill-Down Exclusivo y Modal In-Context en Alta de Repuestos (`/compras/catalogo/nuevo`):
   - **Experiencia de Usuario Punctual & Zero-Stress:**
     - Sustitución del panel en cascada por el selector Combobox Popover de 40px en reposo, homologando la experiencia validada y elogiada en `/compras/catalogo`.
@@ -142,8 +143,8 @@
   - **Navegación Enfocada Progresiva & Selección Exclusiva (Zero-Saturación):**
     - Erradicación de la sobrecarga visual de árboles saturados y de columnas horizontales: la interfaz se enfoca exclusivamente en el nivel activo.
     - **Paso 1 (Familias Raíz):** Se presentan únicamente las 9 Familias Principales de Nivel 1.
-    - **Paso 2 (Enfoque Exclusivo en Subcategorías):** Al pulsar una familia (e.g. *Filtros y Filtración*), se registra la selección de inmediato (`onChange`), se actualizan las migas de pan superiores y la lista oculta todas las demás familias, desplegando exclusivamente las 6 subcategorías directas de esa familia.
-    - **Paso 3+ (Descenso a $N$-Niveles):** Si se selecciona una subcategoría con hijos (e.g. *Filtros de Aire*), la vista avanza exclusivamente a sus hijas (*FILTRO DE AIRE INTERNO* ➔ *Interno Reciclable*). Si es terminal (e.g. *Filtros de Aceite*), se resalta con badge `Terminal` y estado `✓ Asignada`.
+    - **Paso 2 (Enfoque Exclusivo en Subcategorías):** Al pulsar una familia (e.g. _Filtros y Filtración_), se registra la selección de inmediato (`onChange`), se actualizan las migas de pan superiores y la lista oculta todas las demás familias, desplegando exclusivamente las 6 subcategorías directas de esa familia.
+    - **Paso 3+ (Descenso a $N$-Niveles):** Si se selecciona una subcategoría con hijos (e.g. _Filtros de Aire_), la vista avanza exclusivamente a sus hijas (_FILTRO DE AIRE INTERNO_ ➔ _Interno Reciclable_). Si es terminal (e.g. _Filtros de Aceite_), se resalta con badge `Terminal` y estado `✓ Asignada`.
     - **Navegación Bidireccional Fluida:** Botón `← Volver` para subir un nivel, más migas de pan interactivas como "máquina del tiempo" para saltar a cualquier nivel superior con un solo clic.
     - **Buscador Predictivo Global:** Búsqueda textual instantánea con salto directo al nodo y auto-posicionamiento en su vista enfocada.
     - **Alta In-Context de Ramas:** Creación rápida en caliente con el padre activo preseleccionado.
@@ -196,8 +197,8 @@
 - `b9d4c50`: `fix(wms-ordenes): saneamiento totales prisma, autocierre click-outside, validacion reactiva de existencias y estilizacion selectores`.
 - `feat(wms-ordenes)`: Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`), despacho por bodega/lote FIFO, reversión atómica en Kardex, selector predictivo de OT e impresión en PDF oficial.
 - `d59d83f` / `b852ef8`: `fix(wms): correccion bug falsy zero en modales multi-bodega, preseleccion inteligente con stock, saneamiento kardex historico y footer sticky`.
-**Estado General:** ✅ **~99.5% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
-**Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
+  **Estado General:** ✅ **~99.5% DE COMPLETITUD GLOBAL DEL ECOSISTEMA**  
+  **Documento Maestro Detallado:** Para el análisis exhaustivo, tablas y métricas línea por línea, consulte [ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md).
 
 ---
 
@@ -223,6 +224,7 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
 ## 🔍 RESUMEN DE SUBSISTEMAS Y ÚLTIMAS REMEDIACIONES
 
 ### 1. Expediente EAM 360° de Activos Industriales & Matriz BOM (`/equipos` y `/equipos/[id]`) — **100% Certificado**
+
 - **Lógica de Suficiencia de Stock en Matriz BOM (`stock_actual` vs `cantidad_requerida`):**
   - Se subsanó la validación ingenieril de disponibilidad: si el almacén posee existencias menores a las requeridas por el kit de servicio ($0 < \text{stock} < \text{req}$), el sistema emite el badge ámbar de advertencia `⚠️ X de Y [unidad] (Faltan Z)` y habilita de inmediato el botón `🛒 Pedir OC` hacia `/compras/ordenes/nueva?componenteId=[id]&cantidad=[faltante]`.
   - Cuando el stock cubre o supera el kit ($\text{stock} \ge \text{req}$), emite el badge verde corporativo `✓ Cubre Kit`.
@@ -241,6 +243,7 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
   - Tanto desde los botones `+ Nueva OT` de las tarjetas de `/equipos` como desde `+ Crear Orden de Servicio` en `/equipos/[id]`, los parámetros `?clienteId=...&equipoId=...` son consumidos por el wizard de `/ordenes/nueva`, asociando de forma reactiva y determinista al cliente y preseleccionando el equipo en el Paso 1.
 
 ### 2. Integración Transaccional Bidireccional Inventario WMS ⇄ Órdenes de Servicio (`/ordenes/[id]` y `/inventario`) — **100% Certificado**
+
 - **Modelo de Datos Enriquecido (`public.componentes_usados`):**
   - Incorporadas las columnas y llaves foráneas `id_ubicacion` (hacia `ubicaciones_bodega`), `id_lote` (hacia `lotes_componentes`) e `id_movimiento_inventario` (hacia `movimientos_inventario`), además de la secuencia nativa `componentes_usados_id_componente_usado_seq`.
 - **Motor Transaccional Unificado en `InventarioService` (`apps/api/src/inventario/inventario.service.ts`):**
@@ -248,6 +251,7 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
   - `reintegrarComponenteOrden` (`DELETE /api/ordenes/:id/componentes/:idUso`): Reversión atómica que restaura el saldo en el lote origen y en el catálogo maestro, asienta el contra-movimiento auditable en Kardex (`tipo_movimiento: 'ENTRADA'`, `origen_movimiento: 'DEVOLUCION'`), elimina la imputación en la orden y recalcula los totales financieros.
 
 ### 3. Inventario & Almacén WMS (`/inventario` y `/inventario/[id]`) — **100% Certificado**
+
 - **Auditoría Forense Senior Zero-Trust:**
   - Ajuste físico multi-bodega con cálculo delta en tiempo real.
   - Salida y traslado con control estricto de saldo por bodega origen y rotación FIFO/FEFO.
@@ -257,23 +261,26 @@ El ecosistema ERP/WMS industrial Mekanos ha consolidado la integración transacc
 ---
 
 ## 🎯 PRÓXIMAS DECISIONES Y HOJA DE RUTA
+
 Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Users/Malo/Documents/mekanosApp/mekanos-app-produccion/docs/ESTADO_ACTUAL_SISTEMA_2026.md) para los siguientes pasos:
+
 - **Flujo A:** ✅ **COMPLETADO:** Integración transaccional bidireccional entre Inventario WMS (`/inventario`) y Órdenes de Servicio (`/ordenes/[id]`).
 - **Flujo B:** ✅ **COMPLETADO:** Pruebas de integración de recepciones automáticas de mercancía (Orden de Compra -> Entrada a Lote WMS).
 - **Flujo C:** ✅ **COMPLETADO:** Evolución EAM 360° de Equipos (`/equipos` y `/equipos/[id]`), Matriz BOM con stock WMS en vivo, edición inline, kits completos vs insuficientes y sugerencias de despacho en OTs.
-
 
 ---
 
 ## 🏛️ GESTIÓN INTELIGENTE Y TRAZABILIDAD MULTI-EQUIPO DE PENDIENTES TÉCNICOS (COMMIT c6c5c37) — **100% CERTIFICADO**
 
 ### 1. Formulario Estratégico y Categorías Dinámicas en Catálogo Maestro (`/configuracion/catalogos/pendientes`)
+
 - **Categorías Vivas en Base de Datos:** Eliminado el texto libre hardcodeado. Se consulta `GET /api/ordenes/catalogo-pendientes/categorias` que extrae dinámicamente las categorías reales existentes en la base de datos (`ELECTRICO`, `MECANICO`, `COMBUSTIBLE`, `HIDRAULICO`, `ELECTRONICO`, `INSTRUMENTACION`, `LIMPIEZA`, `GENERAL`), enriquecido con selector táctil de badges e iconos vectoriales.
 - **Creación In-Context (`+ Nueva Categoría`):** Modal interactivo que permite añadir nuevas familias en caliente sin salir del flujo de trabajo, formateándolas en mayúsculas y asignándolas de inmediato.
 - **Tipos de Equipo Dinámicos:** Lectura directa desde `tipos_equipo` de la base de datos relacional (Generador Eléctrico, Bomba Hidráulica, Compresor de Aire, Motor Industrial, etc.), con opción explícita `🌐 Aplica Universalmente a Todo Tipo de Activo`.
 - **Autogenerador Mnemotécnico Anti-Colisión:** Algoritmo en tiempo real con patrón `PEND-[PREFIJO]-[SLUG]-[SUFFIX]` que sugiere códigos inteligentes basados en la descripción y tipo de equipo (ej: `PEND-GEN-BAT-ARR`, `PEND-BOM-FUG-SEL-MEC`) con verificación instantánea de unicidad (`✓ Código único verificado` vs `⚠️ Código ya en uso`).
 
 ### 2. Modal Ergonómico Dedicado en App Mobile (`apps/mobile` - Flutter)
+
 - **Sustitución del Widget Apretado Inline:** En la pantalla de ejecución (`ejecucion_screen.dart`), se despliega una **Tarjeta Ejecutiva Limpia** con badge de conteo y botón prominente `[+ Registrar / Gestionar Pendientes]`.
 - **Modal Sheet de Alta Comodidad (90% de pantalla):**
   - **Selector Multi-Equipo en Cabecera Sticky:** Si la orden comprende múltiples máquinas, el técnico selecciona primero a cuál corresponde el pendiente mediante chips táctiles grandes (`#1 · Bomba Jockey`, `#2 · Bomba Principal`).
@@ -281,6 +288,7 @@ Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Us
   - **Pestaña 2 - Hallazgo Personalizado:** Formulario táctil espacioso con selector de prioridad, campo de descripción multilínea y notas de referencia para cotización posterior.
 
 ### 3. Arquitectura y Trazabilidad Multi-Equipo (`ordenes_pendientes` ⇄ `equipos` ⇄ `ordenes_equipos`)
+
 - **Binding Atómico de Integridad Referencial:**
   - En `POST /api/ordenes/:id/pendientes`, se resuelve y vincula obligatoriamente `id_orden_equipo` junto con `id_equipo`, asociando el hallazgo a la máquina específica dentro de órdenes de batería o estaciones de bombeo.
   - Respuesta enriquecida con relación `ordenes_equipos: { select: { id_orden_equipo, orden_secuencia, nombre_sistema } }`.
@@ -288,3 +296,47 @@ Consulte el documento maestro [docs/ESTADO_ACTUAL_SISTEMA_2026.md](file:///c:/Us
   - Endpoint de consulta EAM que reporta `total`, `activosCount`, `resueltosCount`, `canceladosCount` y la lista completa de pendientes asociados al activo a lo largo de su ciclo de vida.
 - **Pestaña 4 en Expediente 360° (`/equipos/[id]`):**
   - Incorporada la pestaña **"4. Hallazgos & Pendientes Técnicos"** (`EquipoPendientesTab`), con tarjetas KPI de abiertos vs resueltos, filtros por estado, buscador y enlaces directos a las Órdenes de Servicio de origen para auditoría y cotización post-servicio.
+
+---
+
+## ⏱️ PROPAGACIÓN MULTI-EQUIPO Y SANEAMIENTO GLOBAL DE HORÓMETROS EAM (COMMIT b3c6f6c) — **100% CERTIFICADO**
+
+### 1. Diagnóstico Forense y Causa Raíz de Desincronización (Zero-Trust)
+
+Durante la auditoría del activo `GEN-MAGA-SGUG6M` (Planta KDE 1200 TA en COMFENALCO, ID `379`), se detectó que a pesar de contar con 8 órdenes de servicio completadas (la última `OS-202610-0114` con 276 h registradas en mediciones), la tarjeta KPI y la hoja de vida reportaban `0 hrs`. El análisis forense reveló 5 causas raíz concatenadas:
+
+1. **Falla de Secuencia en Base de Datos (`lecturas_horometro.id_lectura`):** La tabla histórica carecía de `DEFAULT nextval(...)` y Prisma schema no tenía `@default(autoincrement())`. Toda inserción de lectura lanzaba error de Prisma (`Argument id_lectura is missing`), el cual era silenciado en el bloque `catch` de `persistirHorometro`.
+2. **Omisión de Mutación de Estado en `equipos`:** El método `persistirHorometro` únicamente insertaba en la bitácora `lecturas_horometro`, pero nunca ejecutaba la mutación del activo `prisma.equipos.update({ where: { id_equipo }, data: { horas_actuales: horas } })`.
+3. **Punto Ciego en Órdenes Multi-Equipo:** En el paso 7.5 de `finalizacion-orden.service.ts`, el motor de finalización asumía exclusivamente órdenes mono-equipo (`orden.id_equipo`). En órdenes con batería de equipos o estaciones de bombeo (`orden.ordenes_equipos`), `orden.id_equipo` era nulo o solo apuntaba a la máquina primaria, provocando rechazo (`idEquipo must not be null`) o ignorando los demás equipos.
+4. **Omisión en Flujos de Medición en Tiempo Real:** Ni el sincronizador móvil (`sync.service.ts` -> `processMedicion`) ni la captura desde Portal Admin (`ordenes.controller.ts` -> `crearMedicion`) propagaban las lecturas de horómetro al activo al momento de crearse la medición.
+5. **Doble Patrón de Captura Móvil:** La app técnica en Flutter permite registrar el horómetro tanto como medición técnica (`GEN_HOROMETRO` / `Horas de Trabajo`) como en observaciones de actividades del checklist (`_marcarHorometro` guardando `observaciones: "HORAS: 276"`), pero el backend solo esperaba mediciones numéricas estructuradas.
+
+### 2. Blindaje Integral de Backend (`apps/api`)
+
+- **Normalización y Extracción Polimórfica:**
+  - `esParametroHorometro(param)`: Detección insensible a mayúsculas/acentos de `horometro`, `gen_horometro`, `horas de trabajo`, `horas de operacion`, `horas motor`, `tiempo de uso`.
+  - `extraerHorasDeObservacion(obs)`: Parser regex capaz de extraer el valor numérico de cadenas tipo `"HORAS: 276"` o `"Horómetro: 416.5"`.
+- **Iteración Multi-Equipo Determinista en Finalización:**
+  - Al completar la orden, el servicio itera sobre cada máquina de `orden.ordenes_equipos`.
+  - Resuelve las lecturas correspondientes desde `dto.medicionesPorEquipo`, `dto.mediciones` (filtrando por `idOrdenEquipo`), `dto.actividadesPorEquipo` o fallbacks de la orden.
+- **Mutación Atómica y Validación Anti-Retroceso en `persistirHorometro`:**
+  - Valida que las horas sean positivas y que no retrocedan respecto al máximo histórico registrado.
+  - Inserta el registro auditable en `lecturas_horometro` (`origen: "FINALIZACION_ORDEN"` o `"MEDICION_SERVICIO"`).
+  - Actualiza de forma atómica en `equipos`: `horas_actuales = horas` y `fecha_ultima_lectura_horas = now()`.
+- **Sincronización en Tiempo Real:**
+  - Integrada la actualización de horómetro en `SyncService.processMedicion` (subidas offline/online de técnicos móviles) y en `OrdenesController.crearMedicion` (Portal Admin).
+
+### 3. Saneamiento Global de la Flota (Auto-Healing de Base de Datos)
+
+- Se ejecutó script de conciliación histórica sobre las 680 mediciones de horómetro existentes en producción:
+  - **152 equipos** actualizaron su horómetro al valor real más alto de sus órdenes de servicio y quedaron con sus respectivas bitácoras en `lecturas_horometro`.
+  - Activo `GEN-MAGA-SGUG6M` (ID 379) sincronizado exitosamente de `0 hrs` a **`276 hrs`** (lectura #134, originada en OT `OS-202610-0114`).
+  - Activo `GEN-EDIF-T86FEH` (ID 351) certificado en **`416 hrs`** (OT `OS-202610-0021`).
+
+### 4. Auditoría y Certificación 360° de la Ficha de Activos (`/equipos/[id]`)
+
+- **Tarjeta Superior KPI:** Muestra en tiempo real las horas sincronizadas del activo con timestamp de última actualización.
+- **Pestaña 1 - Ficha Técnica:** Placa de especificaciones (kVA, motor, alternador, RPM, voltaje, serie) y ubicación física del cliente.
+- **Pestaña 2 - Matriz BOM & Kits WMS:** Repuestos compatibles vinculados, stock disponible en bodegas, validación de kit completo y despacho predictivo.
+- **Pestaña 3 - Historial de Intervenciones:** Listado cronológico de OTs con estado, técnico asignado, tipo de mantenimiento y enlace directo al reporte PDF legal.
+- **Pestaña 4 - Hallazgos & Pendientes Técnicos:** Trazabilidad integral de necesidades técnicas pendientes con indicador de prioridad y criticidad.

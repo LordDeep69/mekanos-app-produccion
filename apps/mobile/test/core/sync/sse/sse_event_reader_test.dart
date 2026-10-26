@@ -173,9 +173,7 @@ void main() {
 
       // Comentarios cada 50 ms: hay bytes (no hay stall), pero el proceso
       // total supera el límite de 300 ms.
-      var latido = 0;
       final timer = Timer.periodic(const Duration(milliseconds: 50), (t) {
-        latido++;
         controller.add(utf8.encode(': keep-alive\n\n'));
       });
 
