@@ -522,6 +522,22 @@ export class SyncService {
         // aunque no haya órdenes modificadas, para permitir refrescar catálogos (p.ej. nuevas actividades).
         this.logger.log(`[Sync Delta] No hay órdenes modificadas desde ${sinceIsoString}`);
 
+        // Obtener SIEMPRE catálogo de pendientes frecuentes activos para mantener mobile 100% sincronizado
+        const pendientesRaw = await this.prisma.catalogo_pendientes.findMany({
+          where: { activo: true },
+          orderBy: [{ orden_visual: 'asc' }, { id_pendiente_catalogo: 'asc' }],
+        });
+        const pendientesDelta = pendientesRaw.map((p) => ({
+          id: p.id_pendiente_catalogo,
+          idPendienteCatalogo: p.id_pendiente_catalogo,
+          codigo: p.codigo ?? undefined,
+          descripcion: p.descripcion,
+          categoria: p.categoria ?? undefined,
+          idTipoEquipo: p.id_tipo_equipo ?? undefined,
+          ordenVisual: p.orden_visual ?? 0,
+          activo: p.activo ?? true,
+        }));
+
         if (includeCatalogs) {
           this.logger.log('[Sync Delta] includeCatalogs=true → enviando catálogos completos sin órdenes');
 
@@ -602,6 +618,7 @@ export class SyncService {
               nombre: t.nombre_tipo,
               descripcion: t.descripcion ?? undefined,
             })),
+            catalogoPendientes: pendientesDelta,
           };
         }
 
@@ -616,6 +633,7 @@ export class SyncService {
           actividadesCatalogo: [],
           estadosOrden: [],
           tiposServicio: [],
+          catalogoPendientes: pendientesDelta,
         };
       }
 
@@ -1103,25 +1121,26 @@ export class SyncService {
         descripcion: t.descripcion ?? undefined,
       }));
 
-      // 7. Obtener catálogo de pendientes frecuentes activos
-      const pendientes = await this.prisma.catalogo_pendientes.findMany({
-        where: { activo: true },
-        orderBy: [{ orden_visual: 'asc' }, { id_pendiente_catalogo: 'asc' }],
-      });
-
-      pendientesDownload = pendientes.map((p) => ({
-        id: p.id_pendiente_catalogo,
-        idPendienteCatalogo: p.id_pendiente_catalogo,
-        codigo: p.codigo ?? undefined,
-        descripcion: p.descripcion,
-        categoria: p.categoria ?? undefined,
-        idTipoEquipo: p.id_tipo_equipo ?? undefined,
-        ordenVisual: p.orden_visual ?? 0,
-        activo: p.activo ?? true,
-      }));
     } else {
-      this.logger.log('[Sync Delta] Omitiendo catálogos (ya sincronizados)');
+      this.logger.log('[Sync Delta] Omitiendo catálogos pesados (ya sincronizados)');
     }
+
+    // 7. Obtener SIEMPRE catálogo de pendientes frecuentes activos para mantener mobile 100% sincronizado
+    const pendientes = await this.prisma.catalogo_pendientes.findMany({
+      where: { activo: true },
+      orderBy: [{ orden_visual: 'asc' }, { id_pendiente_catalogo: 'asc' }],
+    });
+
+    pendientesDownload = pendientes.map((p) => ({
+      id: p.id_pendiente_catalogo,
+      idPendienteCatalogo: p.id_pendiente_catalogo,
+      codigo: p.codigo ?? undefined,
+      descripcion: p.descripcion,
+      categoria: p.categoria ?? undefined,
+      idTipoEquipo: p.id_tipo_equipo ?? undefined,
+      ordenVisual: p.orden_visual ?? 0,
+      activo: p.activo ?? true,
+    }));
 
     // Log resumen de sync
     this.logger.log(`[Sync] Resultado: ${ordenesDownload.length} órdenes, ${parametrosDownload.length} params, ${actividadesDownload.length} actividades, ${pendientesDownload.length} pendientes`);
@@ -1137,7 +1156,7 @@ export class SyncService {
       actividadesCatalogo: actividadesDownload,
       estadosOrden: estadosDownload,
       tiposServicio: tiposServicioDownload,
-      catalogoPendientes: includeCatalogs ? pendientesDownload : undefined,
+      catalogoPendientes: pendientesDownload,
       ordenesEliminadas: since ? ordenesEliminadasIds : undefined,
       idsOrdenesValidas: since ? undefined : idsOrdenesValidas,
     };

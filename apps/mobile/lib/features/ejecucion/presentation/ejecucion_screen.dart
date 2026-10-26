@@ -19,6 +19,7 @@ import '../../firmas/presentation/firmas_section.dart';
 import '../../settings/presentation/configuracion_screen.dart'
     show formatoHora24Provider;
 import '../data/ejecucion_service.dart';
+import '../../../core/telemetria/telemetria_service.dart';
 import 'pendientes_orden_widget.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
@@ -83,11 +84,25 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     // ✅ FIX 17-DIC-2025: Orden simple = 3 tabs (Checklist + Mediciones + Resumen)
     // Multi-equipo = 2 tabs (Resumen está en NavigacionEquiposScreen)
     _tabController = TabController(length: _esOrdenSimple ? 3 : 2, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _cargarDatos();
+  }
+
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging && _orden?.idBackend != null) {
+      final tabName = _tabController.index == 0
+          ? 'Checklist ($_completadas/$_total)'
+          : _tabController.index == 1
+              ? 'Mediciones ($_medicionesConValor/$_totalMediciones)'
+              : 'Resumen de Finalización';
+      ref.read(telemetriaServiceProvider).updateActividad(tabName);
+    }
   }
 
   @override
   void dispose() {
+    ref.read(telemetriaServiceProvider).stopHeartbeat();
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _observacionesController.dispose();
     _observacionesFocusNode.dispose();
@@ -190,6 +205,14 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       } else {
         _esCorrectivo = false;
         _esBomba = false;
+      // ✅ SEGUIMIENTO EN TIEMPO REAL: Iniciar telemetría / heartbeat para Portal Admin
+      if (orden?.idBackend != null) {
+        ref.read(telemetriaServiceProvider).startHeartbeat(
+          idOrdenBackend: orden!.idBackend!,
+          numeroOrden: _numeroOrden ?? 'Sin número',
+          actividadInicial:
+              'Checklist: $_completadas/$_total | Mediciones: $_medicionesConValor/$_totalMediciones',
+        );
       }
     } catch (e) {
       print('❌ Error cargando datos: $e');
@@ -253,6 +276,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         setState(() {
           _completadas = completadas;
         });
+
+        // ✅ Notificar telemetría en tiempo real
+        ref.read(telemetriaServiceProvider).updateActividad(
+          'Checklist: $_completadas/$_total ($simbologia) | Mediciones: $_medicionesConValor/$_totalMediciones',
+        );
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1230,6 +1258,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       setState(() {
         _medicionesConValor = conValor;
       });
+
+      // ✅ Notificar telemetría en tiempo real
+      ref.read(telemetriaServiceProvider).updateActividad(
+        'Medición registrada ($_medicionesConValor/$_totalMediciones) | Checklist: $_completadas/$_total',
+      );
     }
   }
 
@@ -4968,7 +5001,6 @@ class _SyncProgressDialog extends ConsumerWidget {
     final isCompleted = progress.pasosCompletados.contains(step);
     final isActive = progress.pasoActual == step;
     final isError = progress.pasoActual == SyncStep.error && isActive;
-    final isPending = !isCompleted && !isActive;
 
     Color color;
     Widget leading;

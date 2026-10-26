@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
 
@@ -44,6 +45,7 @@ class _PendientesOrdenWidgetState
   void initState() {
     super.initState();
     _cargarDatos();
+    _refrescarCatalogoRemoto();
   }
 
   Future<void> _cargarDatos() async {
@@ -64,6 +66,55 @@ class _PendientesOrdenWidgetState
     } catch (e) {
       debugPrint('❌ Error cargando pendientes: $e');
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Sincroniza en segundo plano el catálogo de pendientes desde el servidor
+  Future<void> _refrescarCatalogoRemoto() async {
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final db = ref.read(databaseProvider);
+      final response = await apiClient.dio.get('/ordenes/catalogo-pendientes');
+      if (response.statusCode == 200 && response.data is List) {
+        final List list = response.data as List;
+        for (final item in list) {
+          if (item is! Map) continue;
+          final rawId = item['id'] ?? item['idPendienteCatalogo'] ?? item['id_pendiente_catalogo'];
+          final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '') ?? 0;
+          if (id == 0) continue;
+
+          final rawTipo = item['idTipoEquipo'] ?? item['id_tipo_equipo'];
+          final idTipo = rawTipo is int ? rawTipo : int.tryParse(rawTipo?.toString() ?? '');
+
+          final rawOrden = item['ordenVisual'] ?? item['orden_visual'];
+          final ordenVisual = rawOrden is int ? rawOrden : int.tryParse(rawOrden?.toString() ?? '') ?? 0;
+
+          final rawActivo = item['activo'];
+          final activo = rawActivo is bool ? rawActivo : (rawActivo?.toString().toLowerCase() != 'false');
+
+          await db.upsertPendienteCatalogo(
+            PendientesCatalogoCompanion(
+              id: Value(id),
+              codigo: Value(item['codigo'] as String?),
+              descripcion: Value(item['descripcion'] as String? ?? ''),
+              categoria: Value(item['categoria'] as String? ?? 'GENERAL'),
+              idTipoEquipo: Value(idTipo),
+              activo: Value(activo),
+              ordenVisual: Value(ordenVisual),
+              lastSyncedAt: Value(DateTime.now()),
+            ),
+          );
+        }
+
+        final updatedCats = await db.getPendientesCatalogo();
+        if (mounted) {
+          setState(() {
+            _catalogo = updatedCats;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('ℹ️ [PENDIENTES] Catálogo remoto no disponible (modo offline): $e');
     }
   }
 
@@ -440,6 +491,8 @@ class _ModalGestionPendientesState
     extends ConsumerState<_ModalGestionPendientes> {
   late int? _idOrdenEquipoSeleccionado;
   late int? _idEquipoSeleccionado;
+  late List<PendientesCatalogoData> _catalogoItems;
+  bool _isRefreshingCatalogo = false;
 
   String _filtroCategoria = 'TODAS';
   String _busqueda = '';
@@ -454,6 +507,7 @@ class _ModalGestionPendientesState
   @override
   void initState() {
     super.initState();
+    _catalogoItems = List.from(widget.catalogo);
     _idOrdenEquipoSeleccionado = widget.widget.idOrdenEquipo;
     _idEquipoSeleccionado = widget.widget.idEquipo;
 
@@ -464,6 +518,71 @@ class _ModalGestionPendientesState
       final primerEq = widget.widget.equipos!.first;
       _idOrdenEquipoSeleccionado = primerEq.idOrdenEquipo;
       _idEquipoSeleccionado = primerEq.idEquipo;
+    }
+  }
+
+  Future<void> _actualizarCatalogoManual() async {
+    setState(() => _isRefreshingCatalogo = true);
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final db = ref.read(databaseProvider);
+      final response = await apiClient.dio.get('/ordenes/catalogo-pendientes');
+      if (response.statusCode == 200 && response.data is List) {
+        final List list = response.data as List;
+        for (final item in list) {
+          if (item is! Map) continue;
+          final rawId = item['id'] ?? item['idPendienteCatalogo'] ?? item['id_pendiente_catalogo'];
+          final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '') ?? 0;
+          if (id == 0) continue;
+
+          final rawTipo = item['idTipoEquipo'] ?? item['id_tipo_equipo'];
+          final idTipo = rawTipo is int ? rawTipo : int.tryParse(rawTipo?.toString() ?? '');
+
+          final rawOrden = item['ordenVisual'] ?? item['orden_visual'];
+          final ordenVisual = rawOrden is int ? rawOrden : int.tryParse(rawOrden?.toString() ?? '') ?? 0;
+
+          final rawActivo = item['activo'];
+          final activo = rawActivo is bool ? rawActivo : (rawActivo?.toString().toLowerCase() != 'false');
+
+          await db.upsertPendienteCatalogo(
+            PendientesCatalogoCompanion(
+              id: Value(id),
+              codigo: Value(item['codigo'] as String?),
+              descripcion: Value(item['descripcion'] as String? ?? ''),
+              categoria: Value(item['categoria'] as String? ?? 'GENERAL'),
+              idTipoEquipo: Value(idTipo),
+              activo: Value(activo),
+              ordenVisual: Value(ordenVisual),
+              lastSyncedAt: Value(DateTime.now()),
+            ),
+          );
+        }
+
+        final updated = await db.getPendientesCatalogo();
+        if (mounted) {
+          setState(() {
+            _catalogoItems = updated;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✓ Catálogo actualizado (${updated.length} sugerencias)'),
+              backgroundColor: Colors.green.shade700,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Modo offline: se mantiene el catálogo local actual'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshingCatalogo = false);
     }
   }
 
@@ -484,7 +603,7 @@ class _ModalGestionPendientesState
 
   List<String> _obtenerCategoriasDisponibles() {
     final setCat = <String>{'TODAS'};
-    for (final item in widget.catalogo) {
+    for (final item in _catalogoItems) {
       if (item.categoria != null && item.categoria!.isNotEmpty) {
         setCat.add(item.categoria!.trim().toUpperCase());
       }
@@ -578,7 +697,7 @@ class _ModalGestionPendientesState
   @override
   Widget build(BuildContext context) {
     final categorias = _obtenerCategoriasDisponibles();
-    final itemsFiltrados = widget.catalogo.where((item) {
+    final itemsFiltrados = _catalogoItems.where((item) {
       final matchCat =
           _filtroCategoria == 'TODAS' || item.categoria == _filtroCategoria;
       final matchSearch = _busqueda.isEmpty ||
@@ -654,9 +773,24 @@ class _ModalGestionPendientesState
                       ),
                     ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 24),
-                    onPressed: () => Navigator.pop(context),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: _isRefreshingCatalogo
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.sync, color: Colors.blue, size: 22),
+                        tooltip: 'Actualizar catálogo desde servidor',
+                        onPressed: _isRefreshingCatalogo ? null : _actualizarCatalogoManual,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 24),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -798,7 +932,7 @@ class _ModalGestionPendientesState
                 tabs: [
                   Tab(
                     icon: const Icon(Icons.auto_stories_rounded, size: 18),
-                    text: 'Catálogo Sugerido (${widget.catalogo.length})',
+                    text: 'Catálogo Sugerido (${_catalogoItems.length})',
                   ),
                   const Tab(
                     icon: Icon(Icons.edit_note_rounded, size: 18),

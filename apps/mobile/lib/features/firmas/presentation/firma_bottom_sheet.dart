@@ -526,13 +526,14 @@ class _FirmaFullscreenScreenState extends State<FirmaFullscreenScreen> {
               onPressed: _tieneTrazo
                   ? () async {
                       try {
+                        final nav = Navigator.of(context);
                         final ui.Image img =
                             await _padKey.currentState!.toImage();
                         final byteData =
                             await img.toByteData(format: ui.ImageByteFormat.png);
                         if (!mounted) return;
                         if (byteData != null) {
-                          Navigator.pop(context, byteData.buffer.asUint8List());
+                          nav.pop(byteData.buffer.asUint8List());
                         }
                       } catch (e) {
                         debugPrint('Error capturando firma expandida: $e');
