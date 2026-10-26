@@ -1630,6 +1630,9 @@ model ordenes_servicio {
   edicion_tecnico_autorizada_por                                                           Int?
   edicion_tecnico_fecha_autorizacion                                                       DateTime?                   @db.Timestamp(6)
   edicion_tecnico_motivo                                                                   String?                     @db.VarChar(500)
+  id_orden_padre                                                                           Int?
+  tipo_visita                                                                              String?                     @default("INICIAL") @db.VarChar(50)
+  numero_visita_caso                                                                       Int?                        @default(1)
   actividades_ejecutadas                                                                   actividades_ejecutadas[]
   componentes_usados                                                                       componentes_usados[]
   cotizaciones                                                                             cotizaciones[]
@@ -1657,6 +1660,9 @@ model ordenes_servicio {
   propuestas_correctivo_propuestas_correctivo_id_orden_servicioToordenes_servicio          propuestas_correctivo[]     @relation("propuestas_correctivo_id_orden_servicioToordenes_servicio")
   propuestas_correctivo_propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio propuestas_correctivo[]     @relation("propuestas_correctivo_id_orden_servicio_generadaToordenes_servicio")
   remisiones                                                                               remisiones[]
+  orden_padre                                                                              ordenes_servicio?           @relation("OrdenHiloCaso", fields: [id_orden_padre], references: [id_orden_servicio], onDelete: SetNull, map: "fk_os_orden_padre")
+  visitas_hijas                                                                            ordenes_servicio[]          @relation("OrdenHiloCaso")
+  pendientes_asignados_resolver                                                            ordenes_pendientes[]        @relation("OrdenResolucionPendiente")
 
   @@index([id_cliente, fecha_programada(sort: Desc)], map: "idx_os_cliente_fecha")
   @@index([id_equipo, fecha_programada(sort: Desc)], map: "idx_os_equipo_fecha")
@@ -1667,6 +1673,7 @@ model ordenes_servicio {
   @@index([fecha_creacion(sort: Desc)], map: "idx_ordenes_fecha_creacion")
   @@index([id_firma_tecnico], map: "idx_ordenes_firma_tecnico")
   @@index([prioridad, id_estado_actual], map: "idx_ordenes_prioridad_estado")
+  @@index([id_orden_padre], map: "idx_os_orden_padre")
 }
 
 model historial_emails_enviados {
@@ -2987,16 +2994,18 @@ model catalogo_pendientes {
 
 model ordenes_pendientes {
   id_orden_pendiente                                          Int                          @id @default(autoincrement())
-  id_orden_servicio                                           Int
+  id_orden_servicio                                           Int?
   id_cliente                                                  Int
-  id_equipo                                                   Int
+  id_equipo                                                   Int?
   id_orden_equipo                                             Int?
   id_pendiente_catalogo                                       Int?
+  alcance                                                     String?                      @default("EQUIPO") @db.VarChar(30)
   descripcion                                                 String                       @db.VarChar(1000)
   origen                                                      origen_pendiente_enum?       @default(CATALOGO)
   prioridad                                                   prioridad_enum?              @default(NORMAL)
   estado                                                      estado_pendiente_orden_enum  @default(PENDIENTE)
   observaciones                                               String?
+  id_orden_resolucion                                         Int?
   creado_por                                                  Int?
   fecha_creacion                                              DateTime                     @default(now()) @db.Timestamp(6)
   fecha_resolucion                                            DateTime?                    @db.Timestamp(6)
@@ -3004,13 +3013,16 @@ model ordenes_pendientes {
   observaciones_resolucion                                    String?
   catalogo_pendientes                                         catalogo_pendientes?         @relation(fields: [id_pendiente_catalogo], references: [id_pendiente_catalogo])
   clientes                                                    clientes                     @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade)
-  equipos                                                     equipos                      @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+  equipos                                                     equipos?                     @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
   ordenes_equipos                                             ordenes_equipos?             @relation(fields: [id_orden_equipo], references: [id_orden_equipo])
-  ordenes_servicio                                            ordenes_servicio             @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  ordenes_servicio                                            ordenes_servicio?            @relation(fields: [id_orden_servicio], references: [id_orden_servicio], onDelete: Cascade)
+  orden_resolucion                                            ordenes_servicio?            @relation("OrdenResolucionPendiente", fields: [id_orden_resolucion], references: [id_orden_servicio], onDelete: SetNull, map: "fk_op_orden_resolucion")
   empleados_ordenes_pendientes_creado_porToempleados          empleados?                   @relation("ordenes_pendientes_creado_porToempleados", fields: [creado_por], references: [id_empleado])
   empleados_ordenes_pendientes_resuelto_porToempleados        empleados?                   @relation("ordenes_pendientes_resuelto_porToempleados", fields: [resuelto_por], references: [id_empleado])
 
   @@index([id_orden_servicio], map: "idx_op_orden")
+  @@index([id_orden_resolucion], map: "idx_op_orden_resolucion")
+  @@index([alcance], map: "idx_op_alcance")
   @@index([id_cliente, estado], map: "idx_op_cliente_estado")
   @@index([id_equipo, estado], map: "idx_op_equipo_estado")
   @@index([id_orden_equipo], map: "idx_op_orden_equipo")

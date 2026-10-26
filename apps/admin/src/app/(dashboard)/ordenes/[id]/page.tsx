@@ -63,6 +63,7 @@ import { HorariosServicioSection } from '@/features/ordenes/components/horarios-
 import { MedicionCardAdvanced, ResumenMediciones } from '@/features/ordenes/components/medicion-card-advanced';
 import { ObservacionesCierreSection } from '@/features/ordenes/components/observaciones-section';
 import { PendientesSection } from '@/features/ordenes/components/pendientes-section';
+import { HiloContinuidadCaso } from '@/features/ordenes/components/hilo-continuidad-caso';
 import { OrdenEditModal } from '@/features/ordenes/components/orden-edit-modal';
 import { SelectorCard } from '@/features/ordenes/components/selector-card';
 import { ProgresoRegistroTelemetria } from '@/features/ordenes/components/progreso-registro-telemetria';
@@ -3962,6 +3963,9 @@ export default function OrdenDetallePage() {
                     </div>
                 </div>
             )}
+
+            {/* ✅ HILO DE CONTINUIDAD DEL CASO (Visita 1 ──▶ Visita N) */}
+            <HiloContinuidadCaso orden={orden} />
 
             {/* ✅ FEATURE ESTILO SYTEX: Panel de Telemetría y Lectura en Tiempo Real */}
             <ProgresoRegistroTelemetria

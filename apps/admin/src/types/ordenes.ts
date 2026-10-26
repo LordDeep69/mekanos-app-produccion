@@ -73,6 +73,35 @@ export interface TecnicoOrden {
     };
 }
 
+export interface HiloCasoVisita {
+    id_orden_servicio: number;
+    numero_orden: string;
+    id_orden_padre?: number | null;
+    tipo_visita?: string | null;
+    numero_visita_caso?: number | null;
+    fecha_programada?: string;
+    fecha_fin_real?: string;
+    total_general?: number;
+    estados_orden?: EstadoOrden;
+    tipos_servicio?: TipoServicio;
+    empleados_ordenes_servicio_id_tecnico_asignadoToempleados?: TecnicoOrden;
+    ordenes_pendientes?: Array<{ id_orden_pendiente: number; estado: string; alcance?: string }>;
+    pendientes_asignados_resolver?: Array<{ id_orden_pendiente: number; estado: string; alcance?: string }>;
+}
+
+export interface HiloCaso {
+    id_orden_raiz: number;
+    numero_orden_raiz: string;
+    es_multivisita: boolean;
+    total_visitas: number;
+    inversion_acumulada: number;
+    pendientes_totales: number;
+    pendientes_resueltos: number;
+    pendientes_en_gestion: number;
+    pendientes_abiertos: number;
+    visitas: HiloCasoVisita[];
+}
+
 // Orden de servicio
 export interface Orden {
     id_orden_servicio: number;
@@ -104,6 +133,40 @@ export interface Orden {
     // ✅ FIX 23-SEP-2026: Total de pendientes técnicos para badge en lista
     total_pendientes?: number;
     ordenes_pendientes?: OrdenPendiente[];
+    pendientes_asignados_resolver?: OrdenPendiente[];
+
+    // ✅ Encadenamiento Fractal (Visita 1 -> Visita N)
+    id_cliente?: number;
+    id_equipo?: number;
+    id_orden_padre?: number | null;
+    tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string | null;
+    numero_visita_caso?: number | null;
+    orden_padre?: {
+        id_orden_servicio: number;
+        numero_orden: string;
+        fecha_programada?: string;
+        tipo_visita?: string;
+        numero_visita_caso?: number;
+        estados_orden?: EstadoOrden;
+    } | null;
+    hilo_caso?: HiloCaso;
+    pendientes_asignados_resolver?: OrdenPendiente[];
+
+    // ✅ Encadenamiento Fractal (Visita 1 -> Visita N)
+    id_cliente?: number;
+    id_equipo?: number;
+    id_orden_padre?: number | null;
+    tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string | null;
+    numero_visita_caso?: number | null;
+    orden_padre?: {
+        id_orden_servicio: number;
+        numero_orden: string;
+        fecha_programada?: string;
+        tipo_visita?: string;
+        numero_visita_caso?: number;
+        estados_orden?: EstadoOrden;
+    } | null;
+    hilo_caso?: HiloCaso;
 
     // Relaciones
     estados_orden?: EstadoOrden;
@@ -292,6 +355,9 @@ export interface CreateOrdenDto {
     prioridad?: 'BAJA' | 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
     fechaProgramada?: string;
     tecnicoId?: number;         // Opcional: asignar técnico al crear
+    idOrdenPadre?: number;      // Orden Raíz/Padre si es visita de seguimiento
+    tipoVisita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string;
+    idsPendientesAResolver?: number[]; // Pendientes que se resolverán en esta orden
 }
 
 // DTO para cambiar estado
@@ -354,13 +420,15 @@ export function getPrioridadColor(prioridad?: string): string {
 
 export interface OrdenPendiente {
     id_orden_pendiente: number;
-    id_orden_servicio: number;
+    id_orden_servicio?: number | null;
     id_cliente: number;
-    id_equipo: number;
+    id_equipo?: number | null;
     id_orden_equipo?: number | null;
+    alcance?: 'CLIENTE' | 'EQUIPO' | 'SERVICIO';
+    id_orden_resolucion?: number | null;
     id_pendiente_catalogo?: number | null;
     descripcion: string;
-    origen: 'CATALOGO' | 'MANUAL';
+    origen: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
     prioridad: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
     estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO';
     observaciones?: string | null;
@@ -369,6 +437,28 @@ export interface OrdenPendiente {
     fecha_resolucion?: string | null;
     resuelto_por?: number | null;
     observaciones_resolucion?: string | null;
+    ordenes_servicio?: {
+        id_orden_servicio: number;
+        numero_orden: string;
+        fecha_programada?: string;
+        tipo_visita?: string;
+        numero_visita_caso?: number;
+        estados_orden?: {
+            nombre_estado: string;
+            color_hex?: string;
+        };
+    } | null;
+    orden_resolucion?: {
+        id_orden_servicio: number;
+        numero_orden: string;
+        fecha_programada?: string;
+        tipo_visita?: string;
+        numero_visita_caso?: number;
+        estados_orden?: {
+            nombre_estado: string;
+            color_hex?: string;
+        };
+    } | null;
     ordenes_equipos?: {
         id_orden_equipo: number;
         orden_secuencia?: number;
@@ -383,7 +473,8 @@ export interface OrdenPendiente {
         id_equipo: number;
         codigo_equipo?: string;
         nombre_equipo?: string;
-    };
+        ubicacion_texto?: string;
+    } | null;
     catalogo_pendientes?: {
         id_pendiente_catalogo: number;
         codigo?: string;

@@ -162,6 +162,11 @@ export interface DatosOrdenPDF {
   // Número de orden
   numeroOrden: string;
 
+  // ✅ Trazabilidad de Caso / Encadenamiento Fractal (Visita 1 -> Visita N)
+  numeroVisitaCaso?: number;
+  tipoVisita?: string;
+  numeroOrdenPadre?: string;
+
   // Datos del módulo de control (para generadores)
   datosModulo?: {
     rpm?: number;
@@ -1900,6 +1905,12 @@ export const generarDatosClienteConFichaTecnica = (
   return `
   <div class="section ficha-tecnica-box" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 12px;">
     <div class="section-title">DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO</div>
+    ${(datos.numeroVisitaCaso && datos.numeroVisitaCaso > 1) || datos.numeroOrdenPadre ? `
+    <div style="margin: 4px 0 6px 0; padding: 5px 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #1d4ed8; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; font-size: 8.5px; color: #1e3a8a; font-weight: 700;">
+      <span>🔗 SECUENCIA DE SERVICIO: VISITA #${datos.numeroVisitaCaso || 2} (${datos.tipoVisita || 'CONTINUACION'})</span>
+      ${datos.numeroOrdenPadre ? `<span style="background: #dbeafe; color: #1e40af; padding: 1.5px 6px; border-radius: 3px; font-family: monospace;">VINCULADA A ${datos.numeroOrdenPadre}</span>` : ''}
+    </div>
+    ` : ''}
     
     <!-- Fila Cliente & Ubicación -->
     <div class="info-grid">

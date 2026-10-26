@@ -843,6 +843,9 @@ export class FinalizacionOrdenService {
                 tiempoTotal,
                 ordenId: orden.id_orden_servicio,
                 numeroOrden: orden.numero_orden,
+            numeroVisitaCaso: (orden as any).numero_visita_caso || 1,
+            tipoVisita: (orden as any).tipo_visita || 'INICIAL',
+            numeroOrdenPadre: (orden as any).orden_padre?.numero_orden || undefined,
                 modo: dto.modo || 'COMPLETO',
             });
 
@@ -971,6 +974,7 @@ export class FinalizacionOrdenService {
                     },
                 },
                 sedes_cliente: true,
+                orden_padre: { select: { numero_orden: true } },
                 componentes_usados: {
                     include: {
                         catalogo_componentes: true,

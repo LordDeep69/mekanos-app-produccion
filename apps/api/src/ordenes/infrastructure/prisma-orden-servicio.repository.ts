@@ -181,6 +181,12 @@ export class PrismaOrdenServicioRepository {
         },
       },
     },
+    orden_padre: {
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+      },
+    },
     estados_orden: {
       select: {
         id_estado: true,
@@ -394,9 +400,41 @@ export class PrismaOrdenServicioRepository {
    * ✅ OPTIMIZADO 05-ENE-2026: Guardar con equipos y retornar datos LITE
    * Evita el findById pesado que causaba +10 segundos de latencia
    */
-  async saveWithEquiposOptimizado(orden: any, equiposIds: number[], serviciosIds?: number[]): Promise<any> {
+  async saveWithEquiposOptimizado(
+    orden: any,
+    equiposIds: number[],
+    serviciosIds?: number[],
+    idsPendientesAResolver?: number[],
+  ): Promise<any> {
     // ✅ FIX: Aumentar timeout para conexiones lentas con Supabase
     return this.prisma.$transaction(async (tx) => {
+      // 🛡️ BLINDAJE #2: Normalización de Orden Raíz (Root Order Normalization)
+      let rootOrderId: number | null = null;
+      let numeroVisitaCaso = 1;
+      let tipoVisita = orden.tipo_visita || 'INICIAL';
+
+      if (orden.id_orden_padre) {
+        const ordenOrigen = await tx.ordenes_servicio.findUnique({
+          where: { id_orden_servicio: Number(orden.id_orden_padre) },
+          select: { id_orden_servicio: true, id_orden_padre: true },
+        });
+        if (ordenOrigen) {
+          rootOrderId = ordenOrigen.id_orden_padre ?? ordenOrigen.id_orden_servicio;
+          const totalVisitasHilo = await tx.ordenes_servicio.count({
+            where: {
+              OR: [
+                { id_orden_servicio: rootOrderId },
+                { id_orden_padre: rootOrderId },
+              ],
+            },
+          });
+          numeroVisitaCaso = totalVisitasHilo + 1;
+          if (!orden.tipo_visita || orden.tipo_visita === 'INICIAL') {
+            tipoVisita = 'CONTINUACION';
+          }
+        }
+      }
+
       // 1. Crear la cabecera de la orden
       const savedOrden = await tx.ordenes_servicio.create({
         data: {
@@ -416,6 +454,9 @@ export class PrismaOrdenServicioRepository {
           descripcion_inicial: orden.descripcion_inicial || null,
           requiere_firma_cliente: orden.requiere_firma_cliente !== undefined ? orden.requiere_firma_cliente : true,
           creado_por: orden.creado_por,
+          id_orden_padre: rootOrderId,
+          tipo_visita: tipoVisita,
+          numero_visita_caso: numeroVisitaCaso,
           fecha_modificacion: new Date(), // ✅ FIX 23-ENE-2026: Sync delta necesita esta fecha
         },
         // ✅ INCLUDE LITE: Solo datos esenciales para respuesta inmediata
@@ -458,6 +499,17 @@ export class PrismaOrdenServicioRepository {
             data: vinculacionesServicios,
           });
         }
+      }
+
+      // 4. Vincular pendientes seleccionados para resolverse en esta visita (pasan a EN_GESTION)
+      if (idsPendientesAResolver && Array.isArray(idsPendientesAResolver) && idsPendientesAResolver.length > 0) {
+        await tx.ordenes_pendientes.updateMany({
+          where: { id_orden_pendiente: { in: idsPendientesAResolver } },
+          data: {
+            id_orden_resolucion: savedOrden.id_orden_servicio,
+            estado: 'EN_GESTION',
+          },
+        });
       }
 
       // ✅ Retornar directamente sin consulta adicional
@@ -747,6 +799,66 @@ export class PrismaOrdenServicioRepository {
           },
         },
         catalogo_pendientes: true,
+            orden_resolucion: {
+              select: {
+                id_orden_servicio: true,
+                numero_orden: true,
+                tipo_visita: true,
+                numero_visita_caso: true,
+                estados_orden: true,
+              },
+            },
+            empleados_ordenes_pendientes_creado_porToempleados: {
+              include: {
+                persona: {
+                  select: {
+                    nombre_completo: true,
+                    primer_nombre: true,
+                    primer_apellido: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            id_orden_pendiente: 'asc' as const,
+          },
+        },
+        orden_padre: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            estados_orden: true,
+          },
+        },
+        pendientes_asignados_resolver: {
+          include: {
+            equipos: {
+              select: {
+                id_equipo: true,
+                codigo_equipo: true,
+                nombre_equipo: true,
+              },
+            },
+            ordenes_equipos: {
+              select: {
+                id_orden_equipo: true,
+                orden_secuencia: true,
+                nombre_sistema: true,
+              },
+            },
+            catalogo_pendientes: true,
+            ordenes_servicio: {
+              select: {
+                id_orden_servicio: true,
+                numero_orden: true,
+                fecha_programada: true,
+                numero_visita_caso: true,
+              },
+            },
             empleados_ordenes_pendientes_creado_porToempleados: {
               include: {
                 persona: {
@@ -767,6 +879,96 @@ export class PrismaOrdenServicioRepository {
         // Se cargan bajo demanda con sus propios endpoints
       },
     });
+  }
+
+  /**
+   * 🗂️ Obtiene el Hilo de Continuidad del Caso (Expediente Multi-Visita)
+   * Usa normalización de Orden Raíz para traer todas las visitas hermanas en 1 sola consulta plana.
+   */
+  async obtenerHiloCaso(orden: any): Promise<any> {
+    const rootOrderId = orden.id_orden_padre || orden.id_orden_servicio;
+
+    const visitas = await this.prisma.ordenes_servicio.findMany({
+      where: {
+        OR: [
+          { id_orden_servicio: rootOrderId },
+          { id_orden_padre: rootOrderId },
+        ],
+      },
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        id_orden_padre: true,
+        tipo_visita: true,
+        numero_visita_caso: true,
+        fecha_programada: true,
+        fecha_inicio_real: true,
+        fecha_fin_real: true,
+        total_general: true,
+        total_servicios: true,
+        total_componentes: true,
+        estados_orden: {
+          select: {
+            id_estado: true,
+            codigo_estado: true,
+            nombre_estado: true,
+            color_hex: true,
+          },
+        },
+        empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
+          select: {
+            id_empleado: true,
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { numero_visita_caso: 'asc' },
+        { id_orden_servicio: 'asc' },
+      ],
+    });
+
+    const visitasIds = visitas.map((v) => v.id_orden_servicio);
+
+    const pendientesCaso = await this.prisma.ordenes_pendientes.findMany({
+      where: {
+        OR: [
+          { id_orden_servicio: { in: visitasIds } },
+          { id_orden_resolucion: { in: visitasIds } },
+        ],
+      },
+      select: {
+        id_orden_pendiente: true,
+        estado: true,
+        alcance: true,
+        prioridad: true,
+      },
+    });
+
+    return {
+      id_orden_raiz: rootOrderId,
+      numero_orden_raiz: visitas[0]?.numero_orden || orden.numero_orden,
+      es_multivisita: visitas.length > 1 || Boolean(orden.id_orden_padre),
+      total_visitas: visitas.length,
+      inversion_acumulada: visitas.reduce((acc, v) => acc + Number(v.total_general || 0), 0),
+      pendientes_totales: pendientesCaso.length,
+      pendientes_resueltos: pendientesCaso.filter((p) => p.estado === 'RESUELTO').length,
+      pendientes_en_gestion: pendientesCaso.filter((p) => p.estado === 'EN_GESTION').length,
+      pendientes_abiertos: pendientesCaso.filter((p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION').length,
+      visitas: visitas.map((v, idx) => ({
+        ...v,
+        numero_visita_caso: v.numero_visita_caso || (idx + 1),
+        tipo_visita: v.tipo_visita || (idx === 0 ? 'INICIAL' : 'CONTINUACION'),
+        total_general: Number(v.total_general || 0),
+        es_actual: v.id_orden_servicio === orden.id_orden_servicio,
+      })),
+    };
   }
 
   /**

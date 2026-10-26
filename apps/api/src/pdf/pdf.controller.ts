@@ -214,6 +214,7 @@ export class PdfController {
           },
         },
         tipos_servicio: true,
+        orden_padre: { select: { numero_orden: true } },
         actividades_ejecutadas: {
           include: {
             catalogo_actividades: {
@@ -624,6 +625,9 @@ export class PdfController {
       horaSalida: this.formatearHora(orden.fecha_fin_real),
       tipoServicio: orden.tipos_servicio?.nombre_tipo || 'PREVENTIVO_A',
       numeroOrden: orden.numero_orden || `ORD-${id.substring(0, 8)}`,
+      numeroVisitaCaso: (orden as any).numero_visita_caso || 1,
+      tipoVisita: (orden as any).tipo_visita || 'INICIAL',
+      numeroOrdenPadre: (orden as any).orden_padre?.numero_orden || undefined,
       datosModulo: this.extraerDatosModulo(orden.mediciones_servicio),
       actividades: orden.actividades_ejecutadas?.filter((act: any) => !act.excluido_pdf).map((act: any) => ({
         sistema: act.catalogo_actividades?.catalogo_sistemas?.nombre_sistema || 'GENERAL',
@@ -1258,6 +1262,7 @@ export class PdfController {
           },
         },
         tipos_servicio: true,
+        orden_padre: { select: { numero_orden: true } },
         actividades_ejecutadas: {
           include: {
             catalogo_actividades: {
@@ -1661,6 +1666,9 @@ export class PdfController {
       horaSalida: this.formatearHora(orden.fecha_fin_real),
       tipoServicio: orden.tipos_servicio?.nombre_tipo || 'PREVENTIVO_A',
       numeroOrden: orden.numero_orden || `ORD-${id}`,
+      numeroVisitaCaso: (orden as any).numero_visita_caso || 1,
+      tipoVisita: (orden as any).tipo_visita || 'INICIAL',
+      numeroOrdenPadre: (orden as any).orden_padre?.numero_orden || undefined,
       // ✅ FIX 19-ENE-2026: Extraer datosModulo correctamente de las mediciones
       datosModulo: this.extraerDatosModuloReal(orden.mediciones_servicio),
       // Actividades flat (para backward compatibility y single-equipo)

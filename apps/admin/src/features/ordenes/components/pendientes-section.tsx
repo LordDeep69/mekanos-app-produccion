@@ -1,24 +1,26 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import {
     AlertCircle,
+    Building2,
     CheckCircle2,
     CheckSquare,
     ClipboardList,
     Clock,
-    Filter,
+    CornerDownRight,
+    ExternalLink,
     Globe,
     Loader2,
     Plus,
-    RefreshCw,
     Search,
     Square,
+    Target,
     Trash2,
     User,
     Wrench,
     X,
-    ExternalLink
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
@@ -33,6 +35,9 @@ interface PendientesSectionProps {
 export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     const [pendientes, setPendientes] = useState<OrdenPendiente[]>(
         orden.ordenes_pendientes || []
+    );
+    const [pendientesAsignados, setPendientesAsignados] = useState<OrdenPendiente[]>(
+        orden.pendientes_asignados_resolver || []
     );
     const [filtroEstado, setFiltroEstado] = useState<string>('TODOS');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -52,10 +57,19 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [searchCatalogo, setSearchCatalogo] = useState('');
     const [catFiltro, setCatFiltro] = useState('TODAS');
-    const [categoriasList, setCategoriasList] = useState<string[]>(['TODAS', 'ELECTRICO', 'MECANICO', 'COMBUSTIBLE', 'HIDRAULICO', 'ELECTRONICO', 'INSTRUMENTACION', 'GENERAL']);
+    const [categoriasList, setCategoriasList] = useState<string[]>([
+        'TODAS',
+        'ELECTRICO',
+        'MECANICO',
+        'COMBUSTIBLE',
+        'HIDRAULICO',
+        'ELECTRONICO',
+        'INSTRUMENTACION',
+        'GENERAL',
+    ]);
 
-    // ✅ Multi-equipos & Alcance Selection State
-    const [tipoAlcance, setTipoAlcance] = useState<'GENERAL' | 'EQUIPOS'>('EQUIPOS');
+    // ✅ Multi-equipos & 3-Scope Alcance Selection State (EQUIPO | CLIENTE | SERVICIO)
+    const [tipoAlcance, setTipoAlcance] = useState<'EQUIPO' | 'CLIENTE' | 'SERVICIO'>('EQUIPO');
     const [selectedEquiposIds, setSelectedEquiposIds] = useState<number[]>([]);
 
     // Normalización de equipos de la orden (Multi-equipos y equipo simple)
@@ -75,15 +89,17 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
             });
         }
         if (orden.equipos) {
-            return [{
-                idOrdenEquipo: null as number | null,
-                idEquipo: orden.equipos.id_equipo,
-                secuencia: 1,
-                nombreSistema: null,
-                codigoEquipo: orden.equipos.codigo_equipo || '',
-                nombreEquipo: orden.equipos.nombre_equipo || 'Equipo Principal',
-                tipoEquipo: (orden.equipos as any)?.tipos_equipo?.nombre_tipo || '',
-            }];
+            return [
+                {
+                    idOrdenEquipo: null as number | null,
+                    idEquipo: orden.equipos.id_equipo,
+                    secuencia: 1,
+                    nombreSistema: null,
+                    codigoEquipo: orden.equipos.codigo_equipo || '',
+                    nombreEquipo: orden.equipos.nombre_equipo || 'Equipo Principal',
+                    tipoEquipo: (orden.equipos as any)?.tipos_equipo?.nombre_tipo || '',
+                },
+            ];
         }
         return [];
     }, [orden]);
@@ -93,13 +109,17 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         if (orden.ordenes_pendientes) {
             setPendientes(orden.ordenes_pendientes);
         }
-    }, [orden.ordenes_pendientes]);
+        if (orden.pendientes_asignados_resolver) {
+            setPendientesAsignados(orden.pendientes_asignados_resolver);
+        }
+    }, [orden.ordenes_pendientes, orden.pendientes_asignados_resolver]);
 
     // Cargar catálogo de pendientes al abrir modal
     useEffect(() => {
         if (isAddModalOpen && catalogoItems.length === 0) {
             setLoadingCatalogo(true);
-            apiClient.get('/ordenes/catalogo-pendientes/categorias')
+            apiClient
+                .get('/ordenes/catalogo-pendientes/categorias')
                 .then((res) => {
                     if (res.data?.success && Array.isArray(res.data.data)) {
                         setCategoriasList(['TODAS', ...res.data.data]);
@@ -107,7 +127,8 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 })
                 .catch(() => {});
 
-            apiClient.get('/ordenes/catalogo-pendientes')
+            apiClient
+                .get('/ordenes/catalogo-pendientes')
                 .then((res) => {
                     const data = res.data;
                     if (data?.success && data?.data) {
@@ -125,14 +146,14 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         setSelectedCatalogoId(null);
         setObservaciones('');
         if (listaEquipos.length > 0) {
-            setTipoAlcance('EQUIPOS');
+            setTipoAlcance('EQUIPO');
             if (listaEquipos.length === 1 && listaEquipos[0].idOrdenEquipo) {
                 setSelectedEquiposIds([listaEquipos[0].idOrdenEquipo]);
             } else {
                 setSelectedEquiposIds([]);
             }
         } else {
-            setTipoAlcance('GENERAL');
+            setTipoAlcance('SERVICIO');
             setSelectedEquiposIds([]);
         }
         setIsAddModalOpen(true);
@@ -170,11 +191,12 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
             return;
         }
 
-        // Validación de asignación
-        if (tipoAlcance === 'EQUIPOS') {
+        if (tipoAlcance === 'EQUIPO') {
             const tieneEquiposConId = listaEquipos.some((e) => e.idOrdenEquipo !== null);
             if (tieneEquiposConId && selectedEquiposIds.length === 0) {
-                setErrorMsg('Por favor seleccione al menos un equipo de la lista o elija "General de la Orden"');
+                setErrorMsg(
+                    'Por favor seleccione al menos un equipo de la lista o elija alcance "Cliente / Sede" o "Continuidad del Servicio"'
+                );
                 return;
             }
         }
@@ -185,10 +207,15 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 descripcion: desc,
                 idPendienteCatalogo: selectedCatalogoId || undefined,
                 prioridad,
+                alcance: tipoAlcance,
                 observaciones: observaciones.trim() || undefined,
             };
 
-            if (tipoAlcance === 'GENERAL') {
+            if (tipoAlcance === 'CLIENTE') {
+                payload.esGeneral = true;
+                payload.idEquipo = null;
+                payload.idOrdenEquipo = null;
+            } else if (tipoAlcance === 'SERVICIO') {
                 payload.esGeneral = true;
                 payload.idOrdenEquipo = undefined;
             } else {
@@ -200,7 +227,10 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 }
             }
 
-            const res = await apiClient.post(`/ordenes/${orden.id_orden_servicio}/pendientes`, payload);
+            const res = await apiClient.post(
+                `/ordenes/${orden.id_orden_servicio}/pendientes`,
+                payload
+            );
             const data = res.data;
             if (!data?.success) {
                 throw new Error(data?.message || 'Error registrando pendiente');
@@ -230,10 +260,17 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         if (!selectedPendiente) return;
         setIsSubmitting(true);
         try {
-            const res = await apiClient.patch(`/ordenes/pendientes/${selectedPendiente.id_orden_pendiente}/estado`, {
-                estado: resolucionEstado,
-                observaciones_resolucion: resolucionNotas.trim() || undefined,
-            });
+            const res = await apiClient.patch(
+                `/ordenes/pendientes/${selectedPendiente.id_orden_pendiente}/estado`,
+                {
+                    estado: resolucionEstado,
+                    observaciones_resolucion: resolucionNotas.trim() || undefined,
+                    id_orden_resolucion:
+                        resolucionEstado === 'RESUELTO'
+                            ? selectedPendiente.id_orden_resolucion || orden.id_orden_servicio
+                            : undefined,
+                }
+            );
             const data = res.data;
             if (!data?.success) {
                 throw new Error(data?.message || 'Error actualizando estado');
@@ -244,12 +281,42 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                     p.id_orden_pendiente === selectedPendiente.id_orden_pendiente ? data.data : p
                 )
             );
+            setPendientesAsignados((prev) =>
+                prev.map((p) =>
+                    p.id_orden_pendiente === selectedPendiente.id_orden_pendiente ? data.data : p
+                )
+            );
             setIsResolveModalOpen(false);
             setSelectedPendiente(null);
             setResolucionNotas('');
             onUpdate?.();
         } catch (err: any) {
             alert(err.message || 'Error al actualizar estado');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleResolverAsignadoDirecto = async (p: OrdenPendiente) => {
+        setIsSubmitting(true);
+        try {
+            const res = await apiClient.patch(`/ordenes/pendientes/${p.id_orden_pendiente}/estado`, {
+                estado: 'RESUELTO',
+                id_orden_resolucion: orden.id_orden_servicio,
+                observaciones_resolucion:
+                    p.observaciones_resolucion ||
+                    `Resuelto satisfactoriamente durante la ejecución de la visita ${orden.numero_orden}`,
+            });
+            if (res.data?.success) {
+                setPendientesAsignados((prev) =>
+                    prev.map((item) =>
+                        item.id_orden_pendiente === p.id_orden_pendiente ? res.data.data : item
+                    )
+                );
+                onUpdate?.();
+            }
+        } catch (err) {
+            console.error('Error resolviendo pendiente asignado:', err);
         } finally {
             setIsSubmitting(false);
         }
@@ -277,8 +344,124 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'
     ).length;
 
+    const rootOrderId =
+        orden.hilo_caso?.id_orden_raiz || orden.id_orden_padre || orden.id_orden_servicio;
+    const idCliente = orden.clientes?.id_cliente || orden.id_cliente;
+
     return (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
+            {/* ═══════════════════════════════════════════════════════════════════ */}
+            {/* BLOQUE A (CLOSED-LOOP): PENDIENTES ASIGNADOS PARA RESOLVER EN ESTA VISITA */}
+            {/* ═══════════════════════════════════════════════════════════════════ */}
+            {pendientesAsignados.length > 0 && (
+                <div className="p-5 bg-gradient-to-r from-indigo-50 via-blue-50/60 to-emerald-50/40 border-b border-indigo-200">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                                <Target className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-extrabold text-indigo-950 flex items-center gap-2">
+                                    <span>Pendientes Asignados para Resolver en esta Visita</span>
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+                                        {pendientesAsignados.filter((p) => p.estado === 'RESUELTO').length} /{' '}
+                                        {pendientesAsignados.length} resueltos
+                                    </span>
+                                </h4>
+                                <p className="text-xs text-indigo-700/80">
+                                    Hallazgos provenientes de visitas anteriores vinculados a esta orden para cierre de ciclo.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {pendientesAsignados.map((p) => {
+                            const yaResuelto = p.estado === 'RESUELTO';
+                            const numOrigen = p.ordenes_servicio?.numero_orden;
+                            const codEq = p.equipos?.codigo_equipo;
+                            return (
+                                <div
+                                    key={p.id_orden_pendiente}
+                                    className={cn(
+                                        'p-3.5 rounded-xl border flex flex-col justify-between gap-2.5 transition-all',
+                                        yaResuelto
+                                            ? 'bg-emerald-50/80 border-emerald-300'
+                                            : 'bg-white border-indigo-200 shadow-2xs'
+                                    )}
+                                >
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span
+                                                    className={cn(
+                                                        'px-2 py-0.5 rounded text-[10px] font-bold border',
+                                                        getPendienteEstadoColor(p.estado)
+                                                    )}
+                                                >
+                                                    {p.estado}
+                                                </span>
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                                                    Alcance: {p.alcance || 'EQUIPO'}
+                                                </span>
+                                                {codEq && (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                                        {codEq}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {p.ordenes_servicio && (
+                                                <Link
+                                                    href={`/ordenes/${p.ordenes_servicio.id_orden_servicio}`}
+                                                    className="text-[11px] font-mono font-bold text-indigo-700 hover:underline flex items-center gap-1"
+                                                >
+                                                    <span>Origen: {numOrigen}</span>
+                                                    <ExternalLink className="h-2.5 w-2.5" />
+                                                </Link>
+                                            )}
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-900">{p.descripcion}</p>
+                                        {p.observaciones && (
+                                            <p className="text-[11px] text-slate-600 mt-1">{p.observaciones}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/70">
+                                        <span className="text-[11px] text-slate-500">
+                                            {yaResuelto ? '✅ Ciclo cerrado en esta visita' : '⏳ En ejecución en esta visita'}
+                                        </span>
+                                        {!yaResuelto ? (
+                                            <button
+                                                type="button"
+                                                disabled={isSubmitting}
+                                                onClick={() => handleResolverAsignadoDirecto(p)}
+                                                className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                                            >
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                                <span>Marcar como Resuelto</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedPendiente(p);
+                                                    setResolucionEstado('RESUELTO');
+                                                    setResolucionNotas(p.observaciones_resolucion || '');
+                                                    setIsResolveModalOpen(true);
+                                                }}
+                                                className="text-[11px] font-semibold text-emerald-800 hover:underline cursor-pointer"
+                                            >
+                                                Editar nota
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Header de la Sección */}
             <div className="p-6 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -286,9 +469,9 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                         <ClipboardList className="h-6 w-6" />
                     </div>
                     <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-lg font-bold text-gray-900">
-                                Trabajos y Repuestos Pendientes
+                                Hallazgos y Pendientes Originados en esta Visita (360°)
                             </h3>
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                 {pendientes.length} total
@@ -300,13 +483,12 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                             )}
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            Trazabilidad y seguimiento post-servicio para cotizaciones y próximos mantenimientos
+                            Trazabilidad multinivel (Equipo • Cliente/Sede • Continuidad del Servicio) y encadenamiento con futuras visitas
                         </p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* Botón Nuevo Pendiente */}
                     <button
                         onClick={handleOpenAddModal}
                         className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-amber-600/20 active:scale-95 cursor-pointer"
@@ -319,7 +501,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
             {/* Filtros rápidos */}
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-gray-400 font-medium">Filtrar:</span>
                     {(['TODOS', 'PENDIENTE', 'EN_GESTION', 'RESUELTO', 'CANCELADO'] as const).map((est) => (
                         <button
@@ -356,10 +538,10 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                     <div className="text-center py-10 px-4 bg-gray-50/50 rounded-xl border-2 border-dashed border-gray-200">
                         <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2 opacity-80" />
                         <h4 className="text-sm font-bold text-gray-800">
-                            Sin Pendientes Registrados
+                            Sin Pendientes Originados en esta Orden
                         </h4>
                         <p className="text-xs text-gray-500 max-w-md mx-auto mt-1 mb-4">
-                            Esta orden no tiene trabajos ni repuestos pendientes registrados por el técnico.
+                            Esta orden no dejó hallazgos técnicos, requerimientos locativos de cliente ni trabajos inconclusos pendientes.
                         </p>
                         <button
                             onClick={handleOpenAddModal}
@@ -376,16 +558,28 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                             const isCancelado = p.estado === 'CANCELADO';
                             const estadoClase = getPendienteEstadoColor(p.estado);
                             const prioridadClase = getPrioridadColor(p.prioridad);
+                            const alcance = p.alcance || (p.id_orden_equipo ? 'EQUIPO' : 'SERVICIO');
 
-                            // Resolución precisa multiequipo vs general
-                            const tieneEquipoAsignado = !!p.id_orden_equipo;
-                            const oeRel = orden.ordenes_equipos?.find((e: any) => e.id_orden_equipo === p.id_orden_equipo);
-                            const eqObj = oeRel?.equipo || oeRel?.equipos || p.equipos;
+                            // Resolución precisa multiequipo vs cliente vs servicio
+                            const oeRel = orden.ordenes_equipos?.find(
+                                (e: any) => e.id_orden_equipo === p.id_orden_equipo
+                            );
+                            const eqObj = oeRel?.equipo || (oeRel as any)?.equipos || p.equipos;
                             const ordenSec = oeRel?.orden_secuencia || p.ordenes_equipos?.orden_secuencia;
                             const sistName = oeRel?.nombre_sistema || p.ordenes_equipos?.nombre_sistema;
                             const eqCode = eqObj?.codigo_equipo ? `[${eqObj.codigo_equipo}] ` : '';
                             const eqName = sistName || eqObj?.nombre_equipo || 'Equipo';
-                            const badgeEquipoLabel = ordenSec ? `#${ordenSec} · ${eqCode}${eqName}` : `${eqCode}${eqName}`;
+                            const badgeEquipoLabel = ordenSec
+                                ? `#${ordenSec} · ${eqCode}${eqName}`
+                                : `${eqCode}${eqName}`;
+
+                            const crearVisitaHref = `/ordenes/nueva?ordenPadreId=${rootOrderId}&ordenOrigenId=${orden.id_orden_servicio}${
+                                idCliente ? `&clienteId=${idCliente}` : ''
+                            }${
+                                p.id_equipo || orden.id_equipo
+                                    ? `&equipoId=${p.id_equipo || orden.id_equipo}`
+                                    : ''
+                            }&tipoVisita=CORRECTIVO_DERIVADO&pendientesIds=${p.id_orden_pendiente}`;
 
                             return (
                                 <div
@@ -419,20 +613,22 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                 >
                                                     {p.prioridad}
                                                 </span>
-                                                <span className="px-2 py-0.5 rounded-md text-[11px] bg-gray-100 text-gray-600 font-medium">
-                                                    {p.origen === 'CATALOGO' ? 'Catálogo' : 'Manual'}
-                                                </span>
 
-                                                {/* Badge de Trazabilidad: General vs Equipo Específico */}
-                                                {tieneEquipoAsignado ? (
+                                                {/* Badge de Alcance 360° */}
+                                                {alcance === 'CLIENTE' ? (
+                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1">
+                                                        <Building2 className="h-3 w-3 text-purple-600" />
+                                                        Cliente / Sede
+                                                    </span>
+                                                ) : alcance === 'SERVICIO' && !p.id_orden_equipo ? (
+                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                                        <Globe className="h-3 w-3 text-amber-600" />
+                                                        Continuidad Servicio
+                                                    </span>
+                                                ) : (
                                                     <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1">
                                                         <Wrench className="h-3 w-3 text-blue-600" />
                                                         {badgeEquipoLabel}
-                                                    </span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
-                                                        <Globe className="h-3 w-3 text-amber-600" />
-                                                        General de la Orden
                                                     </span>
                                                 )}
                                             </div>
@@ -461,6 +657,26 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                             </p>
                                         )}
 
+                                        {/* Vínculo a Orden de Resolución (Closed-Loop) */}
+                                        {p.orden_resolucion && (
+                                            <div className="mt-2 p-2 rounded-lg bg-indigo-50/80 border border-indigo-200 flex items-center justify-between text-xs">
+                                                <span className="text-indigo-900 font-semibold flex items-center gap-1">
+                                                    <CornerDownRight className="h-3.5 w-3.5 text-indigo-600" />
+                                                    {isResuelto ? 'Resuelto en visita:' : 'Asignado a visita:'}
+                                                </span>
+                                                <Link
+                                                    href={`/ordenes/${p.orden_resolucion.id_orden_servicio}`}
+                                                    className="font-mono font-bold text-indigo-700 hover:underline flex items-center gap-1"
+                                                >
+                                                    <span>
+                                                        {p.orden_resolucion.numero_orden} (Visita #
+                                                        {p.orden_resolucion.numero_visita_caso || 2})
+                                                    </span>
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </Link>
+                                            </div>
+                                        )}
+
                                         {/* Resolución si existe */}
                                         {p.observaciones_resolucion && (
                                             <div className="mt-2 text-xs bg-emerald-50 text-emerald-800 p-2 rounded-lg border border-emerald-200">
@@ -473,14 +689,16 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                         )}
                                     </div>
 
-                                    {/* Footer con metadata y botón para resolver */}
-                                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 text-xs text-gray-500">
+                                    {/* Footer con metadata y botones de acción */}
+                                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 text-xs text-gray-500 flex-wrap">
                                         <div className="flex flex-col gap-0.5">
                                             {p.empleados_ordenes_pendientes_creado_porToempleados?.persona && (
                                                 <span className="flex items-center gap-1 font-medium text-gray-700">
                                                     <User className="h-3 w-3 text-gray-400" />
-                                                    {p.empleados_ordenes_pendientes_creado_porToempleados.persona.nombre_completo ||
-                                                     p.empleados_ordenes_pendientes_creado_porToempleados.persona.primer_nombre}
+                                                    {p.empleados_ordenes_pendientes_creado_porToempleados.persona
+                                                        .nombre_completo ||
+                                                        p.empleados_ordenes_pendientes_creado_porToempleados.persona
+                                                            .primer_nombre}
                                                 </span>
                                             )}
                                             <span className="flex items-center gap-1 text-[11px] text-gray-400">
@@ -489,32 +707,44 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                             </span>
                                         </div>
 
-                                        {/* Botón de cambio de estado */}
-                                        {!isResuelto && !isCancelado ? (
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedPendiente(p);
-                                                    setResolucionEstado('RESUELTO');
-                                                    setResolucionNotas(p.observaciones_resolucion || '');
-                                                    setIsResolveModalOpen(true);
-                                                }}
-                                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold rounded-lg border border-amber-300 transition-colors cursor-pointer"
-                                            >
-                                                Gestionar Estado
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedPendiente(p);
-                                                    setResolucionEstado(p.estado as any);
-                                                    setResolucionNotas(p.observaciones_resolucion || '');
-                                                    setIsResolveModalOpen(true);
-                                                }}
-                                                className="px-2 py-0.5 text-gray-500 hover:text-gray-800 text-[11px] font-medium underline cursor-pointer"
-                                            >
-                                                Ver / Editar Estado
-                                            </button>
-                                        )}
+                                        <div className="flex items-center gap-1.5">
+                                            {!isResuelto && !isCancelado && !p.orden_resolucion && (
+                                                <Link
+                                                    href={crearVisitaHref}
+                                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-semibold rounded-lg border border-indigo-200 transition-colors flex items-center gap-1"
+                                                    title="Programar una visita encadenada para resolver este pendiente"
+                                                >
+                                                    <CornerDownRight className="h-3 w-3" />
+                                                    <span>Crear Visita</span>
+                                                </Link>
+                                            )}
+
+                                            {!isResuelto && !isCancelado ? (
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedPendiente(p);
+                                                        setResolucionEstado('RESUELTO');
+                                                        setResolucionNotas(p.observaciones_resolucion || '');
+                                                        setIsResolveModalOpen(true);
+                                                    }}
+                                                    className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold rounded-lg border border-amber-300 transition-colors cursor-pointer"
+                                                >
+                                                    Gestionar Estado
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedPendiente(p);
+                                                        setResolucionEstado(p.estado as any);
+                                                        setResolucionNotas(p.observaciones_resolucion || '');
+                                                        setIsResolveModalOpen(true);
+                                                    }}
+                                                    className="px-2 py-0.5 text-gray-500 hover:text-gray-800 text-[11px] font-medium underline cursor-pointer"
+                                                >
+                                                    Ver / Editar Estado
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -523,15 +753,14 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                 )}
             </div>
 
-            {/* Modal: Agregar Nuevo Pendiente */}
+            {/* Modal: Agregar Nuevo Pendiente (3 Alcances: EQUIPO, CLIENTE, SERVICIO) */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                        {/* Modal Header */}
                         <div className="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50/60 border-b border-amber-200/80 flex items-center justify-between shrink-0">
                             <h3 className="font-bold text-gray-900 flex items-center gap-2">
                                 <Plus className="h-5 w-5 text-amber-600" />
-                                Registrar Pendiente Técnico
+                                Registrar Pendiente en Matriz 360°
                             </h3>
                             <button
                                 onClick={() => setIsAddModalOpen(false)}
@@ -541,7 +770,6 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                             </button>
                         </div>
 
-                        {/* Modal Form Scrollable */}
                         <form onSubmit={handleCreatePendiente} className="p-6 space-y-4 overflow-y-auto flex-1">
                             {errorMsg && (
                                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
@@ -550,83 +778,105 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                 </div>
                             )}
 
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
-                            {/* 1. SELECCIÓN DE ALCANCE: GENERAL VS EQUIPO(S) ESPECÍFICO(S) */}
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
+                            {/* 1. SELECCIÓN DE ALCANCE (3 NIVELES: EQUIPO, CLIENTE, SERVICIO) */}
                             <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-3">
                                 <div className="flex items-center justify-between">
                                     <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                                         <Wrench className="h-4 w-4 text-amber-600" />
-                                        1. Alcance y Asignación del Requerimiento *
+                                        1. Alcance del Requerimiento (3 Niveles) *
                                     </label>
                                     <span className="text-[11px] font-semibold text-slate-500">
-                                        {listaEquipos.length > 0 ? `${listaEquipos.length} equipo(s) en orden` : 'Orden general'}
+                                        {listaEquipos.length > 0
+                                            ? `${listaEquipos.length} equipo(s) en orden`
+                                            : 'Orden general'}
                                     </span>
                                 </div>
 
-                                {/* Botones de Decisión de Alcance */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                    {/* Opción A: General de la Orden */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setTipoAlcance('GENERAL')}
-                                        className={cn(
-                                            'p-3 rounded-xl text-left transition-all border flex flex-col justify-between gap-1.5 cursor-pointer relative',
-                                            tipoAlcance === 'GENERAL'
-                                                ? 'bg-amber-500/10 border-amber-500 text-amber-950 shadow-xs ring-1 ring-amber-500'
-                                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-100/50'
-                                        )}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span className="flex items-center gap-1.5 text-xs font-bold">
-                                                <Globe className="h-3.5 w-3.5 text-amber-600" />
-                                                General de la Orden
-                                            </span>
-                                            {tipoAlcance === 'GENERAL' && (
-                                                <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
-                                            )}
-                                        </div>
-                                        <p className="text-[11px] text-slate-500 leading-tight">
-                                            Cuarto de máquinas, infraestructura, tuberías comunes o toda la orden (sin máquina específica).
-                                        </p>
-                                    </button>
-
-                                    {/* Opción B: Equipo(s) Específico(s) */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                    {/* Nivel 1: Equipo(s) */}
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setTipoAlcance('EQUIPOS');
-                                            if (selectedEquiposIds.length === 0 && listaEquipos.length === 1 && listaEquipos[0].idOrdenEquipo) {
+                                            setTipoAlcance('EQUIPO');
+                                            if (
+                                                selectedEquiposIds.length === 0 &&
+                                                listaEquipos.length === 1 &&
+                                                listaEquipos[0].idOrdenEquipo
+                                            ) {
                                                 setSelectedEquiposIds([listaEquipos[0].idOrdenEquipo]);
                                             }
                                         }}
                                         disabled={listaEquipos.length === 0}
                                         className={cn(
-                                            'p-3 rounded-xl text-left transition-all border flex flex-col justify-between gap-1.5 cursor-pointer relative disabled:opacity-50 disabled:cursor-not-allowed',
-                                            tipoAlcance === 'EQUIPOS'
-                                                ? 'bg-blue-500/10 border-blue-500 text-blue-950 shadow-xs ring-1 ring-blue-500'
-                                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-100/50'
+                                            'p-3 rounded-xl text-left transition-all border flex flex-col justify-between gap-1.5 cursor-pointer relative disabled:opacity-50',
+                                            tipoAlcance === 'EQUIPO'
+                                                ? 'bg-blue-500/10 border-blue-500 text-blue-950 ring-1 ring-blue-500'
+                                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                                         )}
                                     >
                                         <div className="flex items-center justify-between">
                                             <span className="flex items-center gap-1.5 text-xs font-bold">
                                                 <Wrench className="h-3.5 w-3.5 text-blue-600" />
-                                                Asignar a Equipo(s)
+                                                Equipo(s)
                                             </span>
-                                            {tipoAlcance === 'EQUIPOS' && (
+                                            {tipoAlcance === 'EQUIPO' && (
                                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                                                    {selectedEquiposIds.length} selec.
+                                                    {selectedEquiposIds.length}
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-[11px] text-slate-500 leading-tight">
-                                            Trazabilidad directa en la hoja de vida técnica de uno o varios equipos intervenidos.
+                                        <p className="text-[10px] text-slate-500 leading-tight">
+                                            Repuesto o correctivo propio de una o varias máquinas.
+                                        </p>
+                                    </button>
+
+                                    {/* Nivel 2: Cliente / Sede */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setTipoAlcance('CLIENTE')}
+                                        className={cn(
+                                            'p-3 rounded-xl text-left transition-all border flex flex-col justify-between gap-1.5 cursor-pointer relative',
+                                            tipoAlcance === 'CLIENTE'
+                                                ? 'bg-purple-500/10 border-purple-500 text-purple-950 ring-1 ring-purple-500'
+                                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex items-center gap-1.5 text-xs font-bold">
+                                                <Building2 className="h-3.5 w-3.5 text-purple-600" />
+                                                Cliente / Sede
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 leading-tight">
+                                            Cuarto de máquinas, ventilación, obra civil o permisos del cliente.
+                                        </p>
+                                    </button>
+
+                                    {/* Nivel 3: Continuidad del Servicio */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setTipoAlcance('SERVICIO')}
+                                        className={cn(
+                                            'p-3 rounded-xl text-left transition-all border flex flex-col justify-between gap-1.5 cursor-pointer relative',
+                                            tipoAlcance === 'SERVICIO'
+                                                ? 'bg-amber-500/10 border-amber-500 text-amber-950 ring-1 ring-amber-500'
+                                                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex items-center gap-1.5 text-xs font-bold">
+                                                <Globe className="h-3.5 w-3.5 text-amber-600" />
+                                                Servicio / Visita
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 leading-tight">
+                                            Pruebas o actividades del servicio que continúan en próxima visita.
                                         </p>
                                     </button>
                                 </div>
 
-                                {/* Si seleccionó Equipos Específicos: Desplegar selector multiequipo interactivo */}
-                                {tipoAlcance === 'EQUIPOS' && listaEquipos.length > 0 && (
+                                {/* Selector multiequipo cuando el alcance es EQUIPO */}
+                                {tipoAlcance === 'EQUIPO' && listaEquipos.length > 0 && (
                                     <div className="pt-2.5 border-t border-slate-200 space-y-2">
                                         <div className="flex items-center justify-between text-xs">
                                             <span className="font-semibold text-slate-700">
@@ -662,7 +912,9 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                 return (
                                                     <div
                                                         key={eq.idOrdenEquipo || eq.idEquipo}
-                                                        onClick={() => eq.idOrdenEquipo && toggleEquipoSelection(eq.idOrdenEquipo)}
+                                                        onClick={() =>
+                                                            eq.idOrdenEquipo && toggleEquipoSelection(eq.idOrdenEquipo)
+                                                        }
                                                         className={cn(
                                                             'p-2.5 rounded-xl border text-left text-xs transition-all flex items-start gap-2.5 cursor-pointer select-none',
                                                             isSelected
@@ -691,28 +943,16 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                             <div className="font-bold text-xs truncate mt-0.5">
                                                                 {label}
                                                             </div>
-                                                            {eq.tipoEquipo && (
-                                                                <span className="text-[10px] text-slate-500 block truncate">
-                                                                    {eq.tipoEquipo}
-                                                                </span>
-                                                            )}
                                                         </div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
-                                        {selectedEquiposIds.length === 0 && (
-                                            <p className="text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 font-medium">
-                                                ⚠️ Por favor seleccione al menos un equipo de la orden o seleccione &quot;General de la Orden&quot;.
-                                            </p>
-                                        )}
                                     </div>
                                 )}
                             </div>
 
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
                             {/* 2. CATÁLOGO MAESTRO DE PLANTILLAS */}
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
                             <div>
                                 <div className="flex items-center justify-between mb-1.5">
                                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
@@ -725,7 +965,9 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
 
                                 {selectedCatalogoId ? (
                                     (() => {
-                                        const sel = catalogoItems.find((c) => c.id_pendiente_catalogo === selectedCatalogoId);
+                                        const sel = catalogoItems.find(
+                                            (c) => c.id_pendiente_catalogo === selectedCatalogoId
+                                        );
                                         return (
                                             <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-300 rounded-xl flex items-start justify-between gap-3 shadow-xs">
                                                 <div className="flex items-start gap-2.5 min-w-0">
@@ -761,12 +1003,11 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                 type="text"
                                                 value={searchCatalogo}
                                                 onChange={(e) => setSearchCatalogo(e.target.value)}
-                                                placeholder="Buscar por palabra clave o código (ej: Batería, Fuga, Filtro, Radiador)..."
+                                                placeholder="Buscar plantilla por palabra clave o código..."
                                                 className="w-full text-xs pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-gray-400"
                                             />
                                         </div>
 
-                                        {/* Filtros por Categoría */}
                                         <div className="flex flex-wrap gap-1">
                                             {categoriasList.map((cat) => (
                                                 <button
@@ -785,69 +1026,73 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                             ))}
                                         </div>
 
-                                        {/* Lista de Plantillas */}
-                                        <div className="max-h-36 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-lg bg-white shadow-inner">
+                                        <div className="max-h-32 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-lg bg-white shadow-inner">
                                             {loadingCatalogo ? (
                                                 <div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-500">
                                                     <Loader2 className="h-4 w-4 animate-spin text-amber-600" /> Cargando catálogo...
                                                 </div>
-                                            ) : (() => {
-                                                const items = catalogoItems.filter((item) => {
-                                                    const matchCat = catFiltro === 'TODAS' || item.categoria === catFiltro;
-                                                    const matchSearch =
-                                                        !searchCatalogo.trim() ||
-                                                        item.descripcion?.toLowerCase().includes(searchCatalogo.toLowerCase()) ||
-                                                        item.codigo?.toLowerCase().includes(searchCatalogo.toLowerCase());
-                                                    return matchCat && matchSearch;
-                                                });
+                                            ) : (
+                                                (() => {
+                                                    const items = catalogoItems.filter((item) => {
+                                                        const matchCat =
+                                                            catFiltro === 'TODAS' || item.categoria === catFiltro;
+                                                        const matchSearch =
+                                                            !searchCatalogo.trim() ||
+                                                            item.descripcion
+                                                                ?.toLowerCase()
+                                                                .includes(searchCatalogo.toLowerCase()) ||
+                                                            item.codigo
+                                                                ?.toLowerCase()
+                                                                .includes(searchCatalogo.toLowerCase());
+                                                        return matchCat && matchSearch;
+                                                    });
 
-                                                if (items.length === 0) {
-                                                    return (
-                                                        <div className="py-5 text-center text-xs text-gray-400">
-                                                            No se encontraron plantillas coincidentes. Puede redactar abajo directamente.
-                                                        </div>
-                                                    );
-                                                }
-
-                                                return items.map((item) => (
-                                                    <button
-                                                        key={item.id_pendiente_catalogo}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setSelectedCatalogoId(item.id_pendiente_catalogo);
-                                                            setDescripcionManual(item.descripcion);
-                                                        }}
-                                                        className="w-full text-left p-2.5 hover:bg-amber-50/70 transition-colors flex items-center justify-between gap-2 group cursor-pointer"
-                                                    >
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="flex items-center gap-1.5 mb-0.5">
-                                                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
-                                                                    {item.categoria || 'GENERAL'}
-                                                                </span>
-                                                                {item.codigo && (
-                                                                    <span className="text-[10px] font-mono text-gray-500 font-semibold">
-                                                                        {item.codigo}
-                                                                    </span>
-                                                                )}
+                                                    if (items.length === 0) {
+                                                        return (
+                                                            <div className="py-4 text-center text-xs text-gray-400">
+                                                                Sin coincidencias. Puede redactar abajo directamente.
                                                             </div>
-                                                            <p className="text-xs font-medium text-gray-800 line-clamp-1 group-hover:text-amber-900">
-                                                                {item.descripcion}
-                                                            </p>
-                                                        </div>
-                                                        <span className="text-[11px] font-bold text-amber-700 opacity-0 group-hover:opacity-100 shrink-0">
-                                                            + Seleccionar
-                                                        </span>
-                                                    </button>
-                                                ));
-                                            })()}
+                                                        );
+                                                    }
+
+                                                    return items.map((item) => (
+                                                        <button
+                                                            key={item.id_pendiente_catalogo}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSelectedCatalogoId(item.id_pendiente_catalogo);
+                                                                setDescripcionManual(item.descripcion);
+                                                            }}
+                                                            className="w-full text-left p-2.5 hover:bg-amber-50/70 transition-colors flex items-center justify-between gap-2 group cursor-pointer"
+                                                        >
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                                                                        {item.categoria || 'GENERAL'}
+                                                                    </span>
+                                                                    {item.codigo && (
+                                                                        <span className="text-[10px] font-mono text-gray-500 font-semibold">
+                                                                            {item.codigo}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs font-medium text-gray-800 line-clamp-1 group-hover:text-amber-900">
+                                                                    {item.descripcion}
+                                                                </p>
+                                                            </div>
+                                                            <span className="text-[11px] font-bold text-amber-700 opacity-0 group-hover:opacity-100 shrink-0">
+                                                                + Seleccionar
+                                                            </span>
+                                                        </button>
+                                                    ));
+                                                })()
+                                            )}
                                         </div>
                                     </div>
                                 )}
                             </div>
 
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
                             {/* 3. DESCRIPCIÓN DEL PENDIENTE */}
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                                     Descripción del Pendiente *
@@ -855,16 +1100,14 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                 <textarea
                                     value={descripcionManual}
                                     onChange={(e) => setDescripcionManual(e.target.value)}
-                                    placeholder="Detalle el trabajo o repuesto pendiente (ej: Fuga en manguera de retorno de combustible)..."
+                                    placeholder="Detalle el hallazgo, repuesto o adecuación requerida..."
                                     rows={3}
                                     required
                                     className="w-full text-sm p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                                 />
                             </div>
 
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
                             {/* 4. PRIORIDAD Y OBSERVACIONES */}
-                            {/* ═══════════════════════════════════════════════════════════════════ */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
@@ -890,13 +1133,12 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                         type="text"
                                         value={observaciones}
                                         onChange={(e) => setObservaciones(e.target.value)}
-                                        placeholder="Medidas, modelo de repuesto, número de parte..."
+                                        placeholder="Medidas, referencia de repuesto, contacto..."
                                         className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                                     />
                                 </div>
                             </div>
 
-                            {/* Modal Footer */}
                             <div className="pt-3 border-t border-gray-100 flex justify-end gap-2 shrink-0">
                                 <button
                                     type="button"
@@ -911,11 +1153,13 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                     className="flex items-center gap-1.5 px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-xl disabled:opacity-50 shadow-sm shadow-amber-600/20 cursor-pointer"
                                 >
                                     {isSubmitting ? (
-                                        <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</>
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" /> Guardando...
+                                        </>
+                                    ) : tipoAlcance === 'EQUIPO' && selectedEquiposIds.length > 1 ? (
+                                        `Guardar Pendiente (${selectedEquiposIds.length} equipos)`
                                     ) : (
-                                        tipoAlcance === 'EQUIPOS' && selectedEquiposIds.length > 1
-                                            ? `Guardar Pendiente (${selectedEquiposIds.length} equipos)`
-                                            : 'Guardar Pendiente'
+                                        'Guardar Pendiente'
                                     )}
                                 </button>
                             </div>
@@ -960,7 +1204,9 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                     onChange={(e) => setResolucionEstado(e.target.value as any)}
                                     className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                                 >
-                                    <option value="EN_GESTION">En Gestión (Cotizando / En espera repuesto)</option>
+                                    <option value="EN_GESTION">
+                                        En Gestión (Cotizando / Asignado a orden de seguimiento)
+                                    </option>
                                     <option value="RESUELTO">Resuelto (Ejecutado o corregido)</option>
                                     <option value="CANCELADO">Cancelado (No aplica o desestimado)</option>
                                 </select>
@@ -973,7 +1219,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                 <textarea
                                     value={resolucionNotas}
                                     onChange={(e) => setResolucionNotas(e.target.value)}
-                                    placeholder="Ej: Se instaló repuesto en orden #OS-2026-008 o se cotizó con cliente..."
+                                    placeholder="Ej: Se instaló repuesto en visita de seguimiento o se aprobó cotización..."
                                     rows={3}
                                     className="w-full text-sm p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 />
@@ -994,7 +1240,9 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                     className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl disabled:opacity-50 shadow-sm cursor-pointer"
                                 >
                                     {isSubmitting ? (
-                                        <><Loader2 className="h-4 w-4 animate-spin" /> Guardando...</>
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" /> Guardando...
+                                        </>
                                     ) : (
                                         'Actualizar Estado'
                                     )}

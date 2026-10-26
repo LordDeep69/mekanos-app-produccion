@@ -1854,6 +1854,21 @@ export class EquiposGestionService {
             nombre_sistema: true,
           },
         },
+        orden_resolucion: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            estados_orden: {
+              select: {
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
+          },
+        },
         catalogo_pendientes: true,
         empleados_ordenes_pendientes_creado_porToempleados: {
           include: {

@@ -53,6 +53,7 @@ import {
     type FamiliaEquipo,
 } from '@/features/ordenes/lib/familia-equipo';
 import { calculateSmartMatchScore } from '@/lib/search-utils';
+import { apiClient } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import {
     AlertTriangle,
@@ -94,6 +95,10 @@ interface WizardData {
     descripcion?: string;
     tecnicoId?: number;
     tecnicoSeleccionado?: TecnicoSelector;
+    idOrdenPadre?: number;
+    numeroOrdenPadre?: string;
+    tipoVisita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA';
+    idsPendientesAResolver?: number[];
 }
 
 type Paso = 1 | 2 | 3;
@@ -185,20 +190,103 @@ function PasoContexto({
     const { clientes, sedes, equipos, isLoadingClientes, isFetchingClientes, isLoadingSedes, isLoadingEquipos } =
         useCascadaClienteEquipo(data.clienteId, data.sedeId, busquedaCliente);
 
-    // Preselección desde query params (?clienteId=...&equipoId=...) al venir desde /equipos/[id]
+    // ✅ Preselección desde query params (?clienteId=...&equipoId=...&ordenPadreId=...&tipoVisita=...&pendientesIds=...)
+    const [pendientesDetectados, setPendientesDetectados] = useState<any[]>([]);
+    const [loadingPendientes, setLoadingPendientes] = useState(false);
+
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const params = new URLSearchParams(window.location.search);
-        const cId = params.get('clienteId');
+        const cId = params.get('clienteId') || params.get('id_cliente');
         const eId = params.get('equipoId');
+        const oPadreId = params.get('ordenPadreId') || params.get('ordenOrigenId');
+        const tVisita = params.get('tipoVisita') as any;
+        const pIdsStr = params.get('pendientesIds') || params.get('pendienteId');
+
+        const updates: Partial<WizardData> = {};
         if (cId && !data.clienteId) {
-            onChange({ clienteId: Number(cId) });
+            updates.clienteId = Number(cId);
+        }
+        if (tVisita) {
+            updates.tipoVisita = tVisita;
+        }
+        if (pIdsStr) {
+            const pIds = pIdsStr.split(',').map(Number).filter(Boolean);
+            if (pIds.length > 0) {
+                updates.idsPendientesAResolver = pIds;
+            }
+        }
+        if (Object.keys(updates).length > 0) {
+            onChange(updates);
         }
         if (eId) {
             setPreselectEquipoId(Number(eId));
         }
+
+        if (oPadreId) {
+            apiClient
+                .get(`/ordenes/${oPadreId}`)
+                .then((res) => {
+                    const ord = res.data?.data;
+                    if (!ord) return;
+                    const rootId = ord.id_orden_padre || ord.id_orden_servicio;
+                    const rootNum = ord.orden_padre?.numero_orden || ord.numero_orden;
+                    const nextUpdates: Partial<WizardData> = {
+                        idOrdenPadre: rootId,
+                        numeroOrdenPadre: rootNum,
+                        tipoVisita: tVisita || 'CORRECTIVO_DERIVADO',
+                    };
+                    if (!cId && (ord.clientes?.id_cliente || ord.id_cliente)) {
+                        nextUpdates.clienteId = ord.clientes?.id_cliente || ord.id_cliente;
+                    }
+                    if (!eId && ord.ordenes_equipos?.length > 0) {
+                        const firstEq = ord.ordenes_equipos[0]?.equipo || ord.ordenes_equipos[0]?.equipos;
+                        if (firstEq?.id_equipo) {
+                            setPreselectEquipoId(firstEq.id_equipo);
+                        }
+                    } else if (!eId && ord.equipos?.id_equipo) {
+                        setPreselectEquipoId(ord.equipos.id_equipo);
+                    }
+                    onChange(nextUpdates);
+                })
+                .catch((err) => console.error('Error cargando orden padre:', err));
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // ✅ Detector Proactivo de Pendientes Abiertos (Cliente / Equipo / Servicio)
+    useEffect(() => {
+        if (!data.clienteId) {
+            setPendientesDetectados([]);
+            return;
+        }
+        setLoadingPendientes(true);
+        const eqIds = data.equiposSeleccionados.map((e) => e.id_equipo);
+        const query = new URLSearchParams();
+        query.set('idCliente', String(data.clienteId));
+        query.set('estado', 'ACTIVOS');
+        if (eqIds.length > 0) {
+            query.set('idEquipos', eqIds.join(','));
+        }
+        apiClient
+            .get(`/ordenes/backlog-pendientes?${query.toString()}`)
+            .then((res) => {
+                if (res.data?.success && Array.isArray(res.data.data)) {
+                    setPendientesDetectados(res.data.data);
+                }
+            })
+            .catch(() => {})
+            .finally(() => setLoadingPendientes(false));
+    }, [data.clienteId, data.equiposSeleccionados]);
+
+    const togglePendienteResolver = (idPendiente: number) => {
+        const actuales = data.idsPendientesAResolver || [];
+        const existe = actuales.includes(idPendiente);
+        const nuevos = existe
+            ? actuales.filter((id) => id !== idPendiente)
+            : [...actuales, idPendiente];
+        onChange({ idsPendientesAResolver: nuevos });
+    };
 
     useEffect(() => {
         if (data.clienteId && !data.clienteSeleccionado && clientes.length > 0) {
@@ -335,6 +423,64 @@ function PasoContexto({
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* ✅ BANNER DE ENCADENAMIENTO FRACTAL (VISITA DE SEGUIMIENTO / GARANTÍA) */}
+            {data.idOrdenPadre && (
+                <div className="p-5 rounded-2xl bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white border border-indigo-500/40 shadow-md space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/40 rounded-xl text-indigo-300">
+                                <Layers className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[11px] font-extrabold uppercase tracking-widest text-indigo-300">
+                                        Secuencia Encadenada de Servicio
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-500/30 border border-indigo-400/40">
+                                        Caso Raíz: {data.numeroOrdenPadre || `#${data.idOrdenPadre}`}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-300 mt-0.5">
+                                    Esta nueva orden quedará enlazada automáticamente al hilo técnico de la orden raíz para trazabilidad financiera y operativa.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => onChange({ idOrdenPadre: undefined, numeroOrdenPadre: undefined, tipoVisita: 'INICIAL' })}
+                            className="text-xs text-slate-300 hover:text-white underline self-end sm:self-center cursor-pointer"
+                        >
+                            Desvincular
+                        </button>
+                    </div>
+
+                    <div className="pt-2 border-t border-white/10 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-indigo-200 mr-1">
+                            Naturaleza de esta visita:
+                        </span>
+                        {([
+                            { key: 'CORRECTIVO_DERIVADO', label: '🔧 Correctivo Derivado (Hallazgos)' },
+                            { key: 'CONTINUACION', label: '⏳ Continuación Operativa (2da Jornada)' },
+                            { key: 'GARANTIA', label: '🛡️ Visita por Garantía' },
+                        ] as const).map((op) => (
+                            <button
+                                key={op.key}
+                                type="button"
+                                onClick={() => onChange({ tipoVisita: op.key })}
+                                className={cn(
+                                    'px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer',
+                                    (data.tipoVisita || 'CORRECTIVO_DERIVADO') === op.key
+                                        ? 'bg-indigo-500 text-white border-indigo-300 shadow-xs'
+                                        : 'bg-white/5 text-slate-300 border-white/15 hover:bg-white/10'
+                                )}
+                            >
+                                {op.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-slate-50 border border-blue-100">
                 <div className="relative z-10 flex items-start gap-4">
                     <div className="p-3 bg-white rounded-xl shadow-sm text-blue-600">
@@ -1250,6 +1396,9 @@ export default function NuevaOrdenPage() {
                 fechaProgramada: data.fechaProgramada || undefined,
                 descripcion: data.descripcion,
                 tecnicoId: data.tecnicoId,
+                idOrdenPadre: data.idOrdenPadre,
+                tipoVisita: data.tipoVisita || (data.idOrdenPadre ? 'CORRECTIVO_DERIVADO' : 'INICIAL'),
+                idsPendientesAResolver: data.idsPendientesAResolver,
             });
             if (result.data?.id_orden_servicio) router.push(`/ordenes/${result.data.id_orden_servicio}`);
             else router.push('/ordenes');

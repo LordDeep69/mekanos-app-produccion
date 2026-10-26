@@ -2,7 +2,7 @@ import { PrioridadOrdenEnum } from '@mekanos/core';
 
 /**
  * Command: CreateOrdenCommand
- * Soporte Multi-Equipos (Enterprise)
+ * Soporte Multi-Equipos (Enterprise) + Encadenamiento Fractal de Visitas + Resolución de Pendientes
  */
 export class CreateOrdenCommand {
   constructor(
@@ -16,6 +16,9 @@ export class CreateOrdenCommand {
     public readonly prioridad?: PrioridadOrdenEnum,
     public readonly fechaProgramada?: Date,
     public readonly tecnicoId?: number, // Asignación proactiva
-    public readonly userId?: number
+    public readonly userId?: number,
+    public readonly idOrdenPadre?: number,
+    public readonly tipoVisita?: string,
+    public readonly idsPendientesAResolver?: number[],
   ) { }
 }

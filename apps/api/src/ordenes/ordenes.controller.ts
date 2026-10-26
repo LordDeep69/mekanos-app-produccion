@@ -2025,7 +2025,11 @@ export class OrdenesController {
   @ApiOperation({ summary: 'Actualizar estado de un pendiente técnico' })
   async updateEstadoPendiente(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO'; observaciones_resolucion?: string },
+    @Body() body: {
+      estado: 'PENDIENTE' | 'EN_GESTION' | 'RESUELTO' | 'CANCELADO';
+      observaciones_resolucion?: string;
+      id_orden_resolucion?: number | null;
+    },
     @CurrentUser() user: any,
   ) {
     const pendiente = await this.prisma.ordenes_pendientes.findUnique({
@@ -2048,14 +2052,20 @@ export class OrdenesController {
       idEmpleadoResuelve = emp?.id_empleado || null;
     }
 
+    const updateData: any = {
+      estado: body.estado,
+      observaciones_resolucion: body.observaciones_resolucion !== undefined ? body.observaciones_resolucion : pendiente.observaciones_resolucion,
+      fecha_resolucion: (esResuelto || esCancelado) ? new Date() : null,
+      resuelto_por: (esResuelto || esCancelado) ? idEmpleadoResuelve : null,
+    };
+
+    if (body.id_orden_resolucion !== undefined) {
+      updateData.id_orden_resolucion = body.id_orden_resolucion;
+    }
+
     const updated = await this.prisma.ordenes_pendientes.update({
       where: { id_orden_pendiente: id },
-      data: {
-        estado: body.estado,
-        observaciones_resolucion: body.observaciones_resolucion !== undefined ? body.observaciones_resolucion : pendiente.observaciones_resolucion,
-        fecha_resolucion: (esResuelto || esCancelado) ? new Date() : null,
-        resuelto_por: (esResuelto || esCancelado) ? idEmpleadoResuelve : null,
-      },
+      data: updateData,
       include: {
         equipos: {
           select: {
@@ -2069,6 +2079,20 @@ export class OrdenesController {
             id_orden_equipo: true,
             orden_secuencia: true,
             nombre_sistema: true,
+          },
+        },
+        orden_resolucion: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            estados_orden: {
+              select: {
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
           },
         },
         catalogo_pendientes: true,
@@ -2089,13 +2113,11 @@ export class OrdenesController {
     @Body() body: {
       descripcion: string;
       idPendienteCatalogo?: number;
-      idEquipo?: number;
-      idOrdenEquipo?: number;
+      idEquipo?: number | null;
+      idOrdenEquipo?: number | null;
       idOrdenEquipos?: number[];
       esGeneral?: boolean;
-      // ✅ origen_pendiente_enum = CATALOGO | PERSONALIZADO | MANUAL.
-      // La firma solo declaraba CATALOGO | MANUAL y luego comparaba contra
-      // 'PERSONALIZADO', un valor que TypeScript marcaba como imposible.
+      alcance?: 'CLIENTE' | 'EQUIPO' | 'SERVICIO';
       origen?: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
       prioridad?: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
       observaciones?: string;
@@ -2150,6 +2172,20 @@ export class OrdenesController {
           nombre_sistema: true,
         },
       },
+      orden_resolucion: {
+        select: {
+          id_orden_servicio: true,
+          numero_orden: true,
+          tipo_visita: true,
+          numero_visita_caso: true,
+          estados_orden: {
+            select: {
+              nombre_estado: true,
+              color_hex: true,
+            },
+          },
+        },
+      },
       catalogo_pendientes: true,
     };
 
@@ -2173,6 +2209,7 @@ export class OrdenesController {
             id_cliente: orden.id_cliente,
             id_equipo: targetIdEquipo,
             id_orden_equipo: targetIdOrdenEquipo,
+            alcance: body.alcance || 'EQUIPO',
             id_pendiente_catalogo: body.idPendienteCatalogo || null,
             descripcion: body.descripcion.trim(),
             origen: origenVal,
@@ -2195,13 +2232,19 @@ export class OrdenesController {
       };
     }
 
-    // ✅ CASO B: Un solo registro (General o Equipo individual)
-    let idEquipo = body.idEquipo;
-    let idOrdenEquipo = body.idOrdenEquipo || null;
+    // ✅ CASO B: Un solo registro (Alcance CLIENTE, SERVICIO o EQUIPO individual)
+    const alcanceResuelto: 'CLIENTE' | 'EQUIPO' | 'SERVICIO' =
+      body.alcance || (body.esGeneral ? 'SERVICIO' : 'EQUIPO');
 
-    if (body.esGeneral === true) {
+    let idEquipo: number | null = body.idEquipo ?? null;
+    let idOrdenEquipo: number | null = body.idOrdenEquipo || null;
+
+    if (alcanceResuelto === 'CLIENTE') {
       idOrdenEquipo = null;
-      idEquipo = orden.id_equipo;
+      idEquipo = body.idEquipo ?? null;
+    } else if (alcanceResuelto === 'SERVICIO' || body.esGeneral === true) {
+      idOrdenEquipo = null;
+      idEquipo = body.idEquipo !== undefined ? body.idEquipo : orden.id_equipo;
     } else {
       if (idOrdenEquipo && orden.ordenes_equipos) {
         const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === idOrdenEquipo);
@@ -2229,6 +2272,7 @@ export class OrdenesController {
         id_cliente: orden.id_cliente,
         id_equipo: idEquipo,
         id_orden_equipo: idOrdenEquipo || null,
+        alcance: alcanceResuelto,
         id_pendiente_catalogo: body.idPendienteCatalogo || null,
         descripcion: body.descripcion.trim(),
         origen: origenVal,
@@ -2246,6 +2290,297 @@ export class OrdenesController {
       message: 'Pendiente creado correctamente',
       data: created,
       items: [created],
+    };
+  }
+
+  /**
+   * GET /api/ordenes/backlog-pendientes
+   * Motor Central de Pendientes 360° (Alcances: CLIENTE, EQUIPO, SERVICIO)
+   */
+  @Get('backlog-pendientes')
+  @ApiOperation({ summary: 'Consultar backlog transversal de pendientes (Cliente / Equipo / Servicio)' })
+  async getBacklogPendientes(
+    @Query('idCliente') idCliente?: string,
+    @Query('idEquipo') idEquipo?: string,
+    @Query('idEquipos') idEquipos?: string,
+    @Query('idOrdenServicio') idOrdenServicio?: string,
+    @Query('idOrdenResolucion') idOrdenResolucion?: string,
+    @Query('alcance') alcance?: string,
+    @Query('estado') estado?: string,
+  ) {
+    const where: any = {};
+
+    if (idCliente) {
+      where.id_cliente = parseInt(idCliente, 10);
+    }
+
+    if (idEquipos) {
+      const ids = idEquipos
+        .split(',')
+        .map((v) => parseInt(v.trim(), 10))
+        .filter((n) => !isNaN(n) && n > 0);
+      if (ids.length > 0) {
+        if (idCliente) {
+          where.OR = [
+            { id_equipo: { in: ids } },
+            { alcance: 'CLIENTE' },
+            { id_equipo: null },
+          ];
+        } else {
+          where.id_equipo = { in: ids };
+        }
+      }
+    } else if (idEquipo) {
+      where.id_equipo = parseInt(idEquipo, 10);
+    }
+
+    if (idOrdenServicio) {
+      where.id_orden_servicio = parseInt(idOrdenServicio, 10);
+    }
+
+    if (idOrdenResolucion) {
+      where.id_orden_resolucion = parseInt(idOrdenResolucion, 10);
+    }
+
+    if (alcance && alcance !== 'TODOS') {
+      where.alcance = alcance;
+    }
+
+    if (estado === 'ACTIVOS') {
+      where.estado = { in: ['PENDIENTE', 'EN_GESTION'] };
+    } else if (estado && estado !== 'TODOS') {
+      where.estado = estado;
+    }
+
+    const items = await this.prisma.ordenes_pendientes.findMany({
+      where,
+      orderBy: [
+        { fecha_creacion: 'desc' },
+      ],
+      include: {
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+            ubicacion_texto: true,
+          },
+        },
+        clientes: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                razon_social: true,
+                nombre_comercial: true,
+              },
+            },
+          },
+        },
+        ordenes_servicio: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            estados_orden: {
+              select: {
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
+          },
+        },
+        orden_resolucion: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            estados_orden: {
+              select: {
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
+          },
+        },
+        ordenes_equipos: {
+          select: {
+            id_orden_equipo: true,
+            orden_secuencia: true,
+            nombre_sistema: true,
+          },
+        },
+        catalogo_pendientes: true,
+        empleados_ordenes_pendientes_creado_porToempleados: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+        empleados_ordenes_pendientes_resuelto_porToempleados: {
+          include: {
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const resumen = {
+      total: items.length,
+      pendientes: items.filter((i) => i.estado === 'PENDIENTE').length,
+      en_gestion: items.filter((i) => i.estado === 'EN_GESTION').length,
+      resueltos: items.filter((i) => i.estado === 'RESUELTO').length,
+      por_alcance: {
+        EQUIPO: items.filter((i) => (i.alcance || 'EQUIPO') === 'EQUIPO').length,
+        CLIENTE: items.filter((i) => i.alcance === 'CLIENTE').length,
+        SERVICIO: items.filter((i) => i.alcance === 'SERVICIO').length,
+      },
+    };
+
+    return {
+      success: true,
+      data: items,
+      resumen,
+    };
+  }
+
+  /**
+   * POST /api/ordenes/pendientes-directos
+   * Crea un pendiente directo en el Backlog (sin requerir Orden de Servicio previa, o asociado a Equipo/Cliente)
+   * Blindaje #1: Garantiza No-Orfandad resolviendo siempre id_cliente.
+   */
+  @Post('pendientes-directos')
+  @ApiOperation({ summary: 'Registrar un pendiente directo de Cliente, Equipo o Servicio' })
+  async createPendienteDirecto(
+    @Body() body: {
+      idCliente?: number;
+      idEquipo?: number | null;
+      idOrdenServicio?: number | null;
+      alcance?: 'CLIENTE' | 'EQUIPO' | 'SERVICIO';
+      descripcion: string;
+      idPendienteCatalogo?: number;
+      origen?: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO';
+      prioridad?: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+      observaciones?: string;
+    },
+    @CurrentUser() user: any,
+  ) {
+    if (!body.descripcion?.trim()) {
+      throw new BadRequestException('La descripción del pendiente es requerida');
+    }
+
+    let idClienteResuelto = body.idCliente ? Number(body.idCliente) : null;
+    const idEquipoResuelto = body.idEquipo ? Number(body.idEquipo) : null;
+    const idOrdenResuelto = body.idOrdenServicio ? Number(body.idOrdenServicio) : null;
+
+    if (!idClienteResuelto && idEquipoResuelto) {
+      const eq = await this.prisma.equipos.findUnique({
+        where: { id_equipo: idEquipoResuelto },
+        select: { id_cliente: true },
+      });
+      if (!eq) {
+        throw new NotFoundException(`Equipo con ID ${idEquipoResuelto} no encontrado`);
+      }
+      idClienteResuelto = eq.id_cliente;
+    }
+
+    if (!idClienteResuelto && idOrdenResuelto) {
+      const ord = await this.prisma.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: idOrdenResuelto },
+        select: { id_cliente: true },
+      });
+      if (!ord) {
+        throw new NotFoundException(`Orden con ID ${idOrdenResuelto} no encontrada`);
+      }
+      idClienteResuelto = ord.id_cliente;
+    }
+
+    if (!idClienteResuelto) {
+      throw new BadRequestException(
+        'Blindaje de No-Orfandad: Debe especificar idCliente, idEquipo o idOrdenServicio para registrar el pendiente.',
+      );
+    }
+
+    let idEmpleado: number | null = null;
+    if (user?.id_usuario) {
+      const emp = await this.prisma.empleados.findFirst({
+        where: { persona: { usuarios: { id_usuario: user.id_usuario } } },
+        select: { id_empleado: true },
+      });
+      idEmpleado = emp?.id_empleado || null;
+    }
+
+    let origenVal: 'CATALOGO' | 'MANUAL' | 'PERSONALIZADO' = 'MANUAL';
+    if (body.origen) {
+      origenVal = body.origen;
+    } else if (body.idPendienteCatalogo) {
+      origenVal = 'CATALOGO';
+    }
+
+    const alcanceFinal: 'CLIENTE' | 'EQUIPO' | 'SERVICIO' =
+      body.alcance || (idEquipoResuelto ? 'EQUIPO' : idOrdenResuelto ? 'SERVICIO' : 'CLIENTE');
+
+    const created = await this.prisma.ordenes_pendientes.create({
+      data: {
+        id_cliente: idClienteResuelto,
+        id_equipo: idEquipoResuelto,
+        id_orden_servicio: idOrdenResuelto,
+        alcance: alcanceFinal,
+        id_pendiente_catalogo: body.idPendienteCatalogo || null,
+        descripcion: body.descripcion.trim(),
+        origen: origenVal,
+        prioridad: body.prioridad || 'NORMAL',
+        estado: 'PENDIENTE',
+        observaciones: body.observaciones?.trim() || null,
+        creado_por: idEmpleado,
+        fecha_creacion: new Date(),
+      },
+      include: {
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+          },
+        },
+        ordenes_servicio: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            fecha_programada: true,
+          },
+        },
+        orden_resolucion: {
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+          },
+        },
+        catalogo_pendientes: true,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Pendiente registrado exitosamente en el Backlog 360°',
+      data: created,
     };
   }
 
@@ -2306,11 +2641,12 @@ export class OrdenesController {
       dto.descripcion_inicial,
       razonFalla,
       dto.prioridad,
-      // ✅ FIX TIMEZONE: Agregar T12:00:00 para evitar offset de día
-      // "2026-01-05" → "2026-01-05T12:00:00" (mediodía evita problemas de timezone)
       dto.fecha_programada ? new Date(`${dto.fecha_programada}T12:00:00`) : undefined,
       tecnicoId,
-      userId
+      userId,
+      dto.id_orden_padre,
+      dto.tipo_visita,
+      dto.ids_pendientes_a_resolver,
     );
 
     const result = await this.commandBus.execute(command);

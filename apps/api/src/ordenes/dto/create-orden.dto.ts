@@ -3,6 +3,7 @@ import { IsArray, IsDateString, IsEnum, IsInt, IsOptional, IsString, Min } from 
 
 /**
  * DTO para crear nueva orden de servicio
+ * Incluye soporte para Encadenamiento Fractal (Orden Raíz -> Visitas Hijas) y Resolución de Pendientes
  */
 export class CreateOrdenDto {
   @IsOptional()
@@ -63,4 +64,19 @@ export class CreateOrdenDto {
   @IsInt()
   @Min(1)
   tecnicoId?: number; // Alias para compatibilidad con frontend
+
+  // ✅ ENCADENAMIENTO FRACTAL DE VISITAS (Hilo de Caso)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  id_orden_padre?: number;
+
+  @IsOptional()
+  @IsString()
+  tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  ids_pendientes_a_resolver?: number[];
 }

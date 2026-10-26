@@ -9,7 +9,7 @@ import { CreateOrdenCommand } from './create-orden.command';
 
 /**
  * Handler para CreateOrdenCommand
- * Crea una nueva Orden de Servicio en estado BORRADOR
+ * Crea una nueva Orden de Servicio con soporte para Encadenamiento Fractal (Visita 1 -> Visita N)
  */
 @CommandHandler(CreateOrdenCommand)
 export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
@@ -30,12 +30,10 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       prioridad,
       fechaProgramada,
       tecnicoId,
+      idOrdenPadre,
+      tipoVisita,
+      idsPendientesAResolver,
     } = command;
-
-    // --- VALIDACIÓN ZERO TRUST (Integridad Atómica) ---
-    // 1. Validar que el cliente existe
-    // 2. Validar que todos los equipos pertenecen al cliente
-    // 3. Validar que el tipo de servicio es compatible con los equipos (si aplica)
 
     // Obtener el primer equipo como principal para la tabla ordenes_servicio (compatibilidad)
     const equipoPrincipalId = equiposIds[0];
@@ -73,7 +71,6 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
     });
 
     // Mapear datos para persistencia
-    // Si hay técnico, el estado inicial es ASIGNADA (ID 1), de lo contrario PROGRAMADA (ID 3)
     let idEstadoInicial = 3;
     if (tecnicoId) {
       const estadoAsignada = await (this.ordenRepository as any).findEstadoByCodigo?.('ASIGNADA');
@@ -92,18 +89,22 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       descripcion_inicial: orden.descripcion,
       fecha_programada: orden.fechaProgramada,
       prioridad: orden.prioridad.getValue(),
-      origen_solicitud: 'PROGRAMADO',
+      origen_solicitud: tipoVisita === 'GARANTIA' ? 'GARANTIA' : 'PROGRAMADO',
       id_estado_actual: idEstadoInicial,
       id_tecnico_asignado: tecnicoId || null,
       fecha_asignacion: tecnicoId ? new Date() : null,
       requiere_firma_cliente: true,
       creado_por: command.userId,
+      id_orden_padre: idOrdenPadre || null,
+      tipo_visita: tipoVisita || 'INICIAL',
     };
 
-    // --- TRANSACCIÓN ENTERPRISE: Orden + Múltiples Equipos + Servicios Específicos ---
-    // ✅ OPTIMIZADO 05-ENE-2026: Retornar orden con relaciones LITE directamente
-    // Evita el findById pesado que causaba +10 segundos de latencia
-    const savedOrden = await (this.ordenRepository as any).saveWithEquiposOptimizado(ordenData, equiposIds, serviciosIds);
+    const savedOrden = await (this.ordenRepository as any).saveWithEquiposOptimizado(
+      ordenData,
+      equiposIds,
+      serviciosIds,
+      idsPendientesAResolver,
+    );
 
     return savedOrden;
   }

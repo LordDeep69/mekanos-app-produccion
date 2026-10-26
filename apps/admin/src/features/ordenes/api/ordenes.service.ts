@@ -105,6 +105,9 @@ export async function createOrden(data: CreateOrdenDto): Promise<{ success: bool
         prioridad: data.prioridad || 'NORMAL',
         fecha_programada: data.fechaProgramada,
         id_tecnico_asignado: data.tecnicoId,
+        id_orden_padre: data.idOrdenPadre,
+        tipo_visita: data.tipoVisita,
+        ids_pendientes_a_resolver: data.idsPendientesAResolver,
     };
 
     const response = await apiClient.post<{ success: boolean; data: Orden }>(
@@ -807,5 +810,62 @@ export async function removeComponenteOrden(
         `${ORDENES_BASE}/${idOrden}/componentes/${idUso}`,
         { params: motivo ? { motivo } : undefined }
     );
+    return response.data;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MOTOR CENTRAL DE PENDIENTES 360° (CLIENTE / EQUIPO / SERVICIO)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export async function getBacklogPendientes(params: {
+    idCliente?: number;
+    idEquipo?: number;
+    idEquipos?: number[];
+    idOrdenServicio?: number;
+    idOrdenResolucion?: number;
+    alcance?: string;
+    estado?: string;
+}) {
+    const queryParams = new URLSearchParams();
+    if (params.idCliente) queryParams.append('idCliente', String(params.idCliente));
+    if (params.idEquipo) queryParams.append('idEquipo', String(params.idEquipo));
+    if (params.idEquipos && params.idEquipos.length > 0) {
+        queryParams.append('idEquipos', params.idEquipos.join(','));
+    }
+    if (params.idOrdenServicio) queryParams.append('idOrdenServicio', String(params.idOrdenServicio));
+    if (params.idOrdenResolucion) queryParams.append('idOrdenResolucion', String(params.idOrdenResolucion));
+    if (params.alcance) queryParams.append('alcance', params.alcance);
+    if (params.estado) queryParams.append('estado', params.estado);
+
+    const response = await apiClient.get<{
+        success: boolean;
+        data: any[];
+        resumen: {
+            total: number;
+            pendientes: number;
+            en_gestion: number;
+            resueltos: number;
+            por_alcance: { EQUIPO: number; CLIENTE: number; SERVICIO: number };
+        };
+    }>(`${ORDENES_BASE}/backlog-pendientes?${queryParams.toString()}`);
+    return response.data;
+}
+
+export async function createPendienteDirecto(data: {
+    idCliente?: number;
+    idEquipo?: number | null;
+    idOrdenServicio?: number | null;
+    alcance?: 'CLIENTE' | 'EQUIPO' | 'SERVICIO';
+    descripcion: string;
+    idPendienteCatalogo?: number;
+    prioridad?: 'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA';
+    observaciones?: string;
+}) {
+    const response = await apiClient.post<{
+        success: boolean;
+        message: string;
+        data: any;
+    }>(`${ORDENES_BASE}/pendientes-directos`, data);
     return response.data;
 }

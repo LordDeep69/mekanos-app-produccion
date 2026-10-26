@@ -7,14 +7,15 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  CornerDownRight,
   ExternalLink,
-  Filter,
   Loader2,
   Plus,
   RefreshCw,
   Search,
   User,
   Wrench,
+  X,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
@@ -41,6 +42,13 @@ export function EquipoPendientesTab({
   const [filtro, setFiltro] = useState<'TODOS' | 'ACTIVOS' | 'RESUELTOS'>('TODOS');
   const [busqueda, setBusqueda] = useState('');
 
+  // Modal Nuevo Pendiente Directo (sin OT previa)
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [descripcion, setDescripcion] = useState('');
+  const [prioridad, setPrioridad] = useState<'NORMAL' | 'ALTA' | 'URGENTE' | 'EMERGENCIA'>('NORMAL');
+  const [observaciones, setObservaciones] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
   const cargarPendientes = async () => {
     setLoading(true);
     setError(null);
@@ -62,6 +70,32 @@ export function EquipoPendientesTab({
   useEffect(() => {
     cargarPendientes();
   }, [idEquipo]);
+
+  const handleCrearPendienteDirecto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!descripcion.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await apiClient.post('/ordenes/pendientes-directos', {
+        idEquipo,
+        alcance: 'EQUIPO',
+        descripcion: descripcion.trim(),
+        prioridad,
+        observaciones: observaciones.trim() || undefined,
+      });
+      if (res.data?.success) {
+        setIsAddOpen(false);
+        setDescripcion('');
+        setObservaciones('');
+        setPrioridad('NORMAL');
+        await cargarPendientes();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error registrando pendiente directo');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -90,10 +124,14 @@ export function EquipoPendientesTab({
   }
 
   const items = data?.items || [];
+  const pendientesActivosIds = items
+    .filter((p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION')
+    .map((p) => p.id_orden_pendiente);
+
   const filtrados = items.filter((p) => {
     if (filtro === 'ACTIVOS') {
       if (p.estado !== 'PENDIENTE' && p.estado !== 'EN_GESTION') return false;
-    } else if (filtro === 'RESUELTO' || filtro === 'RESUELTOS') {
+    } else if (filtro === 'RESUELTOS') {
       if (p.estado !== 'RESUELTO') return false;
     }
 
@@ -121,32 +159,43 @@ export function EquipoPendientesTab({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-900">
-                Trazabilidad de Hallazgos & Pendientes Técnicos
+                Trazabilidad de Hallazgos & Pendientes del Equipo (EAM 360°)
               </h3>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
                 {data?.total || 0} total
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Registro histórico de trabajos, desgastes y repuestos pendientes capturados en campo durante el mantenimiento
+              Registro histórico y activo de pendientes técnicos capturados en órdenes de servicio o reportados directamente
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             onClick={cargarPendientes}
-            className="p-2 text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            className="p-2 text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
             title="Refrescar datos"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
-          <Link
-            href={`/ordenes/nueva?equipoId=${idEquipo}`}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors"
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer"
           >
             <Plus className="h-4 w-4" />
-            <span>Crear OT para Resolver</span>
+            <span>+ Nuevo Pendiente Directo</span>
+          </button>
+          <Link
+            href={`/ordenes/nueva?equipoId=${idEquipo}${
+              pendientesActivosIds.length > 0
+                ? `&pendientesIds=${pendientesActivosIds.join(',')}&tipoVisita=CORRECTIVO_DERIVADO`
+                : ''
+            }`}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors"
+          >
+            <CornerDownRight className="h-4 w-4" />
+            <span>Generar OT Correctiva</span>
           </Link>
         </div>
       </div>
@@ -184,7 +233,7 @@ export function EquipoPendientesTab({
             <span className="text-xs text-slate-500">reparaciones cerradas</span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
-            Trabajos completados en intervenciones anteriores
+            Trabajos completados con trazabilidad de orden de resolución
           </p>
         </div>
 
@@ -305,15 +354,19 @@ export function EquipoPendientesTab({
                     </div>
 
                     {/* Vínculo a la Orden de Servicio de Origen */}
-                    {p.ordenes_servicio && (
+                    {p.ordenes_servicio ? (
                       <Link
                         href={`/ordenes/${p.ordenes_servicio.id_orden_servicio}`}
                         className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 hover:underline"
                         title="Ver Orden de Servicio donde se reportó este hallazgo"
                       >
-                        <span>{numOrden || `OT #${p.ordenes_servicio.id_orden_servicio}`}</span>
+                        <span>Origen: {numOrden || `OT #${p.ordenes_servicio.id_orden_servicio}`}</span>
                         <ExternalLink className="h-2.5 w-2.5" />
                       </Link>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                        Directo Hoja de Vida
+                      </span>
                     )}
                   </div>
 
@@ -327,6 +380,26 @@ export function EquipoPendientesTab({
                     <p className="text-xs text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                       <strong className="text-slate-700">Obs:</strong> {p.observaciones}
                     </p>
+                  )}
+
+                  {/* Vínculo a Orden de Resolución (Closed-Loop) */}
+                  {p.orden_resolucion && (
+                    <div className="mt-2 p-2 rounded-lg bg-indigo-50/80 border border-indigo-200 flex items-center justify-between text-xs">
+                      <span className="text-indigo-900 font-semibold flex items-center gap-1">
+                        <CornerDownRight className="h-3.5 w-3.5 text-indigo-600" />
+                        {isResuelto ? 'Resuelto en:' : 'En resolución en:'}
+                      </span>
+                      <Link
+                        href={`/ordenes/${p.orden_resolucion.id_orden_servicio}`}
+                        className="font-mono font-bold text-indigo-700 hover:underline flex items-center gap-1"
+                      >
+                        <span>
+                          {p.orden_resolucion.numero_orden} (Visita #
+                          {p.orden_resolucion.numero_visita_caso || 2})
+                        </span>
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </div>
                   )}
 
                   {/* Notas de Resolución */}
@@ -348,19 +421,115 @@ export function EquipoPendientesTab({
                     <span>Reportado: {formatDateSafe(p.fecha_creacion)}</span>
                   </div>
 
-                  {p.empleados_ordenes_pendientes_creado_porToempleados?.persona && (
-                    <div className="flex items-center gap-1 text-slate-600 font-medium">
-                      <User className="h-3 w-3 text-slate-400" />
-                      <span>
-                        {p.empleados_ordenes_pendientes_creado_porToempleados.persona.nombre_completo ||
-                          p.empleados_ordenes_pendientes_creado_porToempleados.persona.primer_nombre}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {!isResuelto && !isCancelado && !p.orden_resolucion && (
+                      <Link
+                        href={`/ordenes/nueva?equipoId=${idEquipo}&pendientesIds=${p.id_orden_pendiente}${
+                          p.ordenes_servicio?.id_orden_servicio
+                            ? `&ordenPadreId=${p.ordenes_servicio.id_orden_servicio}&tipoVisita=CORRECTIVO_DERIVADO`
+                            : ''
+                        }`}
+                        className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded font-bold text-[10px]"
+                      >
+                        Resolver en OT →
+                      </Link>
+                    )}
+                    {p.empleados_ordenes_pendientes_creado_porToempleados?.persona && (
+                      <div className="flex items-center gap-1 text-slate-600 font-medium">
+                        <User className="h-3 w-3 text-slate-400" />
+                        <span>
+                          {p.empleados_ordenes_pendientes_creado_porToempleados.persona
+                            .nombre_completo ||
+                            p.empleados_ordenes_pendientes_creado_porToempleados.persona
+                              .primer_nombre}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal Nuevo Pendiente Directo al Equipo */}
+      {isAddOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-5 py-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+              <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                <Plus className="h-4 w-4 text-amber-600" />
+                Registrar Pendiente Directo ({codigoEquipo || `Equipo #${idEquipo}`})
+              </h4>
+              <button
+                onClick={() => setIsAddOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCrearPendienteDirecto} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Descripción del Requerimiento / Repuesto *
+                </label>
+                <textarea
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  rows={3}
+                  required
+                  placeholder="Ej: Reemplazar sensor de presión de aceite VDO en próximo servicio..."
+                  className="w-full text-sm p-2.5 border border-slate-300 rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Prioridad
+                  </label>
+                  <select
+                    value={prioridad}
+                    onChange={(e) => setPrioridad(e.target.value as any)}
+                    className="w-full text-sm p-2 border border-slate-300 rounded-xl bg-white"
+                  >
+                    <option value="NORMAL">Normal</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="URGENTE">Urgente</option>
+                    <option value="EMERGENCIA">Emergencia</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Observación / Parte
+                  </label>
+                  <input
+                    type="text"
+                    value={observaciones}
+                    onChange={(e) => setObservaciones(e.target.value)}
+                    placeholder="Ref / medida..."
+                    className="w-full text-sm p-2 border border-slate-300 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 border border-slate-300 rounded-xl hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl disabled:opacity-50 cursor-pointer"
+                >
+                  {submitting ? 'Guardando...' : 'Guardar en Hoja de Vida'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

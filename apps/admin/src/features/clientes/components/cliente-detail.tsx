@@ -73,6 +73,7 @@ import { toast } from 'sonner';
 import { useCliente } from '../hooks/use-clientes';
 import { BitacoraTab } from './bitacora-tab';
 import { EquiposClienteTable } from './equipos-cliente-table';
+import { ClientePendientesSection } from './cliente-pendientes-section';
 import { TrazabilidadServiciosCliente } from './trazabilidad-servicios-cliente';
 
 interface ClienteDetailProps {
@@ -1098,6 +1099,22 @@ export function ClienteDetail({ clienteId }: ClienteDetailProps) {
             {/* TARJETA 5: TABLA DE EQUIPOS ASOCIADOS (Full Width) */}
             <div className="md:col-span-2">
               <EquiposClienteTable clienteId={clienteId} />
+            </div>
+
+            {/* TARJETA 6: BACKLOG CENTRAL DE PENDIENTES 360° (CLIENTE / EQUIPO / SERVICIO) */}
+            <div className="md:col-span-2">
+              <ClientePendientesSection
+                clienteId={clienteId}
+                equiposCliente={cliente.equipos || []}
+              />
+            </div>
+
+            {/* TARJETA 6: BACKLOG CENTRAL DE PENDIENTES 360° (CLIENTE / EQUIPO / SERVICIO) */}
+            <div className="md:col-span-2">
+              <ClientePendientesSection
+                clienteId={clienteId}
+                equiposCliente={cliente.equipos || []}
+              />
             </div>
           </div>
         </TabsContent>

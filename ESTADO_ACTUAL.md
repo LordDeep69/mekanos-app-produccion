@@ -2,7 +2,34 @@
 
 ## 🚀 ÚLTIMOS COMMITS Y RESOLUCIONES ARQUITECTÓNICAS (26 DE OCTUBRE DE 2026)
 
-### Commit c308977: Sincronización Atómica de Horómetro (EAM Hoja de Vida) y Armonización de Navegación en Agenda (/agenda)
+### Encadenamiento Fractal de Órdenes (`Visita 1 ➔ Visita N`) y Motor Central de Pendientes 360° (`CLIENTE / EQUIPO / SERVICIO`)
+
+1. **Pilar 1 — Evolución de Base de Datos PostgreSQL & Prisma (`packages/database/prisma/schema.prisma`):**
+   - **Auto-Relación Fractal en `ordenes_servicio`:** Incorporación de `id_orden_padre Int?` (FK recursiva `fk_os_orden_padre`), `tipo_visita String? @default("INICIAL")` (`INICIAL`, `CONTINUACION`, `CORRECTIVO_DERIVADO`, `GARANTIA`) y `numero_visita_caso Int? @default(1)`, con índice `idx_os_orden_padre`.
+   - **Matriz Multinivel 360° y Ciclo Cerrado en `ordenes_pendientes`:**
+     - **Blindaje #1 (No-Orfandad):** `id_orden_servicio Int?` e `id_equipo Int?` pasan a ser opcionales mientras que `id_cliente Int` se mantiene obligatorio, indexado y con backfill automático en SQL sobre el 100% de registros históricos.
+     - **Alcances Operativos (`alcance`):** Soporte nativo para `EQUIPO` (Hoja de Vida EAM), `CLIENTE` (infraestructura locativa, cuarto de máquinas, permisos de sede) y `SERVICIO` (continuidad operativa de la visita).
+     - **Cierre de Ciclo (`id_orden_resolucion`):** Nueva llave foránea a `ordenes_servicio` (`fk_op_orden_resolucion`) que vincula explícitamente en qué orden posterior se gestiona (`EN_GESTION`) o resuelve (`RESUELTO`) cada hallazgo.
+
+2. **Pilar 2 — Backend CQRS, Normalización de Orden Raíz & Motor PDF (`apps/api`):**
+   - **Blindaje #2 (`Root Order Normalization` en `prisma-orden-servicio.repository.ts`):** Al crear una visita de seguimiento desde cualquier orden del hilo (Visita #1, #2 o #3), el repositorio normaliza siempre `id_orden_padre` apuntando a la Orden Raíz (`ordenOrigen.id_orden_padre ?? ordenOrigen.id_orden_servicio`) y calcula automáticamente `numero_visita_caso = totalVisitasDelHilo + 1`.
+   - **Transición Automática a `EN_GESTION`:** Al recibir `ids_pendientes_a_resolver` en `POST /api/ordenes`, el repositorio actualiza atómicamente los pendientes seleccionados a `estado = 'EN_GESTION'` y les asigna `id_orden_resolucion = nuevaOrden.id_orden_servicio`.
+   - **Agregador `obtenerHiloCaso` en `GET /api/ordenes/:id`:** Retorna el árbol plano ordenado cronológicamente junto con los KPIs consolidados del expediente (`total_visitas`, `inversion_acumulada`, `pendientes_totales`, `pendientes_resueltos`, `pendientes_abiertos`).
+   - **Endpoints de Backlog Central 360° (`ordenes.controller.ts`):** Nuevos endpoints `@Get('backlog-pendientes')` (con filtros combinados `idCliente`, `idEquipo`, `idEquipos`, `alcance`, `estado`) y `@Post('pendientes-directos')` (creación directa sin requerir orden previa garantizando `id_cliente`).
+   - **Blindaje #4 (Reflejo en Motor PDF Legal - `mekanos-base.template.ts`, `pdf.controller.ts`, `finalizacion-orden.service.ts`):** Cuando `numero_visita_caso > 1` o existe `id_orden_padre`, el encabezado de los informes técnicos PDF renderiza automáticamente el cintillo oficial: `🔗 SECUENCIA DE SERVICIO: VISITA #N (TIPO_VISITA) — VINCULADA A OS-XXXX`.
+
+3. **Pilar 3 — Experiencia Ejecutiva 360° en Portal Admin (`apps/admin`):**
+   - **Blindaje #3 (`HiloContinuidadCaso` en `/ordenes/[id]`):** Barra superior interactiva con línea de tiempo horizontal (`Visita #1 ──▶ Visita #2 ──▶ [+ Nueva Visita]`), píldoras consolidadas de *Total Visitas*, *Inversión Acumulada del Caso ($ COP)* y *Pendientes del Caso*, y botón directo **`Programar Visita de Seguimiento / Garantía`**.
+   - **Cierre de Ciclo en `PendientesSection` (`/ordenes/[id]`):** Bloque destacado **"🎯 Pendientes Asignados para Resolver en esta Visita"** con botón de 1 clic **`Marcar como Resuelto`**, selector de los 3 alcances (`Equipo(s)`, `Cliente / Sede`, `Servicio / Visita`) y atajo **`Crear Visita`** en cada pendiente abierto.
+   - **Detector Proactivo y Encadenamiento en `/ordenes/nueva`:** Pre-llenado automático desde `?ordenPadreId=...`, selector de naturaleza de visita (`CORRECTIVO_DERIVADO`, `CONTINUACION`, `GARANTIA`) y tarjeta interactiva que detecta automáticamente los pendientes activos del cliente/equipos seleccionados para vincularlos a la nueva orden.
+   - **Backlog Directo en `/equipos/[id]` y `/clientes/[id]`:** Creación de pendientes directos sin requerir OT previa (`EquipoPendientesTab` y `ClientePendientesSection`) y botón de despacho directo hacia `/ordenes/nueva`.
+
+4. **Pilar 4 — Caso Real Sembrado en Producción (`OS-202610-0021` ➔ `OS-202610-0021-V2`):**
+   - Expediente real encadenado en *Edificio Palmetto Beach* (`GEN-EDIF-T86FEH`) con Visita #1 (`OS-202610-0021`, ID `1916`), 3 pendientes en los 3 alcances (`EQUIPO`, `SERVICIO`, `CLIENTE`) y Visita #2 (`OS-202610-0021-V2`, ID `2035`) vinculada con resolución trazable.
+
+---
+
+### Commit c308977 / fd9fbfa: Sincronización Atómica de Horómetro (EAM Hoja de Vida), Blindaje Anti-Outlier y Armonización de Agenda (/agenda)
 
 1. **Sincronización Atómica de Horómetro y Hoja de Vida (`finalizacion-orden.service.ts` & `schema.prisma`):**
    - **Diagnóstico Nuclear:** La tabla `lecturas_horometro` contaba con la secuencia de PostgreSQL `lecturas_horometro_id_lectura_seq`, pero su columna `id_lectura` no tenía configurado el valor por defecto en base de datos (`column_default: NULL`) y el esquema de Prisma carecía de `@default(autoincrement())`. Cualquier inserción fallaba silenciada en el `catch`. Además, `persistirHorometro` solo intentaba registrar en `lecturas_horometro` sin actualizar el campo acumulado `horas_actuales` de la tabla maestra `equipos`.
