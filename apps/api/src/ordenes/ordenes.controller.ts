@@ -2045,6 +2045,8 @@ export class OrdenesController {
       idPendienteCatalogo?: number;
       idEquipo?: number;
       idOrdenEquipo?: number;
+      idOrdenEquipos?: number[];
+      esGeneral?: boolean;
       // ✅ origen_pendiente_enum = CATALOGO | PERSONALIZADO | MANUAL.
       // La firma solo declaraba CATALOGO | MANUAL y luego comparaba contra
       // 'PERSONALIZADO', un valor que TypeScript marcaba como imposible.
@@ -2069,28 +2071,6 @@ export class OrdenesController {
       throw new NotFoundException(`Orden con ID ${idOrden} no encontrada`);
     }
 
-    let idEquipo = body.idEquipo;
-    let idOrdenEquipo = body.idOrdenEquipo || null;
-
-    if (idOrdenEquipo && orden.ordenes_equipos) {
-      const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === idOrdenEquipo);
-      if (oe?.id_equipo) {
-        idEquipo = oe.id_equipo;
-      }
-    } else if (idEquipo && orden.ordenes_equipos) {
-      const oe = orden.ordenes_equipos.find((e: any) => e.id_equipo === idEquipo);
-      if (oe) {
-        idOrdenEquipo = oe.id_orden_equipo;
-      }
-    }
-
-    if (!idEquipo) {
-      idEquipo = orden.id_equipo;
-    }
-    if (!idOrdenEquipo && orden.ordenes_equipos && orden.ordenes_equipos.length === 1) {
-      idOrdenEquipo = orden.ordenes_equipos[0].id_orden_equipo;
-    }
-
     let idEmpleado: number | null = null;
     if (user?.id_usuario) {
       const emp = await this.prisma.empleados.findFirst({
@@ -2109,6 +2089,94 @@ export class OrdenesController {
       origenVal = 'MANUAL';
     }
 
+    const includeRelations = {
+      equipos: {
+        select: {
+          id_equipo: true,
+          codigo_equipo: true,
+          nombre_equipo: true,
+        },
+      },
+      ordenes_equipos: {
+        select: {
+          id_orden_equipo: true,
+          orden_secuencia: true,
+          nombre_sistema: true,
+        },
+      },
+      catalogo_pendientes: true,
+    };
+
+    // ✅ CASO A: Multi-equipos seleccionado (array de idOrdenEquipos)
+    if (body.idOrdenEquipos && Array.isArray(body.idOrdenEquipos) && body.idOrdenEquipos.length > 0) {
+      const createdList: any[] = [];
+      for (const targetOeId of body.idOrdenEquipos) {
+        let targetIdEquipo = orden.id_equipo;
+        let targetIdOrdenEquipo: number | null = targetOeId;
+
+        if (targetOeId && orden.ordenes_equipos) {
+          const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === targetOeId);
+          if (oe?.id_equipo) {
+            targetIdEquipo = oe.id_equipo;
+          }
+        }
+
+        const itemCreated = await this.prisma.ordenes_pendientes.create({
+          data: {
+            id_orden_servicio: idOrden,
+            id_cliente: orden.id_cliente,
+            id_equipo: targetIdEquipo,
+            id_orden_equipo: targetIdOrdenEquipo,
+            id_pendiente_catalogo: body.idPendienteCatalogo || null,
+            descripcion: body.descripcion.trim(),
+            origen: origenVal,
+            prioridad: body.prioridad || 'NORMAL',
+            estado: 'PENDIENTE',
+            observaciones: body.observaciones?.trim() || null,
+            creado_por: idEmpleado,
+            fecha_creacion: new Date(),
+          },
+          include: includeRelations,
+        });
+        createdList.push(itemCreated);
+      }
+
+      return {
+        success: true,
+        message: `${createdList.length} pendiente(s) registrado(s) correctamente`,
+        data: createdList.length === 1 ? createdList[0] : createdList,
+        items: createdList,
+      };
+    }
+
+    // ✅ CASO B: Un solo registro (General o Equipo individual)
+    let idEquipo = body.idEquipo;
+    let idOrdenEquipo = body.idOrdenEquipo || null;
+
+    if (body.esGeneral === true) {
+      idOrdenEquipo = null;
+      idEquipo = orden.id_equipo;
+    } else {
+      if (idOrdenEquipo && orden.ordenes_equipos) {
+        const oe = orden.ordenes_equipos.find((e: any) => e.id_orden_equipo === idOrdenEquipo);
+        if (oe?.id_equipo) {
+          idEquipo = oe.id_equipo;
+        }
+      } else if (idEquipo && orden.ordenes_equipos) {
+        const oe = orden.ordenes_equipos.find((e: any) => e.id_equipo === idEquipo);
+        if (oe) {
+          idOrdenEquipo = oe.id_orden_equipo;
+        }
+      }
+
+      if (!idEquipo) {
+        idEquipo = orden.id_equipo;
+      }
+      if (!idOrdenEquipo && orden.ordenes_equipos && orden.ordenes_equipos.length === 1) {
+        idOrdenEquipo = orden.ordenes_equipos[0].id_orden_equipo;
+      }
+    }
+
     const created = await this.prisma.ordenes_pendientes.create({
       data: {
         id_orden_servicio: idOrden,
@@ -2124,29 +2192,14 @@ export class OrdenesController {
         creado_por: idEmpleado,
         fecha_creacion: new Date(),
       },
-      include: {
-        equipos: {
-          select: {
-            id_equipo: true,
-            codigo_equipo: true,
-            nombre_equipo: true,
-          },
-        },
-        ordenes_equipos: {
-          select: {
-            id_orden_equipo: true,
-            orden_secuencia: true,
-            nombre_sistema: true,
-          },
-        },
-        catalogo_pendientes: true,
-      },
+      include: includeRelations,
     });
 
     return {
       success: true,
       message: 'Pendiente creado correctamente',
       data: created,
+      items: [created],
     };
   }
 

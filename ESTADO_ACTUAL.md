@@ -1,6 +1,34 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
-## 🚀 ÚLTIMO COMMIT Y RESOLUCIÓN ARQUITECTÓNICA (24 DE OCTUBRE DE 2026)
+## 🚀 ÚLTIMO COMMIT Y RESOLUCIÓN ARQUITECTÓNICA (26 DE OCTUBRE DE 2026)
+### Commit c8d41fe: Selector Explícito de Alcance (General vs Multi-Equipo) y Creación Atómica en Pendientes Técnicos
+
+1. **Selector Explícito de Alcance y Multi-Selección en Portal Admin (`apps/admin/src/features/ordenes/components/pendientes-section.tsx`):**
+   - **Diagnóstico:** Anteriormente, el formulario de registro de pendientes no preguntaba al usuario si el pendiente correspondía a toda la orden o a un equipo en particular. Además, dependía de una condición restrictiva (`ordenes_equipos.length > 1`) que ocultaba la opción en órdenes mono-equipo o formateadas como objeto singular, y solo permitía seleccionar un único equipo a la vez.
+   - **Impacto:** Imposibilidad de asignar un mismo hallazgo a varios equipos a la vez, falta de transparencia sobre si el pendiente quedaba ligado al cuarto de máquinas o a una máquina concreta, y riesgo de pérdida de trazabilidad EAM en órdenes multiequipo.
+   - **Solución Implementada:**
+     - **Paso 1 (Alcance y Asignación):** Tarjetas de selección mutuamente excluyentes y destacadas:
+       - `🌐 General de la Orden`: Para hallazgos de infraestructura, tuberías comunes, cuarto de máquinas o ventilación general (sin ligarse a una máquina específica).
+       - `🎯 Asignar a Equipo(s)`: Para registrar y trazar el hallazgo en la hoja de vida técnica de los activos intervenidos.
+     - **Paso 2 (Multi-Selección de Equipos):** Grilla interactiva de equipos con casillas de verificación (checkboxes), secuencia (`#1`, `#2`), código de activo (`GEN-001`, `BOM-002`), nombre del sistema o equipo y tipo de equipo. Incorpora atajos `[Seleccionar todos]` y `[Limpiar selección]`.
+     - **Paso 3 (Creación Atómica Múltiple):** Si se seleccionan $N$ equipos, el formulario envía `idOrdenEquipos` al backend y actualiza el estado agregando los $N$ registros creados simultáneamente.
+     - **Paso 4 (Insignias de Trazabilidad en Listado):** Los ítems registrados muestran de forma taxativa:
+       - `🌐 General de la Orden` (badge ámbar con icono Globe) si no está ligado a un equipo.
+       - `🔧 #sec · [CÓDIGO] Nombre de Equipo` (badge azul con icono Wrench) con enlace inequívoco a su equipo.
+
+2. **Extensión Atómica en Backend API (`apps/api/src/ordenes/ordenes.controller.ts`):**
+   - **Soporte de Multi-Asignación:** El endpoint `POST /api/ordenes/:id/pendientes` ahora acepta `idOrdenEquipos: number[]`, creando atómicamente un registro `ordenes_pendientes` por cada equipo con su respectivo `id_orden_equipo` e `id_equipo` de base de datos.
+   - **Soporte de Alcance General:** Acepta `esGeneral: boolean`, garantizando que `id_orden_equipo` se guarde como `null` sin defaults forzados al primer equipo.
+   - **Retrocompatibilidad:** Mantiene la compatibilidad con peticiones mono-equipo enviando `data` e `items`.
+
+3. **Homologación en Flutter Mobile (`apps/mobile/lib/features/ejecucion/presentation/pendientes_orden_widget.dart`):**
+   - Incorporación del chip `🌐 General de la Orden` en la barra horizontal de asignación del modal móvil.
+   - Resolución de visualización: cuando `idOrdenEquipo` es nulo, el widget reporta taxativamente `🌐 General de la Orden` en lugar de un genérico "Equipo Principal".
+
+---
+
+## 📅 HISTORIAL DE RESOLUCIONES ARQUITECTÓNICAS (OCTUBRE DE 2026)
+
 ### Commit `7e211c7`: Blindaje Integral del Módulo de Pendientes Técnicos (Backend ⇄ Admin Portal ⇄ Mobile App)
 
 1. **Causa Raíz Nuclear Resuelta en Backend (`apps/api/src/ordenes/ordenes.controller.ts`):**

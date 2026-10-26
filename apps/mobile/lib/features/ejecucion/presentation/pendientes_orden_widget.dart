@@ -103,7 +103,7 @@ class _PendientesOrdenWidgetState
         return '#${eq.ordenSecuencia} · $nombre';
       }
     }
-    return 'Equipo Principal';
+    return idOrdenEquipo == null ? '🌐 General de la Orden' : 'Equipo Principal';
   }
 
   Future<void> _eliminarPendiente(OrdenesPendiente p) async {
@@ -696,41 +696,74 @@ class _ModalGestionPendientesState
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: widget.widget.equipos!.map((eq) {
-                          final isSelected =
-                              _idOrdenEquipoSeleccionado == eq.idOrdenEquipo;
-                          final label = (eq.nombreSistema != null &&
-                                  eq.nombreSistema!.isNotEmpty)
-                              ? eq.nombreSistema!
-                              : (eq.nombreEquipo ?? 'Equipo ${eq.ordenSecuencia}');
-
-                          return Padding(
+                        children: [
+                          Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: ChoiceChip(
-                              label: Text('#${eq.ordenSecuencia} · $label'),
-                              selected: isSelected,
-                              onSelected: (_) => _seleccionarEquipo(eq),
-                              selectedColor: Colors.blue.shade700,
+                              label: const Text('🌐 General de la Orden'),
+                              selected: _idOrdenEquipoSeleccionado == null,
+                              onSelected: (_) {
+                                setState(() {
+                                  _idOrdenEquipoSeleccionado = null;
+                                  _idEquipoSeleccionado = widget.widget.idEquipo;
+                                });
+                              },
+                              selectedColor: Colors.amber.shade800,
                               backgroundColor: Colors.white,
                               labelStyle: TextStyle(
                                 fontSize: 11,
-                                fontWeight: isSelected
+                                fontWeight: _idOrdenEquipoSeleccionado == null
                                     ? FontWeight.bold
                                     : FontWeight.w600,
-                                color: isSelected
+                                color: _idOrdenEquipoSeleccionado == null
                                     ? Colors.white
-                                    : Colors.blue.shade900,
+                                    : Colors.amber.shade900,
                               ),
                               side: BorderSide(
-                                color: isSelected
-                                    ? Colors.blue.shade700
-                                    : Colors.blue.shade200,
+                                color: _idOrdenEquipoSeleccionado == null
+                                    ? Colors.amber.shade800
+                                    : Colors.amber.shade300,
                               ),
-                              showCheckmark: isSelected,
+                              showCheckmark: _idOrdenEquipoSeleccionado == null,
                               checkmarkColor: Colors.white,
                             ),
-                          );
-                        }).toList(),
+                          ),
+                          ...widget.widget.equipos!.map((eq) {
+                            final isSelected =
+                                _idOrdenEquipoSeleccionado == eq.idOrdenEquipo;
+                            final label = (eq.nombreSistema != null &&
+                                    eq.nombreSistema!.isNotEmpty)
+                                ? eq.nombreSistema!
+                                : (eq.nombreEquipo ?? 'Equipo ${eq.ordenSecuencia}');
+
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text('#${eq.ordenSecuencia} · $label'),
+                                selected: isSelected,
+                                onSelected: (_) => _seleccionarEquipo(eq),
+                                selectedColor: Colors.blue.shade700,
+                                backgroundColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w600,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.blue.shade900,
+                                ),
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? Colors.blue.shade700
+                                      : Colors.blue.shade200,
+                                ),
+                                showCheckmark: isSelected,
+                                checkmarkColor: Colors.white,
+                              ),
+                            );
+                          }),
+                        ],
                       ),
                     ),
                   ],
