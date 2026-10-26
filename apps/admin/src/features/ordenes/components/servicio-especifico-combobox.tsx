@@ -34,6 +34,7 @@ interface ServicioEspecificoComboboxProps {
     disabled?: boolean;
     className?: string;
     placeholder?: string;
+    align?: 'left' | 'right';
 }
 
 export function ServicioEspecificoCombobox({
@@ -43,6 +44,7 @@ export function ServicioEspecificoCombobox({
     disabled = false,
     className,
     placeholder = 'Filtrar por servicio específico...',
+    align = 'left',
 }: ServicioEspecificoComboboxProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -91,14 +93,22 @@ export function ServicioEspecificoCombobox({
         };
     }, [isOpen]);
 
-    // Lista de categorías únicas disponibles en los servicios
+    // Lista de categorías únicas disponibles en los servicios (priorizando CORRECTIVO)
     const categoriasDisponibles = useMemo(() => {
         if (!catalogoServicios) return [];
         const cats = new Set<string>();
         catalogoServicios.forEach((s) => {
             if (s.categoria) cats.add(s.categoria);
         });
-        return Array.from(cats);
+        const ordenDeseado = ['CORRECTIVO', 'PREVENTIVO', 'PREDICTIVO', 'ESPECIALIZADO', 'OVERHAUL', 'DIAGNOSTICO'];
+        return Array.from(cats).sort((a, b) => {
+            const idxA = ordenDeseado.indexOf(a);
+            const idxB = ordenDeseado.indexOf(b);
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+            if (idxA !== -1) return -1;
+            if (idxB !== -1) return 1;
+            return a.localeCompare(b);
+        });
     }, [catalogoServicios]);
 
     // Filtrar y ordenar servicios inteligentemente (independiente del orden de palabras, acentos o combinación de caracteres)
@@ -167,6 +177,8 @@ export function ServicioEspecificoCombobox({
         onSelect(null);
     };
 
+    const esCorrectivo = selectedServicio?.categoria === 'CORRECTIVO';
+
     return (
         <div ref={containerRef} className={cn('relative inline-block w-full', className)}>
             {/* BOTÓN TRIGGER */}
@@ -175,23 +187,30 @@ export function ServicioEspecificoCombobox({
                 disabled={disabled}
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 className={cn(
-                    'w-full flex items-center justify-between gap-2 px-3 py-2 text-left rounded-lg text-sm transition-all border',
+                    'w-full flex items-center justify-between gap-1.5 px-3 py-2 text-left rounded-lg text-xs font-medium transition-all border',
                     selectedServicio
-                        ? 'border-blue-400 bg-blue-50/70 text-blue-900 shadow-xs ring-1 ring-blue-300/50'
+                        ? esCorrectivo
+                            ? 'border-orange-300 bg-orange-50/80 text-orange-950 shadow-2xs ring-1 ring-orange-300/50'
+                            : 'border-blue-400 bg-blue-50/70 text-blue-900 shadow-2xs ring-1 ring-blue-300/50'
                         : 'border-gray-300 bg-white hover:bg-gray-50 text-gray-700',
                     disabled && 'opacity-50 cursor-not-allowed bg-gray-100',
-                    isOpen && 'ring-2 ring-blue-500 border-blue-500'
+                    isOpen && (esCorrectivo ? 'ring-2 ring-orange-500 border-orange-500' : 'ring-2 ring-blue-500 border-blue-500')
                 )}
                 title={selectedServicio ? `${selectedServicio.codigo_servicio} - ${selectedServicio.nombre_servicio}` : undefined}
             >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Tag className={cn('h-4 w-4 shrink-0', selectedServicio ? 'text-blue-600' : 'text-gray-400')} />
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <Tag className={cn('h-3.5 w-3.5 shrink-0', esCorrectivo ? 'text-orange-600' : selectedServicio ? 'text-blue-600' : 'text-gray-400')} />
                     {selectedServicio ? (
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            <span className="font-mono text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 shrink-0">
+                            <span className={cn(
+                                'font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
+                                esCorrectivo
+                                    ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                                    : 'bg-blue-100 text-blue-800'
+                            )}>
                                 {selectedServicio.codigo_servicio}
                             </span>
-                            <span className="truncate text-xs font-medium text-gray-800">
+                            <span className="truncate text-xs font-semibold text-gray-900">
                                 {selectedServicio.nombre_servicio}
                             </span>
                         </div>
@@ -209,13 +228,18 @@ export function ServicioEspecificoCombobox({
                             tabIndex={0}
                             onClick={handleClear}
                             onKeyDown={(e) => e.key === 'Enter' && handleClear(e as any)}
-                            className="p-0.5 hover:bg-blue-200/70 rounded-full text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                            className={cn(
+                                'p-0.5 rounded-full transition-colors cursor-pointer',
+                                esCorrectivo
+                                    ? 'hover:bg-orange-200 text-orange-700'
+                                    : 'hover:bg-blue-200/70 text-blue-600 hover:text-blue-800'
+                            )}
                             title="Quitar filtro de servicio específico"
                         >
                             <X className="h-3.5 w-3.5" />
                         </span>
                     )}
-                    <ChevronDown className={cn('h-4 w-4 text-gray-400 transition-transform duration-200', isOpen && 'rotate-180')} />
+                    <ChevronDown className={cn('h-3.5 w-3.5 text-gray-400 transition-transform duration-200', isOpen && 'rotate-180')} />
                 </div>
             </button>
 
@@ -223,7 +247,8 @@ export function ServicioEspecificoCombobox({
             {isOpen && (
                 <div
                     className={cn(
-                        'absolute left-0 top-full mt-1.5 w-full sm:w-[440px] max-w-[95vw] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150'
+                        'absolute top-full mt-1.5 w-[340px] sm:w-[450px] max-w-[95vw] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150',
+                        align === 'right' ? 'right-0' : 'left-0'
                     )}
                 >
                     {/* Header del dropdown con buscador */}

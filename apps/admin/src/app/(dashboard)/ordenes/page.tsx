@@ -101,7 +101,15 @@ function PrioridadBadge({ prioridad }: { prioridad?: string }) {
     );
 }
 
-function OrdenCard({ orden, filtroServicioEspecifico }: { orden: Orden; filtroServicioEspecifico?: string }) {
+function OrdenCard({
+    orden,
+    filtroServicioEspecifico,
+    onSelectServicio,
+}: {
+    orden: Orden;
+    filtroServicioEspecifico?: string;
+    onSelectServicio?: (id: number) => void;
+}) {
     const fechaProgramada = orden.fecha_programada
         ? formatDateSafe(orden.fecha_programada)
         : 'Sin programar';
@@ -252,25 +260,33 @@ function OrdenCard({ orden, filtroServicioEspecifico }: { orden: Orden; filtroSe
                             {serviciosOrdenados.slice(0, 3).map((item, idx) => {
                                 const isMatch = Boolean(filtroServicioEspecifico && item.id_servicio === parseInt(filtroServicioEspecifico));
                                 return (
-                                    <span
+                                    <button
+                                        type="button"
                                         key={idx}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            if (onSelectServicio) {
+                                                onSelectServicio(isMatch ? 0 : item.id_servicio);
+                                            }
+                                        }}
                                         className={cn(
-                                            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors',
+                                            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-all text-left cursor-pointer',
                                             isMatch
-                                                ? 'bg-blue-100 text-blue-900 font-bold border border-blue-300 ring-1 ring-blue-400/50 shadow-2xs'
-                                                : 'bg-slate-100 text-slate-700 border border-slate-200/70 hover:bg-slate-200/80'
+                                                ? 'bg-orange-100 text-orange-900 font-bold border border-orange-300 ring-2 ring-orange-400/50 shadow-xs'
+                                                : 'bg-slate-100 text-slate-700 border border-slate-200/70 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-900'
                                         )}
-                                        title={item.catalogo_servicios?.nombre_servicio}
+                                        title={`Filtrar por catálogo: ${item.catalogo_servicios?.nombre_servicio || 'servicio'}`}
                                     >
                                         {item.catalogo_servicios?.codigo_servicio && (
-                                            <span className="font-mono text-[10px] text-blue-700 font-semibold">
+                                            <span className="font-mono text-[10px] text-orange-700 font-semibold">
                                                 {item.catalogo_servicios.codigo_servicio}
                                             </span>
                                         )}
                                         <span className="truncate max-w-[150px]">
                                             {item.catalogo_servicios?.nombre_servicio || `Servicio #${item.id_servicio}`}
                                         </span>
-                                    </span>
+                                    </button>
                                 );
                             })}
                             {orden.detalle_servicios_orden.length > 3 && (
@@ -367,10 +383,9 @@ function OrdenesPageContent() {
     const { data: tecnicos } = useTecnicosSelector();
     const { data: catalogoServicios } = useServiciosComerciales({ activo: true, limit: 250 });
 
-    // Contador de filtros avanzados activos
+    // Contador de filtros avanzados activos (excluyendo el filtro de servicio que ahora es visible directamente)
     const activeAdvancedCount =
         (filtroTipoServicio ? 1 : 0) +
-        (filtroServicioEspecifico ? 1 : 0) +
         (sortBy !== 'fecha_creacion' || sortOrder !== 'desc' ? 1 : 0);
 
     // ✅ BÚSQUEDA SERVER-SIDE: Enviar busqueda y filtros al backend
@@ -506,6 +521,20 @@ function OrdenesPageContent() {
                             <option value="ALTA">Alta</option>
                             <option value="URGENTE">Urgente</option>
                         </select>
+
+                        {/* ✅ FILTRO DIRECTO: Catálogo de Servicios Específicos (Especialmente Correctivos) */}
+                        <div className="w-56 sm:w-64 md:w-72">
+                            <ServicioEspecificoCombobox
+                                selectedId={filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : null}
+                                onSelect={(id) => {
+                                    setFiltroServicioEspecifico(id ? String(id) : '');
+                                    setPage(1);
+                                }}
+                                tipoServicioId={filtroTipoServicio ? parseInt(filtroTipoServicio, 10) : undefined}
+                                placeholder="Servicio correctivo / catálogo..."
+                                align="right"
+                            />
+                        </div>
 
                         {/* Botón filtros avanzados */}
                         <button
@@ -776,8 +805,8 @@ function OrdenesPageContent() {
                             )}
 
                             {filtroServicioEspecifico && (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-100 text-blue-900 border border-blue-300 rounded-full text-xs font-semibold shadow-2xs">
-                                    <Tag className="h-3 w-3 text-blue-600" />
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-orange-100 text-orange-950 border border-orange-300 rounded-full text-xs font-semibold shadow-2xs">
+                                    <Tag className="h-3 w-3 text-orange-600" />
                                     <span>
                                         Servicio: {(() => {
                                             const s = catalogoServicios?.find(srv => srv.id_servicio === parseInt(filtroServicioEspecifico));
@@ -787,7 +816,7 @@ function OrdenesPageContent() {
                                     <button
                                         type="button"
                                         onClick={() => { setFiltroServicioEspecifico(''); setPage(1); }}
-                                        className="hover:bg-blue-200 rounded-full p-0.5 text-blue-800 transition-colors"
+                                        className="hover:bg-orange-200 rounded-full p-0.5 text-orange-800 transition-colors"
                                         title="Quitar filtro de servicio específico"
                                     >
                                         <X className="h-3 w-3" />
@@ -852,6 +881,10 @@ function OrdenesPageContent() {
                                     key={orden.id_orden_servicio}
                                     orden={orden}
                                     filtroServicioEspecifico={filtroServicioEspecifico}
+                                    onSelectServicio={(id) => {
+                                        setFiltroServicioEspecifico(id ? String(id) : '');
+                                        setPage(1);
+                                    }}
                                 />
                             ))}
                         </div>

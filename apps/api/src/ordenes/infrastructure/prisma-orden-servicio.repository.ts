@@ -119,6 +119,8 @@ export class PrismaOrdenServicioRepository {
         OR unaccent(COALESCE(pp.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(pt.primer_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(pt.primer_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(cs.nombre_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(cs.codigo_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR os.numero_orden ILIKE '%' || $${i + 1} || '%'
       )`).join(' AND ');
 
@@ -131,6 +133,8 @@ export class PrismaOrdenServicioRepository {
         LEFT JOIN personas pp ON cp.id_persona = pp.id_persona
         LEFT JOIN empleados e ON os.id_tecnico_asignado = e.id_empleado
         LEFT JOIN personas pt ON e.id_persona = pt.id_persona
+        LEFT JOIN detalle_servicios_orden dso ON os.id_orden_servicio = dso.id_orden_servicio
+        LEFT JOIN catalogo_servicios cs ON dso.id_servicio = cs.id_servicio
         WHERE ${tokenConditions}
         LIMIT ${limit}
       `;
