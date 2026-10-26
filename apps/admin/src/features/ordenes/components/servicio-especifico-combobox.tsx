@@ -21,6 +21,7 @@ import {
     Loader2,
     RotateCcw,
     Search,
+    Sparkles,
     Tag,
     Wrench,
     X
@@ -29,7 +30,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 interface ServicioEspecificoComboboxProps {
     selectedId?: number | null;
-    onSelect: (servicioId: number | null) => void;
+    selectedTexto?: string | null;
+    onSelect: (servicioId: number | null, servicioTexto?: string | null) => void;
     tipoServicioId?: number; // Opcional: para contextualizar según el tipo macro seleccionado
     disabled?: boolean;
     className?: string;
@@ -39,6 +41,7 @@ interface ServicioEspecificoComboboxProps {
 
 export function ServicioEspecificoCombobox({
     selectedId,
+    selectedTexto,
     onSelect,
     tipoServicioId,
     disabled = false,
@@ -167,17 +170,26 @@ export function ServicioEspecificoCombobox({
     }, [catalogoServicios, searchQuery, categoriaTab, tipoServicioId]);
 
     const handleSelect = (servicio: CatalogoServicio | null) => {
-        onSelect(servicio ? servicio.id_servicio : null);
+        onSelect(servicio ? servicio.id_servicio : null, null);
         setIsOpen(false);
         setSearchQuery('');
     };
 
-    const handleClear = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onSelect(null);
+    const handleSelectTexto = (texto: string) => {
+        const clean = texto.trim();
+        if (!clean) return;
+        onSelect(null, clean);
+        setIsOpen(false);
+        setSearchQuery('');
+    };
+
+    const handleClear = (e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        onSelect(null, null);
     };
 
     const esCorrectivo = selectedServicio?.categoria === 'CORRECTIVO';
+    const isKeywordFilterActive = Boolean(selectedTexto && !selectedServicio);
 
     return (
         <div ref={containerRef} className={cn('relative inline-block w-full', className)}>
@@ -188,20 +200,38 @@ export function ServicioEspecificoCombobox({
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 className={cn(
                     'w-full flex items-center justify-between gap-1.5 px-3 py-2 text-left rounded-lg text-xs font-medium transition-all border',
-                    selectedServicio
-                        ? esCorrectivo
-                            ? 'border-orange-300 bg-orange-50/80 text-orange-950 shadow-2xs ring-1 ring-orange-300/50'
-                            : 'border-blue-400 bg-blue-50/70 text-blue-900 shadow-2xs ring-1 ring-blue-300/50'
-                        : 'border-gray-300 bg-white hover:bg-gray-50 text-gray-700',
+                    isKeywordFilterActive
+                        ? 'border-amber-400 bg-amber-50/90 text-amber-950 shadow-2xs ring-1 ring-amber-300/50'
+                        : selectedServicio
+                            ? esCorrectivo
+                                ? 'border-orange-300 bg-orange-50/80 text-orange-950 shadow-2xs ring-1 ring-orange-300/50'
+                                : 'border-blue-400 bg-blue-50/70 text-blue-900 shadow-2xs ring-1 ring-blue-300/50'
+                            : 'border-gray-300 bg-white hover:bg-gray-50 text-gray-700',
                     disabled && 'opacity-50 cursor-not-allowed bg-gray-100',
-                    isOpen && (esCorrectivo ? 'ring-2 ring-orange-500 border-orange-500' : 'ring-2 ring-blue-500 border-blue-500')
+                    isOpen && (isKeywordFilterActive || esCorrectivo ? 'ring-2 ring-amber-500 border-amber-500' : 'ring-2 ring-blue-500 border-blue-500')
                 )}
-                title={selectedServicio ? `${selectedServicio.codigo_servicio} - ${selectedServicio.nombre_servicio}` : undefined}
+                title={
+                    isKeywordFilterActive
+                        ? `Búsqueda inteligente por palabra clave: "${selectedTexto}"`
+                        : selectedServicio
+                            ? `${selectedServicio.codigo_servicio} - ${selectedServicio.nombre_servicio}`
+                            : undefined
+                }
             >
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <Tag className={cn('h-3.5 w-3.5 shrink-0', esCorrectivo ? 'text-orange-600' : selectedServicio ? 'text-blue-600' : 'text-gray-400')} />
-                    {selectedServicio ? (
+                    {isKeywordFilterActive ? (
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <Sparkles className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                            <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900 border border-amber-300/80 shrink-0 uppercase tracking-tight">
+                                Contiene
+                            </span>
+                            <span className="truncate text-xs font-bold text-amber-950">
+                                &quot;{selectedTexto}&quot;
+                            </span>
+                        </div>
+                    ) : selectedServicio ? (
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <Tag className={cn('h-3.5 w-3.5 shrink-0', esCorrectivo ? 'text-orange-600' : 'text-blue-600')} />
                             <span className={cn(
                                 'font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
                                 esCorrectivo
@@ -215,14 +245,17 @@ export function ServicioEspecificoCombobox({
                             </span>
                         </div>
                     ) : (
-                        <span className="text-gray-500 text-xs truncate">
-                            {placeholder}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <Tag className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                            <span className="text-gray-500 text-xs truncate">
+                                {placeholder}
+                            </span>
+                        </div>
                     )}
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                    {selectedServicio && !disabled && (
+                    {(selectedServicio || isKeywordFilterActive) && !disabled && (
                         <span
                             role="button"
                             tabIndex={0}
@@ -230,9 +263,11 @@ export function ServicioEspecificoCombobox({
                             onKeyDown={(e) => e.key === 'Enter' && handleClear(e as any)}
                             className={cn(
                                 'p-0.5 rounded-full transition-colors cursor-pointer',
-                                esCorrectivo
-                                    ? 'hover:bg-orange-200 text-orange-700'
-                                    : 'hover:bg-blue-200/70 text-blue-600 hover:text-blue-800'
+                                isKeywordFilterActive
+                                    ? 'hover:bg-amber-200 text-amber-800'
+                                    : esCorrectivo
+                                        ? 'hover:bg-orange-200 text-orange-700'
+                                        : 'hover:bg-blue-200/70 text-blue-600 hover:text-blue-800'
                             )}
                             title="Quitar filtro de servicio específico"
                         >
@@ -269,10 +304,16 @@ export function ServicioEspecificoCombobox({
                             <input
                                 ref={searchInputRef}
                                 type="text"
-                                placeholder="Buscar por código, nombre o intervención..."
+                                placeholder="Buscar por código, nombre o palabra clave (ej: RADIADOR)..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-gray-400"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && searchQuery.trim()) {
+                                        e.preventDefault();
+                                        handleSelectTexto(searchQuery.trim());
+                                    }
+                                }}
+                                className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all placeholder:text-gray-400"
                             />
                             {searchQuery && (
                                 <button
@@ -321,13 +362,66 @@ export function ServicioEspecificoCombobox({
 
                     {/* LISTA SCROLLABLE DE SERVICIOS ("deslizar para indicar cuál servicio") */}
                     <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 p-1">
+                        {/* Estado si hay filtro por palabra clave activo */}
+                        {isKeywordFilterActive && (
+                            <div className="p-2 mb-1 rounded-lg bg-amber-50/90 border border-amber-200 flex items-center justify-between text-xs text-amber-900">
+                                <span className="flex items-center gap-1.5 font-medium truncate">
+                                    <Sparkles className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                    <span>Palabra clave activa: <strong>&quot;{selectedTexto}&quot;</strong></span>
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => handleClear()}
+                                    className="text-amber-800 hover:text-amber-950 font-bold hover:underline shrink-0 text-[11px] ml-2"
+                                >
+                                    Restablecer
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Botón de Búsqueda Inteligente por Palabra Clave */}
+                        {searchQuery.trim().length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => handleSelectTexto(searchQuery.trim())}
+                                className={cn(
+                                    'w-full flex items-center justify-between p-2.5 rounded-lg text-left text-xs transition-all mb-1 border shadow-2xs group cursor-pointer',
+                                    selectedTexto?.toLowerCase() === searchQuery.trim().toLowerCase()
+                                        ? 'bg-amber-100 text-amber-950 border-amber-300 font-bold ring-2 ring-amber-400/50'
+                                        : 'bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100/80 hover:to-orange-100/80 text-amber-950 border-amber-200/90'
+                                )}
+                            >
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className="p-1.5 rounded-md bg-amber-500 text-white shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                                        <Sparkles className="h-3.5 w-3.5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-bold text-amber-950 truncate">
+                                                Buscar órdenes con: &quot;{searchQuery.trim()}&quot;
+                                            </span>
+                                            <span className="text-[9px] bg-amber-200/90 text-amber-900 font-bold px-1.5 py-0.2 rounded uppercase">
+                                                Palabra clave
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-amber-700 truncate mt-0.5">
+                                            {serviciosFiltrados.length} servicio(s) coincidente(s) • Clic o Enter para filtrar todas
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] font-mono text-amber-800 bg-white/90 border border-amber-200 px-1.5 py-0.5 rounded shadow-2xs shrink-0 ml-1">
+                                    <span>↵ Enter</span>
+                                </div>
+                            </button>
+                        )}
+
                         {/* Opción para deseleccionar / ver todas las órdenes */}
                         <button
                             type="button"
                             onClick={() => handleSelect(null)}
                             className={cn(
                                 'w-full flex items-center justify-between p-2.5 rounded-lg text-left text-xs transition-colors',
-                                !selectedId
+                                !selectedId && !selectedTexto
                                     ? 'bg-blue-50/80 text-blue-800 font-semibold'
                                     : 'hover:bg-gray-50 text-gray-600'
                             )}
@@ -336,7 +430,7 @@ export function ServicioEspecificoCombobox({
                                 <RotateCcw className="h-3.5 w-3.5 text-gray-400" />
                                 <span>Todos los servicios (sin filtro específico)</span>
                             </div>
-                            {!selectedId && <Check className="h-4 w-4 text-blue-600" />}
+                            {!selectedId && !selectedTexto && <Check className="h-4 w-4 text-blue-600" />}
                         </button>
 
                         {/* Estados de carga / vacío / resultados */}

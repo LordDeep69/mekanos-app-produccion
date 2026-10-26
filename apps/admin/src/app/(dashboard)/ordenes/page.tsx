@@ -48,6 +48,7 @@ import {
     RotateCcw,
     Search,
     SlidersHorizontal,
+    Sparkles,
     Tag,
     User,
     Wrench,
@@ -104,10 +105,12 @@ function PrioridadBadge({ prioridad }: { prioridad?: string }) {
 function OrdenCard({
     orden,
     filtroServicioEspecifico,
+    filtroServicioTexto,
     onSelectServicio,
 }: {
     orden: Orden;
     filtroServicioEspecifico?: string;
+    filtroServicioTexto?: string;
     onSelectServicio?: (id: number) => void;
 }) {
     const fechaProgramada = orden.fecha_programada
@@ -258,7 +261,14 @@ function OrdenCard({
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                             {serviciosOrdenados.slice(0, 3).map((item, idx) => {
-                                const isMatch = Boolean(filtroServicioEspecifico && item.id_servicio === parseInt(filtroServicioEspecifico));
+                                const isExactMatch = Boolean(filtroServicioEspecifico && item.id_servicio === parseInt(filtroServicioEspecifico));
+                                const isTextMatch = Boolean(
+                                    filtroServicioTexto && (
+                                        item.catalogo_servicios?.nombre_servicio?.toLowerCase().includes(filtroServicioTexto.toLowerCase()) ||
+                                        item.catalogo_servicios?.codigo_servicio?.toLowerCase().includes(filtroServicioTexto.toLowerCase())
+                                    )
+                                );
+                                const isMatch = isExactMatch || isTextMatch;
                                 return (
                                     <button
                                         type="button"
@@ -335,8 +345,11 @@ function OrdenesPageContent() {
     const [filtroServicioEspecifico, setFiltroServicioEspecifico] = useState<string>(
         searchParams.get('servicio') || searchParams.get('idServicio') || ''
     );
+    const [filtroServicioTexto, setFiltroServicioTexto] = useState<string>(
+        searchParams.get('servicioTexto') || ''
+    );
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(
-        searchParams.get('advanced') === 'true' || Boolean(searchParams.get('servicio')) || Boolean(searchParams.get('idServicio'))
+        searchParams.get('advanced') === 'true' || Boolean(searchParams.get('servicio')) || Boolean(searchParams.get('idServicio')) || Boolean(searchParams.get('servicioTexto'))
     );
     const [enVivoAutoRefresh, setEnVivoAutoRefresh] = useState(false);
 
@@ -369,12 +382,13 @@ function OrdenesPageContent() {
         if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
         if (filtroTipoServicio) params.set('tipoServicio', filtroTipoServicio);
         if (filtroServicioEspecifico) params.set('servicio', filtroServicioEspecifico);
+        if (filtroServicioTexto) params.set('servicioTexto', filtroServicioTexto);
         if (showAdvancedFilters) params.set('advanced', 'true');
 
         const queryString = params.toString();
         const newPath = queryString ? `/ordenes?${queryString}` : '/ordenes';
         router.replace(newPath);
-    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, showAdvancedFilters, router]);
+    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, filtroServicioTexto, showAdvancedFilters, router]);
 
     const pageSize = 12;
 
@@ -399,6 +413,7 @@ function OrdenesPageContent() {
         sortOrder,
         tipoServicioId: filtroTipoServicio ? parseInt(filtroTipoServicio) : undefined,
         idServicio: filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : undefined,
+        servicioTexto: filtroServicioTexto || undefined,
         busqueda: busquedaDebounced || undefined,
     });
 
@@ -522,12 +537,14 @@ function OrdenesPageContent() {
                             <option value="URGENTE">Urgente</option>
                         </select>
 
-                        {/* ✅ FILTRO DIRECTO: Catálogo de Servicios Específicos (Especialmente Correctivos) */}
+                        {/* ✅ FILTRO DIRECTO: Catálogo de Servicios Específicos (Especialmente Correctivos y Búsqueda Inteligente) */}
                         <div className="w-56 sm:w-64 md:w-72">
                             <ServicioEspecificoCombobox
                                 selectedId={filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : null}
-                                onSelect={(id) => {
+                                selectedTexto={filtroServicioTexto}
+                                onSelect={(id, texto) => {
                                     setFiltroServicioEspecifico(id ? String(id) : '');
+                                    setFiltroServicioTexto(texto || '');
                                     setPage(1);
                                 }}
                                 tipoServicioId={filtroTipoServicio ? parseInt(filtroTipoServicio, 10) : undefined}
@@ -672,8 +689,10 @@ function OrdenesPageContent() {
                                     </label>
                                     <ServicioEspecificoCombobox
                                         selectedId={filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : null}
-                                        onSelect={(id) => {
+                                        selectedTexto={filtroServicioTexto}
+                                        onSelect={(id, texto) => {
                                             setFiltroServicioEspecifico(id ? String(id) : '');
+                                            setFiltroServicioTexto(texto || '');
                                             setPage(1);
                                         }}
                                         tipoServicioId={filtroTipoServicio ? parseInt(filtroTipoServicio, 10) : undefined}
@@ -717,7 +736,7 @@ function OrdenesPageContent() {
                 )}
 
                 {/* Indicadores de filtros activos */}
-                {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || filtroServicioEspecifico || busquedaDebounced) && (
+                {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || filtroServicioEspecifico || filtroServicioTexto || busquedaDebounced) && (
                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 flex-wrap">
                         <div className="flex items-center gap-2 text-xs flex-wrap">
                             <div className="flex items-center gap-1 text-gray-500 font-semibold mr-1">
@@ -823,6 +842,21 @@ function OrdenesPageContent() {
                                     </button>
                                 </span>
                             )}
+
+                            {filtroServicioTexto && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-100 text-amber-950 border border-amber-300 rounded-full text-xs font-semibold shadow-2xs">
+                                    <Sparkles className="h-3 w-3 text-amber-600" />
+                                    <span>Servicio contiene: &quot;{filtroServicioTexto}&quot;</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFiltroServicioTexto(''); setPage(1); }}
+                                        className="hover:bg-amber-200 rounded-full p-0.5 text-amber-800 transition-colors"
+                                        title="Quitar filtro de palabra clave de servicio"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
                         </div>
 
                         {/* Botón limpiar todos */}
@@ -834,6 +868,7 @@ function OrdenesPageContent() {
                                 setFiltroPrioridad('');
                                 setFiltroTipoServicio('');
                                 setFiltroServicioEspecifico('');
+                                setFiltroServicioTexto('');
                                 setBusqueda('');
                                 setBusquedaDebounced('');
                                 setPage(1);
@@ -881,8 +916,10 @@ function OrdenesPageContent() {
                                     key={orden.id_orden_servicio}
                                     orden={orden}
                                     filtroServicioEspecifico={filtroServicioEspecifico}
+                                    filtroServicioTexto={filtroServicioTexto}
                                     onSelectServicio={(id) => {
                                         setFiltroServicioEspecifico(id ? String(id) : '');
+                                        setFiltroServicioTexto('');
                                         setPage(1);
                                     }}
                                 />

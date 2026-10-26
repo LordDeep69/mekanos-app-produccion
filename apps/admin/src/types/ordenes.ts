@@ -339,6 +339,7 @@ export interface OrdenesQueryParams {
     fechaHasta?: string;  // ISO date string
     busqueda?: string;    // ✅ Búsqueda por texto libre (numero_orden, cliente, técnico, equipo)
     idServicio?: number;  // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
+    servicioTexto?: string; // ✅ Búsqueda inteligente por palabra clave de servicio (ej: 'RADIADOR')
 }
 
 // DTO para crear orden - MULTI-EQUIPOS

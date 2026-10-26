@@ -2684,6 +2684,7 @@ export class OrdenesController {
     @Query('fechaHasta') fechaHasta?: string,
     @Query('busqueda') busqueda?: string,
     @Query('idServicio') idServicio?: string,
+    @Query('servicioTexto') servicioTexto?: string,
   ) {
     // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
@@ -2703,7 +2704,8 @@ export class OrdenesController {
       fechaHasta,
       idAsesorFiltro, // ✅ MULTI-ASESOR
       busqueda, // ✅ BÚSQUEDA
-      idServicio ? parseInt(idServicio, 10) : undefined, // ✅ Filtro por servicio específico
+      idServicio ? parseInt(idServicio, 10) : undefined,
+      servicioTexto?.trim() || undefined, // ✅ Filtro por servicio específico
     );
 
     const result = await this.queryBus.execute(query);

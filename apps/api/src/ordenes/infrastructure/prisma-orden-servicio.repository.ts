@@ -149,6 +149,40 @@ export class PrismaOrdenServicioRepository {
   }
 
   /**
+   * ✅ Búsqueda inteligente por palabra clave de servicio específico del catálogo
+   * Busca todas las órdenes que tienen al menos un servicio asignado en detalle_servicios_orden
+   * cuyo nombre o código de servicio contenga los términos buscados (con unaccent para ignorar acentos y en cualquier orden).
+   * @param servicioTexto Texto de búsqueda (ej: "RADIADOR" o "manguera radiador")
+   * @param limit Límite de IDs a retornar
+   */
+  private async findOrdenIdsByServicioTexto(servicioTexto: string, limit: number = 500): Promise<number[]> {
+    try {
+      const tokens = servicioTexto.trim().split(/\s+/).filter(t => t.length > 0);
+      if (tokens.length === 0) return [];
+
+      const tokenConditions = tokens.map((_t, i) => `(
+        unaccent(COALESCE(cs.nombre_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(cs.codigo_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+      )`).join(' AND ');
+
+      const sql = `
+        SELECT DISTINCT os.id_orden_servicio
+        FROM ordenes_servicio os
+        JOIN detalle_servicios_orden dso ON os.id_orden_servicio = dso.id_orden_servicio
+        JOIN catalogo_servicios cs ON dso.id_servicio = cs.id_servicio
+        WHERE ${tokenConditions}
+        LIMIT ${limit}
+      `;
+
+      const results: any[] = await this.prisma.$queryRawUnsafe(sql, ...tokens);
+      return results.map(r => r.id_orden_servicio);
+    } catch (error) {
+      console.warn('⚠️ Error en findOrdenIdsByServicioTexto (fallback a Prisma ILIKE):', error);
+      return [];
+    }
+  }
+
+  /**
    * ═══════════════════════════════════════════════════════════════════════════
    * 🚀 OPTIMIZACIÓN ENTERPRISE 05-ENE-2026: INCLUDE STRATEGIES
    * ═══════════════════════════════════════════════════════════════════════════
@@ -990,6 +1024,7 @@ export class PrismaOrdenServicioRepository {
     id_estado_actual?: number;
     id_tipo_servicio?: number;
     id_servicio?: number; // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
+    servicioTexto?: string; // ✅ Búsqueda inteligente por palabra clave de servicio (ej: 'RADIADOR')
     fecha_desde?: Date | string;
     fecha_hasta?: Date | string;
     fechaDesde?: Date | string;
@@ -1211,6 +1246,49 @@ export class PrismaOrdenServicioRepository {
           id_servicio: filters.id_servicio,
         },
       };
+    }
+
+    // ✅ Búsqueda inteligente por palabra clave de servicio específico (ej: 'RADIADOR', 'manguera radiador')
+    // Coincide si el nombre o código del servicio asignado contiene los términos buscados en cualquier orden
+    // y sin importar tildes (usando unaccent + Prisma ILIKE).
+    if (filters?.servicioTexto) {
+      const s = filters.servicioTexto.trim();
+      const tokens = s.split(/\s+/).filter(t => t.length > 0);
+
+      const matchingOrdenIds = await this.findOrdenIdsByServicioTexto(s);
+
+      const prismaCondition = {
+        detalle_servicios_orden: {
+          some: {
+            catalogo_servicios: {
+              AND: tokens.map(token => ({
+                OR: [
+                  { nombre_servicio: { contains: token, mode: 'insensitive' as const } },
+                  { codigo_servicio: { contains: token, mode: 'insensitive' as const } },
+                ]
+              }))
+            }
+          }
+        }
+      };
+
+      const servicioCondition = matchingOrdenIds.length > 0
+        ? {
+            OR: [
+              prismaCondition,
+              { id_orden_servicio: { in: matchingOrdenIds } }
+            ]
+          }
+        : prismaCondition;
+
+      if (where.AND) {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : [where.AND]),
+          servicioCondition
+        ];
+      } else {
+        where.AND = [servicioCondition];
+      }
     }
 
     // ✅ MULTI-ASESOR: Filtrar órdenes por clientes asignados al asesor
