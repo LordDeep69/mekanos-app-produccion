@@ -1,6 +1,35 @@
 # 📊 ESTADO ACTUAL DEL PROYECTO - MEKANOS S.A.S (OCTUBRE 2026)
 
-## 🚀 ÚLTIMO COMMIT Y RESOLUCIÓN ARQUITECTÓNICA (26 DE OCTUBRE DE 2026)
+## 🚀 ÚLTIMOS COMMITS Y RESOLUCIONES ARQUITECTÓNICAS (26 DE OCTUBRE DE 2026)
+
+### Commit c308977: Sincronización Atómica de Horómetro (EAM Hoja de Vida) y Armonización de Navegación en Agenda (/agenda)
+
+1. **Sincronización Atómica de Horómetro y Hoja de Vida (`finalizacion-orden.service.ts` & `schema.prisma`):**
+   - **Diagnóstico Nuclear:** La tabla `lecturas_horometro` contaba con la secuencia de PostgreSQL `lecturas_horometro_id_lectura_seq`, pero su columna `id_lectura` no tenía configurado el valor por defecto en base de datos (`column_default: NULL`) y el esquema de Prisma carecía de `@default(autoincrement())`. Cualquier inserción fallaba silenciada en el `catch`. Además, `persistirHorometro` solo intentaba registrar en `lecturas_horometro` sin actualizar el campo acumulado `horas_actuales` de la tabla maestra `equipos`.
+   - **Solución Implementada:**
+     - Enlace de la secuencia en PostgreSQL y actualización del modelo Prisma `lecturas_horometro { id_lectura Int @id @default(autoincrement()) }`.
+     - Detección ampliada de parámetros en `mapearMedicionesADatosModulo` para capturar `horometro`, `horómetro` y `horas de trabajo`.
+     - Actualización atómica en `persistirHorometro`: valida prevención de reversa horométrica, calcula horas y días transcurridos respecto a la última lectura, inserta la lectura histórica y actualiza simultáneamente `equipos.horas_actuales` y `equipos.fecha_ultima_lectura_horas`.
+     - Sincronización retroactiva aplicada al activo `GEN-EDIF-T86FEH` (ID `351`), reflejando con exactitud sus 416 horas tanto en hoja de vida como en el PDF legal.
+
+2. **Armonización de UX y Navegación en la Agenda de Servicios (`apps/admin/src/app/(dashboard)/agenda/page.tsx`):**
+   - **Diagnóstico:** En la vista de servicios programados de la agenda, cuando un servicio aún no tenía una orden creada (`servicio.orden_servicio === undefined`), hacer clic en la fila no ejecutaba ninguna acción ni brindaba retroalimentación al usuario. Los nombres de cliente y equipo tampoco permitían navegar a sus respectivas fichas técnicas.
+   - **Solución Implementada:**
+     - Columna de acción clara: si existe orden, despliega botón/insignia azul interactivo `OS #numero` (`/ordenes/${id}`); si no existe orden, despliega botón verde destacado `+ Generar OS` (`/ordenes/nueva?clienteId=...&equipoId=...`).
+     - Enlaces directos e independientes: clic en el nombre del cliente conduce a `/clientes/${id}`; clic en el código de equipo conduce a `/equipos/${id}`.
+     - Armonización visual corporativa con bordes suaves `border-slate-200 bg-white shadow-xs rounded-2xl` en tarjetas KPI, panel de alertas vencidas, carga de técnicos y tabla de cronograma.
+
+---
+
+### Commit 93f0f44 / 1f75991: Certificación Oficial (100% PASS) de la Cadena Maestra EAM hasta el PDF Legal
+
+- **Validación Visual de Integridad:** Certificada en orden real `OS-202610-0021` (`GEN-EDIF-T86FEH` en Edificio Palmetto Beach).
+- **Flujo E2E Validado:** Catálogo Maestro ⟷ Sourcing B2B ⟷ Compras & Muelle ⟷ WMS Lotes FIFO ⟷ Órdenes de Servicio ⟷ Equipos BOM ⟷ PDF Legal.
+- **Segregación de Repuestos:** Tabla A (Garantía Almacén Mekanos Lote `LOT-2026-0005`), Tabla B (Suministro Cliente con Cláusula de Exención de Responsabilidad Civil) y Tabla C (Compras directas en sitio).
+- **Ficha Técnica Industrial:** Placa de motor/generador de 810 kVA, tensiones 220/127V, RPM 1800, marcas Stamford / Doosan y control estricto de saltos de página con Puppeteer.
+
+---
+
 ### Commit c8d41fe: Selector Explícito de Alcance (General vs Multi-Equipo) y Creación Atómica en Pendientes Técnicos
 
 1. **Selector Explícito de Alcance y Multi-Selección en Portal Admin (`apps/admin/src/features/ordenes/components/pendientes-section.tsx`):**
