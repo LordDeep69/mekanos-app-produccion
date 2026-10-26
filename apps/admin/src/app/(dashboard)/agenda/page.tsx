@@ -39,8 +39,9 @@ import {
     CalendarDays,
     CalendarRange,
     CheckCircle2,
-    ChevronRight,
     Clock,
+    FileText,
+    Plus,
     RefreshCw,
     Search,
     Users,
@@ -51,10 +52,10 @@ import { useMemo, useState } from 'react';
 
 // Colores por nivel de urgencia
 const URGENCIA_COLORS: Record<NivelUrgencia, string> = {
-    CRITICA: 'bg-red-100 text-red-800 border-red-300',
-    ALTA: 'bg-orange-100 text-orange-800 border-orange-300',
-    MEDIA: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    NORMAL: 'bg-green-100 text-green-800 border-green-300',
+    CRITICA: 'bg-red-50 text-red-700 border-red-200',
+    ALTA: 'bg-orange-50 text-orange-700 border-orange-200',
+    MEDIA: 'bg-amber-50 text-amber-700 border-amber-200',
+    NORMAL: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
 const ESTADO_BADGES: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
@@ -81,7 +82,7 @@ function MetricasPanel() {
         return (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {[...Array(6)].map((_, i) => (
-                    <Skeleton key={i} className="h-24" />
+                    <Skeleton key={i} className="h-24 rounded-2xl" />
                 ))}
             </div>
         );
@@ -143,21 +144,28 @@ function MetricasPanel() {
     ];
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
             {cards.map((card) => (
-                <Card key={card.title} className={card.alert ? 'border-red-300 animate-pulse' : ''}>
+                <Card
+                    key={card.title}
+                    className={`border border-slate-200 bg-white shadow-xs rounded-2xl transition-all duration-200 hover:shadow-sm ${
+                        card.alert ? 'border-red-300 ring-1 ring-red-200' : ''
+                    }`}
+                >
                     <CardContent className="p-4">
                         <div className="flex items-center justify-between">
-                            <div className={`p-2 rounded-lg ${card.bg}`}>
+                            <div className={`p-2 rounded-xl ${card.bg}`}>
                                 <card.icon className={`h-5 w-5 ${card.color}`} />
                             </div>
                             {card.alert && (
-                                <span className="text-xs text-red-600 font-medium">Alerta</span>
+                                <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">
+                                    Alerta
+                                </span>
                             )}
                         </div>
                         <div className="mt-3">
-                            <p className="text-2xl font-bold">{card.value}</p>
-                            <p className="text-sm text-muted-foreground">{card.title}</p>
+                            <p className="text-2xl font-bold tracking-tight text-slate-900">{card.value}</p>
+                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mt-0.5">{card.title}</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -171,51 +179,53 @@ function CargaTecnicosPanel() {
     const { data: tecnicos, isLoading } = useCargaTecnicos();
 
     if (isLoading) {
-        return <Skeleton className="h-48" />;
+        return <Skeleton className="h-48 rounded-2xl" />;
     }
 
     if (!tecnicos || tecnicos.length === 0) {
         return (
-            <div className="text-center py-8 text-muted-foreground">
-                No hay técnicos registrados
-            </div>
+            <Card className="border border-slate-200 bg-white shadow-xs rounded-2xl">
+                <CardContent className="p-6 text-center text-muted-foreground">
+                    No hay técnicos registrados
+                </CardContent>
+            </Card>
         );
     }
 
     return (
-        <Card>
+        <Card className="border border-slate-200 bg-white shadow-xs rounded-2xl">
             <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                    <Users className="h-5 w-5" />
+                <CardTitle className="text-lg flex items-center gap-2 font-semibold text-slate-900">
+                    <Users className="h-5 w-5 text-slate-600" />
                     Carga de Técnicos
                 </CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="space-y-3">
                     {tecnicos.slice(0, 5).map((tecnico) => (
-                        <div key={tecnico.id_tecnico} className="flex items-center justify-between">
+                        <div key={tecnico.id_tecnico} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
                             <div>
-                                <p className="font-medium text-sm">{tecnico.nombre}</p>
-                                <p className="text-xs text-muted-foreground">{tecnico.zona}</p>
+                                <p className="font-semibold text-sm text-slate-900">{tecnico.nombre}</p>
+                                <p className="text-xs text-slate-500">{tecnico.zona}</p>
                             </div>
                             <div className="flex items-center gap-3">
                                 <div className="text-right">
-                                    <p className="text-sm font-medium">{tecnico.servicios_semana} esta semana</p>
-                                    <p className="text-xs text-muted-foreground">{tecnico.servicios_hoy} hoy</p>
+                                    <p className="text-sm font-semibold text-slate-700">{tecnico.servicios_semana} sem</p>
+                                    <p className="text-xs text-slate-400">{tecnico.servicios_hoy} hoy</p>
                                 </div>
                                 <div className="w-20">
-                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
                                         <div
                                             className={`h-full rounded-full ${tecnico.carga_porcentaje >= 80
                                                 ? 'bg-red-500'
                                                 : tecnico.carga_porcentaje >= 60
-                                                    ? 'bg-orange-500'
-                                                    : 'bg-green-500'
+                                                    ? 'bg-amber-500'
+                                                    : 'bg-emerald-500'
                                                 }`}
                                             style={{ width: `${tecnico.carga_porcentaje}%` }}
                                         />
                                     </div>
-                                    <p className="text-xs text-center mt-1">{tecnico.carga_porcentaje}%</p>
+                                    <p className="text-[11px] font-medium text-slate-500 text-center mt-1">{tecnico.carga_porcentaje}%</p>
                                 </div>
                             </div>
                         </div>
@@ -252,7 +262,7 @@ function ServiciosTable({ servicios, isLoading }: { servicios?: ServicioPrograma
         return (
             <div className="space-y-2">
                 {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-16" />
+                    <Skeleton key={i} className="h-16 rounded-xl" />
                 ))}
             </div>
         );
@@ -275,7 +285,7 @@ function ServiciosTable({ servicios, isLoading }: { servicios?: ServicioPrograma
                     placeholder="Buscar por cliente, equipo, servicio..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl border-slate-200"
                 />
             </div>
 
@@ -285,60 +295,85 @@ function ServiciosTable({ servicios, isLoading }: { servicios?: ServicioPrograma
                     <p>No hay servicios programados</p>
                 </div>
             ) : (
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs bg-white">
                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[100px]">Fecha</TableHead>
-                                <TableHead>Cliente</TableHead>
-                                <TableHead>Equipo</TableHead>
-                                <TableHead>Servicio</TableHead>
-                                <TableHead className="w-[80px]">Días</TableHead>
-                                <TableHead className="w-[100px]">Estado</TableHead>
-                                <TableHead className="w-[80px]">Prioridad</TableHead>
-                                <TableHead className="w-[50px]"></TableHead>
+                        <TableHeader className="bg-slate-50/75 border-b border-slate-200">
+                            <TableRow className="hover:bg-transparent">
+                                <TableHead className="w-[110px] font-semibold text-slate-700">Fecha</TableHead>
+                                <TableHead className="font-semibold text-slate-700">Cliente</TableHead>
+                                <TableHead className="font-semibold text-slate-700">Equipo</TableHead>
+                                <TableHead className="font-semibold text-slate-700">Servicio</TableHead>
+                                <TableHead className="w-[90px] font-semibold text-slate-700">Días</TableHead>
+                                <TableHead className="w-[110px] font-semibold text-slate-700">Estado</TableHead>
+                                <TableHead className="w-[90px] font-semibold text-slate-700">Prioridad</TableHead>
+                                <TableHead className="w-[150px] text-right font-semibold text-slate-700">Orden / Acción</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {filteredServicios.map((servicio) => (
                                 <TableRow
                                     key={servicio.id_cronograma}
-                                    className={`cursor-pointer hover:bg-muted/50 ${servicio.nivel_urgencia === 'CRITICA' ? 'bg-red-50' : ''
-                                        }`}
+                                    className={`transition-colors hover:bg-slate-50/80 cursor-pointer ${
+                                        servicio.nivel_urgencia === 'CRITICA' ? 'bg-red-50/40' : ''
+                                    }`}
                                     onClick={() => {
                                         if (servicio.orden_servicio) {
                                             router.push(`/ordenes/${servicio.orden_servicio.id}`);
+                                        } else {
+                                            router.push(`/ordenes/nueva?clienteId=${servicio.cliente.id}&equipoId=${servicio.equipo.id}`);
                                         }
                                     }}
                                 >
                                     <TableCell className="font-medium">
-                                        <div className={`px-2 py-1 rounded text-xs text-center ${URGENCIA_COLORS[servicio.nivel_urgencia]}`}>
+                                        <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold text-center border ${URGENCIA_COLORS[servicio.nivel_urgencia]}`}>
                                             {formatDate(servicio.fecha_prevista)}
                                         </div>
                                     </TableCell>
                                     <TableCell>
                                         <div>
-                                            <p className="font-medium text-sm">{servicio.cliente.nombre}</p>
-                                            <p className="text-xs text-muted-foreground">{servicio.cliente.codigo}</p>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    router.push(`/clientes/${servicio.cliente.id}`);
+                                                }}
+                                                className="font-semibold text-sm text-slate-900 hover:text-blue-600 hover:underline text-left block truncate max-w-[220px]"
+                                            >
+                                                {servicio.cliente.nombre}
+                                            </button>
+                                            <p className="text-xs text-slate-500 font-mono">{servicio.cliente.codigo}</p>
                                         </div>
                                     </TableCell>
                                     <TableCell>
                                         <div>
-                                            <p className="text-sm">{servicio.equipo.codigo}</p>
-                                            <p className="text-xs text-muted-foreground">{servicio.equipo.nombre_tipo}</p>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    router.push(`/equipos/${servicio.equipo.id}`);
+                                                }}
+                                                className="font-semibold text-sm text-slate-800 hover:text-blue-600 hover:underline text-left block font-mono"
+                                            >
+                                                {servicio.equipo.codigo}
+                                            </button>
+                                            <p className="text-xs text-slate-500">{servicio.equipo.nombre_tipo}</p>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <p className="text-sm">{servicio.tipo_servicio.nombre}</p>
+                                        <p className="text-sm font-medium text-slate-700">{servicio.tipo_servicio.nombre}</p>
+                                        {servicio.contrato?.codigo && (
+                                            <p className="text-[11px] text-slate-400 font-mono">Contr: {servicio.contrato.codigo}</p>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <span
-                                            className={`font-bold ${servicio.dias_restantes < 0
-                                                ? 'text-red-600'
-                                                : servicio.dias_restantes <= 3
-                                                    ? 'text-orange-600'
-                                                    : 'text-gray-600'
-                                                }`}
+                                            className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block ${
+                                                servicio.dias_restantes < 0
+                                                    ? 'bg-red-100 text-red-700 border border-red-200'
+                                                    : servicio.dias_restantes <= 3
+                                                        ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                                        : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                            }`}
                                         >
                                             {servicio.dias_restantes < 0
                                                 ? `${Math.abs(servicio.dias_restantes)}d atrás`
@@ -348,17 +383,42 @@ function ServiciosTable({ servicios, isLoading }: { servicios?: ServicioPrograma
                                         </span>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={ESTADO_BADGES[servicio.estado_cronograma]?.variant || 'secondary'}>
+                                        <Badge variant={ESTADO_BADGES[servicio.estado_cronograma]?.variant || 'secondary'} className="font-medium text-xs">
                                             {ESTADO_BADGES[servicio.estado_cronograma]?.label || servicio.estado_cronograma}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge className={PRIORIDAD_BADGES[servicio.prioridad]?.className || ''}>
+                                        <Badge className={`text-xs font-semibold ${PRIORIDAD_BADGES[servicio.prioridad]?.className || ''}`}>
                                             {PRIORIDAD_BADGES[servicio.prioridad]?.label || servicio.prioridad}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell>
-                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                    <TableCell className="text-right">
+                                        {servicio.orden_servicio ? (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-8 gap-1.5 text-xs font-semibold border-blue-200 bg-blue-50/60 text-blue-700 hover:bg-blue-100 hover:text-blue-800 transition-colors shadow-2xs"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    router.push(`/ordenes/${servicio.orden_servicio!.id}`);
+                                                }}
+                                            >
+                                                <FileText className="h-3.5 w-3.5" />
+                                                <span>OS #{servicio.orden_servicio.numero}</span>
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                size="sm"
+                                                className="h-8 gap-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    router.push(`/ordenes/nueva?clienteId=${servicio.cliente.id}&equipoId=${servicio.equipo.id}`);
+                                                }}
+                                            >
+                                                <Plus className="h-3.5 w-3.5" />
+                                                <span>Generar OS</span>
+                                            </Button>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -380,17 +440,17 @@ function AlertasVencidas() {
     const router = useRouter();
 
     if (isLoading) {
-        return <Skeleton className="h-32" />;
+        return <Skeleton className="h-32 rounded-2xl" />;
     }
 
     if (!vencidos || vencidos.total === 0) {
         return (
-            <Card className="border-green-200 bg-green-50">
+            <Card className="border border-emerald-200 bg-emerald-50/40 rounded-2xl shadow-xs">
                 <CardContent className="p-4 flex items-center gap-3">
-                    <CheckCircle2 className="h-8 w-8 text-green-600" />
+                    <CheckCircle2 className="h-8 w-8 text-emerald-600" />
                     <div>
-                        <p className="font-medium text-green-800">Sin servicios vencidos</p>
-                        <p className="text-sm text-green-600">Todos los servicios están al día</p>
+                        <p className="font-semibold text-emerald-900">Sin servicios vencidos</p>
+                        <p className="text-sm text-emerald-700">Todos los servicios están al día según cronograma</p>
                     </div>
                 </CardContent>
             </Card>
@@ -398,41 +458,91 @@ function AlertasVencidas() {
     }
 
     return (
-        <Card className="border-red-300 bg-red-50">
+        <Card className="border border-red-200 bg-red-50/30 rounded-2xl shadow-xs">
             <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2 text-red-800">
-                    <AlertTriangle className="h-5 w-5" />
-                    Servicios Vencidos ({vencidos.total})
+                <CardTitle className="text-lg flex items-center justify-between text-red-900 font-semibold">
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-red-600" />
+                        <span>Servicios Vencidos ({vencidos.total})</span>
+                    </div>
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                     {vencidos.data.slice(0, 5).map((servicio) => (
                         <div
                             key={servicio.id_cronograma}
-                            className="flex items-center justify-between p-2 bg-white rounded border border-red-200 cursor-pointer hover:bg-red-100"
+                            className="flex items-center justify-between p-3 bg-white rounded-xl border border-red-200/80 shadow-2xs hover:border-red-300 hover:shadow-xs transition-all gap-3 cursor-pointer"
                             onClick={() => {
                                 if (servicio.orden_servicio) {
                                     router.push(`/ordenes/${servicio.orden_servicio.id}`);
+                                } else {
+                                    router.push(`/ordenes/nueva?clienteId=${servicio.cliente.id}&equipoId=${servicio.equipo.id}`);
                                 }
                             }}
                         >
-                            <div>
-                                <p className="font-medium text-sm">{servicio.cliente.nombre}</p>
-                                <p className="text-xs text-muted-foreground">
-                                    {servicio.equipo.codigo} - {servicio.tipo_servicio.nombre}
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            router.push(`/clientes/${servicio.cliente.id}`);
+                                        }}
+                                        className="font-semibold text-sm text-slate-900 hover:text-blue-600 truncate text-left"
+                                    >
+                                        {servicio.cliente.nombre}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            router.push(`/equipos/${servicio.equipo.id}`);
+                                        }}
+                                        className="font-medium hover:text-blue-600 hover:underline"
+                                    >
+                                        {servicio.equipo.codigo}
+                                    </button>
+                                    {' • '}{servicio.tipo_servicio.nombre}
                                 </p>
                             </div>
-                            <div className="text-right">
-                                <p className="text-red-600 font-bold text-sm">
-                                    {Math.abs(servicio.dias_restantes)} días atrás
-                                </p>
+                            <div className="flex items-center gap-2.5 shrink-0">
+                                <span className="text-red-700 font-bold text-xs bg-red-100/80 px-2 py-1 rounded-md border border-red-200">
+                                    {Math.abs(servicio.dias_restantes)}d atrás
+                                </span>
+                                {servicio.orden_servicio ? (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs font-semibold border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 shadow-2xs"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            router.push(`/ordenes/${servicio.orden_servicio!.id}`);
+                                        }}
+                                    >
+                                        OS #{servicio.orden_servicio.numero}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        size="sm"
+                                        className="h-7 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-2xs"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            router.push(`/ordenes/nueva?clienteId=${servicio.cliente.id}&equipoId=${servicio.equipo.id}`);
+                                        }}
+                                    >
+                                        <Plus className="h-3.5 w-3.5 mr-1" />
+                                        Crear OS
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     ))}
                 </div>
                 {vencidos.total > 5 && (
-                    <p className="text-xs text-red-600 mt-2 text-center">
+                    <p className="text-xs text-red-600 mt-2 text-center font-medium">
                         +{vencidos.total - 5} más vencidos
                     </p>
                 )}
@@ -470,12 +580,12 @@ export default function AgendaPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
+                    <div className="p-2 bg-blue-100 rounded-xl">
                         <Calendar className="h-6 w-6 text-blue-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Agenda de Servicios</h1>
-                        <p className="text-muted-foreground">
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Agenda de Servicios</h1>
+                        <p className="text-muted-foreground text-sm">
                             Centro de programación inteligente - {new Date().toLocaleDateString('es-CO', {
                                 weekday: 'long',
                                 year: 'numeric',
@@ -485,7 +595,7 @@ export default function AgendaPage() {
                         </p>
                     </div>
                 </div>
-                <Button variant="outline" onClick={refreshAgenda}>
+                <Button variant="outline" onClick={refreshAgenda} className="border-slate-200 rounded-xl hover:bg-slate-50">
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Actualizar
                 </Button>
@@ -501,21 +611,21 @@ export default function AgendaPage() {
             </div>
 
             {/* Tabs de vista temporal */}
-            <Card>
+            <Card className="border border-slate-200 bg-white shadow-xs rounded-2xl">
                 <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Servicios Programados</CardTitle>
+                        <CardTitle className="text-lg font-semibold text-slate-900">Servicios Programados</CardTitle>
                         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as AgendaView)}>
-                            <TabsList>
-                                <TabsTrigger value="hoy" className="gap-1">
+                            <TabsList className="bg-slate-100 rounded-xl p-1 border border-slate-200/60">
+                                <TabsTrigger value="hoy" className="gap-1 rounded-lg">
                                     <Calendar className="h-4 w-4" />
                                     Hoy
                                 </TabsTrigger>
-                                <TabsTrigger value="semana" className="gap-1">
+                                <TabsTrigger value="semana" className="gap-1 rounded-lg">
                                     <CalendarDays className="h-4 w-4" />
                                     Semana
                                 </TabsTrigger>
-                                <TabsTrigger value="mes" className="gap-1">
+                                <TabsTrigger value="mes" className="gap-1 rounded-lg">
                                     <CalendarRange className="h-4 w-4" />
                                     Mes
                                 </TabsTrigger>

@@ -1236,7 +1236,7 @@ export class FinalizacionOrdenService {
                 datosModulo.temperaturaRefrigerante = valor;
             } else if (param.includes('bater') || param.includes('carga')) {
                 datosModulo.cargaBateria = valor;
-            } else if (param.includes('hora') && param.includes('trabajo')) {
+            } else if (param.includes('horometro') || param.includes('horómetro') || (param.includes('hora') && param.includes('trabajo'))) {
                 datosModulo.horasTrabajo = valor;
             } else if (param.includes('voltaje') || (param.includes('volt') && !param.includes('bater'))) {
                 datosModulo.voltaje = valor;
@@ -2343,19 +2343,34 @@ export class FinalizacionOrdenService {
         usuarioId: number,
     ): Promise<void> {
         try {
-            // 1. Obtener la última lectura para este equipo
-            const ultimaLectura = await this.prisma.lecturas_horometro.findFirst({
-                where: { id_equipo: idEquipo },
-                orderBy: { fecha_lectura: 'desc' },
-            });
+            // 1. Obtener el equipo y su última lectura histórica
+            const [equipo, ultimaLectura] = await Promise.all([
+                this.prisma.equipos.findUnique({
+                    where: { id_equipo: idEquipo },
+                    select: { id_equipo: true, horas_actuales: true, codigo_equipo: true },
+                }),
+                this.prisma.lecturas_horometro.findFirst({
+                    where: { id_equipo: idEquipo },
+                    orderBy: { fecha_lectura: 'desc' },
+                }),
+            ]);
 
-            // 2. Validación Zero Trust: Evitar horómetro en reversa
-            if (ultimaLectura && Number(ultimaLectura.horas_lectura) > horas) {
-                this.logger.warn(`⚠️ Intento de registrar horómetro menor al actual (${horas} < ${ultimaLectura.horas_lectura}). Se ignorará para mantener integridad.`);
+            const horasActuales = equipo?.horas_actuales ? Number(equipo.horas_actuales) : 0;
+            const ultimaHoras = ultimaLectura ? Number(ultimaLectura.horas_lectura) : 0;
+            const referenciaHoras = Math.max(horasActuales, ultimaHoras);
+
+            // 2. Validación Zero Trust: Evitar horómetro en reversa si ya existían horas mayores registradas
+            if (referenciaHoras > 0 && horas < referenciaHoras) {
+                this.logger.warn(`⚠️ Intento de registrar horómetro menor al actual (${horas} < ${referenciaHoras}) en equipo ${equipo?.codigo_equipo || idEquipo}. Se mantendrán las horas mayores.`);
                 return;
             }
 
-            // 3. Registrar nueva lectura
+            const horasTranscurridas = ultimaLectura ? Math.max(0, horas - Number(ultimaLectura.horas_lectura)) : null;
+            const diasTranscurridos = ultimaLectura
+                ? Math.floor((new Date().getTime() - new Date(ultimaLectura.fecha_lectura).getTime()) / (1000 * 60 * 60 * 24))
+                : null;
+
+            // 3. Registrar nueva lectura en tabla histórica
             await this.prisma.lecturas_horometro.create({
                 data: {
                     id_equipo: idEquipo,
@@ -2363,12 +2378,23 @@ export class FinalizacionOrdenService {
                     horas_lectura: horas,
                     fecha_lectura: new Date(),
                     tipo_lectura: 'MANTENIMIENTO',
+                    horas_transcurridas: horasTranscurridas,
+                    dias_transcurridos: diasTranscurridos,
                     registrado_por: usuarioId,
-                    observaciones: `Registrado automáticamente al finalizar orden ${idOrden}`,
+                    observaciones: `Registrado automáticamente al finalizar orden #${idOrden}`,
                 },
             });
 
-            this.logger.log(`   ✅ Horómetro registrado: ${horas}h (Equipo ID: ${idEquipo})`);
+            // ✅ 4. SINCRONIZACIÓN ATÓMICA DE HOJA DE VIDA: Actualizar equipos.horas_actuales
+            await this.prisma.equipos.update({
+                where: { id_equipo: idEquipo },
+                data: {
+                    horas_actuales: horas,
+                    fecha_ultima_lectura_horas: new Date(),
+                },
+            });
+
+            this.logger.log(`   ✅ Horómetro registrado y sincronizado en Hoja de Vida: ${horas}h (Equipo: ${equipo?.codigo_equipo || idEquipo})`);
         } catch (error: unknown) {
             const err = error as Error;
             this.logger.error(`❌ Error persistiendo horómetro: ${err.message}`);
