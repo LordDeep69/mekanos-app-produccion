@@ -757,6 +757,52 @@ export class OrdenesController {
       include: { parametros_medicion: true },
     });
 
+    // ✅ Sincronización proactiva de horómetro en equipos al crear medición en orden
+    if (parametro && (
+      parametro.codigo_parametro?.toUpperCase().includes('HORO') ||
+      parametro.nombre_parametro?.toLowerCase().includes('hora') ||
+      parametro.nombre_parametro?.toLowerCase().includes('horo')
+    )) {
+      const horasVal = body.valor_numerico != null ? Number(body.valor_numerico) : parseFloat(String(body.valor_texto || ''));
+      if (!isNaN(horasVal) && horasVal > 0) {
+        try {
+          let idEquipoTarget = null;
+          if (body.id_orden_equipo) {
+            const oe = await this.prisma.ordenes_equipos.findUnique({
+              where: { id_orden_equipo: body.id_orden_equipo },
+              select: { id_equipo: true },
+            });
+            if (oe) idEquipoTarget = oe.id_equipo;
+          }
+          if (!idEquipoTarget) {
+            const ord = await this.prisma.ordenes_servicio.findUnique({
+              where: { id_orden_servicio: id },
+              select: { id_equipo: true },
+            });
+            if (ord) idEquipoTarget = ord.id_equipo;
+          }
+          if (idEquipoTarget) {
+            const eq = await this.prisma.equipos.findUnique({
+              where: { id_equipo: idEquipoTarget },
+              select: { horas_actuales: true },
+            });
+            const actual = eq?.horas_actuales ? Number(eq.horas_actuales) : 0;
+            if (horasVal >= actual) {
+              await this.prisma.equipos.update({
+                where: { id_equipo: idEquipoTarget },
+                data: {
+                  horas_actuales: horasVal,
+                  fecha_ultima_lectura_horas: new Date(),
+                },
+              });
+            }
+          }
+        } catch {
+          // Non-blocking
+        }
+      }
+    }
+
     return {
       success: true,
       data: nuevaMedicion,

@@ -718,18 +718,100 @@ export class FinalizacionOrdenService {
             }
 
             // ========================================================================
-            // PASO 7.5: Registrar lectura de horómetro (si existe) - SIEMPRE
+            // PASO 7.5: Registrar lectura de horómetro - ROBUSTO MULTI-EQUIPO & MONO-EQUIPO
             // ========================================================================
-            if (dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo) {
-                const horas = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
-                emitProgress('actualizando_estado', 'in_progress', `Registrando lectura de horómetro: ${horas}h...`, 93);
-                this.logger.log(`⏳ Paso 7.5: Registrando lectura de horómetro (${horas}h)...`);
-                await this.persistirHorometro(
-                    orden.id_orden_servicio,
-                    orden.id_equipo,
-                    horas!,
-                    dto.usuarioId,
-                );
+            emitProgress('actualizando_estado', 'in_progress', 'Sincronizando horómetro(s) en hoja de vida...', 93);
+            this.logger.log('⏳ Paso 7.5: Sincronizando horómetro(s) en hoja de vida...');
+
+            const equiposSincronizados = new Set<number>();
+
+            // A. Si la orden tiene equipos asociados en ordenes_equipos (Multi-Equipo o Mono con relación)
+            if (orden.ordenes_equipos && orden.ordenes_equipos.length > 0) {
+                for (const oe of orden.ordenes_equipos) {
+                    if (!oe.id_equipo) continue;
+                    let horasEquipo: number | null = null;
+
+                    // 1. Buscar en dto.medicionesPorEquipo
+                    if (dto.medicionesPorEquipo) {
+                        const grupo = dto.medicionesPorEquipo.find(g => g.idOrdenEquipo === oe.id_orden_equipo);
+                        const med = grupo?.mediciones?.find(m => this.esParametroHorometro(m.parametro));
+                        if (med && med.valor != null) {
+                            const v = typeof med.valor === 'number' ? med.valor : parseFloat(String(med.valor));
+                            if (!isNaN(v) && v > 0) horasEquipo = v;
+                        }
+                    }
+
+                    // 2. Buscar en dto.mediciones flat asociadas a este orden_equipo
+                    if (horasEquipo == null && dto.mediciones) {
+                        const med = dto.mediciones.find(m => m.idOrdenEquipo === oe.id_orden_equipo && this.esParametroHorometro(m.parametro));
+                        if (med && med.valor != null) {
+                            const v = typeof med.valor === 'number' ? med.valor : parseFloat(String(med.valor));
+                            if (!isNaN(v) && v > 0) horasEquipo = v;
+                        }
+                    }
+
+                    // 3. Buscar en dto.actividadesPorEquipo
+                    if (horasEquipo == null && dto.actividadesPorEquipo) {
+                        const grupo = dto.actividadesPorEquipo.find(g => g.idOrdenEquipo === oe.id_orden_equipo);
+                        for (const act of grupo?.actividades || []) {
+                            const h = this.extraerHorasDeObservacion(act.observaciones);
+                            if (h != null && h > 0) {
+                                horasEquipo = h;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 4. Si la orden solo tiene 1 equipo en ordenes_equipos, usar el general
+                    if (horasEquipo == null && orden.ordenes_equipos.length === 1) {
+                        const vGeneral = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
+                        if (vGeneral != null) {
+                            const v = typeof vGeneral === 'number' ? vGeneral : parseFloat(String(vGeneral));
+                            if (!isNaN(v) && v > 0) horasEquipo = v;
+                        }
+                    }
+
+                    if (horasEquipo != null && horasEquipo > 0) {
+                        await this.persistirHorometro(
+                            orden.id_orden_servicio,
+                            oe.id_equipo,
+                            horasEquipo,
+                            dto.usuarioId,
+                        );
+                        equiposSincronizados.add(oe.id_equipo);
+                    }
+                }
+            }
+
+            // B. Para el equipo principal (orden.id_equipo), si no se sincronizó aún
+            const idEquipoPrincipal = orden.id_equipo || (orden.ordenes_equipos?.length === 1 ? orden.ordenes_equipos[0].id_equipo : null);
+            if (idEquipoPrincipal && !equiposSincronizados.has(idEquipoPrincipal)) {
+                let horasPrincipal: number | null = null;
+                const vGeneral = dto.datosModulo?.horasTrabajo || datosModuloMapeado.horasTrabajo;
+                if (vGeneral != null) {
+                    const v = typeof vGeneral === 'number' ? vGeneral : parseFloat(String(vGeneral));
+                    if (!isNaN(v) && v > 0) horasPrincipal = v;
+                }
+
+                // Fallback: buscar en dto.actividades generales
+                if (horasPrincipal == null && dto.actividades) {
+                    for (const act of dto.actividades) {
+                        const h = this.extraerHorasDeObservacion(act.observaciones);
+                        if (h != null && h > 0) {
+                            horasPrincipal = h;
+                            break;
+                        }
+                    }
+                }
+
+                if (horasPrincipal != null && horasPrincipal > 0) {
+                    await this.persistirHorometro(
+                        orden.id_orden_servicio,
+                        idEquipoPrincipal,
+                        horasPrincipal,
+                        dto.usuarioId,
+                    );
+                }
             }
 
             // ========================================================================
@@ -1225,7 +1307,8 @@ export class FinalizacionOrdenService {
 
         for (const m of mediciones) {
             const param = m.parametro?.toLowerCase() || '';
-            const valor = m.valor;
+            const valor = typeof m.valor === 'number' ? m.valor : parseFloat(String(m.valor));
+            if (isNaN(valor)) continue;
 
             // Mapeo flexible por palabras clave
             if (param.includes('rpm') || param.includes('velocidad')) {
@@ -1236,7 +1319,7 @@ export class FinalizacionOrdenService {
                 datosModulo.temperaturaRefrigerante = valor;
             } else if (param.includes('bater') || param.includes('carga')) {
                 datosModulo.cargaBateria = valor;
-            } else if (param.includes('horometro') || param.includes('horómetro') || (param.includes('hora') && param.includes('trabajo'))) {
+            } else if (this.esParametroHorometro(param)) {
                 datosModulo.horasTrabajo = valor;
             } else if (param.includes('voltaje') || (param.includes('volt') && !param.includes('bater'))) {
                 datosModulo.voltaje = valor;
@@ -2336,6 +2419,40 @@ export class FinalizacionOrdenService {
      * Registra la lectura del horómetro en la tabla lecturas_horometro
      * ROBUSTEZ: Valida que la lectura no sea inferior a la anterior
      */
+    /**
+     * Evalúa si un parámetro corresponde a lectura de horómetro
+     */
+    private esParametroHorometro(param?: string): boolean {
+        if (!param) return false;
+        const p = param.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return (
+            p.includes('horometro') ||
+            p.includes('horo') ||
+            p.includes('gen_horometro') ||
+            (p.includes('hora') && (
+                p.includes('trabaj') ||
+                p.includes('operac') ||
+                p.includes('motor') ||
+                p.includes('actual') ||
+                p.includes('acumul') ||
+                p.includes('servicio')
+            ))
+        );
+    }
+
+    /**
+     * Extrae valor numérico de horas desde observaciones de checklist (ej: "HORAS: 276")
+     */
+    private extraerHorasDeObservacion(obs?: string): number | null {
+        if (!obs) return null;
+        const match = obs.match(/(?:HORAS|HOROMETRO|HORÓMETRO)\s*:\s*([\d.]+)/i);
+        if (match && match[1]) {
+            const val = parseFloat(match[1]);
+            return isNaN(val) ? null : val;
+        }
+        return null;
+    }
+
     private async persistirHorometro(
         idOrden: number,
         idEquipo: number,

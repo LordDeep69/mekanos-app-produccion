@@ -371,7 +371,7 @@ export class SyncService {
     }
 
     // Crear medición
-    return await tx.mediciones_servicio.create({
+    const nuevaMedicion = await tx.mediciones_servicio.create({
       data: {
         id_orden_servicio: idOrdenServicio,
         id_parametro_medicion: dto.idParametroMedicion,
@@ -387,6 +387,43 @@ export class SyncService {
         medido_por: tecnicoId,
       },
     });
+
+    // ✅ Sincronización proactiva de horómetro en equipos
+    if (parametro && (
+      parametro.codigo_parametro?.toUpperCase().includes('HORO') ||
+      parametro.nombre_parametro?.toLowerCase().includes('hora') ||
+      parametro.nombre_parametro?.toLowerCase().includes('horo')
+    )) {
+      const horasVal = dto.valorNumerico != null ? Number(dto.valorNumerico) : parseFloat(String(dto.valorTexto || ''));
+      if (!isNaN(horasVal) && horasVal > 0) {
+        try {
+          const ord = await tx.ordenes_servicio.findUnique({
+            where: { id_orden_servicio: idOrdenServicio },
+            select: { id_equipo: true },
+          });
+          if (ord?.id_equipo) {
+            const eq = await tx.equipos.findUnique({
+              where: { id_equipo: ord.id_equipo },
+              select: { horas_actuales: true },
+            });
+            const actual = eq?.horas_actuales ? Number(eq.horas_actuales) : 0;
+            if (horasVal >= actual) {
+              await tx.equipos.update({
+                where: { id_equipo: ord.id_equipo },
+                data: {
+                  horas_actuales: horasVal,
+                  fecha_ultima_lectura_horas: new Date(),
+                },
+              });
+            }
+          }
+        } catch {
+          // Non-blocking
+        }
+      }
+    }
+
+    return nuevaMedicion;
   }
 
   /**
