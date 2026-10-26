@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/error_feedback.dart';
 import '../../../core/lifecycle/data_lifecycle_manager.dart';
 import '../../../core/storage/storage_preferences.dart';
 
@@ -60,8 +61,10 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cargando configuración: $e')),
+        mostrarErrorSnackBar(
+          context,
+          e,
+          contexto: 'cargar la configuración de almacenamiento',
         );
       }
     }
@@ -143,12 +146,7 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
     } catch (e) {
       setState(() => _isCleaningInProgress = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error durante limpieza: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        mostrarErrorSnackBar(context, e, contexto: 'limpiar el almacenamiento');
       }
     }
   }
@@ -188,9 +186,11 @@ class _StorageSettingsScreenState extends ConsumerState<StorageSettingsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        mostrarErrorSnackBar(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+          e,
+          contexto: 'restaurar la configuración',
+        );
       }
     }
   }

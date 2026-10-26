@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../errors/user_friendly_error.dart';
 import '../lifecycle/app_lifecycle_observer.dart';
 import 'smart_sync_service.dart';
 import 'sync_service.dart';
@@ -99,6 +100,11 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
   static const _lastSyncKey = 'last_sync_at';
   static const _initialSyncDoneKey = 'initial_sync_done';
   static const _lastCatalogsSyncKey = 'last_catalogs_sync_at';
+
+  /// ✅ 26-OCT-2026: red de seguridad global. El Smart Sync tiene su propio
+  /// plazo de 120 s; este techo de 150 s garantiza que la UI nunca quede
+  /// "sincronizando" para siempre aunque una capa inferior se cuelgue.
+  static const _timeoutSyncTotal = Duration(seconds: 150);
 
   SyncStateNotifier(
     this._syncService,
@@ -238,45 +244,34 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
           currentStep: 'Comparando con servidor...',
         );
 
-        final smartResult = await _smartSyncService.sincronizarInteligente(
-          tecnicoId,
-          limit: 500,
-          onProgress: (smartProgress) {
-            if (!state.isSyncing) return;
-            state = state.copyWith(
-              progress: smartProgress.porcentaje.clamp(0.0, 1.0).toDouble(),
-              currentStep: smartProgress.mensaje,
-            );
-          },
-        );
-
-        // ✅ 24-OCT-2026: los catálogos solo se refrescan una vez al día.
-        // Antes se pedía fullCatalogs=true en CADA smart sync, lo que
-        // retrasaba el estado "completado" sin aportar datos nuevos.
-        if (await _debenRefrescarCatalogos()) {
-          try {
-            state = state.copyWith(
-              progress: 0.92,
-              currentStep: 'Actualizando catálogos...',
-            );
-
-            await _syncService.downloadData(
+        final smartResult = await _smartSyncService
+            .sincronizarInteligente(
               tecnicoId,
-              since: DateTime.now().toUtc(),
-              fullCatalogs: true,
+              limit: 500,
+              onProgress: (smartProgress) {
+                if (!state.isSyncing) return;
+                state = state.copyWith(
+                  progress: smartProgress.porcentaje.clamp(0.0, 1.0).toDouble(),
+                  currentStep: smartProgress.mensaje,
+                );
+              },
+            )
+            .timeout(
+              _timeoutSyncTotal,
+              onTimeout: () => throw TimeoutException(
+                'La sincronización superó el tiempo máximo permitido',
+              ),
             );
-            await _saveCatalogsSync(DateTime.now().toUtc());
-          } catch (e) {
-            debugPrint(
-              '⚠️ [SYNC] Error refrescando catálogos post smart sync: $e',
-            );
-          }
-        } else {
-          state = state.copyWith(
-            progress: 0.96,
-            currentStep: 'Finalizando sincronización...',
-          );
-        }
+
+        // ✅ 26-OCT-2026: los catálogos ya no bloquean el estado "completado".
+        // Se refrescan en segundo plano (máximo 1 vez/día) y, si fallan, no
+        // afectan al técnico.
+        _refrescarCatalogosEnSegundoPlano(tecnicoId);
+
+        state = state.copyWith(
+          progress: 0.96,
+          currentStep: 'Finalizando sincronización...',
+        );
 
         if (smartResult.success || smartResult.descargadas > 0) {
           final syncTime =
@@ -298,15 +293,9 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
             '${smartResult.omitidas} sin cambios',
           );
 
-          // ✅ FIX 26-FEB-2026: Ejecutar limpieza post-sync
-          // Limpia archivos de evidencias/firmas ya sincronizados
-          // y ejecuta limpieza automática si corresponde (respeta intervalo mínimo de 6h)
-          try {
-            await _lifecycleObserver.onPostSyncExitoso();
-            await _lifecycleObserver.ejecutarLimpiezaAutomatica();
-          } catch (e) {
-            debugPrint('⚠️ [SYNC] Error en limpieza post-sync: $e');
-          }
+          // ✅ 26-OCT-2026: limpieza de archivos en segundo plano. Antes se
+          // esperaba a borrar evidencias para marcar el sync como exitoso.
+          unawaited(_limpiarPostSyncEnSegundoPlano());
 
           return SyncResult(
             success: true,
@@ -364,12 +353,8 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
             '✅ [SYNC] Completada: ${result.ordenesDescargadas} órdenes',
           );
 
-          // ✅ FIX 26-FEB-2026: Limpieza post-sync también en sync completo
-          try {
-            await _lifecycleObserver.onPostSyncExitoso();
-          } catch (e) {
-            debugPrint('⚠️ [SYNC] Error en limpieza post-sync completo: $e');
-          }
+          // ✅ 26-OCT-2026: limpieza post-sync en segundo plano.
+          unawaited(_limpiarPostSyncEnSegundoPlano());
         } else {
           state = state.copyWith(
             status: SyncStatus.error,
@@ -384,9 +369,11 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
         return result;
       }
     } catch (e) {
+      final mensaje = mensajeAmigable(e, contexto: 'sincronizar');
+
       state = state.copyWith(
         status: SyncStatus.error,
-        errorMessage: e.toString(),
+        errorMessage: mensaje,
         progress: 0.0,
         currentStep: null,
       );
@@ -396,8 +383,41 @@ class SyncStateNotifier extends StateNotifier<SyncState> {
       return SyncResult(
         success: false,
         message: 'Error de sincronización',
-        error: e.toString(),
+        error: mensaje,
       );
+    }
+  }
+
+  /// Refresca catálogos sin bloquear la sincronización visible.
+  /// Respeta la regla de máximo 1 vez cada 24 h.
+  void _refrescarCatalogosEnSegundoPlano(int tecnicoId) {
+    unawaited(() async {
+      try {
+        if (!await _debenRefrescarCatalogos()) return;
+        debugPrint('📚 [SYNC] Refrescando catálogos en segundo plano...');
+        await _syncService
+            .downloadData(
+              tecnicoId,
+              since: DateTime.now().toUtc(),
+              fullCatalogs: true,
+            )
+            .timeout(const Duration(minutes: 3));
+        await _saveCatalogsSync(DateTime.now().toUtc());
+        debugPrint('✅ [SYNC] Catálogos actualizados');
+      } catch (e) {
+        // No afecta al técnico: los catálogos anteriores siguen funcionando.
+        debugPrint('⚠️ [SYNC] Catálogos no actualizados: $e');
+      }
+    }());
+  }
+
+  /// Limpieza de archivos locales ya sincronizados, fuera del camino crítico.
+  Future<void> _limpiarPostSyncEnSegundoPlano() async {
+    try {
+      await _lifecycleObserver.onPostSyncExitoso();
+      await _lifecycleObserver.ejecutarLimpiezaAutomatica();
+    } catch (e) {
+      debugPrint('⚠️ [SYNC] Error en limpieza post-sync: $e');
     }
   }
 

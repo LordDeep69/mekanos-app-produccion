@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/errors/error_feedback.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/sync_service.dart';
 import '../../auth/data/auth_provider.dart';
 import 'storage_settings_screen.dart';
@@ -154,7 +156,12 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('❌ Error: ${result.error ?? result.message}'),
+              content: Text(
+                mensajeAmigable(
+                  result.error ?? result.message,
+                  contexto: 'sincronizar',
+                ),
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -162,12 +169,7 @@ class _ConfiguracionScreenState extends ConsumerState<ConfiguracionScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error de sincronización: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        mostrarErrorSnackBar(context, e, contexto: 'sincronizar');
       }
     } finally {
       if (mounted) {

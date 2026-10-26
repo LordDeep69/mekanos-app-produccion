@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/errors/user_friendly_error.dart';
+
 /// Provider para el servicio de PDF
 final pdfServiceProvider = Provider<PdfService>((ref) {
   return PdfService();
@@ -92,7 +94,10 @@ class PdfService {
         sizeBytes: response.bodyBytes.length,
       );
     } catch (e) {
-      return PdfDownloadResult(success: false, error: 'Error al descargar: $e');
+      return PdfDownloadResult(
+        success: false,
+        error: mensajeAmigable(e, contexto: 'descargar el PDF'),
+      );
     }
   }
 

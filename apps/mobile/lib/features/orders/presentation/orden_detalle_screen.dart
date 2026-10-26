@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/smart_sync_service.dart';
 import '../../ejecucion/data/ejecucion_service.dart';
 import '../../ejecucion/presentation/ejecucion_screen.dart';
@@ -105,8 +106,9 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
         }
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = 'Error: $e';
+        _error = mensajeAmigable(e, contexto: 'cargar la orden');
         _isLoading = false;
       });
     }
@@ -996,7 +998,12 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ ${resultado.error}'),
+            content: Text(
+              mensajeAmigable(
+                resultado.error,
+                contexto: 'iniciar la ejecución de la orden',
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1280,7 +1287,12 @@ class _OrdenDetalleScreenState extends ConsumerState<OrdenDetalleScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ ${resultado.error}'),
+            content: Text(
+              mensajeAmigable(
+                resultado.error,
+                contexto: 'iniciar la ejecución de la orden',
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );

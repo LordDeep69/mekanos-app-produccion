@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/database_service.dart';
+import '../../../core/errors/error_feedback.dart';
 import '../../orders/data/orden_repository.dart';
 import '../../orders/presentation/orden_detalle_screen.dart';
 import '../../historial/presentation/historial_detalle_screen.dart';
@@ -49,8 +50,10 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _cargando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cargando notificaciones: $e')),
+        mostrarErrorSnackBar(
+          context,
+          e,
+          contexto: 'cargar las notificaciones',
         );
       }
     }

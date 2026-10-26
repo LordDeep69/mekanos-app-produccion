@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import '../errors/user_friendly_error.dart';
 import '../storage/storage_preferences.dart';
 
 /// Provider para el servicio de ciclo de vida de datos
@@ -175,7 +176,7 @@ class DataLifecycleManager {
       );
     } catch (e, stack) {
       resultado.success = false;
-      resultado.error = e.toString();
+      resultado.error = mensajeAmigable(e, contexto: 'limpiar el almacenamiento');
       debugPrint('❌ [LIFECYCLE] Error en limpieza: $e');
       debugPrint('$stack');
     }
@@ -709,7 +710,7 @@ class DataLifecycleManager {
       );
     } catch (e, stack) {
       resultado.success = false;
-      resultado.error = e.toString();
+      resultado.error = mensajeAmigable(e, contexto: 'limpiar el almacenamiento');
       debugPrint('❌ [LIFECYCLE] Error en limpieza forzada: $e');
       debugPrint('$stack');
     }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/user_friendly_error.dart';
 import '../data/pdf_service.dart';
 
 /// Pantalla para visualizar PDFs de órdenes finalizadas
@@ -80,13 +81,16 @@ class _PdfViewerScreenState extends ConsumerState<PdfViewerScreen> {
         }
       } else {
         setState(() {
-          _error = result.error ?? 'Error desconocido al descargar el PDF';
+          _error = mensajeAmigable(
+            result.error ?? 'No se pudo descargar el PDF.',
+            contexto: 'descargar el PDF',
+          );
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _error = 'Error: $e';
+        _error = mensajeAmigable(e, contexto: 'descargar el PDF');
         _isLoading = false;
       });
     }
@@ -257,7 +261,8 @@ class _PdfViewerScreenState extends ConsumerState<PdfViewerScreen> {
       onError: (error) {
         print('❌ Error al renderizar PDF: $error');
         setState(() {
-          _error = 'Error al renderizar el PDF: $error';
+          _error =
+              'No se pudo mostrar el PDF. Puede estar dañado o incompleto.';
         });
       },
       onPageError: (page, error) {

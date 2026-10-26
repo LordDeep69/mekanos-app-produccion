@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/config/environment.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/storage/secure_storage.dart';
 import 'auth_models.dart';
 
@@ -95,18 +96,29 @@ class AuthService {
         );
       }
 
-      throw AuthException('Login fallido: ${response.statusCode}');
+      throw AuthException(
+        'No se pudo iniciar sesión. Intenta de nuevo en unos minutos.',
+      );
     } on DioException catch (e) {
       debugPrint('❌ Error de red en login: ${e.message}');
 
       if (e.response?.statusCode == 401) {
-        throw AuthException('Credenciales incorrectas');
+        throw AuthException('Correo o contraseña incorrectos.');
+      }
+      if (e.response?.statusCode == 429) {
+        throw AuthException(
+          'Demasiados intentos. Espera un momento e intenta de nuevo.',
+        );
       }
 
-      throw AuthException('Error de conexión: ${e.message}');
+      throw AuthException(
+        mensajeAmigable(e, contexto: 'iniciar sesión'),
+      );
     } catch (e) {
       debugPrint('❌ Error inesperado en login: $e');
-      rethrow;
+      throw AuthException(
+        mensajeAmigable(e, contexto: 'iniciar sesión'),
+      );
     }
   }
 

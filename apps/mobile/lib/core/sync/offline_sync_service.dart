@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -8,8 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import '../errors/user_friendly_error.dart';
 import 'connectivity_service.dart';
 import 'sync_progress.dart';
+import 'sse/sse_event_reader.dart';
 
 /// Resultado del intento de sincronización offline
 class OfflineSyncResult {
@@ -336,7 +339,9 @@ class OfflineSyncService {
             // Error 400 pero no está completada - eliminar de cola (error permanente)
             await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
             fallidas++;
-            errores.add('Orden ${orden.idOrdenBackend}: Error $statusCode');
+            errores.add(
+              'Orden ${orden.idOrdenBackend}: el servidor rechazó los datos.',
+            );
             continue;
           }
         }
@@ -385,18 +390,24 @@ class OfflineSyncService {
           continue;
         }
 
-        // Después de 30s de espera, si aún no está completada, marcar como error
+        // Después de la verificación, si aún no está completada, marcar error.
         debugPrint('❌ [SYNC] Marcando como ERROR para reintento posterior');
-        final errorMsg =
-            e.response?.data?.toString() ?? e.message ?? 'Error de conexión';
+        final errorMsg = mensajeAmigable(
+          e,
+          contexto: 'finalizar la orden',
+        );
         await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
         fallidas++;
         errores.add('Orden ${orden.idOrdenBackend}: $errorMsg');
       } catch (e) {
         // Error inesperado
-        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, e.toString());
+        final mensaje = mensajeAmigable(
+          e,
+          contexto: 'sincronizar la orden ${orden.idOrdenBackend}',
+        );
+        await _db.marcarOrdenErrorSync(orden.idOrdenLocal, mensaje);
         fallidas++;
-        errores.add('Orden ${orden.idOrdenBackend}: $e');
+        errores.add(mensaje);
       }
     }
 
@@ -411,9 +422,97 @@ class OfflineSyncService {
     );
   }
 
-  /// Verifica si una orden ya fue completada en el backend
-  /// Retorna un Map con {completada: bool, pdfUrl: String?, datosOrden: Map?}
+  /// Verifica si una orden ya fue completada en el backend.
+  ///
+  /// ✅ 26-OCT-2026 (Fase A): usa `/sync/permiso-edicion/:id`, que responde en
+  /// ~1 s con 140 bytes (1 query) en lugar de descargar la orden completa
+  /// (~3,6 s y N+1 de Prisma). Se consulta después de un corte de SSE para
+  /// decidir si hay que reenviar.
+  ///
+  /// Retorna {completada: bool, pdfUrl: String?, datosOrden: Map?}.
   Future<Map<String, dynamic>> _verificarOrdenYaCompletada(
+    int idOrdenBackend,
+  ) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/sync/permiso-edicion/$idOrdenBackend',
+        options: Options(
+          sendTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 20),
+        ),
+      );
+
+      final data = response.data;
+      if (response.statusCode == 200 && data != null) {
+        final estadoCodigo = data['estadoCodigo']?.toString();
+        final esEstadoFinal = data['esEstadoFinal'] == true;
+        final completada =
+            esEstadoFinal || estadoCodigo == 'COMPLETADA';
+
+        debugPrint(
+          '🔍 [VERIFICAR] Orden $idOrdenBackend: estado=$estadoCodigo, '
+          'final=$esEstadoFinal → completada=$completada',
+        );
+
+        return {
+          'completada': completada,
+          'pdfUrl': null, // SOLO_DATOS: el PDF se genera en Admin Portal
+          'datosOrden': data,
+        };
+      }
+
+      return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+
+      if (status == 404) {
+        // Distinguir "orden eliminada" de "endpoint no existe en este backend".
+        final cuerpo = e.response?.data?.toString() ?? '';
+        if (cuerpo.contains('Cannot GET') ||
+            cuerpo.contains('permiso-edicion')) {
+          debugPrint(
+            '⚠️ [VERIFICAR] Endpoint liviano no disponible; usando orden completa',
+          );
+          return _verificarDesdeOrdenCompleta(idOrdenBackend);
+        }
+        debugPrint('🗑️ [VERIFICAR] Orden $idOrdenBackend no existe (404)');
+        return {
+          'completada': false,
+          'eliminada': true,
+          'pdfUrl': null,
+          'datosOrden': null,
+        };
+      }
+
+      if (status == 401) {
+        return {
+          'completada': false,
+          'sesionExpirada': true,
+          'pdfUrl': null,
+          'datosOrden': null,
+        };
+      }
+
+      // 403 = la orden ya no está asignada a este técnico; 405/501 = endpoint
+      // no implementado. El resto es transitorio: no concluir nada.
+      if (status == 403) {
+        return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
+      }
+      if (status == 405 || status == 501) {
+        return _verificarDesdeOrdenCompleta(idOrdenBackend);
+      }
+
+      debugPrint('❌ [VERIFICAR] Error liviano verificando: $e');
+      return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
+    } catch (e) {
+      debugPrint('❌ [VERIFICAR] Error verificando: $e');
+      return {'completada': false, 'pdfUrl': null, 'datosOrden': null};
+    }
+  }
+
+  /// Fallback de compatibilidad: descarga la orden completa.
+  /// Solo se usa si el backend no tiene el endpoint liviano.
+  Future<Map<String, dynamic>> _verificarDesdeOrdenCompleta(
     int idOrdenBackend,
   ) async {
     try {
@@ -563,7 +662,9 @@ class OfflineSyncService {
       return await _procesarOrdenIndividual(orden);
     } catch (e) {
       debugPrint('❌ [SYNC-INDIVIDUAL] Error en reintentarOrden: $e');
-      _progressNotifier.error('No se pudo iniciar la sincronización: $e');
+      _progressNotifier.error(
+        mensajeAmigable(e, contexto: 'iniciar la sincronización'),
+      );
       return false;
     }
   }
@@ -757,7 +858,10 @@ class OfflineSyncService {
           _progressNotifier.completar();
           return true;
         }
-        final errorMsg = 'Error $statusCode';
+        final errorMsg = mensajeAmigable(
+          e,
+          contexto: 'finalizar la orden',
+        );
         await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
         _progressNotifier.error(errorMsg);
         return false;
@@ -766,33 +870,32 @@ class OfflineSyncService {
       // Verificar si el backend procesó durante timeout
       // ✅ 24-OCT-2026: en SOLO_DATOS no hay PDF/email, así que verificar de
       // inmediato y luego con esperas cortas (~10s total, antes 30s).
-      for (int intento = 1; intento <= 3; intento++) {
-        debugPrint('🔍 [SYNC-INDIVIDUAL] Verificación intento $intento/3...');
-        if (intento > 1) {
-          await Future.delayed(Duration(seconds: intento * 2)); // 4s, 6s
-        }
-        final verificacion = await _verificarOrdenYaCompletada(
-          orden.idOrdenBackend,
-        );
-        if (verificacion['completada'] == true) {
-          await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
-          await _marcarOrdenSincronizada(orden.idOrdenLocal, {
-            'pdfUrl': verificacion['pdfUrl'],
-          });
-          _progressNotifier.completar();
-          return true;
-        }
+      final verificacionTimeout = await _verificarConEspera(
+        orden.idOrdenBackend,
+      );
+      if (verificacionTimeout['completada'] == true) {
+        await _db.eliminarOrdenPendienteSync(orden.idOrdenLocal);
+        await _marcarOrdenSincronizada(orden.idOrdenLocal, {
+          'pdfUrl': verificacionTimeout['pdfUrl'],
+        });
+        _progressNotifier.completar();
+        return true;
       }
 
-      // Marcar como error para reintento
-      final errorMsg =
-          e.response?.data?.toString() ?? e.message ?? 'Error de conexión';
+      // Marcar como error para reintento (mensaje ya traducido).
+      final errorMsg = mensajeAmigable(
+        e,
+        contexto: 'finalizar la orden',
+      );
       await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
       _progressNotifier.error(errorMsg);
       return false;
     } catch (e) {
       debugPrint('❌ [SYNC-INDIVIDUAL] Error inesperado: $e');
-      final errorMsg = e.toString();
+      final errorMsg = mensajeAmigable(
+        e,
+        contexto: 'finalizar la orden',
+      );
       await _db.marcarOrdenErrorSync(orden.idOrdenLocal, errorMsg);
       _progressNotifier.error(errorMsg);
       return false;
@@ -831,7 +934,7 @@ class OfflineSyncService {
         debugPrint('❌ [SSE-OFFLINE] Status no válido: ${response.statusCode}');
         return _SSEResult(
           success: false,
-          error: 'Error del servidor: ${response.statusCode}',
+          error: 'El servidor respondió con un estado inesperado.',
         );
       }
 
@@ -842,7 +945,7 @@ class OfflineSyncService {
         debugPrint('❌ [SSE-OFFLINE] Stream es null');
         return _SSEResult(
           success: false,
-          error: 'No se recibió stream del servidor',
+          error: 'No se recibió respuesta del servidor.',
         );
       }
 
@@ -850,64 +953,64 @@ class OfflineSyncService {
         '📡 [SSE-OFFLINE] Stream obtenido, comenzando a leer eventos...',
       );
 
-      // Variables para acumular el resultado final
-      Map<String, dynamic>? resultadoFinal;
-      String? ultimoError;
+      // ✅ 26-OCT-2026: lector SSE robusto compartido. Antes este camino
+      // conservaba el parser por-chunk (duplicado y frágil): una tilde partida
+      // entre chunks rompía el stream y se perdía el progreso.
+      final lectura = await leerEventosSse(
+        stream,
+        onEvento: _progressNotifier.procesarEventoBackend,
+        stallTimeout: const Duration(seconds: 45),
+        limiteTotal: const Duration(minutes: 5),
+      );
 
-      // Leer el stream línea por línea
-      await for (final chunk in stream) {
-        final lines = utf8.decode(chunk).split('\n');
+      debugPrint(
+        '📡 [SSE-OFFLINE] Fin de stream: eventos=${lectura.eventosRecibidos}, '
+        'stall=${lectura.abortadoPorStall}, limite=${lectura.abortadoPorLimite}, '
+        'streamError=${lectura.errorDeStream}',
+      );
 
-        for (final line in lines) {
-          if (line.startsWith('data: ')) {
-            final jsonStr = line.substring(6).trim();
-            if (jsonStr.isEmpty) continue;
-
-            try {
-              final evento = json.decode(jsonStr) as Map<String, dynamic>;
-              debugPrint(
-                '📡 [SSE-OFFLINE] Evento: ${evento['step']} - ${evento['status']}',
-              );
-
-              // Procesar el evento en el notifier
-              _progressNotifier.procesarEventoBackend(evento);
-
-              // Si es el resultado final, guardarlo
-              if (evento['step'] == 'result' && evento['data'] != null) {
-                resultadoFinal = evento['data'] as Map<String, dynamic>;
-              }
-
-              // Si es error, guardarlo
-              if (evento['status'] == 'error') {
-                ultimoError = evento['message'] as String?;
-              }
-            } catch (e) {
-              debugPrint('⚠️ [SSE-OFFLINE] Error parseando evento: $e');
-            }
-          }
-        }
-      }
-
-      // Verificar resultado
-      if (ultimoError != null) {
-        return _SSEResult(success: false, error: ultimoError);
-      }
-
-      if (resultadoFinal != null) {
+      if (lectura.ultimoError != null) {
         return _SSEResult(
-          success: resultadoFinal['success'] as bool? ?? true,
-          datos: resultadoFinal['datos'] as Map<String, dynamic>?,
+          success: false,
+          error: mensajeAmigable(lectura.ultimoError, contexto: 'finalizar la orden'),
         );
       }
 
-      // Si no hubo resultado explícito pero no hubo error, asumir éxito
-      return _SSEResult(success: true);
+      if (lectura.resultadoFinal != null) {
+        return _SSEResult(
+          success: lectura.resultadoFinal!['success'] as bool? ?? true,
+          datos: (lectura.resultadoFinal!['datos'] as Map?)
+              ?.cast<String, dynamic>(),
+        );
+      }
+
+      // ✅ 26-OCT-2026 ZERO TRUST: si el stream terminó sin `result`, NO se
+      // asume éxito. Se verifica si el backend alcanzó a completar la orden
+      // antes de decidir. Antes se devolvía success:true a ciegas.
+      final verificacion = await _verificarConEspera(idOrdenBackend);
+      if (verificacion['completada'] == true) {
+        debugPrint('✅ [SSE-OFFLINE] Backend SÍ completó la orden');
+        return _SSEResult(
+          success: true,
+          datos: verificacion['pdfUrl'] != null
+              ? {
+                  'documento': {'url': verificacion['pdfUrl']},
+                }
+              : null,
+        );
+      }
+
+      return _SSEResult(
+        success: false,
+        error: (lectura.abortadoPorStall || lectura.abortadoPorLimite)
+            ? 'TIMEOUT_SSE'
+            : 'CONEXION_PERDIDA_SSE',
+      );
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       debugPrint('❌ [SSE-OFFLINE] DioException: status=$status, ${e.message}');
 
-      // ✅ 19-OCT-2026: 401/403 son definitivos (sesión/permiso). No hacer
-      // fallback: repetiría el rechazo y confundiría al usuario.
+      // ✅ 19-OCT-2026: 401/403 son definitivos (sesión/permiso). No reintentar.
       if (status == 401) {
         return _SSEResult(success: false, error: 'SESION_EXPIRADA');
       }
@@ -915,13 +1018,74 @@ class OfflineSyncService {
         return _SSEResult(success: false, error: 'EDICION_NO_AUTORIZADA');
       }
 
-      // Si falla el SSE por red/servidor, hacer fallback al endpoint tradicional
-      debugPrint('📡 [SSE-OFFLINE] Fallback a endpoint tradicional...');
-      return _fallbackEnvioTradicional(idOrdenBackend, payload);
+      // ✅ 26-OCT-2026: solo se usa el endpoint tradicional si el SSE no
+      // existe en el servidor (404/405/501). Un timeout o un 5xx NO se
+      // reintenta a ciegas: el backend pudo haber completado la orden.
+      final sseNoDisponible =
+          status == 404 || status == 405 || status == 501;
+      if (sseNoDisponible) {
+        debugPrint('📡 [SSE-OFFLINE] SSE no disponible, usando endpoint clásico');
+        return _fallbackEnvioTradicional(idOrdenBackend, payload);
+      }
+
+      // Rechazo definitivo del payload: reintentar no ayuda.
+      if (status == 400 || status == 409 || status == 422) {
+        return _SSEResult(
+          success: false,
+          error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+        );
+      }
+
+      // Timeout / corte de red / 5xx: verificar idempotencia antes de concluir.
+      final verificacion = await _verificarConEspera(idOrdenBackend);
+      if (verificacion['completada'] == true) {
+        debugPrint('✅ [SSE-OFFLINE] Backend completó la orden pese al corte');
+        return _SSEResult(
+          success: true,
+          datos: verificacion['pdfUrl'] != null
+              ? {
+                  'documento': {'url': verificacion['pdfUrl']},
+                }
+              : null,
+        );
+      }
+
+      final esTimeout =
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+
+      return _SSEResult(
+        success: false,
+        error: esTimeout ? 'TIMEOUT_SSE' : 'CONEXION_PERDIDA_SSE',
+      );
     } catch (e) {
       debugPrint('❌ [SSE-OFFLINE] Error inesperado: $e');
-      return _SSEResult(success: false, error: e.toString());
+      return _SSEResult(
+        success: false,
+        error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
     }
+  }
+
+  /// Verifica si la orden quedó completada, con esperas cortas para cubrir el
+  /// caso en que el backend seguía procesando cuando se cortó la conexión.
+  Future<Map<String, dynamic>> _verificarConEspera(
+    int idOrdenBackend, {
+    int intentos = 3,
+  }) async {
+    for (var intento = 1; intento <= intentos; intento++) {
+      if (intento > 1) {
+        await Future.delayed(Duration(seconds: intento * 2));
+      }
+      final resultado = await _verificarOrdenYaCompletada(idOrdenBackend);
+      if (resultado['completada'] == true) return resultado;
+    }
+    return {
+      'completada': false,
+      'pdfUrl': null,
+      'datosOrden': null,
+    };
   }
 
   /// Fallback al endpoint tradicional si SSE falla
@@ -946,16 +1110,15 @@ class OfflineSyncService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Simular pasos completados para feedback
+        // Feedback local honesto: el endpoint clásico no emite pasos.
+        // SOLO_DATOS no genera PDF ni email, así que no se simulan.
         _progressNotifier.completarPaso(SyncStep.validando);
         _progressNotifier.avanzar(SyncStep.evidencias);
         _progressNotifier.completarPaso(SyncStep.evidencias);
         _progressNotifier.avanzar(SyncStep.firmas);
         _progressNotifier.completarPaso(SyncStep.firmas);
-        _progressNotifier.avanzar(SyncStep.generando_pdf);
-        _progressNotifier.completarPaso(SyncStep.generando_pdf);
-        _progressNotifier.avanzar(SyncStep.enviando_email);
-        _progressNotifier.completarPaso(SyncStep.enviando_email);
+        _progressNotifier.avanzar(SyncStep.actualizando_estado);
+        _progressNotifier.completarPaso(SyncStep.actualizando_estado);
 
         Map<String, dynamic>? datos;
         if (response.data is Map) {
@@ -969,10 +1132,18 @@ class OfflineSyncService {
 
       return _SSEResult(
         success: false,
-        error: 'Error del servidor: ${response.statusCode}',
+        error: 'El servidor no pudo confirmar la orden. Intenta de nuevo.',
       );
-    } on DioException {
-      rethrow;
+    } on DioException catch (e) {
+      return _SSEResult(
+        success: false,
+        error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
+    } catch (e) {
+      return _SSEResult(
+        success: false,
+        error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
     }
   }
 

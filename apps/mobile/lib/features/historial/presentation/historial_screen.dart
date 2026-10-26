@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/errors/user_friendly_error.dart';
 import '../data/historial_service.dart';
 import 'historial_detalle_screen.dart';
 
@@ -106,7 +107,7 @@ class _HistorialScreenState extends ConsumerState<HistorialScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Error al cargar historial: $e';
+          _error = mensajeAmigable(e, contexto: 'cargar el historial');
           _isLoading = false;
         });
       }

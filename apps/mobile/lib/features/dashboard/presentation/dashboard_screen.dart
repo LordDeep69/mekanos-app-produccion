@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/errors/user_friendly_error.dart';
 import '../../orders/presentation/ordenes_list_screen.dart';
 import '../data/dashboard_service.dart';
 
@@ -50,7 +51,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Error al cargar métricas: $e';
+          _error = mensajeAmigable(e, contexto: 'cargar las métricas');
           _isLoading = false;
         });
       }

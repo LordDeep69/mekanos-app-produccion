@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../data/evidencia_service.dart';
 import 'evidencias_gallery_viewer.dart';
 
@@ -166,7 +167,9 @@ class _EvidenciasActividadBottomSheetState
         mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ Error: ${resultado.error}'),
+          content: Text(
+            mensajeAmigable(resultado.error, contexto: 'guardar la foto'),
+          ),
           backgroundColor: Colors.red,
         ),
       );

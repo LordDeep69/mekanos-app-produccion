@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/background_sync_worker.dart';
 import '../../../core/sync/offline_sync_service.dart';
 import '../../../core/sync/sync_lifecycle_manager.dart';
@@ -144,7 +145,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           content: Text(
             result.success
                 ? '✅ Sincronización exitosa: ${result.ordenesDescargadas} órdenes'
-                : '❌ Error: ${result.error}',
+                : mensajeAmigable(result.error, contexto: 'sincronizar'),
           ),
           backgroundColor: result.success ? Colors.green : Colors.red,
         ),
@@ -349,7 +350,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     syncState.lastResult!.success
                         ? '✅ Última sync: ${syncState.lastResult!.ordenesDescargadas} órdenes, '
                               '${syncState.lastResult!.clientesGuardados} clientes'
-                        : '❌ Error: ${syncState.lastResult!.error}',
+                        : mensajeAmigable(
+                            syncState.lastResult!.error,
+                            contexto: 'sincronizar',
+                          ),
                     style: TextStyle(
                       color: syncState.lastResult!.success
                           ? Colors.green.shade800

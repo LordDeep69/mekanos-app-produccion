@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_service.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/sync_lifecycle_manager.dart';
 import '../../../core/sync/sync_state.dart';
 import '../../../core/sync/widgets/sync_indicator.dart';
@@ -491,7 +492,10 @@ class _HomeProductionScreenState extends ConsumerState<HomeProductionScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          syncState.errorMessage!,
+                          mensajeAmigable(
+                            syncState.errorMessage,
+                            contexto: 'sincronizar',
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.error,
                           ),

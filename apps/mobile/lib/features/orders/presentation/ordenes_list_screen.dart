@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../historial/presentation/historial_detalle_screen.dart';
 import '../../historial/presentation/historial_screen.dart';
 import '../data/orden_repository.dart';
@@ -513,17 +514,33 @@ class _OrdenesListScreenState extends ConsumerState<OrdenesListScreen> {
 
                 if (snapshot.hasError) {
                   return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(height: 16),
-                        Text('Error: ${snapshot.error}'),
-                      ],
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 56,
+                            color: Colors.grey.shade500,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            mensajeAmigable(
+                              snapshot.error,
+                              contexto: 'cargar las órdenes',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: () => setState(() {}),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('REINTENTAR'),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }

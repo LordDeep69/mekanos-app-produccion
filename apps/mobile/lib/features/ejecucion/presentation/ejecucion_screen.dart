@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/errors/error_feedback.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/smart_sync_service.dart';
 import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart'
@@ -263,9 +265,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
     } catch (e) {
       print('❌ Error marcando actividad: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        mostrarErrorSnackBar(context, e, contexto: 'marcar la actividad');
       }
     }
   }
@@ -594,9 +594,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        mostrarErrorSnackBar(context, e, contexto: 'agregar la actividad');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -634,9 +632,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         await _cargarDatos();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-          );
+          mostrarErrorSnackBar(context, e, contexto: 'eliminar la actividad');
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -4135,8 +4131,11 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         _mostrarError(resultado.mensaje);
       }
     } catch (e) {
+      if (!mounted) return;
       Navigator.of(context).pop(); // Cerrar loading
-      _mostrarError('Error inesperado: $e');
+      _mostrarError(
+        mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
     }
   }
 

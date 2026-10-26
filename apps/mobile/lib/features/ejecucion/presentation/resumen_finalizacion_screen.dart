@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/sync_progress.dart';
 import '../../../core/sync/sync_upload_service.dart';
 import '../../auth/data/auth_provider.dart';
@@ -1008,7 +1009,9 @@ class _ResumenFinalizacionScreenState
       }
     } catch (e) {
       Navigator.of(context).pop(); // Cerrar loading
-      _mostrarError('Error inesperado: $e');
+      _mostrarError(
+        mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
     }
   }
 

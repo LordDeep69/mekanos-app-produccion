@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_signaturepad/signaturepad.dart';
 
+import '../../../core/errors/user_friendly_error.dart';
 import '../data/firma_service.dart';
 
 /// BottomSheet para capturar firma digital
@@ -120,7 +121,7 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
         _mostrarError('Error al guardar la firma');
       }
     } catch (e) {
-      _mostrarError('Error: $e');
+      _mostrarError(e, contexto: 'guardar la firma');
     } finally {
       if (mounted) {
         setState(() => _guardando = false);
@@ -128,9 +129,14 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
     }
   }
 
-  void _mostrarError(String mensaje) {
+  void _mostrarError(Object error, {String? contexto}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mensaje), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(
+          traducirError(error, contexto: contexto).mensaje,
+        ),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 

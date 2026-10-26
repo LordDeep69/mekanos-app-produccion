@@ -16,6 +16,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/api/api_client.dart';
 import 'core/config/supabase_config.dart';
+import 'core/errors/user_friendly_error.dart';
 import 'core/sync/sync_notification_service.dart';
 import 'features/auth/data/auth_models.dart';
 import 'features/auth/data/auth_provider.dart';
@@ -45,12 +46,67 @@ void main() {
         }
       };
 
+      // ✅ 26-OCT-2026: un widget que falla NUNCA muestra el stack trace al
+      // técnico. En release se ve un mensaje claro y accionable.
+      ErrorWidget.builder = (details) {
+        debugPrint('🔴 [UI] Widget con error: ${details.exception}');
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(24),
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Colors.grey.shade600,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'No se pudo mostrar esta sección.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Vuelve a abrir la pantalla. Si persiste, cierra y abre la app.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                ),
+              ],
+            ),
+          ),
+        );
+      };
+
       runApp(const ProviderScope(child: MekanosApp()));
     },
     (error, stackTrace) {
       if (kDebugMode) {
         debugPrint('🔴 Uncaught Error: $error');
         debugPrint('📍 Stack: $stackTrace');
+      }
+      // ✅ 26-OCT-2026: los errores asíncronos no controlados se avisan de
+      // forma breve y en español, sin exponer el detalle técnico.
+      try {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              mensajeAmigable(error, contexto: 'completar la operación'),
+            ),
+            backgroundColor: const Color(0xFFB3261E),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } catch (_) {
+        // La app puede estar cerrándose: no hay nada más que hacer.
       }
     },
   );

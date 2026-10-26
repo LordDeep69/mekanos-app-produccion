@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import '../errors/user_friendly_error.dart';
 import 'sync_retry_strategy.dart';
 
 /// Provider para el servicio de sincronización
@@ -254,12 +255,13 @@ class SyncService {
         serverTimestamp: serverTimestamp,
       );
     } catch (e) {
-      await _db.updateSyncStatus('download', ultimoError: e.toString());
+      final mensaje = mensajeAmigable(e, contexto: 'sincronizar');
+      await _db.updateSyncStatus('download', ultimoError: mensaje);
 
       return SyncResult(
         success: false,
         message: 'Error de sincronización',
-        error: e.toString(),
+        error: mensaje,
       );
     }
   }

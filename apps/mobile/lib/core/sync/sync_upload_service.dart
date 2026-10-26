@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
@@ -12,8 +11,10 @@ import 'package:image/image.dart' as img;
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import '../errors/user_friendly_error.dart';
 import 'connectivity_service.dart';
 import 'offline_sync_service.dart';
+import 'sse/sse_event_reader.dart';
 import 'sync_notification_service.dart';
 import 'sync_progress.dart';
 
@@ -725,21 +726,27 @@ class SyncUploadService {
           // El técnico está en pantalla y puede reintentar; además, la orden
           // ya está COMPLETADA y el proceso de cola la ignora.
           if (modoResubida) {
-            _progressNotifier.error(
-              response.error ?? 'No se pudo resubir la orden',
+            final motivo = mensajeAmigable(
+              response.error,
+              contexto: 'resubir la orden',
             );
+            _progressNotifier.error(motivo);
             return SyncUploadResult(
               success: false,
               mensaje:
-                  'No se pudo resubir la orden: ${response.error ?? 'error del servidor'}.\n\n'
+                  'No se pudo resubir la orden.\n\n'
                   'Tus cambios siguen guardados en el dispositivo. Inténtalo de nuevo.',
-              error: response.error,
+              error: motivo,
               guardadoOffline: false,
             );
           }
 
           // Error genuino del servidor - guardar en cola para retry silencioso
-          _progressNotifier.error(response.error ?? 'Error del servidor');
+          final motivoServidor = mensajeAmigable(
+            response.error,
+            contexto: 'finalizar la orden',
+          );
+          _progressNotifier.error(motivoServidor);
           await _offlineSync.guardarEnCola(
             idOrdenLocal: idOrdenLocal,
             idOrdenBackend: idOrdenBackend,
@@ -748,9 +755,9 @@ class SyncUploadService {
           return SyncUploadResult(
             success: false,
             mensaje:
-                'Error del servidor: ${response.error ?? 'desconocido'}.\n\n'
+                'No se pudo confirmar la orden con el servidor.\n\n'
                 'Se reintentará automáticamente en segundo plano.',
-            error: response.error,
+            error: motivoServidor,
             guardadoOffline: false,
           );
         }
@@ -782,9 +789,11 @@ class SyncUploadService {
         // antes del envío. Hacerlo reportaría un falso éxito y perdería los
         // cambios del técnico. Se informa el fallo y se conserva lo local.
         if (modoResubida) {
-          _progressNotifier.error(
-            e.message ?? 'No se pudo confirmar la resubida',
+          final motivo = mensajeAmigable(
+            e,
+            contexto: 'resubir la orden',
           );
+          _progressNotifier.error(motivo);
 
           return SyncUploadResult(
             success: false,
@@ -792,7 +801,7 @@ class SyncUploadService {
                 'No se pudo confirmar la resubida con el servidor.\n\n'
                 'Tus cambios siguen guardados en el dispositivo. '
                 'Verifica tu conexión e inténtalo de nuevo.',
-            error: e.message,
+            error: motivo,
             guardadoOffline: false,
           );
         }
@@ -855,14 +864,15 @@ class SyncUploadService {
           mensaje:
               'Error de conexión durante la sincronización.\n\n'
               'Se reintentará automáticamente en segundo plano.',
-          error: e.message,
+          error: mensajeAmigable(e, contexto: 'sincronizar la orden'),
           guardadoOffline: false,
         );
       }
     } catch (e) {
       debugPrint('❌ [SYNC] Error inesperado: $e');
+      final mensaje = mensajeAmigable(e, contexto: 'sincronizar la orden');
       // ✅ 24-OCT-2026: reflejar el fallo en el diálogo de progreso.
-      _progressNotifier.error('Error inesperado: $e');
+      _progressNotifier.error(mensaje);
 
       // ✅ 19-OCT-2026: una resubida fallida no se encola. La orden ya está
       // COMPLETADA y el técnico puede reintentar desde la pantalla.
@@ -872,7 +882,7 @@ class SyncUploadService {
           mensaje:
               'No se pudo resubir la orden.\n\n'
               'Tus cambios siguen guardados en el dispositivo. Inténtalo de nuevo.',
-          error: e.toString(),
+          error: mensaje,
           guardadoOffline: false,
         );
       }
@@ -897,16 +907,18 @@ class SyncUploadService {
         return SyncUploadResult(
           success: false,
           mensaje:
-              'Error inesperado durante la sincronización.\n\n'
+              'No se pudo confirmar la sincronización.\n\n'
               'Se reintentará automáticamente en segundo plano.',
-          error: e.toString(),
-          guardadoOffline: false,
+          error: mensaje,
+          guardadoOffline: true,
         );
       } catch (_) {
         return SyncUploadResult(
           success: false,
-          mensaje: 'Error inesperado: $e',
-          error: e.toString(),
+          mensaje:
+              'No se pudo sincronizar ni guardar en la cola.\n\n'
+              'Tus cambios siguen en el dispositivo; intenta de nuevo.',
+          error: mensaje,
         );
       }
     }
@@ -1080,6 +1092,54 @@ class SyncUploadService {
   Future<Map<String, dynamic>> _verificarOrdenYaCompletadaEnBackend(
     int idOrdenBackend,
   ) async {
+    // ✅ 26-OCT-2026: endpoint liviano (1 query, ~140 bytes, ~1 s) en lugar de
+    // descargar la orden completa (~3,6 s). Se usa justo después de un corte
+    // para decidir si hay que reenviar.
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/sync/permiso-edicion/$idOrdenBackend',
+        options: Options(
+          sendTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 20),
+        ),
+      );
+
+      final data = response.data;
+      if (response.statusCode == 200 && data != null) {
+        final estadoCodigo = data['estadoCodigo']?.toString();
+        final esEstadoFinal = data['esEstadoFinal'] == true;
+        final completada = esEstadoFinal || estadoCodigo == 'COMPLETADA';
+        return {
+          'completada': completada,
+          'pdfUrl': null, // SOLO_DATOS: el PDF se genera en Admin Portal
+        };
+      }
+
+      return {'completada': false, 'pdfUrl': null};
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 404) {
+        final cuerpo = e.response?.data?.toString() ?? '';
+        if (cuerpo.contains('Cannot GET') ||
+            cuerpo.contains('permiso-edicion')) {
+          // Backend sin endpoint liviano: usar la verificación completa.
+          return _verificarDesdeOrdenCompleta(idOrdenBackend);
+        }
+      }
+      if (status == 405 || status == 501) {
+        return _verificarDesdeOrdenCompleta(idOrdenBackend);
+      }
+      // Cualquier otro fallo: NO asumir completada.
+      return {'completada': false, 'pdfUrl': null};
+    } catch (_) {
+      return {'completada': false, 'pdfUrl': null};
+    }
+  }
+
+  /// Fallback de compatibilidad: descarga la orden completa.
+  Future<Map<String, dynamic>> _verificarDesdeOrdenCompleta(
+    int idOrdenBackend,
+  ) async {
     try {
       final response = await _apiClient.get(
         '/ordenes/$idOrdenBackend',
@@ -1235,7 +1295,9 @@ class SyncUploadService {
         debugPrint('❌ [SSE] Status no válido: ${response.statusCode}');
         return _SSEResult(
           success: false,
-          error: 'Error del servidor: ${response.statusCode}',
+          error:
+              'El servidor no pudo iniciar la sincronización. '
+              'Intenta de nuevo en unos minutos.',
         );
       }
 
@@ -1270,7 +1332,13 @@ class SyncUploadService {
       );
 
       if (lectura.ultimoError != null) {
-        return _SSEResult(success: false, error: lectura.ultimoError);
+        return _SSEResult(
+          success: false,
+          error: mensajeAmigable(
+            lectura.ultimoError,
+            contexto: 'finalizar la orden',
+          ),
+        );
       }
 
       if (lectura.resultadoFinal != null) {
@@ -1320,8 +1388,6 @@ class SyncUploadService {
       debugPrint('❌ [SSE] DioException: status=$status, ${e.message}');
 
       // ✅ 19-OCT-2026: 401/403 son respuestas DEFINITIVAS del guard/permiso.
-      // Reintentar por el endpoint tradicional duplicaría el rechazo y podría
-      // confundir al usuario; se devuelve el error sin fallback.
       if (status == 401) {
         return _SSEResult(success: false, error: 'SESION_EXPIRADA');
       }
@@ -1329,22 +1395,70 @@ class SyncUploadService {
         return _SSEResult(success: false, error: 'EDICION_NO_AUTORIZADA');
       }
 
-      // Si falla el SSE por red/servidor, hacer fallback al endpoint tradicional
-      debugPrint('📡 [SSE] Fallback a endpoint tradicional...');
-      return _fallbackEnvioTradicional(idOrdenBackend, payload);
+      // ✅ 26-OCT-2026 ZERO TRUST: el fallback clásico solo se usa si el SSE
+      // no existe en el servidor. Un timeout/5xx pudo haber completado la
+      // orden: primero se verifica idempotencia, nunca se reenvía a ciegas.
+      if (status == 404 || status == 405 || status == 501) {
+        debugPrint('📡 [SSE] Endpoint SSE no disponible, usando clásico...');
+        return _fallbackEnvioTradicional(idOrdenBackend, payload);
+      }
+
+      if (status == 400 || status == 409 || status == 422) {
+        return _SSEResult(
+          success: false,
+          error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+        );
+      }
+
+      final verificacion = await _verificarOrdenYaCompletadaEnBackend(
+        idOrdenBackend,
+      );
+      if (verificacion['completada'] == true) {
+        debugPrint('✅ [SSE] Backend completó la orden pese al corte');
+        return _SSEResult(
+          success: true,
+          datos: verificacion['pdfUrl'] != null
+              ? {
+                  'documento': {'url': verificacion['pdfUrl']},
+                }
+              : null,
+        );
+      }
+
+      final esTimeout =
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+
+      return _SSEResult(
+        success: false,
+        error: esTimeout ? 'TIMEOUT_SSE' : 'CONEXION_PERDIDA_SSE',
+      );
     } catch (e) {
       debugPrint('❌ [SSE] Error inesperado: $e');
       // ✅ 24-OCT-2026: nunca exponer el texto crudo de la excepción.
-      return _SSEResult(success: false, error: mensajeAmigable(e));
+      return _SSEResult(
+        success: false,
+        error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
     }
   }
 
-  /// Fallback al endpoint tradicional si SSE falla
+  /// Fallback al endpoint tradicional.
+  ///
+  /// ✅ 26-OCT-2026: solo se llama cuando el backend NO tiene el endpoint SSE
+  /// (404/405/501). No se simulan pasos de PDF/email porque en SOLO_DATOS no
+  /// existen; el progreso muestra únicamente lo que realmente ocurre.
   Future<_SSEResult> _fallbackEnvioTradicional(
     int idOrdenBackend,
     Map<String, dynamic> payload,
   ) async {
     try {
+      _progressNotifier.avanzar(
+        SyncStep.validando,
+        mensaje: 'Enviando al servidor...',
+      );
+
       final response = await _apiClient.post(
         '/ordenes/$idOrdenBackend/finalizar-completo',
         data: payload,
@@ -1354,24 +1468,38 @@ class SyncUploadService {
         ),
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _progressNotifier.completarPaso(SyncStep.validando);
+        _progressNotifier.avanzar(SyncStep.actualizando_estado);
+        _progressNotifier.completarPaso(SyncStep.actualizando_estado);
+
         Map<String, dynamic>? datos;
         if (response.data is Map) {
-          datos = response.data as Map<String, dynamic>;
+          datos = (response.data as Map).cast<String, dynamic>();
         }
         return _SSEResult(
           success: true,
-          datos: datos?['datos'] as Map<String, dynamic>?,
+          datos: (datos?['datos'] as Map?)?.cast<String, dynamic>(),
         );
       }
 
       return _SSEResult(
         success: false,
-        error: 'Error del servidor: ${response.statusCode}',
+        error:
+            'El servidor no pudo confirmar la orden. '
+            'Intenta de nuevo en unos minutos.',
       );
-    } on DioException {
-      // Re-lanzar para que el caller maneje el error
-      rethrow;
+    } on DioException catch (e) {
+      // Nunca propagar el texto crudo al diálogo de progreso.
+      return _SSEResult(
+        success: false,
+        error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
+    } catch (e) {
+      return _SSEResult(
+        success: false,
+        error: mensajeAmigable(e, contexto: 'finalizar la orden'),
+      );
     }
   }
 }

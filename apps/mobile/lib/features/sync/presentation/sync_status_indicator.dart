@@ -506,6 +506,9 @@ void showSyncResultSnackBar(BuildContext context, OfflineSyncResult result) {
     icon = Icons.warning;
     message =
         '${result.ordenesSync} sincronizada(s), ${result.ordenesFallidas} con error';
+    if (result.errores.isNotEmpty) {
+      message = '$message: ${result.errores.first}';
+    }
   } else if (result.mensaje == 'No hay órdenes pendientes') {
     backgroundColor = Colors.blue;
     icon = Icons.check;

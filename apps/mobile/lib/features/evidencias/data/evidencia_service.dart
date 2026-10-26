@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_service.dart';
+import '../../../core/errors/user_friendly_error.dart';
 
 /// ============================================================================
 /// EVIDENCIA SERVICE - RUTA 7
@@ -168,7 +169,10 @@ class EvidenciaService {
         tamanoBytes: tamanoBytes,
       );
     } catch (e) {
-      return CapturaEvidenciaResult(exito: false, error: e.toString());
+      return CapturaEvidenciaResult(
+        exito: false,
+        error: mensajeAmigable(e, contexto: 'guardar la evidencia'),
+      );
     }
   }
 
@@ -232,7 +236,10 @@ class EvidenciaService {
         tamanoBytes: tamanoBytes,
       );
     } catch (e) {
-      return CapturaEvidenciaResult(exito: false, error: e.toString());
+      return CapturaEvidenciaResult(
+        exito: false,
+        error: mensajeAmigable(e, contexto: 'guardar la evidencia'),
+      );
     }
   }
 
@@ -299,14 +306,22 @@ class EvidenciaService {
           await Future.delayed(const Duration(milliseconds: 2));
         } catch (e) {
           resultados.add(
-            CapturaEvidenciaResult(exito: false, error: e.toString()),
+            CapturaEvidenciaResult(
+              exito: false,
+              error: mensajeAmigable(e, contexto: 'guardar la evidencia'),
+            ),
           );
         }
       }
 
       return resultados;
     } catch (e) {
-      return [CapturaEvidenciaResult(exito: false, error: e.toString())];
+      return [
+        CapturaEvidenciaResult(
+          exito: false,
+          error: mensajeAmigable(e, contexto: 'guardar la evidencia'),
+        ),
+      ];
     }
   }
 

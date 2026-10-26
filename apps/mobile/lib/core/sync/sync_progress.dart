@@ -1,5 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../errors/user_friendly_error.dart';
 
 /// Pasos del proceso de sincronización
 /// Estos pasos coinciden con los emitidos por el backend durante finalizarOrden
@@ -9,10 +11,12 @@ enum SyncStep {
   // Pasos del servidor (en tiempo real)
   validando, // Paso 0: Validando datos en servidor
   obteniendo_orden, // Paso 1: Obteniendo datos de la orden
+  limpieza_residuales, // Paso 1.5: Rollback / limpieza de intentos previos
   evidencias, // Paso 2: Subiendo evidencias a Cloudinary
   firmas, // Paso 3: Registrando firmas digitales
   actividades, // Paso 3.5: Registrando actividades
   mediciones, // Paso 3.6: Registrando mediciones
+  pendientes, // Paso 3.7: Registrando pendientes técnicos
   generando_pdf, // Paso 4: Generando PDF
   subiendo_pdf, // Paso 5: Subiendo PDF a R2
   registrando_doc, // Paso 6: Registrando documento en BD
@@ -28,10 +32,12 @@ SyncStep? syncStepFromBackend(String stepName) {
   const mapping = {
     'validando': SyncStep.validando,
     'obteniendo_orden': SyncStep.obteniendo_orden,
+    'limpieza_residuales': SyncStep.limpieza_residuales,
     'evidencias': SyncStep.evidencias,
     'firmas': SyncStep.firmas,
     'actividades': SyncStep.actividades,
     'mediciones': SyncStep.mediciones,
+    'pendientes': SyncStep.pendientes,
     'generando_pdf': SyncStep.generando_pdf,
     'subiendo_pdf': SyncStep.subiendo_pdf,
     'registrando_doc': SyncStep.registrando_doc,
@@ -126,9 +132,12 @@ class SyncProgress {
       SyncStep.preparando,
       SyncStep.validando,
       SyncStep.obteniendo_orden,
+      SyncStep.limpieza_residuales,
       SyncStep.evidencias,
       SyncStep.firmas,
       SyncStep.actividades,
+      SyncStep.mediciones,
+      SyncStep.pendientes,
       SyncStep.generando_pdf,
       SyncStep.subiendo_pdf,
       SyncStep.registrando_doc,
@@ -139,6 +148,18 @@ class SyncProgress {
     porcentaje: 100,
     mensajeActual: '¡Completado!',
   );
+
+  /// Primer paso visible que aún no se completó.
+  ///
+  /// Se usa para marcar en rojo el paso exacto que falló cuando el backend
+  /// emite `status: error` (en ese momento `pasoActual` pasa a `error` y, sin
+  /// esto, ningún renglón de la lista quedaría resaltado).
+  SyncStep? get pasoPendienteVisible {
+    for (final paso in pasosVisibles) {
+      if (!pasosCompletados.contains(paso)) return paso;
+    }
+    return null;
+  }
 }
 
 /// Notifier para el progreso de sincronización
@@ -158,7 +179,7 @@ class SyncProgressNotifier extends StateNotifier<SyncProgress> {
     final stepName = evento['step'] as String?;
     final status = evento['status'] as String?;
     final message = evento['message'] as String?;
-    final progress = evento['progress'] as int? ?? 0;
+    final progress = (evento['progress'] as num?)?.toInt() ?? 0;
 
     debugPrint(
       '📡 [SSE] step=$stepName, status=$status, message=$message, progress=$progress',
@@ -192,8 +213,13 @@ class SyncProgressNotifier extends StateNotifier<SyncProgress> {
         porcentaje: progress,
       );
     } else if (status == 'error') {
-      // Error en el proceso
-      state = state.conError(message ?? 'Error desconocido');
+      // ✅ 26-OCT-2026: el backend puede enviar `err.message` con detalles
+      // técnicos. Se traduce antes de mostrarlo; el técnico nunca ve el crudo.
+      final seguro = mensajeAmigable(
+        message ?? 'Error desconocido',
+        contexto: 'finalizar la orden',
+      );
+      state = state.conError(seguro);
     }
   }
 
@@ -245,12 +271,17 @@ final syncProgressProvider =
 
 /// Pasos visibles en la UI (agrupación simplificada para mejor UX)
 /// ✅ FIX 26-FEB-2026: Removidos PDF/email (modo siempre SOLO_DATOS)
+/// ✅ 26-OCT-2026: se muestran los pasos reales donde se va el tiempo
+/// (`obteniendo_orden` y `limpieza_residuales`). Antes el técnico veía
+/// "Validando..." durante 4-6 s sin que ningún renglón avanzara.
 List<SyncStep> get pasosVisibles => [
   SyncStep.preparando,
   SyncStep.validando,
+  SyncStep.obteniendo_orden,
+  SyncStep.limpieza_residuales,
   SyncStep.evidencias,
   SyncStep.firmas,
-  SyncStep.completado,
+  SyncStep.actualizando_estado,
 ];
 
 /// Extensión para obtener información visual de cada paso
@@ -262,7 +293,9 @@ extension SyncStepInfo on SyncStep {
       case SyncStep.validando:
         return 'Validando en servidor...';
       case SyncStep.obteniendo_orden:
-        return 'Obteniendo orden...';
+        return 'Cargando la orden...';
+      case SyncStep.limpieza_residuales:
+        return 'Preparando la orden...';
       case SyncStep.evidencias:
         return 'Subiendo evidencias...';
       case SyncStep.firmas:
@@ -271,6 +304,8 @@ extension SyncStepInfo on SyncStep {
         return 'Registrando actividades...';
       case SyncStep.mediciones:
         return 'Registrando mediciones...';
+      case SyncStep.pendientes:
+        return 'Registrando pendientes...';
       case SyncStep.generando_pdf:
         return 'Generando PDF...';
       case SyncStep.subiendo_pdf:
@@ -280,7 +315,7 @@ extension SyncStepInfo on SyncStep {
       case SyncStep.enviando_email:
         return 'Enviando notificación...';
       case SyncStep.actualizando_estado:
-        return 'Actualizando estado...';
+        return 'Confirmando cierre...';
       case SyncStep.completado:
         return '¡Completado!';
       case SyncStep.error:
@@ -296,6 +331,8 @@ extension SyncStepInfo on SyncStep {
         return 'Datos validados';
       case SyncStep.obteniendo_orden:
         return 'Orden cargada';
+      case SyncStep.limpieza_residuales:
+        return 'Orden preparada';
       case SyncStep.evidencias:
         return 'Evidencias subidas';
       case SyncStep.firmas:
@@ -304,6 +341,8 @@ extension SyncStepInfo on SyncStep {
         return 'Actividades registradas';
       case SyncStep.mediciones:
         return 'Mediciones registradas';
+      case SyncStep.pendientes:
+        return 'Pendientes registrados';
       case SyncStep.generando_pdf:
         return 'PDF generado';
       case SyncStep.subiendo_pdf:
@@ -313,7 +352,7 @@ extension SyncStepInfo on SyncStep {
       case SyncStep.enviando_email:
         return 'Notificación enviada';
       case SyncStep.actualizando_estado:
-        return 'Estado actualizado';
+        return 'Cierre confirmado';
       case SyncStep.completado:
         return '¡Completado!';
       case SyncStep.error:
@@ -323,4 +362,28 @@ extension SyncStepInfo on SyncStep {
 
   /// Indica si este paso debe mostrarse en la UI simplificada
   bool get esVisible => pasosVisibles.contains(this);
+
+  /// Icono sugerido para la lista de progreso.
+  IconData get icono {
+    switch (this) {
+      case SyncStep.preparando:
+        return Icons.settings;
+      case SyncStep.validando:
+        return Icons.verified_user;
+      case SyncStep.obteniendo_orden:
+        return Icons.folder_open;
+      case SyncStep.limpieza_residuales:
+        return Icons.cleaning_services;
+      case SyncStep.evidencias:
+        return Icons.photo_camera;
+      case SyncStep.firmas:
+        return Icons.draw;
+      case SyncStep.actualizando_estado:
+        return Icons.flag;
+      case SyncStep.completado:
+        return Icons.check_circle;
+      default:
+        return Icons.circle_outlined;
+    }
+  }
 }

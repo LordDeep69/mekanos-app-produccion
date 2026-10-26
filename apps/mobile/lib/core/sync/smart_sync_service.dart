@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../database/app_database.dart';
 import '../database/database_service.dart';
+import '../errors/user_friendly_error.dart';
 
 // ============================================================================
 // MODELOS
@@ -134,8 +135,24 @@ typedef SmartSyncProgressCallback = void Function(SmartSyncProgress progress);
 /// del técnico ni la conexión a Supabase.
 const int _descargasParalelas = 3;
 
+/// Verificaciones de asignación simultáneas. Antes eran secuenciales y cada
+/// una descargaba la orden completa (~3 s): con 5 órdenes obsoletas el sync
+/// se iba a 15 s solo en verificar.
+const int _verificacionesParalelas = 3;
+
 /// Timeout por orden para evitar que una request colgada bloquee el sync.
-const Duration _timeoutDescargaOrden = Duration(seconds: 45);
+const Duration _timeoutDescargaOrden = Duration(seconds: 30);
+
+/// El compare tarda 1,9–3,7 s en producción; 20 s es un techo generoso.
+const Duration _timeoutCompare = Duration(seconds: 20);
+
+/// Consulta liviana de permiso/estado.
+const Duration _timeoutPermiso = Duration(seconds: 15);
+
+/// Cota total del Smart Sync. Si se supera, se corta de forma controlada y se
+/// informa al técnico; los datos ya descargados quedan guardados y el próximo
+/// sync continúa. Evita la "sincronización indefinida".
+const Duration _plazoTotalSync = Duration(seconds: 120);
 
 class SmartSyncService {
   final ApiClient _apiClient;
@@ -221,6 +238,8 @@ class SmartSyncService {
     int omitidas = 0;
     int errores = 0;
     String serverTimestamp = DateTime.now().toUtc().toIso8601String();
+    final limite = DateTime.now().add(_plazoTotalSync);
+    var interrumpidaPorTiempo = false;
 
     try {
       // =====================================================================
@@ -236,7 +255,7 @@ class SmartSyncService {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
         '/sync/compare/$tecnicoId',
         queryParameters: {'limit': limit},
-        options: Options(receiveTimeout: const Duration(seconds: 60)),
+        options: Options(receiveTimeout: _timeoutCompare),
       );
 
       if (response.data == null) {
@@ -452,38 +471,64 @@ class SmartSyncService {
         );
 
         var verificadas = 0;
-        for (final orden in candidatasVerificacion) {
-          try {
-            final sigueAsignada = await _verificarOrdenAsignadaATecnico(
-              orden.idBackend!,
-              tecnicoId,
-            );
-            if (!sigueAsignada) {
-              // Servidor confirmó 404 (orden eliminada) O la orden ya no está asignada a este técnico (reasignada)
-              // Primero limpiar cola de sync pendiente (si existe)
-              await (_db.delete(
-                _db.ordenesPendientesSync,
-              )..where((o) => o.idOrdenLocal.equals(orden.idLocal))).go();
+        var siguiente = 0;
 
-              await _purgarOrdenLocalCompleta(orden.idLocal, orden.idBackend);
-              ordenesEliminadasCount++;
-              debugPrint(
-                '   🗑️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
-                'purgada localmente (eliminada o reasignada a otro técnico)',
-              );
+        // ✅ 26-OCT-2026: verificación en paralelo (3) con endpoint liviano.
+        // Antes era secuencial y descargaba la orden completa por cada una.
+        Future<void> verificarSiguiente() async {
+          while (true) {
+            if (DateTime.now().isAfter(limite)) {
+              interrumpidaPorTiempo = true;
+              return;
             }
-          } catch (e) {
-            debugPrint('   ❌ Error verificando ${orden.numeroOrden}: $e');
-          }
 
-          verificadas++;
-          onProgress?.call(
-            SmartSyncProgress(
-              'Revisando órdenes ($verificadas/${candidatasVerificacion.length})...',
-              0.2 + 0.1 * (verificadas / candidatasVerificacion.length),
-            ),
-          );
+            final i = siguiente++;
+            if (i >= candidatasVerificacion.length) return;
+
+            final orden = candidatasVerificacion[i];
+            try {
+              final sigueAsignada = await _verificarOrdenAsignadaATecnico(
+                orden.idBackend!,
+                tecnicoId,
+              );
+              if (!sigueAsignada) {
+                // Servidor confirmó 404 (orden eliminada) O la orden ya no está
+                // asignada a este técnico (reasignada).
+                await (_db.delete(
+                  _db.ordenesPendientesSync,
+                )..where((o) => o.idOrdenLocal.equals(orden.idLocal))).go();
+
+                await _purgarOrdenLocalCompleta(
+                  orden.idLocal,
+                  orden.idBackend,
+                );
+                ordenesEliminadasCount++;
+                debugPrint(
+                  '   🗑️ ${orden.numeroOrden} (idBackend=${orden.idBackend}) '
+                  'purgada localmente (eliminada o reasignada a otro técnico)',
+                );
+              }
+            } catch (e) {
+              debugPrint('   ❌ Error verificando ${orden.numeroOrden}: $e');
+            }
+
+            verificadas++;
+            onProgress?.call(
+              SmartSyncProgress(
+                'Revisando órdenes ($verificadas/${candidatasVerificacion.length})...',
+                0.2 +
+                    0.1 * (verificadas / candidatasVerificacion.length),
+              ),
+            );
+          }
         }
+
+        await Future.wait(
+          List.generate(
+            math.min(_verificacionesParalelas, candidatasVerificacion.length),
+            (_) => verificarSiguiente(),
+          ),
+        );
       }
 
       debugPrint(
@@ -568,6 +613,11 @@ class SmartSyncService {
               math.min(inicio + _descargasParalelas, nuevas.length),
             );
 
+            if (DateTime.now().isAfter(limite)) {
+              interrumpidaPorTiempo = true;
+              break;
+            }
+
             await Future.wait(
               lote.map((ordenResumen) async {
                 final idEstadoLocal = estadosMap[ordenResumen.estadoCodigo]!;
@@ -593,8 +643,12 @@ class SmartSyncService {
                   }
                 } catch (e) {
                   errores++;
-                  mensajesError.add('${ordenResumen.numeroOrden}: $e');
-                  debugPrint('   ❌ ${ordenResumen.numeroOrden}: $e');
+                  final mensaje = mensajeAmigable(
+                    e,
+                    contexto: 'descargar la orden ${ordenResumen.numeroOrden}',
+                  );
+                  mensajesError.add('${ordenResumen.numeroOrden}: $mensaje');
+                  debugPrint('   ❌ ${ordenResumen.numeroOrden}: $mensaje');
                 }
               }),
             );
@@ -629,8 +683,15 @@ class SmartSyncService {
       //   } catch (e) { ... }
       // }
 
+      if (interrumpidaPorTiempo) {
+        mensajesError.add(
+          'La sincronización se detuvo por tiempo. '
+          'Lo descargado quedó guardado; intenta de nuevo para continuar.',
+        );
+      }
+
       return SmartSyncResult(
-        success: errores == 0,
+        success: errores == 0 && !interrumpidaPorTiempo,
         totalComparadas: ordenesServidor.length,
         descargadas: descargadas,
         omitidas: omitidas,
@@ -650,7 +711,9 @@ class SmartSyncService {
         omitidas: 0,
         errores: 1,
         ordenesDescargadas: [],
-        mensajesError: ['Error fatal: $e'],
+        mensajesError: [
+          mensajeAmigable(e, contexto: 'sincronizar con el servidor'),
+        ],
         serverTimestamp: serverTimestamp,
       );
     }
@@ -871,12 +934,57 @@ class SmartSyncService {
     );
   }
 
-  /// ✅ FIX 29-SEP-2026: Verifica si una orden aún existe en el servidor Y sigue asignada a este técnico
-  /// Retorna false si:
-  /// - Servidor responde 404 (orden eliminada)
-  /// - Servidor responde 200 pero `id_tecnico_asignado != tecnicoId` (orden reasignada o desasignada)
-  /// Retorna true si sigue asignada al técnico, o en caso de error transitorio de red.
+  /// ✅ 26-OCT-2026: verificación liviana de existencia/asignación.
+  ///
+  /// Usa `/sync/permiso-edicion/:id` (1 query, ~140 bytes, 0,8–1,4 s) en vez
+  /// de `GET /ordenes/:id` (~3,6 s). El endpoint responde 403 si la orden ya
+  /// no está asignada al técnico y 404 si fue eliminada.
+  ///
+  /// Retorna true ante errores transitorios para no purgar datos locales por
+  /// una caída de red. Un 401 se propaga: la sesión expiró y el sync debe
+  /// terminar con un mensaje claro.
   Future<bool> _verificarOrdenAsignadaATecnico(
+    int idBackend,
+    int tecnicoId,
+  ) async {
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/sync/permiso-edicion/$idBackend',
+        options: Options(receiveTimeout: _timeoutPermiso),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+
+      if (status == 404 || status == 403) {
+        return false;
+      }
+      if (status == 401) {
+        // Sesión expirada: no es un problema de la orden. Que el sync falle
+        // de forma visible en lugar de conservar datos obsoletos en silencio.
+        rethrow;
+      }
+      if (status == 405 || status == 501) {
+        // Backend sin el endpoint liviano: compatibilidad.
+        return _verificarOrdenAsignadaConOrdenCompleta(idBackend, tecnicoId);
+      }
+
+      debugPrint(
+        '⚠️ [SMART SYNC] Error transitorio verificando orden $idBackend: '
+        '${e.message}',
+      );
+      return true;
+    } catch (e) {
+      debugPrint(
+        '⚠️ [SMART SYNC] Error inesperado verificando orden $idBackend: $e',
+      );
+      return true;
+    }
+  }
+
+  /// Fallback de compatibilidad: descarga la orden completa para leer el
+  /// técnico asignado. Solo se usa si el endpoint liviano no existe.
+  Future<bool> _verificarOrdenAsignadaConOrdenCompleta(
     int idBackend,
     int tecnicoId,
   ) async {
@@ -900,21 +1008,18 @@ class SmartSyncService {
             ? ordenMap['id_tecnico_asignado'] as int
             : (tecnicoObj is Map ? tecnicoObj['id_empleado'] as int? : null);
 
-        if (tecnicoAsignadoId == null || tecnicoAsignadoId != tecnicoId) {
-          debugPrint(
-            '🔄 [SMART SYNC] Orden $idBackend ya NO está asignada al técnico $tecnicoId '
-            '(técnico en servidor: $tecnicoAsignadoId) → purgar localmente',
-          );
-          return false;
+        if (tecnicoAsignadoId == null) {
+          // Sin dato concluyente: conservar la orden local.
+          return true;
         }
-        return true;
+        return tecnicoAsignadoId == tecnicoId;
       }
       return true;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) {
         return false; // Orden no existe en servidor
       }
-      // Otro error de red → asumir que existe (no purgar por error transitorio de red)
+      // Otro error de red → asumir que existe (no purgar por error transitorio)
       debugPrint(
         '⚠️ [SMART SYNC] Error de red verificando orden $idBackend: ${e.message}',
       );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../features/sync/presentation/pending_sync_screen.dart';
+import '../../errors/user_friendly_error.dart';
 import '../sync_state.dart';
 
 /// Widget indicador de sincronización para mostrar en AppBar o Home
@@ -217,7 +218,12 @@ class SyncButton extends ConsumerWidget {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ Error: ${result.error ?? result.message}'),
+          content: Text(
+            mensajeAmigable(
+              result.error ?? result.message,
+              contexto: 'sincronizar',
+            ),
+          ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -323,7 +329,10 @@ class SyncStatusCard extends ConsumerWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        syncState.errorMessage!,
+                        mensajeAmigable(
+                          syncState.errorMessage,
+                          contexto: 'sincronizar',
+                        ),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.error,
                         ),

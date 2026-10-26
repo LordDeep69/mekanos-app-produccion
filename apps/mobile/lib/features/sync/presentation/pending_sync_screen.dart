@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/background_sync_worker.dart';
 import '../../../core/sync/connectivity_service.dart';
 import '../../../core/sync/offline_sync_service.dart';
@@ -76,7 +78,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       ),
       body: pendientesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => _buildErrorState(e),
         data: (pendientes) {
           if (pendientes.isEmpty) {
             return _buildEmptyState();
@@ -474,6 +476,33 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
     );
   }
 
+  Widget _buildErrorState(Object error) {
+    final traducido = traducirError(error, contexto: 'cargar las órdenes pendientes');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off, size: 48, color: Colors.grey.shade500),
+            const SizedBox(height: 12),
+            Text(
+              traducido.mensaje,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => ref.invalidate(pendingSyncListProvider),
+              icon: const Icon(Icons.refresh),
+              label: const Text('REINTENTAR'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoChip(IconData icon, String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -508,7 +537,13 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const _SyncProgressDialog(),
+      builder: (ctx) => _SyncProgressDialog(
+        onReintentar: () {
+          if (!mounted) return;
+          // Dar tiempo a que el diálogo anterior termine de cerrarse.
+          Future.microtask(() => _subirOrdenIndividual(idOrdenLocal));
+        },
+      ),
     );
 
     try {
@@ -516,24 +551,11 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       final success = await offlineSync.reintentarOrden(idOrdenLocal);
 
       if (mounted) {
-        // Refrescar lista de pendientes
+        // Refrescar lista de pendientes. El diálogo ya muestra el error
+        // traducido con opción de reintentar, así que no se duplica aquí.
         ref.invalidate(pendingSyncListProvider);
-
-        // Mostrar snackbar adicional si hay error
         if (!success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('❌ Error al subir. Revisa los detalles.'),
-                ],
-              ),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
+          debugPrint('⚠️ [SYNC-INDIVIDUAL] La orden $idOrdenLocal no se pudo subir');
         }
       }
     } catch (e) {
@@ -541,7 +563,9 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       debugPrint('❌ [SYNC-INDIVIDUAL] Error no controlado: $e');
       ref
           .read(syncProgressProvider.notifier)
-          .error('Error inesperado al subir la orden: $e');
+          .error(
+            mensajeAmigable(e, contexto: 'subir la orden'),
+          );
     } finally {
       if (mounted) {
         setState(() => _syncingOrders.remove(idOrdenLocal));
@@ -558,6 +582,12 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
       final result = await syncNotifier.syncManual();
 
       if (mounted) {
+        final mensaje = result.success
+            ? result.mensaje
+            : (result.errores.isNotEmpty
+                  ? result.errores.first
+                  : result.mensaje);
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -567,7 +597,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
                   color: Colors.white,
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: Text(result.mensaje)),
+                Expanded(child: Text(mensaje)),
               ],
             ),
             backgroundColor: result.success ? Colors.green : Colors.orange,
@@ -587,12 +617,56 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
 
 /// ✅ WIDGET DE DIÁLOGO DE PROGRESO DE SINCRONIZACIÓN
 /// Muestra el progreso en tiempo real de la subida al servidor
-class _SyncProgressDialog extends ConsumerWidget {
-  const _SyncProgressDialog();
+class _SyncProgressDialog extends ConsumerStatefulWidget {
+  const _SyncProgressDialog({this.onReintentar});
+
+  /// Si se entrega, el diálogo ofrece REINTENTAR cuando el error es
+  /// reintentable. El botón cierra el diálogo y vuelve a lanzar la subida.
+  final VoidCallback? onReintentar;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SyncProgressDialog> createState() =>
+      _SyncProgressDialogState();
+}
+
+class _SyncProgressDialogState extends ConsumerState<_SyncProgressDialog> {
+  late final DateTime _inicio;
+  Timer? _cronometro;
+  Duration _transcurrido = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _inicio = DateTime.now();
+    _cronometro = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final progress = ref.read(syncProgressProvider);
+      if (progress.pasoActual == SyncStep.completado ||
+          progress.pasoActual == SyncStep.error) {
+        _cronometro?.cancel();
+      }
+      setState(() => _transcurrido = DateTime.now().difference(_inicio));
+    });
+  }
+
+  @override
+  void dispose() {
+    _cronometro?.cancel();
+    super.dispose();
+  }
+
+  String get _tiempoTexto {
+    final s = _transcurrido.inSeconds;
+    final m = s ~/ 60;
+    return m > 0 ? '${m}m ${s % 60}s' : '${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final progress = ref.watch(syncProgressProvider);
+    final enProgreso =
+        progress.pasoActual != SyncStep.completado &&
+        progress.pasoActual != SyncStep.error;
 
     return PopScope(
       // No permitir cerrar con back mientras está en progreso
@@ -630,10 +704,8 @@ class _SyncProgressDialog extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ✅ 19-DIC-2025: Mostrar mensaje actual del servidor si está disponible
-              if (progress.mensajeActual != null &&
-                  progress.pasoActual != SyncStep.completado &&
-                  progress.pasoActual != SyncStep.error) ...[
+              // Mensaje actual del servidor, si está disponible.
+              if (enProgreso && progress.mensajeActual != null) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 12),
@@ -664,47 +736,57 @@ class _SyncProgressDialog extends ConsumerWidget {
                 ),
               ],
 
-              // ✅ 19-DIC-2025: Barra de progreso visual
-              if (progress.porcentaje > 0 &&
-                  progress.pasoActual != SyncStep.completado &&
-                  progress.pasoActual != SyncStep.error) ...[
-                LinearProgressIndicator(
-                  value: progress.porcentaje / 100,
-                  backgroundColor: Colors.grey.shade200,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.blue.shade600,
+              // Barra de progreso + cronómetro. El cronómetro deja de correr
+              // al terminar y demuestra que el proceso avanzó de verdad.
+              if (enProgreso) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress.porcentaje > 0
+                        ? progress.porcentaje / 100
+                        : null,
+                    minHeight: 6,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.blue.shade600,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${progress.porcentaje}%',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Tiempo: $_tiempoTexto',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    Text(
+                      progress.porcentaje > 0
+                          ? '${progress.porcentaje}%'
+                          : 'Procesando…',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
               ],
 
-              // Lista de pasos con estados - SOLO_DATOS: sin PDF ni email.
-              // El backend emite estos pasos como "Omitido" en este modo, así
-              // que mostrarlos aquí solo confundía al técnico.
-              _buildStepItem(
-                step: SyncStep.preparando,
-                progress: progress,
-                icon: Icons.settings,
-              ),
-              _buildStepItem(
-                step: SyncStep.validando,
-                progress: progress,
-                icon: Icons.verified_user,
-              ),
-              _buildStepItem(
-                step: SyncStep.evidencias,
-                progress: progress,
-                icon: Icons.photo_camera,
-              ),
-              _buildStepItem(
-                step: SyncStep.firmas,
-                progress: progress,
-                icon: Icons.draw,
+              // Lista de pasos realmente ejecutados. Se construye desde
+              // `pasosVisibles` para que la UI no pueda desincronizarse del
+              // flujo (antes había una lista fija que ocultaba los pasos donde
+              // el técnico pasaba más tiempo).
+              ...pasosVisibles.map(
+                (step) => _buildStepItem(
+                  step: step,
+                  progress: progress,
+                  icon: step.icono,
+                ),
               ),
 
               // Mensaje de error si hay
@@ -719,14 +801,19 @@ class _SyncProgressDialog extends ConsumerWidget {
                     border: Border.all(color: Colors.red.shade200),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.warning, color: Colors.red.shade700, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          progress.mensajeError!,
+                          traducirError(
+                            progress.mensajeError,
+                            contexto: 'finalizar la orden',
+                          ).mensaje,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
+                            height: 1.35,
                             color: Colors.red.shade900,
                           ),
                         ),
@@ -769,24 +856,29 @@ class _SyncProgressDialog extends ConsumerWidget {
           ),
         ),
         actions: [
-          // Solo mostrar botón cuando esté completado o error
-          if (progress.pasoActual == SyncStep.completado ||
-              progress.pasoActual == SyncStep.error)
+          // Solo mostrar botones cuando el proceso terminó.
+          if (progress.pasoActual == SyncStep.completado)
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: progress.pasoActual == SyncStep.completado
-                    ? Colors.green
-                    : Colors.blue,
-              ),
-              onPressed: () {
-                Navigator.of(context).pop(); // Cerrar diálogo
-              },
-              child: Text(
-                progress.pasoActual == SyncStep.completado
-                    ? 'CONTINUAR'
-                    : 'CERRAR',
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CONTINUAR'),
             ),
+          if (progress.pasoActual == SyncStep.error) ...[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CERRAR'),
+            ),
+            if (widget.onReintentar != null)
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.onReintentar!();
+                },
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('REINTENTAR'),
+              ),
+          ],
         ],
       ),
     );
@@ -799,7 +891,11 @@ class _SyncProgressDialog extends ConsumerWidget {
   }) {
     final isCompleted = progress.pasosCompletados.contains(step);
     final isActive = progress.pasoActual == step;
-    final isError = progress.pasoActual == SyncStep.error && isActive;
+    // Cuando el backend reporta error, `pasoActual` es `error`: el paso que
+    // falló es el primero visible sin completar.
+    final isError =
+        progress.pasoActual == SyncStep.error &&
+        progress.pasoPendienteVisible == step;
 
     Color color;
     Widget leading;

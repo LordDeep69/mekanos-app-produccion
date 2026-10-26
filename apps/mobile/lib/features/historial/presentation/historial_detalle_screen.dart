@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_service.dart';
+import '../../../core/errors/error_feedback.dart';
+import '../../../core/errors/user_friendly_error.dart';
 import '../../../core/sync/smart_sync_service.dart';
 import '../../orders/presentation/orden_detalle_screen.dart';
 import '../data/historial_service.dart';
@@ -80,7 +82,7 @@ class _HistorialDetalleScreenState
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Error al cargar detalle: $e';
+          _error = mensajeAmigable(e, contexto: 'cargar el detalle de la orden');
           _isLoading = false;
         });
       }
@@ -269,12 +271,7 @@ class _HistorialDetalleScreenState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al consultar PDF: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        mostrarErrorSnackBar(context, e, contexto: 'consultar el PDF');
       }
     } finally {
       if (mounted) {
@@ -326,7 +323,12 @@ class _HistorialDetalleScreenState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result.error ?? 'Error al descargar PDF'),
+              content: Text(
+                mensajeAmigable(
+                  result.error ?? 'No se pudo descargar el PDF.',
+                  contexto: 'descargar el PDF',
+                ),
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -335,9 +337,7 @@ class _HistorialDetalleScreenState
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Cerrar diálogo
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        mostrarErrorSnackBar(context, e, contexto: 'descargar el PDF');
       }
     }
   }

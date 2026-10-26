@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/user_friendly_error.dart';
 import 'auth_models.dart';
 import 'auth_service.dart';
 
@@ -61,7 +62,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         status: AuthStatus.error,
-        errorMessage: 'Error inesperado: $e',
+        errorMessage: mensajeAmigable(e, contexto: 'iniciar sesión'),
       );
       return false;
     }
