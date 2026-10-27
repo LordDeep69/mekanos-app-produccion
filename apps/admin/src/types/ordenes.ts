@@ -153,6 +153,8 @@ export interface Orden {
         fecha_programada?: string;
         tipo_visita?: string;
         numero_visita_caso?: number;
+        nombre_caso?: string | null;
+        estado_caso?: string | null;
         estados_orden?: EstadoOrden;
     } | null;
     hilo_caso?: HiloCaso;

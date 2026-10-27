@@ -351,7 +351,7 @@ function PasoContexto({
     }, [casosAbiertos, busquedaCaso]);
 
     const modoActual =
-        data.modoEscenario || (data.idOrdenPadre ? 'SEGUIMIENTO_CASO' : 'CASO_RAIZ');
+        data.modoEscenario || (data.idOrdenPadre ? 'SEGUIMIENTO_CASO' : 'VISITA_AISLADA');
 
     useEffect(() => {
         if (data.clienteId && !data.clienteSeleccionado && clientes.length > 0) {
@@ -520,13 +520,13 @@ function PasoContexto({
                                     clienteSeleccionado: cliente,
                                     sedeId: undefined,
                                     equiposSeleccionados: [],
-                                    modoEscenario: 'CASO_RAIZ',
+                                    modoEscenario: 'VISITA_AISLADA',
                                     nombreCaso: '',
                                     idOrdenPadre: undefined,
                                     numeroOrdenPadre: undefined,
                                     codigoCasoPadre: undefined,
                                     nombreCasoPadre: undefined,
-                                    tipoVisita: 'INICIAL',
+                                    tipoVisita: 'AISLADA',
                                     idsPendientesAResolver: [],
                                 });
                             }}
@@ -1950,7 +1950,7 @@ function PasoAsignacion({
 function ResumenOrden({ data }: { data: WizardData }) {
     const esFechaPasada = Boolean(data.fechaProgramada && data.fechaProgramada < new Date().toISOString().split('T')[0]);
     const modoActual =
-        data.modoEscenario || (data.idOrdenPadre ? 'SEGUIMIENTO_CASO' : 'CASO_RAIZ');
+        data.modoEscenario || (data.idOrdenPadre ? 'SEGUIMIENTO_CASO' : 'VISITA_AISLADA');
 
     return (
         <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl space-y-6">
@@ -2096,7 +2096,8 @@ export default function NuevaOrdenPage() {
     const [data, setData] = useState<WizardData>({
         prioridad: 'NORMAL',
         equiposSeleccionados: [],
-        modoEscenario: 'CASO_RAIZ',
+        modoEscenario: 'VISITA_AISLADA',
+        tipoVisita: 'AISLADA',
         nombreCaso: '',
     });
     const [showRetroactivaModal, setShowRetroactivaModal] = useState(false);
@@ -2126,7 +2127,7 @@ export default function NuevaOrdenPage() {
 
     const ejecutarCreacion = async () => {
         try {
-            const modo = data.modoEscenario || (data.idOrdenPadre ? 'SEGUIMIENTO_CASO' : 'CASO_RAIZ');
+            const modo = data.modoEscenario || (data.idOrdenPadre ? 'SEGUIMIENTO_CASO' : 'VISITA_AISLADA');
             const esAislada = modo === 'VISITA_AISLADA';
             const esSeguimiento = modo === 'SEGUIMIENTO_CASO' && Boolean(data.idOrdenPadre);
 

@@ -52,11 +52,14 @@ import {
     Tag,
     User,
     Wrench,
-    X
+    X,
+    GitBranch,
+    AlertTriangle,
+    Lock
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -121,10 +124,65 @@ function OrdenCard({
         <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
-                <div>
+                <div className="flex-1 min-w-0 mr-2">
                     <span className="font-mono text-sm text-blue-600 font-semibold">
                         {orden.numero_orden}
                     </span>
+
+                    {/* ✅ Micro-Badge de Trazabilidad de Caso */}
+                    {(() => {
+                        const esCaso = Boolean(
+                            orden.id_orden_padre ||
+                            (orden.numero_visita_caso && orden.numero_visita_caso > 1) ||
+                            (orden.estado_caso && orden.estado_caso !== 'AISLADA') ||
+                            orden.nombre_caso
+                        );
+                        if (!esCaso) return null;
+
+                        const codigoCaso = (
+                            orden.orden_padre?.numero_orden ||
+                            orden.numero_orden ||
+                            ''
+                        ).replace(/^OS-/, 'CASO-');
+                        const numVisita = orden.numero_visita_caso || (orden.id_orden_padre ? 2 : 1);
+                        const nombreCaso = orden.nombre_caso || orden.orden_padre?.nombre_caso;
+                        const estadoCaso = orden.estado_caso || orden.orden_padre?.estado_caso || 'ABIERTO';
+                        const isAbierto = estadoCaso === 'ABIERTO';
+
+                        return (
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                <span
+                                    className={cn(
+                                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors',
+                                        isAbierto
+                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                                    )}
+                                    title={nombreCaso ? `Caso: ${nombreCaso}` : `Caso ${codigoCaso}`}
+                                >
+                                    <GitBranch className="h-3 w-3 text-indigo-500" />
+                                    <span className="font-mono">{codigoCaso}</span>
+                                    <span className="text-slate-400">•</span>
+                                    <span>Visita #{numVisita}</span>
+                                </span>
+                                <span
+                                    className={cn(
+                                        'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                                        isAbierto
+                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                    )}
+                                >
+                                    {isAbierto ? '🟢 Abierto' : '🔒 Cerrado'}
+                                </span>
+                                {nombreCaso && (
+                                    <span className="text-[11px] text-slate-500 truncate max-w-[200px]" title={nombreCaso}>
+                                        {nombreCaso}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })()}
                     <div className="flex items-center gap-2 mt-1">
                         <EstadoBadge estado={orden.estados_orden?.codigo_estado} />
                         <PrioridadBadge prioridad={orden.prioridad} />
@@ -417,12 +475,53 @@ function OrdenesPageContent() {
         busqueda: busquedaDebounced || undefined,
     });
 
+    const [filtroCasos, setFiltroCasos] = useState<'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES'>('TODAS');
+
     const ordenes = data?.data || [];
     const pagination = data?.pagination;
     const totalPages = pagination?.totalPages || 1;
 
-    // ✅ Server-side search: no need for local filtering
-    const ordenesFiltradas = ordenes;
+    const countCasosAbiertos = useMemo(() => {
+        return ordenes.filter((o) => {
+            const esCaso = Boolean(
+                o.id_orden_padre ||
+                (o.numero_visita_caso && o.numero_visita_caso > 1) ||
+                (o.estado_caso && o.estado_caso !== 'AISLADA') ||
+                o.nombre_caso
+            );
+            const esAbierto =
+                o.estado_caso === 'ABIERTO' ||
+                o.orden_padre?.estado_caso === 'ABIERTO' ||
+                (!o.estado_caso && esCaso);
+            return esCaso && esAbierto;
+        }).length;
+    }, [ordenes]);
+
+    const countConPendientes = useMemo(() => {
+        return ordenes.filter((o) => Boolean(o.total_pendientes && o.total_pendientes > 0)).length;
+    }, [ordenes]);
+
+    const ordenesFiltradas = useMemo(() => {
+        if (filtroCasos === 'CASOS_ABIERTOS') {
+            return ordenes.filter((o) => {
+                const esCaso = Boolean(
+                    o.id_orden_padre ||
+                    (o.numero_visita_caso && o.numero_visita_caso > 1) ||
+                    (o.estado_caso && o.estado_caso !== 'AISLADA') ||
+                    o.nombre_caso
+                );
+                const esAbierto =
+                    o.estado_caso === 'ABIERTO' ||
+                    o.orden_padre?.estado_caso === 'ABIERTO' ||
+                    (!o.estado_caso && esCaso);
+                return esCaso && esAbierto;
+            });
+        }
+        if (filtroCasos === 'CON_PENDIENTES') {
+            return ordenes.filter((o) => Boolean(o.total_pendientes && o.total_pendientes > 0));
+        }
+        return ordenes;
+    }, [ordenes, filtroCasos]);
 
     // ✅ FEATURE ESTILO SYTEX: Auto-refresco en vivo
     useEffect(() => {
@@ -464,6 +563,51 @@ function OrdenesPageContent() {
 
             {/* Filtros Básicos y Avanzados */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs space-y-4">
+                {/* ✅ Píldoras de Filtro Rápido de Continuidad y Casos */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-gray-100">
+                    <button
+                        type="button"
+                        onClick={() => setFiltroCasos('TODAS')}
+                        className={cn(
+                            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap',
+                            filtroCasos === 'TODAS'
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        )}
+                    >
+                        <ClipboardList className="h-3.5 w-3.5" />
+                        <span>Todas las Órdenes ({ordenes.length})</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setFiltroCasos('CASOS_ABIERTOS')}
+                        className={cn(
+                            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap',
+                            filtroCasos === 'CASOS_ABIERTOS'
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+                        )}
+                    >
+                        <GitBranch className="h-3.5 w-3.5 text-indigo-500" />
+                        <span>🟢 Casos Abiertos / En Seguimiento ({countCasosAbiertos})</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setFiltroCasos('CON_PENDIENTES')}
+                        className={cn(
+                            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap',
+                            filtroCasos === 'CON_PENDIENTES'
+                                ? 'bg-amber-600 text-white shadow-xs'
+                                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                        )}
+                    >
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                        <span>🎯 Con Pendientes Activos ({countConPendientes})</span>
+                    </button>
+                </div>
+
                 <div className="flex flex-col lg:flex-row gap-3">
                     {/* Búsqueda */}
                     <div className="relative flex-1">

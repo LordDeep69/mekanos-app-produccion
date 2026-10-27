@@ -223,6 +223,8 @@ export class PrismaOrdenServicioRepository {
       select: {
         id_orden_servicio: true,
         numero_orden: true,
+        nombre_caso: true,
+        estado_caso: true,
       },
     },
     estados_orden: {
