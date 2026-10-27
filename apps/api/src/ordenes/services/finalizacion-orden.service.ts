@@ -611,6 +611,10 @@ export class FinalizacionOrdenService {
                 orden.id_orden_servicio,
                 orden.numero_orden,
                 dto.usuarioId,
+                (subidas, total) => {
+                    const progreso = 18 + Math.round((subidas / total) * 17);
+                    emitProgress('evidencias', 'in_progress', `Subiendo evidencias (${subidas}/${total})...`, progreso);
+                },
             );
             recursosCreados.evidencias = evidenciasResultado.map(e => e.id);
             emitProgress('evidencias', 'completed', `${evidenciasResultado.length} evidencias subidas`, 35);
@@ -1102,6 +1106,7 @@ export class FinalizacionOrdenService {
         idOrden: number,
         numeroOrden: string,
         _usuarioId: number, // Reservado para auditoría futura
+        onBatchProgress?: (subidas: number, total: number) => void,
     ): Promise<Array<{ id: number; tipo: string; url: string }>> {
         if (evidencias.length === 0) return [];
 
@@ -1135,6 +1140,7 @@ export class FinalizacionOrdenService {
                 if (r) uploadResults.push(r);
             }
             idx += MAX_CONCURRENCY;
+            onBatchProgress?.(Math.min(idx, evidencias.length), evidencias.length);
         }
 
         const uploadTime = Date.now() - startUpload;

@@ -959,7 +959,7 @@ class OfflineSyncService {
       final lectura = await leerEventosSse(
         stream,
         onEvento: _progressNotifier.procesarEventoBackend,
-        stallTimeout: const Duration(seconds: 45),
+        stallTimeout: const Duration(seconds: 90),
         limiteTotal: const Duration(minutes: 5),
       );
 

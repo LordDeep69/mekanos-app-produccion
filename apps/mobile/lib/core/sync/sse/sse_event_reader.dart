@@ -77,7 +77,7 @@ class SseReadResult {
 Future<SseReadResult> leerEventosSse(
   Stream<List<int>> stream, {
   required void Function(Map<String, dynamic> evento) onEvento,
-  Duration stallTimeout = const Duration(seconds: 45),
+  Duration stallTimeout = const Duration(seconds: 90),
   Duration limiteTotal = const Duration(minutes: 8),
 }) {
   final completer = Completer<SseReadResult>();
