@@ -280,80 +280,86 @@ class SignatureToolbar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(Icons.draw, color: colorPrimario, size: 18),
-              const SizedBox(width: 6),
-              Text(
-                'Firma digital',
-                style: TextStyle(
-                  color: colorPrimario,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+              Icon(Icons.draw, color: colorPrimario, size: 16),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  'Firma digital',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colorPrimario,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 4),
 
               // Flecha Deshacer (retroceder en los trazos)
               IconButton(
-                tooltip: 'Deshacer trazo (retroceder)',
+                tooltip: 'Deshacer trazo',
                 icon: const Icon(Icons.undo),
-                iconSize: 20,
+                iconSize: 18,
                 color: controller.canUndo ? colorPrimario : Colors.grey.shade400,
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 onPressed: controller.canUndo ? controller.undo : null,
               ),
 
               // Flecha Avanzar / Rehacer (avanzar en los trazos)
               IconButton(
-                tooltip: 'Avanzar trazo (rehacer)',
+                tooltip: 'Avanzar trazo',
                 icon: const Icon(Icons.redo),
-                iconSize: 20,
+                iconSize: 18,
                 color: controller.canRedo ? colorPrimario : Colors.grey.shade400,
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 onPressed: controller.canRedo ? controller.redo : null,
               ),
 
               // Limpiar
               IconButton(
-                tooltip: 'Limpiar todo',
+                tooltip: 'Limpiar',
                 icon: const Icon(Icons.refresh),
-                iconSize: 20,
+                iconSize: 18,
                 color: controller.isNotEmpty ? Colors.red.shade600 : Colors.grey.shade400,
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: const EdgeInsets.all(2),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 onPressed: controller.isNotEmpty ? controller.clear : null,
               ),
 
               if (showExpand && onExpandir != null) ...[
                 const SizedBox(width: 4),
-                InkWell(
-                  onTap: onExpandir,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: colorPrimario,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.open_in_full, size: 12, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text(
-                          'PANTALLA COMPLETA',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                Tooltip(
+                  message: 'Pantalla completa',
+                  child: InkWell(
+                    onTap: onExpandir,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colorPrimario,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.open_in_full, size: 12, color: Colors.white),
+                          SizedBox(width: 3),
+                          Text(
+                            'EXPANDIR',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.3,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

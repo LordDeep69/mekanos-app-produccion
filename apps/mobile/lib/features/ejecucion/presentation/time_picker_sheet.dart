@@ -14,13 +14,21 @@ Future<TimeOfDay?> showMekanosTimePicker({
   required TimeOfDay initialTime,
   required String title,
 }) {
-  return showModalBottomSheet<TimeOfDay>(
+  return showDialog<TimeOfDay>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => TimePickerSheet(
-      initialTime: initialTime,
-      title: title,
+    barrierDismissible: true,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      clipBehavior: Clip.antiAlias,
+      elevation: 10,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 390),
+        child: TimePickerSheet(
+          initialTime: initialTime,
+          title: title,
+        ),
+      ),
     ),
   );
 }
@@ -129,220 +137,215 @@ class _TimePickerSheetState extends State<TimePickerSheet> {
         '${_selectedHour.toString().padLeft(2, '0')}:${_selectedMinute.toString().padLeft(2, '0')}';
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Barra de arrastre superior
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-
-              // Título
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade700,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _abrirRelojNativo,
-                      icon: const Icon(Icons.access_time, size: 16),
-                      label: const Text(
-                        'Reloj del sistema',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Visualización principal de hora (12h y 24h)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Título
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 12, 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(Icons.schedule, size: 20, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
                       Text(
-                        formatted24,
+                        widget.title.toUpperCase(),
                         style: TextStyle(
-                          fontSize: 36,
+                          fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Text(
-                          formatted12,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.primary,
-                          ),
+                          color: Colors.grey.shade800,
+                          letterSpacing: 0.8,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-
-              // Selector AM / PM
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
-                child: SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment<bool>(
-                      value: false,
-                      label: Text('a. m. (Mañana)'),
-                      icon: Icon(Icons.wb_sunny_outlined, size: 16),
+                  TextButton.icon(
+                    onPressed: _abrirRelojNativo,
+                    icon: const Icon(Icons.access_time, size: 16),
+                    label: const Text(
+                      'Reloj del sistema',
+                      style: TextStyle(fontSize: 11),
                     ),
-                    ButtonSegment<bool>(
-                      value: true,
-                      label: Text('p. m. (Tarde)'),
-                      icon: Icon(Icons.nightlight_round_outlined, size: 16),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                     ),
-                  ],
-                  selected: {isPm},
-                  onSelectionChanged: (set) {
-                    if (set.isNotEmpty) _toggleAmPm(set.first);
-                  },
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
                   ),
-                ),
+                ],
               ),
+            ),
 
-              // Tambor de selección
-              SizedBox(
-                height: 170,
-                child: Row(
-                  children: [
-                    // Columna Horas
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            'HORA (0-23)',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          Expanded(
-                            child: _buildWheel(
-                              controller: _hourController,
-                              itemCount: 24,
-                              selectedValue: _selectedHour,
-                              onChanged: (val) => setState(() => _selectedHour = val),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      ':',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade400,
-                      ),
-                    ),
-                    // Columna Minutos
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            'MINUTO (0-59)',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          Expanded(
-                            child: _buildWheel(
-                              controller: _minuteController,
-                              itemCount: 60,
-                              selectedValue: _selectedMinute,
-                              onChanged: (val) => setState(() => _selectedMinute = val),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+            // Visualización principal de hora (12h y 24h)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ),
-
-              // Atajos rápidos de minutos
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Minutos:',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      formatted24,
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                        letterSpacing: 1,
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    _minuteChip(0),
-                    const SizedBox(width: 6),
-                    _minuteChip(15),
-                    const SizedBox(width: 6),
-                    _minuteChip(30),
-                    const SizedBox(width: 6),
-                    _minuteChip(45),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        formatted12,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
+            ),
 
-              const SizedBox(height: 8),
+            // Selector AM / PM
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(
+                    value: false,
+                    label: Text('a. m. (Mañana)', style: TextStyle(fontSize: 12)),
+                    icon: Icon(Icons.wb_sunny_outlined, size: 15),
+                  ),
+                  ButtonSegment<bool>(
+                    value: true,
+                    label: Text('p. m. (Tarde)', style: TextStyle(fontSize: 12)),
+                    icon: Icon(Icons.nightlight_round_outlined, size: 15),
+                  ),
+                ],
+                selected: {isPm},
+                onSelectionChanged: (set) {
+                  if (set.isNotEmpty) _toggleAmPm(set.first);
+                },
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
 
-              // Botones rápidos relativos
-              SingleChildScrollView(
+            // Tambor de selección
+            SizedBox(
+              height: 125,
+              child: Row(
+                children: [
+                  // Columna Horas
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          'HORA (0-23)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildWheel(
+                            controller: _hourController,
+                            itemCount: 24,
+                            selectedValue: _selectedHour,
+                            onChanged: (val) => setState(() => _selectedHour = val),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    ':',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+                  // Columna Minutos
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          'MINUTO (0-59)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildWheel(
+                            controller: _minuteController,
+                            itemCount: 60,
+                            selectedValue: _selectedMinute,
+                            onChanged: (val) => setState(() => _selectedMinute = val),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Atajos rápidos de minutos
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Minutos:',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(width: 8),
+                  _minuteChip(0),
+                  const SizedBox(width: 6),
+                  _minuteChip(15),
+                  const SizedBox(width: 6),
+                  _minuteChip(30),
+                  const SizedBox(width: 6),
+                  _minuteChip(45),
+                ],
+              ),
+            ),
+
+            // Botones rápidos relativos
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
@@ -378,56 +381,56 @@ class _TimePickerSheetState extends State<TimePickerSheet> {
                   ],
                 ),
               ),
+            ),
 
-              const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
-              // Acciones Aceptar / Cancelar
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(null),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('CANCELAR'),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop(
-                            TimeOfDay(
-                              hour: _selectedHour,
-                              minute: _selectedMinute,
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'ACEPTAR',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+            // Acciones Aceptar / Cancelar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(null),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
+                      child: const Text('CANCELAR'),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop(
+                          TimeOfDay(
+                            hour: _selectedHour,
+                            minute: _selectedMinute,
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'ACEPTAR',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -441,9 +444,9 @@ class _TimePickerSheetState extends State<TimePickerSheet> {
   }) {
     return ListWheelScrollView.useDelegate(
       controller: controller,
-      itemExtent: 44,
-      perspective: 0.004,
-      diameterRatio: 1.4,
+      itemExtent: 38,
+      perspective: 0.003,
+      diameterRatio: 1.2,
       physics: const FixedExtentScrollPhysics(),
       onSelectedItemChanged: onChanged,
       childDelegate: ListWheelChildBuilderDelegate(
@@ -454,7 +457,7 @@ class _TimePickerSheetState extends State<TimePickerSheet> {
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 150),
               style: TextStyle(
-                fontSize: isSelected ? 26 : 17,
+                fontSize: isSelected ? 24 : 16,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w400,
                 color: isSelected
                     ? Theme.of(context).colorScheme.primary
