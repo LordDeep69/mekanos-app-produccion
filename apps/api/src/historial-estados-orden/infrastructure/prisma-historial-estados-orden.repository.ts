@@ -9,7 +9,7 @@ export class PrismaHistorialEstadosOrdenRepository
 {
   constructor(private readonly prisma: PrismaService) {}
 
-  // INCLUDE para lista (orden + estado_anterior + estado_nuevo + usuario)
+  // INCLUDE para lista (orden + estado_anterior + estado_nuevo)
   private readonly INCLUDE_RELATIONS_LIST = {
     ordenes_servicio: {
       select: {
@@ -33,15 +33,9 @@ export class PrismaHistorialEstadosOrdenRepository
         color_hex: true,
       },
     },
-    usuarios: {
-      select: {
-        id_usuario: true,
-        email: true,
-      },
-    },
   };
 
-  // INCLUDE para detalle (lista + estado_anterior + usuario)
+  // INCLUDE para detalle (lista + estado_anterior)
   private readonly INCLUDE_RELATIONS_DETAIL = {
     ordenes_servicio: {
       select: {
@@ -67,13 +61,77 @@ export class PrismaHistorialEstadosOrdenRepository
         color_hex: true,
       },
     },
-    usuarios: {
-      select: {
-        id_usuario: true,
-        email: true,
-      },
-    },
   };
+
+  /**
+   * Vincula datos de usuario y nombre de persona sin depender de relaciones rotas en Prisma
+   */
+  private async adjuntarUsuarios(historiales: any[]): Promise<any[]> {
+    if (!historiales || historiales.length === 0) return historiales;
+
+    const userIds = [
+      ...new Set(
+        historiales
+          .map((h: any) => h.realizado_por)
+          .filter((id: any) => id != null && !isNaN(Number(id))),
+      ),
+    ];
+
+    const usuariosList =
+      userIds.length > 0
+        ? await this.prisma.usuarios.findMany({
+            where: { id_usuario: { in: userIds } },
+            select: {
+              id_usuario: true,
+              email: true,
+              username: true,
+              persona: {
+                select: {
+                  primer_nombre: true,
+                  segundo_nombre: true,
+                  primer_apellido: true,
+                  segundo_apellido: true,
+                  razon_social: true,
+                },
+              },
+            },
+          })
+        : [];
+
+    const userMap = new Map(
+      usuariosList.map((u: any) => {
+        const nombreParts = u.persona
+          ? [u.persona.primer_nombre, u.persona.primer_apellido].filter(Boolean)
+          : [];
+        const nombreCompleto =
+          nombreParts.length > 0
+            ? nombreParts.join(' ')
+            : u.username || u.email;
+        return [
+          u.id_usuario,
+          {
+            id_usuario: u.id_usuario,
+            email: u.email,
+            nombre: nombreCompleto,
+          },
+        ];
+      }),
+    );
+
+    for (const h of historiales) {
+      if (h.realizado_por && userMap.has(h.realizado_por)) {
+        h.usuarios = userMap.get(h.realizado_por);
+      } else if (h.realizado_por) {
+        h.usuarios = {
+          id_usuario: h.realizado_por,
+          email: `Usuario #${h.realizado_por}`,
+          nombre: `Usuario #${h.realizado_por}`,
+        };
+      }
+    }
+
+    return historiales;
+  }
 
   async crear(
     idOrdenServicio: number,
@@ -105,6 +163,7 @@ export class PrismaHistorialEstadosOrdenRepository
       include: this.INCLUDE_RELATIONS_DETAIL,
     });
 
+    await this.adjuntarUsuarios([historial]);
     return HistorialEstadosOrdenMapper.toResponse(historial);
   }
 
@@ -128,6 +187,8 @@ export class PrismaHistorialEstadosOrdenRepository
       }),
       this.prisma.historial_estados_orden.count(),
     ]);
+
+    await this.adjuntarUsuarios(historiales);
 
     return {
       data: historiales.map((h: any) => HistorialEstadosOrdenMapper.toResponse(h)),
@@ -169,6 +230,8 @@ export class PrismaHistorialEstadosOrdenRepository
       }),
     ]);
 
+    await this.adjuntarUsuarios(historiales);
+
     return {
       data: historiales.map((h: any) => HistorialEstadosOrdenMapper.toResponse(h)),
       meta: {
@@ -190,6 +253,7 @@ export class PrismaHistorialEstadosOrdenRepository
       return null;
     }
 
+    await this.adjuntarUsuarios([historial]);
     return HistorialEstadosOrdenMapper.toResponse(historial);
   }
 }

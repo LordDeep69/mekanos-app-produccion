@@ -558,6 +558,24 @@ export class PrismaOrdenServicioRepository {
         include: this.INCLUDE_LITE,
       });
 
+      // 1b. Registrar en historial de estados de orden (creación)
+      try {
+        await tx.historial_estados_orden.create({
+          data: {
+            id_orden_servicio: savedOrden.id_orden_servicio,
+            id_estado_anterior: null,
+            id_estado_nuevo: orden.id_estado_actual,
+            motivo_cambio: 'Creación de orden de servicio',
+            observaciones: 'Orden registrada en estado inicial.',
+            accion: 'CREACION',
+            realizado_por: orden.creado_por || 1,
+            fecha_cambio: new Date(),
+          },
+        });
+      } catch (errHistorial) {
+        // Fallback silencioso para no interrumpir la creación
+      }
+
       // 2. Vincular todos los equipos en la tabla intermedia ordenes_equipos
       if (equiposIds && equiposIds.length > 0) {
         // ✅ FIX 14-FEB-2026: Setear orden_secuencia correctamente (1, 2, 3, ...)

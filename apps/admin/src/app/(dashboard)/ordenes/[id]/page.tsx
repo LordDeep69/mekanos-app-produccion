@@ -489,25 +489,32 @@ function TabGeneral({ orden }: { orden: Orden }) {
                 />
             </div>
 
-            {/* Descripción */}
-            {orden.descripcion && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Descripción</h4>
-                    <p className="text-gray-600">{orden.descripcion}</p>
+            {/* Sección Principal de Contenido: 2 Columnas (Izquierda: Descripción & Observaciones | Derecha: Historial de Estados) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                <div className="space-y-6">
+                    {/* Descripción */}
+                    {orden.descripcion && (
+                        <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 shadow-2xs">
+                            <h4 className="text-sm font-semibold text-gray-900 mb-2">Descripción del Servicio</h4>
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap">{orden.descripcion}</p>
+                        </div>
+                    )}
+
+                    {/* Observaciones de Cierre - Editables por Admin */}
+                    <ObservacionesCierreSection orden={orden} />
+
+                    {/* ✅ 19-OCT-2026: Autorización de edición técnica para orden COMPLETADA */}
+                    <EdicionTecnicoSection orden={orden} />
                 </div>
-            )}
+
+                {/* Columna Derecha: Historial de Estados */}
+                <div>
+                    <HistorialEstados idOrden={orden.id_orden_servicio} orden={orden} />
+                </div>
+            </div>
 
             {/* Matriz Completa de Pendientes y Hallazgos del Caso */}
             <PendientesSection orden={orden} />
-
-            {/* Observaciones de Cierre - Editables por Admin */}
-            <ObservacionesCierreSection orden={orden} />
-
-            {/* ✅ 19-OCT-2026: Autorización de edición técnica para orden COMPLETADA */}
-            <EdicionTecnicoSection orden={orden} />
-
-            {/* Historial de Estados */}
-            <HistorialEstados idOrden={orden.id_orden_servicio} />
         </div>
     );
 }
