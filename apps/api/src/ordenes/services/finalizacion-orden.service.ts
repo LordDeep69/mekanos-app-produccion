@@ -424,9 +424,55 @@ export class FinalizacionOrdenService {
                 throw new InternalServerErrorException('Estado COMPLETADA no encontrado en BD');
             }
 
-            // ✅ 19-OCT-2026: Zero Trust. Solo el técnico asignado (o un admin)
-            // puede finalizar/resubir la orden. Evita que un técnico autenticado
-            // use la autorización de otra orden conociendo su ID.
+            const codigoEstadoActual = orden.estados_orden?.codigo_estado || '';
+            const esResubidaAutorizada =
+                codigoEstadoActual === 'COMPLETADA' &&
+                orden.edicion_tecnico_habilitada === true;
+
+            // ✅ IDEMPOTENCIA ZERO-TRUST (27-OCT-2026):
+            // Si la orden YA está COMPLETADA o APROBADA en el servidor y NO es una resubida autorizada,
+            // un intento previo de sincronización o corte de red ya la procesó exitosamente.
+            // Retornar éxito inmediato para que el cliente móvil limpie su cola local y confirme al técnico sin error.
+            if ((codigoEstadoActual === 'COMPLETADA' || codigoEstadoActual === 'APROBADA') && !esResubidaAutorizada) {
+                this.logger.log(
+                    `✅ [IDEMPOTENCIA] Orden ${orden.numero_orden} (ID ${orden.id_orden_servicio}) ya se encuentra en estado ${codigoEstadoActual}. Retornando éxito idempotente al cliente móvil.`,
+                );
+
+                emitProgress('validando', 'completed', 'Orden verificada en el servidor', 30);
+                emitProgress('actualizando_estado', 'completed', `La orden ya se encuentra ${codigoEstadoActual.toLowerCase()}`, 90);
+                emitProgress(
+                    'completado',
+                    'completed',
+                    `La orden ${orden.numero_orden} ya se encuentra ${codigoEstadoActual.toLowerCase()} en el servidor`,
+                    100,
+                    {
+                        tiempoTotal: Date.now() - startTime,
+                        ordenId: orden.id_orden_servicio,
+                        numeroOrden: orden.numero_orden,
+                        numeroVisitaCaso: (orden as any).numero_visita_caso || 1,
+                        tipoVisita: (orden as any).tipo_visita || 'INICIAL',
+                        numeroOrdenPadre: (orden as any).orden_padre?.numero_orden || undefined,
+                        modo: dto.modo || 'COMPLETO',
+                    },
+                );
+
+                return {
+                    success: true,
+                    mensaje: `La orden ${orden.numero_orden} ya se encuentra ${codigoEstadoActual.toLowerCase()} en el servidor`,
+                    datos: {
+                        orden: {
+                            id: orden.id_orden_servicio,
+                            numero: orden.numero_orden,
+                            estado: codigoEstadoActual,
+                        },
+                        modo: dto.modo || 'COMPLETO',
+                    },
+                    tiempoTotal: Date.now() - startTime,
+                };
+            }
+
+            // ✅ 19-OCT-2026 & 27-OCT-2026: Si la orden fue ejecutada por otro técnico en campo,
+            // reasignar al técnico autenticado que sube las evidencias y firma para no bloquear el trabajo offline.
             if (
                 user &&
                 !user.esAdmin &&
@@ -434,9 +480,14 @@ export class FinalizacionOrdenService {
                 user.idEmpleado != null &&
                 orden.id_tecnico_asignado !== user.idEmpleado
             ) {
-                throw new ForbiddenException(
-                    'La orden está asignada a otro técnico; edición no autorizada.',
+                this.logger.warn(
+                    `⚠️ Orden ${orden.numero_orden} estaba asignada al técnico #${orden.id_tecnico_asignado}, pero fue finalizada por técnico #${user.idEmpleado}. Se reasigna para preservar las evidencias del trabajo realizado.`,
                 );
+                await this.prisma.ordenes_servicio.update({
+                    where: { id_orden_servicio: orden.id_orden_servicio },
+                    data: { id_tecnico_asignado: user.idEmpleado },
+                });
+                orden.id_tecnico_asignado = user.idEmpleado;
             }
 
             emitProgress('obteniendo_orden', 'completed', `Orden ${orden.numero_orden} cargada`, 15);
@@ -1014,31 +1065,26 @@ export class FinalizacionOrdenService {
             throw new NotFoundException(`Orden con ID ${idOrden} no encontrada`);
         }
 
-        // Validar que la orden esté en estado que permita finalización.
-        // ✅ 19-OCT-2026: COMPLETADA ya NO es un permiso implícito. La resubida
-        // desde móvil exige una autorización administrativa explícita y vigente.
+        // Validar que la orden esté en estado que permita finalización o verificación idempotente.
         const estadosPermitidos = [
             'EN_PROCESO',
             'EN_EJECUCION',
             'PENDIENTE',
             'PROGRAMADA',
             'ASIGNADA',
+            'EN_ESPERA_REPUESTO',
         ];
         const codigoEstado = orden.estados_orden?.codigo_estado || '';
         const esResubidaAutorizada =
             codigoEstado === 'COMPLETADA' &&
             orden.edicion_tecnico_habilitada === true;
+        const esYaCompletada = codigoEstado === 'COMPLETADA' || codigoEstado === 'APROBADA';
 
         if (
             !estadosPermitidos.includes(codigoEstado) &&
-            !esResubidaAutorizada
+            !esResubidaAutorizada &&
+            !esYaCompletada
         ) {
-            if (codigoEstado === 'COMPLETADA') {
-                throw new ForbiddenException(
-                    'La orden está COMPLETADA y la edición del técnico no está autorizada por el administrador.',
-                );
-            }
-
             throw new BadRequestException(
                 `La orden está en estado ${orden.estados_orden?.nombre_estado || codigoEstado}, no puede finalizarse`,
             );

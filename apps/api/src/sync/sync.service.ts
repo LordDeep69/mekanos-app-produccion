@@ -1206,16 +1206,10 @@ export class SyncService {
       throw new NotFoundException(`Orden ${ordenId} no existe`);
     }
 
-    if (!user?.esAdmin) {
-      if (
-        !user?.idEmpleado ||
-        orden.id_tecnico_asignado !== user.idEmpleado
-      ) {
-        throw new ForbiddenException(
-          `La orden ${ordenId} no está asignada al técnico autenticado.`,
-        );
-      }
-    }
+    const esTecnicoAsignado =
+      !orden.id_tecnico_asignado ||
+      !user?.idEmpleado ||
+      orden.id_tecnico_asignado === user.idEmpleado;
 
     const estadoCodigo = orden.estados_orden?.codigo_estado || 'DESCONOCIDO';
     const esEstadoFinal = orden.estados_orden?.es_estado_final === true;
@@ -1225,6 +1219,7 @@ export class SyncService {
       estadoCodigo,
       esEstadoFinal,
       permiteEdicionTecnico:
+        (user?.esAdmin || esTecnicoAsignado) &&
         estadoCodigo === 'COMPLETADA' &&
         orden.edicion_tecnico_habilitada === true,
       fechaModificacion:
