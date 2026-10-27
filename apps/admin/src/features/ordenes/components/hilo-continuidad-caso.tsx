@@ -26,6 +26,8 @@ import {
     Wrench,
     X,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
 import type { Orden, OrdenPendiente } from '@/types/ordenes';
 import {
@@ -292,14 +294,19 @@ export function ProgramarVisitaModal({
                             <GitBranch className="h-5 w-5" />
                         </div>
                         <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="font-extrabold text-base text-white">
                                     Programar Visita #{nextVisitaNum} de Seguimiento
                                 </h3>
                                 <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/40">
-                                    Caso Raíz: {rootOrderNumero}
+                                    {orden.hilo_caso?.codigo_caso || rootOrderNumero.replace(/^OS-/, 'CASO-')} ({rootOrderNumero})
                                 </span>
                             </div>
+                            {orden.hilo_caso?.nombre_caso && (
+                                <p className="text-xs font-bold text-indigo-200 mt-0.5">
+                                    📋 Caso: {orden.hilo_caso.nombre_caso}
+                                </p>
+                            )}
                             <p className="text-xs text-slate-300 mt-0.5">
                                 Creación directa en 1 solo paso heredando cliente, equipo(s) y pendientes activos del caso.
                             </p>
@@ -599,9 +606,50 @@ export function ProgramarVisitaModal({
 }
 
 export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinuidadCasoProps) {
+    const queryClient = useQueryClient();
     const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
 
     const hilo = orden.hilo_caso;
+    const codigoCaso =
+        hilo?.codigo_caso ||
+        (hilo?.numero_orden_raiz || orden.orden_padre?.numero_orden || orden.numero_orden || '').replace(
+            /^OS-/,
+            'CASO-'
+        );
+    const numeroOrdenRaiz =
+        hilo?.numero_orden_raiz || orden.orden_padre?.numero_orden || orden.numero_orden;
+    const [nombreCasoLocal, setNombreCasoLocal] = useState(
+        hilo?.nombre_caso || orden.nombre_caso || ''
+    );
+    const [estadoCasoLocal, setEstadoCasoLocal] = useState(
+        hilo?.estado_caso || orden.estado_caso || 'ABIERTO'
+    );
+    const [editandoNombreCaso, setEditandoNombreCaso] = useState(false);
+    const [guardandoCaso, setGuardandoCaso] = useState(false);
+
+    useEffect(() => {
+        setNombreCasoLocal(hilo?.nombre_caso || orden.nombre_caso || '');
+        setEstadoCasoLocal(hilo?.estado_caso || orden.estado_caso || 'ABIERTO');
+    }, [hilo?.nombre_caso, hilo?.estado_caso, orden.nombre_caso, orden.estado_caso]);
+
+    const guardarIdentidadCaso = async (nuevoNombre?: string, nuevoEstado?: string) => {
+        setGuardandoCaso(true);
+        try {
+            const payload: any = {};
+            if (nuevoNombre !== undefined) payload.nombre_caso = nuevoNombre;
+            if (nuevoEstado !== undefined) payload.estado_caso = nuevoEstado;
+            await apiClient.patch(`/ordenes/${orden.id_orden_servicio}/caso`, payload);
+            if (nuevoNombre !== undefined) setNombreCasoLocal(nuevoNombre);
+            if (nuevoEstado !== undefined) setEstadoCasoLocal(nuevoEstado);
+            setEditandoNombreCaso(false);
+            queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+        } catch (e) {
+            console.error('Error actualizando identidad del caso:', e);
+        } finally {
+            setGuardandoCaso(false);
+        }
+    };
+
     const pendientesPropiosAbiertos = (
         hilo?.pendientes_caso ||
         orden.ordenes_pendientes ||
@@ -635,15 +683,37 @@ export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinui
         return (
             <>
                 <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-4 shadow-sm border border-slate-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start sm:items-center gap-3">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
                         <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/30 rounded-xl text-indigo-300 shrink-0">
                             <GitBranch className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
                                     Trazabilidad Continua del Caso (Visita #1 • Inicial)
                                 </span>
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-indigo-500/30 text-white border border-indigo-400/40">
+                                    {codigoCaso}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        guardarIdentidadCaso(
+                                            undefined,
+                                            estadoCasoLocal === 'ABIERTO' ? 'CERRADO' : 'ABIERTO'
+                                        )
+                                    }
+                                    disabled={guardandoCaso}
+                                    title="Alternar estado del Caso Base (Abierto / Cerrado)"
+                                    className={cn(
+                                        'px-2 py-0.5 rounded-full text-[10px] font-extrabold border transition-colors cursor-pointer',
+                                        estadoCasoLocal === 'ABIERTO'
+                                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 hover:bg-emerald-500/30'
+                                            : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+                                    )}
+                                >
+                                    {estadoCasoLocal === 'ABIERTO' ? '🟢 Caso Abierto' : '🔒 Caso Cerrado / Aislado'}
+                                </button>
                                 {pendientesPropiosAbiertos.length > 0 && (
                                     <button
                                         type="button"
@@ -654,6 +724,47 @@ export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinui
                                     </button>
                                 )}
                             </div>
+
+                            {editandoNombreCaso ? (
+                                <div className="mt-2 flex items-center gap-2 max-w-xl">
+                                    <input
+                                        type="text"
+                                        value={nombreCasoLocal}
+                                        onChange={(e) => setNombreCasoLocal(e.target.value)}
+                                        placeholder="Ingrese el nombre característico del caso base..."
+                                        className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-indigo-400/60 text-white text-xs font-semibold outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={guardandoCaso}
+                                        onClick={() => guardarIdentidadCaso(nombreCasoLocal, 'ABIERTO')}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                                    >
+                                        Guardar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditandoNombreCaso(false)}
+                                        className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs font-semibold cursor-pointer"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <p className="text-xs font-bold text-white truncate">
+                                        {nombreCasoLocal || 'Sin título de caso asignado'}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditandoNombreCaso(true)}
+                                        className="text-[11px] text-indigo-300 hover:text-white underline shrink-0 cursor-pointer"
+                                    >
+                                        Editar nombre del caso
+                                    </button>
+                                </div>
+                            )}
+
                             <p className="text-xs text-slate-300 mt-0.5">
                                 ¿El escenario requiere una segunda intervención, montaje de repuestos o garantía? Programe una visita de seguimiento en 1 clic manteniendo el mismo caso técnico.
                             </p>
@@ -688,17 +799,17 @@ export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinui
             <div className="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm overflow-hidden">
                 {/* Barra Superior Consolidada del Expediente */}
                 <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex items-start sm:items-center gap-3">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
                         <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/40 rounded-xl text-indigo-300 shrink-0">
                             <GitBranch className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[11px] font-extrabold uppercase tracking-widest text-indigo-300">
                                     Hilo de Continuidad del Caso
                                 </span>
                                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-500/30 text-white border border-indigo-400/40">
-                                    Caso Raíz: {hilo?.numero_orden_raiz || orden.orden_padre?.numero_orden || orden.numero_orden}
+                                    {codigoCaso} (Orden Raíz: {numeroOrdenRaiz})
                                 </span>
                                 <span
                                     className={cn(
@@ -708,8 +819,68 @@ export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinui
                                 >
                                     Visita #{orden.numero_visita_caso || 1} • {metaActual.label}
                                 </span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        guardarIdentidadCaso(
+                                            undefined,
+                                            estadoCasoLocal === 'ABIERTO' ? 'CERRADO' : 'ABIERTO'
+                                        )
+                                    }
+                                    disabled={guardandoCaso}
+                                    title="Alternar estado del Caso Base (Abierto / Cerrado)"
+                                    className={cn(
+                                        'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border transition-colors cursor-pointer',
+                                        estadoCasoLocal === 'ABIERTO'
+                                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 hover:bg-emerald-500/30'
+                                            : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+                                    )}
+                                >
+                                    {estadoCasoLocal === 'ABIERTO' ? '🟢 Caso Abierto' : '🔒 Caso Cerrado'}
+                                </button>
                             </div>
-                            <p className="text-xs text-slate-300 mt-1">
+
+                            {editandoNombreCaso ? (
+                                <div className="mt-2 flex items-center gap-2 max-w-xl">
+                                    <input
+                                        type="text"
+                                        value={nombreCasoLocal}
+                                        onChange={(e) => setNombreCasoLocal(e.target.value)}
+                                        placeholder="Nombre característico del caso..."
+                                        className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-indigo-400/60 text-white text-xs font-semibold outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={guardandoCaso}
+                                        onClick={() => guardarIdentidadCaso(nombreCasoLocal)}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                                    >
+                                        Guardar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditandoNombreCaso(false)}
+                                        className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs font-semibold cursor-pointer"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <p className="text-sm font-extrabold text-white truncate">
+                                        📋 {nombreCasoLocal || `Expediente ${codigoCaso}`}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditandoNombreCaso(true)}
+                                        className="text-[11px] text-indigo-300 hover:text-white underline shrink-0 cursor-pointer"
+                                    >
+                                        Renombrar caso
+                                    </button>
+                                </div>
+                            )}
+
+                            <p className="text-xs text-slate-300 mt-0.5">
                                 Secuencia de visitas vinculadas a este mismo caso técnico.
                             </p>
                         </div>

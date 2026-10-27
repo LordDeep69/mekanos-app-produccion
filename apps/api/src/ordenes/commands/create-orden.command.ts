@@ -20,5 +20,7 @@ export class CreateOrdenCommand {
     public readonly idOrdenPadre?: number,
     public readonly tipoVisita?: string,
     public readonly idsPendientesAResolver?: number[],
+    public readonly nombreCaso?: string,
+    public readonly estadoCaso?: string,
   ) { }
 }

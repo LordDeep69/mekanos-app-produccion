@@ -2461,6 +2461,327 @@ export class OrdenesController {
   }
 
   /**
+   * GET /api/ordenes/casos-abiertos
+   * Obtiene los Casos Raíz (Expedientes Técnicos) abiertos de un cliente, con buscador inteligente,
+   * conteo de visitas, equipos vinculados y pendientes activos del hilo completo.
+   */
+  @Get('casos-abiertos')
+  @ApiOperation({ summary: 'Consultar casos raíz abiertos de un cliente para encadenar nuevas visitas' })
+  async getCasosAbiertosCliente(
+    @Query('idCliente') idCliente?: string,
+    @Query('idEquipos') idEquipos?: string,
+    @Query('incluirHistoricos') incluirHistoricos?: string,
+    @Query('busqueda') busqueda?: string,
+  ) {
+    if (!idCliente) {
+      return { success: true, data: [], total: 0 };
+    }
+
+    const clienteIdNum = parseInt(idCliente, 10);
+    if (isNaN(clienteIdNum)) {
+      return { success: true, data: [], total: 0 };
+    }
+
+    const verHistoricos = incluirHistoricos === 'true';
+
+    const rootOrders = await this.prisma.ordenes_servicio.findMany({
+      where: {
+        id_cliente: clienteIdNum,
+        id_orden_padre: null,
+        ...(verHistoricos
+          ? {}
+          : {
+              OR: [
+                { estado_caso: 'ABIERTO' },
+                {
+                  ordenes_pendientes: {
+                    some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } },
+                  },
+                },
+                {
+                  visitas_hijas: {
+                    some: {
+                      ordenes_pendientes: {
+                        some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } },
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+      },
+      orderBy: [{ id_orden_servicio: 'desc' }],
+      take: 40,
+      include: {
+        tipos_servicio: {
+          select: {
+            id_tipo_servicio: true,
+            codigo_tipo: true,
+            nombre_tipo: true,
+            categoria: true,
+          },
+        },
+        estados_orden: {
+          select: {
+            id_estado: true,
+            codigo_estado: true,
+            nombre_estado: true,
+            color_hex: true,
+          },
+        },
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+          },
+        },
+        ordenes_equipos: {
+          include: {
+            equipos: {
+              select: {
+                id_equipo: true,
+                codigo_equipo: true,
+                nombre_equipo: true,
+              },
+            },
+          },
+        },
+        ordenes_pendientes: {
+          include: {
+            equipos: {
+              select: {
+                id_equipo: true,
+                codigo_equipo: true,
+                nombre_equipo: true,
+              },
+            },
+            ordenes_servicio: {
+              select: {
+                id_orden_servicio: true,
+                numero_orden: true,
+                numero_visita_caso: true,
+              },
+            },
+            orden_resolucion: {
+              select: {
+                id_orden_servicio: true,
+                numero_orden: true,
+                numero_visita_caso: true,
+              },
+            },
+          },
+        },
+        visitas_hijas: {
+          orderBy: [{ numero_visita_caso: 'asc' }, { id_orden_servicio: 'asc' }],
+          select: {
+            id_orden_servicio: true,
+            numero_orden: true,
+            tipo_visita: true,
+            numero_visita_caso: true,
+            fecha_programada: true,
+            fecha_creacion: true,
+            estados_orden: {
+              select: {
+                id_estado: true,
+                codigo_estado: true,
+                nombre_estado: true,
+                color_hex: true,
+              },
+            },
+            ordenes_pendientes: {
+              include: {
+                equipos: {
+                  select: {
+                    id_equipo: true,
+                    codigo_equipo: true,
+                    nombre_equipo: true,
+                  },
+                },
+                ordenes_servicio: {
+                  select: {
+                    id_orden_servicio: true,
+                    numero_orden: true,
+                    numero_visita_caso: true,
+                  },
+                },
+                orden_resolucion: {
+                  select: {
+                    id_orden_servicio: true,
+                    numero_orden: true,
+                    numero_visita_caso: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const eqIdsFilter = idEquipos
+      ? idEquipos
+          .split(',')
+          .map((v) => parseInt(v.trim(), 10))
+          .filter((n) => !isNaN(n) && n > 0)
+      : [];
+
+    const searchLower = busqueda?.trim().toLowerCase() || '';
+
+    const casosFormateados = rootOrders
+      .map((root) => {
+        // Consolidar equipos del caso
+        const eqMap = new Map<number, { id_equipo: number; codigo_equipo: string; nombre_equipo: string }>();
+        if (root.equipos) {
+          eqMap.set(root.equipos.id_equipo, {
+            id_equipo: root.equipos.id_equipo,
+            codigo_equipo: root.equipos.codigo_equipo || '',
+            nombre_equipo: root.equipos.nombre_equipo || '',
+          });
+        }
+        for (const oe of root.ordenes_equipos || []) {
+          if (oe.equipos) {
+            eqMap.set(oe.equipos.id_equipo, {
+              id_equipo: oe.equipos.id_equipo,
+              codigo_equipo: oe.equipos.codigo_equipo || '',
+              nombre_equipo: oe.equipos.nombre_equipo || '',
+            });
+          }
+        }
+        const equiposCaso = Array.from(eqMap.values());
+
+        // Consolidar todos los pendientes del caso (raíz + visitas hijas)
+        const pendMap = new Map<number, any>();
+        for (const p of root.ordenes_pendientes || []) {
+          pendMap.set(p.id_orden_pendiente, p);
+        }
+        for (const vh of root.visitas_hijas || []) {
+          for (const p of vh.ordenes_pendientes || []) {
+            pendMap.set(p.id_orden_pendiente, p);
+          }
+        }
+        const todosPendientes = Array.from(pendMap.values());
+        const pendientesActivos = todosPendientes.filter(
+          (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION',
+        );
+        const pendientesResueltos = todosPendientes.filter((p) => p.estado === 'RESUELTO');
+
+        const codigoCaso = root.numero_orden.replace(/^OS-/, 'CASO-');
+        const eqPrincipalTag =
+          equiposCaso[0]?.codigo_equipo || equiposCaso[0]?.nombre_equipo || '';
+        const nombreCasoCalculado =
+          root.nombre_caso?.trim() ||
+          root.descripcion_inicial?.trim()?.split('\n')[0] ||
+          pendientesActivos[0]?.descripcion ||
+          `${root.tipos_servicio?.nombre_tipo || 'Expediente Técnico'}${eqPrincipalTag ? ` — ${eqPrincipalTag}` : ''}`;
+
+        const totalVisitas = 1 + (root.visitas_hijas?.length || 0);
+        const ultimaVisita =
+          root.visitas_hijas && root.visitas_hijas.length > 0
+            ? root.visitas_hijas[root.visitas_hijas.length - 1]
+            : root;
+
+        const coincideEquipoSeleccionado =
+          eqIdsFilter.length === 0 ||
+          equiposCaso.some((e) => eqIdsFilter.includes(e.id_equipo));
+
+        return {
+          id_orden_raiz: root.id_orden_servicio,
+          codigo_caso: codigoCaso,
+          numero_orden_raiz: root.numero_orden,
+          nombre_caso: nombreCasoCalculado,
+          tiene_nombre_personalizado: Boolean(root.nombre_caso?.trim()),
+          estado_caso: root.estado_caso || 'ABIERTO',
+          fecha_apertura: root.fecha_creacion || root.fecha_programada,
+          tipo_servicio: root.tipos_servicio,
+          estado_orden_raiz: root.estados_orden,
+          equipos: equiposCaso,
+          coincide_equipo_seleccionado: coincideEquipoSeleccionado,
+          total_visitas: totalVisitas,
+          proxima_visita_numero: totalVisitas + 1,
+          ultima_visita: {
+            id_orden_servicio: ultimaVisita.id_orden_servicio,
+            numero_orden: ultimaVisita.numero_orden,
+            numero_visita_caso: ultimaVisita.numero_visita_caso || totalVisitas,
+            estado: ultimaVisita.estados_orden?.nombre_estado || 'Registrada',
+          },
+          pendientes_activos: pendientesActivos,
+          pendientes_activos_ids: pendientesActivos.map((p) => p.id_orden_pendiente),
+          pendientes_activos_count: pendientesActivos.length,
+          pendientes_resueltos_count: pendientesResueltos.length,
+          pendientes_totales_count: todosPendientes.length,
+        };
+      })
+      .filter((caso) => {
+        if (!searchLower) return true;
+        const matchNombre = caso.nombre_caso.toLowerCase().includes(searchLower);
+        const matchCodigo = caso.codigo_caso.toLowerCase().includes(searchLower);
+        const matchOrden = caso.numero_orden_raiz.toLowerCase().includes(searchLower);
+        const matchEquipo = caso.equipos.some(
+          (e) =>
+            e.codigo_equipo.toLowerCase().includes(searchLower) ||
+            e.nombre_equipo.toLowerCase().includes(searchLower),
+        );
+        const matchPendiente = caso.pendientes_activos.some((p: any) =>
+          p.descripcion?.toLowerCase().includes(searchLower),
+        );
+        return matchNombre || matchCodigo || matchOrden || matchEquipo || matchPendiente;
+      });
+
+    return {
+      success: true,
+      data: casosFormateados,
+      total: casosFormateados.length,
+    };
+  }
+
+  /**
+   * PATCH /api/ordenes/:id/caso
+   * Actualiza la identidad del Caso Raíz (nombre_caso y/o estado_caso: ABIERTO | CERRADO)
+   */
+  @Patch(':id/caso')
+  @ApiOperation({ summary: 'Actualizar nombre o estado del Caso Raíz' })
+  async updateCasoIdentidad(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { nombre_caso?: string; estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' },
+  ) {
+    const orden = await this.prisma.ordenes_servicio.findUnique({
+      where: { id_orden_servicio: id },
+      select: { id_orden_servicio: true, id_orden_padre: true },
+    });
+
+    if (!orden) {
+      throw new NotFoundException(`Orden #${id} no encontrada`);
+    }
+
+    const rootId = orden.id_orden_padre || orden.id_orden_servicio;
+    const dataUpdate: any = {};
+    if (body.nombre_caso !== undefined) {
+      dataUpdate.nombre_caso = body.nombre_caso.trim() || null;
+    }
+    if (body.estado_caso !== undefined) {
+      dataUpdate.estado_caso = body.estado_caso;
+    }
+
+    const updated = await this.prisma.ordenes_servicio.update({
+      where: { id_orden_servicio: rootId },
+      data: dataUpdate,
+      select: {
+        id_orden_servicio: true,
+        numero_orden: true,
+        nombre_caso: true,
+        estado_caso: true,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Identidad del caso actualizada exitosamente',
+      data: updated,
+    };
+  }
+
+  /**
    * POST /api/ordenes/pendientes-directos
    * Crea un pendiente directo en el Backlog (sin requerir Orden de Servicio previa, o asociado a Equipo/Cliente)
    * Blindaje #1: Garantiza No-Orfandad resolviendo siempre id_cliente.
@@ -2648,6 +2969,8 @@ export class OrdenesController {
       dto.id_orden_padre,
       dto.tipo_visita,
       dto.ids_pendientes_a_resolver,
+      dto.nombre_caso,
+      dto.estado_caso,
     );
 
     const result = await this.commandBus.execute(command);

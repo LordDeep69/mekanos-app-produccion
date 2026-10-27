@@ -33,6 +33,8 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       idOrdenPadre,
       tipoVisita,
       idsPendientesAResolver,
+      nombreCaso,
+      estadoCaso,
     } = command;
 
     // Obtener el primer equipo como principal para la tabla ordenes_servicio (compatibilidad)
@@ -97,6 +99,8 @@ export class CreateOrdenHandler implements ICommandHandler<CreateOrdenCommand> {
       creado_por: command.userId,
       id_orden_padre: idOrdenPadre || null,
       tipo_visita: tipoVisita || 'INICIAL',
+      nombre_caso: nombreCaso || null,
+      estado_caso: estadoCaso || (tipoVisita === 'AISLADA' ? 'AISLADA' : 'ABIERTO'),
     };
 
     const savedOrden = await (this.ordenRepository as any).saveWithEquiposOptimizado(

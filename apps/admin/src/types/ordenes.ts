@@ -91,7 +91,10 @@ export interface HiloCasoVisita {
 
 export interface HiloCaso {
     id_orden_raiz: number;
+    codigo_caso?: string;
     numero_orden_raiz: string;
+    nombre_caso?: string | null;
+    estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string;
     es_multivisita: boolean;
     total_visitas: number;
     inversion_acumulada: number;
@@ -140,8 +143,10 @@ export interface Orden {
     id_cliente?: number;
     id_equipo?: number;
     id_orden_padre?: number | null;
-    tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string | null;
+    tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | 'AISLADA' | string | null;
     numero_visita_caso?: number | null;
+    nombre_caso?: string | null;
+    estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string | null;
     orden_padre?: {
         id_orden_servicio: number;
         numero_orden: string;
@@ -341,7 +346,9 @@ export interface CreateOrdenDto {
     fechaProgramada?: string;
     tecnicoId?: number;         // Opcional: asignar técnico al crear
     idOrdenPadre?: number;      // Orden Raíz/Padre si es visita de seguimiento
-    tipoVisita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string;
+    tipoVisita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | 'AISLADA' | string;
+    nombreCaso?: string;        // Nombre característico del Caso Base (Expediente Raíz)
+    estadoCaso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string;
     idsPendientesAResolver?: number[]; // Pendientes que se resolverán en esta orden
 }
 
@@ -502,6 +509,7 @@ export function getTipoVisitaLabel(tipo?: string | null): string {
         CONTINUACION: 'Continuación Operativa',
         CORRECTIVO_DERIVADO: 'Correctivo Derivado',
         GARANTIA: 'Visita por Garantía',
+        AISLADA: 'Visita Independiente (Aislada)',
     };
     return labels[tipo || 'INICIAL'] || tipo || 'Visita Inicial';
 }

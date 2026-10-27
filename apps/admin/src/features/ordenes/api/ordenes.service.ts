@@ -110,6 +110,8 @@ export async function createOrden(data: CreateOrdenDto): Promise<{ success: bool
         id_tecnico_asignado: data.tecnicoId,
         id_orden_padre: data.idOrdenPadre,
         tipo_visita: data.tipoVisita,
+        nombre_caso: data.nombreCaso,
+        estado_caso: data.estadoCaso,
         ids_pendientes_a_resolver: data.idsPendientesAResolver,
     };
 

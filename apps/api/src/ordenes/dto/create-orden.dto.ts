@@ -73,7 +73,15 @@ export class CreateOrdenDto {
 
   @IsOptional()
   @IsString()
-  tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | string;
+  tipo_visita?: 'INICIAL' | 'CONTINUACION' | 'CORRECTIVO_DERIVADO' | 'GARANTIA' | 'AISLADA' | string;
+
+  @IsOptional()
+  @IsString()
+  nombre_caso?: string;
+
+  @IsOptional()
+  @IsString()
+  estado_caso?: 'ABIERTO' | 'CERRADO' | 'AISLADA' | string;
 
   @IsOptional()
   @IsArray()

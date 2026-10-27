@@ -1633,6 +1633,8 @@ model ordenes_servicio {
   id_orden_padre                                                                           Int?
   tipo_visita                                                                              String?                     @default("INICIAL") @db.VarChar(50)
   numero_visita_caso                                                                       Int?                        @default(1)
+  nombre_caso                                                                              String?                     @db.VarChar(250)
+  estado_caso                                                                              String?                     @default("ABIERTO") @db.VarChar(30)
   actividades_ejecutadas                                                                   actividades_ejecutadas[]
   componentes_usados                                                                       componentes_usados[]
   cotizaciones                                                                             cotizaciones[]

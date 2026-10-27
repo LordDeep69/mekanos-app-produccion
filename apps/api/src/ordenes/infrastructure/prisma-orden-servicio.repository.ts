@@ -450,14 +450,48 @@ export class PrismaOrdenServicioRepository {
       let rootOrderId: number | null = null;
       let numeroVisitaCaso = 1;
       let tipoVisita = orden.tipo_visita || 'INICIAL';
+      let nombreCasoFinal: string | null = orden.nombre_caso?.trim() || null;
+      let estadoCasoFinal: string =
+        orden.estado_caso || (tipoVisita === 'AISLADA' ? 'AISLADA' : 'ABIERTO');
 
       if (orden.id_orden_padre) {
         const ordenOrigen = await tx.ordenes_servicio.findUnique({
           where: { id_orden_servicio: Number(orden.id_orden_padre) },
-          select: { id_orden_servicio: true, id_orden_padre: true },
+          select: {
+            id_orden_servicio: true,
+            id_orden_padre: true,
+            nombre_caso: true,
+            estado_caso: true,
+          },
         });
         if (ordenOrigen) {
           rootOrderId = ordenOrigen.id_orden_padre ?? ordenOrigen.id_orden_servicio;
+          const ordenRaiz =
+            rootOrderId === ordenOrigen.id_orden_servicio
+              ? ordenOrigen
+              : await tx.ordenes_servicio.findUnique({
+                  where: { id_orden_servicio: rootOrderId },
+                  select: {
+                    id_orden_servicio: true,
+                    nombre_caso: true,
+                    estado_caso: true,
+                  },
+                });
+
+          nombreCasoFinal = nombreCasoFinal || ordenRaiz?.nombre_caso || null;
+          estadoCasoFinal = 'ABIERTO';
+
+          // Asegurar que la orden raíz quede marcada como Caso Abierto y tenga nombre_caso
+          if (ordenRaiz && (ordenRaiz.estado_caso !== 'ABIERTO' || (!ordenRaiz.nombre_caso && nombreCasoFinal))) {
+            await tx.ordenes_servicio.update({
+              where: { id_orden_servicio: rootOrderId },
+              data: {
+                estado_caso: 'ABIERTO',
+                ...(nombreCasoFinal && !ordenRaiz.nombre_caso ? { nombre_caso: nombreCasoFinal } : {}),
+              },
+            });
+          }
+
           const totalVisitasHilo = await tx.ordenes_servicio.count({
             where: {
               OR: [
@@ -471,6 +505,27 @@ export class PrismaOrdenServicioRepository {
             tipoVisita = 'CONTINUACION';
           }
         }
+      } else if (estadoCasoFinal === 'ABIERTO' && !nombreCasoFinal) {
+        // Si se abre como un Caso Raíz (Opción A) y no enviaron título explícito, generar uno descriptivo
+        const [tipoServ, eqPrincipal] = await Promise.all([
+          orden.id_tipo_servicio
+            ? tx.tipos_servicio.findUnique({
+                where: { id_tipo_servicio: Number(orden.id_tipo_servicio) },
+                select: { nombre_tipo: true },
+              })
+            : Promise.resolve(null),
+          orden.id_equipo
+            ? tx.equipos.findUnique({
+                where: { id_equipo: Number(orden.id_equipo) },
+                select: { codigo_equipo: true, nombre_equipo: true },
+              })
+            : Promise.resolve(null),
+        ]);
+        const descLimpia = orden.descripcion_inicial?.trim()?.split('\n')[0]?.slice(0, 140);
+        const eqTag = eqPrincipal?.codigo_equipo || eqPrincipal?.nombre_equipo || '';
+        nombreCasoFinal =
+          descLimpia ||
+          `${tipoServ?.nombre_tipo || 'Expediente Técnico'}${eqTag ? ` — ${eqTag}` : ''}`;
       }
 
       // 1. Crear la cabecera de la orden
@@ -495,6 +550,8 @@ export class PrismaOrdenServicioRepository {
           id_orden_padre: rootOrderId,
           tipo_visita: tipoVisita,
           numero_visita_caso: numeroVisitaCaso,
+          nombre_caso: nombreCasoFinal,
+          estado_caso: estadoCasoFinal,
           fecha_modificacion: new Date(), // ✅ FIX 23-ENE-2026: Sync delta necesita esta fecha
         },
         // ✅ INCLUDE LITE: Solo datos esenciales para respuesta inmediata
@@ -965,6 +1022,9 @@ export class PrismaOrdenServicioRepository {
         id_orden_padre: true,
         tipo_visita: true,
         numero_visita_caso: true,
+        nombre_caso: true,
+        estado_caso: true,
+        descripcion_inicial: true,
         fecha_programada: true,
         fecha_inicio_real: true,
         fecha_fin_real: true,
@@ -1085,10 +1145,26 @@ export class PrismaOrdenServicioRepository {
       },
     });
 
+    const numRaiz = visitas[0]?.numero_orden || orden.numero_orden;
+    const codigoCaso = numRaiz ? numRaiz.replace(/^OS-/, 'CASO-') : `CASO-${rootOrderId}`;
+    const nombreCasoRaiz =
+      visitas[0]?.nombre_caso ||
+      orden.nombre_caso ||
+      visitas[0]?.descripcion_inicial ||
+      orden.descripcion_inicial ||
+      null;
+    const estadoCasoRaiz = visitas[0]?.estado_caso || orden.estado_caso || 'ABIERTO';
+
     return {
       id_orden_raiz: rootOrderId,
-      numero_orden_raiz: visitas[0]?.numero_orden || orden.numero_orden,
-      es_multivisita: visitas.length > 1 || Boolean(orden.id_orden_padre),
+      codigo_caso: codigoCaso,
+      numero_orden_raiz: numRaiz,
+      nombre_caso: nombreCasoRaiz,
+      estado_caso: estadoCasoRaiz,
+      es_multivisita:
+        visitas.length > 1 ||
+        Boolean(orden.id_orden_padre) ||
+        (estadoCasoRaiz === 'ABIERTO' && Boolean(visitas[0]?.nombre_caso || orden.nombre_caso)),
       total_visitas: visitas.length,
       inversion_acumulada: visitas.reduce((acc, v) => acc + Number(v.total_general || 0), 0),
       pendientes_totales: pendientesCaso.length,
