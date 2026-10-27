@@ -1,12 +1,11 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:syncfusion_flutter_signaturepad/signaturepad.dart';
 
 import '../../../core/errors/user_friendly_error.dart';
 import '../data/firma_service.dart';
+import 'signature_canvas.dart';
 
 /// BottomSheet para capturar firma digital
 ///
@@ -36,7 +35,7 @@ class FirmaBottomSheet extends ConsumerStatefulWidget {
 }
 
 class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
-  final GlobalKey<SfSignaturePadState> _signaturePadKey = GlobalKey();
+  final SignatureCanvasController _canvasController = SignatureCanvasController();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _cargoController = TextEditingController();
 
@@ -45,14 +44,29 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
   bool _guardando = false;
 
   @override
+  void initState() {
+    super.initState();
+    _canvasController.addListener(_onCanvasChange);
+  }
+
+  void _onCanvasChange() {
+    final tiene = _firmaBytes != null || _canvasController.isNotEmpty;
+    if (_firmaDibujada != tiene) {
+      setState(() => _firmaDibujada = tiene);
+    }
+  }
+
+  @override
   void dispose() {
+    _canvasController.removeListener(_onCanvasChange);
+    _canvasController.dispose();
     _nombreController.dispose();
     _cargoController.dispose();
     super.dispose();
   }
 
   void _limpiarCanvas() {
-    _signaturePadKey.currentState?.clear();
+    _canvasController.clear();
     setState(() {
       _firmaDibujada = false;
       _firmaBytes = null;
@@ -79,20 +93,13 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
     setState(() => _guardando = true);
 
     try {
-      Uint8List pngBytes;
-      if (_firmaBytes != null) {
-        pngBytes = _firmaBytes!;
-      } else {
-        // Obtener imagen del canvas
-        final ui.Image image = await _signaturePadKey.currentState!.toImage();
-        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      Uint8List? pngBytes = _firmaBytes;
+      pngBytes ??= await _canvasController.toPngBytes(pixelRatio: 2.5);
 
-        if (byteData == null) {
-          _mostrarError('Error al procesar la firma');
-          setState(() => _guardando = false);
-          return;
-        }
-        pngBytes = byteData.buffer.asUint8List();
+      if (pngBytes == null) {
+        _mostrarError('Error al procesar la firma. Por favor intente nuevamente.');
+        setState(() => _guardando = false);
+        return;
       }
 
       // Guardar firma
@@ -109,7 +116,6 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
 
       if (idFirma != null && mounted) {
         Navigator.of(context).pop(true); // Retornar true indica éxito
-        // ✅ FIX 29-ENE-2026: Reducir duración de 4s (default) a 1s
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ Firma ${widget.tipoFirma.toLowerCase()} guardada'),
@@ -147,9 +153,9 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         children: [
@@ -244,7 +250,7 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
                       ],
                     ),
 
-                  // Canvas de firma
+                  // Canvas de firma con soporte Deshacer / Avanzar
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: colorPrimario, width: 2),
@@ -252,66 +258,11 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
                     ),
                     child: Column(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorPrimario.withValues(alpha: 0.1),
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(10),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.draw, color: colorPrimario, size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Dibuje su firma aquí',
-                                style: TextStyle(
-                                  color: colorPrimario,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const Spacer(),
-                              // ✅ BOTÓN EXPANDIR (Pantalla Completa)
-                              InkWell(
-                                onTap: _abrirFirmaFullscreen,
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: colorPrimario,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.open_in_full,
-                                        size: 14,
-                                        color: Colors.white,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'EXPANDIR',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                        SignatureToolbar(
+                          controller: _canvasController,
+                          colorPrimario: colorPrimario,
+                          onExpandir: _abrirFirmaFullscreen,
+                          showExpand: true,
                         ),
                         SizedBox(
                           height: 200,
@@ -348,24 +299,29 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
                                     ),
                                   ],
                                 )
-                              : SfSignaturePad(
-                                  key: _signaturePadKey,
-                                  backgroundColor: Colors.white,
-                                  strokeColor: Colors.black,
-                                  minimumStrokeWidth: 1.5,
-                                  maximumStrokeWidth: 4.0,
-                                  onDrawStart: () {
-                                    setState(() {
-                                      _firmaDibujada = true;
-                                    });
-                                    return false;
-                                  },
+                              : SignatureCanvasWidget(
+                                  controller: _canvasController,
                                 ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+
+                  // Indicación sobre las flechas de deshacer y avanzar
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Firme por tramos. Use las flechas ↩ y ↪ en la barra superior del recuadro para retroceder o avanzar trazos.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
 
                   // Indicador de firma dibujada
                   if (_firmaDibujada)
@@ -397,7 +353,7 @@ class _FirmaBottomSheetState extends ConsumerState<FirmaBottomSheet> {
                         ],
                       ),
                     ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
 
                   // Botones de acción
                   Row(
@@ -496,131 +452,150 @@ class FirmaFullscreenScreen extends StatefulWidget {
 }
 
 class _FirmaFullscreenScreenState extends State<FirmaFullscreenScreen> {
-  final GlobalKey<SfSignaturePadState> _padKey = GlobalKey();
-  bool _tieneTrazo = false;
+  final SignatureCanvasController _canvasController = SignatureCanvasController();
+
+  @override
+  void initState() {
+    super.initState();
+    _canvasController.strokeWidth = 3.5;
+  }
+
+  @override
+  void dispose() {
+    _canvasController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      appBar: AppBar(
-        backgroundColor: widget.colorPrimario,
-        foregroundColor: Colors.white,
-        title: Text(
-          widget.titulo,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              _padKey.currentState?.clear();
-              setState(() => _tieneTrazo = false);
-            },
-            icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
-            label: const Text('Limpiar', style: TextStyle(color: Colors.white)),
-          ),
-          const SizedBox(width: 4),
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: ElevatedButton.icon(
-              onPressed: _tieneTrazo
-                  ? () async {
-                      try {
-                        final nav = Navigator.of(context);
-                        final ui.Image img =
-                            await _padKey.currentState!.toImage();
-                        final byteData =
-                            await img.toByteData(format: ui.ImageByteFormat.png);
-                        if (!mounted) return;
-                        if (byteData != null) {
-                          nav.pop(byteData.buffer.asUint8List());
+    return AnimatedBuilder(
+      animation: _canvasController,
+      builder: (context, _) {
+        final tieneTrazo = _canvasController.isNotEmpty;
+
+        return Scaffold(
+          backgroundColor: Colors.grey.shade100,
+          appBar: AppBar(
+            backgroundColor: widget.colorPrimario,
+            foregroundColor: Colors.white,
+            title: Text(
+              widget.titulo,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            actions: [
+              // Flecha Deshacer (retroceder)
+              IconButton(
+                tooltip: 'Deshacer trazo',
+                icon: const Icon(Icons.undo, color: Colors.white),
+                onPressed: _canvasController.canUndo ? _canvasController.undo : null,
+              ),
+
+              // Flecha Avanzar (rehacer)
+              IconButton(
+                tooltip: 'Avanzar trazo',
+                icon: const Icon(Icons.redo, color: Colors.white),
+                onPressed: _canvasController.canRedo ? _canvasController.redo : null,
+              ),
+
+              // Limpiar
+              IconButton(
+                tooltip: 'Limpiar todo',
+                icon: const Icon(Icons.delete_sweep, color: Colors.white),
+                onPressed: _canvasController.isNotEmpty ? _canvasController.clear : null,
+              ),
+
+              const SizedBox(width: 4),
+
+              // Botón Listo
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ElevatedButton.icon(
+                  onPressed: tieneTrazo
+                      ? () async {
+                          try {
+                            final nav = Navigator.of(context);
+                            final bytes = await _canvasController.toPngBytes(pixelRatio: 2.5);
+                            if (!mounted) return;
+                            if (bytes != null) {
+                              nav.pop(bytes);
+                            }
+                          } catch (e) {
+                            debugPrint('Error capturando firma expandida: $e');
+                          }
                         }
-                      } catch (e) {
-                        debugPrint('Error capturando firma expandida: $e');
-                      }
-                    }
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: widget.colorPrimario,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: widget.colorPrimario,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text(
+                    'Listo',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
-              icon: const Icon(Icons.check, size: 18),
-              label: const Text(
-                'Listo',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: widget.colorPrimario.withValues(alpha: 0.08),
-              child: Row(
-                children: [
-                  Icon(Icons.touch_app, color: widget.colorPrimario, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Use toda el área de la pantalla para realizar una firma clara.',
-                      style: TextStyle(
-                        color: widget.colorPrimario,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+          body: SafeArea(
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: widget.colorPrimario.withValues(alpha: 0.08),
+                  child: Row(
+                    children: [
+                      Icon(Icons.touch_app, color: widget.colorPrimario, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Dibuje por tramos. Use las flechas de la barra superior para retroceder o avanzar en los trazos de su firma.',
+                          style: TextStyle(
+                            color: widget.colorPrimario,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: widget.colorPrimario.withValues(alpha: 0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SignatureCanvasWidget(
+                        controller: _canvasController,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: widget.colorPrimario.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: SfSignaturePad(
-                    key: _padKey,
-                    backgroundColor: Colors.white,
-                    strokeColor: Colors.black,
-                    minimumStrokeWidth: 2.0,
-                    maximumStrokeWidth: 5.0,
-                    onDrawStart: () {
-                      if (!_tieneTrazo) {
-                        setState(() => _tieneTrazo = true);
-                      }
-                      return false;
-                    },
-                  ),
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
-

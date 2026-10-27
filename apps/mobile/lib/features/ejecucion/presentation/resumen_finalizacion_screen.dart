@@ -13,6 +13,7 @@ import '../../firmas/data/firma_service.dart';
 import '../../firmas/presentation/firmas_section.dart';
 import '../data/ejecucion_service.dart';
 import 'pendientes_orden_widget.dart';
+import 'time_picker_sheet.dart';
 
 /// Pantalla de Resumen y Finalización de Orden - NIVEL ORDEN (no equipo)
 ///
@@ -797,6 +798,15 @@ class _ResumenFinalizacionScreenState
   }
 
   /// Formatea TimeOfDay a HH:mm (24h) para enviar al backend
+  String _formatTimeWithPeriod(TimeOfDay t) {
+    final h24 = _formatTimeOfDay24h(t);
+    final isPm = t.hour >= 12;
+    final h12 = t.hour == 0 ? 12 : (t.hour > 12 ? t.hour - 12 : t.hour);
+    final m12 = t.minute.toString().padLeft(2, '0');
+    final p = isPm ? 'p. m.' : 'a. m.';
+    return '$h24 ($h12:$m12 $p)';
+  }
+
   String _formatTimeOfDay24h(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
@@ -809,18 +819,27 @@ class _ResumenFinalizacionScreenState
     return showModalBottomSheet<TimeOfDay>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _DrumTimePicker(initialTime: initialTime, title: title),
+      builder: (ctx) => TimePickerSheet(initialTime: initialTime, title: title),
     );
   }
 
   /// Muestra diálogo para capturar datos finales y sincronizar
   Future<void> _mostrarDialogoFinalizacion() async {
+    final db = ref.read(databaseProvider);
+    final ordenLocal = await (db.select(
+      db.ordenes,
+    )..where((o) => o.idLocal.equals(widget.idOrdenLocal))).getSingleOrNull();
+
     final now = DateTime.now();
+    final fechaInicioLocal = ordenLocal?.fechaInicio;
+    final fechaFinLocal = ordenLocal?.fechaFin;
 
     TimeOfDay horaEntrada = TimeOfDay.fromDateTime(
-      now.subtract(const Duration(hours: 1)),
+      fechaInicioLocal ?? now.subtract(const Duration(hours: 1)),
     );
-    TimeOfDay horaSalida = TimeOfDay.fromDateTime(now);
+    TimeOfDay horaSalida = (ordenLocal?.permiteEdicionTecnico == true && fechaFinLocal != null)
+        ? TimeOfDay.fromDateTime(fechaFinLocal)
+        : TimeOfDay.fromDateTime(now);
 
     final razonFallaController = TextEditingController(
       text: _razonFallaActual ?? '',
@@ -850,7 +869,7 @@ class _ResumenFinalizacionScreenState
                 ),
                 const SizedBox(height: 16),
 
-                // ── Hora de Entrada (Drum Picker) ──
+                // ── Hora de Entrada ──
                 InkWell(
                   onTap: () async {
                     final picked = await _showDrumTimePicker(
@@ -863,21 +882,130 @@ class _ResumenFinalizacionScreenState
                     }
                   },
                   child: InputDecorator(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Hora de Entrada',
-                      prefixIcon: Icon(Icons.login),
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.access_time, color: Colors.blue),
+                      prefixIcon: const Icon(Icons.login),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.edit_calendar, color: Colors.blue),
+                        onPressed: () async {
+                          final picked = await _showDrumTimePicker(ctx, horaEntrada, 'HORA DE ENTRADA');
+                          if (picked != null) setDialogState(() => horaEntrada = picked);
+                        },
+                      ),
                     ),
                     child: Text(
-                      _formatTimeOfDay24h(horaEntrada),
-                      style: const TextStyle(fontSize: 16),
+                      _formatTimeWithPeriod(horaEntrada),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    if (fechaInicioLocal != null)
+                      ActionChip(
+                        avatar: const Icon(Icons.history, size: 14),
+                        label: const Text('Inicio orden', style: TextStyle(fontSize: 11)),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        onPressed: () => setDialogState(
+                          () => horaEntrada = TimeOfDay.fromDateTime(fechaInicioLocal),
+                        ),
+                      ),
+                    ActionChip(
+                      avatar: const Icon(Icons.access_time, size: 14),
+                      label: const Text('Ahora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () => setDialogState(
+                        () => horaEntrada = TimeOfDay.now(),
+                      ),
+                    ),
+                    ActionChip(
+                      label: const Text('-1 hora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        final n = TimeOfDay.now();
+                        setDialogState(
+                          () => horaEntrada = TimeOfDay(
+                            hour: (n.hour - 1 + 24) % 24,
+                            minute: n.minute,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
 
-                // ── Hora de Salida (Drum Picker) ──
+                // ── Duración estimada entre Entrada y Salida ──
+                Builder(
+                  builder: (_) {
+                    final totE = horaEntrada.hour * 60 + horaEntrada.minute;
+                    final totS = horaSalida.hour * 60 + horaSalida.minute;
+                    final diff = totS - totE;
+                    if (diff > 0) {
+                      final h = diff ~/ 60;
+                      final m = diff % 60;
+                      final durStr = h > 0 ? (m > 0 ? '${h}h ${m}m' : '${h}h') : '${m}m';
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.timer_outlined, size: 14, color: Colors.green.shade700),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Duración estimada: $durStr',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else if (diff < 0) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade800),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Salida anterior a entrada (servicio nocturno)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+
+                // ── Hora de Salida ──
                 InkWell(
                   onTap: () async {
                     final picked = await _showDrumTimePicker(
@@ -890,17 +1018,66 @@ class _ResumenFinalizacionScreenState
                     }
                   },
                   child: InputDecorator(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Hora de Salida',
-                      prefixIcon: Icon(Icons.logout),
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.access_time, color: Colors.blue),
+                      prefixIcon: const Icon(Icons.logout),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.edit_calendar, color: Colors.blue),
+                        onPressed: () async {
+                          final picked = await _showDrumTimePicker(ctx, horaSalida, 'HORA DE SALIDA');
+                          if (picked != null) setDialogState(() => horaSalida = picked);
+                        },
+                      ),
                     ),
                     child: Text(
-                      _formatTimeOfDay24h(horaSalida),
-                      style: const TextStyle(fontSize: 16),
+                      _formatTimeWithPeriod(horaSalida),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                   ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.access_time, size: 14),
+                      label: const Text('Ahora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () => setDialogState(
+                        () => horaSalida = TimeOfDay.now(),
+                      ),
+                    ),
+                    ActionChip(
+                      label: const Text('+30 min', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        final tot = horaEntrada.hour * 60 + horaEntrada.minute + 30;
+                        setDialogState(
+                          () => horaSalida = TimeOfDay(
+                            hour: (tot ~/ 60) % 24,
+                            minute: tot % 60,
+                          ),
+                        );
+                      },
+                    ),
+                    ActionChip(
+                      label: const Text('+1 hora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        final tot = horaEntrada.hour * 60 + horaEntrada.minute + 60;
+                        setDialogState(
+                          () => horaSalida = TimeOfDay(
+                            hour: (tot ~/ 60) % 24,
+                            minute: tot % 60,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
 
                 if (_esCorrectivo) ...[
@@ -1216,8 +1393,11 @@ class _ResumenSyncProgressDialog extends ConsumerWidget {
               ],
               _buildStep(SyncStep.preparando, progress, Icons.settings),
               _buildStep(SyncStep.validando, progress, Icons.verified_user),
+              _buildStep(SyncStep.obteniendo_orden, progress, Icons.cloud_download),
+              _buildStep(SyncStep.limpieza_residuales, progress, Icons.cleaning_services),
               _buildStep(SyncStep.evidencias, progress, Icons.photo_camera),
               _buildStep(SyncStep.firmas, progress, Icons.draw),
+              _buildStep(SyncStep.actualizando_estado, progress, Icons.cloud_done),
               if (progress.pasoActual == SyncStep.error &&
                   progress.mensajeError != null) ...[
                 const SizedBox(height: 16),

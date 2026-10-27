@@ -176,12 +176,14 @@ Future<SseReadResult> leerEventosSse(
 
   deadlineTimer = Timer(limiteTotal, abortarPorLimite);
 
-  sub = stream
+  try {
+    sub = stream
+      .cast<List<int>>()
       .transform(const Utf8Decoder(allowMalformed: true))
       .transform(const LineSplitter())
       .listen(
         (line) {
-          rearmarStall();
+            rearmarStall();
 
           final l = line.trimRight();
           if (l.isEmpty) {
@@ -215,7 +217,13 @@ Future<SseReadResult> leerEventosSse(
         cancelOnError: true,
       );
 
-  rearmarStall();
+    rearmarStall();
+  } catch (e) {
+    debugSse('❌ [SSE] Error al iniciar escucha del stream: $e');
+    errorStream = true;
+    errorTexto = e.toString();
+    terminar();
+  }
   return completer.future;
 }
 

@@ -44,6 +44,7 @@ SyncStep? syncStepFromBackend(String stepName) {
     'enviando_email': SyncStep.enviando_email,
     'actualizando_estado': SyncStep.actualizando_estado,
     'completado': SyncStep.completado,
+    'result': SyncStep.completado,
     'error': SyncStep.error,
   };
   return mapping[stepName];
@@ -200,17 +201,20 @@ class SyncProgressNotifier extends StateNotifier<SyncProgress> {
         pasosCompletados: state.pasosCompletados,
         mensajeActual: message,
         ordenId: state.ordenId,
-        porcentaje: progress,
+        porcentaje: step == SyncStep.completado ? 100 : progress,
       );
     } else if (status == 'completed') {
       // Paso completado - marcar como completado
       final nuevosCompletados = {...state.pasosCompletados, step};
+      final todosCompletados = step == SyncStep.completado
+          ? {...nuevosCompletados, ...pasosVisibles}
+          : nuevosCompletados;
       state = SyncProgress(
         pasoActual: step,
-        pasosCompletados: nuevosCompletados,
+        pasosCompletados: todosCompletados,
         mensajeActual: message,
         ordenId: state.ordenId,
-        porcentaje: progress,
+        porcentaje: step == SyncStep.completado ? 100 : progress,
       );
     } else if (status == 'error') {
       // ✅ 26-OCT-2026: el backend puede enviar `err.message` con detalles

@@ -21,6 +21,7 @@ import '../../settings/presentation/configuracion_screen.dart'
 import '../data/ejecucion_service.dart';
 import '../../../core/telemetria/telemetria_service.dart';
 import 'pendientes_orden_widget.dart';
+import 'time_picker_sheet.dart';
 
 /// Pantalla de Ejecución de Orden - RUTA 6
 /// TabBar: Checklist | Mediciones | Resumen
@@ -3869,7 +3870,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) =>
-          _DrumTimePicker(initialTime: initialTime, title: helpText),
+          TimePickerSheet(initialTime: initialTime, title: helpText),
     );
   }
 
@@ -3989,7 +3990,7 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                 ),
                 const SizedBox(height: 16),
 
-                // ── Hora de Entrada (TimePicker) ──
+                // ── Hora de Entrada ──
                 InkWell(
                   onTap: () async {
                     final picked = await _showTimePickerWithFormat(
@@ -4002,21 +4003,130 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                     }
                   },
                   child: InputDecorator(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Hora de Entrada',
-                      prefixIcon: Icon(Icons.login),
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.access_time, color: Colors.blue),
+                      prefixIcon: const Icon(Icons.login),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.edit_calendar, color: Colors.blue),
+                        onPressed: () async {
+                          final picked = await _showTimePickerWithFormat(ctx, horaEntrada, 'HORA DE ENTRADA');
+                          if (picked != null) setDialogState(() => horaEntrada = picked);
+                        },
+                      ),
                     ),
                     child: Text(
                       _formatTimeOfDayDisplay(ctx, horaEntrada),
-                      style: const TextStyle(fontSize: 16),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    if (fechaInicioLocal != null)
+                      ActionChip(
+                        avatar: const Icon(Icons.history, size: 14),
+                        label: const Text('Inicio orden', style: TextStyle(fontSize: 11)),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        onPressed: () => setDialogState(
+                          () => horaEntrada = TimeOfDay.fromDateTime(fechaInicioLocal),
+                        ),
+                      ),
+                    ActionChip(
+                      avatar: const Icon(Icons.access_time, size: 14),
+                      label: const Text('Ahora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () => setDialogState(
+                        () => horaEntrada = TimeOfDay.now(),
+                      ),
+                    ),
+                    ActionChip(
+                      label: const Text('-1 hora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        final n = TimeOfDay.now();
+                        setDialogState(
+                          () => horaEntrada = TimeOfDay(
+                            hour: (n.hour - 1 + 24) % 24,
+                            minute: n.minute,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
 
-                // ── Hora de Salida (TimePicker) ──
+                // ── Duración estimada entre Entrada y Salida ──
+                Builder(
+                  builder: (_) {
+                    final totE = horaEntrada.hour * 60 + horaEntrada.minute;
+                    final totS = horaSalida.hour * 60 + horaSalida.minute;
+                    final diff = totS - totE;
+                    if (diff > 0) {
+                      final h = diff ~/ 60;
+                      final m = diff % 60;
+                      final durStr = h > 0 ? (m > 0 ? '${h}h ${m}m' : '${h}h') : '${m}m';
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.timer_outlined, size: 14, color: Colors.green.shade700),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Duración estimada: $durStr',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else if (diff < 0) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade800),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Salida anterior a entrada (servicio nocturno)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+
+                // ── Hora de Salida ──
                 InkWell(
                   onTap: () async {
                     final picked = await _showTimePickerWithFormat(
@@ -4029,17 +4139,66 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
                     }
                   },
                   child: InputDecorator(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Hora de Salida',
-                      prefixIcon: Icon(Icons.logout),
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.access_time, color: Colors.blue),
+                      prefixIcon: const Icon(Icons.logout),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.edit_calendar, color: Colors.blue),
+                        onPressed: () async {
+                          final picked = await _showTimePickerWithFormat(ctx, horaSalida, 'HORA DE SALIDA');
+                          if (picked != null) setDialogState(() => horaSalida = picked);
+                        },
+                      ),
                     ),
                     child: Text(
                       _formatTimeOfDayDisplay(ctx, horaSalida),
-                      style: const TextStyle(fontSize: 16),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                   ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.access_time, size: 14),
+                      label: const Text('Ahora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () => setDialogState(
+                        () => horaSalida = TimeOfDay.now(),
+                      ),
+                    ),
+                    ActionChip(
+                      label: const Text('+30 min', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        final tot = horaEntrada.hour * 60 + horaEntrada.minute + 30;
+                        setDialogState(
+                          () => horaSalida = TimeOfDay(
+                            hour: (tot ~/ 60) % 24,
+                            minute: tot % 60,
+                          ),
+                        );
+                      },
+                    ),
+                    ActionChip(
+                      label: const Text('+1 hora', style: TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        final tot = horaEntrada.hour * 60 + horaEntrada.minute + 60;
+                        setDialogState(
+                          () => horaSalida = TimeOfDay(
+                            hour: (tot ~/ 60) % 24,
+                            minute: tot % 60,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
 
                 if (_esCorrectivo) ...[
@@ -4903,6 +5062,16 @@ class _SyncProgressDialog extends ConsumerWidget {
                 icon: Icons.verified_user,
               ),
               _buildStepItem(
+                step: SyncStep.obteniendo_orden,
+                progress: progress,
+                icon: Icons.cloud_download,
+              ),
+              _buildStepItem(
+                step: SyncStep.limpieza_residuales,
+                progress: progress,
+                icon: Icons.cleaning_services,
+              ),
+              _buildStepItem(
                 step: SyncStep.evidencias,
                 progress: progress,
                 icon: Icons.photo_camera,
@@ -4911,6 +5080,11 @@ class _SyncProgressDialog extends ConsumerWidget {
                 step: SyncStep.firmas,
                 progress: progress,
                 icon: Icons.draw,
+              ),
+              _buildStepItem(
+                step: SyncStep.actualizando_estado,
+                progress: progress,
+                icon: Icons.cloud_done,
               ),
 
               // Mensaje de error si hay

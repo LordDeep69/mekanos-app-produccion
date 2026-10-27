@@ -67,3 +67,4 @@ temp/
 .vercel
 uploads/
 scratch/
+*.apk

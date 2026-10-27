@@ -1,7 +1,7 @@
 name: mekanos_mobile
 description: "App móvil para técnicos Mekanos S.A.S - Gestión de órdenes de servicio"
 publish_to: 'none'
-version: 1.1.2+4
+version: 1.1.2+5
 
 environment:
   sdk: ^3.10.1
