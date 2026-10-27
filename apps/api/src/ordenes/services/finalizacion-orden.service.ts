@@ -430,10 +430,12 @@ export class FinalizacionOrdenService {
             if (
                 user &&
                 !user.esAdmin &&
+                orden.id_tecnico_asignado != null &&
+                user.idEmpleado != null &&
                 orden.id_tecnico_asignado !== user.idEmpleado
             ) {
                 throw new ForbiddenException(
-                    'La orden no está asignada al técnico autenticado; edición no autorizada.',
+                    'La orden está asignada a otro técnico; edición no autorizada.',
                 );
             }
 
@@ -1015,7 +1017,13 @@ export class FinalizacionOrdenService {
         // Validar que la orden esté en estado que permita finalización.
         // ✅ 19-OCT-2026: COMPLETADA ya NO es un permiso implícito. La resubida
         // desde móvil exige una autorización administrativa explícita y vigente.
-        const estadosPermitidos = ['EN_PROCESO', 'EN_EJECUCION', 'PENDIENTE'];
+        const estadosPermitidos = [
+            'EN_PROCESO',
+            'EN_EJECUCION',
+            'PENDIENTE',
+            'PROGRAMADA',
+            'ASIGNADA',
+        ];
         const codigoEstado = orden.estados_orden?.codigo_estado || '';
         const esResubidaAutorizada =
             codigoEstado === 'COMPLETADA' &&
@@ -1032,7 +1040,7 @@ export class FinalizacionOrdenService {
             }
 
             throw new BadRequestException(
-                `La orden está en estado ${orden.estados_orden?.nombre_estado}, no puede finalizarse`,
+                `La orden está en estado ${orden.estados_orden?.nombre_estado || codigoEstado}, no puede finalizarse`,
             );
         }
 

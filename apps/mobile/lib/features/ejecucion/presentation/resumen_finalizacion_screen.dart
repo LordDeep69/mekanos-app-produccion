@@ -1005,7 +1005,12 @@ class _ResumenFinalizacionScreenState
       if (resultado.success) {
         _mostrarExitoOnline(resultado);
       } else {
-        _mostrarError(resultado.mensaje);
+        final errorTexto = (resultado.error != null &&
+                resultado.error!.trim().isNotEmpty &&
+                !resultado.mensaje.contains(resultado.error!.trim()))
+            ? '${resultado.mensaje}\n\nDetalle: ${resultado.error}'
+            : resultado.mensaje;
+        _mostrarError(errorTexto);
       }
     } catch (e) {
       Navigator.of(context).pop(); // Cerrar loading

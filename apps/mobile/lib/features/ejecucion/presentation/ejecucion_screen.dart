@@ -202,17 +202,19 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
             _codigoTipoServicio.contains('BOM') ||
             nombreTipo.contains('BOMBA') ||
             numero.contains('BOM');
+
+        // ✅ SEGUIMIENTO EN TIEMPO REAL: Iniciar telemetría / heartbeat para Portal Admin
+        if (orden.idBackend != null) {
+          ref.read(telemetriaServiceProvider).startHeartbeat(
+            idOrdenBackend: orden.idBackend!,
+            numeroOrden: _numeroOrden ?? 'Sin número',
+            actividadInicial:
+                'Checklist: $_completadas/$_total | Mediciones: $_medicionesConValor/$_totalMediciones',
+          );
+        }
       } else {
         _esCorrectivo = false;
         _esBomba = false;
-      // ✅ SEGUIMIENTO EN TIEMPO REAL: Iniciar telemetría / heartbeat para Portal Admin
-      if (orden?.idBackend != null) {
-        ref.read(telemetriaServiceProvider).startHeartbeat(
-          idOrdenBackend: orden!.idBackend!,
-          numeroOrden: _numeroOrden ?? 'Sin número',
-          actividadInicial:
-              'Checklist: $_completadas/$_total | Mediciones: $_medicionesConValor/$_totalMediciones',
-        );
       }
     } catch (e) {
       print('❌ Error cargando datos: $e');
@@ -4193,7 +4195,12 @@ class _EjecucionScreenState extends ConsumerState<EjecucionScreen>
         }
         await _mostrarExitoOnline(resultado);
       } else {
-        _mostrarError(resultado.mensaje);
+        final errorTexto = (resultado.error != null &&
+                resultado.error!.trim().isNotEmpty &&
+                !resultado.mensaje.contains(resultado.error!.trim()))
+            ? '${resultado.mensaje}\n\nDetalle: ${resultado.error}'
+            : resultado.mensaje;
+        _mostrarError(errorTexto);
       }
     } catch (e) {
       if (!mounted) return;

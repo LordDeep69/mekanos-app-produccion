@@ -604,6 +604,19 @@ class SyncUploadService {
 
       // 9. CON CONEXIÓN - Intentar sync con streaming de progreso
       try {
+        // ✅ Asegurar que la orden esté EN_PROCESO en el backend
+        // Si el técnico trabajó offline o la transición previa falló,
+        // la orden puede seguir PROGRAMADA o ASIGNADA en el servidor.
+        if (!modoResubida) {
+          try {
+            await _apiClient.put('/ordenes/$idOrdenBackend/iniciar');
+          } catch (e) {
+            debugPrint(
+              '⚠️ [SYNC] Error notificando inicio en servidor (puede ya estar en proceso): $e',
+            );
+          }
+        }
+
         // ✅ 19-DIC-2025: Usar endpoint con SSE para progreso en tiempo real
         final response = await _enviarConProgresoSSE(
           idOrdenBackend: idOrdenBackend,
@@ -755,7 +768,8 @@ class SyncUploadService {
           return SyncUploadResult(
             success: false,
             mensaje:
-                'No se pudo confirmar la orden con el servidor.\n\n'
+                'No se pudo confirmar la orden con el servidor:\n\n'
+                '$motivoServidor\n\n'
                 'Se reintentará automáticamente en segundo plano.',
             error: motivoServidor,
             guardadoOffline: false,
@@ -859,12 +873,14 @@ class SyncUploadService {
           'No se pudo confirmar la sincronización. '
           'Se reintentará automáticamente.',
         );
+        final motivoConexion = mensajeAmigable(e, contexto: 'sincronizar la orden');
         return SyncUploadResult(
           success: false,
           mensaje:
-              'Error de conexión durante la sincronización.\n\n'
+              'Error de conexión durante la sincronización:\n\n'
+              '$motivoConexion\n\n'
               'Se reintentará automáticamente en segundo plano.',
-          error: mensajeAmigable(e, contexto: 'sincronizar la orden'),
+          error: motivoConexion,
           guardadoOffline: false,
         );
       }
@@ -907,7 +923,8 @@ class SyncUploadService {
         return SyncUploadResult(
           success: false,
           mensaje:
-              'No se pudo confirmar la sincronización.\n\n'
+              'No se pudo confirmar la sincronización:\n\n'
+              '$mensaje\n\n'
               'Se reintentará automáticamente en segundo plano.',
           error: mensaje,
           guardadoOffline: true,
