@@ -128,14 +128,27 @@ export const getTiposServicio = async (params?: {
     categoria?: string;
     tipoEquipoId?: number;
 }): Promise<TipoServicio[]> => {
-    const response = await apiClient.get<PaginatedResponse<TipoServicio>>('/tipos-servicio', {
+    const response = await apiClient.get<PaginatedResponse<TipoServicio> | TipoServicio[]>('/tipos-servicio', {
         params: {
             activo: params?.activo,
             categoria: params?.categoria,
             tipoEquipoId: params?.tipoEquipoId
         }
     });
-    return response.data.data || [];
+
+    // El backend responde { success, data: [], meta }; toleramos también un array plano.
+    const payload = response.data as PaginatedResponse<TipoServicio> | TipoServicio[];
+
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+    if (payload && Array.isArray(payload.data)) {
+        return payload.data;
+    }
+
+    // Respuesta no reconocida (cuerpo vacío por 304, HTML de error, etc.):
+    // fallar de forma visible en lugar de devolver una lista vacía silenciosa.
+    throw new Error('Respuesta inválida del catálogo de tipos de servicio');
 };
 
 export async function getTipoServicio(id: number): Promise<TipoServicio> {

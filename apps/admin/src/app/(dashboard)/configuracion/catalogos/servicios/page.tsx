@@ -24,7 +24,7 @@ import {
     Wrench,
     X
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { calculateSmartMatchScore } from '@/lib/search-utils';
 
 export default function CatalogoServiciosComercialesPage() {
@@ -38,11 +38,26 @@ export default function CatalogoServiciosComercialesPage() {
         limit: 100,
     });
 
-    const { data: tiposServicio } = useTiposServicio({ activo: true });
+    const {
+        data: tiposServicio,
+        isLoading: loadingTipos,
+        isError: errorTipos,
+        refetch: refetchTipos,
+    } = useTiposServicio({ activo: true });
 
     const crearServicio = useCrearServicioComercial();
     const actualizarServicio = useActualizarServicioComercial();
     const eliminarServicio = useEliminarServicioComercial();
+
+    // Al abrir el modal refrescamos los tipos de servicio: así el selector de
+    // "Vincular a Tipo de Servicio" nunca queda vacío por una consulta fallida
+    // o por datos cacheados de una sesión anterior.
+    useEffect(() => {
+        if (isModalOpen) {
+            refetchTipos();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isModalOpen]);
 
     const handleEdit = (servicio: any) => {
         setEditingServicio(servicio);
@@ -113,9 +128,16 @@ export default function CatalogoServiciosComercialesPage() {
                 <select
                     value={filtroTipoServicio}
                     onChange={(e) => setFiltroTipoServicio(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                    disabled={loadingTipos}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
                 >
-                    <option value="">Todos los tipos de servicio</option>
+                    <option value="">
+                        {loadingTipos
+                            ? 'Cargando tipos de servicio...'
+                            : errorTipos
+                                ? 'No se pudieron cargar los tipos'
+                                : 'Todos los tipos de servicio'}
+                    </option>
                     {tiposServicio?.map((t: any) => (
                         <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>{t.nombre_tipo}</option>
                     ))}
@@ -232,6 +254,9 @@ export default function CatalogoServiciosComercialesPage() {
                     onClose={() => setIsModalOpen(false)}
                     servicio={editingServicio}
                     tiposServicio={tiposServicio || []}
+                    tiposServicioLoading={loadingTipos}
+                    tiposServicioError={errorTipos}
+                    onReintentarTipos={() => refetchTipos()}
                     onSubmit={async (formData: any) => {
                         if (editingServicio) {
                             await actualizarServicio.mutateAsync({ id: editingServicio.id_servicio, data: formData });
@@ -325,7 +350,7 @@ function sugerirCodigoServicio(nombre: string, categoria?: string): string {
     return baseParts.join('-');
 }
 
-function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSubmit, isLoading }: any) {
+function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, tiposServicioLoading, tiposServicioError, onReintentarTipos, onSubmit, isLoading }: any) {
     const [formData, setFormData] = useState({
         nombre_servicio: servicio?.nombre_servicio || '',
         codigo_servicio: servicio?.codigo_servicio || '',
@@ -459,13 +484,41 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, onSu
                             <select
                                 value={formData.id_tipo_servicio}
                                 onChange={(e) => setFormData({ ...formData, id_tipo_servicio: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                                disabled={tiposServicioLoading}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
                             >
                                 <option value="">No vincular (General / Multi-tipo)</option>
                                 {tiposServicio?.map((t: any) => (
                                     <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>{t.nombre_tipo}</option>
                                 ))}
                             </select>
+                            {tiposServicioLoading ? (
+                                <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1">
+                                    <Loader2 className="h-3 w-3 animate-spin" /> Cargando tipos de servicio...
+                                </p>
+                            ) : tiposServicioError ? (
+                                <p className="text-[10px] text-red-600 mt-1">
+                                    No se pudieron cargar los tipos de servicio.{' '}
+                                    <button
+                                        type="button"
+                                        onClick={() => onReintentarTipos?.()}
+                                        className="font-bold underline hover:text-red-800"
+                                    >
+                                        Reintentar
+                                    </button>
+                                </p>
+                            ) : tiposServicio && tiposServicio.length > 0 ? (
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                    {tiposServicio.length} tipo{tiposServicio.length === 1 ? '' : 's'} de servicio activo{tiposServicio.length === 1 ? '' : 's'} disponible{tiposServicio.length === 1 ? '' : 's'}.
+                                </p>
+                            ) : (
+                                <p className="text-[10px] text-amber-600 mt-1">
+                                    No hay tipos de servicio activos.{' '}
+                                    <a href="/configuracion/catalogos/tipos-servicio" className="font-bold underline hover:text-amber-800">
+                                        Crear uno
+                                    </a>
+                                </p>
+                            )}
                         </div>
                     </div>
 
