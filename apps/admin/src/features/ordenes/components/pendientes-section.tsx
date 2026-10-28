@@ -413,6 +413,9 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         Boolean(orden.hilo_caso?.es_multivisita) ||
         Boolean(orden.id_orden_padre) ||
         numVisitaActual > 1;
+    const esVisitaCompletada =
+        orden.id_estado_orden === 4 ||
+        (orden.estados_orden?.nombre_estado || '').toUpperCase().includes('COMPLETAD');
 
     return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
@@ -421,6 +424,14 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
             {/* ═══════════════════════════════════════════════════════════════════ */}
             {pendientesActivosCaso.length > 0 && (
                 <div className="p-5 bg-gradient-to-r from-indigo-50 via-blue-50/60 to-emerald-50/40 border-b border-indigo-200">
+                    {esVisitaCompletada && (
+                        <div className="mb-3 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start sm:items-center gap-2.5 text-xs text-amber-900 shadow-2xs">
+                            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
+                            <div>
+                                <span className="font-bold">⚠️ Esta visita ya fue completada en campo:</span> Confirme si estos hallazgos quedaron solucionados durante la visita o si deben devolverse a pendientes abiertos para programar un seguimiento posterior.
+                            </div>
+                        </div>
+                    )}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                         <div className="flex items-center gap-2.5">
                             <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
@@ -514,15 +525,29 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
                                                 ? `🎯 Asignado a ${p.orden_resolucion.numero_orden} (Visita #${p.orden_resolucion.numero_visita_caso || numVisitaActual})`
                                                 : '⏳ Pendiente de resolución'}
                                         </span>
-                                        <button
-                                            type="button"
-                                            disabled={isSubmitting}
-                                            onClick={() => handleResolverDirecto(p)}
-                                            className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                                        >
-                                            <CheckCircle2 className="h-3.5 w-3.5" />
-                                            <span>✓ Marcar Resuelto en Visita #{numVisitaActual}</span>
-                                        </button>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            {p.id_orden_resolucion === orden.id_orden_servicio && (
+                                                <button
+                                                    type="button"
+                                                    disabled={isSubmitting}
+                                                    onClick={() => handleReabrirDirecto(p)}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-300 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                                                    title="Devolver a Pendiente Abierto si no se pudo solucionar en esta visita"
+                                                >
+                                                    <RotateCcw className="h-3 w-3 text-slate-600" />
+                                                    <span>↩ Devolver a Abierto</span>
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                disabled={isSubmitting}
+                                                onClick={() => handleResolverDirecto(p)}
+                                                className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                                            >
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                                <span>✓ Marcar Resuelto en Visita #{numVisitaActual}</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );

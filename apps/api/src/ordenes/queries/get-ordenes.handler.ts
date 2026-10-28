@@ -8,6 +8,8 @@ interface PaginatedResponse {
   page: number;
   limit: number;
   totalPages: number;
+  totalCasosAbiertos?: number;
+  totalConPendientes?: number;
 }
 
 @QueryHandler(GetOrdenesQuery)
@@ -20,7 +22,8 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
   async execute(query: GetOrdenesQuery): Promise<PaginatedResponse> {
     const {
       page, limit, clienteId, equipoId, tecnicoId, estado, prioridad,
-      sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta, idAsesorAsignado, busqueda, idServicio, servicioTexto
+      sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta, idAsesorAsignado, busqueda, idServicio, servicioTexto,
+      filtroCaso, conPendientes
     } = query;
 
     // Resolver estado string → id_estado_actual (ZERO TRUST: lookup en BD)
@@ -51,9 +54,11 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
       fechaHasta,
       idAsesorAsignado, // ✅ MULTI-ASESOR
       busqueda, // ✅ BÚSQUEDA
+      filtroCaso, // ✅ FILTRO CASOS ABIERTOS / EN SEGUIMIENTO
+      conPendientes, // ✅ FILTRO PENDIENTES ACTIVOS
     };
 
-    // findAll() devuelve { items, total } directamente
+    // findAll() devuelve { items, total, totalCasosAbiertos, totalConPendientes }
     const result = await this.ordenRepository.findAll(filters);
 
     // ✅ FIX: Transformar ordenes_equipos para que use 'equipo' (singular) en lugar de 'equipos' (plural)
@@ -73,7 +78,9 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
       total: result.total,
       page,
       limit,
-      totalPages: Math.ceil(result.total / limit)
+      totalPages: Math.ceil(result.total / limit),
+      totalCasosAbiertos: result.totalCasosAbiertos,
+      totalConPendientes: result.totalConPendientes,
     };
   }
 }

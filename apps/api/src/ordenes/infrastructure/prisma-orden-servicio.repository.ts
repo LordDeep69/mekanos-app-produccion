@@ -219,6 +219,26 @@ export class PrismaOrdenServicioRepository {
         },
       },
     },
+    equipos: {
+      select: {
+        id_equipo: true,
+        codigo_equipo: true,
+        nombre_equipo: true,
+      },
+    },
+    ordenes_equipos: {
+      select: {
+        id_orden_equipo: true,
+        id_equipo: true,
+        equipos: {
+          select: {
+            id_equipo: true,
+            codigo_equipo: true,
+            nombre_equipo: true,
+          },
+        },
+      },
+    },
     orden_padre: {
       select: {
         id_orden_servicio: true,
@@ -1020,6 +1040,38 @@ export class PrismaOrdenServicioRepository {
         // Se cargan bajo demanda con sus propios endpoints
       },
     });
+
+    if (!orden) return null;
+
+    // ✅ Resolucion de usuario para edicion_tecnico_autorizada_por (Zero Trust)
+    if (orden.edicion_tecnico_autorizada_por) {
+      try {
+        const userAuth = await this.prisma.usuarios.findUnique({
+          where: { id_usuario: orden.edicion_tecnico_autorizada_por },
+          select: {
+            id_usuario: true,
+            email: true,
+            persona: {
+              select: {
+                nombre_completo: true,
+                primer_nombre: true,
+                primer_apellido: true,
+              },
+            },
+          },
+        });
+        if (userAuth) {
+          (orden as any).edicion_tecnico_autorizada_por_nombre =
+            userAuth.persona?.nombre_completo?.trim() ||
+            [userAuth.persona?.primer_nombre, userAuth.persona?.primer_apellido].filter(Boolean).join(' ') ||
+            (userAuth.id_usuario === 1 ? 'Administrador del Sistema' : userAuth.email);
+        }
+      } catch (errUser) {
+        // Fallback silencioso
+      }
+    }
+
+    return orden;
   }
 
   /**
@@ -1500,6 +1552,37 @@ export class PrismaOrdenServicioRepository {
       if (fechaHasta) where.fecha_programada.lte = new Date(fechaHasta);
     }
 
+    // ✅ FILTRO DE CASOS Y PENDIENTES 360° (Continuidad Operativa)
+    if (filters?.filtroCaso === 'CASOS_ABIERTOS') {
+      const casoCondition = {
+        OR: [
+          { estado_caso: 'ABIERTO', nombre_caso: { not: null } },
+          { id_orden_padre: { not: null } },
+          { numero_visita_caso: { gt: 1 } },
+          { orden_padre: { estado_caso: 'ABIERTO' } },
+          { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+        ],
+      };
+      if (where.AND) {
+        where.AND = [...(Array.isArray(where.AND) ? where.AND : [where.AND]), casoCondition];
+      } else {
+        where.AND = [casoCondition];
+      }
+    } else if (filters?.filtroCaso === 'CON_PENDIENTES' || filters?.conPendientes === true) {
+      const pendientesCondition = {
+        OR: [
+          { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+        ],
+      };
+      if (where.AND) {
+        where.AND = [...(Array.isArray(where.AND) ? where.AND : [where.AND]), pendientesCondition];
+      } else {
+        where.AND = [pendientesCondition];
+      }
+    }
+
     // ENTERPRISE: Ordenamiento dinámico
     const sortField = filters?.sortBy || 'fecha_creacion';
     const sortDirection = filters?.sortOrder || 'desc';
@@ -1518,7 +1601,7 @@ export class PrismaOrdenServicioRepository {
 
     // ✅ OPTIMIZACIÓN 05-ENE-2026: Usar INCLUDE_LITE para listas
     // Reduce de 10+ JOINs a solo 4, mejorando tiempo de ~5s a ~500ms
-    const [itemsRaw, total] = await Promise.all([
+    const [itemsRaw, total, totalCasosAbiertos, totalConPendientes] = await Promise.all([
       this.prisma.ordenes_servicio.findMany({
         where,
         include: this.INCLUDE_LITE,
@@ -1527,27 +1610,79 @@ export class PrismaOrdenServicioRepository {
         take: filters?.take || 10,
       }),
       this.prisma.ordenes_servicio.count({ where }),
+      this.prisma.ordenes_servicio.count({
+        where: {
+          OR: [
+            { estado_caso: 'ABIERTO', nombre_caso: { not: null } },
+            { id_orden_padre: { not: null } },
+            { numero_visita_caso: { gt: 1 } },
+            { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+            { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          ],
+        },
+      }),
+      this.prisma.ordenes_servicio.count({
+        where: {
+          OR: [
+            { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+            { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          ],
+        },
+      }),
     ]);
 
     // ✅ FIX 06-MAY-2026: Contar documentos PDF (INFORME_SERVICIO) para cada orden
-    // Usamos Prisma findMany para evitar problemas de tipos en queryRaw
     const ordenIds = itemsRaw.map((o: any) => o.id_orden_servicio);
-    const documentosCount = ordenIds.length > 0
-      ? await this.prisma.documentos_generados.groupBy({
-        by: ['id_referencia'],
-        where: {
-          id_referencia: { in: ordenIds },
-          tipo_documento: 'INFORME_SERVICIO',
-        },
-        _count: true,
-      })
-      : [];
+    const [documentosCount, pendientesRows] = await Promise.all([
+      ordenIds.length > 0
+        ? this.prisma.documentos_generados.groupBy({
+            by: ['id_referencia'],
+            where: {
+              id_referencia: { in: ordenIds },
+              tipo_documento: 'INFORME_SERVICIO',
+            },
+            _count: true,
+          })
+        : Promise.resolve([]),
+      ordenIds.length > 0
+        ? this.prisma.ordenes_pendientes.findMany({
+            where: {
+              OR: [
+                { id_orden_servicio: { in: ordenIds } },
+                { id_orden_resolucion: { in: ordenIds } },
+              ],
+            },
+            select: {
+              id_orden_pendiente: true,
+              id_orden_servicio: true,
+              id_orden_resolucion: true,
+              estado: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
 
     const pdfCountMap = new Map(documentosCount.map((dc: any) => [dc.id_referencia, dc._count]));
 
+    const pendientesPorOrden = new Map<number, { total: number; activos: number }>();
+    for (const p of pendientesRows) {
+      const esActivo = p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION';
+      const agregarA = (idOrden: number | null) => {
+        if (!idOrden) return;
+        const actual = pendientesPorOrden.get(idOrden) || { total: 0, activos: 0 };
+        actual.total += 1;
+        if (esActivo) actual.activos += 1;
+        pendientesPorOrden.set(idOrden, actual);
+      };
+      if (p.id_orden_servicio) agregarA(p.id_orden_servicio);
+      if (p.id_orden_resolucion && p.id_orden_resolucion !== p.id_orden_servicio) {
+        agregarA(p.id_orden_resolucion);
+      }
+    }
+
     // ✅ FIX 03-MAR-2026: Transformar _count a total_emails_enviados
     // ✅ FIX 06-MAY-2026: Agregar total_documentos_pdf desde query de documentos
-    // ✅ FIX 23-SEP-2026: Agregar total_pendientes desde _count.ordenes_pendientes
+    // ✅ FIX 23-SEP-2026: Agregar total_pendientes desde _count.ordenes_pendientes y pendientesPorOrden
     // ✅ FIX 25-SEP-2026: Calcular telemetría y avance en tiempo real (Estilo Sytex)
     const items = itemsRaw.map((orden: any) => {
       const { _count, ...rest } = orden;
@@ -1618,16 +1753,22 @@ export class PrismaOrdenServicioRepository {
         },
       };
 
+      const pInfo = pendientesPorOrden.get(orden.id_orden_servicio) || {
+        total: _count?.ordenes_pendientes || 0,
+        activos: 0,
+      };
+
       return {
         ...rest,
         total_emails_enviados: _count?.historial_emails_enviados || 0,
         total_documentos_pdf: pdfCountMap.get(orden.id_orden_servicio) || 0,
-        total_pendientes: _count?.ordenes_pendientes || 0,
+        total_pendientes: Math.max(pInfo.total, _count?.ordenes_pendientes || 0),
+        pendientes_activos: pInfo.activos,
         progreso_registro,
       };
     });
 
-    return { items, total };
+    return { items, total, totalCasosAbiertos, totalConPendientes };
   }
 
   /**

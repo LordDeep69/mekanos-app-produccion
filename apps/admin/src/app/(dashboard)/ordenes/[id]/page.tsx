@@ -308,7 +308,13 @@ function formatDisplayDate(dateStr?: string) {
     }
 }
 
-function TabGeneral({ orden }: { orden: Orden }) {
+function TabGeneral({
+    orden,
+    onOpenPendientesTab,
+}: {
+    orden: Orden;
+    onOpenPendientesTab?: () => void;
+}) {
     const fechaProgramada = formatDisplayDate(orden.fecha_programada);
 
     const fechaCreacion = orden.fecha_creacion
@@ -322,6 +328,17 @@ function TabGeneral({ orden }: { orden: Orden }) {
     // ✅ FIX: Solo mostrar banner si tiene fecha_fin_real (servicio realmente finalizado)
     // No mostrar para órdenes recién creadas o estados administrativos
     const servicioFinalizado = !!orden.fecha_fin_real;
+
+    const hilo = orden.hilo_caso;
+    const totalesCaso = hilo?.pendientes_totales ?? (orden.ordenes_pendientes?.length || 0);
+    const resueltosCaso =
+        hilo?.pendientes_resueltos ??
+        (orden.ordenes_pendientes || []).filter((p) => p.estado === 'RESUELTO').length;
+    const activosCaso =
+        hilo?.pendientes_abiertos ??
+        (orden.ordenes_pendientes || []).filter(
+            (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'
+        ).length;
 
     return (
         <div className="space-y-6">
@@ -513,8 +530,42 @@ function TabGeneral({ orden }: { orden: Orden }) {
                 </div>
             </div>
 
-            {/* Matriz Completa de Pendientes y Hallazgos del Caso */}
-            <PendientesSection orden={orden} />
+            {/* Resumen Compacto de Pendientes y Hallazgos del Caso (Navegación directa a Pestaña) */}
+            {totalesCaso > 0 && (
+                <div className="bg-amber-50/70 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm shadow-2xs">
+                    <div className="flex items-center gap-3 text-amber-900 font-medium">
+                        <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0">
+                            <ClipboardList className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <span className="text-gray-900 font-bold block sm:inline">
+                                Hallazgos y Pendientes del Caso:{' '}
+                            </span>
+                            <span>
+                                Este caso tiene{' '}
+                                <strong className="text-amber-950 font-bold">
+                                    {activosCaso} pendientes activos
+                                </strong>{' '}
+                                en gestión y{' '}
+                                <strong className="text-emerald-800 font-bold">
+                                    {resueltosCaso} resueltos
+                                </strong>
+                                .
+                            </span>
+                        </div>
+                    </div>
+                    {onOpenPendientesTab && (
+                        <button
+                            type="button"
+                            onClick={onOpenPendientesTab}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-amber-950 bg-amber-200/80 hover:bg-amber-300/80 border border-amber-300 transition-colors shrink-0 cursor-pointer shadow-2xs"
+                        >
+                            <span>Ver y Gestionar en Pestaña Pendientes</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -4037,7 +4088,12 @@ export default function OrdenDetallePage() {
 
             {/* Contenido del tab */}
             <div className="min-h-[400px]">
-                {activeTab === 'general' && <TabGeneral orden={orden} />}
+                {activeTab === 'general' && (
+                    <TabGeneral
+                        orden={orden}
+                        onOpenPendientesTab={() => setActiveTab('pendientes')}
+                    />
+                )}
                 {activeTab === 'ejecucion' && <TabEjecucion orden={orden} />}
                 {activeTab === 'pendientes' && <PendientesSection orden={orden} />}
                 {activeTab === 'financiero' && <TabFinanciero orden={orden} />}

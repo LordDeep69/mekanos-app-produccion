@@ -71,6 +71,12 @@ export async function getOrdenes(
     if (params?.servicioTexto) {
         queryParams.append('servicioTexto', params.servicioTexto);
     }
+    if (params?.filtroCaso) {
+        queryParams.append('filtroCaso', params.filtroCaso);
+    }
+    if (params?.conPendientes !== undefined) {
+        queryParams.append('conPendientes', String(params.conPendientes));
+    }
 
     const url = queryParams.toString()
         ? `${ORDENES_BASE}?${queryParams.toString()}`

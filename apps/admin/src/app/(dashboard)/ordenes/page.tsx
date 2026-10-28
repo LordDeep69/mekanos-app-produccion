@@ -134,8 +134,9 @@ function OrdenCard({
                         const esCaso = Boolean(
                             orden.id_orden_padre ||
                             (orden.numero_visita_caso && orden.numero_visita_caso > 1) ||
-                            (orden.estado_caso && orden.estado_caso !== 'AISLADA') ||
-                            orden.nombre_caso
+                            Boolean(orden.total_pendientes && orden.total_pendientes > 0) ||
+                            Boolean(orden.pendientes_activos && orden.pendientes_activos > 0) ||
+                            (orden.estado_caso === 'ABIERTO' && Boolean(orden.nombre_caso?.trim()))
                         );
                         if (!esCaso) return null;
 
@@ -223,13 +224,13 @@ function OrdenCard({
                             </span>
                         )}
                         {/* ✅ FIX 23-SEP-2026: Indicador de pendientes técnicos */}
-                        {Boolean(orden.total_pendientes && orden.total_pendientes > 0) ? (
+                        {Boolean((orden.total_pendientes && orden.total_pendientes > 0) || (orden.pendientes_activos && orden.pendientes_activos > 0)) ? (
                             <span
-                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 shadow-sm"
-                                title={`${orden.total_pendientes} pendiente(s) técnico(s) registrado(s)`}
+                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs"
+                                title={`${orden.pendientes_activos ?? orden.total_pendientes} pendiente(s) técnico(s) activo(s)`}
                             >
                                 <ClipboardList className="h-3 w-3 text-amber-700" />
-                                {orden.total_pendientes}
+                                {orden.pendientes_activos ?? orden.total_pendientes}
                             </span>
                         ) : (
                             <span
@@ -270,13 +271,21 @@ function OrdenCard({
                 </div>
 
                 {/* Equipo */}
-                <div className="flex items-center gap-2 text-gray-600">
-                    <Wrench className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <span className="line-clamp-1">
-                        {orden.equipos?.codigo_equipo || 'Sin equipo'}
-                        {orden.equipos?.nombre_equipo && ` - ${orden.equipos.nombre_equipo}`}
-                    </span>
-                </div>
+                {(() => {
+                    const equipoInfo =
+                        orden.equipos ||
+                        (orden.ordenes_equipos?.[0] as any)?.equipo ||
+                        (orden.ordenes_equipos?.[0] as any)?.equipos;
+                    return (
+                        <div className="flex items-center gap-2 text-gray-600">
+                            <Wrench className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                            <span className="line-clamp-1">
+                                {equipoInfo?.codigo_equipo || 'Sin equipo'}
+                                {equipoInfo?.nombre_equipo && ` - ${equipoInfo.nombre_equipo}`}
+                            </span>
+                        </div>
+                    );
+                })()}
 
                 {/* Técnico */}
                 <div className="flex items-center gap-2 text-gray-600">
@@ -460,10 +469,13 @@ function OrdenesPageContent() {
         (filtroTipoServicio ? 1 : 0) +
         (sortBy !== 'fecha_creacion' || sortOrder !== 'desc' ? 1 : 0);
 
-    // ✅ BÚSQUEDA SERVER-SIDE: Enviar busqueda y filtros al backend
+    const [filtroCasos, setFiltroCasos] = useState<'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES'>('TODAS');
+
+    // ✅ BÚSQUEDA SERVER-SIDE: Enviar busqueda y filtros al backend (incluyendo filtro de Casos y Pendientes)
     const { data, isLoading, isError, refetch } = useOrdenes({
         page,
         limit: pageSize,
+        filtroCaso: filtroCasos !== 'TODAS' ? filtroCasos : undefined,
         estado: filtroEstado || undefined,
         prioridad: filtroPrioridad || undefined,
         idTecnico: filtroTecnico ? parseInt(filtroTecnico) : undefined,
@@ -475,8 +487,6 @@ function OrdenesPageContent() {
         busqueda: busquedaDebounced || undefined,
     });
 
-    const [filtroCasos, setFiltroCasos] = useState<'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES'>('TODAS');
-
     const ordenes = data?.data || [];
     const pagination = data?.pagination;
     const totalPages = pagination?.totalPages || 1;
@@ -486,8 +496,9 @@ function OrdenesPageContent() {
             const esCaso = Boolean(
                 o.id_orden_padre ||
                 (o.numero_visita_caso && o.numero_visita_caso > 1) ||
-                (o.estado_caso && o.estado_caso !== 'AISLADA') ||
-                o.nombre_caso
+                Boolean(o.total_pendientes && o.total_pendientes > 0) ||
+                Boolean(o.pendientes_activos && o.pendientes_activos > 0) ||
+                (o.estado_caso === 'ABIERTO' && Boolean(o.nombre_caso?.trim()))
             );
             const esAbierto =
                 o.estado_caso === 'ABIERTO' ||
@@ -498,30 +509,15 @@ function OrdenesPageContent() {
     }, [ordenes]);
 
     const countConPendientes = useMemo(() => {
-        return ordenes.filter((o) => Boolean(o.total_pendientes && o.total_pendientes > 0)).length;
+        return ordenes.filter((o) => Boolean((o.total_pendientes && o.total_pendientes > 0) || (o.pendientes_activos && o.pendientes_activos > 0))).length;
     }, [ordenes]);
 
-    const ordenesFiltradas = useMemo(() => {
-        if (filtroCasos === 'CASOS_ABIERTOS') {
-            return ordenes.filter((o) => {
-                const esCaso = Boolean(
-                    o.id_orden_padre ||
-                    (o.numero_visita_caso && o.numero_visita_caso > 1) ||
-                    (o.estado_caso && o.estado_caso !== 'AISLADA') ||
-                    o.nombre_caso
-                );
-                const esAbierto =
-                    o.estado_caso === 'ABIERTO' ||
-                    o.orden_padre?.estado_caso === 'ABIERTO' ||
-                    (!o.estado_caso && esCaso);
-                return esCaso && esAbierto;
-            });
-        }
-        if (filtroCasos === 'CON_PENDIENTES') {
-            return ordenes.filter((o) => Boolean(o.total_pendientes && o.total_pendientes > 0));
-        }
-        return ordenes;
-    }, [ordenes, filtroCasos]);
+    const ordenesFiltradas = ordenes;
+
+    const handleCambiarFiltroCaso = (nuevo: 'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES') => {
+        setFiltroCasos(nuevo);
+        setPage(1);
+    };
 
     // ✅ FEATURE ESTILO SYTEX: Auto-refresco en vivo
     useEffect(() => {
@@ -567,7 +563,7 @@ function OrdenesPageContent() {
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-gray-100">
                     <button
                         type="button"
-                        onClick={() => setFiltroCasos('TODAS')}
+                        onClick={() => handleCambiarFiltroCaso('TODAS')}
                         className={cn(
                             'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap',
                             filtroCasos === 'TODAS'
@@ -576,12 +572,12 @@ function OrdenesPageContent() {
                         )}
                     >
                         <ClipboardList className="h-3.5 w-3.5" />
-                        <span>Todas las Órdenes ({ordenes.length})</span>
+                        <span>Todas las Órdenes ({pagination?.total || ordenes.length})</span>
                     </button>
 
                     <button
                         type="button"
-                        onClick={() => setFiltroCasos('CASOS_ABIERTOS')}
+                        onClick={() => handleCambiarFiltroCaso('CASOS_ABIERTOS')}
                         className={cn(
                             'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap',
                             filtroCasos === 'CASOS_ABIERTOS'
@@ -590,12 +586,12 @@ function OrdenesPageContent() {
                         )}
                     >
                         <GitBranch className="h-3.5 w-3.5 text-indigo-500" />
-                        <span>🟢 Casos Abiertos / En Seguimiento ({countCasosAbiertos})</span>
+                        <span>🟢 Casos Abiertos / En Seguimiento ({pagination?.totalCasosAbiertos ?? countCasosAbiertos})</span>
                     </button>
 
                     <button
                         type="button"
-                        onClick={() => setFiltroCasos('CON_PENDIENTES')}
+                        onClick={() => handleCambiarFiltroCaso('CON_PENDIENTES')}
                         className={cn(
                             'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap',
                             filtroCasos === 'CON_PENDIENTES'
@@ -604,7 +600,7 @@ function OrdenesPageContent() {
                         )}
                     >
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                        <span>🎯 Con Pendientes Activos ({countConPendientes})</span>
+                        <span>🎯 Con Pendientes Activos ({pagination?.totalConPendientes ?? countConPendientes})</span>
                     </button>
                 </div>
 

@@ -240,11 +240,11 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                         const motivoTexto =
                             item.motivo || item.motivo_cambio || item.motivoCambio || null;
 
+                        const rawEmail = item.usuario?.email || item.usuarioRealizador?.email || '';
+                        const fallbackAdmin = rawEmail.includes('admin@') || rawEmail.includes('superpa83') || item.realizado_por === 1;
                         const usuarioNombre =
                             item.usuario?.nombre ||
-                            item.usuario?.email ||
-                            item.usuarioRealizador?.email ||
-                            (item.realizado_por ? `Usuario #${item.realizado_por}` : 'Administrador');
+                            (fallbackAdmin ? 'Administrador del Sistema' : (rawEmail || (item.realizado_por ? `Usuario #${item.realizado_por}` : 'Administrador del Sistema')));
 
                         return (
                             <div

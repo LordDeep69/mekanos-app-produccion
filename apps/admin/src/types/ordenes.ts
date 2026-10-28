@@ -136,6 +136,7 @@ export interface Orden {
 
     // ✅ FIX 23-SEP-2026: Total de pendientes técnicos para badge en lista
     total_pendientes?: number;
+    pendientes_activos?: number;
     ordenes_pendientes?: OrdenPendiente[];
     pendientes_asignados_resolver?: OrdenPendiente[];
 
@@ -203,6 +204,7 @@ export interface Orden {
     // de una orden COMPLETADA desde la app móvil.
     edicion_tecnico_habilitada?: boolean;
     edicion_tecnico_autorizada_por?: number | null;
+    edicion_tecnico_autorizada_por_nombre?: string | null;
     edicion_tecnico_fecha_autorizacion?: string | null;
     edicion_tecnico_motivo?: string | null;
 }
@@ -310,6 +312,8 @@ export interface OrdenesResponse {
         limit: number;
         total: number;
         totalPages: number;
+        totalCasosAbiertos?: number;
+        totalConPendientes?: number;
     };
 }
 
@@ -331,6 +335,8 @@ export interface OrdenesQueryParams {
     busqueda?: string;    // ✅ Búsqueda por texto libre (numero_orden, cliente, técnico, equipo)
     idServicio?: number;  // ✅ Filtro por servicio específico del catálogo (catalogo_servicios)
     servicioTexto?: string; // ✅ Búsqueda inteligente por palabra clave de servicio (ej: 'RADIADOR')
+    filtroCaso?: 'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | string;
+    conPendientes?: boolean;
 }
 
 // DTO para crear orden - MULTI-EQUIPOS

@@ -63,7 +63,7 @@ export class HistorialEstadosOrdenMapper {
         },
         usuario: {
           id_usuario: historial.usuarios.id_usuario,
-          nombre: historial.usuarios.email,
+          nombre: historial.usuarios.nombre || historial.usuarios.email,
           email: historial.usuarios.email,
         },
       }),

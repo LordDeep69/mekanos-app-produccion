@@ -87,6 +87,7 @@ export class PrismaHistorialEstadosOrdenRepository
               username: true,
               persona: {
                 select: {
+                  nombre_completo: true,
                   primer_nombre: true,
                   segundo_nombre: true,
                   primer_apellido: true,
@@ -100,13 +101,17 @@ export class PrismaHistorialEstadosOrdenRepository
 
     const userMap = new Map(
       usuariosList.map((u: any) => {
+        const nombreDirecto = u.persona?.nombre_completo?.trim();
         const nombreParts = u.persona
           ? [u.persona.primer_nombre, u.persona.primer_apellido].filter(Boolean)
           : [];
+        const nombreGenerado = nombreParts.length > 0 ? nombreParts.join(' ') : null;
         const nombreCompleto =
-          nombreParts.length > 0
-            ? nombreParts.join(' ')
-            : u.username || u.email;
+          nombreDirecto ||
+          nombreGenerado ||
+          (u.id_usuario === 1 ? 'Administrador del Sistema' : null) ||
+          u.username ||
+          u.email;
         return [
           u.id_usuario,
           {
@@ -124,8 +129,8 @@ export class PrismaHistorialEstadosOrdenRepository
       } else if (h.realizado_por) {
         h.usuarios = {
           id_usuario: h.realizado_por,
-          email: `Usuario #${h.realizado_por}`,
-          nombre: `Usuario #${h.realizado_por}`,
+          email: h.realizado_por === 1 ? 'admin@mekanos.com' : `Usuario #${h.realizado_por}`,
+          nombre: h.realizado_por === 1 ? 'Administrador del Sistema' : `Usuario #${h.realizado_por}`,
         };
       }
     }

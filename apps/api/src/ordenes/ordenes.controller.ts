@@ -3009,6 +3009,8 @@ export class OrdenesController {
     @Query('busqueda') busqueda?: string,
     @Query('idServicio') idServicio?: string,
     @Query('servicioTexto') servicioTexto?: string,
+    @Query('filtroCaso') filtroCaso?: string,
+    @Query('conPendientes') conPendientes?: string,
   ) {
     // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
@@ -3030,6 +3032,8 @@ export class OrdenesController {
       busqueda, // ✅ BÚSQUEDA
       idServicio ? parseInt(idServicio, 10) : undefined,
       servicioTexto?.trim() || undefined, // ✅ Filtro por servicio específico
+      filtroCaso, // ✅ FILTRO CASOS: 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | 'TODAS'
+      conPendientes === 'true' || conPendientes === '1' ? true : undefined,
     );
 
     const result = await this.queryBus.execute(query);
@@ -3043,6 +3047,8 @@ export class OrdenesController {
         limit: result.limit,
         total: result.total,
         totalPages: result.totalPages,
+        totalCasosAbiertos: result.totalCasosAbiertos,
+        totalConPendientes: result.totalConPendientes,
       },
     };
   }

@@ -132,7 +132,7 @@ export function EdicionTecnicoSection({ orden }: EdicionTecnicoSectionProps) {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-emerald-800">
                             <span className="inline-flex items-center gap-1.5">
                                 <ShieldCheck className="h-3.5 w-3.5" />
-                                Por: {orden.edicion_tecnico_autorizada_por ? `usuario #${orden.edicion_tecnico_autorizada_por}` : 'Administrador'}
+                                Por: {orden.edicion_tecnico_autorizada_por_nombre || (orden.edicion_tecnico_autorizada_por === 1 ? 'Administrador del Sistema' : orden.edicion_tecnico_autorizada_por ? `Usuario #${orden.edicion_tecnico_autorizada_por}` : 'Administrador del Sistema')}
                             </span>
                             <span className="inline-flex items-center gap-1.5">
                                 <Clock className="h-3.5 w-3.5" />

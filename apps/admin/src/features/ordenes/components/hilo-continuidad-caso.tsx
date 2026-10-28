@@ -681,7 +681,46 @@ export function HiloContinuidadCaso({ orden, onOpenPendientesTab }: HiloContinui
             (p) => p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION'
         ).length;
 
-    // Si es una visita única sin encadenamiento aún, mostrar barra ejecutiva compacta para encadenar
+    const esCasoReal =
+        esMultivisita ||
+        totalesCaso > 0 ||
+        Boolean(orden.nombre_caso?.trim()) ||
+        (estadoCasoLocal === 'ABIERTO' && Boolean(hilo?.nombre_caso?.trim()));
+
+    // Si es una visita única/aislada sin encadenamiento ni pendientes, mostrar barra ejecutiva sutil
+    if (!esCasoReal) {
+        return (
+            <>
+                <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm shadow-2xs">
+                    <div className="flex items-center gap-2.5 text-slate-700">
+                        <div className="p-1.5 bg-slate-200/80 rounded-lg text-slate-600">
+                            <GitBranch className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-medium text-slate-600">
+                            Esta orden se ejecuta como una <strong>Visita Puntual Independiente</strong>. No pertenece a un expediente multi-visita.
+                        </span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsFollowUpModalOpen(true)}
+                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer shrink-0"
+                    >
+                        <Plus className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>Iniciar Caso / Programar Visita de Seguimiento</span>
+                    </button>
+                </div>
+
+                <ProgramarVisitaModal
+                    orden={orden}
+                    isOpen={isFollowUpModalOpen}
+                    onClose={() => setIsFollowUpModalOpen(false)}
+                    initialPendientesIds={[]}
+                />
+            </>
+        );
+    }
+
+    // Si es un caso base de 1 sola visita, mostrar barra ejecutiva de caso base
     if (!esMultivisita) {
         return (
             <>
