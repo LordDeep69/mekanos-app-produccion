@@ -31,4 +31,6 @@ export {
 
 // Components
 export * from './components/servicio-especifico-combobox';
-
+export * from './components/caracteristicas-orden-filter';
+export * from './components/filtro-fecha-premium';
+export * from './components/modern-filter-select';

@@ -20,6 +20,12 @@ import {
     useOrdenes,
     useServiciosComerciales,
     ServicioEspecificoCombobox,
+    CARACTERISTICAS_ORDEN_REGISTRY,
+    CaracteristicasOrdenFilter,
+    type FiltrosCaracteristicas,
+    FiltroFechaPremium,
+    ModernFilterSelect,
+    type ModernFilterOption,
 } from '@/features/ordenes';
 import { ProgresoRegistroBadge } from '@/features/ordenes/components/progreso-registro-badge';
 import { useTiposServicio, useTecnicosSelector } from '@/features/ordenes/hooks/use-catalogos';
@@ -31,6 +37,7 @@ import {
     ArrowUpAZ,
     Calendar,
     Check,
+    CheckCircle2,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
@@ -187,60 +194,25 @@ function OrdenCard({
                     <div className="flex items-center gap-2 mt-1">
                         <EstadoBadge estado={orden.estados_orden?.codigo_estado} />
                         <PrioridadBadge prioridad={orden.prioridad} />
-                        {/* ✅ FIX 03-MAR-2026: Indicador de email enviado */}
-                        {orden.total_emails_enviados ? (
-                            <span
-                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"
-                                title={`${orden.total_emails_enviados} email(s) enviado(s)`}
-                            >
-                                <Mail className="h-3 w-3" />
-                                {orden.total_emails_enviados}
-                            </span>
-                        ) : (
-                            <span
-                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
-                                title="Sin emails enviados"
-                            >
-                                <Mail className="h-3 w-3" />
-                                -
-                            </span>
-                        )}
-                        {/* ✅ FIX 06-MAY-2026: Indicador de PDF generado */}
-                        {orden.total_documentos_pdf ? (
-                            <span
-                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"
-                                title={`${orden.total_documentos_pdf} PDF(s) generado(s)`}
-                            >
-                                <FileText className="h-3 w-3" />
-                                {orden.total_documentos_pdf}
-                            </span>
-                        ) : (
-                            <span
-                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
-                                title="Sin PDF generado"
-                            >
-                                <FileText className="h-3 w-3" />
-                                -
-                            </span>
-                        )}
-                        {/* ✅ FIX 23-SEP-2026: Indicador de pendientes técnicos */}
-                        {Boolean((orden.total_pendientes && orden.total_pendientes > 0) || (orden.pendientes_activos && orden.pendientes_activos > 0)) ? (
-                            <span
-                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs"
-                                title={`${orden.pendientes_activos ?? orden.total_pendientes} pendiente(s) técnico(s) activo(s)`}
-                            >
-                                <ClipboardList className="h-3 w-3 text-amber-700" />
-                                {orden.pendientes_activos ?? orden.total_pendientes}
-                            </span>
-                        ) : (
-                            <span
-                                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-400"
-                                title="Sin pendientes técnicos"
-                            >
-                                <ClipboardList className="h-3 w-3" />
-                                -
-                            </span>
-                        )}
+                        {/* ✅ BADGES DINÁMICOS VINCULADOS AL REGISTRO CENTRAL */}
+                        {CARACTERISTICAS_ORDEN_REGISTRY.map((caract) => {
+                            const Icon = caract.icon;
+                            const tiene = caract.check(orden);
+                            const count = caract.getCount(orden);
+                            return (
+                                <span
+                                    key={caract.id}
+                                    className={cn(
+                                        'flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors',
+                                        tiene ? caract.colorPillActiva : caract.colorPillInactiva
+                                    )}
+                                    title={tiene ? caract.titleCard(count) : caract.titleInactivo}
+                                >
+                                    <Icon className="h-3 w-3" />
+                                    <span>{tiene ? count : '-'}</span>
+                                </span>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -394,6 +366,33 @@ function OrdenCard({
 // PÁGINA PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// OPCIONES DE FILTROS MODERNOS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const ESTADOS_OPTIONS: ModernFilterOption[] = [
+    { value: 'PROGRAMADA', label: 'Programada' },
+    { value: 'ASIGNADA', label: 'Asignada sin ejecutar' },
+    { value: 'EN_PROCESO', label: 'En Proceso' },
+    { value: 'EN_ESPERA_REPUESTO', label: 'Espera Repuesto' },
+    { value: 'COMPLETADA', label: 'Completada' },
+    { value: 'APROBADA', label: 'Aprobada' },
+    { value: 'CANCELADA', label: 'Cancelada' },
+];
+
+const PRIORIDADES_OPTIONS: ModernFilterOption[] = [
+    { value: 'BAJA', label: 'Baja' },
+    { value: 'NORMAL', label: 'Normal' },
+    { value: 'ALTA', label: 'Alta' },
+    { value: 'URGENTE', label: 'Urgente' },
+];
+
+const SORT_OPTIONS: ModernFilterOption[] = [
+    { value: 'fecha_creacion', label: 'Fecha creación' },
+    { value: 'fecha_programada', label: 'Fecha programada' },
+    { value: 'numero_orden', label: 'Número orden' },
+];
+
 function OrdenesPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -405,6 +404,20 @@ function OrdenesPageContent() {
     const [filtroEstado, setFiltroEstado] = useState<string>(searchParams.get('estado') || '');
     const [filtroPrioridad, setFiltroPrioridad] = useState<string>(searchParams.get('prioridad') || '');
     const [filtroTecnico, setFiltroTecnico] = useState<string>(searchParams.get('tecnico') || '');
+    // ✅ FECHAS PREMIUM (Desde / Hasta)
+    const [fechaDesde, setFechaDesde] = useState<string>(searchParams.get('fechaDesde') || '');
+    const [fechaHasta, setFechaHasta] = useState<string>(searchParams.get('fechaHasta') || '');
+    // ✅ CARACTERÍSTICAS / BADGES DINÁMICOS (Correo, PDF, Pendientes)
+    const [filtrosCaracteristicas, setFiltrosCaracteristicas] = useState<FiltrosCaracteristicas>(() => {
+        const init: FiltrosCaracteristicas = {};
+        for (const c of CARACTERISTICAS_ORDEN_REGISTRY) {
+            const val = searchParams.get(`caract_${c.id}`);
+            if (val === 'CON' || val === 'SIN') {
+                init[c.id] = val;
+            }
+        }
+        return init;
+    });
     // ENTERPRISE: Nuevos filtros avanzados
     const [sortBy, setSortBy] = useState<'fecha_creacion' | 'fecha_programada' | 'numero_orden'>((searchParams.get('sortBy') as any) || 'fecha_creacion');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>((searchParams.get('sortOrder') as any) || 'desc');
@@ -445,6 +458,11 @@ function OrdenesPageContent() {
         if (filtroEstado) params.set('estado', filtroEstado);
         if (filtroPrioridad) params.set('prioridad', filtroPrioridad);
         if (filtroTecnico) params.set('tecnico', filtroTecnico);
+        if (fechaDesde) params.set('fechaDesde', fechaDesde);
+        if (fechaHasta) params.set('fechaHasta', fechaHasta);
+        for (const [k, v] of Object.entries(filtrosCaracteristicas)) {
+            if (v && v !== 'TODOS') params.set(`caract_${k}`, v);
+        }
         if (sortBy !== 'fecha_creacion') params.set('sortBy', sortBy);
         if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
         if (filtroTipoServicio) params.set('tipoServicio', filtroTipoServicio);
@@ -455,7 +473,7 @@ function OrdenesPageContent() {
         const queryString = params.toString();
         const newPath = queryString ? `/ordenes?${queryString}` : '/ordenes';
         router.replace(newPath);
-    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, filtroServicioTexto, showAdvancedFilters, router]);
+    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, fechaDesde, fechaHasta, filtrosCaracteristicas, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, filtroServicioTexto, showAdvancedFilters, router]);
 
     const pageSize = 12;
 
@@ -464,9 +482,30 @@ function OrdenesPageContent() {
     const { data: tecnicos } = useTecnicosSelector();
     const { data: catalogoServicios } = useServiciosComerciales({ activo: true, limit: 250 });
 
-    // Contador de filtros avanzados activos (excluyendo el filtro de servicio que ahora es visible directamente)
+    const tecnicosOptions: ModernFilterOption[] = useMemo(() => {
+        return (tecnicos || []).map((tec) => {
+            const nombre = tec.persona
+                ? `${tec.persona.primer_nombre || ''} ${tec.persona.primer_apellido || ''}`.trim()
+                : `Técnico #${tec.id_empleado}`;
+            return { value: tec.id_empleado, label: nombre };
+        });
+    }, [tecnicos]);
+
+    const tiposServicioOptions: ModernFilterOption[] = useMemo(() => {
+        return (tiposServicio || []).map((tipo) => ({
+            value: tipo.id_tipo_servicio,
+            label: tipo.nombre_tipo,
+        }));
+    }, [tiposServicio]);
+
+    const activeCaractCount = useMemo(() => {
+        return Object.values(filtrosCaracteristicas).filter((v) => v && v !== 'TODOS').length;
+    }, [filtrosCaracteristicas]);
+
+    // Contador de filtros avanzados activos
     const activeAdvancedCount =
         (filtroTipoServicio ? 1 : 0) +
+        activeCaractCount +
         (sortBy !== 'fecha_creacion' || sortOrder !== 'desc' ? 1 : 0);
 
     const [filtroCasos, setFiltroCasos] = useState<'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES'>('TODAS');
@@ -485,6 +524,9 @@ function OrdenesPageContent() {
         idServicio: filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : undefined,
         servicioTexto: filtroServicioTexto || undefined,
         busqueda: busquedaDebounced || undefined,
+        fechaDesde: fechaDesde || undefined,
+        fechaHasta: fechaHasta || undefined,
+        conPendientes: filtrosCaracteristicas.pendientes === 'CON' ? true : undefined,
     });
 
     const ordenes = data?.data || [];
@@ -512,7 +554,17 @@ function OrdenesPageContent() {
         return ordenes.filter((o) => Boolean((o.total_pendientes && o.total_pendientes > 0) || (o.pendientes_activos && o.pendientes_activos > 0))).length;
     }, [ordenes]);
 
-    const ordenesFiltradas = ordenes;
+    // ✅ FILTRADO DINÁMICO POR CARACTERÍSTICAS DE CARDS (Correo, PDF, Pendientes, etc.)
+    const ordenesFiltradas = useMemo(() => {
+        return ordenes.filter((orden) => {
+            for (const caract of CARACTERISTICAS_ORDEN_REGISTRY) {
+                const estado = filtrosCaracteristicas[caract.id] || 'TODOS';
+                if (estado === 'CON' && !caract.check(orden)) return false;
+                if (estado === 'SIN' && caract.check(orden)) return false;
+            }
+            return true;
+        });
+    }, [ordenes, filtrosCaracteristicas]);
 
     const handleCambiarFiltroCaso = (nuevo: 'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES') => {
         setFiltroCasos(nuevo);
@@ -629,55 +681,53 @@ function OrdenesPageContent() {
 
                     {/* Filtros principales */}
                     <div className="flex flex-wrap items-center gap-2">
-                        {/* Estado */}
-                        <select
+                        {/* Estado con selector moderno */}
+                        <ModernFilterSelect
+                            icon={CheckCircle2}
                             value={filtroEstado}
-                            onChange={(e) => { setFiltroEstado(e.target.value); setPage(1); }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-700 font-medium"
-                        >
-                            <option value="">Todos los estados</option>
-                            <option value="PROGRAMADA">Programada</option>
-                            <option value="ASIGNADA">Asignada sin ejecutar</option>
-                            <option value="EN_PROCESO">En Proceso</option>
-                            <option value="EN_ESPERA_REPUESTO">Espera Repuesto</option>
-                            <option value="COMPLETADA">Completada</option>
-                            <option value="APROBADA">Aprobada</option>
-                            <option value="CANCELADA">Cancelada</option>
-                        </select>
+                            onChange={(val) => { setFiltroEstado(val); setPage(1); }}
+                            options={ESTADOS_OPTIONS}
+                            placeholder="Todos los estados"
+                            onClear={() => { setFiltroEstado(''); setPage(1); }}
+                        />
 
-                        {/* Filtro por Técnico Asignado */}
-                        <select
+                        {/* Técnico Asignado con selector moderno */}
+                        <ModernFilterSelect
+                            icon={User}
                             value={filtroTecnico}
-                            onChange={(e) => { setFiltroTecnico(e.target.value); setPage(1); }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-700 font-medium"
-                        >
-                            <option value="">Todos los técnicos</option>
-                            {tecnicos?.map((tec) => {
-                                const nombre = tec.persona
-                                    ? `${tec.persona.primer_nombre || ''} ${tec.persona.primer_apellido || ''}`.trim()
-                                    : `Técnico #${tec.id_empleado}`;
-                                return (
-                                    <option key={tec.id_empleado} value={tec.id_empleado}>
-                                        {nombre}
-                                    </option>
-                                );
-                            })}
-                        </select>
+                            onChange={(val) => { setFiltroTecnico(val); setPage(1); }}
+                            options={tecnicosOptions}
+                            placeholder="Todos los técnicos"
+                            onClear={() => { setFiltroTecnico(''); setPage(1); }}
+                        />
 
-                        {/* Prioridad */}
-                        <select
+                        {/* Prioridad con selector moderno */}
+                        <ModernFilterSelect
+                            icon={AlertCircle}
                             value={filtroPrioridad}
-                            onChange={(e) => { setFiltroPrioridad(e.target.value); setPage(1); }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs bg-white text-gray-700 font-medium"
-                        >
-                            <option value="">Todas las prioridades</option>
-                            <option value="BAJA">Baja</option>
-                            <option value="NORMAL">Normal</option>
-                            <option value="ALTA">Alta</option>
-                            <option value="URGENTE">Urgente</option>
-                        </select>
+                            onChange={(val) => { setFiltroPrioridad(val); setPage(1); }}
+                            options={PRIORIDADES_OPTIONS}
+                            placeholder="Todas las prioridades"
+                            onClear={() => { setFiltroPrioridad(''); setPage(1); }}
+                        />
 
-                        {/* ✅ FILTRO DIRECTO: Catálogo de Servicios Específicos (Especialmente Correctivos y Búsqueda Inteligente) */}
+                        {/* ✅ FILTRO DE FECHAS PREMIUM (Estado del Arte) */}
+                        <FiltroFechaPremium
+                            fechaDesde={fechaDesde}
+                            fechaHasta={fechaHasta}
+                            onSelectRange={(desde, hasta) => {
+                                setFechaDesde(desde);
+                                setFechaHasta(hasta);
+                                setPage(1);
+                            }}
+                            onClear={() => {
+                                setFechaDesde('');
+                                setFechaHasta('');
+                                setPage(1);
+                            }}
+                        />
+
+                        {/* ✅ FILTRO DIRECTO: Catálogo de Servicios Específicos */}
                         <div className="w-56 sm:w-64 md:w-72">
                             <ServicioEspecificoCombobox
                                 selectedId={filtroServicioEspecifico ? parseInt(filtroServicioEspecifico, 10) : null}
@@ -698,12 +748,12 @@ function OrdenesPageContent() {
                             type="button"
                             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                             className={cn(
-                                'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-semibold transition-all',
+                                'flex items-center gap-1.5 h-9 px-3 border rounded-xl text-xs font-semibold transition-all shadow-2xs cursor-pointer',
                                 showAdvancedFilters || activeAdvancedCount > 0
-                                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-2xs'
-                                    : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                                    ? 'border-blue-400 bg-blue-50/80 text-blue-900 ring-2 ring-blue-500/15'
+                                    : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-700 bg-white'
                             )}
-                            title="Filtros avanzados y por servicio específico"
+                            title="Filtros avanzados y de entregables"
                         >
                             <SlidersHorizontal className="h-3.5 w-3.5" />
                             <span>Avanzados</span>
@@ -724,10 +774,10 @@ function OrdenesPageContent() {
                                 toast.info(next ? 'Modo Sytex En Vivo activado (refresco cada 20s)' : 'Modo En Vivo pausado');
                             }}
                             className={cn(
-                                'flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-semibold transition-all',
+                                'flex items-center gap-1.5 h-9 px-3 border rounded-xl text-xs font-semibold transition-all shadow-2xs cursor-pointer',
                                 enVivoAutoRefresh
-                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-xs'
-                                    : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500/15'
+                                    : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-700 bg-white'
                             )}
                             title={enVivoAutoRefresh ? 'Pausar modo en vivo' : 'Activar lectura y auto-refresco en vivo estilo Sytex'}
                         >
@@ -735,7 +785,7 @@ function OrdenesPageContent() {
                                 {enVivoAutoRefresh && (
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                                 )}
-                                <span className={cn('relative inline-flex rounded-full h-2 w-2', enVivoAutoRefresh ? 'bg-emerald-500' : 'bg-gray-400')} />
+                                <span className={cn('relative inline-flex rounded-full h-2 w-2', enVivoAutoRefresh ? 'bg-emerald-500' : 'bg-slate-400')} />
                             </span>
                             <Radio className="h-3.5 w-3.5" />
                             <span className="hidden sm:inline">En Vivo</span>
@@ -745,7 +795,7 @@ function OrdenesPageContent() {
                         <button
                             type="button"
                             onClick={() => refetch()}
-                            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
+                            className="h-9 px-2.5 border border-slate-300 rounded-xl hover:bg-slate-50 text-slate-600 transition-colors bg-white shadow-2xs flex items-center justify-center cursor-pointer"
                             title="Refrescar lista de órdenes"
                         >
                             <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin text-blue-600')} />
@@ -876,7 +926,16 @@ function OrdenesPageContent() {
                 )}
 
                 {/* Indicadores de filtros activos */}
-                {(filtroEstado || filtroTecnico || filtroPrioridad || filtroTipoServicio || filtroServicioEspecifico || filtroServicioTexto || busquedaDebounced) && (
+                {(filtroEstado ||
+                    filtroTecnico ||
+                    filtroPrioridad ||
+                    filtroTipoServicio ||
+                    filtroServicioEspecifico ||
+                    filtroServicioTexto ||
+                    fechaDesde ||
+                    fechaHasta ||
+                    activeCaractCount > 0 ||
+                    busquedaDebounced) && (
                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 flex-wrap">
                         <div className="flex items-center gap-2 text-xs flex-wrap">
                             <div className="flex items-center gap-1 text-gray-500 font-semibold mr-1">
@@ -947,6 +1006,23 @@ function OrdenesPageContent() {
                                 </span>
                             )}
 
+                            {(fechaDesde || fechaHasta) && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-full text-xs font-medium">
+                                    <Calendar className="h-3 w-3 text-blue-600" />
+                                    <span>
+                                        Fecha: {fechaDesde && fechaHasta ? `${fechaDesde} a ${fechaHasta}` : fechaDesde ? `Desde ${fechaDesde}` : `Hasta ${fechaHasta}`}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFechaDesde(''); setFechaHasta(''); setPage(1); }}
+                                        className="hover:bg-blue-200/60 rounded-full p-0.5 text-blue-700 transition-colors"
+                                        title="Quitar filtro de fecha"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            )}
+
                             {filtroTipoServicio && (
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-purple-50 text-purple-800 border border-purple-200 rounded-full text-xs font-medium">
                                     <span>
@@ -974,8 +1050,8 @@ function OrdenesPageContent() {
                                     </span>
                                     <button
                                         type="button"
-                                        onClick={() => { setFiltroServicioEspecifico(''); setPage(1); }}
-                                        className="hover:bg-orange-200 rounded-full p-0.5 text-orange-800 transition-colors"
+                                        onClick={() => { setFiltroServicioEspecifico(''); setFiltroServicioTexto(''); setPage(1); }}
+                                        className="hover:bg-orange-200/60 rounded-full p-0.5 text-orange-800 transition-colors"
                                         title="Quitar filtro de servicio específico"
                                     >
                                         <X className="h-3 w-3" />
@@ -983,71 +1059,96 @@ function OrdenesPageContent() {
                                 </span>
                             )}
 
-                            {filtroServicioTexto && (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-100 text-amber-950 border border-amber-300 rounded-full text-xs font-semibold shadow-2xs">
-                                    <Sparkles className="h-3 w-3 text-amber-600" />
-                                    <span>Servicio contiene: &quot;{filtroServicioTexto}&quot;</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setFiltroServicioTexto(''); setPage(1); }}
-                                        className="hover:bg-amber-200 rounded-full p-0.5 text-amber-800 transition-colors"
-                                        title="Quitar filtro de palabra clave de servicio"
+                            {/* Badges dinámicos de características activas */}
+                            {CARACTERISTICAS_ORDEN_REGISTRY.map((caract) => {
+                                const val = filtrosCaracteristicas[caract.id];
+                                if (!val || val === 'TODOS') return null;
+                                const Icon = caract.icon;
+                                const isCon = val === 'CON';
+                                return (
+                                    <span
+                                        key={caract.id}
+                                        className={cn(
+                                            'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border shadow-2xs',
+                                            isCon ? caract.activeBadgeColor : 'bg-slate-100 text-slate-700 border-slate-300'
+                                        )}
                                     >
-                                        <X className="h-3 w-3" />
-                                    </button>
-                                </span>
-                            )}
+                                        <Icon className="h-3 w-3" />
+                                        <span>{isCon ? `Con ${caract.labelCorto}` : `Sin ${caract.labelCorto}`}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFiltrosCaracteristicas((prev) => ({
+                                                    ...prev,
+                                                    [caract.id]: 'TODOS',
+                                                }));
+                                                setPage(1);
+                                            }}
+                                            className="hover:opacity-75 rounded-full p-0.5 transition-opacity"
+                                            title={`Quitar filtro de ${caract.labelCorto}`}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </span>
+                                );
+                            })}
                         </div>
 
-                        {/* Botón limpiar todos */}
+                        {/* Botón Restablecer Todos */}
                         <button
                             type="button"
                             onClick={() => {
+                                setBusqueda('');
+                                setBusquedaDebounced('');
                                 setFiltroEstado('');
                                 setFiltroTecnico('');
                                 setFiltroPrioridad('');
                                 setFiltroTipoServicio('');
                                 setFiltroServicioEspecifico('');
                                 setFiltroServicioTexto('');
-                                setBusqueda('');
-                                setBusquedaDebounced('');
+                                setFechaDesde('');
+                                setFechaHasta('');
+                                setFiltrosCaracteristicas({});
                                 setPage(1);
                             }}
-                            className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-semibold hover:underline shrink-0 ml-auto"
+                            className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-semibold hover:underline cursor-pointer"
                         >
-                            <RotateCcw className="h-3.5 w-3.5" />
-                            Limpiar todos
+                            <RotateCcw className="h-3 w-3" />
+                            <span>Restablecer todos</span>
                         </button>
                     </div>
                 )}
             </div>
 
-            {/* Loading */}
-            {isLoading && (
-                <div className="flex justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
-            )}
-
-            {/* Error */}
-            {isError && (
-                <div className="flex flex-col items-center justify-center py-12 text-red-500">
-                    <AlertCircle className="h-8 w-8 mb-2" />
-                    <p className="font-medium">Error al cargar órdenes</p>
-                    <button onClick={() => refetch()} className="mt-2 text-sm text-blue-600 hover:underline">
-                        Reintentar
-                    </button>
-                </div>
-            )}
-
             {/* Grid de órdenes */}
             {!isLoading && !isError && (
                 <>
                     {ordenesFiltradas.length === 0 ? (
-                        <div className="text-center py-12 bg-gray-50 rounded-lg">
-                            <ClipboardList className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-                            <p className="text-gray-600 font-medium">No hay órdenes de servicio</p>
-                            <p className="text-gray-500 text-sm">Las órdenes aparecerán aquí cuando se creen</p>
+                        <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-8 space-y-3">
+                            <ClipboardList className="h-12 w-12 mx-auto text-slate-400" />
+                            <p className="text-slate-800 font-bold text-base">No se encontraron órdenes con los filtros aplicados</p>
+                            <p className="text-slate-500 text-xs max-w-md mx-auto">Prueba cambiando el rango de fechas, los indicadores de entregables o restableciendo los criterios.</p>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setBusqueda('');
+                                    setBusquedaDebounced('');
+                                    setFiltroEstado('');
+                                    setFiltroTecnico('');
+                                    setFiltroPrioridad('');
+                                    setFiltroTipoServicio('');
+                                    setFiltroServicioEspecifico('');
+                                    setFiltroServicioTexto('');
+                                    setFechaDesde('');
+                                    setFechaHasta('');
+                                    setFiltrosCaracteristicas({});
+                                    setPage(1);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                <span>Restablecer Filtros</span>
+                            </button>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
