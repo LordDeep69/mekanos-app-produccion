@@ -414,7 +414,7 @@ export function PendientesSection({ orden, onUpdate }: PendientesSectionProps) {
         Boolean(orden.id_orden_padre) ||
         numVisitaActual > 1;
     const esVisitaCompletada =
-        orden.id_estado_orden === 4 ||
+        (orden.id_estado === 4 || (orden as any).id_estado_orden === 4) ||
         (orden.estados_orden?.nombre_estado || '').toUpperCase().includes('COMPLETAD');
 
     return (

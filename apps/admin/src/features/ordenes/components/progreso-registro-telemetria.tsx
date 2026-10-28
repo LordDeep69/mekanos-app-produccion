@@ -530,7 +530,7 @@ export function ProgresoRegistroTelemetria({
                         </div>
 
                         <div className="space-y-2">
-                            {ultimosEventos.slice(0, 5).map((evt, idx) => {
+                            {ultimosEventos.slice(0, 5).map((evt: any, idx: number) => {
                                 const horaTexto = evt.timestamp
                                     ? new Date(evt.timestamp).toLocaleTimeString([], {
                                           hour: '2-digit',

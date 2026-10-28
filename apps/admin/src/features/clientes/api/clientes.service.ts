@@ -13,7 +13,8 @@ import type {
   ClientesResponse,
   ClientesSummary,
   CreateClienteDto,
-  UpdateClienteDto
+  UpdateClienteDto,
+  ClientePrincipalSelector
 } from '@/types/clientes';
 
 const CLIENTES_BASE = '/clientes';

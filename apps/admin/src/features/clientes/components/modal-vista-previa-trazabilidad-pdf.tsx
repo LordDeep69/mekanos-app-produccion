@@ -12,6 +12,7 @@ import {
   FileCheck2,
   Calendar,
   CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { getTrazabilidadPdfBlob } from '../api/clientes.service';
 

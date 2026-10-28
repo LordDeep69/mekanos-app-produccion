@@ -18,6 +18,7 @@ import {
     Globe,
     Layers,
     Loader2,
+    Lock,
     Plus,
     Settings,
     Square,
