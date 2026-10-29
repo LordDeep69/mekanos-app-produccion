@@ -94,6 +94,7 @@ export interface ReportesQueryParams {
     tipoServicio?: number;
     estadoInforme?: string;
     busqueda?: string;
+    descargado?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -114,6 +115,7 @@ export async function getReportes(params?: ReportesQueryParams): Promise<Reporte
     if (params?.tipoServicio) queryParams.append('tipoServicio', String(params.tipoServicio));
     if (params?.estadoInforme) queryParams.append('estadoInforme', params.estadoInforme);
     if (params?.busqueda) queryParams.append('busqueda', params.busqueda);
+    if (params?.descargado) queryParams.append('descargado', params.descargado);
 
     const qs = queryParams.toString();
     const url = `/informes/reportes${qs ? `?${qs}` : ''}`;

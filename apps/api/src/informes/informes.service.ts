@@ -78,6 +78,7 @@ export class InformesService {
     tipoServicio?: number;
     estadoInforme?: string;
     busqueda?: string;
+    descargado?: string;
   }) {
     try {
       const page = filters.page || 1;
@@ -117,6 +118,14 @@ export class InformesService {
         } else {
           conditions.push(`i.estado_informe::text = $${idx++}`);
           params.push(filters.estadoInforme);
+        }
+      }
+
+      if (filters.descargado) {
+        if (filters.descargado === 'SI' || filters.descargado === 'true' || filters.descargado === 'DESCARGADO') {
+          conditions.push(`COALESCE(dg.veces_descargado, 0) > 0`);
+        } else if (filters.descargado === 'NO' || filters.descargado === 'false' || filters.descargado === 'NO_DESCARGADO') {
+          conditions.push(`COALESCE(dg.veces_descargado, 0) = 0`);
         }
       }
 
@@ -240,10 +249,10 @@ export class InformesService {
       const dataParams = [...params, limit, offset];
 
       // ── Execute both queries in parallel ─────────────────────────────────
-      const [countResult, data]: [any[], any[]] = await Promise.all([
+      const [countResult, data] = (await Promise.all([
         this.prisma.$queryRawUnsafe(countSql, ...params),
         this.prisma.$queryRawUnsafe(dataSql, ...dataParams),
-      ]);
+      ])) as [any[], any[]];
 
       const total = countResult[0]?.total || 0;
 

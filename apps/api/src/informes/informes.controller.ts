@@ -37,6 +37,7 @@ export class InformesController {
     @Query('tipoServicio') tipoServicioStr?: string,
     @Query('estadoInforme') estadoInforme?: string,
     @Query('busqueda') busqueda?: string,
+    @Query('descargado') descargado?: string,
   ) {
     return this.informesService.findAllReportes({
       page: pageStr ? parseInt(pageStr, 10) : undefined,
@@ -47,6 +48,7 @@ export class InformesController {
       tipoServicio: tipoServicioStr ? parseInt(tipoServicioStr, 10) : undefined,
       estadoInforme,
       busqueda,
+      descargado,
     });
   }
 

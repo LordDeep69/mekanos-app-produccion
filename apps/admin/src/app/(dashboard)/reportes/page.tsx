@@ -358,6 +358,7 @@ export default function ReportesPage() {
     const [busquedaDebounced, setBusquedaDebounced] = useState('');
     const [filtroCliente, setFiltroCliente] = useState<string>('');
     const [filtroEstado, setFiltroEstado] = useState<string>('');
+    const [filtroDescarga, setFiltroDescarga] = useState<string>('');
     const [fechaDesde, setFechaDesde] = useState<string>('');
     const [fechaHasta, setFechaHasta] = useState<string>('');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -386,6 +387,7 @@ export default function ReportesPage() {
         fechaDesde: fechaDesde || undefined,
         fechaHasta: fechaHasta || undefined,
         busqueda: busquedaDebounced || undefined,
+        descargado: filtroDescarga || undefined,
     });
 
     const reportes = data?.data || [];
@@ -393,7 +395,7 @@ export default function ReportesPage() {
     const totalPages = meta?.totalPages || 1;
     const totalItems = meta?.total || 0;
 
-    const hasActiveFilters = !!(filtroCliente || filtroEstado || fechaDesde || fechaHasta || busquedaDebounced);
+    const hasActiveFilters = !!(filtroCliente || filtroEstado || fechaDesde || fechaHasta || busquedaDebounced || filtroDescarga);
 
     const clearAllFilters = () => {
         setFiltroCliente('');
@@ -402,6 +404,7 @@ export default function ReportesPage() {
         setFechaHasta('');
         setBusqueda('');
         setBusquedaDebounced('');
+        setFiltroDescarga('');
         setPage(1);
     };
 
@@ -486,6 +489,49 @@ export default function ReportesPage() {
                             <option value="ENVIADO">Enviado</option>
                         </select>
 
+                        {/* Filtro por Descargas / Badge */}
+                        <div className="flex items-center rounded-lg border border-gray-300 bg-gray-50/70 p-0.5 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => { setFiltroDescarga(''); setPage(1); }}
+                                className={cn(
+                                    'px-2.5 py-1.5 rounded-md font-medium transition-all text-xs',
+                                    !filtroDescarga
+                                        ? 'bg-white text-gray-900 shadow-2xs font-semibold'
+                                        : 'text-gray-500 hover:text-gray-900'
+                                )}
+                            >
+                                Todas
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setFiltroDescarga('SI'); setPage(1); }}
+                                className={cn(
+                                    'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-medium transition-all text-xs',
+                                    filtroDescarga === 'SI'
+                                        ? 'bg-emerald-600 text-white shadow-2xs font-semibold'
+                                        : 'text-gray-600 hover:text-emerald-700'
+                                )}
+                                title="Filtrar informes que tienen el badge de descargados (descargados al menos 1 vez)"
+                            >
+                                <BadgeCheck className={cn('h-3.5 w-3.5', filtroDescarga === 'SI' ? 'text-white' : 'text-emerald-600')} />
+                                <span>Descargados</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setFiltroDescarga('NO'); setPage(1); }}
+                                className={cn(
+                                    'px-2.5 py-1.5 rounded-md font-medium transition-all text-xs',
+                                    filtroDescarga === 'NO'
+                                        ? 'bg-gray-800 text-white shadow-2xs font-semibold'
+                                        : 'text-gray-600 hover:text-gray-900'
+                                )}
+                                title="Filtrar informes sin descargar"
+                            >
+                                <span>Sin descargar</span>
+                            </button>
+                        </div>
+
                         {/* Toggle filtros avanzados */}
                         <button
                             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -546,6 +592,31 @@ export default function ReportesPage() {
                         {filtroEstado && (
                             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full text-xs">
                                 Estado: {getEstadoInformeLabel(filtroEstado)}
+                            </span>
+                        )}
+                        {filtroDescarga && (
+                            <span className={cn(
+                                'flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
+                                filtroDescarga === 'SI'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : 'bg-gray-100 text-gray-800 border border-gray-200'
+                            )}>
+                                {filtroDescarga === 'SI' ? (
+                                    <>
+                                        <BadgeCheck className="h-3 w-3 text-emerald-600" />
+                                        <span>Descargas: Con badge</span>
+                                    </>
+                                ) : (
+                                    <span>Descargas: Sin descargar</span>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => { setFiltroDescarga(''); setPage(1); }}
+                                    className="hover:opacity-75"
+                                    title="Quitar filtro de descargas"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
                             </span>
                         )}
                         {(fechaDesde || fechaHasta) && (
