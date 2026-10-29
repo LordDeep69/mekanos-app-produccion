@@ -130,6 +130,9 @@ export function HierarchicalCategorySelect({
   const [selectedCat, setSelectedCat] = useState<CategoriaNodo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Bandera para diferenciar cambios internos (clic del usuario) de cambios externos (props)
+  const isInternalChangeRef = useRef(false);
+
   // Ruta activa de ancestros: [idL1, idL2, idL3, ...]
   const [selectedPath, setSelectedPath] = useState<number[]>([]);
 
@@ -194,6 +197,25 @@ export function HierarchicalCategorySelect({
 
   // 2. Sincronizar selección y ruta activa
   useEffect(() => {
+    if (isInternalChangeRef.current) {
+      // Cambio interno originado por interacción del usuario dentro del componente:
+      // Sincronizamos selectedCat y selectedPath según el nuevo valor, sin sobreescribir currentParentId.
+      isInternalChangeRef.current = false;
+      if (value && mapPorId.has(value)) {
+        const encontrada = mapPorId.get(value)!;
+        setSelectedCat(encontrada);
+        const path: number[] = [];
+        let curr: CategoriaNodo | undefined = encontrada;
+        while (curr) {
+          path.unshift(curr.id_categoria);
+          curr = curr.id_padre ? mapPorId.get(curr.id_padre) : undefined;
+        }
+        setSelectedPath(path);
+      }
+      return;
+    }
+
+    // Cambio externo (carga inicial, reseteo del formulario desde el padre, etc.)
     if (value && mapPorId.has(value)) {
       const encontrada = mapPorId.get(value)!;
       setSelectedCat(encontrada);
@@ -251,10 +273,52 @@ export function HierarchicalCategorySelect({
     return currentParentNode.nivel + 1;
   }, [currentParentNode]);
 
+  // Categoría seleccionada actualmente dentro del nivel visualizado (si la hay)
+  const selectedInCurrentLevel = useMemo(() => {
+    if (!selectedCat) return null;
+    return itemsEnfoqueActual.find((c) => c.id_categoria === selectedCat.id_categoria) || null;
+  }, [itemsEnfoqueActual, selectedCat]);
+
+  // Determinar si la categoría seleccionada tiene hijas directas para habilitar el botón de exploración
+  const canDrillDownSelected = useMemo(() => {
+    if (!selectedInCurrentLevel) return false;
+    const hijos = getChildren(selectedInCurrentLevel);
+    return Array.isArray(hijos) && hijos.length > 0 && currentParentId !== selectedInCurrentLevel.id_categoria;
+  }, [selectedInCurrentLevel, currentParentId]);
+
+  const drillDownHijosCount = useMemo(() => {
+    if (!selectedInCurrentLevel) return 0;
+    return getChildren(selectedInCurrentLevel).length;
+  }, [selectedInCurrentLevel]);
+
+  // Acción para descender a las hijas de la categoría seleccionada (equivalente al 2do clic)
+  const handleDrillDownSelected = () => {
+    if (!selectedInCurrentLevel) return;
+    const hijos = getChildren(selectedInCurrentLevel);
+    if (hijos && hijos.length > 0) {
+      isInternalChangeRef.current = true;
+      setCurrentParentId(selectedInCurrentLevel.id_categoria);
+    }
+  };
+
   // 5. Manejador al seleccionar un ítem en la lista enfocada:
-  // - Si tiene hijos: REGISTRA LA SELECCIÓN y AVANZA de nivel (mostrando solo sus hijas directas).
-  // - Si no tiene hijos (terminal): REGISTRA LA SELECCIÓN y CIERRA "EL CUADRO".
+  // - 1er clic en categoría con hijas: REGISTRA LA SELECCIÓN (se pone azul) y muestra botón "Ver Categorías Hijas".
+  // - 2do clic en la misma categoría: DESPLIEGA las hijas directas de esa categoría (drill-down).
+  // - Clic en categoría terminal (sin hijas): REGISTRA LA SELECCIÓN y CIERRA "EL CUADRO".
   const handleSelectItem = (cat: CategoriaNodo, isFromCombobox = false) => {
+    const hijos = getChildren(cat);
+    const hasChildren = Array.isArray(hijos) && hijos.length > 0;
+    const isAlreadySelected = selectedCat?.id_categoria === cat.id_categoria;
+
+    // Si ya estaba seleccionada y tiene hijos: EL SEGUNDO CLIC DESPLIEGA LAS HIJAS DIRECTAS
+    if (isAlreadySelected && hasChildren) {
+      isInternalChangeRef.current = true;
+      setCurrentParentId(cat.id_categoria);
+      return;
+    }
+
+    // PRIMER CLIC: REGISTRA LA SELECCIÓN
+    isInternalChangeRef.current = true;
     const path: number[] = [];
     let curr: CategoriaNodo | undefined = cat;
     while (curr) {
@@ -267,12 +331,8 @@ export function HierarchicalCategorySelect({
     // REGISTRO Y VALIDACIÓN INMEDIATA EN EL FORMULARIO / URL
     onChange(cat.id_categoria, cat);
 
-    const hijos = getChildren(cat);
-    if (hijos && hijos.length > 0) {
-      // Avanzar el foco exclusivamente a sus hijas directas
-      setCurrentParentId(cat.id_categoria);
-    } else {
-      // Si es terminal, damos por completada la selección y replegamos el cuadro
+    // Si NO tiene hijos (terminal), completamos la selección cerrando el popover
+    if (!hasChildren) {
       if (isFromCombobox) {
         setIsOpenCombobox(false);
       } else {
@@ -283,6 +343,7 @@ export function HierarchicalCategorySelect({
 
   // Manejador para aplicar categoría intermedia (ej. filtrar por "Filtros y Filtración" completo)
   const handleAplicarCategoriaPadre = (cat: CategoriaNodo, isFromCombobox = false) => {
+    isInternalChangeRef.current = true;
     const path: number[] = [];
     let curr: CategoriaNodo | undefined = cat;
     while (curr) {
@@ -297,29 +358,23 @@ export function HierarchicalCategorySelect({
     else setIsExploradorAbierto(false);
   };
 
-  // 6. Navegación hacia atrás (Volver un nivel)
+  // 6. Navegación hacia atrás (Volver un nivel respetando estrictamente el flujo secuencial)
   const handleVolverNivel = () => {
-    if (!currentParentNode) return;
-    const nuevoPadreId = currentParentNode.id_padre || null;
-    setCurrentParentId(nuevoPadreId);
-
-    if (nuevoPadreId && mapPorId.has(nuevoPadreId)) {
-      const nuevoCat = mapPorId.get(nuevoPadreId)!;
-      setSelectedCat(nuevoCat);
-      onChange(nuevoCat.id_categoria, nuevoCat);
-
-      const path: number[] = [];
-      let curr: CategoriaNodo | undefined = nuevoCat;
-      while (curr) {
-        path.unshift(curr.id_categoria);
-        curr = curr.id_padre ? mapPorId.get(curr.id_padre) : undefined;
-      }
-      setSelectedPath(path);
+    if (!currentParentNode) {
+      // Ya estamos en la raíz (Nivel 1)
+      setCurrentParentId(null);
+      return;
     }
+    
+    // Retroceder un escalón exacto hacia el padre del nivel actual
+    const nuevoPadreId = currentParentNode.id_padre || null;
+    isInternalChangeRef.current = true;
+    setCurrentParentId(nuevoPadreId);
   };
 
   // Saltar directamente a cualquier nivel desde las migas de pan
   const handleJumpToLevel = (cat: CategoriaNodo) => {
+    isInternalChangeRef.current = true;
     setSelectedCat(cat);
     onChange(cat.id_categoria, cat);
 
@@ -356,6 +411,7 @@ export function HierarchicalCategorySelect({
   }, [flatList, searchGlobal]);
 
   const handleSelectBusquedaDirecta = (cat: CategoriaNodo, isFromCombobox = false) => {
+    isInternalChangeRef.current = true;
     const path: number[] = [];
     let curr: CategoriaNodo | undefined = cat;
     while (curr) {
@@ -381,6 +437,7 @@ export function HierarchicalCategorySelect({
 
   const handleClear = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    isInternalChangeRef.current = true;
     setSelectedCat(null);
     setSelectedPath([]);
     setCurrentParentId(null);
@@ -433,6 +490,7 @@ export function HierarchicalCategorySelect({
       const nuevoArbol = await comprasService.getCategoriasArbol();
       setArbol(nuevoArbol);
 
+      isInternalChangeRef.current = true;
       // Reconstruir camino y auto-seleccionar
       const path: number[] = [];
       let curr: CategoriaNodo | undefined = nueva;
@@ -792,7 +850,20 @@ export function HierarchicalCategorySelect({
                           )}
 
                           {hasChildren ? (
-                            <div className="flex items-center gap-1">
+                            <div
+                              role="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectItem(cat, false);
+                                isInternalChangeRef.current = true;
+                                setCurrentParentId(cat.id_categoria);
+                              }}
+                              className={cn(
+                                'flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer',
+                                isSelected ? 'hover:bg-blue-700' : 'hover:bg-blue-100/60'
+                              )}
+                              title={`Explorar ${hijos.length} subcategorías directas`}
+                            >
                               <Badge
                                 variant="outline"
                                 className={cn(
@@ -862,16 +933,30 @@ export function HierarchicalCategorySelect({
                 )}
               </div>
 
-              {selectedCat && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setIsExploradorAbierto(false)}
-                  className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
-                >
-                  ✓ Listo, aplicar selección
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {canDrillDownSelected && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleDrillDownSelected}
+                    className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 px-3 shadow-xs transition-all animate-in fade-in"
+                  >
+                    <FolderTree className="h-3.5 w-3.5" />
+                    <span>Ver Categorías Hijas ({drillDownHijosCount})</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {selectedCat && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsExploradorAbierto(false)}
+                    className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+                  >
+                    ✓ Listo, aplicar selección
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -1032,18 +1117,26 @@ export function HierarchicalCategorySelect({
                 <button
                   type="button"
                   onClick={handleVolverNivel}
-                  className="flex items-center gap-1 font-bold text-blue-700 hover:text-blue-900"
+                  className="flex items-center gap-1 font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 rounded-md px-2 py-0.5 shadow-2xs hover:bg-blue-100 transition-colors"
+                  title="Volver al nivel superior anterior"
                 >
-                  <ArrowLeft className="h-3 w-3" />
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   <span>Volver</span>
                 </button>
-                <span className="font-semibold text-[11px] text-gray-700 truncate max-w-[180px]">
-                  {currentParentNode.nombre}
-                </span>
+                <div className="flex items-center gap-1.5 truncate max-w-[220px]">
+                  <span className="text-[10px] text-gray-500 font-medium">En:</span>
+                  <span className="font-bold text-[11px] text-blue-950 uppercase truncate">
+                    {currentParentNode.nombre}
+                  </span>
+                  <Badge variant="outline" className="text-[9px] bg-white border-blue-300 text-blue-700 font-mono px-1 py-0 shrink-0">
+                    N{nivelVisualizado}
+                  </Badge>
+                </div>
                 <button
                   type="button"
                   onClick={() => handleAplicarCategoriaPadre(currentParentNode, true)}
-                  className="text-[10px] text-blue-700 hover:underline font-bold"
+                  className="text-[10px] text-blue-700 hover:underline font-bold shrink-0"
+                  title={`Asignar ${currentParentNode.nombre} directamente`}
                 >
                   ✓ Asignar esta
                 </button>
@@ -1088,11 +1181,26 @@ export function HierarchicalCategorySelect({
 
                       <div className="flex items-center gap-1 shrink-0 ml-1">
                         {hasChildren ? (
-                          <div className="flex items-center gap-0.5">
-                            <span className={cn('text-[10px] font-mono', isSelected ? 'text-blue-200' : 'text-gray-400')}>
+                          <div
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectItem(cat, true);
+                              isInternalChangeRef.current = true;
+                              setCurrentParentId(cat.id_categoria);
+                            }}
+                            className={cn(
+                              'flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer',
+                              isSelected
+                                ? 'hover:bg-blue-700 text-blue-100'
+                                : 'hover:bg-gray-200 text-gray-500 hover:text-blue-700'
+                            )}
+                            title={`Ver ${hijos.length} subcategorías directas`}
+                          >
+                            <span className="text-[10px] font-mono font-medium">
                               {hijos.length}
                             </span>
-                            <ChevronRight className={cn('h-3 w-3', isSelected ? 'text-white' : 'text-gray-400 group-hover:text-blue-600')} />
+                            <ChevronRight className={cn('h-3.5 w-3.5', isSelected ? 'text-white' : 'text-gray-400')} />
                           </div>
                         ) : (
                           isSelected && <Check className="h-3.5 w-3.5 text-white" />
@@ -1109,8 +1217,8 @@ export function HierarchicalCategorySelect({
             </div>
 
             {/* Pie del Popover con Creación In-Context y Cierre Limpio */}
-            <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
+            <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 shrink-0">
                 {selectedCat ? (
                   <button
                     type="button"
@@ -1124,13 +1232,32 @@ export function HierarchicalCategorySelect({
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                {canDrillDownSelected && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleDrillDownSelected}
+                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 px-2.5 shadow-2xs transition-all animate-in fade-in shrink-0"
+                    title={`Ver ${drillDownHijosCount} subcategorías directas de ${selectedInCurrentLevel?.nombre}`}
+                  >
+                    <FolderTree className="h-3.5 w-3.5" />
+                    <span>Ver Categorías Hijas</span>
+                    {drillDownHijosCount > 0 && (
+                      <span className="bg-blue-500 text-white text-[10px] font-mono px-1.5 py-0 rounded-full font-bold">
+                        {drillDownHijosCount}
+                      </span>
+                    )}
+                    <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                  </Button>
+                )}
+
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
                   onClick={() => handleOpenCreateModal(currentParentId)}
-                  className="h-7 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 px-2"
+                  className="h-7 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 px-2 shrink-0"
                   title={currentParentId === null ? 'Crear nueva familia principal' : `Crear subcategoría dentro de ${currentParentNode?.nombre}`}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -1141,7 +1268,7 @@ export function HierarchicalCategorySelect({
                   size="sm"
                   variant="outline"
                   onClick={() => setIsOpenCombobox(false)}
-                  className="h-7 text-xs px-2.5"
+                  className="h-7 text-xs px-2.5 shrink-0"
                 >
                   Cerrar
                 </Button>
