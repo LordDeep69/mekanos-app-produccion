@@ -656,31 +656,31 @@ function OrdenesPageContent() {
                     </button>
                 </div>
 
-                <div className="flex flex-col lg:flex-row gap-3">
-                    {/* Búsqueda */}
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <div className="flex flex-col xl:flex-row gap-2.5 items-stretch xl:items-center">
+                    {/* Búsqueda inteligente y adaptativa (nunca colapsa) */}
+                    <div className="relative w-full xl:w-80 2xl:w-96 shrink-0">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                         <input
                             type="text"
-                            placeholder="Buscar por orden, cliente, NIT, técnico, equipo, servicio..."
+                            placeholder="Buscar orden, cliente, NIT, técnico, equipo..."
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
-                            className="w-full pl-10 pr-9 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
+                            className="w-full h-9 pl-9 pr-8 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 placeholder-slate-400 font-medium transition-all shadow-2xs"
                         />
                         {busqueda && (
                             <button
                                 type="button"
                                 onClick={() => setBusqueda('')}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 transition-colors"
                                 title="Limpiar búsqueda"
                             >
-                                <X className="h-4 w-4" />
+                                <X className="h-3.5 w-3.5" />
                             </button>
                         )}
                     </div>
 
                     {/* Filtros principales */}
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 flex-1">
                         {/* Estado con selector moderno */}
                         <ModernFilterSelect
                             icon={CheckCircle2}
@@ -868,8 +868,19 @@ function OrdenesPageContent() {
                                     />
                                 </div>
 
-                                {/* Columna 2: Indicadores y Badges de la Orden (Correo, PDF, Pendientes) */}
+                                {/* Columna 2: Indicadores y Badges de la Orden (Desplegable con Feedback) */}
                                 <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                                        <span className="flex items-center gap-1.5">
+                                            <SlidersHorizontal className="h-3.5 w-3.5 text-blue-600" />
+                                            Indicadores de Entrega
+                                        </span>
+                                        {activeCaractCount > 0 && (
+                                            <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+                                                {activeCaractCount} activo{activeCaractCount > 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </label>
                                     <CaracteristicasOrdenFilter
                                         filtros={filtrosCaracteristicas}
                                         onChange={(id, estado) => {
