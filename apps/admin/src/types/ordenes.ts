@@ -337,6 +337,9 @@ export interface OrdenesQueryParams {
     servicioTexto?: string; // ✅ Búsqueda inteligente por palabra clave de servicio (ej: 'RADIADOR')
     filtroCaso?: 'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | string;
     conPendientes?: boolean;
+    filtroCorreo?: 'CON' | 'SIN' | string;
+    filtroPdf?: 'CON' | 'SIN' | string;
+    filtroPendientes?: 'CON' | 'SIN' | string;
 }
 
 // DTO para crear orden - MULTI-EQUIPOS

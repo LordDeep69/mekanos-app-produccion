@@ -527,6 +527,9 @@ function OrdenesPageContent() {
         fechaDesde: fechaDesde || undefined,
         fechaHasta: fechaHasta || undefined,
         conPendientes: filtrosCaracteristicas.pendientes === 'CON' ? true : undefined,
+        filtroCorreo: (filtrosCaracteristicas.correo === 'CON' || filtrosCaracteristicas.correo === 'SIN') ? filtrosCaracteristicas.correo : undefined,
+        filtroPdf: (filtrosCaracteristicas.pdf === 'CON' || filtrosCaracteristicas.pdf === 'SIN') ? filtrosCaracteristicas.pdf : undefined,
+        filtroPendientes: (filtrosCaracteristicas.pendientes === 'CON' || filtrosCaracteristicas.pendientes === 'SIN') ? filtrosCaracteristicas.pendientes : undefined,
     });
 
     const ordenes = data?.data || [];
@@ -554,17 +557,7 @@ function OrdenesPageContent() {
         return ordenes.filter((o) => Boolean((o.total_pendientes && o.total_pendientes > 0) || (o.pendientes_activos && o.pendientes_activos > 0))).length;
     }, [ordenes]);
 
-    // ✅ FILTRADO DINÁMICO POR CARACTERÍSTICAS DE CARDS (Correo, PDF, Pendientes, etc.)
-    const ordenesFiltradas = useMemo(() => {
-        return ordenes.filter((orden) => {
-            for (const caract of CARACTERISTICAS_ORDEN_REGISTRY) {
-                const estado = filtrosCaracteristicas[caract.id] || 'TODOS';
-                if (estado === 'CON' && !caract.check(orden)) return false;
-                if (estado === 'SIN' && caract.check(orden)) return false;
-            }
-            return true;
-        });
-    }, [ordenes, filtrosCaracteristicas]);
+    // ✅ Las órdenes se filtran 100% Server-Side para garantizar paginación y renderizado continuo y exacto
 
     const handleCambiarFiltroCaso = (nuevo: 'TODAS' | 'CASOS_ABIERTOS' | 'CON_PENDIENTES') => {
         setFiltroCasos(nuevo);
@@ -1136,7 +1129,7 @@ function OrdenesPageContent() {
             {/* Grid de órdenes */}
             {!isLoading && !isError && (
                 <>
-                    {ordenesFiltradas.length === 0 ? (
+                    {ordenes.length === 0 ? (
                         <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-8 space-y-3">
                             <ClipboardList className="h-12 w-12 mx-auto text-slate-400" />
                             <p className="text-slate-800 font-bold text-base">No se encontraron órdenes con los filtros aplicados</p>
@@ -1165,7 +1158,7 @@ function OrdenesPageContent() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {ordenesFiltradas.map((orden) => (
+                            {ordenes.map((orden) => (
                                 <OrdenCard
                                     key={orden.id_orden_servicio}
                                     orden={orden}

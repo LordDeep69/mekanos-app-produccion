@@ -5,6 +5,7 @@
  * ENTERPRISE: Soporta sortBy y sortOrder para ordenamiento flexible
  * ✅ 31-ENE-2026: MULTI-ASESOR - Agregado idAsesorAsignado para filtrar por clientes del asesor
  * ✅ 28-OCT-2026: Soporte de filtros de Casos y Pendientes en SQL (Continuidad Operativa)
+ * ✅ 29-OCT-2026: Soporte Server-Side para filtros de entregables (Correo, PDF, Pendientes)
  */
 export class GetOrdenesQuery {
   constructor(
@@ -26,5 +27,8 @@ export class GetOrdenesQuery {
     public readonly servicioTexto?: string, // ✅ Búsqueda inteligente por palabra clave de servicio (ej: 'RADIADOR')
     public readonly filtroCaso?: string, // ✅ FILTRO CASOS: 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | 'TODAS'
     public readonly conPendientes?: boolean, // ✅ Filtro de órdenes con pendientes técnicos activos
+    public readonly filtroCorreo?: string, // ✅ 'CON' | 'SIN'
+    public readonly filtroPdf?: string, // ✅ 'CON' | 'SIN'
+    public readonly filtroPendientes?: string, // ✅ 'CON' | 'SIN'
   ) { }
 }

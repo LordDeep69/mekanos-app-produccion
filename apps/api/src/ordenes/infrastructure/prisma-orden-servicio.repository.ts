@@ -1282,7 +1282,12 @@ export class PrismaOrdenServicioRepository {
     take?: number;
     idAsesorAsignado?: number; // ✅ MULTI-ASESOR
     busqueda?: string; // ✅ BÚSQUEDA: por numero_orden, cliente, técnico, equipo
-  }): Promise<{ items: any[]; total: number }> {
+    filtroCaso?: string; // ✅ FILTRO CASOS: 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | 'TODAS'
+    conPendientes?: boolean; // ✅ Filtro de órdenes con pendientes técnicos activos
+    filtroCorreo?: string; // ✅ 'CON' | 'SIN'
+    filtroPdf?: string; // ✅ 'CON' | 'SIN'
+    filtroPendientes?: string; // ✅ 'CON' | 'SIN'
+  }): Promise<{ items: any[]; total: number; totalCasosAbiertos?: number; totalConPendientes?: number }> {
     const where: any = {};
 
     // ✅ BÚSQUEDA INTELIGENTE MULTI-CRITERIO (MEJORADA 19-SEP-2026):
@@ -1581,6 +1586,47 @@ export class PrismaOrdenServicioRepository {
       } else {
         where.AND = [pendientesCondition];
       }
+    }
+
+    // ✅ FILTRO DE ENTREGABLES Y CARACTERÍSTICAS (Correo, PDF, Pendientes)
+    // 1. CORREO ('CON' | 'SIN')
+    if (filters?.filtroCorreo === 'CON') {
+      const condition = { historial_emails_enviados: { some: {} } };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), condition];
+    } else if (filters?.filtroCorreo === 'SIN') {
+      const condition = { historial_emails_enviados: { none: {} } };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), condition];
+    }
+
+    // 2. PDF ('CON' | 'SIN')
+    if (filters?.filtroPdf === 'CON' || filters?.filtroPdf === 'SIN') {
+      const docsRows: any[] = await this.prisma.$queryRaw`
+        SELECT DISTINCT id_referencia FROM documentos_generados WHERE tipo_documento = 'INFORME_SERVICIO'::tipo_documento_enum
+      `;
+      const idsConPdf = docsRows.map((r: any) => r.id_referencia);
+      const pdfCondition = filters.filtroPdf === 'CON'
+        ? { id_orden_servicio: { in: idsConPdf } }
+        : { id_orden_servicio: { notIn: idsConPdf } };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), pdfCondition];
+    }
+
+    // 3. PENDIENTES ('CON' | 'SIN')
+    if (filters?.filtroPendientes === 'CON' && filters?.filtroCaso !== 'CON_PENDIENTES' && !filters?.conPendientes) {
+      const pendientesCondition = {
+        OR: [
+          { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+        ],
+      };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), pendientesCondition];
+    } else if (filters?.filtroPendientes === 'SIN') {
+      const sinPendientesCondition = {
+        AND: [
+          { ordenes_pendientes: { none: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+          { pendientes_asignados_resolver: { none: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
+        ],
+      };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), sinPendientesCondition];
     }
 
     // ENTERPRISE: Ordenamiento dinámico

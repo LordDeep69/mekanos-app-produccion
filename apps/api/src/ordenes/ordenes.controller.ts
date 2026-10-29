@@ -3011,6 +3011,9 @@ export class OrdenesController {
     @Query('servicioTexto') servicioTexto?: string,
     @Query('filtroCaso') filtroCaso?: string,
     @Query('conPendientes') conPendientes?: string,
+    @Query('filtroCorreo') filtroCorreo?: string,
+    @Query('filtroPdf') filtroPdf?: string,
+    @Query('filtroPendientes') filtroPendientes?: string,
   ) {
     // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
@@ -3034,6 +3037,9 @@ export class OrdenesController {
       servicioTexto?.trim() || undefined, // ✅ Filtro por servicio específico
       filtroCaso, // ✅ FILTRO CASOS: 'CASOS_ABIERTOS' | 'CON_PENDIENTES' | 'TODAS'
       conPendientes === 'true' || conPendientes === '1' ? true : undefined,
+      filtroCorreo?.trim() || undefined,
+      filtroPdf?.trim() || undefined,
+      filtroPendientes?.trim() || undefined,
     );
 
     const result = await this.queryBus.execute(query);

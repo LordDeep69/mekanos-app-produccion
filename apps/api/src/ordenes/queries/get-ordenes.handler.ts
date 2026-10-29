@@ -23,7 +23,7 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
     const {
       page, limit, clienteId, equipoId, tecnicoId, estado, prioridad,
       sortBy, sortOrder, tipoServicioId, fechaDesde, fechaHasta, idAsesorAsignado, busqueda, idServicio, servicioTexto,
-      filtroCaso, conPendientes
+      filtroCaso, conPendientes, filtroCorreo, filtroPdf, filtroPendientes
     } = query;
 
     // Resolver estado string → id_estado_actual (ZERO TRUST: lookup en BD)
@@ -56,6 +56,9 @@ export class GetOrdenesHandler implements IQueryHandler<GetOrdenesQuery> {
       busqueda, // ✅ BÚSQUEDA
       filtroCaso, // ✅ FILTRO CASOS ABIERTOS / EN SEGUIMIENTO
       conPendientes, // ✅ FILTRO PENDIENTES ACTIVOS
+      filtroCorreo, // ✅ FILTRO ENTREGABLES: CORREO ('CON' | 'SIN')
+      filtroPdf, // ✅ FILTRO ENTREGABLES: PDF ('CON' | 'SIN')
+      filtroPendientes, // ✅ FILTRO ENTREGABLES: PENDIENTES ('CON' | 'SIN')
     };
 
     // findAll() devuelve { items, total, totalCasosAbiertos, totalConPendientes }

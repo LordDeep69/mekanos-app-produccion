@@ -77,6 +77,15 @@ export async function getOrdenes(
     if (params?.conPendientes !== undefined) {
         queryParams.append('conPendientes', String(params.conPendientes));
     }
+    if (params?.filtroCorreo) {
+        queryParams.append('filtroCorreo', params.filtroCorreo);
+    }
+    if (params?.filtroPdf) {
+        queryParams.append('filtroPdf', params.filtroPdf);
+    }
+    if (params?.filtroPendientes) {
+        queryParams.append('filtroPendientes', params.filtroPendientes);
+    }
 
     const url = queryParams.toString()
         ? `${ORDENES_BASE}?${queryParams.toString()}`
