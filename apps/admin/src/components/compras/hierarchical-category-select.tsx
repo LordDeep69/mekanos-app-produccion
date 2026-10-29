@@ -1050,9 +1050,9 @@ export function HierarchicalCategorySelect({
           </div>
         </div>
 
-        {/* POPOVER FLOTANTE Z-50 (SÓLO SE REFLEJA CUANDO EL SELECTOR TIENE EL CLIC ACTIVADO) */}
+        {/* POPOVER FLOTANTE Z-50 (CONTENEDOR INTELIGENTE ADAPTABLE SIN DESBORDAMIENTO) */}
         {isOpenCombobox && (
-          <div className="absolute z-50 left-0 mt-1 w-full min-w-[320px] sm:w-[480px] max-w-full rounded-xl border border-gray-200 bg-white p-3 shadow-xl animate-in fade-in-0 zoom-in-95 space-y-2.5">
+          <div className="absolute z-50 left-0 mt-1 w-full min-w-[320px] sm:min-w-[560px] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-3 shadow-xl animate-in fade-in-0 zoom-in-95 space-y-2.5">
             {/* Buscador superior predictivo */}
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
@@ -1217,13 +1217,13 @@ export function HierarchicalCategorySelect({
             </div>
 
             {/* Pie del Popover con Creación In-Context y Cierre Limpio */}
-            <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
+            <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2 shrink-0">
                 {selectedCat ? (
                   <button
                     type="button"
                     onClick={handleClear}
-                    className="text-[11px] text-red-600 hover:underline font-medium"
+                    className="text-[11px] text-red-600 hover:text-red-700 hover:underline font-medium transition-colors"
                   >
                     Limpiar selección
                   </button>
@@ -1232,13 +1232,13 @@ export function HierarchicalCategorySelect({
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 overflow-x-auto">
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
                 {canDrillDownSelected && (
                   <Button
                     type="button"
                     size="sm"
                     onClick={handleDrillDownSelected}
-                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 px-2.5 shadow-2xs transition-all animate-in fade-in shrink-0"
+                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 px-2.5 shadow-2xs transition-all animate-in fade-in"
                     title={`Ver ${drillDownHijosCount} subcategorías directas de ${selectedInCurrentLevel?.nombre}`}
                   >
                     <FolderTree className="h-3.5 w-3.5" />
@@ -1257,7 +1257,7 @@ export function HierarchicalCategorySelect({
                   size="sm"
                   variant="ghost"
                   onClick={() => handleOpenCreateModal(currentParentId)}
-                  className="h-7 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 px-2 shrink-0"
+                  className="h-7 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 px-2"
                   title={currentParentId === null ? 'Crear nueva familia principal' : `Crear subcategoría dentro de ${currentParentNode?.nombre}`}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -1268,7 +1268,7 @@ export function HierarchicalCategorySelect({
                   size="sm"
                   variant="outline"
                   onClick={() => setIsOpenCombobox(false)}
-                  className="h-7 text-xs px-2.5 shrink-0"
+                  className="h-7 text-xs px-2.5 text-gray-700 hover:bg-gray-50 border-gray-300"
                 >
                   Cerrar
                 </Button>
