@@ -4,6 +4,7 @@ import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
 /**
  * DTO para filtrar equipos en listados
  * ✅ FASE 2: Campos mapeados a schema real (snake_case)
+ * ✅ SMART FACETS EAM: Filtros dinámicos por marcas de subsistema y métricas de operación
  */
 export class GetEquiposQueryDto {
   @IsOptional()
@@ -32,6 +33,42 @@ export class GetEquiposQueryDto {
   @IsOptional()
   @IsString({ message: 'search debe ser una cadena de texto' })
   search?: string;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ✅ FACETAS AVANZADAS DINÁMICAS (EAM SMART FACETS)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  @IsOptional()
+  @IsString({ message: 'filtroMarcaCampo debe ser una cadena de texto' })
+  filtroMarcaCampo?: string;
+
+  @IsOptional()
+  @IsString({ message: 'filtroMarcaValor debe ser una cadena de texto' })
+  filtroMarcaValor?: string;
+
+  @IsOptional()
+  @IsString({ message: 'filtroMarcaTabla debe ser una cadena de texto' })
+  filtroMarcaTabla?: string;
+
+  @IsOptional()
+  @IsString({ message: 'filtroValorCampo debe ser una cadena de texto' })
+  filtroValorCampo?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  filtroValorMin?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  filtroValorMax?: number;
+
+  @IsOptional()
+  @IsString({ message: 'filtroValorExacto debe ser una cadena de texto' })
+  filtroValorExacto?: string;
+
+  @IsOptional()
+  @IsString({ message: 'filtroValorTabla debe ser una cadena de texto' })
+  filtroValorTabla?: string;
 
   @IsOptional()
   @IsString({ message: 'sortBy debe ser una cadena de texto' })

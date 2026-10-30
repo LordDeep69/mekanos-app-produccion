@@ -20,6 +20,7 @@ export {
     useEliminarEquipoCompletamente,
     useEquipo,
     useEquipos,
+    useFacetasEquipos,
     useRegistrarLecturaHorometro,
     useTrazabilidadEquipo,
     type TrazabilidadEquipoResponse,

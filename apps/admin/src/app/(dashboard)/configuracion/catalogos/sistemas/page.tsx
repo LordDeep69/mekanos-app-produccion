@@ -178,10 +178,19 @@ export default function SistemasPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex flex-wrap gap-1">
-                                                {sistema.aplica_a ? (
-                                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold uppercase">
-                                                        {APLICA_A_OPTIONS.find(o => o.value === sistema.aplica_a)?.label || sistema.aplica_a}
+                                            <div className="flex flex-wrap gap-1 items-center">
+                                                {Array.isArray(sistema.aplica_a) && sistema.aplica_a.length > 0 ? (
+                                                    sistema.aplica_a.map((codigo: string) => (
+                                                        <span
+                                                            key={codigo}
+                                                            className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider font-mono"
+                                                        >
+                                                            {codigo}
+                                                        </span>
+                                                    ))
+                                                ) : sistema.aplica_a && typeof sistema.aplica_a === 'string' ? (
+                                                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider font-mono">
+                                                        {sistema.aplica_a}
                                                     </span>
                                                 ) : (
                                                     <span className="text-xs text-gray-400 italic">Todos los equipos</span>
@@ -339,6 +348,64 @@ function SistemaModal({ isOpen, onClose, sistema, onSubmit, isLoading }: any) {
                             className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
                             placeholder="Breve descripción de los componentes que abarca..."
                         />
+                    </div>
+
+                    <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-sm font-bold text-gray-700">Aplica a Tipos de Equipo</label>
+                            <span className="text-[11px] text-gray-400">
+                                {Array.isArray(formData.aplica_a) && formData.aplica_a.length > 0
+                                    ? `${formData.aplica_a.length} seleccionado(s)`
+                                    : 'Aplica a todos (sin filtro)'}
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                            {[
+                                { codigo: 'GENERADOR', label: '⚡ Generador / Planta' },
+                                { codigo: 'BOMBA', label: '💧 Bomba / Motobomba' },
+                                { codigo: 'COMPRESOR', label: '💨 Compresor de Aire' },
+                                { codigo: 'MOTOR', label: '⚙️ Motor Independiente' },
+                                { codigo: 'HVAC', label: '❄️ Climatización / HVAC' },
+                            ].map((opt) => {
+                                const selected = Array.isArray(formData.aplica_a) && formData.aplica_a.includes(opt.codigo);
+                                return (
+                                    <button
+                                        key={opt.codigo}
+                                        type="button"
+                                        onClick={() => {
+                                            const curr = Array.isArray(formData.aplica_a) ? [...formData.aplica_a] : [];
+                                            const idx = curr.indexOf(opt.codigo);
+                                            if (idx >= 0) {
+                                                curr.splice(idx, 1);
+                                            } else {
+                                                curr.push(opt.codigo);
+                                            }
+                                            setFormData({ ...formData, aplica_a: curr });
+                                        }}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
+                                            selected
+                                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        <span>{opt.label}</span>
+                                        {selected && <Check className="h-3 w-3" />}
+                                    </button>
+                                );
+                            })}
+                            {Array.isArray(formData.aplica_a) && formData.aplica_a.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, aplica_a: [] })}
+                                    className="px-2 py-1 text-[11px] font-semibold text-gray-500 hover:text-red-600 hover:underline ml-auto"
+                                >
+                                    Restablecer a Todos
+                                </button>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">
+                            Si no selecciona ningún tipo específico, el sistema estará disponible globalmente para cualquier equipo.
+                        </p>
                     </div>
                 </form>
 

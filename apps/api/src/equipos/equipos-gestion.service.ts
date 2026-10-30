@@ -28,6 +28,11 @@ import {
   TipoEquipoDiscriminator,
   TipoMotorEnum,
 } from './dto/create-equipo-completo.dto';
+import {
+  FACETAS_MARCA_REGISTRO,
+  FACETAS_VALOR_TRABAJO_REGISTRO,
+  resolverBloquesActivos,
+} from './domain/equipment-facets.config';
 
 @Injectable()
 export class EquiposGestionService {
@@ -429,7 +434,7 @@ export class EquiposGestionService {
    * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
    * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
-  async listarEquiposCompletos(params: {
+    async listarEquiposCompletos(params: {
     id_cliente?: number;
     id_sede?: number;
     tipo?: string;
@@ -440,6 +445,14 @@ export class EquiposGestionService {
     page?: number;
     limit?: number;
     idAsesorAsignado?: number; // ✅ MULTI-ASESOR
+    filtroMarcaCampo?: string;
+    filtroMarcaValor?: string;
+    filtroMarcaTabla?: string;
+    filtroValorCampo?: string;
+    filtroValorMin?: number;
+    filtroValorMax?: number;
+    filtroValorExacto?: string;
+    filtroValorTabla?: string;
   }) {
     try {
       const {
@@ -479,6 +492,60 @@ export class EquiposGestionService {
         where.equipos_motor = { isNot: null };
         where.equipos_generador = { is: null };
         where.equipos_bomba = { is: null };
+      }
+
+      // ✅ APLICAR FACETAS DINÁMICAS EAM (Zero-Trust)
+      const applyRelationFilter = (
+        relation: 'equipos_motor' | 'equipos_generador' | 'equipos_bomba',
+        field: string,
+        condition: any,
+      ) => {
+        if (!where[relation]) {
+          where[relation] = { is: {} };
+        } else if (!where[relation].is) {
+          where[relation].is = {};
+        }
+        where[relation].is[field] = condition;
+      };
+
+      const resolverTabla = (campo: string, tablaEspecificada?: string): 'equipos_motor' | 'equipos_generador' | 'equipos_bomba' => {
+        if (tablaEspecificada === 'equipos_motor' || tablaEspecificada === 'equipos_generador' || tablaEspecificada === 'equipos_bomba') {
+          return tablaEspecificada;
+        }
+        const defMarca = FACETAS_MARCA_REGISTRO.find((f) => f.campo === campo);
+        if (defMarca) return defMarca.tabla;
+        const defValor = FACETAS_VALOR_TRABAJO_REGISTRO.find((f) => f.campo === campo);
+        if (defValor) return defValor.tabla;
+        if (campo.includes('motor') || campo.includes('cargador') || campo.includes('bateria') || campo.includes('aceite')) return 'equipos_motor';
+        if (campo.includes('bomba') || campo.includes('caudal') || campo.includes('presion') || campo.includes('variador') || campo.includes('sello')) return 'equipos_bomba';
+        return 'equipos_generador';
+      };
+
+      if (filtroMarcaCampo && filtroMarcaValor && filtroMarcaValor.trim()) {
+        const tabla = resolverTabla(filtroMarcaCampo, filtroMarcaTabla);
+        applyRelationFilter(tabla, filtroMarcaCampo, {
+          contains: filtroMarcaValor.trim(),
+          mode: 'insensitive',
+        });
+      }
+
+      if (filtroValorCampo) {
+        const tabla = resolverTabla(filtroValorCampo, filtroValorTabla);
+        const condition: any = {};
+        if (filtroValorMin !== undefined && filtroValorMin !== null && !isNaN(Number(filtroValorMin))) {
+          condition.gte = Number(filtroValorMin);
+        }
+        if (filtroValorMax !== undefined && filtroValorMax !== null && !isNaN(Number(filtroValorMax))) {
+          condition.lte = Number(filtroValorMax);
+        }
+        if (filtroValorExacto !== undefined && filtroValorExacto !== null && String(filtroValorExacto).trim() !== '') {
+          const num = Number(filtroValorExacto);
+          condition.equals = !isNaN(num) ? num : String(filtroValorExacto).trim();
+        }
+
+        if (Object.keys(condition).length > 0) {
+          applyRelationFilter(tabla, filtroValorCampo, condition);
+        }
       }
 
       // Base filter for global park KPI summary (ignores search/tipo/estado filter so KPIs show the park overview)
@@ -1911,6 +1978,88 @@ export class EquiposGestionService {
       resueltosCount: resueltos.length,
       canceladosCount: cancelados.length,
       items,
+    };
+  }
+
+
+  /**
+   * Obtiene la definición dinámica de facetas técnicas y marcas según el tipo o parque completo
+   */
+  async obtenerFacetasDinamicas(tipo?: string) {
+    let tipoDb: any = null;
+    if (tipo && tipo.trim() !== '') {
+      tipoDb = await this.prisma.tipos_equipo.findFirst({
+        where: {
+          OR: [
+            { codigo_tipo: { equals: tipo.trim().toUpperCase(), mode: 'insensitive' } },
+            { nombre_tipo: { contains: tipo.trim(), mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
+
+    const bloquesActivos = resolverBloquesActivos(tipo, tipoDb);
+
+    // Filtrar facetas de marca y valores de trabajo correspondientes a los bloques activos
+    const marcasFiltradas = FACETAS_MARCA_REGISTRO.filter((m) => bloquesActivos.includes(m.bloque));
+    const valoresTrabajoFiltrados = FACETAS_VALOR_TRABAJO_REGISTRO.filter((v) =>
+      bloquesActivos.includes(v.bloque),
+    );
+
+    // Consultar marcas distintas en paralelo directamente de la base de datos
+    const marcasConValores = await Promise.all(
+      marcasFiltradas.map(async (def) => {
+        try {
+          let rows: any[] = [];
+          if (def.tabla === 'equipos_motor') {
+            rows = await this.prisma.equipos_motor.findMany({
+              select: { [def.campo]: true },
+              distinct: [def.campo as any],
+            });
+          } else if (def.tabla === 'equipos_generador') {
+            rows = await this.prisma.equipos_generador.findMany({
+              select: { [def.campo]: true },
+              distinct: [def.campo as any],
+            });
+          } else if (def.tabla === 'equipos_bomba') {
+            rows = await this.prisma.equipos_bomba.findMany({
+              select: { [def.campo]: true },
+              distinct: [def.campo as any],
+            });
+          }
+
+          const valoresSugeridos = Array.from(
+            new Set(
+              rows
+                .map((r) => r[def.campo]?.toString().trim())
+                .filter(
+                  (val) =>
+                    !!val &&
+                    val.toUpperCase() !== 'N/A' &&
+                    val.toUpperCase() !== 'NULL' &&
+                    val !== '0',
+                ),
+            ),
+          ).sort((a, b) => a.localeCompare(b));
+
+          return {
+            ...def,
+            valoresSugeridos,
+          };
+        } catch (err) {
+          return {
+            ...def,
+            valoresSugeridos: [],
+          };
+        }
+      }),
+    );
+
+    return {
+      tipo: tipo || null,
+      bloquesActivos,
+      marcas: marcasConValores,
+      valoresTrabajo: valoresTrabajoFiltrados,
     };
   }
 

@@ -12,6 +12,8 @@ import type {
   CreateEquipoResponse,
   EquipoDetalle,
   EquiposListadoResponse,
+  FacetasEquiposResponse,
+  FiltrosFacetasEquipos,
   RegistrarLecturaResponse,
   UpdateDatosEspecificosPayload,
   UpdateEquipoPayload
@@ -39,7 +41,7 @@ export const equiposService = {
    * Obtiene el listado paginado de equipos con datos polimórficos
    * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
    */
-  async listarEquipos(params?: {
+    async listarEquipos(params?: {
     page?: number;
     limit?: number;
     id_cliente?: number;
@@ -49,6 +51,14 @@ export const equiposService = {
     search?: string;
     sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
     sortOrder?: 'asc' | 'desc';
+    filtroMarcaCampo?: string;
+    filtroMarcaValor?: string;
+    filtroMarcaTabla?: string;
+    filtroValorCampo?: string;
+    filtroValorMin?: number;
+    filtroValorMax?: number;
+    filtroValorExacto?: string;
+    filtroValorTabla?: string;
   }): Promise<EquiposListadoResponse> {
     const searchParams = new URLSearchParams();
 
@@ -61,11 +71,35 @@ export const equiposService = {
     if (params?.search) searchParams.append('search', params.search);
     if (params?.sortBy) searchParams.append('sortBy', params.sortBy);
     if (params?.sortOrder) searchParams.append('sortOrder', params.sortOrder);
+    if (params?.filtroMarcaCampo) searchParams.append('filtroMarcaCampo', params.filtroMarcaCampo);
+    if (params?.filtroMarcaValor) searchParams.append('filtroMarcaValor', params.filtroMarcaValor);
+    if (params?.filtroMarcaTabla) searchParams.append('filtroMarcaTabla', params.filtroMarcaTabla);
+    if (params?.filtroValorCampo) searchParams.append('filtroValorCampo', params.filtroValorCampo);
+    if (params?.filtroValorMin !== undefined && params?.filtroValorMin !== null && !isNaN(params.filtroValorMin)) {
+      searchParams.append('filtroValorMin', params.filtroValorMin.toString());
+    }
+    if (params?.filtroValorMax !== undefined && params?.filtroValorMax !== null && !isNaN(params.filtroValorMax)) {
+      searchParams.append('filtroValorMax', params.filtroValorMax.toString());
+    }
+    if (params?.filtroValorExacto) searchParams.append('filtroValorExacto', params.filtroValorExacto);
+    if (params?.filtroValorTabla) searchParams.append('filtroValorTabla', params.filtroValorTabla);
 
     const query = searchParams.toString();
     const url = `/equipos/listado-completo${query ? `?${query}` : ''}`;
 
     const response = await apiClient.get<EquiposListadoResponse>(url);
+    return response.data;
+  },
+
+/**
+   * Obtiene dinámicamente las facetas técnicas y marcas según tipo de equipo
+   */
+  async obtenerFacetas(tipo?: string): Promise<FacetasEquiposResponse> {
+    const searchParams = new URLSearchParams();
+    if (tipo) searchParams.append('tipo', tipo);
+    const query = searchParams.toString();
+    const url = `/equipos/facetas${query ? `?${query}` : ''}`;
+    const response = await apiClient.get<FacetasEquiposResponse>(url);
     return response.data;
   },
 
@@ -210,6 +244,14 @@ export function useEquipos(params?: {
   search?: string;
   sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
   sortOrder?: 'asc' | 'desc';
+  filtroMarcaCampo?: string;
+  filtroMarcaValor?: string;
+  filtroMarcaTabla?: string;
+  filtroValorCampo?: string;
+  filtroValorMin?: number;
+  filtroValorMax?: number;
+  filtroValorExacto?: string;
+  filtroValorTabla?: string;
 }) {
   return useQuery({
     queryKey: equiposKeys.list(params || {}),
@@ -431,5 +473,17 @@ export function useTrazabilidadEquipo(id: number, options?: { enabled?: boolean 
     queryFn: () => equiposService.obtenerTrazabilidadEquipo(id),
     staleTime: 2 * 60 * 1000,
     enabled: options?.enabled ?? id > 0,
+  });
+}
+
+
+/**
+ * Hook para obtener las facetas y marcas disponibles dinámicamente según el tipo de equipo
+ */
+export function useFacetasEquipos(tipo?: string) {
+  return useQuery({
+    queryKey: ['equipos', 'facetas', tipo || 'TODOS'],
+    queryFn: () => equiposService.obtenerFacetas(tipo),
+    staleTime: 5 * 60 * 1000,
   });
 }

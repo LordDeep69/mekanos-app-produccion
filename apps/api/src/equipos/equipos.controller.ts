@@ -172,7 +172,7 @@ export class EquiposController {
     // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
 
-    return this.equiposGestionService.listarEquiposCompletos({
+        return this.equiposGestionService.listarEquiposCompletos({
       id_cliente: queryDto.id_cliente,
       id_sede: queryDto.id_sede,
       tipo: queryDto.tipo,
@@ -183,6 +183,14 @@ export class EquiposController {
       page: queryDto.page,
       limit: queryDto.limit,
       idAsesorAsignado: idAsesorFiltro,
+      filtroMarcaCampo: queryDto.filtroMarcaCampo,
+      filtroMarcaValor: queryDto.filtroMarcaValor,
+      filtroMarcaTabla: queryDto.filtroMarcaTabla,
+      filtroValorCampo: queryDto.filtroValorCampo,
+      filtroValorMin: queryDto.filtroValorMin,
+      filtroValorMax: queryDto.filtroValorMax,
+      filtroValorExacto: queryDto.filtroValorExacto,
+      filtroValorTabla: queryDto.filtroValorTabla,
     });
   }
 
@@ -190,6 +198,16 @@ export class EquiposController {
    * GET /api/equipos/completo/:id
    * Obtener equipo con todos sus datos polimórficos
    */
+/**
+   * GET /api/equipos/facetas
+   * Obtiene dinámicamente las facetas de marca y valores de operación según tipo
+   */
+  @Get('facetas')
+  @ApiOperation({ summary: 'Obtener facetas técnicas y marcas disponibles dinámicamente' })
+  async obtenerFacetas(@Query('tipo') tipo?: string) {
+    return this.equiposGestionService.obtenerFacetasDinamicas(tipo);
+  }
+
   @Get('completo/:id')
   @ApiOperation({ summary: 'Obtener equipo con datos específicos según tipo' })
   async obtenerEquipoCompleto(@Param('id', ParseIntPipe) id: number) {

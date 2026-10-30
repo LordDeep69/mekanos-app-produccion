@@ -516,3 +516,44 @@ export interface EquiposListadoResponse {
     totalPages: number;
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FACETAS AVANZADAS DINÁMICAS (EAM SMART FACETS)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface FacetaMarcaDef {
+  campo: string;
+  etiqueta: string;
+  bloque: string;
+  tabla: 'equipos_motor' | 'equipos_generador' | 'equipos_bomba';
+  valoresSugeridos: string[];
+}
+
+export interface FacetaValorTrabajoDef {
+  campo: string;
+  etiqueta: string;
+  bloque: string;
+  tabla: 'equipos_motor' | 'equipos_generador' | 'equipos_bomba';
+  unidad: string;
+  tipoDato: 'numero';
+  minSugerido?: number;
+  maxSugerido?: number;
+}
+
+export interface FacetasEquiposResponse {
+  tipo: string | null;
+  bloquesActivos: string[];
+  marcas: FacetaMarcaDef[];
+  valoresTrabajo: FacetaValorTrabajoDef[];
+}
+
+export interface FiltrosFacetasEquipos {
+  filtroMarcaCampo?: string;
+  filtroMarcaValor?: string;
+  filtroMarcaTabla?: string;
+  filtroValorCampo?: string;
+  filtroValorMin?: number;
+  filtroValorMax?: number;
+  filtroValorExacto?: string;
+  filtroValorTabla?: string;
+}

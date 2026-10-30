@@ -12,7 +12,7 @@
 'use client';
 
 import type { EquipoListItem, TipoEquipo } from '@/features/equipos';
-import { EquipoForm, useEliminarEquipoCompletamente, useEquipos } from '@/features/equipos';
+import { EquipoForm, useEliminarEquipoCompletamente, useEquipos, useFacetasEquipos } from '@/features/equipos';
 import { cn } from '@/lib/utils';
 import {
   Activity,
@@ -43,6 +43,11 @@ import {
   Wrench,
   X,
   Zap,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  Sparkles,
+  Tag,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -540,6 +545,89 @@ export default function EquiposPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FILTROS AVANZADOS INTELIGENTES EAM (Taxonomía Dinámica por Subsistemas)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filtroMarcaCampo, setFiltroMarcaCampo] = useState<string>('');
+  const [filtroMarcaValor, setFiltroMarcaValor] = useState<string>('');
+  const [filtroMarcaTabla, setFiltroMarcaTabla] = useState<string>('');
+  const [filtroValorCampo, setFiltroValorCampo] = useState<string>('');
+  const [filtroValorMin, setFiltroValorMin] = useState<number | ''>('');
+  const [filtroValorMax, setFiltroValorMax] = useState<number | ''>('');
+  const [filtroValorExacto, setFiltroValorExacto] = useState<string>('');
+  const [filtroValorTabla, setFiltroValorTabla] = useState<string>('');
+
+  // Debounce para valor de marca
+  const [debouncedMarcaValor, setDebouncedMarcaValor] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMarcaValor(filtroMarcaValor);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filtroMarcaValor]);
+
+  // Carga reactiva de facetas técnicas según el tipo de equipo activo
+  const { data: facetasData } = useFacetasEquipos(tipoFiltro);
+  const marcasDisponibles = useMemo(() => facetasData?.marcas || [], [facetasData]);
+  const valoresTrabajoDisponibles = useMemo(() => facetasData?.valoresTrabajo || [], [facetasData]);
+
+  // Sanear filtros si el tipo cambia y las variables seleccionadas ya no aplican al nuevo bloque
+  useEffect(() => {
+    if (filtroMarcaCampo && marcasDisponibles.length > 0 && !marcasDisponibles.some((m) => m.campo === filtroMarcaCampo)) {
+      setFiltroMarcaCampo('');
+      setFiltroMarcaValor('');
+      setFiltroMarcaTabla('');
+    }
+    if (filtroValorCampo && valoresTrabajoDisponibles.length > 0 && !valoresTrabajoDisponibles.some((v) => v.campo === filtroValorCampo)) {
+      setFiltroValorCampo('');
+      setFiltroValorMin('');
+      setFiltroValorMax('');
+      setFiltroValorExacto('');
+      setFiltroValorTabla('');
+    }
+  }, [marcasDisponibles, valoresTrabajoDisponibles, filtroMarcaCampo, filtroValorCampo]);
+
+  // Sugerencias de marcas para el campo seleccionado
+  const sugerenciasMarcaActual = useMemo(() => {
+    if (!filtroMarcaCampo) return [];
+    const def = marcasDisponibles.find((m) => m.campo === filtroMarcaCampo);
+    return def?.valoresSugeridos || [];
+  }, [marcasDisponibles, filtroMarcaCampo]);
+
+  // Métrica técnica actual
+  const metricaTrabajoActual = useMemo(() => {
+    if (!filtroValorCampo) return null;
+    return valoresTrabajoDisponibles.find((v) => v.campo === filtroValorCampo) || null;
+  }, [valoresTrabajoDisponibles, filtroValorCampo]);
+
+  const hasActiveFacetFilters = useMemo(() => {
+    return Boolean(
+      (filtroMarcaCampo && debouncedMarcaValor.trim()) ||
+      (filtroValorCampo && (filtroValorMin !== '' || filtroValorMax !== '' || filtroValorExacto !== ''))
+    );
+  }, [filtroMarcaCampo, debouncedMarcaValor, filtroValorCampo, filtroValorMin, filtroValorMax, filtroValorExacto]);
+
+  const activeFacetCount = useMemo(() => {
+    let count = 0;
+    if (filtroMarcaCampo && debouncedMarcaValor.trim()) count++;
+    if (filtroValorCampo && (filtroValorMin !== '' || filtroValorMax !== '' || filtroValorExacto !== '')) count++;
+    return count;
+  }, [filtroMarcaCampo, debouncedMarcaValor, filtroValorCampo, filtroValorMin, filtroValorMax, filtroValorExacto]);
+
+  const clearAdvancedFacets = useCallback(() => {
+    setFiltroMarcaCampo('');
+    setFiltroMarcaValor('');
+    setFiltroMarcaTabla('');
+    setFiltroValorCampo('');
+    setFiltroValorMin('');
+    setFiltroValorMax('');
+    setFiltroValorExacto('');
+    setFiltroValorTabla('');
+    setPage(1);
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput);
@@ -862,6 +950,32 @@ export default function EquiposPage() {
             </button>
           </div>
 
+          {/* Botón Filtros Avanzados EAM */}
+          <button
+            type="button"
+            onClick={() => setShowAdvancedFilters((prev) => !prev)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer',
+              showAdvancedFilters || hasActiveFacetFilters
+                ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-2xs'
+                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400',
+            )}
+            title="Filtros avanzados por marcas de subsistema y valores de trabajo"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span>Filtros Técnicos</span>
+            {hasActiveFacetFilters && (
+              <span className="ml-0.5 px-1.5 py-0.2 bg-blue-600 text-white rounded-full text-[10px] font-bold">
+                {activeFacetCount}
+              </span>
+            )}
+            {showAdvancedFilters ? (
+              <ChevronUp className="h-3.5 w-3.5 text-blue-600" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            )}
+          </button>
+
           <div className="flex-1" />
 
           {activeFiltersCount > 0 && (
@@ -890,9 +1004,7 @@ export default function EquiposPage() {
             >
               <List className="h-4 w-4" />
             </button>
-          </div>
-
-          <button
+          </div>          <button
             onClick={() => refetch()}
             disabled={isFetching}
             className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
@@ -901,6 +1013,346 @@ export default function EquiposPage() {
             <RefreshCw className={cn('h-4 w-4 text-slate-600', isFetching && 'animate-spin')} />
           </button>
         </div>
+
+        {/* Panel Desplegable: Filtros Avanzados Inteligentes por Subsistema */}
+        {showAdvancedFilters && (
+          <div className="pt-3 border-t border-slate-200/80 animate-in fade-in-50 duration-200">
+            <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 sm:p-4 space-y-3.5">
+              {/* Encabezado del panel avanzado */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      Filtros Avanzados por Subsistemas Técnicos
+                      {tipoFiltro && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          {tipoFiltro}
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Taxonomía inteligente: los campos se adaptan automáticamente a los componentes del equipo seleccionado.
+                    </p>
+                  </div>
+                </div>
+
+                {hasActiveFacetFilters && (
+                  <button
+                    type="button"
+                    onClick={clearAdvancedFacets}
+                    className="self-start sm:self-auto text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline flex items-center gap-1"
+                  >
+                    <X className="h-3 w-3" />
+                    Restablecer facetas técnicas
+                  </button>
+                )}
+              </div>
+
+              {/* Grid de 2 Dimensiones: Marca de Subsistema + Valores de Trabajo */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Dimensión 1: MARCA DE... */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                      <Tag className="h-3 w-3 text-blue-600" />
+                      Filtrar por Marca de Subsistema
+                    </label>
+                    {filtroMarcaCampo && (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {marcasDisponibles.find((m) => m.campo === filtroMarcaCampo)?.bloque || ''}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Selector de campo de marca */}
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                        ¿Marca de qué componente?
+                      </label>
+                      <select
+                        value={filtroMarcaCampo}
+                        onChange={(e) => {
+                          const campo = e.target.value;
+                          setFiltroMarcaCampo(campo);
+                          const def = marcasDisponibles.find((m) => m.campo === campo);
+                          setFiltroMarcaTabla(def?.tabla || '');
+                          setFiltroMarcaValor('');
+                          setPage(1);
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Seleccionar subsistema...</option>
+                        {marcasDisponibles.map((m) => (
+                          <option key={m.campo} value={m.campo}>
+                            {m.etiqueta} ({m.bloque})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Input / Selector de valor de marca */}
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                        Fabricante / Marca
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          list="marcas-sugeridas-datalist"
+                          placeholder={
+                            filtroMarcaCampo
+                              ? 'Escribir o elegir marca...'
+                              : 'Primero elige componente'
+                          }
+                          disabled={!filtroMarcaCampo}
+                          value={filtroMarcaValor}
+                          onChange={(e) => {
+                            setFiltroMarcaValor(e.target.value);
+                          }}
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        {filtroMarcaValor && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFiltroMarcaValor('');
+                              setPage(1);
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                        <datalist id="marcas-sugeridas-datalist">
+                          {sugerenciasMarcaActual.map((sug) => (
+                            <option key={sug} value={sug} />
+                          ))}
+                        </datalist>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pastillas de sugerencias rápidas */}
+                  {filtroMarcaCampo && sugerenciasMarcaActual.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 pt-1">
+                      <span className="text-[10px] text-slate-400">Comunes:</span>
+                      {sugerenciasMarcaActual.slice(0, 6).map((sug) => (
+                        <button
+                          key={sug}
+                          type="button"
+                          onClick={() => {
+                            setFiltroMarcaValor(sug);
+                            setPage(1);
+                          }}
+                          className={cn(
+                            'px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors border cursor-pointer',
+                            filtroMarcaValor.toUpperCase() === sug.toUpperCase()
+                              ? 'bg-blue-600 text-white border-blue-600 font-semibold'
+                              : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200',
+                          )}
+                        >
+                          {sug}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Dimensión 2: VALORES DE TRABAJO */}
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                      <Zap className="h-3 w-3 text-amber-500" />
+                      Filtrar por Valores de Trabajo y Operación
+                    </label>
+                    {metricaTrabajoActual?.unidad && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded font-mono font-semibold">
+                        Unidad: {metricaTrabajoActual.unidad}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Selector de variable de trabajo */}
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                        Variable técnica
+                      </label>
+                      <select
+                        value={filtroValorCampo}
+                        onChange={(e) => {
+                          const campo = e.target.value;
+                          setFiltroValorCampo(campo);
+                          const def = valoresTrabajoDisponibles.find((v) => v.campo === campo);
+                          setFiltroValorTabla(def?.tabla || '');
+                          setFiltroValorMin('');
+                          setFiltroValorMax('');
+                          setPage(1);
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Seleccionar variable...</option>
+                        {valoresTrabajoDisponibles.map((v) => (
+                          <option key={v.campo} value={v.campo}>
+                            {v.etiqueta} ({v.unidad})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Rango Min - Max */}
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                        Rango {metricaTrabajoActual?.unidad ? `(${metricaTrabajoActual.unidad})` : ''}
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          placeholder="Mín"
+                          disabled={!filtroValorCampo}
+                          value={filtroValorMin}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? '' : Number(e.target.value);
+                            setFiltroValorMin(val);
+                            setPage(1);
+                          }}
+                          className="w-1/2 px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <span className="text-slate-400 text-xs font-bold">-</span>
+                        <input
+                          type="number"
+                          placeholder="Máx"
+                          disabled={!filtroValorCampo}
+                          value={filtroValorMax}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? '' : Number(e.target.value);
+                            setFiltroValorMax(val);
+                            setPage(1);
+                          }}
+                          className="w-1/2 px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rango de referencia sugerido */}
+                  {metricaTrabajoActual && (metricaTrabajoActual.minSugerido || metricaTrabajoActual.maxSugerido) && (
+                    <p className="text-[10px] text-slate-400 pt-0.5">
+                      Rango típico comercial: {metricaTrabajoActual.minSugerido ?? 0} a {metricaTrabajoActual.maxSugerido ?? 1000} {metricaTrabajoActual.unidad}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Barra de Filtros Activos (Chips con eliminación individual) */}
+        {activeFiltersCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-slate-100 text-xs">
+            <span className="text-[11px] font-semibold text-slate-400 mr-1">Filtros activos:</span>
+
+            {tipoFiltro && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[11px] font-semibold">
+                Tipo: {tipoFiltro}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTipoFiltro('');
+                    setPage(1);
+                  }}
+                  className="hover:text-blue-900 cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {estadoFiltro && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[11px] font-semibold">
+                Estado: {estadoFiltro}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEstadoFiltro('');
+                    setPage(1);
+                  }}
+                  className="hover:text-emerald-900 cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {debouncedSearch && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[11px] font-medium">
+                Búsqueda: &ldquo;{debouncedSearch}&rdquo;
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchInput('');
+                    setDebouncedSearch('');
+                    setPage(1);
+                  }}
+                  className="hover:text-slate-900 cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {filtroMarcaCampo && debouncedMarcaValor && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-300 rounded-md text-[11px] font-semibold">
+                <Tag className="h-2.5 w-2.5 text-blue-600" />
+                {marcasDisponibles.find((m) => m.campo === filtroMarcaCampo)?.etiqueta || filtroMarcaCampo}: {debouncedMarcaValor}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroMarcaValor('');
+                    setPage(1);
+                  }}
+                  className="hover:text-blue-950 cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {filtroValorCampo && (filtroValorMin !== '' || filtroValorMax !== '') && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded-md text-[11px] font-semibold">
+                <Zap className="h-2.5 w-2.5 text-amber-600" />
+                {metricaTrabajoActual?.etiqueta || filtroValorCampo}:{' '}
+                {filtroValorMin !== '' ? `≥ ${filtroValorMin}` : ''}
+                {filtroValorMin !== '' && filtroValorMax !== '' ? ' y ' : ''}
+                {filtroValorMax !== '' ? `≤ ${filtroValorMax}` : ''}{' '}
+                {metricaTrabajoActual?.unidad || ''}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroValorMin('');
+                    setFiltroValorMax('');
+                    setPage(1);
+                  }}
+                  className="hover:text-amber-950 cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+            >
+              Limpiar todos los filtros
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Loading Skeleton */}
