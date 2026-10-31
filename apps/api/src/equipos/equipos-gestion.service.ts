@@ -466,8 +466,18 @@ export class EquiposGestionService {
         page = 1,
         limit = 20,
         idAsesorAsignado,
+        filtroMarcaCampo,
+        filtroMarcaValor,
+        filtroMarcaTabla,
+        filtroValorCampo,
+        filtroValorMin,
+        filtroValorMax,
+        filtroValorExacto,
+        filtroValorTabla,
       } = params;
-      const skip = (page - 1) * limit;
+      const pageNum = Math.max(1, Number(page) || 1);
+      const limitNum = Math.max(1, Number(limit) || 20);
+      const skip = (pageNum - 1) * limitNum;
 
       const where: any = { activo: true };
       if (id_cliente) where.id_cliente = id_cliente;
@@ -588,7 +598,7 @@ export class EquiposGestionService {
         this.prisma.equipos.findMany({
           where,
           skip,
-          take: limit,
+          take: limitNum,
           include: {
             clientes: {
               include: {
@@ -685,9 +695,9 @@ export class EquiposGestionService {
         },
         pagination: {
           total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
         },
       };
     } catch (error) {
