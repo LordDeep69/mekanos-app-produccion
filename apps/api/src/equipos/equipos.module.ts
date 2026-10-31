@@ -11,6 +11,7 @@ import { EquiposController } from './equipos.controller';
 import { PrismaEquipoRepository } from './infrastructure/prisma-equipo.repository';
 import { GetEquipoHandler } from './queries/get-equipo.handler';
 import { GetEquiposHandler } from './queries/get-equipos.handler';
+import { UomConversionService } from './services/uom-conversion.service';
 
 const CommandHandlers = [
   CreateEquipoHandler,
@@ -43,9 +44,10 @@ const QueryHandlers = [
       useClass: PrismaEquipoRepository // ← CAMBIADO de MockEquipoRepository
     },
     EquiposGestionService, // ← AGREGADO: Servicio de gestión polimórfica
+    UomConversionService,
     ...CommandHandlers,
     ...QueryHandlers
   ],
-  exports: [EquiposGestionService, ...CommandHandlers, ...QueryHandlers]
+  exports: [EquiposGestionService, UomConversionService, ...CommandHandlers, ...QueryHandlers]
 })
 export class EquiposModule { }

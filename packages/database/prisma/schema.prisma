@@ -246,6 +246,7 @@ model catalogo_componentes {
   remisiones_detalle           remisiones_detalle[]
   articulos_proveedores        articulos_proveedores[]
   historial_costos_compra      historial_costos_compra[]
+  modelos_equipo_bom           modelos_equipo_bom[]
 
   @@index([referencia_fabricante], map: "idx_componente_referencia")
   @@index([id_tipo_componente], map: "idx_componente_tipo")
@@ -788,6 +789,11 @@ model equipos {
   historial_estados_equipo        historial_estados_equipo[]
   lecturas_horometro              lecturas_horometro[]
   ordenes_equipos                 ordenes_equipos[]
+  id_modelo_equipo                Int?
+  especificaciones                Json?
+  esquema_version                 Int                        @default(1)
+  modelos_equipo                  modelos_equipo?            @relation(fields: [id_modelo_equipo], references: [id_modelo_equipo], map: "fk_equipos_modelo_equipo")
+  equipos_atributos_filtro        equipos_atributos_filtro[]
   ordenes_servicio                ordenes_servicio[]
   ordenes_pendientes              ordenes_pendientes[]
   propuestas_correctivo           propuestas_correctivo[]
@@ -1724,6 +1730,8 @@ model parametros_medicion {
   catalogo_actividades  catalogo_actividades[]
   mediciones_servicio   mediciones_servicio[]
   tipos_equipo          tipos_equipo?             @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo])
+  unidad_codigo         String?                   @db.VarChar(10)
+  unidad_ref            unidades_medida?          @relation(fields: [unidad_codigo], references: [codigo], map: "fk_parametros_medicion_unidad_codigo")
 
   @@index([categoria], map: "idx_parametros_categoria")
   @@index([id_tipo_equipo], map: "idx_parametros_equipo")
@@ -2109,6 +2117,17 @@ model tipos_equipo {
   plantillas_parametros        plantillas_parametros[]
   tipos_servicio               tipos_servicio[]
   catalogo_pendientes          catalogo_pendientes[]
+  icono_ui                     String?                  @db.VarChar(50)
+  color_hex                    String?                  @db.VarChar(20)
+  prefijo_codigo               String?                  @db.VarChar(20)
+  unidad_uso                   String                   @default("HORAS") @db.VarChar(20)
+  etiqueta_contador            String                   @default("Horómetro") @db.VarChar(50)
+  usa_plantilla_universal      Boolean                  @default(false)
+  version_esquema              Int                      @default(1)
+  bloques_opcionales           Json?
+  tipo_equipo_modulos          tipo_equipo_modulos[]
+  tipo_equipo_planes           tipo_equipo_planes[]
+  modelos_equipo               modelos_equipo[]
 
   @@index([codigo_tipo], map: "idx_tipos_equipo_codigo")
 }
@@ -2143,6 +2162,7 @@ model tipos_servicio {
   ordenes_servicio        ordenes_servicio[]
   plantillas_informe      plantillas_informe[]
   tipos_equipo            tipos_equipo?           @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo])
+  tipo_equipo_planes      tipo_equipo_planes[]
 
   @@index([categoria], map: "idx_tipos_servicio_categoria")
   @@index([id_tipo_equipo], map: "idx_tipos_servicio_equipo")
@@ -3125,12 +3145,20 @@ model unidades_medida {
   nombre                String                   @db.VarChar(50)
   simbolo               String                   @db.VarChar(10)
   tipo_magnitud         String                   @default("CANTIDAD") @db.VarChar(20)
+  id_magnitud           Int?
+  factor_a              Decimal                  @default(1.0) @db.Decimal(18, 10)
+  factor_b              Decimal                  @default(0.0) @db.Decimal(18, 10)
+  es_unidad_base        Boolean                  @default(false)
   permite_decimales     Boolean                  @default(false)
   activo                Boolean                  @default(true)
   fecha_creacion        DateTime                 @default(now()) @db.Timestamp(6)
   catalogo_componentes  catalogo_componentes[]
+  magnitud              catalogo_magnitudes?     @relation(fields: [id_magnitud], references: [id_magnitud], map: "fk_unidades_medida_magnitud")
+  atributos_tecnicos    atributos_tecnicos[]
+  parametros_medicion   parametros_medicion[]
 
   @@index([tipo_magnitud], map: "idx_unidades_medida_tipo")
+  @@index([id_magnitud], map: "idx_unidades_medida_magnitud")
 }
 
 model categorias_componente {
@@ -3155,3 +3183,185 @@ model categorias_componente {
 }
 
 
+
+// ============================================================================
+// METAMODELO UNIVERSAL DE ACTIVOS EAM (FASE 1)
+// ============================================================================
+
+model catalogo_magnitudes {
+  id_magnitud        Int                  @id @default(autoincrement())
+  codigo_magnitud    String               @unique @db.VarChar(50)
+  nombre_magnitud    String               @db.VarChar(100)
+  descripcion        String?
+  unidad_base_codigo String?              @db.VarChar(10)
+  es_sistema         Boolean              @default(true)
+  activo             Boolean              @default(true)
+  fecha_creacion     DateTime             @default(now()) @db.Timestamp(6)
+  unidades_medida    unidades_medida[]
+  atributos_tecnicos atributos_tecnicos[]
+
+  @@map("catalogo_magnitudes")
+}
+
+model atributos_tecnicos {
+  id_atributo           Int                  @id @default(autoincrement())
+  codigo_atributo       String               @unique @db.VarChar(60)
+  nombre_atributo       String               @db.VarChar(120)
+  descripcion           String?
+  tipo_control          String               @db.VarChar(30)
+  id_magnitud           Int?
+  unidad_defecto_codigo String?              @db.VarChar(10)
+  rol_semantico         String               @default("ESTANDAR") @db.VarChar(40)
+  opciones_json         Json?
+  validacion_json       Json?
+  es_sistema            Boolean              @default(false)
+  activo                Boolean              @default(true)
+  fecha_creacion        DateTime             @default(now()) @db.Timestamp(6)
+  fecha_modificacion    DateTime?            @default(now()) @db.Timestamp(6)
+
+  magnitud              catalogo_magnitudes? @relation(fields: [id_magnitud], references: [id_magnitud])
+  unidad_defecto        unidades_medida?     @relation(fields: [unidad_defecto_codigo], references: [codigo])
+  modulo_atributos      modulo_atributos[]
+
+  @@index([rol_semantico], map: "idx_atributos_rol_semantico")
+  @@index([id_magnitud], map: "idx_atributos_magnitud")
+  @@map("atributos_tecnicos")
+}
+
+model modulos_tecnicos {
+  id_modulo           Int                   @id @default(autoincrement())
+  codigo_modulo       String                @unique @db.VarChar(50)
+  nombre_modulo       String                @db.VarChar(100)
+  descripcion         String?
+  icono               String?               @db.VarChar(50)
+  color_ui            String?               @db.VarChar(20)
+  es_sistema          Boolean               @default(false)
+  activo              Boolean               @default(true)
+  fecha_creacion      DateTime              @default(now()) @db.Timestamp(6)
+  fecha_modificacion  DateTime?             @default(now()) @db.Timestamp(6)
+
+  modulo_atributos    modulo_atributos[]
+  tipo_equipo_modulos tipo_equipo_modulos[]
+
+  @@map("modulos_tecnicos")
+}
+
+model modulo_atributos {
+  id_modulo_atributo     Int                @id @default(autoincrement())
+  id_modulo              Int
+  id_atributo            Int
+  orden_visual           Int                @default(1)
+  obligatorio            Boolean            @default(false)
+  es_kpi                 Boolean            @default(false)
+  es_filtrable           Boolean            @default(false)
+  visible_en_pdf         Boolean            @default(true)
+  rol_semantico_override String?            @db.VarChar(40)
+  grupo_visual           String?            @db.VarChar(60)
+  valor_defecto          String?
+  fecha_creacion         DateTime           @default(now()) @db.Timestamp(6)
+
+  modulo                 modulos_tecnicos   @relation(fields: [id_modulo], references: [id_modulo], onDelete: Cascade)
+  atributo               atributos_tecnicos @relation(fields: [id_atributo], references: [id_atributo], onDelete: Restrict)
+
+  @@unique([id_modulo, id_atributo], map: "uq_modulo_atributos_modulo_atributo")
+  @@index([id_modulo], map: "idx_modulo_atributos_modulo")
+  @@index([id_atributo], map: "idx_modulo_atributos_atributo")
+  @@map("modulo_atributos")
+}
+
+model tipo_equipo_modulos {
+  id_tipo_equipo_modulo Int              @id @default(autoincrement())
+  id_tipo_equipo        Int
+  id_modulo             Int
+  orden_visual          Int              @default(1)
+  obligatorio           Boolean          @default(true)
+  etiqueta_local        String?          @db.VarChar(100)
+  overrides_json        Json?
+  fecha_creacion        DateTime         @default(now()) @db.Timestamp(6)
+
+  tipo_equipo           tipos_equipo     @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Cascade)
+  modulo                modulos_tecnicos @relation(fields: [id_modulo], references: [id_modulo], onDelete: Restrict)
+
+  @@unique([id_tipo_equipo, id_modulo], map: "uq_tipo_equipo_modulos_tipo_modulo")
+  @@index([id_tipo_equipo], map: "idx_tipo_equipo_modulos_tipo")
+  @@index([id_modulo], map: "idx_tipo_equipo_modulos_modulo")
+  @@map("tipo_equipo_modulos")
+}
+
+model tipo_equipo_planes {
+  id_plan             Int            @id @default(autoincrement())
+  id_tipo_equipo      Int
+  id_tipo_servicio    Int
+  nombre_plan         String         @db.VarChar(120)
+  frecuencia_dias     Int?
+  frecuencia_uso      Decimal?       @db.Decimal(10, 1)
+  criterio_intervalo  String         @default("LO_QUE_OCURRA_PRIMERO") @db.VarChar(30)
+  es_plan_por_defecto Boolean        @default(true)
+  activo              Boolean        @default(true)
+  fecha_creacion      DateTime       @default(now()) @db.Timestamp(6)
+
+  tipo_equipo         tipos_equipo   @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Cascade)
+  tipo_servicio       tipos_servicio @relation(fields: [id_tipo_servicio], references: [id_tipo_servicio], onDelete: Restrict)
+
+  @@unique([id_tipo_equipo, id_tipo_servicio], map: "uq_tipo_equipo_planes_tipo_servicio")
+  @@index([id_tipo_equipo], map: "idx_tipo_equipo_planes_tipo")
+  @@index([id_tipo_servicio], map: "idx_tipo_equipo_planes_servicio")
+  @@map("tipo_equipo_planes")
+}
+
+model modelos_equipo {
+  id_modelo_equipo            Int                  @id @default(autoincrement())
+  id_tipo_equipo              Int
+  codigo_modelo               String               @unique @db.VarChar(60)
+  marca                       String               @db.VarChar(100)
+  modelo                      String               @db.VarChar(100)
+  nombre_comercial            String?              @db.VarChar(150)
+  especificaciones_base       Json                 @default("{}")
+  plantilla_parametros_config Json?
+  activo                      Boolean              @default(true)
+  fecha_creacion              DateTime             @default(now()) @db.Timestamp(6)
+  fecha_modificacion          DateTime?            @default(now()) @db.Timestamp(6)
+
+  tipo_equipo                 tipos_equipo         @relation(fields: [id_tipo_equipo], references: [id_tipo_equipo], onDelete: Restrict)
+  modelos_equipo_bom          modelos_equipo_bom[]
+  equipos                     equipos[]
+
+  @@index([id_tipo_equipo], map: "idx_modelos_equipo_tipo")
+  @@index([marca, modelo], map: "idx_modelos_equipo_marca_modelo")
+  @@map("modelos_equipo")
+}
+
+model modelos_equipo_bom {
+  id_modelo_bom        Int                  @id @default(autoincrement())
+  id_modelo_equipo     Int
+  id_componente        Int
+  cantidad_sugerida    Decimal              @default(1.0) @db.Decimal(10, 2)
+  rol_bom              String               @default("TITULAR") @db.VarChar(30)
+  notas                String?
+  fecha_creacion       DateTime             @default(now()) @db.Timestamp(6)
+
+  modelo_equipo        modelos_equipo       @relation(fields: [id_modelo_equipo], references: [id_modelo_equipo], onDelete: Cascade)
+  catalogo_componentes catalogo_componentes @relation(fields: [id_componente], references: [id_componente], onDelete: Restrict)
+
+  @@unique([id_modelo_equipo, id_componente], map: "uq_modelos_equipo_bom_modelo_componente")
+  @@index([id_modelo_equipo], map: "idx_modelos_equipo_bom_modelo")
+  @@index([id_componente], map: "idx_modelos_equipo_bom_componente")
+  @@map("modelos_equipo_bom")
+}
+
+model equipos_atributos_filtro {
+  id_filtro           Int      @id @default(autoincrement())
+  id_equipo           Int
+  codigo_atributo     String   @db.VarChar(60)
+  valor_num_base      Decimal? @db.Decimal(18, 6)
+  valor_texto         String?  @db.VarChar(255)
+  unidad_base_codigo  String?  @db.VarChar(10)
+  fecha_actualizacion DateTime @default(now()) @db.Timestamp(6)
+
+  equipo              equipos  @relation(fields: [id_equipo], references: [id_equipo], onDelete: Cascade)
+
+  @@index([codigo_atributo, valor_num_base], map: "idx_equipos_attr_filtro_num")
+  @@index([codigo_atributo, valor_texto], map: "idx_equipos_attr_filtro_texto")
+  @@index([id_equipo], map: "idx_equipos_attr_filtro_equipo")
+  @@map("equipos_atributos_filtro")
+}

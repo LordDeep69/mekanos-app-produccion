@@ -1,7 +1,7 @@
 # MEKANOS ERP / EAM - METAMODELO UNIVERSAL DE ACTIVOS
 ## Documento Maestro 02: Plan de Rutas de Desarrollo Atómico Nuclear
 
-> **Estado:** Fase 0 Completada y Certificada / Fases 1 a 5 Planificadas  
+> **Estado:** Fase 0 y Fase 1 Completadas y Certificadas / Fases 2 a 5 Planificadas  
 > **Estrategia:** Zero-Trust, First-Principles, Adición sin Regresiones  
 > **Fecha de Actualización:** Octubre 2026  
 
@@ -16,8 +16,10 @@
 | **Re-export Dominio** | `apps/api/src/equipos/domain/equipo-specs-reader.ts` | Interfaz limpia para módulos y librerías | ✅ Activo |
 | **Golden Master Fixture** | `apps/api/test/fixtures/golden-master-pdf.json` | Snapshot inmutable de 35 órdenes de producción | ✅ Certificado |
 | **Golden Master Test** | `apps/api/test/golden-master-pdf.spec.ts` | Verificación automatizada de no-regresión | ✅ 100% Green |
-| **Esquema BD** | `packages/database/prisma/schema.prisma` | Modelos de UoM, catálogo de atributos y JSONB | ⏳ Fase 1 |
-| **Migración SQL** | `packages/database/prisma/migrations/*` | DDL incremental con índices GIN en PostgreSQL | ⏳ Fase 1 |
+| **Esquema BD** | `packages/database/prisma/schema.prisma` | Modelos de UoM, catálogo de atributos y JSONB | ✅ F1 Landed (Prisma 5.22.0) |
+| **Migración SQL** | `packages/database/prisma/migrations/*` | DDL incremental con índices GIN en PostgreSQL | ✅ 20261031_eam_universal_fase1.sql |
+| **Sembrado Canónico** | `packages/database/prisma/seeds/seed-eam-universal.ts` | 11 magnitudes, 38 UoM, 26 atributos, 5 módulos | ✅ Supabase Landed |
+| **Motor UoM Dimensional** | `apps/api/src/equipos/services/uom-conversion.service.ts` | Motor afín de conversión ($y = ax + b$) | ✅ 32/32 Tests Green |
 | **Catálogos API** | `apps/api/src/catalogos/` | Endpoints CRUD de atributos, arquetipos y UoM | ⏳ Fase 2 |
 | **Gestión Equipos** | `apps/api/src/equipos/equipos-gestion.service.ts` | Ingesta polimórfica y validación de esquemas | ⏳ Fase 2 |
 | **Sidebar Admin** | `apps/admin/src/components/layout/sidebar.tsx` | Reestructuración ejecutiva de menú lateral | ⏳ Fase 3 |
@@ -58,24 +60,48 @@
 
 ---
 
-## 3. Fase 1: Metamodelo Relacional y Catálogo de Atributos EAM
+## 3. Fase 1: Metamodelo Relacional, Semilla Canónica y Motor Dimensional UoM [ ✅ COMPLETADA ]
 
-**Objetivo:** Introducir los modelos de datos canónicos para unidades de medida y atributos dinámicos en Prisma sin alterar el funcionamiento de las tablas existentes.
+**Objetivo:** Introducir los modelos de datos canónicos para magnitudes físicas, unidades de medida ($y = ax + b$), módulos técnicos y atributos dinámicos en Prisma y PostgreSQL (Supabase) de forma estrictamente aditiva, asegurando cero pérdida de datos sobre los 467 equipos y 1,807 órdenes de servicio, y construyendo el motor dimensional afín `UomConversionService`.
 
-### Tareas Nucleares:
-1. **Modelado en `packages/database/prisma/schema.prisma`:**
-   - Tabla `magnitudes_fisicas`: `id_magnitud`, `codigo`, `nombre`, `unidad_base`, `descripcion`.
-   - Tabla `unidades_medida`: `id_unidad`, `id_magnitud`, `codigo`, `simbolo`, `factor_a` ($a$), `constante_b` ($b$).
-   - Tabla `catalogo_atributos`: `id_atributo`, `codigo_atributo`, `nombre_atributo`, `id_magnitud`, `tipo_dato`, `rol_semantico`, `visible_en_pdf`, `modulo_defecto`.
-   - Tabla de unión `tipos_equipo_atributos`: Asociación de atributos requeridos u opcionales por arquetipo.
-   - Columna `especificaciones` (JSONB) en modelo `equipos` con índice PostgreSQL GIN.
-2. **Generación y Aplicación de Migración:**
-   - `pnpm --filter @mekanos/database prisma migrate dev --name init_eam_metamodel`
-   - Migración estrictamente aditiva (sin DROP TABLE ni DROP COLUMN).
-3. **Carga de Semillas Base (Seeders):**
-   - Inserción de magnitudes fundamentales (Temperatura, Presión, Caudal, Potencia, Frecuencia, Voltaje).
-   - Inserción de unidades comerciales ($y = ax + b$).
-   - Registro de atributos estándar para `GENERADOR`, `BOMBA`, `COMPRESOR`, `HVAC`.
+### Checklist de Ejecución y Certificación:
+- [x] **1.1 Modelado en `packages/database/prisma/schema.prisma`:**
+  - `catalogo_magnitudes`: 11 magnitudes físicas (Potencia, Presión, Caudal, Temperatura, Volumen, etc.).
+  - `unidades_medida`: Factor afín $y = ax + b$ (`factor_a`, `factor_b`), `es_unidad_base`, `permite_decimales`.
+  - `atributos_tecnicos`: 26 atributos canónicos con rol semántico, tipo de dato y flag de visualización en PDF.
+  - `modulos_tecnicos`: Módulos funcionales (`motor_combustion`, `alternador_generador`, `bomba_hidraulica`, etc.).
+  - `modulo_atributos`: 44 asociaciones jerárquicas módulo-atributo con orden y obligatoriedad.
+  - `tipo_equipo_modulos`: Vinculación de módulos técnicos a arquetipos en `tipos_equipo`.
+  - `tipo_equipo_planes`: Planes de mantenimiento preconfigurados por arquetipo.
+  - `modelos_equipo` y `modelos_equipo_bom`: Fichas técnicas estándar de fabricantes y listas de partes (BOM).
+  - `equipos_atributos_filtro`: Índices desnormalizados para búsqueda rápida.
+  - Columna `especificaciones` (JSONB) en `equipos` con índice PostgreSQL GIN (`jsonb_path_ops`).
+  - Columna `unidad_codigo` en `parametros_medicion` vinculada a `unidades_medida(codigo)`.
+- [x] **1.2 Migración SQL Additive Ejecutada en Supabase:**
+  - Script: `packages/database/prisma/migrations/20261031_eam_universal_fase1.sql`.
+  - Ejecución en transacción DDL PostgreSQL sin pérdidas ni bloqueos de producción.
+  - Generación limpia de Prisma Client v5.22.0 (`pnpm --filter @mekanos/database run prisma:generate`).
+- [x] **1.3 Sembrado Canónico Landed en Producción (`seed-eam-universal.ts`):**
+  - Conteos certificados en base de datos PostgreSQL:
+    * `catalogo_magnitudes`: 11
+    * `unidades_medida`: 38
+    * `atributos_tecnicos`: 26
+    * `modulos_tecnicos`: 5
+    * `modulo_atributos`: 44
+    * `tipo_equipo_modulos`: 12
+    * `tipo_equipo_planes`: 20
+    * `equipos_total`: 467 (100% íntegros y preservados)
+    * `parametros_medicion_con_unidad_codigo`: 27 de 27 (100% mapeados)
+- [x] **1.4 Motor Dimensional Afín `UomConversionService` y Suite Jest:**
+  - Archivo central: `apps/api/src/equipos/services/uom-conversion.service.ts`.
+  - Inyección NestJS `@Injectable()` registrada y exportada en `EquiposModule`.
+  - Métodos nucleares: `convertir()`, `convertirABase()`, `sonCompatibles()`, `formatearEquivalencia()`, `formatearConSimbolo()`, `normalizarCodigo()`.
+  - Suite de pruebas unitarias: `apps/api/src/equipos/services/uom-conversion.service.spec.ts` (32 pruebas pasando).
+- [x] **1.5 Certificación de No-Regresión Triple Suite:**
+  - `test/golden-master-pdf.spec.ts`: PASSED (35 órdenes de producción reales verificadas con 0 discrepancias).
+  - `src/equipos/services/equipo-specs.reader.spec.ts`: PASSED (14 pruebas pasando).
+  - `src/equipos/services/uom-conversion.service.spec.ts`: PASSED (32 pruebas pasando).
+  - Total: 48 pruebas automatizadas 100% green.
 
 ---
 
