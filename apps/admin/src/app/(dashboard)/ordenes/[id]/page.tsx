@@ -3871,7 +3871,7 @@ export default function OrdenDetallePage() {
                                                         </span>
                                                     </div>
                                                     <p className="text-xs text-gray-500 mt-1 truncate">
-                                                        {getClienteNombre(o)} - {o.equipos?.codigo_equipo || 'Sin equipo'}
+                                                        {getClienteNombre(o)} - {o.equipos?.codigo_equipo || (o.ordenes_equipos?.[0] as any)?.equipo?.codigo_equipo || (o.ordenes_equipos?.[0] as any)?.equipos?.codigo_equipo || 'Sin equipo'}
                                                     </p>
                                                 </button>
                                             ))}
