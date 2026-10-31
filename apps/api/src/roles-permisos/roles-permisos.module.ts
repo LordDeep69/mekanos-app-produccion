@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { PrismaService } from '../database/prisma.service';
 import { RolesPermisosController } from './roles-permisos.controller';
 import { RolesPermisosService } from './roles-permisos.service';
 
 @Module({
   imports: [AuthModule],
   controllers: [RolesPermisosController],
-  providers: [RolesPermisosService, PrismaService],
+  // PrismaService se resuelve desde PrismaModule (@Global). Declararlo aquí
+  // creaba una instancia más de PrismaClient (pool propio) por módulo.
+  providers: [RolesPermisosService],
   exports: [RolesPermisosService],
 })
 export class RolesPermisosModule {}
