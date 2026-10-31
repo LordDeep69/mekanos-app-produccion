@@ -68,3 +68,4 @@ temp/
 uploads/
 scratch/
 *.apk
+*.sha1
