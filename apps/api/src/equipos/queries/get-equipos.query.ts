@@ -70,6 +70,26 @@ export class GetEquiposQueryDto {
   @IsString({ message: 'filtroValorTabla debe ser una cadena de texto' })
   filtroValorTabla?: string;
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ✅ FILTRO B-TREE NORMALIZADO EAM (equipos_atributos_filtro)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  @IsOptional()
+  @IsString({ message: 'filtroAtributoCodigo debe ser una cadena de texto' })
+  filtroAtributoCodigo?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  filtroAtributoValorMin?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  filtroAtributoValorMax?: number;
+
+  @IsOptional()
+  @IsString({ message: 'filtroAtributoTexto debe ser una cadena de texto' })
+  filtroAtributoTexto?: string;
+
   @IsOptional()
   @IsString({ message: 'sortBy debe ser una cadena de texto' })
   sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';

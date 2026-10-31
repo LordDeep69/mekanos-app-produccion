@@ -1212,7 +1212,7 @@ model historial_envios {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model historial_estados_equipo {
-  id_historial    Int                 @id
+  id_historial    Int                 @id @default(autoincrement())
   id_equipo       Int
   estado_anterior estado_equipo_enum?
   estado_nuevo    estado_equipo_enum

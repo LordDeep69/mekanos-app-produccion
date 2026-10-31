@@ -14,7 +14,7 @@ import {
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Public } from '../auth/decorators/public.decorator';
+
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateEquipoCommand } from './commands/create-equipo.command';
 import { DeleteEquipoCommand } from './commands/delete-equipo.command';
@@ -24,6 +24,11 @@ import { UserId } from './decorators/user-id.decorator';
 import { CreateEquipoCompletoDto } from './dto/create-equipo-completo.dto';
 import { CreateEquipoDto } from './dto/create-equipo.dto';
 import { UpdateEquipoDto } from './dto/update-equipo.dto';
+import {
+  CambiarEstadoEquipoDto,
+  RegistrarLecturaHorometroDto,
+} from './dto/cambiar-estado-equipo.dto';
+import { UpdateDatosEspecificosDto } from './dto/update-datos-especificos.dto';
 import { EquiposGestionService } from './equipos-gestion.service';
 import { GetEquipoQuery } from './queries/get-equipo.query';
 import { GetEquiposQuery, GetEquiposQueryDto } from './queries/get-equipos.query';
@@ -191,6 +196,10 @@ export class EquiposController {
       filtroValorMax: queryDto.filtroValorMax,
       filtroValorExacto: queryDto.filtroValorExacto,
       filtroValorTabla: queryDto.filtroValorTabla,
+      filtroAtributoCodigo: queryDto.filtroAtributoCodigo,
+      filtroAtributoValorMin: queryDto.filtroAtributoValorMin,
+      filtroAtributoValorMax: queryDto.filtroAtributoValorMax,
+      filtroAtributoTexto: queryDto.filtroAtributoTexto,
     });
   }
 

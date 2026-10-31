@@ -16,6 +16,7 @@ import { CatalogoComponentesModule } from './catalogo-componentes/catalogo-compo
 import { MarcasModule } from './marcas/marcas.module';
 import { CategoriasComponenteModule } from './categorias-componente/categorias-componente.module';
 import { UnidadesMedidaModule } from './unidades-medida/unidades-medida.module';
+import { CatalogosEamModule } from './catalogos-eam/catalogos-eam.module';
 import { CatalogoServiciosModule } from './catalogo-servicios/catalogo-servicios.module';
 import { CatalogoSistemasModule } from './catalogo-sistemas/catalogo-sistemas.module';
 import { CertificacionesTecnicasModule } from './certificaciones-tecnicas/certificaciones-tecnicas.module';
@@ -132,6 +133,7 @@ import { CuentasEmailModule } from './cuentas-email/cuentas-email.module';
     MarcasModule, // ✅ FASE 2: Marcas y Fabricantes OEM (Combobox y creación al vuelo)
     CategoriasComponenteModule, // ✅ FASE 2: Taxonomía y Categorías Jerárquicas (Árbol recursivo)
     UnidadesMedidaModule, // ✅ FASE 2: Unidades de Medida Normalizadas (Solo lectura)
+    CatalogosEamModule, // ✅ EAM METAMODELO UNIVERSAL: Hub de Catálogos (Magnitudes, Atributos, Módulos, Arquetipos, Modelos)
     ComponentesEquipoModule, // ✅ FASE 1 BLOQUE 3: Componentes-Equipo N:N CQRS completo (Sesion Nov 19)
     CatalogoSistemasModule, // ✅ FASE 1: Catálogo Sistemas CQRS completo (Sesión 25 - BLOQUE 1 Catálogos - 3/3 complete)
     EquiposMotorModule, // ✅ FASE 1 BLOQUE 2: Equipos Motor CQRS completo (Sesión 25 - 45+ campos, 5 enums, 11 Decimals)

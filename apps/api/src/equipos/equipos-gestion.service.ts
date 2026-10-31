@@ -23,6 +23,11 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { ClientesService } from '../clientes/clientes.service';
 import {
+  CambiarEstadoEquipoDto,
+  RegistrarLecturaHorometroDto,
+} from './dto/cambiar-estado-equipo.dto';
+import { UpdateDatosEspecificosDto } from './dto/update-datos-especificos.dto';
+import {
   CreateEquipoCompletoDto,
   CreateEquipoCompletoResponse,
   TipoEquipoDiscriminator,
@@ -33,12 +38,14 @@ import {
   FACETAS_VALOR_TRABAJO_REGISTRO,
   resolverBloquesActivos,
 } from './domain/equipment-facets.config';
+import { EquipoFilterProjectionService } from './services/equipo-filter-projection.service';
 
 @Injectable()
 export class EquiposGestionService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly clientesService?: ClientesService
+    @Optional() private readonly clientesService?: ClientesService,
+    @Optional() private readonly projectionService?: EquipoFilterProjectionService,
   ) { }
 
   /**
@@ -395,6 +402,15 @@ export class EquiposGestionService {
       // Invalida caché de clientes para sincronizar badges de plantas y bombas en tiempo real
       this.clientesService?.invalidateClientesCache();
 
+      // ✅ EAM FASE 2: Doble escritura JSONB y proyección B-Tree en equipos_atributos_filtro
+      if (this.projectionService) {
+        try {
+          await this.projectionService.reconstruirJsonYProyectar(resultado.equipo.id_equipo);
+        } catch {
+          // No bloqueante
+        }
+      }
+
       return {
         success: true,
         message: `Equipo tipo ${dto.tipo} creado exitosamente`,
@@ -453,6 +469,10 @@ export class EquiposGestionService {
     filtroValorMax?: number;
     filtroValorExacto?: string;
     filtroValorTabla?: string;
+    filtroAtributoCodigo?: string;
+    filtroAtributoValorMin?: number;
+    filtroAtributoValorMax?: number;
+    filtroAtributoTexto?: string;
   }) {
     try {
       const {
@@ -466,8 +486,18 @@ export class EquiposGestionService {
         page = 1,
         limit = 20,
         idAsesorAsignado,
+        filtroMarcaCampo,
+        filtroMarcaValor,
+        filtroMarcaTabla,
+        filtroValorCampo,
+        filtroValorMin,
+        filtroValorMax,
+        filtroValorExacto,
+        filtroValorTabla,
       } = params;
-      const skip = (page - 1) * limit;
+      const pageNum = Math.max(1, Number(page) || 1);
+      const limitNum = Math.max(1, Number(limit) || 20);
+      const skip = (pageNum - 1) * limitNum;
 
       const where: any = { activo: true };
       if (id_cliente) where.id_cliente = id_cliente;
@@ -548,6 +578,29 @@ export class EquiposGestionService {
         }
       }
 
+      // ✅ EAM FASE 2: Filtro Dinámico Universal B-Tree (equipos_atributos_filtro)
+      if (params.filtroAtributoCodigo) {
+        const condFiltro: any = {
+          codigo_atributo: params.filtroAtributoCodigo,
+        };
+        const condNum: any = {};
+        if (params.filtroAtributoValorMin !== undefined && !isNaN(Number(params.filtroAtributoValorMin))) {
+          condNum.gte = Number(params.filtroAtributoValorMin);
+        }
+        if (params.filtroAtributoValorMax !== undefined && !isNaN(Number(params.filtroAtributoValorMax))) {
+          condNum.lte = Number(params.filtroAtributoValorMax);
+        }
+        if (Object.keys(condNum).length > 0) {
+          condFiltro.valor_num_base = condNum;
+        }
+        if (params.filtroAtributoTexto && String(params.filtroAtributoTexto).trim()) {
+          condFiltro.valor_texto = { contains: String(params.filtroAtributoTexto).trim(), mode: 'insensitive' };
+        }
+        where.equipos_atributos_filtro = {
+          some: condFiltro,
+        };
+      }
+
       // Base filter for global park KPI summary (ignores search/tipo/estado filter so KPIs show the park overview)
       const baseParkWhere: any = { activo: true };
       if (id_cliente) baseParkWhere.id_cliente = id_cliente;
@@ -588,7 +641,7 @@ export class EquiposGestionService {
         this.prisma.equipos.findMany({
           where,
           skip,
-          take: limit,
+          take: limitNum,
           include: {
             clientes: {
               include: {
@@ -685,9 +738,9 @@ export class EquiposGestionService {
         },
         pagination: {
           total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
         },
       };
     } catch (error) {
@@ -1281,6 +1334,15 @@ export class EquiposGestionService {
 
     // Invalida caché de clientes para sincronizar badges de plantas y bombas en tiempo real
     this.clientesService?.invalidateClientesCache();
+
+    // ✅ EAM FASE 2: Proyección B-Tree y sincronización JSONB
+    if (this.projectionService) {
+      try {
+        await this.projectionService.reconstruirJsonYProyectar(idEquipo);
+      } catch {
+        // No bloqueante
+      }
+    }
 
     return {
       success: true,

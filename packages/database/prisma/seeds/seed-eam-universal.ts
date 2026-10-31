@@ -1,16 +1,31 @@
+/**
+ * MEKANOS S.A.S - Motor Universal de Activos EAM
+ * 
+ * Script de Sembrado Canónico Exhaustivo (Fase 2 - Cobertura 1:1)
+ * 
+ * Siembra:
+ * 1. 11 Magnitudes Físicas Fundamentales
+ * 2. 38 Unidades de Medida Dimensiónales (y = ax + b)
+ * 3. Mapeo de unidad_codigo en 27 parámetros de medición
+ * 4. ~70 Atributos Técnicos que cubren el 100% de las columnas satélite
+ * 5. 5 Módulos Técnicos con asignación de atributos y grupos visuales
+ * 6. Vinculación de Arquetipos a sus Módulos y Planes
+ * 7. 4 Modelos OEM Maestros con especificaciones base y kits BOM
+ */
+
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('================================================================');
-  console.log('🚀 INICIANDO SEMBRADO CANÓNICO DEL METAMODELO EAM UNIVERSAL');
+  console.log('🚀 INICIANDO SEMBRADO CANÓNICO EXHAUSTIVO DEL METAMODELO EAM (1:1)');
   console.log('================================================================');
 
   // --------------------------------------------------------------------------
   // 1. MAGNITUDES FÍSICAS CANÓNICAS
   // --------------------------------------------------------------------------
-  console.log('\n[1/5] Sembrando Magnitudes Físicas Canónicas...');
+  console.log('\n[1/6] Sembrando Magnitudes Físicas Canónicas...');
 
   const magnitudes = [
     { codigo_magnitud: 'POTENCIA', nombre_magnitud: 'Potencia Mecánica / Eléctrica', descripcion: 'Capacidad de trabajo o potencia instalada', unidad_base_codigo: 'KW' },
@@ -54,49 +69,69 @@ async function main() {
   // --------------------------------------------------------------------------
   // 2. UNIDADES DE MEDIDA DIMENSIONALES (y = ax + b)
   // --------------------------------------------------------------------------
-  console.log('\n[2/5] Sembrando Unidades de Medida y Factores de Conversión...');
+  console.log('\n[2/6] Sembrando Unidades de Medida y Factores de Conversión...');
 
   const unidades = [
     // ADIMENSIONAL
     { codigo: 'UND', nombre: 'Unidad', simbolo: 'und', tipo_magnitud: 'CANTIDAD', id_magnitud: mapMagnitudes.get('ADIMENSIONAL'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: false },
+    { codigo: 'PAR', nombre: 'Par', simbolo: 'par', tipo_magnitud: 'CANTIDAD', id_magnitud: mapMagnitudes.get('ADIMENSIONAL'), factor_a: 2.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: false },
+    { codigo: 'KIT', nombre: 'Juego / Kit', simbolo: 'kit', tipo_magnitud: 'CANTIDAD', id_magnitud: mapMagnitudes.get('ADIMENSIONAL'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: false },
+
     // VOLUMEN
     { codigo: 'LIT', nombre: 'Litros', simbolo: 'L', tipo_magnitud: 'VOLUMEN', id_magnitud: mapMagnitudes.get('VOLUMEN'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
     { codigo: 'GAL', nombre: 'Galones (US)', simbolo: 'Gal', tipo_magnitud: 'VOLUMEN', id_magnitud: mapMagnitudes.get('VOLUMEN'), factor_a: 3.785411784, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'ML', nombre: 'Mililitros', simbolo: 'mL', tipo_magnitud: 'VOLUMEN', id_magnitud: mapMagnitudes.get('VOLUMEN'), factor_a: 0.001, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'M3_VOL', nombre: 'Metros Cúbicos', simbolo: 'm³', tipo_magnitud: 'VOLUMEN', id_magnitud: mapMagnitudes.get('VOLUMEN'), factor_a: 1000.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
     // POTENCIA
     { codigo: 'KW', nombre: 'Kilovatios', simbolo: 'kW', tipo_magnitud: 'POTENCIA', id_magnitud: mapMagnitudes.get('POTENCIA'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
     { codigo: 'HP', nombre: 'Caballos de Fuerza', simbolo: 'HP', tipo_magnitud: 'POTENCIA', id_magnitud: mapMagnitudes.get('POTENCIA'), factor_a: 0.745699872, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
     { codigo: 'KVA', nombre: 'Kilovoltiamperios', simbolo: 'kVA', tipo_magnitud: 'POTENCIA', id_magnitud: mapMagnitudes.get('POTENCIA'), factor_a: 0.8, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
     { codigo: 'BTU_H', nombre: 'BTU por hora', simbolo: 'BTU/h', tipo_magnitud: 'POTENCIA', id_magnitud: mapMagnitudes.get('POTENCIA'), factor_a: 0.000293071, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
     { codigo: 'TR', nombre: 'Toneladas de Refrigeración', simbolo: 'TR', tipo_magnitud: 'POTENCIA', id_magnitud: mapMagnitudes.get('POTENCIA'), factor_a: 3.51685284, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'W', nombre: 'Vatios', simbolo: 'W', tipo_magnitud: 'POTENCIA', id_magnitud: mapMagnitudes.get('POTENCIA'), factor_a: 0.001, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
     // PRESION
     { codigo: 'PSI', nombre: 'Libras por Pulgada Cuadrada', simbolo: 'PSI', tipo_magnitud: 'PRESION', id_magnitud: mapMagnitudes.get('PRESION'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
     { codigo: 'BAR', nombre: 'Bares', simbolo: 'bar', tipo_magnitud: 'PRESION', id_magnitud: mapMagnitudes.get('PRESION'), factor_a: 14.5037738, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
     { codigo: 'KPA', nombre: 'Kilopascales', simbolo: 'kPa', tipo_magnitud: 'PRESION', id_magnitud: mapMagnitudes.get('PRESION'), factor_a: 0.1450377, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'MPA', nombre: 'Megapascales', simbolo: 'MPa', tipo_magnitud: 'PRESION', id_magnitud: mapMagnitudes.get('PRESION'), factor_a: 145.037738, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
     // TEMPERATURA
     { codigo: 'C', nombre: 'Grados Celsius', simbolo: '°C', tipo_magnitud: 'TEMPERATURA', id_magnitud: mapMagnitudes.get('TEMPERATURA'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
-    { codigo: 'F', nombre: 'Grados Fahrenheit', simbolo: '°F', tipo_magnitud: 'TEMPERATURA', id_magnitud: mapMagnitudes.get('TEMPERATURA'), factor_a: 0.5555555556, factor_b: -17.7777777778, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'F', nombre: 'Grados Fahrenheit', simbolo: '°F', tipo_magnitud: 'TEMPERATURA', id_magnitud: mapMagnitudes.get('TEMPERATURA'), factor_a: 5 / 9, factor_b: -160 / 9, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'K', nombre: 'Kelvin', simbolo: 'K', tipo_magnitud: 'TEMPERATURA', id_magnitud: mapMagnitudes.get('TEMPERATURA'), factor_a: 1.0, factor_b: -273.15, es_unidad_base: false, permite_decimales: true },
+
     // CAUDAL
     { codigo: 'M3H', nombre: 'Metros Cúbicos por Hora', simbolo: 'm³/h', tipo_magnitud: 'CAUDAL', id_magnitud: mapMagnitudes.get('CAUDAL'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
     { codigo: 'GPM', nombre: 'Galones por Minuto', simbolo: 'GPM', tipo_magnitud: 'CAUDAL', id_magnitud: mapMagnitudes.get('CAUDAL'), factor_a: 0.2271247, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
     { codigo: 'LPS', nombre: 'Litros por Segundo', simbolo: 'L/s', tipo_magnitud: 'CAUDAL', id_magnitud: mapMagnitudes.get('CAUDAL'), factor_a: 3.6, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
-    // FRECUENCIA Y VELOCIDAD
-    { codigo: 'RPM', nombre: 'Revoluciones por Minuto', simbolo: 'RPM', tipo_magnitud: 'VELOCIDAD', id_magnitud: mapMagnitudes.get('FRECUENCIA_VELOCIDAD'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: false },
-    { codigo: 'HZ', nombre: 'Hercio / Frecuencia', simbolo: 'Hz', tipo_magnitud: 'FRECUENCIA', id_magnitud: mapMagnitudes.get('FRECUENCIA_VELOCIDAD'), factor_a: 60.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
-    { codigo: 'MMS', nombre: 'Milímetros por Segundo (Vibración)', simbolo: 'mm/s', tipo_magnitud: 'VELOCIDAD', id_magnitud: mapMagnitudes.get('FRECUENCIA_VELOCIDAD'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
-    // ELECTRICIDAD
-    { codigo: 'V', nombre: 'Voltios', simbolo: 'V', tipo_magnitud: 'VOLTAJE', id_magnitud: mapMagnitudes.get('ELECTRICA_VOLTAJE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
-    { codigo: 'VAC', nombre: 'Voltios Corriente Alterna', simbolo: 'VAC', tipo_magnitud: 'VOLTAJE', id_magnitud: mapMagnitudes.get('ELECTRICA_VOLTAJE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
-    { codigo: 'VDC', nombre: 'Voltios Corriente Directa', simbolo: 'VDC', tipo_magnitud: 'VOLTAJE', id_magnitud: mapMagnitudes.get('ELECTRICA_VOLTAJE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
-    { codigo: 'A', nombre: 'Amperios', simbolo: 'A', tipo_magnitud: 'CORRIENTE', id_magnitud: mapMagnitudes.get('ELECTRICA_CORRIENTE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
-    { codigo: 'CCA', nombre: 'Cold Cranking Amps', simbolo: 'CCA', tipo_magnitud: 'CORRIENTE', id_magnitud: mapMagnitudes.get('ELECTRICA_CORRIENTE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: false },
-    { codigo: 'AH', nombre: 'Amperios-Hora', simbolo: 'Ah', tipo_magnitud: 'CAPACIDAD_ELECTRICA', id_magnitud: mapMagnitudes.get('ELECTRICA_CORRIENTE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'LPM', nombre: 'Litros por Minuto', simbolo: 'L/min', tipo_magnitud: 'CAUDAL', id_magnitud: mapMagnitudes.get('CAUDAL'), factor_a: 0.06, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
+    // ELECTRICA_VOLTAJE
+    { codigo: 'V', nombre: 'Voltios', simbolo: 'V', tipo_magnitud: 'ELECTRICA_VOLTAJE', id_magnitud: mapMagnitudes.get('ELECTRICA_VOLTAJE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
+    { codigo: 'VAC', nombre: 'Voltios Corriente Alterna', simbolo: 'VAC', tipo_magnitud: 'ELECTRICA_VOLTAJE', id_magnitud: mapMagnitudes.get('ELECTRICA_VOLTAJE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'VDC', nombre: 'Voltios Corriente Continua', simbolo: 'VDC', tipo_magnitud: 'ELECTRICA_VOLTAJE', id_magnitud: mapMagnitudes.get('ELECTRICA_VOLTAJE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'KV_VOLT', nombre: 'Kilovoltios', simbolo: 'kV', tipo_magnitud: 'ELECTRICA_VOLTAJE', id_magnitud: mapMagnitudes.get('ELECTRICA_VOLTAJE'), factor_a: 1000.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
+    // ELECTRICA_CORRIENTE
+    { codigo: 'A', nombre: 'Amperios', simbolo: 'A', tipo_magnitud: 'ELECTRICA_CORRIENTE', id_magnitud: mapMagnitudes.get('ELECTRICA_CORRIENTE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
+    { codigo: 'MA', nombre: 'Miliamperios', simbolo: 'mA', tipo_magnitud: 'ELECTRICA_CORRIENTE', id_magnitud: mapMagnitudes.get('ELECTRICA_CORRIENTE'), factor_a: 0.001, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
+    // FRECUENCIA_VELOCIDAD
+    { codigo: 'RPM', nombre: 'Revoluciones por Minuto', simbolo: 'RPM', tipo_magnitud: 'FRECUENCIA_VELOCIDAD', id_magnitud: mapMagnitudes.get('FRECUENCIA_VELOCIDAD'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: false },
+    { codigo: 'HZ', nombre: 'Hercios', simbolo: 'Hz', tipo_magnitud: 'FRECUENCIA_VELOCIDAD', id_magnitud: mapMagnitudes.get('FRECUENCIA_VELOCIDAD'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
     // LONGITUD
     { codigo: 'MET', nombre: 'Metros', simbolo: 'm', tipo_magnitud: 'LONGITUD', id_magnitud: mapMagnitudes.get('LONGITUD'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
-    { codigo: 'PULG', nombre: 'Pulgadas', simbolo: '"', tipo_magnitud: 'LONGITUD', id_magnitud: mapMagnitudes.get('LONGITUD'), factor_a: 0.0254, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
-    { codigo: 'KM', nombre: 'Kilómetros', simbolo: 'km', tipo_magnitud: 'LONGITUD', id_magnitud: mapMagnitudes.get('LONGITUD'), factor_a: 1000.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
-    // TIEMPO
-    { codigo: 'HORAS', nombre: 'Horas de Operación', simbolo: 'hrs', tipo_magnitud: 'TIEMPO', id_magnitud: mapMagnitudes.get('TIEMPO_USO'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
-    { codigo: 'CICLOS', nombre: 'Ciclos de Arranque', simbolo: 'ciclos', tipo_magnitud: 'CANTIDAD', id_magnitud: mapMagnitudes.get('TIEMPO_USO'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: false },
+    { codigo: 'MM', nombre: 'Milímetros', simbolo: 'mm', tipo_magnitud: 'LONGITUD', id_magnitud: mapMagnitudes.get('LONGITUD'), factor_a: 0.001, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'CM', nombre: 'Centímetros', simbolo: 'cm', tipo_magnitud: 'LONGITUD', id_magnitud: mapMagnitudes.get('LONGITUD'), factor_a: 0.01, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'PULG', nombre: 'Pulgadas', simbolo: 'in', tipo_magnitud: 'LONGITUD', id_magnitud: mapMagnitudes.get('LONGITUD'), factor_a: 0.0254, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
+    // TIEMPO_USO
+    { codigo: 'HORAS', nombre: 'Horas', simbolo: 'h', tipo_magnitud: 'TIEMPO_USO', id_magnitud: mapMagnitudes.get('TIEMPO_USO'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
+    { codigo: 'MIN', nombre: 'Minutos', simbolo: 'min', tipo_magnitud: 'TIEMPO_USO', id_magnitud: mapMagnitudes.get('TIEMPO_USO'), factor_a: 1 / 60, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+    { codigo: 'DIAS', nombre: 'Días', simbolo: 'd', tipo_magnitud: 'TIEMPO_USO', id_magnitud: mapMagnitudes.get('TIEMPO_USO'), factor_a: 24.0, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
   ];
 
   for (const u of unidades) {
@@ -140,7 +175,7 @@ async function main() {
     'A': 'A',
     'VDC': 'VDC',
     'VAC': 'VAC',
-    'mm/s': 'MMS',
+    'mm/s': 'MM',
     'N/A': 'UND',
   };
 
@@ -155,394 +190,770 @@ async function main() {
   console.log(`✅ ${params.length} parámetros de medición vinculados al código de unidad canónico.`);
 
   // --------------------------------------------------------------------------
-  // 3. DICCIONARIO ATÓMICO DE ATRIBUTOS TÉCNICOS
+  // 3. DICCIONARIO ATÓMICO DE ATRIBUTOS TÉCNICOS (COBERTURA 1:1 CON SATÉLITES)
   // --------------------------------------------------------------------------
-  console.log('\n[3/5] Sembrando Diccionario de Atributos Técnicos...');
+  console.log('\n[3/6] Sembrando Diccionario Completo de Atributos Técnicos (1:1)...');
 
   const atributos = [
-    // Identificación Primaria
+    // --- Identificación Primaria Universal ---
     { codigo: 'marca_principal', nombre: 'Marca Principal', control: 'TEXTO_CORTO', rol: 'MARCA_PRINCIPAL', mag: null, unidad: null },
     { codigo: 'modelo_principal', nombre: 'Modelo Principal', control: 'TEXTO_CORTO', rol: 'MODELO_PRINCIPAL', mag: null, unidad: null },
     { codigo: 'serie_principal', nombre: 'Número de Serie Principal', control: 'TEXTO_CORTO', rol: 'SERIE_PRINCIPAL', mag: null, unidad: null },
 
-    // Potencias y Capacidades
+    // --- Motor Combustión: Identificación ---
+    { codigo: 'marca_motor', nombre: 'Marca del Motor', control: 'TEXTO_CORTO', rol: 'MARCA_MOTOR', mag: null, unidad: null },
+    { codigo: 'modelo_motor', nombre: 'Modelo del Motor', control: 'TEXTO_CORTO', rol: 'MODELO_MOTOR', mag: null, unidad: null },
+    { codigo: 'numero_serie_motor', nombre: 'Número de Serie del Motor', control: 'TEXTO_CORTO', rol: 'SERIE_MOTOR', mag: null, unidad: null },
+    { codigo: 'tipo_motor', nombre: 'Tipo de Motor', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'COMBUSTION', etiqueta: 'Combustión Interna' }, { valor: 'ELECTRICO', etiqueta: 'Motor Eléctrico' }] },
+    { codigo: 'tipo_combustible', nombre: 'Tipo de Combustible', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'DIESEL', etiqueta: 'Diésel' }, { valor: 'GASOLINA', etiqueta: 'Gasolina' }, { valor: 'GAS_NATURAL', etiqueta: 'Gas Natural' }, { valor: 'GLP', etiqueta: 'GLP' }] },
+    { codigo: 'ano_fabricacion_motor', nombre: 'Año de Fabricación del Motor', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+
+    // --- Motor Combustión: Rendimiento & Cilindros ---
+    { codigo: 'potencia_hp', nombre: 'Potencia Mecánica (HP)', control: 'NUMERICO_MAGNITUD', rol: 'POTENCIA_CAPACIDAD_PRINCIPAL', mag: 'POTENCIA', unidad: 'HP' },
+    { codigo: 'potencia_kw_motor', nombre: 'Potencia Activa Motor (kW)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'POTENCIA', unidad: 'KW' },
+    { codigo: 'velocidad_rpm', nombre: 'Velocidad de Giro (RPM)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'FRECUENCIA_VELOCIDAD', unidad: 'RPM' },
+    { codigo: 'numero_cilindros', nombre: 'Número de Cilindros', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'cilindrada_cc', nombre: 'Cilindrada (cc)', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'aspiracion', nombre: 'Tipo de Aspiración', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'NATURAL', etiqueta: 'Naturalmente Aspirado' }, { valor: 'TURBOCARGADO', etiqueta: 'Turbocargado' }, { valor: 'TURBOCARGADO_POSTENFRIADO', etiqueta: 'Turbocargado Postenfriado (Aftercooler)' }] },
+    { codigo: 'tiene_turbocargador', nombre: '¿Tiene Turbocargador?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+
+    // --- Motor Combustión: Arranque y Baterías ---
+    { codigo: 'tipo_arranque', nombre: 'Tipo de Arranque', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'ELECTRICO', etiqueta: 'Eléctrico' }, { valor: 'MANUAL', etiqueta: 'Manual' }, { valor: 'AIRE', etiqueta: 'Neumático / Aire' }, { valor: 'HIDRAULICO', etiqueta: 'Hidráulico' }] },
+    { codigo: 'voltaje_arranque_vdc', nombre: 'Voltaje de Arranque (VDC)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_VOLTAJE', unidad: 'VDC' },
+    { codigo: 'amperaje_arranque_cca', nombre: 'Amperaje de Arranque (CCA)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_CORRIENTE', unidad: 'A' },
+    { codigo: 'cantidad_baterias', nombre: 'Cantidad de Baterías', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'referencia_bateria', nombre: 'Referencia / Tipo Batería', control: 'TEXTO_CORTO', rol: 'BATERIA_ARRANQUE', mag: null, unidad: null },
+    { codigo: 'capacidad_bateria_ah', nombre: 'Capacidad Batería (Ah)', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_cargador_bateria', nombre: '¿Tiene Cargador de Batería?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'marca_cargador', nombre: 'Marca Cargador de Batería', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'modelo_cargador', nombre: 'Modelo Cargador de Batería', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'amperaje_cargador', nombre: 'Amperaje Cargador (A)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_CORRIENTE', unidad: 'A' },
+
+    // --- Motor Combustión: Lubricación y Refrigeración ---
+    { codigo: 'capacidad_aceite_litros', nombre: 'Capacidad Aceite Cárter', control: 'NUMERICO_MAGNITUD', rol: 'CAPACIDAD_FLUIDO_LITROS', mag: 'VOLUMEN', unidad: 'LIT' },
+    { codigo: 'tipo_aceite', nombre: 'Tipo y Grado de Aceite', control: 'SELECTOR', rol: 'TIPO_FLUIDO', mag: null, unidad: null, opciones: [{ valor: '15W40 CI-4', etiqueta: '15W40 CI-4 Diésel' }, { valor: '15W40 CK-4', etiqueta: '15W40 CK-4 Premium' }, { valor: '10W30', etiqueta: '10W30 Multigrado' }, { valor: '20W50', etiqueta: '20W50 Alto Kilometraje' }, { valor: 'ISO VG 46', etiqueta: 'ISO VG 46 Hidráulico' }, { valor: 'ISO VG 68', etiqueta: 'ISO VG 68 Compresor' }] },
+    { codigo: 'capacidad_refrigerante_litros', nombre: 'Capacidad de Refrigerante', control: 'NUMERICO_MAGNITUD', rol: 'CAPACIDAD_FLUIDO_LITROS', mag: 'VOLUMEN', unidad: 'LIT' },
+    { codigo: 'tipo_refrigerante', nombre: 'Tipo de Refrigerante', control: 'SELECTOR', rol: 'TIPO_FLUIDO', mag: null, unidad: null, opciones: [{ valor: '50/50 PREMIX', etiqueta: 'Etilenglicol 50/50 Premix' }, { valor: 'OAT LONGLIFE', etiqueta: 'Orgánico Larga Vida (OAT)' }, { valor: 'CONCENTRADO', etiqueta: 'Refrigerante Concentrado' }] },
+    { codigo: 'tiene_radiador', nombre: '¿Tiene Radiador?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'radiador_alto_cm', nombre: 'Alto de Radiador (cm)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'CM' },
+    { codigo: 'radiador_ancho_cm', nombre: 'Ancho de Radiador (cm)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'CM' },
+    { codigo: 'radiador_espesor_cm', nombre: 'Espesor de Radiador (cm)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'CM' },
+
+    // --- Motor Eléctrico ---
+    { codigo: 'marca_motor_electrico', nombre: 'Marca del Motor Eléctrico', control: 'TEXTO_CORTO', rol: 'MARCA_MOTOR', mag: null, unidad: null },
+    { codigo: 'modelo_motor_electrico', nombre: 'Modelo del Motor Eléctrico', control: 'TEXTO_CORTO', rol: 'MODELO_MOTOR', mag: null, unidad: null },
+    { codigo: 'numero_serie_motor_electrico', nombre: 'Número de Serie Motor Eléctrico', control: 'TEXTO_CORTO', rol: 'SERIE_MOTOR', mag: null, unidad: null },
+    { codigo: 'potencia_hp_electrico', nombre: 'Potencia Eléctrica (HP)', control: 'NUMERICO_MAGNITUD', rol: 'POTENCIA_CAPACIDAD_PRINCIPAL', mag: 'POTENCIA', unidad: 'HP' },
+    { codigo: 'potencia_kw_electrico', nombre: 'Potencia Eléctrica (kW)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'POTENCIA', unidad: 'KW' },
+    { codigo: 'voltaje_operacion_vac', nombre: 'Voltaje de Operación (VAC)', control: 'SELECTOR', rol: 'ESTANDAR', mag: 'ELECTRICA_VOLTAJE', unidad: 'VAC', opciones: [{ valor: '220/127', etiqueta: '220/127 VAC' }, { valor: '440/254', etiqueta: '440/254 VAC' }, { valor: '208/120', etiqueta: '208/120 VAC' }, { valor: '480/277', etiqueta: '480/277 VAC' }, { valor: '380/220', etiqueta: '380/220 VAC' }] },
+    { codigo: 'numero_fases_motor', nombre: 'Número de Fases Motor', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: '3', etiqueta: 'Trifásico (3F)' }, { valor: '1', etiqueta: 'Monofásico (1F)' }, { valor: '2', etiqueta: 'Bifásico (2F)' }] },
+    { codigo: 'frecuencia_hz_motor', nombre: 'Frecuencia Motor (Hz)', control: 'SELECTOR', rol: 'ESTANDAR', mag: 'FRECUENCIA_VELOCIDAD', unidad: 'HZ', opciones: [{ valor: '60', etiqueta: '60 Hz' }, { valor: '50', etiqueta: '50 Hz' }] },
+    { codigo: 'amperaje_nominal_motor', nombre: 'Amperaje Nominal Motor (A)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_CORRIENTE', unidad: 'A' },
+    { codigo: 'factor_potencia_motor', nombre: 'Factor de Potencia Motor (cos φ)', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'clase_aislamiento_motor', nombre: 'Clase de Aislamiento Motor', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'CLASE_H', etiqueta: 'Clase H (180°C)' }, { valor: 'CLASE_F', etiqueta: 'Clase F (155°C)' }, { valor: 'CLASE_B', etiqueta: 'Clase B (130°C)' }] },
+    { codigo: 'grado_proteccion_ip_motor', nombre: 'Grado Protección IP Motor', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'IP55', etiqueta: 'IP55 (Estándar Industrial)' }, { valor: 'IP54', etiqueta: 'IP54' }, { valor: 'IP23', etiqueta: 'IP23' }, { valor: 'IP65', etiqueta: 'IP65' }] },
+    { codigo: 'ano_fabricacion_motor_electrico', nombre: 'Año Fabricación Motor Eléctrico', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+
+    // --- Alternador / Generador ---
+    { codigo: 'marca_generador', nombre: 'Marca del Generador', control: 'TEXTO_CORTO', rol: 'MARCA_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'modelo_generador', nombre: 'Modelo del Generador', control: 'TEXTO_CORTO', rol: 'MODELO_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'numero_serie_generador', nombre: 'Número de Serie del Generador', control: 'TEXTO_CORTO', rol: 'SERIE_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'marca_alternador', nombre: 'Marca del Alternador', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'modelo_alternador', nombre: 'Modelo del Alternador', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'numero_serie_alternador', nombre: 'Número de Serie Alternador', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
     { codigo: 'potencia_kva', nombre: 'Potencia Aparente (kVA)', control: 'NUMERICO_MAGNITUD', rol: 'POTENCIA_CAPACIDAD_PRINCIPAL', mag: 'POTENCIA', unidad: 'KVA' },
     { codigo: 'potencia_kw', nombre: 'Potencia Activa (kW)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'POTENCIA', unidad: 'KW' },
-    { codigo: 'potencia_hp', nombre: 'Potencia Mecánica (HP)', control: 'NUMERICO_MAGNITUD', rol: 'POTENCIA_CAPACIDAD_PRINCIPAL', mag: 'POTENCIA', unidad: 'HP' },
-    { codigo: 'caudal_maximo_m3h', nombre: 'Caudal Máximo', control: 'NUMERICO_MAGNITUD', rol: 'POTENCIA_CAPACIDAD_PRINCIPAL', mag: 'CAUDAL', unidad: 'M3H' },
-    { codigo: 'presion_maxima_psi', nombre: 'Presión Máxima', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
-    { codigo: 'capacidad_tanque_gal', nombre: 'Capacidad de Tanque', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'VOLUMEN', unidad: 'GAL' },
+    { codigo: 'factor_potencia', nombre: 'Factor de Potencia Generador', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'voltaje_salida', nombre: 'Voltaje de Salida Generador', control: 'SELECTOR', rol: 'ESTANDAR', mag: 'ELECTRICA_VOLTAJE', unidad: 'VAC', opciones: [{ valor: '220/127', etiqueta: '220/127 VAC' }, { valor: '440/254', etiqueta: '440/254 VAC' }, { valor: '208/120', etiqueta: '208/120 VAC' }, { valor: '480/277', etiqueta: '480/277 VAC' }, { valor: '380/220', etiqueta: '380/220 VAC' }] },
+    { codigo: 'numero_fases', nombre: 'Número de Fases Generador', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: '3', etiqueta: 'Trifásico (3F)' }, { valor: '1', etiqueta: 'Monofásico (1F)' }, { valor: '2', etiqueta: 'Bifásico (2F)' }] },
+    { codigo: 'frecuencia_hz', nombre: 'Frecuencia Generador (Hz)', control: 'SELECTOR', rol: 'ESTANDAR', mag: 'FRECUENCIA_VELOCIDAD', unidad: 'HZ', opciones: [{ valor: '60', etiqueta: '60 Hz' }, { valor: '50', etiqueta: '50 Hz' }] },
+    { codigo: 'amperaje_nominal_salida', nombre: 'Amperaje Nominal Salida (A)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_CORRIENTE', unidad: 'A' },
+    { codigo: 'configuracion_salida', nombre: 'Configuración Conexión', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'ESTRELLA_SERIE', etiqueta: 'Estrella Serie (Wye)' }, { valor: 'ESTRELLA_PARALELO', etiqueta: 'Estrella Paralelo' }, { valor: 'DELTA_SERIE', etiqueta: 'Delta Serie' }, { valor: 'DELTA_ZIGZAG', etiqueta: 'Delta Zig-Zag' }] },
+    { codigo: 'clase_aislamiento', nombre: 'Clase de Aislamiento Alternador', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'CLASE_H', etiqueta: 'Clase H' }, { valor: 'CLASE_F', etiqueta: 'Clase F' }] },
+    { codigo: 'grado_proteccion_ip', nombre: 'Grado Protección IP Alternador', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'IP23', etiqueta: 'IP23' }, { valor: 'IP21', etiqueta: 'IP21' }, { valor: 'IP54', etiqueta: 'IP54' }] },
+    { codigo: 'ano_fabricacion_generador', nombre: 'Año Fabricación Generador', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
 
-    // Eléctrico y Control
-    { codigo: 'voltaje_operacion', nombre: 'Voltaje de Operación', control: 'SELECTOR', rol: 'ESTANDAR', mag: 'ELECTRICA_VOLTAJE', unidad: 'VAC', opciones: [{ valor: '220/127', etiqueta: '220/127 VAC' }, { valor: '440/254', etiqueta: '440/254 VAC' }, { valor: '208/120', etiqueta: '208/120 VAC' }, { valor: '480/277', etiqueta: '480/277 VAC' }] },
-    { codigo: 'frecuencia_hz', nombre: 'Frecuencia Nominal', control: 'SELECTOR', rol: 'ESTANDAR', mag: 'FRECUENCIA_VELOCIDAD', unidad: 'HZ', opciones: [{ valor: '60', etiqueta: '60 Hz' }, { valor: '50', etiqueta: '50 Hz' }] },
-    { codigo: 'velocidad_rpm', nombre: 'Velocidad de Giro', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'FRECUENCIA_VELOCIDAD', unidad: 'RPM' },
-    { codigo: 'numero_fases', nombre: 'Número de Fases', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: '3', etiqueta: 'Trifásico (3F)' }, { valor: '1', etiqueta: 'Monofásico (1F)' }, { valor: '2', etiqueta: 'Bifásico (2F)' }] },
-    { codigo: 'factor_potencia', nombre: 'Factor de Potencia (FP)', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null, validacion: { min: 0.1, max: 1.0, decimales: 2 } },
-    { codigo: 'tipo_alternador', nombre: 'Tipo de Alternador', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'SIN_ESCOBILLAS', etiqueta: 'Sin Escobillas (Brushless)' }, { valor: 'CON_ESCOBILLAS', etiqueta: 'Con Escobillas' }] },
+    // --- Regulación, Control & Transferencia ---
+    { codigo: 'tiene_avr', nombre: '¿Tiene Regulador de Voltaje (AVR)?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'marca_avr', nombre: 'Marca del AVR', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'modelo_avr', nombre: 'Modelo del AVR', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'referencia_avr', nombre: 'Referencia / Código AVR', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_modulo_control', nombre: '¿Tiene Módulo de Control?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'marca_modulo_control', nombre: 'Marca Módulo de Control', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'modelo_modulo_control', nombre: 'Modelo Módulo de Control', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_arranque_automatico', nombre: '¿Tiene Arranque Automático?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'capacidad_tanque_principal_litros', nombre: 'Tanque Principal Combustible (L)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'VOLUMEN', unidad: 'LIT' },
+    { codigo: 'tiene_tanque_auxiliar', nombre: '¿Tiene Tanque Auxiliar?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'capacidad_tanque_auxiliar_litros', nombre: 'Tanque Auxiliar Combustible (L)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'VOLUMEN', unidad: 'LIT' },
+    { codigo: 'tiene_cabina_insonorizada', nombre: '¿Tiene Cabina Insonorizada?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_tablero_transferencia', nombre: '¿Tiene Tablero de Transferencia?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tipo_transferencia', nombre: 'Tipo de Transferencia', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'AUTOMATICA', etiqueta: 'Automática (ATS)' }, { valor: 'MANUAL', etiqueta: 'Manual (MTS)' }, { valor: 'SIN_TRANSFERENCIA', etiqueta: 'Sin Transferencia' }] },
+    { codigo: 'ubicacion_transferencia', nombre: 'Ubicación de Transferencia', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'INTEGRADA', etiqueta: 'Integrada en Cabina' }, { valor: 'EXTERNA_PARED', etiqueta: 'Externa en Pared' }, { valor: 'EXTERNA_PEDESTAL', etiqueta: 'Externa en Pedestal' }] },
+    { codigo: 'amperaje_transferencia', nombre: 'Amperaje de Transferencia (A)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_CORRIENTE', unidad: 'A' },
+    { codigo: 'calibre_cable_potencia', nombre: 'Calibre Cable de Potencia', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'longitud_cable_m', nombre: 'Longitud de Cable (m)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'MET' },
 
-    // Motor y Fluidos
-    { codigo: 'capacidad_aceite_litros', nombre: 'Capacidad de Aceite en Cárter', control: 'NUMERICO_MAGNITUD', rol: 'CAPACIDAD_FLUIDO_LITROS', mag: 'VOLUMEN', unidad: 'LIT' },
-    { codigo: 'tipo_aceite', nombre: 'Tipo y Grado de Aceite', control: 'SELECTOR', rol: 'TIPO_FLUIDO', mag: null, unidad: null, opciones: [{ valor: '15W40 CI-4', etiqueta: '15W40 CI-4 Diésel' }, { valor: '15W40 CK-4', etiqueta: '15W40 CK-4 Premium' }, { valor: 'ISO VG 46', etiqueta: 'ISO VG 46 Hidráulico' }, { valor: 'ISO VG 68', etiqueta: 'ISO VG 68 Compresor' }] },
-    { codigo: 'capacidad_refrigerante_litros', nombre: 'Capacidad de Refrigerante', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'VOLUMEN', unidad: 'LIT' },
-    { codigo: 'tipo_refrigerante', nombre: 'Tipo de Refrigerante', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: '50/50 PREMIX', etiqueta: 'Etilenglicol 50/50 Premix' }, { valor: 'OAT LONGLIFE', etiqueta: 'Orgánico Larga Vida (OAT)' }] },
-    { codigo: 'numero_cilindros', nombre: 'Número de Cilindros', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
-    { codigo: 'aspiracion', nombre: 'Tipo de Aspiración', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'NATURAL', etiqueta: 'Naturalmente Aspirado' }, { valor: 'TURBOCARGADO', etiqueta: 'Turbocargado' }, { valor: 'TURBOCARGADO_POSTENFRIADO', etiqueta: 'Turbocargado Postenfriado (Aftercooler)' }] },
-    { codigo: 'bateria_arranque', nombre: 'Configuración Batería Arranque', control: 'SELECTOR', rol: 'BATERIA_ARRANQUE', mag: null, unidad: null, opciones: [{ valor: '12V_1000CCA', etiqueta: '1x 12V 1000 CCA' }, { valor: '24V_1000CCA', etiqueta: '2x 12V (24V Serie) 1000 CCA' }, { valor: '12V_650CCA', etiqueta: '1x 12V 650 CCA' }] },
+    // --- Bomba Hidráulica ---
+    { codigo: 'marca_bomba', nombre: 'Marca de la Bomba', control: 'TEXTO_CORTO', rol: 'MARCA_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'modelo_bomba', nombre: 'Modelo de la Bomba', control: 'TEXTO_CORTO', rol: 'MODELO_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'numero_serie_bomba', nombre: 'Número de Serie de la Bomba', control: 'TEXTO_CORTO', rol: 'SERIE_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'tipo_bomba', nombre: 'Tipo de Bomba Hidráulica', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'CENTRIFUGA', etiqueta: 'Centrífuga Horizontal' }, { valor: 'SUMERGIBLE', etiqueta: 'Sumergible Pozo / Achique' }, { valor: 'MULTIETAPAS', etiqueta: 'Multietapas Alta Presión' }, { valor: 'TURBINA_VERTICAL', etiqueta: 'Turbina Vertical' }, { valor: 'ENGRANAJES', etiqueta: 'Desplazamiento Positivo / Engranajes' }, { valor: 'DIAFRAGMA', etiqueta: 'Diafragma / Neumática' }] },
+    { codigo: 'aplicacion_bomba', nombre: 'Aplicación de la Bomba', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'PRESION_CONSTANTE', etiqueta: 'Presión Constante / Hidroneumático' }, { valor: 'AGUA_POTABLE', etiqueta: 'Abastecimiento Agua Potable' }, { valor: 'ACHIQUE_RESIDUALES', etiqueta: 'Achique y Aguas Residuales' }, { valor: 'CONTRA_INCENDIO', etiqueta: 'Red Contra Incendio (RCI)' }, { valor: 'RIEGO', etiqueta: 'Riego Agrícola' }, { valor: 'RECIRCULACION', etiqueta: 'Recirculación Industrial / HVAC' }] },
+    { codigo: 'caudal_maximo_m3h', nombre: 'Caudal Máximo (m³/h)', control: 'NUMERICO_MAGNITUD', rol: 'POTENCIA_CAPACIDAD_PRINCIPAL', mag: 'CAUDAL', unidad: 'M3H' },
+    { codigo: 'altura_manometrica_maxima_m', nombre: 'Altura Manométrica Máxima (m)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'MET' },
+    { codigo: 'altura_presion_trabajo_m', nombre: 'Altura / Presión de Trabajo (m)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'MET' },
+    { codigo: 'potencia_hidraulica_kw', nombre: 'Potencia Hidráulica (kW)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'POTENCIA', unidad: 'KW' },
+    { codigo: 'eficiencia_porcentaje', nombre: 'Eficiencia Hidráulica (%)', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'diametro_succion', nombre: 'Diámetro de Succión', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'diametro_descarga', nombre: 'Diámetro de Descarga', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'total_bombas_sistema', nombre: 'Total Bombas en el Sistema', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'posicion_bomba_numero', nombre: 'Posición de Bomba en Sistema', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'ano_fabricacion_bomba', nombre: 'Año Fabricación de Bomba', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
 
-    // Hidráulica y Compresión
-    { codigo: 'tipo_bomba', nombre: 'Tipo de Bomba Hidráulica', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'CENTRIFUGA', etiqueta: 'Centrífuga Horizontal' }, { valor: 'SUMERGIBLE', etiqueta: 'Sumergible Pozo / Achique' }, { valor: 'TURBINA_VERTICAL', etiqueta: 'Turbina Vertical' }, { valor: 'MULTIETAPAS', etiqueta: 'Multietapas Alta Presión' }] },
-    { codigo: 'diametro_succion_pulg', nombre: 'Diámetro de Succión', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'PULG' },
-    { codigo: 'diametro_descarga_pulg', nombre: 'Diámetro de Descarga', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'LONGITUD', unidad: 'PULG' },
-    { codigo: 'tipo_compresor', nombre: 'Tecnología de Compresor', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'TORNILLO_ROTATIVO', etiqueta: 'Tornillo Rotativo Lubricado' }, { valor: 'PISTON_RECIPROCANTE', etiqueta: 'Pistón Reciprocante' }, { valor: 'SCROLL', etiqueta: 'Scroll Libre de Aceite' }] },
+    // --- Bomba: Control, Presión e Instrumentación ---
+    { codigo: 'tiene_panel_control_bomba', nombre: '¿Tiene Panel de Control?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'marca_panel_control_bomba', nombre: 'Marca Panel de Control', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'modelo_panel_control_bomba', nombre: 'Modelo Panel de Control', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_presostato', nombre: '¿Tiene Presostato?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'marca_presostato', nombre: 'Marca del Presostato', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'modelo_presostato', nombre: 'Modelo del Presostato', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'presion_encendido_psi', nombre: 'Presión de Encendido (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'presion_apagado_psi', nombre: 'Presión de Apagado (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'tiene_contactor_externo', nombre: '¿Tiene Contactor Externo?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'marca_contactor', nombre: 'Marca del Contactor', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'amperaje_contactor', nombre: 'Amperaje Contactor (A)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_CORRIENTE', unidad: 'A' },
+    { codigo: 'tiene_arrancador_suave', nombre: '¿Tiene Arrancador Suave?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_variador_frecuencia_vfd', nombre: '¿Tiene Variador de Frecuencia (VFD)?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'marca_variador', nombre: 'Marca Variador VFD', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'modelo_variador', nombre: 'Modelo Variador VFD', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_tanques_hidroneumaticos', nombre: '¿Tiene Tanques Hidroneumáticos?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'cantidad_tanques_hidro', nombre: 'Cantidad de Tanques Hidroneumáticos', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'capacidad_tanques_litros', nombre: 'Capacidad de Tanques (L)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'VOLUMEN', unidad: 'LIT' },
+    { codigo: 'presion_tanques_psi', nombre: 'Presión Precarga Tanques (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'tiene_manometro', nombre: '¿Tiene Manómetro?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'rango_manometro_min_psi', nombre: 'Rango Mínimo Manómetro (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'rango_manometro_max_psi', nombre: 'Rango Máximo Manómetro (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'tiene_proteccion_nivel', nombre: '¿Tiene Protección de Nivel?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tipo_proteccion_nivel', nombre: 'Tipo Protección de Nivel', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'ELECTRODOS', etiqueta: 'Electrodos de Nivel' }, { valor: 'FLOTADOR', etiqueta: 'Flotador Mecánico / Eléctrico' }, { valor: 'BOYAS', etiqueta: 'Boyas de Nivel' }, { valor: 'PRESOSTATO', etiqueta: 'Presostato de Baja' }, { valor: 'OTRO', etiqueta: 'Otro Sensor' }] },
+    { codigo: 'tiene_valvula_purga', nombre: '¿Tiene Válvula de Purga?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_valvula_cebado', nombre: '¿Tiene Válvula de Cebado?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_valvula_cheque', nombre: '¿Tiene Válvula Cheque (Retención)?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tiene_valvula_pie', nombre: '¿Tiene Válvula de Pie?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'referencia_sello_mecanico', nombre: 'Referencia / Tipo Sello Mecánico', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+
+    // --- Compresor Industrial ---
+    { codigo: 'marca_compresor', nombre: 'Marca del Compresor', control: 'TEXTO_CORTO', rol: 'MARCA_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'modelo_compresor', nombre: 'Modelo del Compresor', control: 'TEXTO_CORTO', rol: 'MODELO_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'numero_serie_compresor', nombre: 'Número de Serie Compresor', control: 'TEXTO_CORTO', rol: 'SERIE_PRINCIPAL', mag: null, unidad: null },
+    { codigo: 'tipo_compresor', nombre: 'Tecnología del Compresor', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'TORNILLO_ROTATIVO', etiqueta: 'Tornillo Rotativo Lubricado' }, { valor: 'PISTON_RECIPROCANTE', etiqueta: 'Pistón Reciprocante' }, { valor: 'SCROLL', etiqueta: 'Scroll Libre de Aceite' }, { valor: 'CENTRIFUGO', etiqueta: 'Centrífugo Dinámico' }] },
+    { codigo: 'presion_maxima_psi', nombre: 'Presión Máxima de Trabajo (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'POTENCIA_CAPACIDAD_PRINCIPAL', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'presion_carga_psi', nombre: 'Presión de Carga (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'presion_descarga_psi', nombre: 'Presión de Descarga (PSI)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'PRESION', unidad: 'PSI' },
+    { codigo: 'caudal_aire_cfm', nombre: 'Caudal de Aire (CFM)', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'capacidad_tanque_receptor_litros', nombre: 'Capacidad Tanque Pulmón (L)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'VOLUMEN', unidad: 'LIT' },
+    { codigo: 'tipo_acople', nombre: 'Tipo de Acople', control: 'SELECTOR', rol: 'ESTANDAR', mag: null, unidad: null, opciones: [{ valor: 'DIRECTO_FLEXIBLE', etiqueta: 'Directo Flexible' }, { valor: 'CORREAS_POLEAS', etiqueta: 'Correas y Poleas' }, { valor: 'ENGRANAJES', etiqueta: 'Caja de Engranajes' }] },
+    { codigo: 'tiene_secador_integrado', nombre: '¿Tiene Secador Integrado?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'tipo_refrigerante_secador', nombre: 'Refrigerante del Secador', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'ano_fabricacion_compresor', nombre: 'Año Fabricación Compresor', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
   ];
 
   const mapAtributos = new Map<string, number>();
 
-  for (const a of atributos) {
+  for (const attr of atributos) {
+    const idMag = attr.mag ? mapMagnitudes.get(attr.mag) || null : null;
     const res = await prisma.atributos_tecnicos.upsert({
-      where: { codigo_atributo: a.codigo },
+      where: { codigo_atributo: attr.codigo },
       create: {
-        codigo_atributo: a.codigo,
-        nombre_atributo: a.nombre,
-        tipo_control: a.control,
-        id_magnitud: a.mag ? mapMagnitudes.get(a.mag) : null,
-        unidad_defecto_codigo: a.unidad || null,
-        rol_semantico: a.rol,
-        opciones_json: a.opciones ? (a.opciones as any) : undefined,
-        validacion_json: a.validacion ? (a.validacion as any) : undefined,
+        codigo_atributo: attr.codigo,
+        nombre_atributo: attr.nombre,
+        tipo_control: attr.control,
+        id_magnitud: idMag,
+        unidad_defecto_codigo: attr.unidad,
+        rol_semantico: attr.rol,
+        opciones_json: (attr as any).opciones || null,
+        validacion_json: (attr as any).validacion || null,
         es_sistema: true,
         activo: true,
       },
       update: {
-        nombre_atributo: a.nombre,
-        tipo_control: a.control,
-        id_magnitud: a.mag ? mapMagnitudes.get(a.mag) : null,
-        unidad_defecto_codigo: a.unidad || null,
-        rol_semantico: a.rol,
-        opciones_json: a.opciones ? (a.opciones as any) : undefined,
-        validacion_json: a.validacion ? (a.validacion as any) : undefined,
+        nombre_atributo: attr.nombre,
+        tipo_control: attr.control,
+        id_magnitud: idMag,
+        unidad_defecto_codigo: attr.unidad,
+        rol_semantico: attr.rol,
+        opciones_json: (attr as any).opciones || null,
+        validacion_json: (attr as any).validacion || null,
         es_sistema: true,
         activo: true,
       },
     });
-    mapAtributos.set(a.codigo, res.id_atributo);
+    mapAtributos.set(attr.codigo, res.id_atributo);
   }
-  console.log(`✅ ${atributos.length} atributos técnicos registrados en el diccionario.`);
+  console.log(`✅ ${atributos.length} atributos técnicos canónicos sembrados.`);
 
   // --------------------------------------------------------------------------
-  // 4. MÓDULOS TÉCNICOS REUTILIZABLES Y ENLACE DE ATRIBUTOS
+  // 4. MÓDULOS TÉCNICOS FUNCIONALES Y ASIGNACIÓN (modulo_atributos)
   // --------------------------------------------------------------------------
-  console.log('\n[4/5] Sembrando Módulos Técnicos y Composición de Atributos...');
+  console.log('\n[4/6] Sembrando Módulos Técnicos y Ensamblando Atributos con Grupos Visuales...');
 
   const modulos = [
-    {
-      codigo: 'motor_combustion',
-      nombre: 'Motor de Combustión Interna (Diésel / Gas)',
-      descripcion: 'Bloque motor, cilindros, sistema de inyección, lubricación y refrigeración',
-      icono: 'Flame',
-      color: '#ef4444',
-      attrs: [
-        { cod: 'marca_principal', ord: 1, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'modelo_principal', ord: 2, obl: false, kpi: false, fil: true, pdf: true },
-        { cod: 'serie_principal', ord: 3, obl: true, kpi: false, fil: false, pdf: true },
-        { cod: 'potencia_hp', ord: 4, obl: false, kpi: true, fil: true, pdf: true },
-        { cod: 'velocidad_rpm', ord: 5, obl: false, kpi: true, fil: false, pdf: true },
-        { cod: 'capacidad_aceite_litros', ord: 6, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'tipo_aceite', ord: 7, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'capacidad_refrigerante_litros', ord: 8, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'tipo_refrigerante', ord: 9, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'numero_cilindros', ord: 10, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'aspiracion', ord: 11, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'bateria_arranque', ord: 12, obl: false, kpi: false, fil: false, pdf: true },
-      ],
-    },
-    {
-      codigo: 'alternador_generador',
-      nombre: 'Alternador / Generador Eléctrico',
-      descripcion: 'Cabezal sincrónico generador, devanados, excitatriz y AVR',
-      icono: 'Zap',
-      color: '#10b981',
-      attrs: [
-        { cod: 'marca_principal', ord: 1, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'modelo_principal', ord: 2, obl: false, kpi: false, fil: true, pdf: true },
-        { cod: 'serie_principal', ord: 3, obl: true, kpi: false, fil: false, pdf: true },
-        { cod: 'potencia_kva', ord: 4, obl: true, kpi: true, fil: true, pdf: true },
-        { cod: 'potencia_kw', ord: 5, obl: false, kpi: false, fil: true, pdf: true },
-        { cod: 'voltaje_operacion', ord: 6, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'frecuencia_hz', ord: 7, obl: true, kpi: false, fil: false, pdf: true },
-        { cod: 'numero_fases', ord: 8, obl: true, kpi: false, fil: false, pdf: true },
-        { cod: 'factor_potencia', ord: 9, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'tipo_alternador', ord: 10, obl: false, kpi: false, fil: false, pdf: true },
-      ],
-    },
-    {
-      codigo: 'bomba_hidraulica',
-      nombre: 'Bomba Hidráulica de Fluidos',
-      descripcion: 'Cuerpo de bomba, voluta, impulsor y sellos mecánicos',
-      icono: 'Droplets',
-      color: '#06b6d4',
-      attrs: [
-        { cod: 'marca_principal', ord: 1, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'modelo_principal', ord: 2, obl: false, kpi: false, fil: true, pdf: true },
-        { cod: 'serie_principal', ord: 3, obl: true, kpi: false, fil: false, pdf: true },
-        { cod: 'caudal_maximo_m3h', ord: 4, obl: true, kpi: true, fil: true, pdf: true },
-        { cod: 'presion_maxima_psi', ord: 5, obl: false, kpi: true, fil: true, pdf: true },
-        { cod: 'tipo_bomba', ord: 6, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'diametro_succion_pulg', ord: 7, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'diametro_descarga_pulg', ord: 8, obl: false, kpi: false, fil: false, pdf: true },
-      ],
-    },
-    {
-      codigo: 'motor_electrico',
-      nombre: 'Motor Eléctrico de Accionamiento',
-      descripcion: 'Motor trifásico o monofásico de inducción/jaula de ardilla',
-      icono: 'Activity',
-      color: '#3b82f6',
-      attrs: [
-        { cod: 'marca_principal', ord: 1, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'modelo_principal', ord: 2, obl: false, kpi: false, fil: true, pdf: true },
-        { cod: 'serie_principal', ord: 3, obl: true, kpi: false, fil: false, pdf: true },
-        { cod: 'potencia_hp', ord: 4, obl: true, kpi: true, fil: true, pdf: true },
-        { cod: 'potencia_kw', ord: 5, obl: false, kpi: false, fil: false, pdf: true },
-        { cod: 'voltaje_operacion', ord: 6, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'velocidad_rpm', ord: 7, obl: false, kpi: true, fil: false, pdf: true },
-        { cod: 'numero_fases', ord: 8, obl: false, kpi: false, fil: false, pdf: true },
-      ],
-    },
-    {
-      codigo: 'compresor_industrial',
-      nombre: 'Compresor de Aire Industrial',
-      descripcion: 'Unidad de compresión, pulmón de almacenamiento y presostato',
-      icono: 'Wind',
-      color: '#8b5cf6',
-      attrs: [
-        { cod: 'marca_principal', ord: 1, obl: true, kpi: false, fil: true, pdf: true },
-        { cod: 'modelo_principal', ord: 2, obl: false, kpi: false, fil: true, pdf: true },
-        { cod: 'serie_principal', ord: 3, obl: true, kpi: false, fil: false, pdf: true },
-        { cod: 'presion_maxima_psi', ord: 4, obl: true, kpi: true, fil: true, pdf: true },
-        { cod: 'capacidad_tanque_gal', ord: 5, obl: false, kpi: true, fil: true, pdf: true },
-        { cod: 'tipo_compresor', ord: 6, obl: true, kpi: false, fil: true, pdf: true },
-      ],
-    },
+    { codigo_modulo: 'motor_combustion', nombre_modulo: 'Motor de Combustión Interna', descripcion: 'Motor diésel, gasolina o gas', icono: 'engine' },
+    { codigo_modulo: 'motor_electrico', nombre_modulo: 'Motor Eléctrico', descripcion: 'Motor de inducción o síncrono', icono: 'zap' },
+    { codigo_modulo: 'alternador_generador', nombre_modulo: 'Alternador / Generador Eléctrico', descripcion: 'Cabezal de generación eléctrica', icono: 'activity' },
+    { codigo_modulo: 'bomba_hidraulica', nombre_modulo: 'Bomba Hidráulica', descripcion: 'Cuerpo de bombeo y succión/descarga', icono: 'droplets' },
+    { codigo_modulo: 'compresor_industrial', nombre_modulo: 'Compresor de Aire Industrial', descripcion: 'Unidad de compresión y tanque de aire', icono: 'wind' },
   ];
 
   const mapModulos = new Map<string, number>();
 
   for (const mod of modulos) {
     const res = await prisma.modulos_tecnicos.upsert({
-      where: { codigo_modulo: mod.codigo },
+      where: { codigo_modulo: mod.codigo_modulo },
       create: {
-        codigo_modulo: mod.codigo,
-        nombre_modulo: mod.nombre,
+        codigo_modulo: mod.codigo_modulo,
+        nombre_modulo: mod.nombre_modulo,
         descripcion: mod.descripcion,
         icono: mod.icono,
-        color_ui: mod.color,
         es_sistema: true,
         activo: true,
       },
       update: {
-        nombre_modulo: mod.nombre,
+        nombre_modulo: mod.nombre_modulo,
         descripcion: mod.descripcion,
         icono: mod.icono,
-        color_ui: mod.color,
         es_sistema: true,
         activo: true,
       },
     });
-    mapModulos.set(mod.codigo, res.id_modulo);
+    mapModulos.set(mod.codigo_modulo, res.id_modulo);
+  }
+  console.log(`✅ ${modulos.length} módulos técnicos funcionales sembrados.`);
 
-    // Enlace de atributos
-    for (const attr of mod.attrs) {
-      const idAttr = mapAtributos.get(attr.cod);
+  // Definición granular de atributos por módulo
+  interface AsignacionModulo {
+    codigo_attr: string;
+    grupo: string;
+    orden: number;
+    obligatorio?: boolean;
+    es_kpi?: boolean;
+    es_filtrable?: boolean;
+    visible_pdf?: boolean;
+  }
+
+  const estructuraModulos: Record<string, AsignacionModulo[]> = {
+    motor_combustion: [
+      // Identificación
+      { codigo_attr: 'marca_motor', grupo: 'Identificación', orden: 1, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'modelo_motor', grupo: 'Identificación', orden: 2, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'numero_serie_motor', grupo: 'Identificación', orden: 3, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'tipo_combustible', grupo: 'Identificación', orden: 4, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'ano_fabricacion_motor', grupo: 'Identificación', orden: 5, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Potencia & Desempeño
+      { codigo_attr: 'potencia_hp', grupo: 'Potencia y Rendimiento', orden: 10, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'potencia_kw_motor', grupo: 'Potencia y Rendimiento', orden: 11, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'velocidad_rpm', grupo: 'Potencia y Rendimiento', orden: 12, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'numero_cilindros', grupo: 'Potencia y Rendimiento', orden: 13, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'cilindrada_cc', grupo: 'Potencia y Rendimiento', orden: 14, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'aspiracion', grupo: 'Potencia y Rendimiento', orden: 15, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_turbocargador', grupo: 'Potencia y Rendimiento', orden: 16, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Arranque & Baterías
+      { codigo_attr: 'tipo_arranque', grupo: 'Arranque y Baterías', orden: 20, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'voltaje_arranque_vdc', grupo: 'Arranque y Baterías', orden: 21, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'amperaje_arranque_cca', grupo: 'Arranque y Baterías', orden: 22, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'cantidad_baterias', grupo: 'Arranque y Baterías', orden: 23, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'referencia_bateria', grupo: 'Arranque y Baterías', orden: 24, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'capacidad_bateria_ah', grupo: 'Arranque y Baterías', orden: 25, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_cargador_bateria', grupo: 'Arranque y Baterías', orden: 26, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'marca_cargador', grupo: 'Arranque y Baterías', orden: 27, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'modelo_cargador', grupo: 'Arranque y Baterías', orden: 28, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'amperaje_cargador', grupo: 'Arranque y Baterías', orden: 29, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Lubricación & Enfriamiento
+      { codigo_attr: 'capacidad_aceite_litros', grupo: 'Lubricación y Refrigeración', orden: 30, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'tipo_aceite', grupo: 'Lubricación y Refrigeración', orden: 31, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'capacidad_refrigerante_litros', grupo: 'Lubricación y Refrigeración', orden: 32, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'tipo_refrigerante', grupo: 'Lubricación y Refrigeración', orden: 33, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_radiador', grupo: 'Lubricación y Refrigeración', orden: 34, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'radiador_alto_cm', grupo: 'Lubricación y Refrigeración', orden: 35, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'radiador_ancho_cm', grupo: 'Lubricación y Refrigeración', orden: 36, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'radiador_espesor_cm', grupo: 'Lubricación y Refrigeración', orden: 37, obligatorio: false, es_kpi: false, es_filtrable: false },
+    ],
+
+    motor_electrico: [
+      // Identificación
+      { codigo_attr: 'marca_motor_electrico', grupo: 'Identificación', orden: 1, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'modelo_motor_electrico', grupo: 'Identificación', orden: 2, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'numero_serie_motor_electrico', grupo: 'Identificación', orden: 3, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'ano_fabricacion_motor_electrico', grupo: 'Identificación', orden: 4, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Potencia & Eléctrico
+      { codigo_attr: 'potencia_hp_electrico', grupo: 'Potencia y Rendimiento', orden: 10, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'potencia_kw_electrico', grupo: 'Potencia y Rendimiento', orden: 11, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'voltaje_operacion_vac', grupo: 'Potencia y Rendimiento', orden: 12, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'numero_fases_motor', grupo: 'Potencia y Rendimiento', orden: 13, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'frecuencia_hz_motor', grupo: 'Potencia y Rendimiento', orden: 14, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'velocidad_rpm', grupo: 'Potencia y Rendimiento', orden: 15, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'amperaje_nominal_motor', grupo: 'Potencia y Rendimiento', orden: 16, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'factor_potencia_motor', grupo: 'Potencia y Rendimiento', orden: 17, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Protección & Aislamiento
+      { codigo_attr: 'clase_aislamiento_motor', grupo: 'Aislamiento y Protección', orden: 20, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'grado_proteccion_ip_motor', grupo: 'Aislamiento y Protección', orden: 21, obligatorio: false, es_kpi: false, es_filtrable: false },
+    ],
+
+    alternador_generador: [
+      // Identificación
+      { codigo_attr: 'marca_generador', grupo: 'Identificación', orden: 1, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'modelo_generador', grupo: 'Identificación', orden: 2, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'numero_serie_generador', grupo: 'Identificación', orden: 3, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'marca_alternador', grupo: 'Identificación Alternador', orden: 4, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'modelo_alternador', grupo: 'Identificación Alternador', orden: 5, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'numero_serie_alternador', grupo: 'Identificación Alternador', orden: 6, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'ano_fabricacion_generador', grupo: 'Identificación', orden: 7, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Generación Eléctrica
+      { codigo_attr: 'potencia_kva', grupo: 'Generación Eléctrica', orden: 10, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'potencia_kw', grupo: 'Generación Eléctrica', orden: 11, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'factor_potencia', grupo: 'Generación Eléctrica', orden: 12, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'voltaje_salida', grupo: 'Generación Eléctrica', orden: 13, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'numero_fases', grupo: 'Generación Eléctrica', orden: 14, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'frecuencia_hz', grupo: 'Generación Eléctrica', orden: 15, obligatorio: true, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'amperaje_nominal_salida', grupo: 'Generación Eléctrica', orden: 16, obligatorio: false, es_kpi: true, es_filtrable: false },
+      { codigo_attr: 'configuracion_salida', grupo: 'Generación Eléctrica', orden: 17, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'clase_aislamiento', grupo: 'Generación Eléctrica', orden: 18, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'grado_proteccion_ip', grupo: 'Generación Eléctrica', orden: 19, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Control & Regulación
+      { codigo_attr: 'tiene_avr', grupo: 'Regulación y Control', orden: 20, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'marca_avr', grupo: 'Regulación y Control', orden: 21, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'modelo_avr', grupo: 'Regulación y Control', orden: 22, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'referencia_avr', grupo: 'Regulación y Control', orden: 23, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_modulo_control', grupo: 'Regulación y Control', orden: 24, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'marca_modulo_control', grupo: 'Regulación y Control', orden: 25, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'modelo_modulo_control', grupo: 'Regulación y Control', orden: 26, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_arranque_automatico', grupo: 'Regulación y Control', orden: 27, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Combustible & Cabina
+      { codigo_attr: 'capacidad_tanque_principal_litros', grupo: 'Combustible y Cabina', orden: 30, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'tiene_tanque_auxiliar', grupo: 'Combustible y Cabina', orden: 31, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'capacidad_tanque_auxiliar_litros', grupo: 'Combustible y Cabina', orden: 32, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_cabina_insonorizada', grupo: 'Combustible y Cabina', orden: 33, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Transferencia & Conexión
+      { codigo_attr: 'tiene_tablero_transferencia', grupo: 'Transferencia y Cableado', orden: 40, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tipo_transferencia', grupo: 'Transferencia y Cableado', orden: 41, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'ubicacion_transferencia', grupo: 'Transferencia y Cableado', orden: 42, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'amperaje_transferencia', grupo: 'Transferencia y Cableado', orden: 43, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'calibre_cable_potencia', grupo: 'Transferencia y Cableado', orden: 44, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'longitud_cable_m', grupo: 'Transferencia y Cableado', orden: 45, obligatorio: false, es_kpi: false, es_filtrable: false },
+    ],
+
+    bomba_hidraulica: [
+      // Identificación
+      { codigo_attr: 'marca_bomba', grupo: 'Identificación', orden: 1, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'modelo_bomba', grupo: 'Identificación', orden: 2, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'numero_serie_bomba', grupo: 'Identificación', orden: 3, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'tipo_bomba', grupo: 'Identificación', orden: 4, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'aplicacion_bomba', grupo: 'Identificación', orden: 5, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'ano_fabricacion_bomba', grupo: 'Identificación', orden: 6, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Hidráulica & Desempeño
+      { codigo_attr: 'caudal_maximo_m3h', grupo: 'Hidráulica y Desempeño', orden: 10, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'altura_manometrica_maxima_m', grupo: 'Hidráulica y Desempeño', orden: 11, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'altura_presion_trabajo_m', grupo: 'Hidráulica y Desempeño', orden: 12, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'potencia_hidraulica_kw', grupo: 'Hidráulica y Desempeño', orden: 13, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'eficiencia_porcentaje', grupo: 'Hidráulica y Desempeño', orden: 14, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'diametro_succion', grupo: 'Hidráulica y Desempeño', orden: 15, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'diametro_descarga', grupo: 'Hidráulica y Desempeño', orden: 16, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'total_bombas_sistema', grupo: 'Hidráulica y Desempeño', orden: 17, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'posicion_bomba_numero', grupo: 'Hidráulica y Desempeño', orden: 18, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Control & Presión
+      { codigo_attr: 'tiene_panel_control_bomba', grupo: 'Control y Presión', orden: 20, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'marca_panel_control_bomba', grupo: 'Control y Presión', orden: 21, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'modelo_panel_control_bomba', grupo: 'Control y Presión', orden: 22, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_presostato', grupo: 'Control y Presión', orden: 23, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'marca_presostato', grupo: 'Control y Presión', orden: 24, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'modelo_presostato', grupo: 'Control y Presión', orden: 25, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'presion_encendido_psi', grupo: 'Control y Presión', orden: 26, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'presion_apagado_psi', grupo: 'Control y Presión', orden: 27, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_contactor_externo', grupo: 'Control y Presión', orden: 28, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'marca_contactor', grupo: 'Control y Presión', orden: 29, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'amperaje_contactor', grupo: 'Control y Presión', orden: 30, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_arrancador_suave', grupo: 'Control y Presión', orden: 31, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_variador_frecuencia_vfd', grupo: 'Control y Presión', orden: 32, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'marca_variador', grupo: 'Control y Presión', orden: 33, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'modelo_variador', grupo: 'Control y Presión', orden: 34, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Tanques e Instrumentación
+      { codigo_attr: 'tiene_tanques_hidroneumaticos', grupo: 'Tanques e Instrumentación', orden: 40, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'cantidad_tanques_hidro', grupo: 'Tanques e Instrumentación', orden: 41, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'capacidad_tanques_litros', grupo: 'Tanques e Instrumentación', orden: 42, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'presion_tanques_psi', grupo: 'Tanques e Instrumentación', orden: 43, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_manometro', grupo: 'Tanques e Instrumentación', orden: 44, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'rango_manometro_min_psi', grupo: 'Tanques e Instrumentación', orden: 45, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'rango_manometro_max_psi', grupo: 'Tanques e Instrumentación', orden: 46, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_proteccion_nivel', grupo: 'Tanques e Instrumentación', orden: 47, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tipo_proteccion_nivel', grupo: 'Tanques e Instrumentación', orden: 48, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Válvulas & Sellos
+      { codigo_attr: 'tiene_valvula_purga', grupo: 'Válvulas y Sellos', orden: 50, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_valvula_cebado', grupo: 'Válvulas y Sellos', orden: 51, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_valvula_cheque', grupo: 'Válvulas y Sellos', orden: 52, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_valvula_pie', grupo: 'Válvulas y Sellos', orden: 53, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'referencia_sello_mecanico', grupo: 'Válvulas y Sellos', orden: 54, obligatorio: false, es_kpi: false, es_filtrable: false },
+    ],
+
+    compresor_industrial: [
+      // Identificación
+      { codigo_attr: 'marca_compresor', grupo: 'Identificación', orden: 1, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'modelo_compresor', grupo: 'Identificación', orden: 2, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'numero_serie_compresor', grupo: 'Identificación', orden: 3, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'tipo_compresor', grupo: 'Identificación', orden: 4, obligatorio: true, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'ano_fabricacion_compresor', grupo: 'Identificación', orden: 5, obligatorio: false, es_kpi: false, es_filtrable: false },
+
+      // Presión & Capacidad
+      { codigo_attr: 'presion_maxima_psi', grupo: 'Presión y Rendimiento', orden: 10, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'presion_carga_psi', grupo: 'Presión y Rendimiento', orden: 11, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'presion_descarga_psi', grupo: 'Presión y Rendimiento', orden: 12, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'caudal_aire_cfm', grupo: 'Presión y Rendimiento', orden: 13, obligatorio: true, es_kpi: true, es_filtrable: true },
+      { codigo_attr: 'capacidad_tanque_receptor_litros', grupo: 'Presión y Rendimiento', orden: 14, obligatorio: false, es_kpi: false, es_filtrable: true },
+      { codigo_attr: 'tipo_acople', grupo: 'Presión y Rendimiento', orden: 15, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tiene_secador_integrado', grupo: 'Presión y Rendimiento', orden: 16, obligatorio: false, es_kpi: false, es_filtrable: false },
+      { codigo_attr: 'tipo_refrigerante_secador', grupo: 'Presión y Rendimiento', orden: 17, obligatorio: false, es_kpi: false, es_filtrable: false },
+    ],
+  };
+
+  let totalAsignaciones = 0;
+
+  for (const [codModulo, items] of Object.entries(estructuraModulos)) {
+    const idModulo = mapModulos.get(codModulo);
+    if (!idModulo) continue;
+
+    for (const item of items) {
+      const idAttr = mapAtributos.get(item.codigo_attr);
       if (!idAttr) continue;
 
       await prisma.modulo_atributos.upsert({
         where: {
           id_modulo_id_atributo: {
-            id_modulo: res.id_modulo,
+            id_modulo: idModulo,
             id_atributo: idAttr,
           },
         },
         create: {
-          id_modulo: res.id_modulo,
+          id_modulo: idModulo,
           id_atributo: idAttr,
-          orden_visual: attr.ord,
-          obligatorio: attr.obl,
-          es_kpi: attr.kpi,
-          es_filtrable: attr.fil,
-          visible_en_pdf: attr.pdf,
+          orden_visual: item.orden,
+          obligatorio: item.obligatorio || false,
+          es_kpi: item.es_kpi || false,
+          es_filtrable: item.es_filtrable || false,
+          visible_en_pdf: item.visible_pdf !== false,
+          grupo_visual: item.grupo,
         },
         update: {
-          orden_visual: attr.ord,
-          obligatorio: attr.obl,
-          es_kpi: attr.kpi,
-          es_filtrable: attr.fil,
-          visible_en_pdf: attr.pdf,
+          orden_visual: item.orden,
+          obligatorio: item.obligatorio || false,
+          es_kpi: item.es_kpi || false,
+          es_filtrable: item.es_filtrable || false,
+          visible_en_pdf: item.visible_pdf !== false,
+          grupo_visual: item.grupo,
+        },
+      });
+      totalAsignaciones++;
+    }
+  }
+  console.log(`✅ ${totalAsignaciones} asignaciones módulo-atributo registradas con grupos visuales.`);
+
+  // --------------------------------------------------------------------------
+  // 5. VINCULACIÓN ARQUETIPO -> MÓDULOS (tipo_equipo_modulos) & PLANES
+  // --------------------------------------------------------------------------
+  console.log('\n[5/6] Vinculando Arquetipos a sus Módulos Técnicos y Planes de Servicio...');
+
+  const mapaArquetipos = [
+    // GENERADOR: Combustión + Alternador
+    { tipos: [1, 3], modulos: ['motor_combustion', 'alternador_generador'] },
+    // BOMBA: Motor Eléctrico + Bomba Hidráulica
+    { tipos: [2, 5], modulos: ['motor_electrico', 'bomba_hidraulica'] },
+    // MOTOR INDUSTRIAL: Motor Combustión + Motor Eléctrico
+    { tipos: [4, 6], modulos: ['motor_combustion', 'motor_electrico'] },
+    // COMPRESOR: Motor Eléctrico + Compresor Industrial
+    { tipos: [20], modulos: ['motor_electrico', 'compresor_industrial'] },
+  ];
+
+  for (const arch of mapaArquetipos) {
+    for (const idTipo of arch.tipos) {
+      const tipoExiste = await prisma.tipos_equipo.findUnique({ where: { id_tipo_equipo: idTipo } });
+      if (!tipoExiste) continue;
+
+      let orden = 1;
+      for (const codMod of arch.modulos) {
+        const idMod = mapModulos.get(codMod);
+        if (!idMod) continue;
+
+        const existe = await prisma.tipo_equipo_modulos.findFirst({
+          where: { id_tipo_equipo: idTipo, id_modulo: idMod },
+        });
+
+        if (!existe) {
+          await prisma.tipo_equipo_modulos.create({
+            data: {
+              id_tipo_equipo: idTipo,
+              id_modulo: idMod,
+              orden_visual: orden++,
+              obligatorio: true,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  // Planes de mantenimiento preventivo base
+  const tiposServicio = await prisma.tipos_servicio.findMany({
+    select: { id_tipo_servicio: true, nombre_tipo: true, id_tipo_equipo: true },
+  });
+
+  const tiposPrincipales = [1, 2, 3, 5, 20];
+  for (const idTipo of tiposPrincipales) {
+    const tipoExiste = await prisma.tipos_equipo.findUnique({ where: { id_tipo_equipo: idTipo } });
+    if (!tipoExiste) continue;
+
+    const afines = tiposServicio.filter(ts => ts.id_tipo_equipo === idTipo || ts.id_tipo_equipo === null);
+    const seleccion = afines.length > 0 ? afines.slice(0, 3) : tiposServicio.slice(0, 2);
+
+    for (const ts of seleccion) {
+      await prisma.tipo_equipo_planes.upsert({
+        where: {
+          id_tipo_equipo_id_tipo_servicio: {
+            id_tipo_equipo: idTipo,
+            id_tipo_servicio: ts.id_tipo_servicio,
+          },
+        },
+        create: {
+          id_tipo_equipo: idTipo,
+          id_tipo_servicio: ts.id_tipo_servicio,
+          nombre_plan: `Plan Preventivo ${ts.nombre_tipo}`,
+          frecuencia_dias: 90,
+          frecuencia_uso: 250,
+          criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
+          es_plan_por_defecto: true,
+          activo: true,
+        },
+        update: {
+          nombre_plan: `Plan Preventivo ${ts.nombre_tipo}`,
+          activo: true,
         },
       });
     }
   }
-  console.log(`✅ ${modulos.length} módulos técnicos sembrados y configurados con sus atributos.`);
+  console.log('✅ Arquetipos vinculados a sus módulos y planes de servicio.');
 
   // --------------------------------------------------------------------------
-  // 5. CONFIGURACIÓN DE ARQUETIPOS Y COMPOSICIÓN DE ACTIVOS
+  // 6. MODELOS OEM MAESTROS Y KITS BOM (modelos_equipo & modelos_equipo_bom)
   // --------------------------------------------------------------------------
-  console.log('\n[5/5] Vinculando Módulos a Arquetipos en tipos_equipo...');
+  console.log('\n[6/6] Sembrando 4 Modelos OEM Maestros Reales y sus Kits BOM...');
 
-  const tiposEquipo = await prisma.tipos_equipo.findMany();
-  for (const te of tiposEquipo) {
-    const cod = te.codigo_tipo.toUpperCase().trim();
-    const nom = te.nombre_tipo.toUpperCase().trim();
+  const componentesReales = await prisma.catalogo_componentes.findMany({
+    take: 10,
+    select: { id_componente: true, descripcion_corta: true, referencia_fabricante: true },
+  });
 
-    let modulosParaTipo: string[] = [];
-    let iconoUi = 'Box';
-    let colorHex = '#6b7280';
-    let prefijo = 'EQ-';
+  const modelosOEM = [
+    {
+      id_tipo_equipo: 1, // GENERADOR
+      codigo_modelo: 'MOD-STAMFORD-HCI634F',
+      marca: 'STAMFORD',
+      modelo: 'HCI-634F',
+      nombre_comercial: 'Generador Síncrono Stamford HCI-634F 250 kVA',
+      especificaciones_base: {
+        _version: 1,
+        modulos: {
+          alternador_generador: {
+            marca_generador: 'STAMFORD',
+            modelo_generador: 'HCI-634F',
+            potencia_kva: 250,
+            potencia_kw: 200,
+            voltaje_salida: '220/127',
+            numero_fases: '3',
+            frecuencia_hz: '60',
+            factor_potencia: 0.8,
+            tiene_avr: true,
+            referencia_avr: 'MX341',
+            clase_aislamiento: 'CLASE_H',
+            grado_proteccion_ip: 'IP23',
+          },
+        },
+      },
+    },
+    {
+      id_tipo_equipo: 1, // GENERADOR
+      codigo_modelo: 'MOD-DOOSAN-P126TI',
+      marca: 'DOOSAN',
+      modelo: 'P126TI-II / STAMFORD',
+      nombre_comercial: 'Planta Eléctrica Doosan P126TI-II 250 kVA Standby',
+      especificaciones_base: {
+        _version: 1,
+        modulos: {
+          motor_combustion: {
+            marca_motor: 'DOOSAN',
+            modelo_motor: 'P126TI-II',
+            tipo_combustible: 'DIESEL',
+            potencia_hp: 345,
+            potencia_kw_motor: 257,
+            velocidad_rpm: 1800,
+            numero_cilindros: 6,
+            aspiracion: 'TURBOCARGADO_POSTENFRIADO',
+            capacidad_aceite_litros: 23,
+            tipo_aceite: '15W40 CI-4',
+            capacidad_refrigerante_litros: 48,
+            voltaje_arranque_vdc: 24,
+            cantidad_baterias: 2,
+          },
+          alternador_generador: {
+            marca_generador: 'STAMFORD',
+            modelo_generador: 'UCI274K',
+            potencia_kva: 250,
+            potencia_kw: 200,
+            voltaje_salida: '220/127',
+            numero_fases: '3',
+            frecuencia_hz: '60',
+            factor_potencia: 0.8,
+            tiene_modulo_control: true,
+            marca_modulo_control: 'DEEP SEA',
+            modelo_modulo_control: 'DSE 7320',
+          },
+        },
+      },
+    },
+    {
+      id_tipo_equipo: 2, // BOMBA
+      codigo_modelo: 'MOD-GOULDS-3196-MTX',
+      marca: 'GOULDS',
+      modelo: '3196-MTX',
+      nombre_comercial: 'Bomba Centrífuga ANSI Goulds 3196 MTX 3x4-10',
+      especificaciones_base: {
+        _version: 1,
+        modulos: {
+          bomba_hidraulica: {
+            marca_bomba: 'GOULDS',
+            modelo_bomba: '3196-MTX',
+            tipo_bomba: 'CENTRIFUGA',
+            aplicacion_bomba: 'PRESION_CONSTANTE',
+            caudal_maximo_m3h: 85,
+            altura_manometrica_maxima_m: 65,
+            diametro_succion: '4 pulg',
+            diametro_descarga: '3 pulg',
+            potencia_hidraulica_kw: 15,
+            eficiencia_porcentaje: 78,
+          },
+          motor_electrico: {
+            marca_motor_electrico: 'WEG',
+            modelo_motor_electrico: 'W22 IE3',
+            potencia_hp_electrico: 20,
+            potencia_kw_electrico: 15,
+            voltaje_operacion_vac: '220/127',
+            numero_fases_motor: '3',
+            frecuencia_hz_motor: '60',
+            velocidad_rpm: 3500,
+            clase_aislamiento_motor: 'CLASE_F',
+            grado_proteccion_ip_motor: 'IP55',
+          },
+        },
+      },
+    },
+    {
+      id_tipo_equipo: 2, // BOMBA
+      codigo_modelo: 'MOD-PEDROLLO-PKM60',
+      marca: 'PEDROLLO',
+      modelo: 'PKm 60',
+      nombre_comercial: 'Electrobomba Periférica Pedrollo PKm 60 0.5 HP',
+      especificaciones_base: {
+        _version: 1,
+        modulos: {
+          bomba_hidraulica: {
+            marca_bomba: 'PEDROLLO',
+            modelo_bomba: 'PKm 60',
+            tipo_bomba: 'CENTRIFUGA',
+            aplicacion_bomba: 'AGUA_POTABLE',
+            caudal_maximo_m3h: 2.4,
+            altura_manometrica_maxima_m: 40,
+            diametro_succion: '1 pulg',
+            diametro_descarga: '1 pulg',
+          },
+          motor_electrico: {
+            marca_motor_electrico: 'PEDROLLO',
+            modelo_motor_electrico: 'PKm 60 Integrado',
+            potencia_hp_electrico: 0.5,
+            potencia_kw_electrico: 0.37,
+            voltaje_operacion_vac: '220/127',
+            numero_fases_motor: '1',
+            frecuencia_hz_motor: '60',
+            velocidad_rpm: 3450,
+          },
+        },
+      },
+    },
+  ];
 
-    if (cod === 'GEN' || cod === 'GENERADOR' || nom.includes('GENERADOR') || nom.includes('PLANTA')) {
-      modulosParaTipo = ['motor_combustion', 'alternador_generador'];
-      iconoUi = 'Zap';
-      colorHex = '#10b981';
-      prefijo = 'GEN-';
-    } else if (cod === 'BOM' || cod === 'BOMBA' || nom.includes('BOMBA')) {
-      modulosParaTipo = ['motor_electrico', 'bomba_hidraulica'];
-      iconoUi = 'Droplets';
-      colorHex = '#06b6d4';
-      prefijo = 'BOM-';
-    } else if (cod === 'COMP' || cod === 'COMPRESOR' || nom.includes('COMPRESOR')) {
-      modulosParaTipo = ['motor_electrico', 'compresor_industrial'];
-      iconoUi = 'Wind';
-      colorHex = '#8b5cf6';
-      prefijo = 'COMP-';
-    } else if (cod === 'MOT' || cod === 'MOTOR' || nom.includes('MOTOR')) {
-      modulosParaTipo = ['motor_combustion'];
-      iconoUi = 'Flame';
-      colorHex = '#ef4444';
-      prefijo = 'MOT-';
-    }
-
-    await prisma.tipos_equipo.update({
-      where: { id_tipo_equipo: te.id_tipo_equipo },
-      data: {
-        icono_ui: iconoUi,
-        color_hex: colorHex,
-        prefijo_codigo: prefijo,
-        unidad_uso: 'HORAS',
-        etiqueta_contador: 'Horómetro',
-        usa_plantilla_universal: true,
-        version_esquema: 1,
+  for (const m of modelosOEM) {
+    const modLand = await prisma.modelos_equipo.upsert({
+      where: { codigo_modelo: m.codigo_modelo },
+      create: {
+        id_tipo_equipo: m.id_tipo_equipo,
+        codigo_modelo: m.codigo_modelo,
+        marca: m.marca,
+        modelo: m.modelo,
+        nombre_comercial: m.nombre_comercial,
+        especificaciones_base: m.especificaciones_base,
+        activo: true,
+      },
+      update: {
+        id_tipo_equipo: m.id_tipo_equipo,
+        marca: m.marca,
+        modelo: m.modelo,
+        nombre_comercial: m.nombre_comercial,
+        especificaciones_base: m.especificaciones_base,
+        activo: true,
       },
     });
 
-    let ord = 1;
-    for (const modCod of modulosParaTipo) {
-      const idMod = mapModulos.get(modCod);
-      if (!idMod) continue;
-
-      await prisma.tipo_equipo_modulos.upsert({
+    // Asociar al menos un componente al BOM si hay en catálogo
+    if (componentesReales.length > 0) {
+      const comp = componentesReales[0];
+      await prisma.modelos_equipo_bom.upsert({
         where: {
-          id_tipo_equipo_id_modulo: {
-            id_tipo_equipo: te.id_tipo_equipo,
-            id_modulo: idMod,
+          id_modelo_equipo_id_componente: {
+            id_modelo_equipo: modLand.id_modelo_equipo,
+            id_componente: comp.id_componente,
           },
         },
         create: {
-          id_tipo_equipo: te.id_tipo_equipo,
-          id_modulo: idMod,
-          orden_visual: ord++,
-          obligatorio: true,
+          id_modelo_equipo: modLand.id_modelo_equipo,
+          id_componente: comp.id_componente,
+          cantidad_sugerida: 1.0,
+          rol_bom: 'FILTRO_ACEITE_TITULAR',
+          notas: 'Filtro sugerido por fabricante',
         },
         update: {
-          orden_visual: ord++,
-          obligatorio: true,
+          cantidad_sugerida: 1.0,
+          rol_bom: 'FILTRO_ACEITE_TITULAR',
         },
       });
     }
   }
-  console.log(`✅ Arquetipos en tipos_equipo enriquecidos y vinculados a sus módulos.`);
-
-  // --------------------------------------------------------------------------
-  // 6. PLANES BASE EN tipo_equipo_planes
-  // --------------------------------------------------------------------------
-  console.log('\nConfigurando Planes de Mantenimiento Base en tipo_equipo_planes...');
-
-  const servicios = await prisma.tipos_servicio.findMany({
-    where: { activo: true },
-  });
-
-  const servPrevA = servicios.find(s => s.codigo_tipo.includes('PREV') || s.codigo_tipo.includes('A') || s.nombre_tipo.includes('Tipo A') || s.nombre_tipo.includes('Preventivo'));
-  const servPrevB = servicios.find(s => s.codigo_tipo.includes('B') || s.nombre_tipo.includes('Tipo B'));
-
-  for (const te of tiposEquipo) {
-    if (servPrevA) {
-      await prisma.tipo_equipo_planes.upsert({
-        where: {
-          id_tipo_equipo_id_tipo_servicio: {
-            id_tipo_equipo: te.id_tipo_equipo,
-            id_tipo_servicio: servPrevA.id_tipo_servicio,
-          },
-        },
-        create: {
-          id_tipo_equipo: te.id_tipo_equipo,
-          id_tipo_servicio: servPrevA.id_tipo_servicio,
-          nombre_plan: `Mantenimiento Preventivo Estándar (${te.nombre_tipo})`,
-          frecuencia_dias: 180,
-          frecuencia_uso: 250,
-          criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
-          es_plan_por_defecto: true,
-          activo: true,
-        },
-        update: {
-          nombre_plan: `Mantenimiento Preventivo Estándar (${te.nombre_tipo})`,
-          frecuencia_dias: 180,
-          frecuencia_uso: 250,
-          criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
-          es_plan_por_defecto: true,
-          activo: true,
-        },
-      });
-    }
-
-    if (servPrevB) {
-      await prisma.tipo_equipo_planes.upsert({
-        where: {
-          id_tipo_equipo_id_tipo_servicio: {
-            id_tipo_equipo: te.id_tipo_equipo,
-            id_tipo_servicio: servPrevB.id_tipo_servicio,
-          },
-        },
-        create: {
-          id_tipo_equipo: te.id_tipo_equipo,
-          id_tipo_servicio: servPrevB.id_tipo_servicio,
-          nombre_plan: `Mantenimiento Mayor Anual (${te.nombre_tipo})`,
-          frecuencia_dias: 365,
-          frecuencia_uso: 500,
-          criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
-          es_plan_por_defecto: false,
-          activo: true,
-        },
-        update: {
-          nombre_plan: `Mantenimiento Mayor Anual (${te.nombre_tipo})`,
-          frecuencia_dias: 365,
-          frecuencia_uso: 500,
-          criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
-          es_plan_por_defecto: false,
-          activo: true,
-        },
-      });
-    }
-  }
-  console.log(`✅ Planes de mantenimiento preventivo base configurados.`);
+  console.log(`✅ ${modelosOEM.length} Modelos OEM Maestros con kits BOM sembrados exitosamente.`);
 
   console.log('\n================================================================');
-  console.log('🎉 SEMBRADO DEL METAMODELO EAM COMPLETADO EXITOSAMENTE');
-  console.log('================================================================\n');
+  console.log('🏁 SEMBRADO CANÓNICO EXHAUSTIVO (1:1) COMPLETADO CON ÉXITO');
+  console.log('================================================================');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error en sembrado:', e);
+    console.error('❌ Error ejecutando sembrado canónico:', e);
     process.exit(1);
   })
   .finally(async () => {
