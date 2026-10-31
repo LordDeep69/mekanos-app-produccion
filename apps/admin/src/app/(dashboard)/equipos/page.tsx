@@ -568,6 +568,20 @@ export default function EquiposPage() {
     return () => clearTimeout(timer);
   }, [filtroMarcaValor]);
 
+  // Debounce para valores de trabajo
+  const [debouncedValorMin, setDebouncedValorMin] = useState<number | ''>('');
+  const [debouncedValorMax, setDebouncedValorMax] = useState<number | ''>('');
+  const [debouncedValorExacto, setDebouncedValorExacto] = useState<string>('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedValorMin(filtroValorMin);
+      setDebouncedValorMax(filtroValorMax);
+      setDebouncedValorExacto(filtroValorExacto);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filtroValorMin, filtroValorMax, filtroValorExacto]);
+
   // Carga reactiva de facetas técnicas según el tipo de equipo activo
   const { data: facetasData } = useFacetasEquipos(tipoFiltro);
   const marcasDisponibles = useMemo(() => facetasData?.marcas || [], [facetasData]);
@@ -605,25 +619,29 @@ export default function EquiposPage() {
   const hasActiveFacetFilters = useMemo(() => {
     return Boolean(
       (filtroMarcaCampo && debouncedMarcaValor.trim()) ||
-      (filtroValorCampo && (filtroValorMin !== '' || filtroValorMax !== '' || filtroValorExacto !== ''))
+      (filtroValorCampo && (debouncedValorMin !== '' || debouncedValorMax !== '' || debouncedValorExacto !== ''))
     );
-  }, [filtroMarcaCampo, debouncedMarcaValor, filtroValorCampo, filtroValorMin, filtroValorMax, filtroValorExacto]);
+  }, [filtroMarcaCampo, debouncedMarcaValor, filtroValorCampo, debouncedValorMin, debouncedValorMax, debouncedValorExacto]);
 
   const activeFacetCount = useMemo(() => {
     let count = 0;
     if (filtroMarcaCampo && debouncedMarcaValor.trim()) count++;
-    if (filtroValorCampo && (filtroValorMin !== '' || filtroValorMax !== '' || filtroValorExacto !== '')) count++;
+    if (filtroValorCampo && (debouncedValorMin !== '' || debouncedValorMax !== '' || debouncedValorExacto !== '')) count++;
     return count;
-  }, [filtroMarcaCampo, debouncedMarcaValor, filtroValorCampo, filtroValorMin, filtroValorMax, filtroValorExacto]);
+  }, [filtroMarcaCampo, debouncedMarcaValor, filtroValorCampo, debouncedValorMin, debouncedValorMax, debouncedValorExacto]);
 
   const clearAdvancedFacets = useCallback(() => {
     setFiltroMarcaCampo('');
     setFiltroMarcaValor('');
+    setDebouncedMarcaValor('');
     setFiltroMarcaTabla('');
     setFiltroValorCampo('');
     setFiltroValorMin('');
     setFiltroValorMax('');
+    setDebouncedValorMin('');
+    setDebouncedValorMax('');
     setFiltroValorExacto('');
+    setDebouncedValorExacto('');
     setFiltroValorTabla('');
     setPage(1);
   }, []);
@@ -644,6 +662,14 @@ export default function EquiposPage() {
     search: debouncedSearch || undefined,
     sortBy,
     sortOrder,
+    filtroMarcaCampo: filtroMarcaCampo || undefined,
+    filtroMarcaValor: debouncedMarcaValor.trim() || undefined,
+    filtroMarcaTabla: filtroMarcaTabla || undefined,
+    filtroValorCampo: filtroValorCampo || undefined,
+    filtroValorMin: typeof debouncedValorMin === 'number' ? debouncedValorMin : undefined,
+    filtroValorMax: typeof debouncedValorMax === 'number' ? debouncedValorMax : undefined,
+    filtroValorExacto: debouncedValorExacto.trim() || undefined,
+    filtroValorTabla: filtroValorTabla || undefined,
   });
 
   const equipos = data?.data || [];
@@ -655,14 +681,28 @@ export default function EquiposPage() {
     if (tipoFiltro) count++;
     if (estadoFiltro) count++;
     if (debouncedSearch) count++;
+    if (filtroMarcaCampo && debouncedMarcaValor.trim()) count++;
+    if (filtroValorCampo && (debouncedValorMin !== '' || debouncedValorMax !== '' || debouncedValorExacto !== '')) count++;
     return count;
-  }, [tipoFiltro, estadoFiltro, debouncedSearch]);
+  }, [tipoFiltro, estadoFiltro, debouncedSearch, filtroMarcaCampo, debouncedMarcaValor, filtroValorCampo, debouncedValorMin, debouncedValorMax, debouncedValorExacto]);
 
   const clearFilters = useCallback(() => {
     setSearchInput('');
     setDebouncedSearch('');
     setTipoFiltro('');
     setEstadoFiltro('');
+    setFiltroMarcaCampo('');
+    setFiltroMarcaValor('');
+    setDebouncedMarcaValor('');
+    setFiltroMarcaTabla('');
+    setFiltroValorCampo('');
+    setFiltroValorMin('');
+    setFiltroValorMax('');
+    setDebouncedValorMin('');
+    setDebouncedValorMax('');
+    setFiltroValorExacto('');
+    setDebouncedValorExacto('');
+    setFiltroValorTabla('');
     setPage(1);
   }, []);
 
@@ -1120,6 +1160,7 @@ export default function EquiposPage() {
                             type="button"
                             onClick={() => {
                               setFiltroMarcaValor('');
+                              setDebouncedMarcaValor('');
                               setPage(1);
                             }}
                             className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded"
@@ -1146,6 +1187,7 @@ export default function EquiposPage() {
                           type="button"
                           onClick={() => {
                             setFiltroMarcaValor(sug);
+                            setDebouncedMarcaValor(sug);
                             setPage(1);
                           }}
                           className={cn(
@@ -1335,6 +1377,10 @@ export default function EquiposPage() {
                   onClick={() => {
                     setFiltroValorMin('');
                     setFiltroValorMax('');
+                    setDebouncedValorMin('');
+                    setDebouncedValorMax('');
+                    setFiltroValorExacto('');
+                    setDebouncedValorExacto('');
                     setPage(1);
                   }}
                   className="hover:text-amber-950 cursor-pointer"
