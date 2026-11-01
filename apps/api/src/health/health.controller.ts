@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { GIT_COMMIT } from '../common/git-commit';
 import { PrismaService } from '../database/prisma.service';
 
 /**
@@ -25,15 +26,9 @@ export class HealthController {
    */
   @Get()
   check() {
-    let gitCommit = 'unknown';
-    try {
-      const { execSync } = require('child_process');
-      gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
-    } catch (e) {}
-
     return {
       status: 'ok',
-      commit: gitCommit,
+      commit: GIT_COMMIT,
       timestamp: new Date().toISOString(),
       service: 'Mekanos API',
       version: '0.1.0',

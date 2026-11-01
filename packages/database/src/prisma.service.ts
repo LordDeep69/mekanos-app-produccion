@@ -15,7 +15,23 @@
  */
 
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+
+/**
+ * Configuración de logs de Prisma.
+ *
+ * El log de queries (`prisma:query`) imprime el SQL completo de CADA consulta en
+ * stdout. En Windows (consola/PowerShell) eso agrega decenas de milisegundos por
+ * consulta y hace ilegible la salida. Queda disponible sólo si se activa
+ * explícitamente con PRISMA_LOG_QUERIES=true.
+ */
+const PRISMA_LOG: Prisma.LogDefinition[] = [
+  ...(process.env.PRISMA_LOG_QUERIES === 'true'
+    ? ([{ emit: 'stdout', level: 'query' }] as Prisma.LogDefinition[])
+    : []),
+  { emit: 'stdout', level: 'error' },
+  { emit: 'stdout', level: 'warn' },
+];
 
 /**
  * PrismaService - Servicio inyectable de NestJS para Prisma Client
@@ -23,16 +39,33 @@ import { PrismaClient } from '@prisma/client';
  * Extiende PrismaClient directamente para heredar todos los métodos
  * e implementa lifecycle hooks de NestJS para conexión y desconexión
  */
+/**
+ * Instancia única compartida por todo el proceso.
+ *
+ * IMPORTANTE: cada `new PrismaClient()` mantiene su PROPIO pool de conexiones.
+ * Si NestJS instancia PrismaService más de una vez (por ejemplo cuando un
+ * módulo lo declara en su array `providers`, o cuando existen dos clases
+ * PrismaService distintas), se abren varios pools contra Supabase y se agota
+ * el límite del pooler en modo sesión:
+ *   FATAL: (EMAXCONNSESSION) max clients reached in session mode
+ *     - max clients are limited to pool_size: 15
+ *
+ * Con este singleton, todas las inyecciones del proceso (globales o por módulo)
+ * reutilizan la MISMA conexión/pool. El coste es que el constructor puede
+ * instanciar un cliente "descartado" (nunca se usa ni abre conexiones, porque
+ * Prisma conecta de forma perezosa).
+ */
+let sharedInstance: PrismaService | undefined;
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    super({
-      log: [
-        { emit: 'stdout', level: 'query' },
-        { emit: 'stdout', level: 'error' },
-        { emit: 'stdout', level: 'warn' },
-      ],
-    });
+    super({ log: PRISMA_LOG });
+
+    if (sharedInstance) {
+      return sharedInstance;
+    }
+    sharedInstance = this;
   }
 
   /**
@@ -78,13 +111,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
  * Instancia singleton legacy para compatibilidad con código existente
  * @deprecated Use PrismaService con NestJS dependency injection
  */
-export const prisma = new PrismaClient({
-  log: [
-    { emit: 'stdout', level: 'query' },
-    { emit: 'stdout', level: 'error' },
-    { emit: 'stdout', level: 'warn' },
-  ],
-});
+export const prisma = new PrismaClient({ log: PRISMA_LOG });
 
 /**
  * Graceful shutdown handler para instancia legacy
