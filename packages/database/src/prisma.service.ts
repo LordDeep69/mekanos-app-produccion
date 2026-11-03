@@ -110,14 +110,47 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 /**
  * Instancia singleton legacy para compatibilidad con código existente
  * @deprecated Use PrismaService con NestJS dependency injection
+ *
+ * IMPORTANTE: es LAZY a propósito.
+ *
+ * Antes se hacía `export const prisma = new PrismaClient(...)` a nivel de módulo,
+ * lo que tenía dos efectos indeseados al importar `@mekanos/database`:
+ *
+ *  1. Creaba un segundo pool de conexiones paralelo al de PrismaService.
+ *  2. El constructor de PrismaClient carga automáticamente el `.env` que está
+ *     junto al schema (`packages/database/.env`, puerto 6543 + pgbouncer) y lo
+ *     escribe en `process.env` ANTES de que NestJS ejecute `ConfigModule.forRoot`
+ *     (que apunta a `apps/api/.env`, puerto 5432). Como dotenv NO sobreescribe
+ *     variables ya definidas, la API terminaba conectándose al puerto equivocado
+ *     y con `connection_limit` por defecto.
+ *
+ * Con el Proxy, el cliente legacy sólo se crea la primera vez que se usa de
+ * verdad (scripts, seeds, pruebas). La API nunca lo toca: usa PrismaService.
  */
-export const prisma = new PrismaClient({ log: PRISMA_LOG });
+let legacyClient: PrismaClient | undefined;
+
+function getLegacyClient(): PrismaClient {
+  if (!legacyClient) {
+    legacyClient = new PrismaClient({ log: PRISMA_LOG });
+  }
+  return legacyClient;
+}
+
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    const client = getLegacyClient() as unknown as Record<string | symbol, unknown>;
+    const value = client[property];
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
 
 /**
  * Graceful shutdown handler para instancia legacy
  */
 process.on('beforeExit', async () => {
-  await prisma.$disconnect();
+  if (legacyClient) {
+    await legacyClient.$disconnect();
+  }
 });
 
 /**

@@ -51,7 +51,7 @@ export interface AtributoTecnico {
   id_magnitud?: number | null;
   unidad_defecto_codigo?: string | null;
   rol_semantico: string;
-  opciones_json?: string[] | null;
+  opciones_json?: Array<string | { valor?: string; etiqueta?: string; value?: string; label?: string; [key: string]: any }> | null;
   validacion_json?: Record<string, any> | null;
   es_sistema: boolean;
   activo: boolean;

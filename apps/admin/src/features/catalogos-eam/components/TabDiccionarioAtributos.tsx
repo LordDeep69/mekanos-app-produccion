@@ -36,6 +36,47 @@ const ROLES_SEMANTICOS = [
   'ESTANDAR',
 ];
 
+interface OpcionParsed {
+  key: string;
+  label: string;
+  value: string;
+}
+
+function parseOpciones(raw: unknown): OpcionParsed[] {
+  if (!raw) return [];
+  let arr: unknown[] = [];
+  if (Array.isArray(raw)) {
+    arr = raw;
+  } else if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) arr = parsed;
+    } catch {
+      arr = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  return arr.map((item, idx) => {
+    if (typeof item === 'string' || typeof item === 'number') {
+      const s = String(item).trim();
+      return { key: `${s || 'op'}-${idx}`, label: s, value: s };
+    }
+    if (item && typeof item === 'object') {
+      const obj = item as Record<string, unknown>;
+      const valor = String(obj.valor ?? obj.value ?? obj.codigo ?? obj.id ?? '').trim();
+      const etiqueta = String(obj.etiqueta ?? obj.label ?? obj.nombre ?? obj.descripcion ?? valor).trim();
+      const label = etiqueta || valor || `Opción ${idx + 1}`;
+      const value = valor || label;
+      return {
+        key: `${value || label}-${idx}`,
+        label,
+        value,
+      };
+    }
+    return { key: `op-${idx}`, label: String(item ?? ''), value: String(item ?? '') };
+  });
+}
+
 export function TabDiccionarioAtributos() {
   const [search, setSearch] = useState('');
   const [filtroMagnitud, setFiltroMagnitud] = useState('');
@@ -97,7 +138,7 @@ export function TabDiccionarioAtributos() {
 
   const openEditModal = (attr: AtributoTecnico) => {
     setEditingAttr(attr);
-    const opcionesArr = Array.isArray(attr.opciones_json) ? attr.opciones_json : [];
+    const parsedOps = parseOpciones(attr.opciones_json);
     setForm({
       codigo_atributo: attr.codigo_atributo,
       nombre_atributo: attr.nombre_atributo,
@@ -106,7 +147,7 @@ export function TabDiccionarioAtributos() {
       id_magnitud: attr.id_magnitud ? String(attr.id_magnitud) : '',
       unidad_defecto_codigo: attr.unidad_defecto_codigo || '',
       rol_semantico: attr.rol_semantico || 'ESTANDAR',
-      opciones_csv: opcionesArr.join(', '),
+      opciones_csv: parsedOps.map((o) => o.label || o.value).filter(Boolean).join(', '),
     });
     setShowModal(true);
   };
@@ -252,7 +293,7 @@ export function TabDiccionarioAtributos() {
                       label: attr.tipo_control,
                       badge: 'bg-slate-100 text-slate-700 border-slate-200',
                     };
-                  const opciones = Array.isArray(attr.opciones_json) ? attr.opciones_json : [];
+                  const opciones = parseOpciones(attr.opciones_json);
 
                   return (
                     <tr key={attr.id_atributo} className="hover:bg-slate-50/80 transition-colors">
@@ -305,10 +346,11 @@ export function TabDiccionarioAtributos() {
                             <div className="flex flex-wrap gap-1.5 max-w-md">
                               {opciones.map((op) => (
                                 <span
-                                  key={String(op)}
+                                  key={op.key}
+                                  title={op.value !== op.label ? `Valor: ${op.value}` : undefined}
                                   className="px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-800 font-mono text-[11px] font-medium"
                                 >
-                                  {String(op)}
+                                  {op.label}
                                 </span>
                               ))}
                             </div>
