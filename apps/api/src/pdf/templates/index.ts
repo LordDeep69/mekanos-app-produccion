@@ -20,4 +20,5 @@ export {
 export {
   DatosTrazabilidadClientePDF, generarTrazabilidadClienteHTML
 } from './trazabilidad-cliente.template';
+export { generarTipoUniversalEamHTML } from './tipo-universal-eam.template';
 

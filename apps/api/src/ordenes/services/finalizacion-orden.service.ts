@@ -1426,16 +1426,20 @@ export class FinalizacionOrdenService {
             return 'BOMBA_A';
         }
 
-        // Si es Tipo B → GENERADOR_B
-        if (tipoServicioCodigo.includes('TIPO_B') || tipoServicioCodigo.includes('_B') ||
-            tipoServicioNombre.includes('TIPO B') || tipoServicioNombre.includes('B')) {
-            this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_B`);
-            return 'GENERADOR_B';
+        // Si es generador o planta eléctrica
+        if (tipoEquipoNombre.includes('generador') || tipoEquipoNombre.includes('electrogeno') || tipoEquipoNombre.includes('planta') || tipoEquipoNombre.includes('gen')) {
+            if (tipoServicioCodigo.includes('TIPO_B') || tipoServicioCodigo.includes('_B') ||
+                tipoServicioNombre.includes('TIPO B') || tipoServicioNombre.includes('B')) {
+                this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_B`);
+                return 'GENERADOR_B';
+            }
+            this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_A`);
+            return 'GENERADOR_A';
         }
 
-        // Default: Tipo A Generador
-        this.logger.log(`📋 Tipo informe seleccionado: GENERADOR_A (default)`);
-        return 'GENERADOR_A';
+        // ✅ EAM FASE 5: Compresores, Motores, Chiller o cualquier arquetipo del Hub EAM
+        this.logger.log(`📋 Tipo informe seleccionado: UNIVERSAL_EAM`);
+        return 'UNIVERSAL_EAM';
     }
 
     /**

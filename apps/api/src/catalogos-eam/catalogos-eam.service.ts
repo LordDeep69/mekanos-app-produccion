@@ -1122,6 +1122,12 @@ export class CatalogosEamService {
       where,
       include: {
         tipo_equipo: true,
+        modelos_equipo_bom: {
+          include: {
+            catalogo_componentes: true,
+          },
+          orderBy: { rol_bom: 'asc' },
+        },
         _count: {
           select: {
             modelos_equipo_bom: true,

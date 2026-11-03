@@ -1381,7 +1381,7 @@ export default function EquiposPage() {
                 Parque de Activos Industriales (EAM 360°)
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Directorio universal de equipos, filtros técnicos B-Tree con conversión de unidades, plantillas OEM y repuestos BOM
+                Directorio universal de equipos, filtros técnicos por especificaciones con conversión de unidades, plantillas OEM y repuestos BOM
               </p>
             </div>
           </div>
@@ -1734,7 +1734,7 @@ export default function EquiposPage() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                      Buscador Técnico por Especificaciones (Índice Rápido B-Tree)
+                      Buscador Técnico por Especificaciones e Ingeniería
                       {tipoFiltro && (
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                           {tipoFiltro}

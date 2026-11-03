@@ -198,6 +198,7 @@ export interface DatosOrdenPDF {
   repuestosWms?: string[];
   repuestosDetallados?: RepuestoUtilizadoPDF[];
   equipoDetalle?: DatosEquipoDetalladoPDF;
+  placaUniversal?: any;
 
   // Firmas
   firmaTecnico?: string;

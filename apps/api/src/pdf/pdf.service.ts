@@ -29,11 +29,12 @@ import {
   generarTipoABombaHTML,
   generarTipoAGeneradorHTML,
   generarTipoBGeneradorHTML,
+  generarTipoUniversalEamHTML,
   generarTrazabilidadClienteHTML,
 } from './templates';
 import { DatosEstructuradosCorrectivoPorEquipo } from './templates/tipo-correctivo.template';
 
-export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
+export type TipoInforme = 'GENERADOR_A' | 'GENERADOR_B' | 'BOMBA_A' | 'UNIVERSAL_EAM' | 'CORRECTIVO' | 'COTIZACION' | 'PROPUESTA_CORRECTIVO' | 'REMISION' | 'ORDEN_COMPRA';
 
 export interface GenerarPDFOptions {
   tipoInforme: TipoInforme;
@@ -197,6 +198,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
         return generarTipoBGeneradorHTML(datos);
       case 'BOMBA_A':
         return generarTipoABombaHTML(datos);
+      case 'UNIVERSAL_EAM':
+        return generarTipoUniversalEamHTML(datos);
       case 'CORRECTIVO':
         return generarCorrectivoOrdenHTML(this.adaptarDatosParaCorrectivo(datos));
       case 'COTIZACION':
@@ -747,6 +750,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       'GENERADOR_A': 'Preventivo_A_Generador',
       'GENERADOR_B': 'Preventivo_B_Generador',
       'BOMBA_A': 'Preventivo_A_Bomba',
+      'UNIVERSAL_EAM': 'Informe_Servicio_EAM',
       'CORRECTIVO': 'Correctivo',
       'COTIZACION': 'Cotizacion',
       'PROPUESTA_CORRECTIVO': 'Propuesta_Correctivo',
@@ -1011,23 +1015,26 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
    * Determina el tipo de informe basado en el equipo y servicio
    */
   determinarTipoInforme(
-    tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR',
-    tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO'
+    tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string,
+    tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string
   ): TipoInforme {
     // ✅ FIX 06-FEB-2026: CORRECTIVO tiene su propio template independiente del equipo
     if (tipoServicio === 'CORRECTIVO') {
       return 'CORRECTIVO';
     }
 
-    if (tipoEquipo === 'BOMBA') {
+    const tEq = (tipoEquipo || '').toUpperCase().trim();
+
+    if (tEq === 'BOMBA' || tEq === 'BOM') {
       return 'BOMBA_A';
     }
 
-    if (tipoEquipo === 'GENERADOR' || tipoEquipo === 'MOTOR') {
+    if (tEq === 'GENERADOR' || tEq === 'GEN') {
       return tipoServicio === 'PREVENTIVO_B' ? 'GENERADOR_B' : 'GENERADOR_A';
     }
 
-    return 'GENERADOR_A';
+    // ✅ EAM FASE 5: Compresores, Motores y arquetipos dinámicos usan plantilla Universal EAM
+    return 'UNIVERSAL_EAM';
   }
 
   /**

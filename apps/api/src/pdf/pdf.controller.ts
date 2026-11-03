@@ -38,6 +38,7 @@ import { R2StorageService } from '../storage/r2-storage.service';
 import { buildInformeFilename } from './pdf-naming.helper';
 import { PdfService, TipoInforme } from './pdf.service';
 import { DatosOrdenPDF, RepuestoUtilizadoPDF, DatosEquipoDetalladoPDF } from './templates';
+import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 
 /**
  * DTO para regenerar PDF y enviarlo por email
@@ -674,6 +675,7 @@ export class PdfController {
       }),
       repuestosDetallados: this.extraerRepuestosDetallados(orden),
       equipoDetalle: this.extraerEquipoDetallado(orden, this.extraerDatosModulo(orden.mediciones_servicio)),
+      placaUniversal: orden.equipos ? EquipoSpecsReader.getPlacaUniversal(orden.equipos) : undefined,
       // ✅ MULTI-EQUIPOS: Datos adicionales
       esMultiEquipo,
       equiposOrden,
@@ -1717,6 +1719,7 @@ export class PdfController {
       }),
       repuestosDetallados: this.extraerRepuestosDetallados(orden),
       equipoDetalle: this.extraerEquipoDetallado(orden, this.extraerDatosModulo(orden.mediciones_servicio)),
+      placaUniversal: orden.equipos ? EquipoSpecsReader.getPlacaUniversal(orden.equipos) : undefined,
       // ✅ FIX 19-ENE-2026: Estructuras multi-equipo (igual que mobile)
       esMultiEquipo,
       actividadesPorEquipo,
@@ -1788,18 +1791,21 @@ export class PdfController {
       }
     }
 
-    // ✅ FIX 15-ENE-2026: Determinar tipo de informe basado en tipos_servicio.codigo_tipo
+    // ✅ FIX 15-ENE-2026 & EAM FASE 5: Determinar tipo de informe con soporte Universal EAM
     let tipoInforme: TipoInforme = 'GENERADOR_A';
     const codigoTipo = orden.tipos_servicio?.codigo_tipo?.toUpperCase() || '';
+    const tEq = (datosOrden.tipoEquipo || '').toUpperCase();
 
     if (codigoTipo.includes('CORR')) {
       tipoInforme = 'CORRECTIVO';
-    } else if (codigoTipo.includes('BOM')) {
+    } else if (codigoTipo.includes('BOM') || tEq.includes('BOMB')) {
       tipoInforme = 'BOMBA_A';
-    } else if (codigoTipo.includes('GEN_PREV_B') || codigoTipo.includes('PREV_B')) {
+    } else if (codigoTipo.includes('GEN_PREV_B') || (codigoTipo.includes('PREV_B') && tEq.includes('GEN'))) {
       tipoInforme = 'GENERADOR_B';
-    } else if (codigoTipo.includes('GEN') || codigoTipo.includes('PREV_A')) {
+    } else if (tEq.includes('GEN') && (codigoTipo.includes('GEN') || codigoTipo.includes('PREV_A') || !codigoTipo)) {
       tipoInforme = 'GENERADOR_A';
+    } else {
+      tipoInforme = 'UNIVERSAL_EAM';
     }
 
     this.logger.log(`📋 Tipo de servicio: ${codigoTipo} -> Tipo de informe: ${tipoInforme}`);
@@ -2358,13 +2364,15 @@ export class PdfController {
   /**
    * Mapea el nombre del tipo de equipo a la enum
    */
-  private mapTipoEquipo(nombre: string | undefined): 'GENERADOR' | 'BOMBA' | 'MOTOR' {
+  private mapTipoEquipo(nombre: string | undefined): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string {
     if (!nombre) return 'GENERADOR';
 
     const nombreUpper = nombre.toUpperCase();
     if (nombreUpper.includes('BOMBA')) return 'BOMBA';
+    if (nombreUpper.includes('COMPRESOR')) return 'COMPRESOR';
     if (nombreUpper.includes('MOTOR')) return 'MOTOR';
-    return 'GENERADOR';
+    if (nombreUpper.includes('GENERADOR') || nombreUpper.includes('PLANTA')) return 'GENERADOR';
+    return nombreUpper;
   }
 
   /**
@@ -2503,7 +2511,9 @@ export class PdfController {
       serie = mot.numero_serie_motor || eq.numero_serie_equipo || 'N/A';
       modelo = mot.modelo_motor || undefined;
     } else {
-      marca = eq.nombre_equipo || 'N/A';
+      marca = EquipoSpecsReader.getMarca(eq);
+      serie = EquipoSpecsReader.getSerie(eq);
+      modelo = EquipoSpecsReader.getModelo(eq);
     }
 
     const potenciaKva = gen?.potencia_kva ? Number(gen.potencia_kva) : undefined;

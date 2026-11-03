@@ -359,7 +359,7 @@ export function FichaTecnicaPolimorficaEam({
       toast({
         title: '✅ Ficha técnica actualizada en tiempo real',
         description:
-          'Se actualizaron las especificaciones JSONB, tablas satélite y el índice B-Tree de búsqueda.',
+          'Se actualizaron las especificaciones JSONB, tablas satélite y el índice de búsqueda rápida.',
       });
       setIsEditModalOpen(false);
       if (onUpdated) onUpdated();
@@ -454,7 +454,7 @@ export function FichaTecnicaPolimorficaEam({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Ficha técnica modular unificada con equivalencias automáticas de unidades SI e indexación B-Tree.
+                Ficha técnica modular unificada con equivalencias automáticas de unidades e indicadores de placa.
               </p>
             </div>
           </div>
@@ -472,35 +472,35 @@ export function FichaTecnicaPolimorficaEam({
         {/* Franja Superior: Indicadores Principales de Placa (KPIs) */}
         {kpisPlaca.length > 0 && (
           <div>
-            <div className="flex items-center gap-1.5 mb-2.5">
+            <div className="flex items-center gap-1.5 mb-2">
               <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                 Indicadores Principales de Placa (KPIs)
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
               {kpisPlaca.map((kpi) => (
                 <div
                   key={kpi.codigo}
-                  className="p-3 rounded-xl bg-slate-50/90 border border-slate-200/90 flex flex-col justify-between"
+                  className="px-3 py-2 rounded-xl bg-slate-50/90 border border-slate-200/80 flex flex-col justify-between min-h-[58px]"
                 >
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block truncate">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block truncate leading-tight">
                       {kpi.modulo}
                     </span>
                     <span
-                      className="text-[11px] font-bold text-slate-700 line-clamp-1 mt-0.5"
+                      className="text-[11px] font-bold text-slate-700 truncate block mt-0.5"
                       title={kpi.etiqueta}
                     >
                       {kpi.etiqueta}
                     </span>
                   </div>
-                  <div className="mt-2">
-                    <span className="text-sm font-black font-mono text-slate-900 block">
+                  <div className="mt-1 flex items-baseline justify-between gap-1">
+                    <span className="text-sm font-black font-mono text-slate-900 truncate">
                       {kpi.valorFormateado}
                     </span>
                     {kpi.equivalencia && (
-                      <span className="text-[10px] font-mono font-semibold text-blue-700">
+                      <span className="text-[10px] font-mono font-semibold text-blue-700 shrink-0">
                         {kpi.equivalencia}
                       </span>
                     )}
@@ -679,7 +679,7 @@ export function FichaTecnicaPolimorficaEam({
                       Editar Especificaciones Técnicas ({equipo.codigo_equipo})
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Los cambios actualizan en vivo la ficha JSONB, las tablas satélite y el índice B-Tree de filtros rápidos.
+                      Los cambios actualizan en vivo la ficha técnica, los subsistemas y el índice de búsqueda rápida.
                     </p>
                   </div>
                 </div>

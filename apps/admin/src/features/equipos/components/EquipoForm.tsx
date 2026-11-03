@@ -515,11 +515,23 @@ export function EquipoForm({
       setModulosValues(nuevosModulos);
       setOrigenAtributos(nuevosOrigenes);
 
-      // Sugerir nombre comercial del activo si está vacío
-      if (!getValues('datosEquipo.nombre_equipo')) {
+      // Sugerir nombre comercial del activo si está vacío o si tenía el nombre de otro modelo OEM previo
+      const currentNombre = (getValues('datosEquipo.nombre_equipo') || '').trim();
+      const esNombreDeOtroModelo = (modelosOem || []).some((m) => {
+        const nomCom = (m.nombre_comercial || '').trim();
+        const marcaMod = `${m.marca} ${m.modelo}`.trim();
+        return (
+          (nomCom && currentNombre === nomCom) ||
+          (marcaMod && currentNombre === marcaMod) ||
+          (nomCom && currentNombre.startsWith(nomCom)) ||
+          (marcaMod && currentNombre.startsWith(marcaMod))
+        );
+      });
+
+      if (!currentNombre || esNombreDeOtroModelo) {
         const sugerido =
           modelo.nombre_comercial || `${modelo.marca} ${modelo.modelo}`;
-        setValue('datosEquipo.nombre_equipo', sugerido);
+        setValue('datosEquipo.nombre_equipo', sugerido, { shouldDirty: true });
       }
 
       toast({
@@ -731,6 +743,7 @@ export function EquipoForm({
   };
 
   const kitBomItems = selectedModeloOem?.modelos_equipo_bom || [];
+  const repuestosKitCount = kitBomItems.length || (selectedModeloOem as any)?._count?.modelos_equipo_bom || 0;
 
   return (
     <form
@@ -981,7 +994,7 @@ export function EquipoForm({
                         <span className="font-extrabold text-emerald-950 flex items-center gap-1">
                           <PackageCheck className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
                           Vincular automáticamente el Kit de Repuestos sugerido de este modelo (
-                          {kitBomItems.length} repuestos WMS) a la matriz BOM del equipo
+                          {repuestosKitCount} repuestos WMS) a la matriz BOM del equipo
                         </span>
                         {kitBomItems.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1">
@@ -1051,7 +1064,7 @@ export function EquipoForm({
                 </p>
                 <p className="text-[11px] text-slate-300">
                   {selectedModeloOem
-                    ? `Plantilla OEM activa: ${selectedModeloOem.marca} ${selectedModeloOem.modelo} (${kitBomItems.length} repuestos BOM)`
+                    ? `Plantilla OEM activa: ${selectedModeloOem.marca} ${selectedModeloOem.modelo} (${repuestosKitCount} repuestos BOM)`
                     : 'Configuración personalizada (sin plantilla OEM)'}
                 </p>
               </div>
@@ -1675,8 +1688,8 @@ export function EquipoForm({
                   <CheckCircle2 className="h-4 w-4" />
                   <span>
                     Registrar Equipo Completo
-                    {selectedModeloOemId && vincularKitBom && kitBomItems.length > 0
-                      ? ` (+ ${kitBomItems.length} Repuestos BOM)`
+                    {selectedModeloOemId && vincularKitBom && repuestosKitCount > 0
+                      ? ` (+ ${repuestosKitCount} Repuestos BOM)`
                       : ''}
                   </span>
                 </>

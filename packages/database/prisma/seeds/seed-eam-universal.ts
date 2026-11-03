@@ -38,6 +38,7 @@ async function main() {
     { codigo_magnitud: 'FRECUENCIA_VELOCIDAD', nombre_magnitud: 'Frecuencia / Velocidad de Rotación', descripcion: 'RPM y frecuencia de red en Hz', unidad_base_codigo: 'RPM' },
     { codigo_magnitud: 'LONGITUD', nombre_magnitud: 'Longitud y Diámetros', descripcion: 'Diámetros de tubería y dimensiones', unidad_base_codigo: 'MET' },
     { codigo_magnitud: 'TIEMPO_USO', nombre_magnitud: 'Tiempo de Uso / Contador', descripcion: 'Horómetro de trabajo o ciclos operativos', unidad_base_codigo: 'HORAS' },
+    { codigo_magnitud: 'CAPACIDAD_BATERIA', nombre_magnitud: 'Capacidad de Batería', descripcion: 'Capacidad de almacenamiento y entrega de carga en acumuladores (Ah, mAh)', unidad_base_codigo: 'AH' },
     { codigo_magnitud: 'ADIMENSIONAL', nombre_magnitud: 'Unidad de Conteo / Adimensional', descripcion: 'Conteo por unidades, piezas o sin magnitud', unidad_base_codigo: 'UND' },
   ];
 
@@ -117,6 +118,10 @@ async function main() {
     // ELECTRICA_CORRIENTE
     { codigo: 'A', nombre: 'Amperios', simbolo: 'A', tipo_magnitud: 'ELECTRICA_CORRIENTE', id_magnitud: mapMagnitudes.get('ELECTRICA_CORRIENTE'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
     { codigo: 'MA', nombre: 'Miliamperios', simbolo: 'mA', tipo_magnitud: 'ELECTRICA_CORRIENTE', id_magnitud: mapMagnitudes.get('ELECTRICA_CORRIENTE'), factor_a: 0.001, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
+
+    // CAPACIDAD_BATERIA
+    { codigo: 'AH', nombre: 'Amperios-Hora', simbolo: 'Ah', tipo_magnitud: 'CAPACIDAD_BATERIA', id_magnitud: mapMagnitudes.get('CAPACIDAD_BATERIA'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: true },
+    { codigo: 'MAH', nombre: 'Miliamperios-Hora', simbolo: 'mAh', tipo_magnitud: 'CAPACIDAD_BATERIA', id_magnitud: mapMagnitudes.get('CAPACIDAD_BATERIA'), factor_a: 0.001, factor_b: 0.0, es_unidad_base: false, permite_decimales: true },
 
     // FRECUENCIA_VELOCIDAD
     { codigo: 'RPM', nombre: 'Revoluciones por Minuto', simbolo: 'RPM', tipo_magnitud: 'FRECUENCIA_VELOCIDAD', id_magnitud: mapMagnitudes.get('FRECUENCIA_VELOCIDAD'), factor_a: 1.0, factor_b: 0.0, es_unidad_base: true, permite_decimales: false },
@@ -223,7 +228,7 @@ async function main() {
     { codigo: 'amperaje_arranque_cca', nombre: 'Amperaje de Arranque (CCA)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'ELECTRICA_CORRIENTE', unidad: 'A' },
     { codigo: 'cantidad_baterias', nombre: 'Cantidad de Baterías', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
     { codigo: 'referencia_bateria', nombre: 'Referencia / Tipo Batería', control: 'TEXTO_CORTO', rol: 'BATERIA_ARRANQUE', mag: null, unidad: null },
-    { codigo: 'capacidad_bateria_ah', nombre: 'Capacidad Batería (Ah)', control: 'NUMERICO_PURO', rol: 'ESTANDAR', mag: null, unidad: null },
+    { codigo: 'capacidad_bateria_ah', nombre: 'Capacidad Batería (Ah)', control: 'NUMERICO_MAGNITUD', rol: 'ESTANDAR', mag: 'CAPACIDAD_BATERIA', unidad: 'AH' },
     { codigo: 'tiene_cargador_bateria', nombre: '¿Tiene Cargador de Batería?', control: 'BOOLEANO', rol: 'ESTANDAR', mag: null, unidad: null },
     { codigo: 'marca_cargador', nombre: 'Marca Cargador de Batería', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
     { codigo: 'modelo_cargador', nombre: 'Modelo Cargador de Batería', control: 'TEXTO_CORTO', rol: 'ESTANDAR', mag: null, unidad: null },
@@ -627,6 +632,11 @@ async function main() {
   };
 
   let totalAsignaciones = 0;
+
+  // Limpieza defensiva de asignaciones preliminares sin grupo visual
+  await prisma.modulo_atributos.deleteMany({
+    where: { grupo_visual: null },
+  });
 
   for (const [codModulo, items] of Object.entries(estructuraModulos)) {
     const idModulo = mapModulos.get(codModulo);

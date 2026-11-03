@@ -421,7 +421,7 @@ export default function EditarEquipoPage() {
       setHasEspecificosChanges(false);
       setVincularKitBom(false);
       toast({
-        title: '✅ Ficha técnica e índice B-Tree actualizados',
+        title: '✅ Ficha técnica e índices actualizados',
         description:
           'Se actualizaron las especificaciones JSONB, las tablas satélite y el árbol de búsqueda rápida.',
       });

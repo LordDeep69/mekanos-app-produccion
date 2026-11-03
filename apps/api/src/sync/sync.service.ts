@@ -21,6 +21,7 @@ import {
   SyncMedicionDto,
   SyncOrdenDto,
 } from './dto/sync-upload-orden.dto';
+import { EquipoSpecsReader } from '../equipos/services/equipo-specs.reader';
 
 /**
  * Servicio de Sincronización Móvil - FASE 2.3
@@ -702,12 +703,28 @@ export class SyncService {
           },
         },
         sedes_cliente: true,
-        equipos: true,
+        equipos: {
+          include: {
+            tipos_equipo: true,
+            modelos_equipo: true,
+            equipos_generador: true,
+            equipos_bomba: true,
+            equipos_motor: true,
+          },
+        },
         tipos_servicio: true,
         // Multi-Equipos: Incluir equipos asociados
         ordenes_equipos: {
           include: {
-            equipos: true,
+            equipos: {
+              include: {
+                tipos_equipo: true,
+                modelos_equipo: true,
+                equipos_generador: true,
+                equipos_bomba: true,
+                equipos_motor: true,
+              },
+            },
           },
           orderBy: { orden_secuencia: 'asc' },
         },
@@ -1409,12 +1426,28 @@ export class SyncService {
           },
         },
         sedes_cliente: true,
-        equipos: true,
+        equipos: {
+          include: {
+            tipos_equipo: true,
+            modelos_equipo: true,
+            equipos_generador: true,
+            equipos_bomba: true,
+            equipos_motor: true,
+          },
+        },
         tipos_servicio: true,
         // ✅ FIX 28-ENE-2026: Incluir ordenes_equipos para multi-equipos
         ordenes_equipos: {
           include: {
-            equipos: true,
+            equipos: {
+              include: {
+                tipos_equipo: true,
+                modelos_equipo: true,
+                equipos_generador: true,
+                equipos_bomba: true,
+                equipos_motor: true,
+              },
+            },
           },
           orderBy: {
             orden_secuencia: 'asc',
@@ -1565,8 +1598,17 @@ export class SyncService {
       idEquipo: orden.id_equipo,
       codigoEquipo: orden.equipos?.codigo_equipo || '',
       nombreEquipo: orden.equipos?.nombre_equipo || 'Equipo',
-      serieEquipo: orden.equipos?.numero_serie_equipo ?? undefined,
+      marcaEquipo: orden.equipos ? EquipoSpecsReader.getMarca(orden.equipos) : undefined,
+      modeloEquipo: orden.equipos ? EquipoSpecsReader.getModelo(orden.equipos) : undefined,
+      serieEquipo: orden.equipos ? EquipoSpecsReader.getSerie(orden.equipos) : (orden.equipos?.numero_serie_equipo ?? undefined),
+      tipoEquipo: orden.equipos ? EquipoSpecsReader.getCategoriaCanonica(orden.equipos) : undefined,
       ubicacionEquipo: orden.equipos?.ubicacion_texto ?? undefined,
+      configParametros: (() => {
+        const pModelo = (orden.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
+        const pEquipo = (orden.equipos?.config_parametros as object) || {};
+        const merged = { ...pModelo, ...pEquipo };
+        return Object.keys(merged).length > 0 ? merged : undefined;
+      })(),
       idTipoServicio: orden.id_tipo_servicio ?? undefined,
       codigoTipoServicio: orden.tipos_servicio?.codigo_tipo ?? undefined,
       nombreTipoServicio: orden.tipos_servicio?.nombre_tipo ?? undefined,
@@ -1607,8 +1649,17 @@ export class SyncService {
           observaciones: oe.observaciones || undefined,
           codigoEquipo: oe.equipos?.codigo_equipo || '',
           nombreEquipo: oe.equipos?.nombre_equipo || '',
+          marcaEquipo: oe.equipos ? EquipoSpecsReader.getMarca(oe.equipos) : undefined,
+          modeloEquipo: oe.equipos ? EquipoSpecsReader.getModelo(oe.equipos) : undefined,
+          serieEquipo: oe.equipos ? EquipoSpecsReader.getSerie(oe.equipos) : (oe.equipos?.numero_serie_equipo || undefined),
+          tipoEquipo: oe.equipos ? EquipoSpecsReader.getCategoriaCanonica(oe.equipos) : undefined,
           ubicacionEquipo: oe.equipos?.ubicacion_texto || undefined,
-          configParametros: oe.equipos?.config_parametros || undefined,
+          configParametros: (() => {
+            const pModelo = (oe.equipos?.modelos_equipo?.plantilla_parametros_config as object) || {};
+            const pEquipo = (oe.equipos?.config_parametros as object) || {};
+            const merged = { ...pModelo, ...pEquipo };
+            return Object.keys(merged).length > 0 ? merged : undefined;
+          })(),
         })) || [];
         // ✅ FIX 14-FEB-2026: Normalizar orden_secuencia si todos iguales
         if (mapped.length > 1) {
