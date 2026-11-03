@@ -1,11 +1,12 @@
 /**
  * SERVICIO DE EQUIPOS - MEKANOS S.A.S
- * 
- * Cliente HTTP para el módulo de gestión de equipos.
+ *
+ * Cliente HTTP para el módulo de gestión de equipos (Fase 4 EAM Universal).
  * Conecta con el backend: /equipos/gestion-completa, /equipos/listado-completo
  */
 
 import { apiClient } from '@/lib/api/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CambiarEstadoResponse,
   CreateEquipoPayload,
@@ -13,10 +14,9 @@ import type {
   EquipoDetalle,
   EquiposListadoResponse,
   FacetasEquiposResponse,
-  FiltrosFacetasEquipos,
   RegistrarLecturaResponse,
   UpdateDatosEspecificosPayload,
-  UpdateEquipoPayload
+  UpdateEquipoPayload,
 } from '../types';
 
 export interface ClienteOption {
@@ -32,213 +32,12 @@ export interface ClienteOption {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SERVICIO EQUIPOS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-export const equiposService = {
-  /**
-   * Obtiene el listado paginado de equipos con datos polimórficos
-   * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
-   */
-    async listarEquipos(params?: {
-    page?: number;
-    limit?: number;
-    id_cliente?: number;
-    id_sede?: number;
-    estado_equipo?: string;
-    tipo?: string;
-    search?: string;
-    sortBy?: 'codigo' | 'nombre' | 'fecha' | 'cliente';
-    sortOrder?: 'asc' | 'desc';
-    filtroMarcaCampo?: string;
-    filtroMarcaValor?: string;
-    filtroMarcaTabla?: string;
-    filtroValorCampo?: string;
-    filtroValorMin?: number;
-    filtroValorMax?: number;
-    filtroValorExacto?: string;
-    filtroValorTabla?: string;
-  }): Promise<EquiposListadoResponse> {
-    const searchParams = new URLSearchParams();
-
-    if (params?.page) searchParams.append('page', params.page.toString());
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
-    if (params?.id_cliente) searchParams.append('id_cliente', params.id_cliente.toString());
-    if (params?.id_sede) searchParams.append('id_sede', params.id_sede.toString());
-    if (params?.estado_equipo) searchParams.append('estado_equipo', params.estado_equipo);
-    if (params?.tipo) searchParams.append('tipo', params.tipo);
-    if (params?.search) searchParams.append('search', params.search);
-    if (params?.sortBy) searchParams.append('sortBy', params.sortBy);
-    if (params?.sortOrder) searchParams.append('sortOrder', params.sortOrder);
-    if (params?.filtroMarcaCampo) searchParams.append('filtroMarcaCampo', params.filtroMarcaCampo);
-    if (params?.filtroMarcaValor) searchParams.append('filtroMarcaValor', params.filtroMarcaValor);
-    if (params?.filtroMarcaTabla) searchParams.append('filtroMarcaTabla', params.filtroMarcaTabla);
-    if (params?.filtroValorCampo) searchParams.append('filtroValorCampo', params.filtroValorCampo);
-    if (params?.filtroValorMin !== undefined && params?.filtroValorMin !== null && !isNaN(params.filtroValorMin)) {
-      searchParams.append('filtroValorMin', params.filtroValorMin.toString());
-    }
-    if (params?.filtroValorMax !== undefined && params?.filtroValorMax !== null && !isNaN(params.filtroValorMax)) {
-      searchParams.append('filtroValorMax', params.filtroValorMax.toString());
-    }
-    if (params?.filtroValorExacto) searchParams.append('filtroValorExacto', params.filtroValorExacto);
-    if (params?.filtroValorTabla) searchParams.append('filtroValorTabla', params.filtroValorTabla);
-
-    const query = searchParams.toString();
-    const url = `/equipos/listado-completo${query ? `?${query}` : ''}`;
-
-    const response = await apiClient.get<EquiposListadoResponse>(url);
-    return response.data;
-  },
-
-/**
-   * Obtiene dinámicamente las facetas técnicas y marcas según tipo de equipo
-   */
-  async obtenerFacetas(tipo?: string): Promise<FacetasEquiposResponse> {
-    const searchParams = new URLSearchParams();
-    if (tipo) searchParams.append('tipo', tipo);
-    const query = searchParams.toString();
-    const url = `/equipos/facetas${query ? `?${query}` : ''}`;
-    const response = await apiClient.get<FacetasEquiposResponse>(url);
-    return response.data;
-  },
-
-  /**
-   * Obtiene un equipo completo por ID con datos polimórficos
-   */
-  async obtenerEquipo(id: number): Promise<{ success: boolean; data: EquipoDetalle }> {
-    const response = await apiClient.get<{ success: boolean; data: EquipoDetalle }>(
-      `/equipos/completo/${id}`
-    );
-    return response.data;
-  },
-
-  /**
-   * Crea un equipo completo (padre + hijo según tipo)
-   */
-  async crearEquipo(payload: CreateEquipoPayload): Promise<CreateEquipoResponse> {
-    const response = await apiClient.post<CreateEquipoResponse>(
-      '/equipos/gestion-completa',
-      payload
-    );
-    return response.data;
-  },
-
-  /**
-   * Actualiza un equipo completo (datos base + config_parametros)
-   */
-  async actualizarEquipo(id: number, payload: UpdateEquipoPayload): Promise<{ success: boolean; data: EquipoDetalle }> {
-    const response = await apiClient.put<{ success: boolean; data: EquipoDetalle }>(
-      `/equipos/${id}`,
-      payload
-    );
-    return response.data;
-  },
-
-  /**
-   * ✅ 08-ENE-2026: Cambiar estado del equipo con historial
-   */
-  async cambiarEstado(
-    id: number,
-    payload: { nuevo_estado: string; motivo_cambio?: string }
-  ): Promise<CambiarEstadoResponse> {
-    const response = await apiClient.patch<CambiarEstadoResponse>(
-      `/equipos/${id}/cambiar-estado`,
-      payload
-    );
-    return response.data;
-  },
-
-  /**
-   * ✅ 08-ENE-2026: Registrar lectura de horómetro
-   */
-  async registrarLecturaHorometro(
-    id: number,
-    payload: { horas_lectura: number; observaciones?: string }
-  ): Promise<RegistrarLecturaResponse> {
-    const response = await apiClient.post<RegistrarLecturaResponse>(
-      `/equipos/${id}/lectura-horometro`,
-      payload
-    );
-    return response.data;
-  },
-
-  /**
-   * ⚠️ ELIMINACIÓN COMPLETA - Elimina permanentemente el equipo y TODOS sus datos relacionados
-   * Solo funciona con equipos marcados como inactivos (soft delete)
-   */
-  async eliminarEquipoCompletamente(
-    id: number,
-    confirmacion: string
-  ): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.delete<{ success: boolean; message: string }>(
-      `/equipos/${id}/hard-delete`,
-      { data: { confirmacion } }
-    );
-    return response.data;
-  },
-
-  /**
-   * ✅ TRAZABILIDAD 360° / HOJA DE VIDA: Obtener historial de intervenciones y servicios del equipo
-   */
-  async obtenerTrazabilidadEquipo(id: number): Promise<TrazabilidadEquipoResponse> {
-    const response = await apiClient.get<{ success: boolean; data: TrazabilidadEquipoResponse }>(
-      `/equipos/${id}/trazabilidad-servicios`
-    );
-    return response.data.data;
-  },
-
-  /**
-   * ✅ 23-FEB-2026: Actualiza datos específicos del equipo (Motor, Generador, Bomba)
-   */
-  async actualizarDatosEspecificos(
-    id: number,
-    payload: UpdateDatosEspecificosPayload
-  ): Promise<{ success: boolean; data: EquipoDetalle }> {
-    const response = await apiClient.patch<{ success: boolean; data: EquipoDetalle }>(
-      `/equipos/${id}/datos-especificos`,
-      payload
-    );
-    return response.data;
-  },
-};
-
-export const clientesService = {
-  async listarClientesParaSelect(): Promise<ClienteOption[]> {
-    // Asume que existe un endpoint para esto
-    const response = await apiClient.get<{ data: ClienteOption[] }>('/clientes?limit=1000');
-    return response.data?.data || [];
-  },
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// HOOKS REACT QUERY
-// ═══════════════════════════════════════════════════════════════════════════════
-
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-
-// Keys para React Query
-export const equiposKeys = {
-  all: ['equipos'] as const,
-  lists: () => [...equiposKeys.all, 'list'] as const,
-  list: (params: Record<string, unknown>) => [...equiposKeys.lists(), params] as const,
-  details: () => [...equiposKeys.all, 'detail'] as const,
-  detail: (id: number) => [...equiposKeys.details(), id] as const,
-};
-
-export const clientesKeys = {
-  forSelect: ['clientes', 'select'] as const,
-};
-
-/**
- * Hook para obtener listado de equipos
- * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
- */
-export function useEquipos(params?: {
+export interface ListarEquiposParams {
   page?: number;
   limit?: number;
   id_cliente?: number;
   id_sede?: number;
+  id_tipo_equipo?: number;
   estado_equipo?: string;
   tipo?: string;
   search?: string;
@@ -252,17 +51,235 @@ export function useEquipos(params?: {
   filtroValorMax?: number;
   filtroValorExacto?: string;
   filtroValorTabla?: string;
-}) {
+  // ✅ FASE 4: Filtro B-Tree con Conversión UoM en Vivo y Booleanos
+  filtroAtributoCodigo?: string;
+  filtroAtributoValorMin?: number;
+  filtroAtributoValorMax?: number;
+  filtroAtributoUnidad?: string;
+  filtroAtributoTexto?: string;
+  filtroAtributoBooleano?: string;
+}
+
+export const equiposService = {
+  /**
+   * Obtiene el listado paginado de equipos con datos polimórficos y Filtros Técnicos B-Tree
+   */
+  async listarEquipos(params?: ListarEquiposParams): Promise<EquiposListadoResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.id_cliente) searchParams.append('id_cliente', params.id_cliente.toString());
+    if (params?.id_sede) searchParams.append('id_sede', params.id_sede.toString());
+    if (params?.id_tipo_equipo)
+      searchParams.append('id_tipo_equipo', params.id_tipo_equipo.toString());
+    if (params?.estado_equipo) searchParams.append('estado_equipo', params.estado_equipo);
+    if (params?.tipo) searchParams.append('tipo', params.tipo);
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.sortBy) searchParams.append('sortBy', params.sortBy);
+    if (params?.sortOrder) searchParams.append('sortOrder', params.sortOrder);
+    if (params?.filtroMarcaCampo) searchParams.append('filtroMarcaCampo', params.filtroMarcaCampo);
+    if (params?.filtroMarcaValor) searchParams.append('filtroMarcaValor', params.filtroMarcaValor);
+    if (params?.filtroMarcaTabla) searchParams.append('filtroMarcaTabla', params.filtroMarcaTabla);
+    if (params?.filtroValorCampo) searchParams.append('filtroValorCampo', params.filtroValorCampo);
+    if (
+      params?.filtroValorMin !== undefined &&
+      params?.filtroValorMin !== null &&
+      !isNaN(params.filtroValorMin)
+    ) {
+      searchParams.append('filtroValorMin', params.filtroValorMin.toString());
+    }
+    if (
+      params?.filtroValorMax !== undefined &&
+      params?.filtroValorMax !== null &&
+      !isNaN(params.filtroValorMax)
+    ) {
+      searchParams.append('filtroValorMax', params.filtroValorMax.toString());
+    }
+    if (params?.filtroValorExacto)
+      searchParams.append('filtroValorExacto', params.filtroValorExacto);
+    if (params?.filtroValorTabla) searchParams.append('filtroValorTabla', params.filtroValorTabla);
+
+    // ✅ FASE 4: Parámetros del Filtro B-Tree Normalizado EAM
+    if (params?.filtroAtributoCodigo) {
+      searchParams.append('filtroAtributoCodigo', params.filtroAtributoCodigo);
+    }
+    if (
+      params?.filtroAtributoValorMin !== undefined &&
+      params?.filtroAtributoValorMin !== null &&
+      !isNaN(params.filtroAtributoValorMin)
+    ) {
+      searchParams.append('filtroAtributoValorMin', params.filtroAtributoValorMin.toString());
+    }
+    if (
+      params?.filtroAtributoValorMax !== undefined &&
+      params?.filtroAtributoValorMax !== null &&
+      !isNaN(params.filtroAtributoValorMax)
+    ) {
+      searchParams.append('filtroAtributoValorMax', params.filtroAtributoValorMax.toString());
+    }
+    if (params?.filtroAtributoUnidad) {
+      searchParams.append('filtroAtributoUnidad', params.filtroAtributoUnidad);
+    }
+    if (params?.filtroAtributoTexto) {
+      searchParams.append('filtroAtributoTexto', params.filtroAtributoTexto);
+    }
+    if (params?.filtroAtributoBooleano) {
+      searchParams.append('filtroAtributoBooleano', params.filtroAtributoBooleano);
+    }
+
+    const query = searchParams.toString();
+    const url = `/equipos/listado-completo${query ? `?${query}` : ''}`;
+
+    const response = await apiClient.get<EquiposListadoResponse>(url);
+    return response.data;
+  },
+
+  /**
+   * Obtiene dinámicamente las facetas técnicas y marcas según tipo de equipo
+   */
+  async obtenerFacetas(tipo?: string): Promise<FacetasEquiposResponse> {
+    const searchParams = new URLSearchParams();
+    if (tipo) searchParams.append('tipo', tipo);
+    const query = searchParams.toString();
+    const url = `/equipos/facetas${query ? `?${query}` : ''}`;
+    const response = await apiClient.get<FacetasEquiposResponse>(url);
+    return response.data;
+  },
+
+  /**
+   * Obtiene un equipo completo por ID con datos polimórficos y especificaciones JSONB
+   */
+  async obtenerEquipo(id: number): Promise<{ success: boolean; data: EquipoDetalle }> {
+    const response = await apiClient.get<{ success: boolean; data: EquipoDetalle }>(
+      `/equipos/completo/${id}`,
+    );
+    return response.data;
+  },
+
+  /**
+   * Crea un equipo completo (padre + hijo + JSONB + B-Tree + Kit BOM OEM)
+   */
+  async crearEquipo(payload: CreateEquipoPayload): Promise<CreateEquipoResponse> {
+    const response = await apiClient.post<CreateEquipoResponse>(
+      '/equipos/gestion-completa',
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
+   * Actualiza un equipo completo (datos base + config_parametros)
+   */
+  async actualizarEquipo(
+    id: number,
+    payload: UpdateEquipoPayload,
+  ): Promise<{ success: boolean; data: EquipoDetalle }> {
+    const response = await apiClient.put<{ success: boolean; data: EquipoDetalle }>(
+      `/equipos/${id}`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
+   * Cambiar estado del equipo con historial
+   */
+  async cambiarEstado(
+    id: number,
+    payload: { nuevo_estado: string; motivo_cambio?: string },
+  ): Promise<CambiarEstadoResponse> {
+    const response = await apiClient.patch<CambiarEstadoResponse>(
+      `/equipos/${id}/cambiar-estado`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
+   * Registrar lectura de horómetro
+   */
+  async registrarLecturaHorometro(
+    id: number,
+    payload: { horas_lectura: number; observaciones?: string },
+  ): Promise<RegistrarLecturaResponse> {
+    const response = await apiClient.post<RegistrarLecturaResponse>(
+      `/equipos/${id}/lectura-horometro`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
+   * Eliminación completa de equipo
+   */
+  async eliminarEquipoCompletamente(
+    id: number,
+    confirmacion: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.delete<{ success: boolean; message: string }>(
+      `/equipos/${id}/hard-delete`,
+      { data: { confirmacion } },
+    );
+    return response.data;
+  },
+
+  /**
+   * Obtener historial de intervenciones y servicios del equipo
+   */
+  async obtenerTrazabilidadEquipo(id: number): Promise<TrazabilidadEquipoResponse> {
+    const response = await apiClient.get<{ success: boolean; data: TrazabilidadEquipoResponse }>(
+      `/equipos/${id}/trazabilidad-servicios`,
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Actualiza datos específicos del equipo (JSONB Modular, Motor, Generador, Bomba)
+   */
+  async actualizarDatosEspecificos(
+    id: number,
+    payload: UpdateDatosEspecificosPayload,
+  ): Promise<{ success: boolean; data: EquipoDetalle }> {
+    const response = await apiClient.patch<{ success: boolean; data: EquipoDetalle }>(
+      `/equipos/${id}/datos-especificos`,
+      payload,
+    );
+    return response.data;
+  },
+};
+
+export const clientesService = {
+  async listarClientesParaSelect(): Promise<ClienteOption[]> {
+    const response = await apiClient.get<{ data: ClienteOption[] }>('/clientes?limit=1000');
+    return response.data?.data || [];
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HOOKS REACT QUERY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const equiposKeys = {
+  all: ['equipos'] as const,
+  lists: () => [...equiposKeys.all, 'list'] as const,
+  list: (params: Record<string, unknown>) => [...equiposKeys.lists(), params] as const,
+  details: () => [...equiposKeys.all, 'detail'] as const,
+  detail: (id: number) => [...equiposKeys.details(), id] as const,
+};
+
+export const clientesKeys = {
+  forSelect: ['clientes', 'select'] as const,
+};
+
+export function useEquipos(params?: ListarEquiposParams) {
   return useQuery({
-    queryKey: equiposKeys.list(params || {}),
+    queryKey: equiposKeys.list((params || {}) as Record<string, unknown>),
     queryFn: () => equiposService.listarEquipos(params),
     placeholderData: (previousData) => previousData,
   });
 }
 
-/**
- * Hook para obtener un equipo por ID
- */
 export function useEquipo(id: number) {
   return useQuery({
     queryKey: equiposKeys.detail(id),
@@ -271,9 +288,6 @@ export function useEquipo(id: number) {
   });
 }
 
-/**
- * Hook para crear equipo
- */
 export function useCrearEquipo() {
   const queryClient = useQueryClient();
 
@@ -285,28 +299,26 @@ export function useCrearEquipo() {
   });
 }
 
-/**
- * Hook para obtener clientes para select
- */
 export function useClientesParaSelect() {
   return useQuery({
     queryKey: clientesKeys.forSelect,
     queryFn: () => clientesService.listarClientesParaSelect(),
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 5 * 60 * 1000,
   });
 }
 
-/**
- * ✅ 08-ENE-2026: Hook para cambiar estado de equipo con historial
- */
 export function useCambiarEstadoEquipo() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, nuevo_estado, motivo_cambio }: {
+    mutationFn: ({
+      id,
+      nuevo_estado,
+      motivo_cambio,
+    }: {
       id: number;
       nuevo_estado: string;
-      motivo_cambio?: string
+      motivo_cambio?: string;
     }) => equiposService.cambiarEstado(id, { nuevo_estado, motivo_cambio }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
@@ -315,17 +327,18 @@ export function useCambiarEstadoEquipo() {
   });
 }
 
-/**
- * ✅ 08-ENE-2026: Hook para registrar lectura de horómetro
- */
 export function useRegistrarLecturaHorometro() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, horas_lectura, observaciones }: {
+    mutationFn: ({
+      id,
+      horas_lectura,
+      observaciones,
+    }: {
       id: number;
       horas_lectura: number;
-      observaciones?: string
+      observaciones?: string;
     }) => equiposService.registrarLecturaHorometro(id, { horas_lectura, observaciones }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: equiposKeys.lists() });
@@ -334,9 +347,6 @@ export function useRegistrarLecturaHorometro() {
   });
 }
 
-/**
- * Hook para actualizar equipo completo
- */
 export function useActualizarEquipo() {
   const queryClient = useQueryClient();
 
@@ -350,9 +360,6 @@ export function useActualizarEquipo() {
   });
 }
 
-/**
- * ✅ 23-FEB-2026: Hook para actualizar datos específicos del equipo (Motor, Generador, Bomba)
- */
 export function useActualizarDatosEspecificos() {
   const queryClient = useQueryClient();
 
@@ -366,9 +373,6 @@ export function useActualizarDatosEspecificos() {
   });
 }
 
-/**
- * ⚠️ Hook para eliminación completa de equipo
- */
 export function useEliminarEquipoCompletamente() {
   const queryClient = useQueryClient();
 
@@ -380,10 +384,6 @@ export function useEliminarEquipoCompletamente() {
     },
   });
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TIPOS Y HOOK DE TRAZABILIDAD / HOJA DE VIDA DEL EQUIPO
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export interface TrazabilidadEquipoResponse {
   equipo: {
@@ -435,7 +435,7 @@ export interface TrazabilidadEquipoResponse {
       precio_unitario: number;
       catalogo_servicios: {
         id_servicio: number;
-        codigo_servicio: string;
+        codigo_servicio: true;
         nombre_servicio: string;
         categoria: string;
         duracion_estimada_horas?: number;
@@ -464,9 +464,6 @@ export interface TrazabilidadEquipoResponse {
   }>;
 }
 
-/**
- * Hook para obtener la hoja de vida y trazabilidad de servicios del equipo
- */
 export function useTrazabilidadEquipo(id: number, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['trazabilidad-equipo', id],
@@ -476,10 +473,6 @@ export function useTrazabilidadEquipo(id: number, options?: { enabled?: boolean 
   });
 }
 
-
-/**
- * Hook para obtener las facetas y marcas disponibles dinámicamente según el tipo de equipo
- */
 export function useFacetasEquipos(tipo?: string) {
   return useQuery({
     queryKey: ['equipos', 'facetas', tipo || 'TODOS'],

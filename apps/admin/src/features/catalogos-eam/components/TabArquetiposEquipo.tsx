@@ -284,27 +284,7 @@ export function TabArquetiposEquipo() {
         </div>
       </div>
 
-      {/* SIMULADOR INTERACTIVO EN VIVO: FORMULARIO DE REGISTRO Y PLACA TÉCNICA PDF */}
-      {showPreviewPanel && selectedArquetipo && (
-        <div>
-          {loadingEsquema || !esquemaVivo ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 flex flex-col items-center justify-center">
-              <Loader2 className="h-7 w-7 animate-spin text-indigo-600 mb-2" />
-              <p className="text-xs font-medium text-slate-500">
-                Preparando simulador de formulario y placa técnica...
-              </p>
-            </div>
-          ) : (
-            <DynamicEquipmentFormPreview
-              esquema={esquemaVivo}
-              modelosOem={modelosOem}
-              magnitudes={magnitudes}
-            />
-          )}
-        </div>
-      )}
-
-      {/* CONFIGURACIÓN DE PARTES Y PLANES PREVENTIVOS DEL TIPO DE EQUIPO */}
+      {/* 1° PRIORIDAD VISUAL: CONFIGURACIÓN DE PARTES Y PLANES PREVENTIVOS DEL TIPO DE EQUIPO */}
       {selectedArquetipo && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* SECCIÓN A: PARTES Y SUBSISTEMAS QUE COMPONEN ESTE EQUIPO */}
@@ -506,6 +486,26 @@ export function TabArquetiposEquipo() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 2° DEBAJO DE PARTES Y PLANES: SIMULADOR INTERACTIVO EN VIVO (FORMULARIO Y PLACA TÉCNICA PDF) */}
+      {showPreviewPanel && selectedArquetipo && (
+        <div>
+          {loadingEsquema || !esquemaVivo ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 flex flex-col items-center justify-center">
+              <Loader2 className="h-7 w-7 animate-spin text-indigo-600 mb-2" />
+              <p className="text-xs font-medium text-slate-500">
+                Preparando simulador de formulario y placa técnica...
+              </p>
+            </div>
+          ) : (
+            <DynamicEquipmentFormPreview
+              esquema={esquemaVivo}
+              modelosOem={modelosOem}
+              magnitudes={magnitudes}
+            />
+          )}
         </div>
       )}
 

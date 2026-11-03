@@ -4,9 +4,11 @@
 
 // Componentes
 export { ConfigParametrosEditor } from './components/ConfigParametrosEditor';
+export { DynamicModularSpecsEditor } from './components/DynamicModularSpecsEditor';
 export { EquipoForm } from './components/EquipoForm';
 export { EquipoRepuestosTab } from './components/EquipoRepuestosTab';
 export { EquipoPendientesTab } from './components/EquipoPendientesTab';
+export { FichaTecnicaPolimorficaEam } from './components/FichaTecnicaPolimorficaEam';
 export { HojaVidaEquipo } from './components/hoja-vida-equipo';
 
 // Servicios y hooks

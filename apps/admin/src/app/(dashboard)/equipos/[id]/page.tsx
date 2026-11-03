@@ -16,6 +16,7 @@
 import {
   EquipoPendientesTab,
   EquipoRepuestosTab,
+  FichaTecnicaPolimorficaEam,
   HojaVidaEquipo,
   useCambiarEstadoEquipo,
   useEquipo,
@@ -1346,20 +1347,8 @@ export default function EquipoDetallePage() {
             </div>
           )}
 
-          {/* Especificaciones Técnicas Polimórficas */}
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-2">
-              <Gauge className="h-4 w-4 text-blue-600" />
-              Placa de Especificaciones de Ingeniería ({equipo.tipo})
-            </h2>
-            {equipo.tipo === 'GENERADOR' && (
-              <FichaTecnicaGenerador datos={datosEspecificos} motor={motor} />
-            )}
-            {equipo.tipo === 'BOMBA' && <FichaTecnicaBomba datos={datosEspecificos} motor={motor} />}
-            {equipo.tipo !== 'GENERADOR' && equipo.tipo !== 'BOMBA' && motor && (
-              <FichaTecnicaGenerador datos={datosEspecificos} motor={motor} />
-            )}
-          </div>
+          {/* Especificaciones Técnicas Polimórficas EAM 360° (JSONB + Satélites + Esquema Hub) */}
+          <FichaTecnicaPolimorficaEam equipo={equipo} onUpdated={() => refetch()} />
 
           {/* Observaciones y Configuración Especial */}
           {(equipo.observaciones_generales ||

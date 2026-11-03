@@ -1,7 +1,7 @@
 # MEKANOS ERP / EAM - METAMODELO UNIVERSAL DE ACTIVOS
 ## Documento Maestro 02: Plan de Rutas de Desarrollo Atómico Nuclear
 
-> **Estado:** Fases 0, 1, 2, 3 y 3.5 Completadas y Certificadas al 100% / Fases 4 y 5 Planificadas  
+> **Estado:** Fases 0, 1, 2, 3, 3.5 y 4 Completadas y Certificadas al 100% / Fase 5 Planificada  
 > **Estrategia:** Zero-Trust, First-Principles, Adición sin Regresiones, Paridad 1:1 de Ingeniería  
 > **Fecha de Actualización:** Noviembre 2026  
 
@@ -23,14 +23,16 @@
 | **Backfill & Saneamiento** | `packages/database/prisma/seeds/backfill-equipos-eam.ts` | Migración de 467 equipos a JSONB + 15 corregidos + B-Tree | ✅ Certificado (467/467) |
 | **Proyección B-Tree** | `apps/api/src/equipos/services/equipo-filter-projection.service.ts` | Proyección de filtros en `equipos_atributos_filtro` | ✅ Certificado (2,276 filas) |
 | **Catálogos API REST** | `apps/api/src/catalogos-eam/` | CRUD completo de magnitudes, UoM, atributos, módulos, arquetipos canónicos y OEM | ✅ Certificado (9/9 Tests) |
-| **Gestión Equipos** | `apps/api/src/equipos/equipos-gestion.service.ts` | Clasificación canónica por `tipos_equipo`, doble escritura y filtros B-Tree | ✅ Certificado |
+| **Gestión Equipos** | `apps/api/src/equipos/equipos-gestion.service.ts` | Clasificación canónica, doble escritura, herencia Kit BOM OEM y filtros B-Tree con conversión SI | ✅ Certificado F4 |
 | **Sidebar Admin** | `apps/admin/src/components/layout/sidebar.tsx` | Entrada única `Catálogo de Equipos Maestros` bajo Configuración | ✅ Certificado F3.5 |
 | **Traductor Humano EAM** | `apps/admin/src/features/catalogos-eam/utils/eam-humanizer.ts` | Traducción 100% lenguaje humano y parser seguro de `opciones_json` | ✅ Certificado F3.5 |
 | **Simulador Ficha/PDF** | `apps/admin/src/features/catalogos-eam/components/DynamicEquipmentFormPreview.tsx` | Formulario interactivo en vivo + Placa Técnica PDF corporativa | ✅ Certificado F3.5 |
-| **Hub Maestros EAM** | `apps/admin/src/app/(dashboard)/configuracion/catalogos-eam/` | Barra única Top-Down (1→5), cero jerga de programador, BOM real WMS | ✅ Certificado F3.5 |
+| **Hub Maestros EAM** | `apps/admin/src/app/(dashboard)/configuracion/catalogos-eam/` | Barra única Top-Down (1→5), Partes/Planes prioritarios sobre simulador, cero truncado | ✅ Certificado F3.5 + F4.0 |
 | **Compatibilidad Ruta** | `apps/admin/src/app/(dashboard)/configuracion/equipos-maestros/` | Redirección canónica hacia `/configuracion/catalogos-eam` | ✅ Completado F3 |
-| **Directorio Equipos** | `apps/admin/src/app/(dashboard)/equipos/` | Directorio universal con tarjetas y KPIs dinámicos | ⏳ Fase 4 |
-| **Formulario Activos** | `apps/admin/src/features/equipos/components/form-equipo-dinamico.tsx` | Form Engine adaptativo basado en arquetipos | ⏳ Fase 4 |
+| **Directorio Equipos** | `apps/admin/src/app/(dashboard)/equipos/page.tsx` | Directorio universal con selector dinámico del Hub, KPIs JSONB y panel `🎛️ Filtros Técnicos` B-Tree | ✅ Certificado F4 |
+| **Editor Modular EAM** | `apps/admin/src/features/equipos/components/DynamicModularSpecsEditor.tsx` | Motor de campos dinámicos por Parte/Subsistema con conversión UoM en vivo ($y = ax + b$) | ✅ Certificado F4 |
+| **Wizard & Edición** | `apps/admin/src/features/equipos/components/EquipoForm.tsx` & `/equipos/[id]/editar/` | Wizard polimórfico de 3 pasos con pre-llenado Modelo de Fábrica, herencia Kit BOM WMS y planes heredados | ✅ Certificado F4 |
+| **Ficha Técnica 360°** | `apps/admin/src/features/equipos/components/FichaTecnicaPolimorficaEam.tsx` | Expediente 360° polimórfico en `/equipos/[id]` con KPIs de placa, equivalencias SI y edición rápida | ✅ Certificado F4 |
 | **PDF Universal** | `apps/api/src/pdf/templates/tipo-universal-eam.template.ts` | Renderizado adaptativo HTML/Puppeteer | ⏳ Fase 5 |
 | **Sincronización Móvil** | `apps/api/src/sync/sync.service.ts` | Snapshots inmutables de parámetros y unidades | ⏳ Fase 5 |
 
@@ -89,46 +91,38 @@
 **Objetivo:** Erradicar el 100% de la jerga de programador (*Developer-Speak*), eliminar la doble barra superior que consumía el 55% de la pantalla, reordenar las 5 pestañas en orden mental humano Top-Down (de lo General a lo Específico), corregir bugs visuales (`[object Object]`, `CMP-TEST-001`) y transformar la vista previa en un simulador interactivo real de Formulario y Placa PDF.
 
 ### Checklist de Ejecución y Certificación:
-- [x] **3.5.1 Unificación de Barra Superior y Reordenamiento Top-Down (1 → 5):**
-  - En `sidebar.tsx`: Eliminado ítem duplicado dentro de `Catálogos` y corregido `useEffect` de auto-expansión; entrada única limpia **`Catálogo de Equipos Maestros`** bajo `Configuración`.
-  - En `/configuracion/catalogos-eam/page.tsx`: Eliminada la doble botonera redundante y reemplazada por **1 Sola Barra de Navegación Compacta con KPIs Integrados** en orden Top-Down:
-    1. **`1. Tipos de Equipo`** *(4 Clases • 464 Equipos)* (Activa por defecto)
-    2. **`2. Modelos de Fábrica y Kits BOM`** *(4 Modelos Preconfigurados)*
-    3. **`3. Partes y Subsistemas`** *(5 Módulos Reutilizables)*
-    4. **`4. Catálogo de Campos Técnicos`** *(145 Campos de Ficha)*
-    5. **`5. Unidades de Medida`** *(11 Magnitudes • Conversor)*
-- [x] **3.5.2 Erradicación del 100% de Jerga de Programador (`eam-humanizer.ts`):**
-  - Eliminados textos técnicos internos (`ZERO-TRUST`, `B-Tree`, `snake_case`, `NUMERICO_MAGNITUD`, `TEXTO_CORTO`, `BOOLEANO`, `SELECTOR`, `ESTANDAR`, `LO_QUE_OCURRA_PRIMERO`).
-  - Traducidos controles a badges humanos (`# Número con Unidad`, `# Número Simple`, `☰ Lista de Opciones`, `Aa Texto`, `✓ Sí / No`), switches a `Obligatorio`, `Permitir Filtrar`, `Destacar en Tarjeta (KPI)`, `Imprimir en PDF`, y criterios preventivos a `Lo que ocurra primero (Días u Horas)`.
-- [x] **3.5.3 Corrección de `[object Object]`, Contexto de Parte/Subsistema y 0 Issues en Next.js (`TabDiccionarioAtributos.tsx`):**
-  - Parser seguro `parseOpcionesSeguras()` para `opciones_json` (`{ valor, etiqueta }`) con claves únicas y límite visual de 4 opciones + badge `+N más` con tooltip.
-  - Nueva columna y filtro **`Parte / Subsistema donde se usa`** (`Motor Combustión`, `Alternador / Generador`, `Bomba Hidráulica`, `Motor Eléctrico`, `Compresor de Aire`).
-- [x] **3.5.4 Orden por Relevancia Operativa y Simulador Interactivo `<DynamicEquipmentFormPreview />` (`TabArquetiposEquipo.tsx`):**
-  - Tipos de Equipo ordenados por parque activo descendente: 1° **Generador Eléctrico (259)**, 2° **Bomba Hidráulica (203)**, 3° **Motor Industrial (2)**, 4° **Compresor de Aire Industrial (1)**.
-  - Corregida obligatoriedad en `Motor Industrial` (`motor_electrico` principal, `motor_combustion` opcional).
-  - Componente reutilizable `<DynamicEquipmentFormPreview />` con conmutador en vivo: **`[ 📝 Así se verá el Formulario de Registro ]`** (inputs reales, conversión automática de unidades UoM, listas desplegables, switches Sí/No y pre-llenado con Modelo de Fábrica) y **`[ 📄 Así se verá la Placa Técnica en el PDF ]`**.
-- [x] **3.5.5 Saneamiento de Kits BOM Reales WMS y Visor Humano de Especificaciones (`TabModelosOemBom.tsx`):**
-  - Erradicado el ítem de prueba `CMP-TEST-001` en `modelos_equipo_bom` y reemplazado por 12 artículos reales activos de `catalogo_componentes` (filtros Baldwin/Fleetguard, lubricantes Mobil/Shell, baterías Willard, correas Gates).
-  - Visor de especificaciones por defecto traducido a **Nombre Humano del Campo + Valor con Unidad / Etiqueta**.
-- [x] **3.5.6 Compactación del Conversor de Unidades en 1 Fila (`TabMagnitudesUom.tsx`):**
-  - Barra horizontal compacta en 1 sola fila para dejar las 11 Magnitudes y sus Unidades visibles sin scroll vertical.
+- [x] **3.5.1 Unificación de Barra Superior y Reordenamiento Top-Down (1 → 5)**
+- [x] **3.5.2 Erradicación del 100% de Jerga de Programador (`eam-humanizer.ts`)**
+- [x] **3.5.3 Corrección de `[object Object]`, Contexto de Parte/Subsistema y 0 Issues en Next.js (`TabDiccionarioAtributos.tsx`)**
+- [x] **3.5.4 Orden por Relevancia Operativa y Simulador Interactivo `<DynamicEquipmentFormPreview />` (`TabArquetiposEquipo.tsx`)**
+- [x] **3.5.5 Saneamiento de Kits BOM Reales WMS y Visor Humano de Especificaciones (`TabModelosOemBom.tsx`)**
+- [x] **3.5.6 Compactación del Conversor de Unidades en 1 Fila (`TabMagnitudesUom.tsx`)**
 
 ---
 
-## 7. Fase 4: Directorio Universal y Form Engine Adaptativo
+## 7. Fase 4: Directorio Universal `/equipos` con Filtros B-Tree, Wizard Polimórfico con Herencia OEM/BOM y Expediente 360° Dinámico [ ✅ COMPLETADA ]
 
-**Objetivo:** Proveer a los coordinadores de mantenimiento de una interfaz visual fluida para dar de alta y editar cualquier tipo de maquinaria sin formularios rígidos.
+**Objetivo:** Conectar el Motor EAM Universal a la operación diaria en `/equipos` y `/equipos/[id]` para que el usuario opere cualquier clase de equipo (Generadores, Bombas, Motores, Compresores y cualquier nuevo tipo) con filtros B-Tree dimensionales, herencia de Modelos de Fábrica + Kits BOM reales del WMS y Ficha Técnica Polimórfica 360°.
 
-### Tareas Nucleares:
-1. **Directorio Universal de Equipos (`apps/admin/src/app/(dashboard)/equipos/`):**
-   - Tarjetas de activos enriquecidas con insignias de arquetipo canónico (`GENERADOR`, `BOMBA`, `COMPRESOR`, `HVAC`, `ELEVADOR`, `OTRO`).
-   - KPIs de cabecera dinámicos renderizados mediante `EquipoSpecsReader.getKpisHeader()`.
-   - Filtros avanzados B-Tree por atributos técnicos (potencia, presión, caudal, voltaje) utilizando `equipos_atributos_filtro`.
-2. **Form Engine Dinámico (`apps/admin/src/features/equipos/components/form-equipo-dinamico.tsx`):**
-   - Carga dinámica del esquema según el tipo de equipo seleccionado (`GET /catalogos/arquetipos/:id/esquema`).
-   - Renderizado modular agrupado por `modulos_tecnicos` y sus `grupo_visual`.
-   - Controles adaptativos tipados (selectores de unidad UoM vinculados al motor afín, campos numéricos con rangos de tolerancia, selectores de opciones).
-   - Pre-visualización en tiempo real de la Placa Técnica Universal antes de guardar.
+### Checklist de Ejecución y Certificación:
+- [x] **4.0 Ajuste Rápido en Pestaña 1 y Pestañas Superiores del Hub (`/configuracion/catalogos-eam`):**
+  - En `TabArquetiposEquipo.tsx`: Invertido el orden vertical debajo de las 4 tarjetas de Tipos de Equipo para mostrar **primero** la fila de 2 columnas (`Partes y Subsistemas del Equipo` + `Planes de Mantenimiento Preventivo`) y **justo debajo** el `Simulador Interactivo` (`<DynamicEquipmentFormPreview />`).
+  - En `/configuracion/catalogos-eam/page.tsx`: Eliminado el truncado `...` en los botones de las 5 pestañas superiores (`2. Modelos de Fábrica y Kits BOM`, `4. Catálogo de Campos Técnicos`).
+- [x] **4.1 Directorio Universal `/equipos` con Filtros Técnicos B-Tree y KPIs Dinámicos (`apps/admin/src/app/(dashboard)/equipos/page.tsx` & `EquiposGestionService`):**
+  - Selector superior de Tipos de Equipo dinámico alimentado por `useArquetiposEam()` + sincronización con los 4 filtros rápidos superiores.
+  - Resolución polimórfica de KPIs inferiores en `EquipoCard` desde `especificaciones JSONB` + `datos_especificos` + `motor` (certificando que el Compresor `ID 214` `BOM-TAKU-HL3IAD` muestre su Presión, Caudal y Potencia reales en la tarjeta).
+  - Panel desplegable **`🎛️ Filtros Técnicos`** conectado al índice B-Tree (`equipos_atributos_filtro`) con:
+    - Selector de Campo Filtrable (`es_filtrable = true` del Hub + catálogo canónico).
+    - Rango numérico (`Valor Mínimo`, `Valor Máximo`) con **Selector de Unidad de Medida** (`filtroAtributoUnidad`) y conversión automática en el backend hacia la unidad base SI mediante `UomConversionService` ($y = ax + b$).
+    - Filtro de texto/selector con chips de sugerencia rápida y filtro booleano (`✓ Sí` / `✕ No`).
+- [x] **4.2 Nuevo Wizard Dinámico de Registro y Edición (`EquipoForm.tsx`, `DynamicModularSpecsEditor.tsx`, `/equipos/[id]/editar/page.tsx`):**
+  - **Paso 1:** Tarjetas dinámicas de Tipo de Equipo desde el Hub + selector **`⚡ Pre-llenar con Modelo de Fábrica (Opcional)`** + casilla marcada por defecto para vincular automáticamente el Kit de Repuestos sugerido del modelo a `componentes_equipo` (matriz BOM del activo).
+  - **Paso 2:** Eliminada la redundancia `Categoría Técnica *`, conectado el botón **`✨ Generar`** al `codigo_corto` del tipo seleccionado (`GEN-`, `BOM-`, `MOT-`, `COMP-`), adaptado el nombre del contador y reemplazadas las 4 cajas fijas por **`📅 Planes de Mantenimiento Preventivo Heredados`**.
+  - **Paso 3:** Renderizado modular con `<DynamicModularSpecsEditor />` agrupado por **Parte / Subsistema** y **Sección (`grupo_visual`)**, conversión matemática en vivo al cambiar la unidad de medida, badges `De fábrica` / `Personalizado` y persistencia Dual-Write (`especificaciones JSONB` + tablas satélite + proyección B-Tree + herencia BOM).
+- [x] **4.3 Ficha Técnica Polimórfica en el Expediente 360° (`/equipos/[id]/page.tsx` & `FichaTecnicaPolimorficaEam.tsx`):**
+  - Cabecera de **Indicadores Principales de Placa (KPIs)** con equivalencias automáticas (`Litros ≈ Galones`, `PSI ≈ bar`, `m³/h ≈ GPM`, `CFM ≈ m³/h`, `HP ≈ kW`).
+  - Bloques modulares limpios por cada **Parte / Subsistema** y **Sección** (visibilizando la ficha completa de Generadores, Bombas, Motores y el Compresor `ID 214`).
+  - Modal de edición rápida in-place **"Editar Especificaciones Técnicas"** impulsado por `<DynamicModularSpecsEditor />` y conectado a `PATCH /api/equipos/:id/datos-especificos`.
 
 ---
 

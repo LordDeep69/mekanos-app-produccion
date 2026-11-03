@@ -5,6 +5,7 @@ import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
  * DTO para filtrar equipos en listados
  * ✅ FASE 2: Campos mapeados a schema real (snake_case)
  * ✅ SMART FACETS EAM: Filtros dinámicos por marcas de subsistema y métricas de operación
+ * ✅ FASE 4: Filtro B-Tree Normalizado EAM con Conversión UoM en Vivo y Booleanos
  */
 export class GetEquiposQueryDto {
   @IsOptional()
@@ -87,8 +88,16 @@ export class GetEquiposQueryDto {
   filtroAtributoValorMax?: number;
 
   @IsOptional()
+  @IsString({ message: 'filtroAtributoUnidad debe ser una cadena de texto' })
+  filtroAtributoUnidad?: string;
+
+  @IsOptional()
   @IsString({ message: 'filtroAtributoTexto debe ser una cadena de texto' })
   filtroAtributoTexto?: string;
+
+  @IsOptional()
+  @IsString({ message: 'filtroAtributoBooleano debe ser una cadena de texto' })
+  filtroAtributoBooleano?: string;
 
   @IsOptional()
   @IsString({ message: 'sortBy debe ser una cadena de texto' })

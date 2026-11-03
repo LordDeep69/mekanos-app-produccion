@@ -2,7 +2,7 @@
 
 /**
  * MEKANOS S.A.S - Portal Admin
- * Configuración de Equipos Maestros y Fichas Técnicas (Fase 3.5)
+ * Configuración de Equipos Maestros y Fichas Técnicas (Fase 3.5 / 4.0)
  * Ruta: /configuracion/catalogos-eam
  *
  * Diseño ergonómico Top-Down (de lo General a lo Específico):
@@ -139,32 +139,32 @@ export default function CatalogosEamHubPage() {
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`rounded-xl border px-3.5 py-2.5 text-left transition-all flex items-center gap-3 ${
+              className={`rounded-xl border px-3 py-2.5 text-left transition-all flex items-center gap-2.5 ${
                 isActive
                   ? tab.activeClasses
                   : 'bg-slate-50/70 border-slate-200/80 hover:bg-slate-100 hover:border-slate-300 text-slate-800'
               }`}
             >
               <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
                   isActive
                     ? tab.iconBgClass
                     : 'bg-white border border-slate-200 text-slate-600'
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" />
               </div>
 
               <div className="min-w-0 flex-1">
                 <div
-                  className={`text-xs font-extrabold leading-tight truncate ${
+                  className={`text-[11.5px] font-extrabold leading-snug ${
                     isActive ? 'text-white' : 'text-slate-900'
                   }`}
                 >
                   {tab.stepNum}. {tab.title}
                 </div>
                 <div
-                  className={`text-[11px] font-semibold mt-0.5 truncate ${
+                  className={`text-[10.5px] font-semibold mt-0.5 leading-snug ${
                     isActive ? 'text-slate-300' : 'text-slate-500'
                   }`}
                 >

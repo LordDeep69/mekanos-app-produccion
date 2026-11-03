@@ -134,7 +134,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
         // Verificar que las imágenes se cargaron (opcional, para debug)
         const imagenesCargadas = await page.evaluate(() => {
-          const imgs = Array.from(document.querySelectorAll('img'));
+          const imgs = Array.from((globalThis as any).document.querySelectorAll('img'));
           return {
             total: imgs.length,
             completadas: imgs.filter((img: any) => img.complete && img.naturalWidth > 0).length,

@@ -1,15 +1,16 @@
-﻿/**
+/**
  * DTO UNIFICADO PARA CREACIÓN DE EQUIPOS - MEKANOS S.A.S
- * 
- * Maneja la creación polimórfica de equipos:
- * - Tabla padre: equipos
- * - Tabla hijo: equipos_generador | equipos_bomba | equipos_motor
- * 
- * Versión: 4.0 - 100% Fidelidad SQL Schema
+ *
+ * Maneja la creación polimórfica y modular de equipos (Fase 4 EAM Universal):
+ * - Tabla padre: equipos (con especificaciones JSONB y id_modelo_equipo)
+ * - Tablas satélite (Dual-Write): equipos_generador | equipos_bomba | equipos_motor
+ * - Proyección automática B-Tree: equipos_atributos_filtro
+ * - Herencia opcional de Kit BOM desde Modelo de Fábrica: componentes_equipo
  */
 
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -28,12 +29,12 @@ import {
   Min,
   MinLength,
   ValidateIf,
-  ValidateNested
+  ValidateNested,
 } from 'class-validator';
 
-// 
+//
 // ENUMS (Sincronizados con SQL)
-// 
+//
 
 export enum TipoEquipoDiscriminator {
   GENERADOR = 'GENERADOR',
@@ -112,9 +113,9 @@ export enum AplicacionBombaEnum {
   RIEGO = 'RIEGO',
 }
 
-// 
+//
 // DTO DATOS COMUNES DEL EQUIPO (TABLA PADRE: equipos)
-// 
+//
 
 export class DatosEquipoBaseDto {
   @IsString()
@@ -137,6 +138,11 @@ export class DatosEquipoBaseDto {
   @IsInt()
   @IsPositive()
   id_sede?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_modelo_equipo?: number;
 
   @IsOptional()
   @IsString()
@@ -185,11 +191,64 @@ export class DatosEquipoBaseDto {
   @IsOptional()
   @IsDateString()
   fecha_fin_garantia?: string;
+
+  @IsOptional()
+  @IsString()
+  proveedor_garantia?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  horas_actuales?: number;
+
+  @IsOptional()
+  @IsString()
+  tipo_contrato?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  intervalo_tipo_a_dias_override?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  intervalo_tipo_a_horas_override?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  intervalo_tipo_b_dias_override?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  intervalo_tipo_b_horas_override?: number;
+
+  @IsOptional()
+  @IsString()
+  criterio_intervalo_override?: string;
+
+  @IsOptional()
+  @IsString()
+  estado_pintura?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  requiere_pintura?: boolean;
+
+  @IsOptional()
+  @IsString()
+  observaciones_generales?: string;
+
+  @IsOptional()
+  @IsString()
+  configuracion_especial?: string;
 }
 
-// 
+//
 // DTO DATOS DEL MOTOR (TABLA: equipos_motor)
-// 
+//
 
 export class DatosMotorDto {
   @IsEnum(TipoMotorEnum)
@@ -221,11 +280,8 @@ export class DatosMotorDto {
   @IsInt()
   velocidad_nominal_rpm?: number;
 
-  // ═══════════════════════════════════════════════════════
-  // CAMPOS COMBUSTIÓN (Validados condicionalmente)
-  // ═══════════════════════════════════════════════════════
-  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.COMBUSTION)
-  @IsNotEmpty({ message: 'El tipo de combustible es obligatorio para motores a combustión' })
+  // CAMPOS COMBUSTIÓN
+  @IsOptional()
   @IsEnum(TipoCombustibleEnum)
   tipo_combustible?: TipoCombustibleEnum;
 
@@ -237,13 +293,15 @@ export class DatosMotorDto {
 
   @IsOptional()
   @IsInt()
+  cilindrada_cc?: number;
+
+  @IsOptional()
+  @IsInt()
   @IsIn([12, 24, 48], { message: 'El voltaje de arranque debe ser 12, 24 o 48 VDC' })
   voltaje_arranque_vdc?: number;
 
   @IsOptional()
   @IsNumber()
-  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.COMBUSTION)
-  @IsNotEmpty({ message: 'La capacidad de aceite es obligatoria para motores a combustión' })
   capacidad_aceite_litros?: number;
 
   @IsOptional()
@@ -319,20 +377,14 @@ export class DatosMotorDto {
   @MaxLength(100)
   tipo_refrigerante?: string;
 
-  // ═══════════════════════════════════════════════════════
-  // CAMPOS ELÉCTRICOS (Validados condicionalmente)
-  // ═══════════════════════════════════════════════════════
+  // CAMPOS ELÉCTRICOS
   @IsOptional()
   @IsString()
   @MaxLength(30)
-  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.ELECTRICO)
-  @IsNotEmpty({ message: 'El voltaje de operación es obligatorio para motores eléctricos' })
   voltaje_operacion_vac?: string;
 
   @IsOptional()
   @IsEnum(NumeroFasesEnum)
-  @ValidateIf(o => o.tipo_motor === TipoMotorEnum.ELECTRICO)
-  @IsNotEmpty({ message: 'El número de fases es obligatorio para motores eléctricos' })
   numero_fases?: NumeroFasesEnum;
 
   @IsOptional()
@@ -369,9 +421,9 @@ export class DatosMotorDto {
   metadata?: any;
 }
 
-// 
+//
 // DTO DATOS ESPECÍFICOS DE GENERADOR (TABLA: equipos_generador)
-// 
+//
 
 export class DatosGeneradorDto {
   @IsString()
@@ -417,9 +469,10 @@ export class DatosGeneradorDto {
   @Max(1.0)
   factor_potencia?: number;
 
+  @IsOptional()
   @IsString()
   @MaxLength(50)
-  voltaje_salida: string;
+  voltaje_salida?: string;
 
   @IsOptional()
   @IsInt()
@@ -487,8 +540,6 @@ export class DatosGeneradorDto {
 
   @IsOptional()
   @IsNumber()
-  @ValidateIf(o => o.tiene_tanque_auxiliar === true)
-  @IsNotEmpty({ message: 'La capacidad del tanque auxiliar es obligatoria si se indica que tiene uno' })
   capacidad_tanque_auxiliar_litros?: number;
 
   @IsOptional()
@@ -514,9 +565,9 @@ export class DatosGeneradorDto {
   metadata?: any;
 }
 
-// 
+//
 // DTO DATOS ESPECÍFICOS DE BOMBA (TABLA: equipos_bomba)
-// 
+//
 
 export class DatosBombaDto {
   @IsString()
@@ -533,8 +584,9 @@ export class DatosBombaDto {
   @MaxLength(100)
   numero_serie_bomba?: string;
 
+  @IsOptional()
   @IsEnum(TipoBombaEnum)
-  tipo_bomba: TipoBombaEnum;
+  tipo_bomba?: TipoBombaEnum;
 
   @IsOptional()
   @IsEnum(AplicacionBombaEnum)
@@ -578,8 +630,6 @@ export class DatosBombaDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @ValidateIf(o => o.numero_total_bombas_sistema !== undefined)
-  @IsNotEmpty({ message: 'La posición es obligatoria si hay un sistema múltiple' })
   numero_bomba_en_sistema?: number;
 
   @IsOptional()
@@ -616,8 +666,6 @@ export class DatosBombaDto {
 
   @IsOptional()
   @IsNumber()
-  @ValidateIf(o => o.tiene_presostato === true)
-  @IsNotEmpty({ message: 'La presión de apagado es obligatoria si usa presostato' })
   presion_apagado_psi?: number;
 
   @IsOptional()
@@ -722,13 +770,17 @@ export class DatosBombaDto {
   metadata?: any;
 }
 
-// 
-// DTO PRINCIPAL UNIFICADO
-// 
+//
+// DTO PRINCIPAL UNIFICADO (FASE 4 EAM UNIVERSAL + BACKWARD COMPATIBLE)
+//
 
 export class CreateEquipoCompletoDto {
-  @IsEnum(TipoEquipoDiscriminator)
-  tipo: TipoEquipoDiscriminator;
+  /**
+   * Código del tipo de equipo (GENERADOR, BOMBA, MOTOR, COMPRESOR o cualquier nuevo arquetipo del Hub).
+   */
+  @IsString()
+  @IsNotEmpty()
+  tipo: string;
 
   @IsNotEmpty()
   @ValidateNested()
@@ -736,8 +788,7 @@ export class CreateEquipoCompletoDto {
   datosEquipo: DatosEquipoBaseDto;
 
   /**
-   * Datos del motor.
-   * Casi siempre requerido para Generadores y Bombas.
+   * Datos del motor (satélite legado o mapeado desde especificaciones).
    */
   @IsOptional()
   @ValidateNested()
@@ -746,37 +797,74 @@ export class CreateEquipoCompletoDto {
 
   /**
    * Datos específicos de generador.
-   * REQUERIDO si tipo === 'GENERADOR'
+   * Requerido para tipo GENERADOR solo cuando no se envía el documento modular especificaciones.
    */
-  @ValidateIf((o) => o.tipo === TipoEquipoDiscriminator.GENERADOR)
-  @IsNotEmpty({ message: 'datosGenerador es requerido para equipos tipo GENERADOR' })
+  @ValidateIf((o) => (o.tipo === TipoEquipoDiscriminator.GENERADOR || o.tipo === 'GEN') && !o.especificaciones)
+  @IsNotEmpty({ message: 'datosGenerador o especificaciones es requerido para equipos tipo GENERADOR' })
   @ValidateNested()
   @Type(() => DatosGeneradorDto)
   datosGenerador?: DatosGeneradorDto;
 
   /**
    * Datos específicos de bomba.
-   * REQUERIDO si tipo === 'BOMBA'
+   * Requerido para tipo BOMBA solo cuando no se envía el documento modular especificaciones.
    */
-  @ValidateIf((o) => o.tipo === TipoEquipoDiscriminator.BOMBA)
-  @IsNotEmpty({ message: 'datosBomba es requerido para equipos tipo BOMBA' })
+  @ValidateIf((o) => (o.tipo === TipoEquipoDiscriminator.BOMBA || o.tipo === 'BOM') && !o.especificaciones)
+  @IsNotEmpty({ message: 'datosBomba o especificaciones es requerido para equipos tipo BOMBA' })
   @ValidateNested()
   @Type(() => DatosBombaDto)
   datosBomba?: DatosBombaDto;
 
   /**
+   * ✅ FASE 4 EAM UNIVERSAL: Documento modular JSONB completo
+   * { _version: 1, modulos: { ... }, origen_atributos: { ... }, unidades_personalizadas?: { ... } }
+   */
+  @IsOptional()
+  @IsObject()
+  especificaciones?: Record<string, any>;
+
+  /**
+   * ✅ FASE 4 EAM UNIVERSAL: ID del Modelo de Fábrica (OEM) seleccionado en el Paso 1
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_modelo_equipo?: number;
+
+  /**
+   * ✅ FASE 4 EAM UNIVERSAL: Si es true y hay id_modelo_equipo, vincula automáticamente el Kit BOM del modelo
+   */
+  @IsOptional()
+  @IsBoolean()
+  vincular_kit_bom?: boolean;
+
+  /**
+   * ✅ FASE 4 EAM UNIVERSAL: Planes preventivos heredados del arquetipo (con ajustes opcionales para este equipo)
+   */
+  @IsOptional()
+  @IsArray()
+  planes_preventivos_override?: Array<{
+    id_plan?: number;
+    id_tipo_servicio: number;
+    nombre_plan: string;
+    frecuencia_dias: number;
+    frecuencia_uso: number;
+    criterio_intervalo: string;
+    activo?: boolean;
+  }>;
+
+  /**
    * ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026)
    * Configuración personalizada de unidades y rangos para el equipo.
-   * Si no se proporciona, se usará el catálogo global.
    */
   @IsOptional()
   @IsObject()
   config_parametros?: Record<string, any>;
 }
 
-// 
+//
 // RESPONSE DTOs
-// 
+//
 
 export interface CreateEquipoCompletoResponse {
   success: boolean;
@@ -791,5 +879,8 @@ export interface CreateEquipoCompletoResponse {
     estado_equipo: string;
     fecha_creacion: string;
     datos_especificos: Record<string, any>;
+    especificaciones?: Record<string, any>;
+    id_modelo_equipo?: number | null;
+    repuestos_bom_vinculados?: number;
   };
 }

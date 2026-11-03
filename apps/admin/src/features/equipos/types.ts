@@ -1,15 +1,10 @@
 /**
  * TIPOS DE EQUIPOS - MEKANOS S.A.S
- * 
- * Tipos TypeScript para el módulo de gestión de equipos.
- * Versión: 4.0 - 100% Fidelidad SQL Schema & Backend DTO
+ *
+ * Tipos TypeScript para el módulo de gestión de equipos (Fase 4 EAM Universal).
  */
 
-// 
-// ENUMS
-// 
-
-export type TipoEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR';
+export type TipoEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string;
 
 export type EstadoEquipo =
   | 'OPERATIVO'
@@ -70,9 +65,12 @@ export type AplicacionBomba =
   | 'PISCINA'
   | 'RIEGO';
 
-// 
-// INTERFACES PRINCIPALES
-// 
+export interface EspecificacionesJsonEam {
+  _version?: number;
+  modulos?: Record<string, Record<string, any>>;
+  origen_atributos?: Record<string, 'MODELO' | 'CUSTOM'>;
+  unidades_personalizadas?: Record<string, string>;
+}
 
 export interface EquipoListItem {
   id_equipo: number;
@@ -82,6 +80,21 @@ export interface EquipoListItem {
   horas_actuales?: number | string | null;
   activo?: boolean;
   tipo: TipoEquipo;
+  id_tipo_equipo?: number;
+  id_modelo_equipo?: number | null;
+  modelo_oem?: {
+    id_modelo_equipo?: number;
+    id_modelo?: number;
+    marca: string;
+    modelo: string;
+    nombre_comercial?: string | null;
+    descripcion?: string | null;
+  } | null;
+  tipos_equipo?: {
+    id_tipo_equipo: number;
+    nombre_tipo: string;
+    codigo_tipo: string;
+  } | null;
   estado_equipo: EstadoEquipo;
   criticidad: Criticidad;
   ubicacion_texto: string;
@@ -95,6 +108,7 @@ export interface EquipoListItem {
   } | null;
   fecha_creacion: string;
   datos_especificos: Record<string, unknown> | null;
+  especificaciones?: EspecificacionesJsonEam | null;
   motor?: DatosMotor;
 }
 
@@ -107,36 +121,28 @@ export interface EquipoDetalle extends EquipoListItem {
   };
   config_parametros?: ConfigParametros;
   fecha_modificacion?: string;
-  // Campos de fechas importantes
   fecha_instalacion?: string | null;
   fecha_inicio_servicio_mekanos?: string | null;
-  // Campos de garantía
   en_garantia?: boolean;
   fecha_inicio_garantia?: string | null;
   fecha_fin_garantia?: string | null;
   proveedor_garantia?: string | null;
-  // Campos de horas y mantenimiento
   horas_actuales?: number | string | null;
   fecha_ultima_lectura_horas?: string | null;
   tipo_contrato?: TipoContrato;
-  // Intervalos de mantenimiento override
   intervalo_tipo_a_dias_override?: number | null;
   intervalo_tipo_a_horas_override?: number | null;
   intervalo_tipo_b_dias_override?: number | null;
   intervalo_tipo_b_horas_override?: number | null;
   criterio_intervalo_override?: CriterioIntervalo | null;
-  // Estado físico
   estado_pintura?: EstadoPintura | null;
   requiere_pintura?: boolean;
-  // Observaciones
   observaciones_generales?: string | null;
   configuracion_especial?: string | null;
   criticidad_justificacion?: string | null;
-  // Estado de baja
   activo?: boolean;
   fecha_baja?: string | null;
   motivo_baja?: string | null;
-  // Relaciones
   lecturas_horometro: Array<{
     id_lectura: number;
     horas_lectura: number | string;
@@ -153,15 +159,12 @@ export interface EquipoDetalle extends EquipoListItem {
   }>;
 }
 
-// 
-// DTOs PARA CREACIÓN (Fieles al Backend)
-// 
-
 export interface DatosEquipoBase {
   codigo_equipo: string;
   id_cliente: number;
   id_tipo_equipo: number;
   id_sede?: number;
+  id_modelo_equipo?: number;
   nombre_equipo?: string;
   numero_serie_equipo?: string;
   ubicacion_texto: string;
@@ -267,7 +270,6 @@ export interface DatosBomba {
   radiador_panal_cm?: number;
 }
 
-// ✅ FLEXIBILIZACIÓN PARÁMETROS (06-ENE-2026): Tipos para config personalizada
 export interface ConfigParametros {
   unidades?: {
     temperatura?: string;
@@ -279,12 +281,24 @@ export interface ConfigParametros {
     vibracion?: string;
     potencia?: string;
   };
-  rangos?: Record<string, {
-    min_normal?: number;
-    max_normal?: number;
-    min_critico?: number;
-    max_critico?: number;
-    valor_ideal?: number;
+  rangos?: Record<
+    string,
+    {
+      min_normal?: number;
+      max_normal?: number;
+      min_critico?: number;
+      max_critico?: number;
+      valor_ideal?: number;
+    }
+  >;
+  planes_preventivos?: Array<{
+    id_plan?: number;
+    id_tipo_servicio: number;
+    nombre_plan: string;
+    frecuencia_dias: number;
+    frecuencia_uso: number;
+    criterio_intervalo: string;
+    activo?: boolean;
   }>;
 }
 
@@ -294,17 +308,22 @@ export interface CreateEquipoPayload {
   datosMotor?: DatosMotor;
   datosGenerador?: DatosGenerador;
   datosBomba?: DatosBomba;
-  // ✅ FLEXIBILIZACIÓN PARÁMETROS: Config personalizada opcional
+  especificaciones?: EspecificacionesJsonEam;
+  id_modelo_equipo?: number;
+  vincular_kit_bom?: boolean;
+  planes_preventivos_override?: Array<{
+    id_plan?: number;
+    id_tipo_servicio: number;
+    nombre_plan: string;
+    frecuencia_dias?: number | null;
+    frecuencia_uso?: number | null;
+    criterio_intervalo: string;
+    activo?: boolean;
+  }>;
   config_parametros?: ConfigParametros;
 }
 
-/**
- * Payload para actualizar un equipo existente
- * Basado en UpdateEquipoDto del backend NestJS
- * ✅ 23-FEB-2026: Expandido con TODOS los campos de la tabla equipos
- */
 export interface UpdateEquipoPayload {
-  // Identificación
   codigo_equipo?: string;
   id_cliente?: number;
   id_tipo_equipo?: number;
@@ -312,40 +331,32 @@ export interface UpdateEquipoPayload {
   nombre_equipo?: string;
   numero_serie_equipo?: string;
   ubicacion_texto?: string;
-  // Estado
   estado_equipo?: EstadoEquipo;
   criticidad?: Criticidad;
   criticidad_justificacion?: string;
-  // Fechas
   fecha_instalacion?: string | null;
   fecha_inicio_servicio_mekanos?: string | null;
-  // Garantía
   en_garantia?: boolean;
   fecha_inicio_garantia?: string | null;
   fecha_fin_garantia?: string | null;
   proveedor_garantia?: string;
-  // Pintura
   estado_pintura?: EstadoPintura;
   requiere_pintura?: boolean;
-  // Contrato
   tipo_contrato?: TipoContrato;
-  // Intervalos override
   intervalo_tipo_a_dias_override?: number | null;
   intervalo_tipo_a_horas_override?: number | null;
   intervalo_tipo_b_dias_override?: number | null;
   intervalo_tipo_b_horas_override?: number | null;
   criterio_intervalo_override?: CriterioIntervalo | null;
-  // Observaciones
   observaciones_generales?: string;
   configuracion_especial?: string;
-  // Parámetros
   config_parametros?: ConfigParametros;
 }
 
-/**
- * ✅ 23-FEB-2026: Payload para actualizar datos específicos (Motor, Generador, Bomba)
- */
 export interface UpdateDatosEspecificosPayload {
+  especificaciones?: EspecificacionesJsonEam;
+  id_modelo_equipo?: number | null;
+  vincular_kit_bom?: boolean;
   datosMotor?: Partial<DatosMotor> & {
     cilindrada_cc?: number;
     tiene_turbocargador?: boolean;
@@ -440,10 +451,6 @@ export interface UpdateDatosEspecificosPayload {
   };
 }
 
-// 
-// RESPUESTAS
-// 
-
 export interface CreateEquipoResponse {
   success: boolean;
   message: string;
@@ -458,12 +465,12 @@ export interface CreateEquipoResponse {
     estado_equipo: string;
     fecha_creacion: string;
     datos_especificos: Record<string, unknown>;
+    especificaciones?: EspecificacionesJsonEam;
+    id_modelo_equipo?: number | null;
+    repuestos_bom_vinculados?: number;
   };
 }
 
-/**
- * ✅ 08-ENE-2026: Response para cambiar estado de equipo
- */
 export interface CambiarEstadoResponse {
   success: boolean;
   message: string;
@@ -478,9 +485,6 @@ export interface CambiarEstadoResponse {
   };
 }
 
-/**
- * ✅ 08-ENE-2026: Response para registrar lectura de horómetro
- */
 export interface RegistrarLecturaResponse {
   success: boolean;
   message: string;
@@ -517,10 +521,6 @@ export interface EquiposListadoResponse {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// FACETAS AVANZADAS DINÁMICAS (EAM SMART FACETS)
-// ═══════════════════════════════════════════════════════════════════════════════
-
 export interface FacetaMarcaDef {
   campo: string;
   etiqueta: string;
@@ -556,4 +556,11 @@ export interface FiltrosFacetasEquipos {
   filtroValorMax?: number;
   filtroValorExacto?: string;
   filtroValorTabla?: string;
+  // ✅ FASE 4: Filtros Técnicos B-Tree Normalizados EAM
+  filtroAtributoCodigo?: string;
+  filtroAtributoValorMin?: number;
+  filtroAtributoValorMax?: number;
+  filtroAtributoUnidad?: string;
+  filtroAtributoTexto?: string;
+  filtroAtributoBooleano?: string;
 }

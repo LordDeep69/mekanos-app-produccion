@@ -416,7 +416,7 @@ export class ClientesService implements OnModuleInit {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { persona: _, ...clienteData } = createDto;
 
-    return this.prisma.clientes.create({
+    const nuevoCliente = await this.prisma.clientes.create({
       data: {
         ...clienteData,
         id_persona: createDto.id_persona,
@@ -556,7 +556,7 @@ export class ClientesService implements OnModuleInit {
     const { persona: _, id_persona: __, ...clienteFields } = createDto;
 
     const principalPersona = principal.persona;
-    const personaOverride = createDto.persona || {};
+    const personaOverride: Record<string, any> = createDto.persona || {};
 
     const personaSede = await this.prisma.personas.create({
       data: {
@@ -1320,7 +1320,7 @@ export class ClientesService implements OnModuleInit {
     },
   ) {
     // 1. Obtener la trazabilidad estructurada
-    const { cliente, ordenes } = await this.getTrazabilidadServicios(clienteId, filtros);
+    const { ordenes } = await this.getTrazabilidadServicios(clienteId, filtros);
 
     const clienteDb = await this.prisma.clientes.findUnique({
       where: { id_cliente: clienteId },
@@ -1351,7 +1351,7 @@ export class ClientesService implements OnModuleInit {
         where: { id_equipo: filtros.idEquipo },
         select: { nombre_equipo: true },
       });
-      equipoFiltroNombre = eq?.nombre_equipo;
+      equipoFiltroNombre = eq?.nombre_equipo ?? undefined;
     }
 
     let sedeFiltroNombre: string | undefined;

@@ -1,8 +1,8 @@
 /**
  * MEKANOS S.A.S - Motor Universal de Activos EAM
- * 
+ *
  * Servicio de Proyección B-Tree de Atributos Técnicos (EquipoFilterProjectionService)
- * 
+ *
  * Mantiene sincronizada la tabla normalizada 'equipos_atributos_filtro' con el documento
  * JSONB 'equipos.especificaciones' y los satélites legados, convirtiendo todas las magnitudes
  * a su unidad física base canónica para permitir búsquedas B-Tree de ultra-alta velocidad.
@@ -19,31 +19,45 @@ export interface AtributoNumericoConfig {
 
 @Injectable()
 export class EquipoFilterProjectionService {
-
   // Mapeo exhaustivo de atributos numéricos con sus unidades de origen por defecto
   private readonly atributosNumericos: Record<string, AtributoNumericoConfig> = {
     potencia_kva: { unidadOrigen: 'KVA' },
     potencia_kw: { unidadOrigen: 'KW' },
     potencia_kw_motor: { unidadOrigen: 'KW' },
     potencia_hp: { unidadOrigen: 'HP' },
+    potencia_motor_hp: { unidadOrigen: 'HP' },
     potencia_hp_electrico: { unidadOrigen: 'HP' },
     potencia_kw_electrico: { unidadOrigen: 'KW' },
     potencia_hidraulica_kw: { unidadOrigen: 'KW' },
     caudal_maximo_m3h: { unidadOrigen: 'M3H' },
+    caudal_aire_cfm: { unidadOrigen: 'CFM' },
     altura_manometrica_maxima_m: { unidadOrigen: 'MET' },
+    altura_presion_trabajo_m: { unidadOrigen: 'MET' },
     presion_maxima_psi: { unidadOrigen: 'PSI' },
+    presion_trabajo_psi: { unidadOrigen: 'PSI' },
     presion_encendido_psi: { unidadOrigen: 'PSI' },
     presion_apagado_psi: { unidadOrigen: 'PSI' },
+    presion_tanques_psi: { unidadOrigen: 'PSI' },
+    rango_manometro_min_psi: { unidadOrigen: 'PSI' },
+    rango_manometro_max_psi: { unidadOrigen: 'PSI' },
     capacidad_aceite_litros: { unidadOrigen: 'LIT' },
     capacidad_refrigerante_litros: { unidadOrigen: 'LIT' },
     capacidad_tanque_principal_litros: { unidadOrigen: 'LIT' },
     capacidad_tanque_auxiliar_litros: { unidadOrigen: 'LIT' },
+    capacidad_tanques_litros: { unidadOrigen: 'LIT' },
+    capacidad_tanque_galones: { unidadOrigen: 'GAL' },
     voltaje_arranque_vdc: { unidadOrigen: 'VDC' },
     amperaje_nominal_salida: { unidadOrigen: 'A' },
     amperaje_nominal_motor: { unidadOrigen: 'A' },
     amperaje_arranque_cca: { unidadOrigen: 'A' },
     amperaje_cargador: { unidadOrigen: 'A' },
+    amperaje_contactor: { unidadOrigen: 'A' },
     velocidad_rpm: { unidadOrigen: 'RPM' },
+    numero_cilindros: { unidadOrigen: 'UND' },
+    cantidad_baterias: { unidadOrigen: 'UND' },
+    capacidad_bateria_ah: { unidadOrigen: 'AH' },
+    cilindrada_cc: { unidadOrigen: 'CC' },
+    eficiencia_porcentaje: { unidadOrigen: 'PCT' },
   };
 
   // Atributos de texto indexados para búsqueda rápida y facetas
@@ -57,16 +71,33 @@ export class EquipoFilterProjectionService {
     'marca_avr',
     'marca_modulo_control',
     'marca_panel_control_bomba',
+    'marca_presostato',
+    'marca_variador',
+    'marca_contactor',
+    'marca_cargador',
     'modelo_motor',
     'modelo_generador',
     'modelo_bomba',
     'modelo_compresor',
+    'modelo_motor_electrico',
     'modelo_alternador',
+    'modelo_avr',
+    'modelo_modulo_control',
     'tipo_combustible',
     'tipo_bomba',
     'aplicacion_bomba',
     'tipo_compresor',
     'tipo_arranque',
+    'voltaje_salida',
+    'voltaje_operacion_vac',
+    'numero_fases',
+    'numero_fases_motor',
+    'frecuencia_hz',
+    'frecuencia_hz_motor',
+    'tipo_aceite',
+    'tipo_refrigerante',
+    'referencia_bateria',
+    'referencia_sello_mecanico',
   ];
 
   constructor(
@@ -75,11 +106,21 @@ export class EquipoFilterProjectionService {
   ) {}
 
   /**
+   * Retorna la unidad por defecto asociada a un atributo numérico canónico
+   */
+  getUnidadOrigenDefecto(codigoAtributo: string): string | undefined {
+    return this.atributosNumericos[codigoAtributo]?.unidadOrigen;
+  }
+
+  /**
    * Extrae atributos de un documento JSONB y proyecta filas en equipos_atributos_filtro
    */
   async proyectarFiltros(
     idEquipo: number,
-    doc: { modulos?: Record<string, Record<string, any>> },
+    doc: {
+      modulos?: Record<string, Record<string, any>>;
+      unidades_personalizadas?: Record<string, string>;
+    },
     tx?: Prisma.TransactionClient,
   ): Promise<number> {
     const client = tx || this.prisma;
@@ -100,50 +141,70 @@ export class EquipoFilterProjectionService {
     }> = [];
 
     const clavesVistas = new Set<string>();
+    const unidadesCustom = doc.unidades_personalizadas || {};
 
     for (const [_, modData] of Object.entries(doc.modulos)) {
       if (!modData || typeof modData !== 'object') continue;
 
       for (const [k, v] of Object.entries(modData)) {
-        if (v === null || v === undefined) continue;
+        if (v === null || v === undefined || v === '') continue;
         if (clavesVistas.has(k)) continue;
 
-        // Caso 1: Numérico
-        if (this.atributosNumericos[k] && typeof v === 'number' && !isNaN(v)) {
-          const cfg = this.atributosNumericos[k];
-          let valorBase = v;
-          let unidadBase = cfg.unidadOrigen;
+        // Caso 1: Booleano (Sí / No)
+        if (typeof v === 'boolean') {
+          filasParaInsertar.push({
+            id_equipo: idEquipo,
+            codigo_atributo: k,
+            valor_num_base: new Prisma.Decimal(v ? 1 : 0),
+            valor_texto: v ? 'true' : 'false',
+            unidad_base_codigo: 'BOOL',
+          });
+          clavesVistas.add(k);
+          continue;
+        }
+
+        // Caso 2: Numérico conocido o valor numérico puro
+        const cfg = this.atributosNumericos[k];
+        const numVal = typeof v === 'number' ? v : cfg && typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+
+        if (!isNaN(numVal) && (typeof v === 'number' || cfg)) {
+          const unidadOrigen = unidadesCustom[k] || cfg?.unidadOrigen || 'UND';
+          let valorBase = numVal;
+          let unidadBase = unidadOrigen;
 
           try {
-            const resConv = this.uomService.convertirABase(v, cfg.unidadOrigen);
+            const resConv = this.uomService.convertirABase(numVal, unidadOrigen);
             valorBase = resConv.valorBase;
             unidadBase = resConv.unidadBaseCodigo;
           } catch {
-            // Si la unidad no está registrada, se almacena sin escalar
-            valorBase = v;
+            // Si la unidad es adimensional o no está en tabla afín, se almacena tal cual
+            valorBase = numVal;
           }
 
           filasParaInsertar.push({
             id_equipo: idEquipo,
             codigo_atributo: k,
             valor_num_base: new Prisma.Decimal(valorBase),
-            valor_texto: String(v),
+            valor_texto: String(numVal),
             unidad_base_codigo: unidadBase,
           });
           clavesVistas.add(k);
           continue;
         }
 
-        // Caso 2: Texto indexable
-        if (this.atributosTexto.includes(k) && typeof v === 'string' && v.trim() !== '') {
-          filasParaInsertar.push({
-            id_equipo: idEquipo,
-            codigo_atributo: k,
-            valor_num_base: null,
-            valor_texto: v.trim(),
-            unidad_base_codigo: null,
-          });
-          clavesVistas.add(k);
+        // Caso 3: Texto indexable (explícito o cualquier campo corto de texto/selector en el módulo)
+        if (typeof v === 'string' && v.trim() !== '') {
+          const limpio = v.trim();
+          if (this.atributosTexto.includes(k) || limpio.length <= 150) {
+            filasParaInsertar.push({
+              id_equipo: idEquipo,
+              codigo_atributo: k,
+              valor_num_base: null,
+              valor_texto: limpio,
+              unidad_base_codigo: null,
+            });
+            clavesVistas.add(k);
+          }
         }
       }
     }
@@ -169,6 +230,7 @@ export class EquipoFilterProjectionService {
   async reconstruirJsonYProyectar(
     idEquipo: number,
     tx?: Prisma.TransactionClient,
+    specsPersonalizadas?: Record<string, any>,
   ): Promise<{ json: any; proyectados: number }> {
     const client = tx || this.prisma;
 
@@ -186,16 +248,28 @@ export class EquipoFilterProjectionService {
     }
 
     // Si ya tiene un JSONB personalizado enriquecido, priorizarlo y mergear
-    const jsonActual = (eq.especificaciones as any) || { _version: 1, modulos: {}, origen_atributos: {} };
-    const modulos: Record<string, Record<string, any>> = jsonActual.modulos || {};
-    const origenAtributos: Record<string, string> = jsonActual.origen_atributos || {};
+    const jsonBase = (eq.especificaciones as any) || {
+      _version: 1,
+      modulos: {},
+      origen_atributos: {},
+    };
+    const modulos: Record<string, Record<string, any>> = {
+      ...(jsonBase.modulos || {}),
+    };
+    const origenAtributos: Record<string, any> = {
+      ...(jsonBase.origen_atributos || {}),
+    };
+    const unidadesPersonalizadas: Record<string, string> = {
+      ...(jsonBase.unidades_personalizadas || {}),
+      ...(specsPersonalizadas?.unidades_personalizadas || {}),
+    };
 
-    // 1. Motor
+    // 1. Motor desde satélite
     const mot = eq.equipos_motor;
     if (mot) {
       const esElectrico = mot.tipo_motor === 'ELECTRICO';
       if (!esElectrico) {
-        const modMotor: Record<string, any> = modulos.motor_combustion || {};
+        const modMotor: Record<string, any> = { ...(modulos.motor_combustion || {}) };
         if (mot.marca_motor) modMotor.marca_motor = mot.marca_motor;
         if (mot.modelo_motor) modMotor.modelo_motor = mot.modelo_motor;
         if (mot.numero_serie_motor) modMotor.numero_serie_motor = mot.numero_serie_motor;
@@ -227,9 +301,11 @@ export class EquipoFilterProjectionService {
         if (mot.a_o_fabricacion) modMotor.ano_fabricacion_motor = mot.a_o_fabricacion;
 
         modulos.motor_combustion = modMotor;
-        origenAtributos.motor_combustion = 'MIGRADO_SATELITE_MOTOR';
+        if (!origenAtributos.motor_combustion) {
+          origenAtributos.motor_combustion = 'MIGRADO_SATELITE_MOTOR';
+        }
       } else {
-        const modMotorElec: Record<string, any> = modulos.motor_electrico || {};
+        const modMotorElec: Record<string, any> = { ...(modulos.motor_electrico || {}) };
         if (mot.marca_motor) modMotorElec.marca_motor_electrico = mot.marca_motor;
         if (mot.modelo_motor) modMotorElec.modelo_motor_electrico = mot.modelo_motor;
         if (mot.numero_serie_motor) modMotorElec.numero_serie_motor_electrico = mot.numero_serie_motor;
@@ -246,14 +322,16 @@ export class EquipoFilterProjectionService {
         if (mot.a_o_fabricacion) modMotorElec.ano_fabricacion_motor_electrico = mot.a_o_fabricacion;
 
         modulos.motor_electrico = modMotorElec;
-        origenAtributos.motor_electrico = 'MIGRADO_SATELITE_MOTOR';
+        if (!origenAtributos.motor_electrico) {
+          origenAtributos.motor_electrico = 'MIGRADO_SATELITE_MOTOR';
+        }
       }
     }
 
-    // 2. Generador / Alternador
+    // 2. Generador / Alternador desde satélite
     const gen = eq.equipos_generador;
     if (gen) {
-      const modGen: Record<string, any> = modulos.alternador_generador || {};
+      const modGen: Record<string, any> = { ...(modulos.alternador_generador || {}) };
       if (gen.marca_generador) modGen.marca_generador = gen.marca_generador;
       if (gen.modelo_generador) modGen.modelo_generador = gen.modelo_generador;
       if (gen.numero_serie_generador) modGen.numero_serie_generador = gen.numero_serie_generador;
@@ -284,13 +362,15 @@ export class EquipoFilterProjectionService {
       if (gen.a_o_fabricacion) modGen.ano_fabricacion_generador = gen.a_o_fabricacion;
 
       modulos.alternador_generador = modGen;
-      origenAtributos.alternador_generador = 'MIGRADO_SATELITE_GENERADOR';
+      if (!origenAtributos.alternador_generador) {
+        origenAtributos.alternador_generador = 'MIGRADO_SATELITE_GENERADOR';
+      }
     }
 
-    // 3. Bomba Hidráulica
+    // 3. Bomba Hidráulica desde satélite
     const bom = eq.equipos_bomba;
     if (bom) {
-      const modBom: Record<string, any> = modulos.bomba_hidraulica || {};
+      const modBom: Record<string, any> = { ...(modulos.bomba_hidraulica || {}) };
       if (bom.marca_bomba) modBom.marca_bomba = bom.marca_bomba;
       if (bom.modelo_bomba) modBom.modelo_bomba = bom.modelo_bomba;
       if (bom.numero_serie_bomba) modBom.numero_serie_bomba = bom.numero_serie_bomba;
@@ -337,14 +417,34 @@ export class EquipoFilterProjectionService {
       if (bom.a_o_fabricacion) modBom.ano_fabricacion_bomba = bom.a_o_fabricacion;
 
       modulos.bomba_hidraulica = modBom;
-      origenAtributos.bomba_hidraulica = 'MIGRADO_SATELITE_BOMBA';
+      if (!origenAtributos.bomba_hidraulica) {
+        origenAtributos.bomba_hidraulica = 'MIGRADO_SATELITE_BOMBA';
+      }
     }
 
-    const docFinal = {
+    // 4. Si se enviaron especificaciones personalizadas desde el Wizard o Ficha 360°, tienen prioridad sobre los satélites
+    if (specsPersonalizadas?.modulos && typeof specsPersonalizadas.modulos === 'object') {
+      for (const [modKey, modValues] of Object.entries(specsPersonalizadas.modulos)) {
+        if (modValues && typeof modValues === 'object') {
+          modulos[modKey] = {
+            ...(modulos[modKey] || {}),
+            ...(modValues as Record<string, any>),
+          };
+        }
+      }
+    }
+    if (specsPersonalizadas?.origen_atributos && typeof specsPersonalizadas.origen_atributos === 'object') {
+      Object.assign(origenAtributos, specsPersonalizadas.origen_atributos);
+    }
+
+    const docFinal: Record<string, any> = {
       _version: 1,
       modulos,
       origen_atributos: origenAtributos,
     };
+    if (Object.keys(unidadesPersonalizadas).length > 0) {
+      docFinal.unidades_personalizadas = unidadesPersonalizadas;
+    }
 
     // Actualizar JSONB en DB
     await client.equipos.update({

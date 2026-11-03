@@ -40,7 +40,6 @@ import { GetEquiposQuery, GetEquiposQueryDto } from './queries/get-equipos.query
 @ApiTags('FASE 1 - Equipos')
 @ApiBearerAuth('JWT-auth')
 @Controller('equipos')
-// @Public() // DESHABILITADO - Se requiere JWT para creado_por y seguridad
 @UseGuards(JwtAuthGuard)
 export class EquiposController {
   constructor(
@@ -72,11 +71,6 @@ export class EquiposController {
    * ✅ OPTIMIZACIÓN 05-ENE-2026: Endpoint LIGERO para selectores
    * Retorna solo id, código, nombre - ideal para dropdowns/autocomplete
    * ✅ 31-ENE-2026: MULTI-ASESOR - Filtra por asesor si NO es admin
-   * 
-   * @param q Término de búsqueda (código, nombre, serie)
-   * @param clienteId Filtrar por cliente
-   * @param sedeId Filtrar por sede
-   * @param limit Máximo de resultados (default 20)
    */
   @Get('selector')
   @ApiOperation({ summary: 'Obtener equipos en formato ligero para selectores' })
@@ -87,7 +81,6 @@ export class EquiposController {
     @Query('sedeId') sedeId?: string,
     @Query('limit') limit?: string,
   ) {
-    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
 
     const items = await this.equiposGestionService.findForSelector({
@@ -107,14 +100,12 @@ export class EquiposController {
   /**
    * GET /api/equipos
    * Listar equipos con filtrado jerárquico enterprise (Cliente -> Sede)
-   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
    */
   @Get()
   async findAll(
     @CurrentUser() user: any,
     @Query() queryDto: GetEquiposQueryDto,
   ) {
-    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
 
     const query = new GetEquiposQuery(
@@ -125,7 +116,7 @@ export class EquiposController {
       queryDto.activo,
       queryDto.page,
       queryDto.limit,
-      idAsesorFiltro, // ✅ MULTI-ASESOR
+      idAsesorFiltro,
     );
 
     const result = await this.queryBus.execute(query);
@@ -151,10 +142,10 @@ export class EquiposController {
 
   /**
    * POST /api/equipos/gestion-completa
-   * Crear equipo con datos polimórficos (padre + hijo en transacción)
+   * Crear equipo con datos polimórficos (padre + hijo + JSONB + B-Tree + BOM OEM en transacción)
    */
   @Post('gestion-completa')
-  @ApiOperation({ summary: 'Crear equipo completo con datos específicos según tipo' })
+  @ApiOperation({ summary: 'Crear equipo completo con datos específicos según tipo y metamodelo EAM' })
   async crearEquipoCompleto(
     @Body() dto: CreateEquipoCompletoDto,
     @UserId() userId: number
@@ -164,22 +155,20 @@ export class EquiposController {
 
   /**
    * GET /api/equipos/listado-completo
-   * Listar equipos con datos polimórficos incluidos
-   * ✅ 08-ENE-2026: Agregado búsqueda, filtro por tipo y ordenación
-   * ✅ 31-ENE-2026: MULTI-ASESOR - Filtrar por clientes asignados al asesor
+   * Listar equipos con datos polimórficos incluidos + filtros B-Tree con conversión UoM
    */
   @Get('listado-completo')
-  @ApiOperation({ summary: 'Listar equipos con datos específicos según tipo' })
+  @ApiOperation({ summary: 'Listar equipos con datos específicos según tipo y filtros B-Tree' })
   async listarEquiposCompletos(
     @CurrentUser() user: any,
     @Query() queryDto: GetEquiposQueryDto,
   ) {
-    // ✅ MULTI-ASESOR: Filtrar por asesor si NO es admin
     const idAsesorFiltro = user?.esAdmin ? undefined : user?.idEmpleado;
 
-        return this.equiposGestionService.listarEquiposCompletos({
+    return this.equiposGestionService.listarEquiposCompletos({
       id_cliente: queryDto.id_cliente,
       id_sede: queryDto.id_sede,
+      id_tipo_equipo: queryDto.id_tipo_equipo,
       tipo: queryDto.tipo,
       estado_equipo: queryDto.estado_equipo,
       search: queryDto.search,
@@ -199,15 +188,13 @@ export class EquiposController {
       filtroAtributoCodigo: queryDto.filtroAtributoCodigo,
       filtroAtributoValorMin: queryDto.filtroAtributoValorMin,
       filtroAtributoValorMax: queryDto.filtroAtributoValorMax,
+      filtroAtributoUnidad: queryDto.filtroAtributoUnidad,
       filtroAtributoTexto: queryDto.filtroAtributoTexto,
+      filtroAtributoBooleano: queryDto.filtroAtributoBooleano,
     });
   }
 
   /**
-   * GET /api/equipos/completo/:id
-   * Obtener equipo con todos sus datos polimórficos
-   */
-/**
    * GET /api/equipos/facetas
    * Obtiene dinámicamente las facetas de marca y valores de operación según tipo
    */
@@ -217,6 +204,10 @@ export class EquiposController {
     return this.equiposGestionService.obtenerFacetasDinamicas(tipo);
   }
 
+  /**
+   * GET /api/equipos/completo/:id
+   * Obtener equipo con todos sus datos polimórficos y especificaciones JSONB
+   */
   @Get('completo/:id')
   @ApiOperation({ summary: 'Obtener equipo con datos específicos según tipo' })
   async obtenerEquipoCompleto(@Param('id', ParseIntPipe) id: number) {
@@ -377,13 +368,11 @@ export class EquiposController {
   /**
    * DELETE /api/equipos/:id/hard-delete
    * ⚠️ ELIMINACIÓN COMPLETA - Elimina permanentemente el equipo y TODOS sus datos relacionados
-   * Requiere confirmación explícita
    */
   @Delete(':id/hard-delete')
   @ApiOperation({
     summary: 'Eliminar completamente un equipo del sistema',
-    description: '⚠️ HARD DELETE: Elimina permanentemente el equipo y todos sus datos relacionados. ' +
-      'Solo funciona con equipos marcados como inactivos. Requiere confirmación explícita.'
+    description: '⚠️ HARD DELETE: Elimina permanentemente el equipo y todos sus datos relacionados.'
   })
   async hardDelete(
     @Param('id', ParseIntPipe) id: number,
@@ -401,7 +390,6 @@ export class EquiposController {
 
   // ════════════════════════════════════════════════════════════════════════════
   // ENDPOINTS DE ACCIONES ESPECÍFICAS
-  // ✅ 08-ENE-2026: Cambio de estado y lectura de horómetro
   // ════════════════════════════════════════════════════════════════════════════
 
   /**
@@ -425,11 +413,10 @@ export class EquiposController {
 
   /**
    * PATCH /api/equipos/:id/datos-especificos
-   * Actualizar datos específicos del equipo (Motor, Generador, Bomba)
-   * ✅ 23-FEB-2026: CRUD completo para datos polimórficos
+   * Actualizar datos específicos del equipo (JSONB modular + Motor + Generador + Bomba + B-Tree)
    */
   @Patch(':id/datos-especificos')
-  @ApiOperation({ summary: 'Actualizar datos específicos del equipo (Motor, Generador, Bomba)' })
+  @ApiOperation({ summary: 'Actualizar datos específicos del equipo (JSONB modular, Motor, Generador, Bomba)' })
   async actualizarDatosEspecificos(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDatosEspecificosDto,
@@ -473,6 +460,4 @@ export class EquiposController {
       data,
     };
   }
-
 }
-

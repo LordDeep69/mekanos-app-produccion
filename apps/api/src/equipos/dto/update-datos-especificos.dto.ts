@@ -1,6 +1,6 @@
 /**
- * DTO para actualizar datos específicos de equipos (Motor, Generador, Bomba)
- * ✅ 23-FEB-2026: CRUD completo - Edición de datos polimórficos
+ * DTO para actualizar datos específicos de equipos (JSONB Modular, Motor, Generador, Bomba)
+ * ✅ FASE 4 EAM UNIVERSAL: Soporta edición polimórfica de especificaciones JSONB + Dual-Write satélites
  */
 
 import { Type } from 'class-transformer';
@@ -10,6 +10,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -353,7 +354,7 @@ export class UpdateDatosBombaDto {
   numero_serie_bomba?: string;
 
   @IsOptional()
-  @IsEnum(['CENTRIFUGA', 'TURBINA_VERTICAL_POZO', 'SUMERGIBLE', 'PERIFERICA', 'TURBINA', 'DESPLAZAMIENTO_POSITIVO'])
+  @IsEnum(['CENTRIFUGA', 'TURBINA_VERTICAL_POZO', 'SUMERGIBLE', 'PERIFERICA', 'TURBINA', 'DESPLAZAMIENTO_POSITIVO', 'HIDRO', 'TANQUE_A_TANQUE'])
   tipo_bomba?: string;
 
   @IsOptional()
@@ -535,7 +536,7 @@ export class UpdateDatosBombaDto {
 }
 
 // ═══════════════════════════════════════════════════════
-// DTO PRINCIPAL: UPDATE DATOS ESPECÍFICOS
+// DTO PRINCIPAL: UPDATE DATOS ESPECÍFICOS + ESPECIFICACIONES JSONB
 // ═══════════════════════════════════════════════════════
 
 export class UpdateDatosEspecificosDto {
@@ -553,4 +554,26 @@ export class UpdateDatosEspecificosDto {
   @ValidateNested()
   @Type(() => UpdateDatosBombaDto)
   datosBomba?: UpdateDatosBombaDto;
+
+  /**
+   * ✅ FASE 4 EAM UNIVERSAL: Documento modular JSONB actualizado
+   */
+  @IsOptional()
+  @IsObject()
+  especificaciones?: Record<string, any>;
+
+  /**
+   * ✅ FASE 4 EAM UNIVERSAL: ID del Modelo de Fábrica (OEM) asociado
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_modelo_equipo?: number;
+
+  /**
+   * ✅ FASE 4 EAM UNIVERSAL: Si es true y hay id_modelo_equipo, vincula el Kit BOM del modelo
+   */
+  @IsOptional()
+  @IsBoolean()
+  vincular_kit_bom?: boolean;
 }
