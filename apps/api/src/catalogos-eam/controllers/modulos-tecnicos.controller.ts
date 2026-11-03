@@ -5,13 +5,20 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
-import { AsignarAtributoModuloDto, CreateModuloTecnicoDto } from '../dto/catalogos-eam.dto';
+import {
+  AsignarAtributoModuloDto,
+  CreateModuloTecnicoDto,
+  UpdateAtributoModuloDto,
+  UpdateModuloTecnicoDto,
+} from '../dto/catalogos-eam.dto';
 
 @ApiTags('EAM - Módulos Técnicos Funcionales')
 @ApiBearerAuth()
@@ -38,6 +45,18 @@ export class ModulosTecnicosController {
     return this.eamService.createModulo(dto);
   }
 
+  @Patch(':codigo')
+  @ApiOperation({ summary: 'Actualizar propiedades de un módulo técnico' })
+  async update(@Param('codigo') codigo: string, @Body() dto: UpdateModuloTecnicoDto) {
+    return this.eamService.updateModulo(codigo, dto);
+  }
+
+  @Put(':codigo')
+  @ApiOperation({ summary: 'Actualizar propiedades de un módulo técnico (PUT)' })
+  async updatePut(@Param('codigo') codigo: string, @Body() dto: UpdateModuloTecnicoDto) {
+    return this.eamService.updateModulo(codigo, dto);
+  }
+
   @Post(':codigo/atributos')
   @ApiOperation({ summary: 'Asignar o actualizar atributo dentro de un módulo (grupo visual, banderas)' })
   async asignarAtributo(
@@ -45,6 +64,16 @@ export class ModulosTecnicosController {
     @Body() dto: AsignarAtributoModuloDto,
   ) {
     return this.eamService.asignarAtributo(codigo, dto);
+  }
+
+  @Patch(':codigo/atributos/:idAtributo')
+  @ApiOperation({ summary: 'Actualizar banderas o grupo visual de un atributo asignado en caliente' })
+  async updateAtributoModulo(
+    @Param('codigo') codigo: string,
+    @Param('idAtributo', ParseIntPipe) idAtributo: number,
+    @Body() dto: UpdateAtributoModuloDto,
+  ) {
+    return this.eamService.updateAtributoModulo(codigo, idAtributo, dto);
   }
 
   @Delete(':codigo/atributos/:idAtributo')

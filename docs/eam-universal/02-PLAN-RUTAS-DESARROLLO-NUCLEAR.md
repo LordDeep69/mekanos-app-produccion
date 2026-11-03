@@ -1,9 +1,9 @@
 # MEKANOS ERP / EAM - METAMODELO UNIVERSAL DE ACTIVOS
 ## Documento Maestro 02: Plan de Rutas de Desarrollo Atómico Nuclear
 
-> **Estado:** Fase 0 y Fase 1 Completadas y Certificadas / Fase 2 en Ejecución Activa / Fases 3 a 5 Planificadas  
+> **Estado:** Fases 0, 1, 2 y 3 Completadas y Certificadas al 100% / Fases 4 y 5 Planificadas  
 > **Estrategia:** Zero-Trust, First-Principles, Adición sin Regresiones, Paridad 1:1 de Ingeniería  
-> **Fecha de Actualización:** Octubre 2026  
+> **Fecha de Actualización:** Noviembre 2026  
 
 ---
 
@@ -18,14 +18,15 @@
 | **Golden Master Test** | `apps/api/test/golden-master-pdf.spec.ts` | Verificación automatizada de no-regresión | ✅ 100% Green |
 | **Esquema BD** | `packages/database/prisma/schema.prisma` | Modelos de UoM, catálogo de atributos y JSONB | ✅ F1 Landed (Prisma 5.22.0) |
 | **Migración SQL** | `packages/database/prisma/migrations/*` | DDL incremental con índices GIN en PostgreSQL | ✅ 20261031_eam_universal_fase1.sql |
-| **Sembrado Canónico** | `packages/database/prisma/seeds/seed-eam-universal.ts` | 11 magnitudes, 38 UoM, ~65 atributos, 5 módulos, 4 OEM | 🔄 Fase 2 (Ampliación 1:1) |
+| **Sembrado Canónico** | `packages/database/prisma/seeds/seed-eam-universal.ts` | 11 magnitudes, 39 UoM, 145 atributos, 5 módulos, 4 OEM + simetría de planes | ✅ Certificado F2/F3 |
 | **Motor UoM Dimensional** | `apps/api/src/equipos/services/uom-conversion.service.ts` | Motor afín de conversión ($y = ax + b$) | ✅ 32/32 Tests Green |
-| **Backfill & Saneamiento** | `packages/database/prisma/seeds/backfill-equipos-eam.ts` | Migración de 467 equipos a JSONB + 15 corregidos + B-Tree | 🔄 Fase 2 |
-| **Proyección B-Tree** | `apps/api/src/equipos/services/equipo-filter-projection.service.ts` | Proyección de filtros en `equipos_atributos_filtro` | 🔄 Fase 2 |
-| **Catálogos API REST** | `apps/api/src/catalogos/` | Endpoints CRUD de atributos, módulos, arquetipos, modelos y UoM | 🔄 Fase 2 |
-| **Gestión Equipos** | `apps/api/src/equipos/equipos-gestion.service.ts` | Ingesta polimórfica, doble escritura y filtros B-Tree | 🔄 Fase 2 |
-| **Sidebar Admin** | `apps/admin/src/components/layout/sidebar.tsx` | Reestructuración ejecutiva de menú lateral | ⏳ Fase 3 |
-| **Hub Maestros EAM** | `apps/admin/src/app/(dashboard)/configuracion/equipos-maestros/` | Hub de 4 Pestañas (Arquetipos, OEM/BOM, Módulos, Atributos) | ⏳ Fase 3 |
+| **Backfill & Saneamiento** | `packages/database/prisma/seeds/backfill-equipos-eam.ts` | Migración de 467 equipos a JSONB + 15 corregidos + B-Tree | ✅ Certificado (467/467) |
+| **Proyección B-Tree** | `apps/api/src/equipos/services/equipo-filter-projection.service.ts` | Proyección de filtros en `equipos_atributos_filtro` | ✅ Certificado (2,276 filas) |
+| **Catálogos API REST** | `apps/api/src/catalogos-eam/` | CRUD completo de magnitudes, UoM, atributos, módulos, arquetipos canónicos y OEM | ✅ Certificado (9/9 Tests) |
+| **Gestión Equipos** | `apps/api/src/equipos/equipos-gestion.service.ts` | Clasificación canónica por `tipos_equipo`, doble escritura y filtros B-Tree | ✅ Certificado |
+| **Sidebar Admin** | `apps/admin/src/components/layout/sidebar.tsx` | Acceso ejecutivo a `Ingeniería EAM (Activos)` | ✅ Completado F3 |
+| **Hub Maestros EAM** | `apps/admin/src/app/(dashboard)/configuracion/catalogos-eam/` | Hub Ejecutivo de 5 Pestañas con KPIs interactivos, In-Place & Elevate y Vista Previa | ✅ Completado F3 |
+| **Compatibilidad Ruta** | `apps/admin/src/app/(dashboard)/configuracion/equipos-maestros/` | Redirección canónica hacia `/configuracion/catalogos-eam` | ✅ Completado F3 |
 | **Directorio Equipos** | `apps/admin/src/app/(dashboard)/equipos/` | Directorio universal con tarjetas y KPIs dinámicos | ⏳ Fase 4 |
 | **Formulario Activos** | `apps/admin/src/features/equipos/components/form-equipo-dinamico.tsx` | Form Engine adaptativo basado en arquetipos | ⏳ Fase 4 |
 | **PDF Universal** | `apps/api/src/pdf/templates/tipo-universal-eam.template.ts` | Renderizado adaptativo HTML/Puppeteer | ⏳ Fase 5 |
@@ -96,52 +97,46 @@
 
 ---
 
-## 4. Fase 2: Backend Core EAM, Paridad 1:1, Backfill de 467 Equipos y Doble Escritura B-Tree [ 🔄 EN EJECUCIÓN ]
+## 4. Fase 2: Backend Core EAM, Paridad 1:1, Backfill de 467 Equipos y Doble Escritura B-Tree [ ✅ COMPLETADA ]
 
 **Objetivo:** Alcanzar paridad 1:1 absoluta con todas las columnas de las tablas satélite (`equipos_generador`, `equipos_bomba`, `equipos_motor`), ejecutar el backfill idempotente de los 467 equipos hacia JSONB y la tabla de filtros B-Tree `equipos_atributos_filtro`, reclasificar los 15 equipos incoherentes, implementar la doble escritura transaccional en `EquiposGestionService` y publicar la API REST completa del metamodelo.
 
 ### Checklist de Ejecución y Certificación:
-- [ ] **2.1 Ampliación Exhaustiva del Seed (`seed-eam-universal.ts`):**
-  - Sembrar los ~65 atributos reales cubriendo el 100% de columnas satélite:
-    * *Motor Combustión:* Aspiración, refrigeración, turbo, arranque, CCA, batería (ref, Ah, cant), etc.
-    * *Alternador / Generador:* AVR (marca, modelo, ref), módulo control, tanques (principal y auxiliar en L), transferencia (tipo, ubicación, amperaje), calibres y metros de cable, cabina insonorizada, aislamiento, IP.
-    * *Bomba Hidráulica:* Aplicación, potencia hidráulica, eficiencia, presostato, contactor, arrancador suave, VFD, tanques hidroneumáticos, manómetro, protección de nivel, sellos mecánicos, etc.
-    * *Compresor Industrial:* Tecnología (tornillo/pistón/scroll), presiones (máx, carga, descarga), caudal CFM, tanque receptor, acople, secador.
-  - Asignar atributos a módulos con `grupo_visual`, `es_kpi`, `es_filtrable`, `visible_en_pdf`.
-  - Sembrar al menos 4 Modelos OEM Maestros (`modelos_equipo`) con kits BOM (`modelos_equipo_bom`).
-- [ ] **2.2 Saneamiento de Incoherencias y Backfill Idempotente (`backfill-equipos-eam.ts`):**
-  - Reclasificar las 14 bombas Goulds/Pentair (IDs 32, 35, 38, 41, 44, 48, 51, 56, 59, 62, 65, 99, 102, 104) de `id_tipo_equipo = 1 (GENERADOR)` a `id_tipo_equipo = 2 (BOMBA)`.
-  - Migrar el compresor Siemens ID 214 a su estructura JSONB de compresor (`modulos.motor_electrico` + `modulos.compresor_industrial`).
-  - Traducir los 467 equipos a `equipos.especificaciones` JSONB bajo el contrato canónico `{ "_version": 1, "modulos": { ... }, "origen_atributos": { ... } }`.
-  - Proyectar atributos numéricos en `equipos_atributos_filtro` con `valor_num_base` normalizado mediante `UomConversionService.convertirABase()`.
-  - Certificar que `golden-master-pdf.spec.ts` se mantiene en 0 discrepancias con JSONB poblado.
-- [ ] **2.3 Doble Escritura Transaccional y Proyección B-Tree en Backend Core:**
-  - Crear servicio `EquipoFilterProjectionService` para sincronización automática de `equipos_atributos_filtro` en altas y modificaciones.
-  - Extender `EquiposGestionService` con persistencia dual: persistir en `equipos.especificaciones` JSONB y en satélites legados para tipos tradicionales.
-  - Extender `GET /equipos` con soporte de filtrado multidimensional sobre `equipos_atributos_filtro` (rango numérico convertido con UoM, texto ILIKE y booleano).
-- [ ] **2.4 Endpoints REST del Hub de Configuración EAM (`apps/api`):**
-  - `/api/catalogos/magnitudes` & `/api/catalogos/unidades`: Catálogo dimensional y endpoint de prueba de conversión.
-  - `/api/catalogos/atributos-tecnicos`: CRUD completo con soporte de creación rápida *In-Place*.
-  - `/api/catalogos/modulos-tecnicos`: CRUD de módulos y asignación de atributos con banderas visuales y operativas.
-  - `/api/catalogos/arquetipos`: Esquema integral de tipos de equipo (módulos, atributos requeridos, planes por defecto).
-  - `/api/catalogos/modelos-equipo`: CRUD de modelos OEM y sus listas de partes BOM sugeridas.
+- [x] **2.1 Ampliación Exhaustiva del Seed (`seed-eam-universal.ts`):**
+  - Sembrados 139 atributos técnicos canónicos (145 totales en diccionario) cubriendo el 100% de columnas satélite (`motor_combustion`, `alternador_generador`, `bomba_hidraulica`, `motor_electrico`, `compresor_industrial`).
+  - Asignadas 136 relaciones en `modulo_atributos` con `grupo_visual`, `es_kpi`, `es_filtrable`, `visible_en_pdf`.
+  - Sembrados 4 Modelos OEM Maestros (`modelos_equipo`) con kits BOM (`modelos_equipo_bom`).
+- [x] **2.2 Saneamiento de Incoherencias y Backfill Idempotente (`backfill-equipos-eam.ts`):**
+  - Reclasificadas las 14 bombas Goulds/Pentair (IDs 32, 35, 38, 41, 44, 48, 51, 56, 59, 62, 65, 99, 102, 104) de `id_tipo_equipo = 1 (GENERADOR)` a `id_tipo_equipo = 2 (BOMBA)`.
+  - Migrado el compresor Siemens ID 214 a su estructura JSONB de compresor (`modulos.motor_electrico` + `modulos.compresor_industrial`).
+  - Traducidos los 467 equipos a `equipos.especificaciones_json` JSONB y proyectadas 2,276 filas en `equipos_atributos_filtro`.
+- [x] **2.3 Doble Escritura Transaccional y Proyección B-Tree en Backend Core:**
+  - Creado servicio `EquipoFilterProjectionService` y conectado a `EquiposGestionService`.
+- [x] **2.4 Endpoints REST del Hub de Configuración EAM (`apps/api/src/catalogos-eam`):**
+  - Controladores REST implementados y certificados con pruebas unitarias.
 
 ---
 
-## 5. Fase 3: Hub Ejecutivo EAM (4 Pestañas) y Ergonomía UI/UX (`apps/admin`)
+## 5. Fase 3: Saneamiento Canónico (Paso 3.0), Completitud CRUD API EAM y Hub Ejecutivo de 5 Pestañas (`apps/admin`) [ ✅ COMPLETADA ]
 
-**Objetivo:** Proveer la interfaz centralizada de administración del metamodelo en una experiencia de usuario fluida, densa y moderna en Next.js.
+**Objetivo:** Proveer la interfaz centralizada de administración del metamodelo de 5 capas en una experiencia de usuario fluida, con ergonomía "Cero Apretado / Cero Truncamiento", KPIs interactivos, alta rápida *In-Place & Elevate* y vista previa en vivo del arquetipo.
 
-### Tareas Nucleares:
-1. **Reestructuración de Sidebar (`apps/admin/src/components/layout/sidebar.tsx`):**
-   - Agrupación ejecutiva limpia: *Operación*, *Gestión de Activos*, *Compras/WMS*, *Configuración EAM*.
-2. **Hub Central de Equipos Maestros (`/configuracion/equipos-maestros`):**
-   - **Pestaña 1: Arquetipos (Lienzo en Blanco & Biblioteca):** Crear y editar tipos de maquinaria, ensamblar módulos funcionales (`tipo_equipo_modulos`) y asociar planes de mantenimiento (`tipo_equipo_planes`).
-   - **Pestaña 2: Modelos OEM & Kits BOM:** Catálogo maestro de fabricantes (Cummins, Caterpillar, Goulds, Siemens, etc.), fichas técnicas base y kit de repuestos sugeridos (`modelos_equipo_bom`).
-   - **Pestaña 3: Módulos Técnicos:** Gestor visual de módulos funcionales (`modulos_tecnicos`), ordenamiento drag-and-drop de atributos y configuración de grupos visuales.
-   - **Pestaña 4: Diccionario de Atributos:** Catálogo universal de atributos (`atributos_tecnicos`) con creación rápida *In-Place & Elevate*, tipos de control UI y selección de magnitudes UoM.
-3. **Consola de Unidades y Magnitudes (`/configuracion/equipos-maestros/unidades`):**
-   - Visualización de factores de escala afines ($y = ax + b$) y calculadora de validación en tiempo real.
+### Checklist de Ejecución y Certificación:
+- [x] **3.0 Saneamiento Profundo en Supabase y Paridad en `EquiposGestionService`:**
+  - Desactivación y limpieza determinista de registros residuales de pruebas E2E (`ENERGIA-TEST-4733`, `ENERGIA-TEST-4499`, `TEST-FULL-1551` en `tipos_equipo` y `TEST_AUTO_7864` en `tipos_servicio`).
+  - Depuración semántica de `tipo_equipo_planes`: erradicación de planes contradictorios vinculados a servicios correctivos/emergencia y sembrado simétrico de planes preventivos e inspección reales en pares canónicos (`1↔3` Generadores, `2↔5` Bombas, `4↔6` Motores, `20` Compresores).
+  - Corrección en `EquiposGestionService.listarEquiposCompletos()` para clasificar tarjetas y calcular KPIs de parque (`259 Generadores activos`, `203 Bombas activas`) priorizando `tipos_equipo.codigo_tipo` sobre filas satélite heredadas.
+- [x] **3.1 Completitud CRUD y Deduplicación Canónica en `CatalogosEamModule` (`apps/api`):**
+  - Deduplicación canónica transparente en `getArquetipos()` sumando conteos activos y totales de pares gemelos (`1+3`, `2+5`, `6+4`) y sincronización espejo al vincular módulos o gestionar planes preventivos.
+  - Endpoints CRUD completos para Magnitudes, Unidades UoM, Atributos Técnicos, Módulos Técnicos (incluyendo `PATCH /catalogos/modulos-tecnicos/:codigo/atributos/:idAtributo` para switches en caliente), Arquetipos, Planes Preventivos y Modelos OEM + buscador de componentes WMS (`GET /catalogos/modelos-equipo/componentes-wms`).
+  - Suite `catalogos-eam.service.spec.ts` ampliada a 9/9 pruebas unitarias en verde.
+- [x] **3.2 Hub Ejecutivo UI/UX de 5 Pestañas en `apps/admin` (`/configuracion/catalogos-eam` y `/configuracion/equipos-maestros`):**
+  - **5 Tarjetas KPI Superiores Interactivas:** Mapa mental clicable que conmuta directamente entre las 5 capas del metamodelo resaltando la capa activa.
+  - **Pestaña 1 (Magnitudes y Unidades UoM):** Maestro-Detalle de las 11 magnitudes y 39 unidades SI + **Calculadora Metrológica UoM en Vivo** ($y = ax + b$).
+  - **Pestaña 2 (Diccionario de Atributos Técnicos):** 145 atributos con buscador instantáneo, filtros por magnitud y tipo de control, jerarquía de 2 líneas sin truncamiento y chips de opciones ENUM.
+  - **Pestaña 3 (Módulos Técnicos Componibles):** Visor por `grupo_visual`, switches interactivos en caliente (`Obligatorio`, `Filtrable B-Tree`, `KPI Ficha`, `Visible PDF`) y creación rápida **`+ Crear y Asignar Atributo Rápido (In-Place)`**.
+  - **Pestaña 4 (Arquetipos Canónicos de Equipo):** Gestión de módulos heredados, CRUD de Planes Preventivos Base, creación rápida *In-Place* y panel interactivo **`👁️ Vista Previa en Vivo: Renderizador Dinámico de Placa Técnica y Formulario`** (`GET /catalogos/arquetipos/:id/esquema`).
+  - **Pestaña 5 (Modelos Maestros OEM y Kits BOM WMS):** Catálogo de modelos OEM, editor de especificaciones base JSONB y gestor de Lista de Materiales (BOM Default) conectado al catálogo WMS.
 
 ---
 

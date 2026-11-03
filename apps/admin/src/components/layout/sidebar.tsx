@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Cpu,
   FileBarChart,
   Gauge,
   HardDrive,
@@ -96,10 +97,17 @@ const navSections: NavSection[] = [
     label: 'Configuración',
     items: [
       {
+        title: 'Ingeniería EAM (Activos)',
+        href: '/configuracion/catalogos-eam',
+        icon: Cpu,
+        badge: 'EAM',
+      },
+      {
         title: 'Catálogos',
         href: '/configuracion/catalogos',
         icon: HardDrive,
         children: [
+          { title: 'Ingeniería EAM (Activos)', href: '/configuracion/catalogos-eam', icon: Cpu },
           { title: 'Tipos de Servicio', href: '/configuracion/catalogos/tipos-servicio', icon: Activity },
           { title: 'Servicios Específicos', href: '/configuracion/catalogos/servicios', icon: Tag },
           { title: 'Estados de Orden', href: '/configuracion/catalogos/estados', icon: CheckCircle2 },

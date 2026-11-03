@@ -511,17 +511,19 @@ export class EquiposGestionService {
         };
       }
 
-      // Filtro por tipo (GENERADOR, BOMBA, COMPRESOR, MOTOR)
+      // Filtro por tipo (GENERADOR, BOMBA, COMPRESOR, MOTOR, OTRO) gobernado por tipos_equipo canónico EAM
       if (tipo === 'GENERADOR') {
-        where.equipos_generador = { isNot: null };
+        where.tipos_equipo = { codigo_tipo: { in: ['GENERADOR', 'GEN'] } };
       } else if (tipo === 'BOMBA') {
-        where.equipos_bomba = { isNot: null };
+        where.tipos_equipo = { codigo_tipo: { in: ['BOMBA', 'BOM'] } };
       } else if (tipo === 'COMPRESOR') {
         where.tipos_equipo = { codigo_tipo: { in: ['COMP', 'COMPRESOR'] } };
       } else if (tipo === 'MOTOR') {
-        where.equipos_motor = { isNot: null };
-        where.equipos_generador = { is: null };
-        where.equipos_bomba = { is: null };
+        where.tipos_equipo = { codigo_tipo: { in: ['MOTOR', 'MOT'] } };
+      } else if (tipo === 'OTRO') {
+        where.tipos_equipo = {
+          codigo_tipo: { notIn: ['GENERADOR', 'GEN', 'BOMBA', 'BOM'] },
+        };
       }
 
       // ✅ APLICAR FACETAS DINÁMICAS EAM (Zero-Trust)
@@ -662,8 +664,18 @@ export class EquiposGestionService {
         }),
         this.prisma.equipos.count({ where }),
         this.prisma.equipos.count({ where: baseParkWhere }),
-        this.prisma.equipos.count({ where: { ...baseParkWhere, equipos_generador: { isNot: null } } }),
-        this.prisma.equipos.count({ where: { ...baseParkWhere, equipos_bomba: { isNot: null } } }),
+        this.prisma.equipos.count({
+          where: {
+            ...baseParkWhere,
+            tipos_equipo: { codigo_tipo: { in: ['GENERADOR', 'GEN'] } },
+          },
+        }),
+        this.prisma.equipos.count({
+          where: {
+            ...baseParkWhere,
+            tipos_equipo: { codigo_tipo: { in: ['BOMBA', 'BOM'] } },
+          },
+        }),
         this.prisma.equipos.count({ where: { ...baseParkWhere, estado_equipo: 'OPERATIVO' } }),
         this.prisma.equipos.count({ where: { ...baseParkWhere, estado_equipo: 'EN_REPARACION' } }),
         this.prisma.equipos.count({ where: { ...baseParkWhere, estado_equipo: 'FUERA_SERVICIO' } }),
@@ -676,24 +688,39 @@ export class EquiposGestionService {
         const nombrePersona = `${persona?.primer_nombre || ''} ${persona?.primer_apellido || ''}`.trim();
         const nombreCliente = nombrePersona || persona?.razon_social || persona?.nombre_comercial || 'Sin nombre';
 
-        // Determinar tipo según tabla hija y asegurar id_tipo_equipo
-        let tipoEquipo: string = eq.tipos_equipo?.codigo_tipo || 'DESCONOCIDO';
+        // Determinar tipo canónico priorizando SIEMPRE tipos_equipo.codigo_tipo (Fuente de Verdad EAM)
+        const codTipo = (eq.tipos_equipo?.codigo_tipo || '').toUpperCase();
+        let tipoEquipo: string = codTipo || 'DESCONOCIDO';
         let datosEspecificos: any = null;
 
-        // El tipo declarado manda: un COMPRESOR no debe heredar la etiqueta de
-        // una tabla hija legada (p. ej. equipos_bomba con especificaciones antiguas).
-        const esCompresorDeclarado =
-          eq.tipos_equipo?.codigo_tipo === 'COMP' || eq.tipos_equipo?.codigo_tipo === 'COMPRESOR';
+        const specsModulos = (eq as any).especificaciones_json?.modulos || {};
 
-        if (esCompresorDeclarado) {
+        if (codTipo === 'COMP' || codTipo === 'COMPRESOR') {
           tipoEquipo = 'COMPRESOR';
-          datosEspecificos = { motor: eq.equipos_motor };
-        } else if (eq.equipos_generador) {
+          datosEspecificos = { ...(specsModulos.compresor_industrial || {}), motor: eq.equipos_motor };
+        } else if (codTipo === 'BOMBA' || codTipo === 'BOM') {
+          tipoEquipo = 'BOMBA';
+          datosEspecificos = {
+            ...(specsModulos.bomba_hidraulica || {}),
+            ...(eq.equipos_bomba || {}),
+            motor: eq.equipos_motor,
+          };
+        } else if (codTipo === 'GENERADOR' || codTipo === 'GEN') {
           tipoEquipo = 'GENERADOR';
-          datosEspecificos = { ...eq.equipos_generador, motor: eq.equipos_motor };
+          datosEspecificos = {
+            ...(specsModulos.alternador_generador || {}),
+            ...(eq.equipos_generador || {}),
+            motor: eq.equipos_motor,
+          };
+        } else if (codTipo === 'MOTOR' || codTipo === 'MOT') {
+          tipoEquipo = 'MOTOR';
+          datosEspecificos = { motor: eq.equipos_motor };
         } else if (eq.equipos_bomba) {
           tipoEquipo = 'BOMBA';
           datosEspecificos = { ...eq.equipos_bomba, motor: eq.equipos_motor };
+        } else if (eq.equipos_generador) {
+          tipoEquipo = 'GENERADOR';
+          datosEspecificos = { ...eq.equipos_generador, motor: eq.equipos_motor };
         } else if (eq.equipos_motor) {
           tipoEquipo = 'MOTOR';
           datosEspecificos = { motor: eq.equipos_motor };

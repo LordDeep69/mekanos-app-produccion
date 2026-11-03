@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
@@ -41,8 +41,17 @@ export class AtributosTecnicosController {
   }
 
   @Put(':codigo')
-  @ApiOperation({ summary: 'Actualizar propiedades de un atributo técnico' })
+  @ApiOperation({ summary: 'Actualizar propiedades de un atributo técnico (PUT)' })
   async update(
+    @Param('codigo') codigo: string,
+    @Body() dto: UpdateAtributoTecnicoDto,
+  ) {
+    return this.eamService.updateAtributo(codigo, dto);
+  }
+
+  @Patch(':codigo')
+  @ApiOperation({ summary: 'Actualizar propiedades de un atributo técnico (PATCH)' })
+  async updatePatch(
     @Param('codigo') codigo: string,
     @Body() dto: UpdateAtributoTecnicoDto,
   ) {

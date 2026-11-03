@@ -5,14 +5,20 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
-import { CreateBomItemDto, CreateModeloEquipoDto } from '../dto/catalogos-eam.dto';
+import {
+  CreateBomItemDto,
+  CreateModeloEquipoDto,
+  UpdateModeloEquipoDto,
+} from '../dto/catalogos-eam.dto';
 
 @ApiTags('EAM - Modelos OEM y Listas de Partes BOM')
 @ApiBearerAuth()
@@ -20,6 +26,13 @@ import { CreateBomItemDto, CreateModeloEquipoDto } from '../dto/catalogos-eam.dt
 @UseGuards(JwtAuthGuard)
 export class ModelosEquipoController {
   constructor(private readonly eamService: CatalogosEamService) {}
+
+  @Get('componentes-wms')
+  @ApiOperation({ summary: 'Buscar componentes del catálogo WMS para vincular a kits BOM OEM' })
+  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda por código, referencia o descripción' })
+  async buscarComponentesWms(@Query('search') search?: string) {
+    return this.eamService.buscarComponentesWms(search);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Listar modelos OEM preconfigurados' })
@@ -39,6 +52,30 @@ export class ModelosEquipoController {
   @ApiOperation({ summary: 'Crear un nuevo modelo OEM' })
   async create(@Body() dto: CreateModeloEquipoDto) {
     return this.eamService.createModelo(dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Actualizar un modelo OEM y sus especificaciones base' })
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateModeloEquipoDto,
+  ) {
+    return this.eamService.updateModelo(id, dto);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Actualizar un modelo OEM y sus especificaciones base (PUT)' })
+  async updatePut(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateModeloEquipoDto,
+  ) {
+    return this.eamService.updateModelo(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Desactivar un modelo OEM' })
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.eamService.deleteModelo(id);
   }
 
   @Post(':id/bom')

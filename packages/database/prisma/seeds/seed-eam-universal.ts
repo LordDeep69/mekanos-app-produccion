@@ -711,45 +711,125 @@ async function main() {
     }
   }
 
-  // Planes de mantenimiento preventivo base
-  const tiposServicio = await prisma.tipos_servicio.findMany({
-    select: { id_tipo_servicio: true, nombre_tipo: true, id_tipo_equipo: true },
+  // 5.1 Saneamiento de Basura E2E en tipos_equipo y tipos_servicio
+  const tiposBasura = await prisma.tipos_equipo.findMany({
+    where: { codigo_tipo: { contains: 'TEST', mode: 'insensitive' } },
+    select: { id_tipo_equipo: true, codigo_tipo: true },
+  });
+  if (tiposBasura.length > 0) {
+    const idsBasura = tiposBasura.map((t) => t.id_tipo_equipo);
+    await prisma.tipo_equipo_planes.deleteMany({ where: { id_tipo_equipo: { in: idsBasura } } });
+    await prisma.tipo_equipo_modulos.deleteMany({ where: { id_tipo_equipo: { in: idsBasura } } });
+    await prisma.tipos_equipo.updateMany({
+      where: { id_tipo_equipo: { in: idsBasura } },
+      data: { activo: false },
+    });
+    console.log(`🧹 Desactivados y limpiados ${idsBasura.length} arquetipos residuales de test E2E: ${tiposBasura.map(t => t.codigo_tipo).join(', ')}`);
+  }
+
+  await prisma.tipos_servicio.updateMany({
+    where: { codigo_tipo: { contains: 'TEST', mode: 'insensitive' } },
+    data: { activo: false },
   });
 
-  const tiposPrincipales = [1, 2, 3, 5, 20];
-  for (const idTipo of tiposPrincipales) {
-    const tipoExiste = await prisma.tipos_equipo.findUnique({ where: { id_tipo_equipo: idTipo } });
-    if (!tipoExiste) continue;
+  // 5.2 Depuración semántica de tipo_equipo_planes: erradicar servicios CORRECTIVO / EMERGENCIA / TEST de los planes preventivos
+  const serviciosNoPreventivos = await prisma.tipos_servicio.findMany({
+    where: {
+      OR: [
+        { categoria: { in: ['CORRECTIVO', 'EMERGENCIA'] } },
+        { codigo_tipo: { contains: 'TEST', mode: 'insensitive' } },
+        { codigo_tipo: { in: ['CORRECTIVO', 'EMERGENCIA', 'GEN_CORR', 'BOM_CORR'] } },
+      ],
+    },
+    select: { id_tipo_servicio: true },
+  });
+  if (serviciosNoPreventivos.length > 0) {
+    await prisma.tipo_equipo_planes.deleteMany({
+      where: { id_tipo_servicio: { in: serviciosNoPreventivos.map((s) => s.id_tipo_servicio) } },
+    });
+  }
 
-    const afines = tiposServicio.filter(ts => ts.id_tipo_equipo === idTipo || ts.id_tipo_equipo === null);
-    const seleccion = afines.length > 0 ? afines.slice(0, 3) : tiposServicio.slice(0, 2);
+  // 5.3 Planes de mantenimiento preventivo e inspección canónicos con simetría 100% en pares (1↔3, 2↔5, 4↔6, 20)
+  const planesCanonicos = [
+    // GENERADORES (1: GENERADOR, 3: GEN)
+    {
+      tipos: [1, 3],
+      planes: [
+        { id_tipo_servicio: 3, nombre_plan: 'Plan Preventivo Tipo A - Generador (Cambio Fluidos y Filtros)', frecuencia_dias: 90, frecuencia_uso: 250 },
+        { id_tipo_servicio: 4, nombre_plan: 'Plan Preventivo Tipo B - Generador (Mantenimiento Mayor)', frecuencia_dias: 180, frecuencia_uso: 500 },
+        { id_tipo_servicio: 8, nombre_plan: 'Plan de Visita de Inspección y Diagnóstico Técnico', frecuencia_dias: 30, frecuencia_uso: 100 },
+      ],
+    },
+    // BOMBAS HIDRÁULICAS (2: BOMBA, 5: BOM)
+    {
+      tipos: [2, 5],
+      planes: [
+        { id_tipo_servicio: 5, nombre_plan: 'Plan Preventivo Tipo A - Sistema de Bombeo Hidráulico', frecuencia_dias: 90, frecuencia_uso: 250 },
+        { id_tipo_servicio: 19, nombre_plan: 'Plan Preventivo Tipo A - Motobomba Combustión / Red Contra Incendio', frecuencia_dias: 90, frecuencia_uso: 200 },
+        { id_tipo_servicio: 8, nombre_plan: 'Plan de Visita de Inspección Hidráulica y Presiones', frecuencia_dias: 30, frecuencia_uso: 100 },
+      ],
+    },
+    // MOTORES INDUSTRIALES (4: MOT, 6: MOTOR)
+    {
+      tipos: [4, 6],
+      planes: [
+        { id_tipo_servicio: 1, nombre_plan: 'Plan Preventivo Estándar Motor Industrial Tipo A', frecuencia_dias: 90, frecuencia_uso: 250 },
+        { id_tipo_servicio: 8, nombre_plan: 'Plan de Inspección Termográfica y Aislamiento', frecuencia_dias: 60, frecuencia_uso: 150 },
+      ],
+    },
+    // COMPRESORES INDUSTRIALES (20: COMP)
+    {
+      tipos: [20],
+      planes: [
+        { id_tipo_servicio: 17, nombre_plan: 'Plan Preventivo Tipo A - Compresor Industrial', frecuencia_dias: 90, frecuencia_uso: 250 },
+        { id_tipo_servicio: 8, nombre_plan: 'Plan de Inspección de Red Neumática y Secador', frecuencia_dias: 30, frecuencia_uso: 100 },
+      ],
+    },
+  ];
 
-    for (const ts of seleccion) {
-      await prisma.tipo_equipo_planes.upsert({
-        where: {
-          id_tipo_equipo_id_tipo_servicio: {
-            id_tipo_equipo: idTipo,
-            id_tipo_servicio: ts.id_tipo_servicio,
+  // Limpiar planes huérfanos en los arquetipos canónicos antes de sembrar la matriz simétrica
+  await prisma.tipo_equipo_planes.deleteMany({
+    where: { id_tipo_equipo: { in: [1, 2, 3, 4, 5, 6, 20] } },
+  });
+
+  for (const grupo of planesCanonicos) {
+    for (const idTipo of grupo.planes.length ? grupo.tipos : []) {
+      const tipoExiste = await prisma.tipos_equipo.findUnique({ where: { id_tipo_equipo: idTipo } });
+      if (!tipoExiste) continue;
+
+      for (const p of grupo.planes) {
+        const srvExiste = await prisma.tipos_servicio.findUnique({ where: { id_tipo_servicio: p.id_tipo_servicio } });
+        if (!srvExiste) continue;
+
+        await prisma.tipo_equipo_planes.upsert({
+          where: {
+            id_tipo_equipo_id_tipo_servicio: {
+              id_tipo_equipo: idTipo,
+              id_tipo_servicio: p.id_tipo_servicio,
+            },
           },
-        },
-        create: {
-          id_tipo_equipo: idTipo,
-          id_tipo_servicio: ts.id_tipo_servicio,
-          nombre_plan: `Plan Preventivo ${ts.nombre_tipo}`,
-          frecuencia_dias: 90,
-          frecuencia_uso: 250,
-          criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
-          es_plan_por_defecto: true,
-          activo: true,
-        },
-        update: {
-          nombre_plan: `Plan Preventivo ${ts.nombre_tipo}`,
-          activo: true,
-        },
-      });
+          create: {
+            id_tipo_equipo: idTipo,
+            id_tipo_servicio: p.id_tipo_servicio,
+            nombre_plan: p.nombre_plan,
+            frecuencia_dias: p.frecuencia_dias,
+            frecuencia_uso: p.frecuencia_uso,
+            criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
+            es_plan_por_defecto: true,
+            activo: true,
+          },
+          update: {
+            nombre_plan: p.nombre_plan,
+            frecuencia_dias: p.frecuencia_dias,
+            frecuencia_uso: p.frecuencia_uso,
+            criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
+            activo: true,
+          },
+        });
+      }
     }
   }
-  console.log('✅ Arquetipos vinculados a sus módulos y planes de servicio.');
+  console.log('✅ Arquetipos vinculados simétricamente a sus módulos y planes preventivos reales.');
 
   // --------------------------------------------------------------------------
   // 6. MODELOS OEM MAESTROS Y KITS BOM (modelos_equipo & modelos_equipo_bom)
