@@ -97,7 +97,7 @@ const navSections: NavSection[] = [
     label: 'Configuración',
     items: [
       {
-        title: 'Ingeniería EAM (Activos)',
+        title: 'Catálogo de Equipos Maestros',
         href: '/configuracion/catalogos-eam',
         icon: Cpu,
         badge: 'EAM',
@@ -107,7 +107,6 @@ const navSections: NavSection[] = [
         href: '/configuracion/catalogos',
         icon: HardDrive,
         children: [
-          { title: 'Ingeniería EAM (Activos)', href: '/configuracion/catalogos-eam', icon: Cpu },
           { title: 'Tipos de Servicio', href: '/configuracion/catalogos/tipos-servicio', icon: Activity },
           { title: 'Servicios Específicos', href: '/configuracion/catalogos/servicios', icon: Tag },
           { title: 'Estados de Orden', href: '/configuracion/catalogos/estados', icon: CheckCircle2 },
@@ -130,7 +129,10 @@ export function Sidebar() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
   useEffect(() => {
-    if (pathname?.includes('/configuracion/catalogos')) {
+    if (
+      pathname === '/configuracion/catalogos' ||
+      pathname?.startsWith('/configuracion/catalogos/')
+    ) {
       setExpandedMenus((prev) =>
         prev.includes('/configuracion/catalogos') ? prev : [...prev, '/configuracion/catalogos']
       );

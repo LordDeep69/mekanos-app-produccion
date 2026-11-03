@@ -53,8 +53,8 @@ const PARES_CANONICOS: Record<number, { primarioId: number; aliasIds: number[]; 
   3: { primarioId: 1, aliasIds: [3], nombreCanonico: 'Generador Eléctrico / Planta de Emergencia' },
   2: { primarioId: 2, aliasIds: [5], nombreCanonico: 'Bomba Hidráulica / Sistema de Bombeo' },
   5: { primarioId: 2, aliasIds: [5], nombreCanonico: 'Bomba Hidráulica / Sistema de Bombeo' },
-  6: { primarioId: 6, aliasIds: [4], nombreCanonico: 'Motor Industrial (Combustión / Eléctrico)' },
-  4: { primarioId: 6, aliasIds: [4], nombreCanonico: 'Motor Industrial (Combustión / Eléctrico)' },
+  6: { primarioId: 6, aliasIds: [4], nombreCanonico: 'Motor Industrial' },
+  4: { primarioId: 6, aliasIds: [4], nombreCanonico: 'Motor Industrial' },
 };
 
 const ALIAS_SECUNDARIOS_OCULTOS = new Set<number>([3, 5, 4]);
@@ -343,6 +343,22 @@ export class CatalogosEamService {
       include: {
         magnitud: true,
         unidad_defecto: true,
+        modulo_atributos: {
+          select: {
+            id_modulo: true,
+            grupo_visual: true,
+            obligatorio: true,
+            es_kpi: true,
+            modulo: {
+              select: {
+                id_modulo: true,
+                codigo_modulo: true,
+                nombre_modulo: true,
+                color_ui: true,
+              },
+            },
+          },
+        },
         _count: {
           select: { modulo_atributos: true },
         },
@@ -747,6 +763,12 @@ export class CatalogosEamService {
         resultado.push({
           ...t,
           nombre_canonico: par.nombreCanonico,
+          codigo_corto:
+            t.id_tipo_equipo === 1 || t.id_tipo_equipo === 3
+              ? 'GEN'
+              : t.id_tipo_equipo === 2 || t.id_tipo_equipo === 5
+                ? 'BOM'
+                : 'MOT',
           ids_sincronizados: idsGrupo,
           codigos_sincronizados: codigosSincronizados,
           equipos_activos: totalEquiposActivos,
@@ -759,9 +781,12 @@ export class CatalogosEamService {
         const activos = mapaActivos.has(t.id_tipo_equipo)
           ? (mapaActivos.get(t.id_tipo_equipo) || 0)
           : (t._count?.equipos || 0);
+        const nombreLimpio =
+          t.codigo_tipo === 'COMP' ? 'Compresor de Aire Industrial' : t.nombre_tipo;
         resultado.push({
           ...t,
-          nombre_canonico: t.nombre_tipo,
+          nombre_canonico: nombreLimpio,
+          codigo_corto: t.codigo_tipo,
           ids_sincronizados: [t.id_tipo_equipo],
           codigos_sincronizados: [t.codigo_tipo],
           equipos_activos: activos,
@@ -769,6 +794,7 @@ export class CatalogosEamService {
       }
     }
 
+    resultado.sort((a, b) => (b.equipos_activos ?? 0) - (a.equipos_activos ?? 0));
     return resultado;
   }
 

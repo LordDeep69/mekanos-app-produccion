@@ -1,6 +1,6 @@
 /**
  * MEKANOS S.A.S - Portal Admin
- * Servicio API Tipado para el Centro de Gobernanza EAM Universal (5 Capas)
+ * Servicio API Tipado para el Catálogo de Equipos Maestros y Fichas Técnicas EAM
  *
  * Conecta directamente con los controladores REST de CatalogosEamModule:
  * - /catalogos/magnitudes
@@ -16,6 +16,16 @@ import { apiClient } from '@/lib/api/client';
 // ═══════════════════════════════════════════════════════════════════════════
 // INTERFACES DE DOMINIO EAM (5 CAPAS)
 // ═══════════════════════════════════════════════════════════════════════════
+
+export type OpcionJsonItem =
+  | string
+  | {
+      valor?: string;
+      etiqueta?: string;
+      value?: string;
+      label?: string;
+      [key: string]: any;
+    };
 
 export interface UnidadMedidaEam {
   codigo: string;
@@ -51,12 +61,24 @@ export interface AtributoTecnico {
   id_magnitud?: number | null;
   unidad_defecto_codigo?: string | null;
   rol_semantico: string;
-  opciones_json?: Array<string | { valor?: string; etiqueta?: string; value?: string; label?: string; [key: string]: any }> | null;
+  opciones_json?: OpcionJsonItem[] | null;
   validacion_json?: Record<string, any> | null;
   es_sistema: boolean;
   activo: boolean;
   magnitud?: MagnitudFisica | null;
   unidad_defecto?: UnidadMedidaEam | null;
+  modulo_atributos?: Array<{
+    id_modulo: number;
+    grupo_visual?: string | null;
+    obligatorio: boolean;
+    es_kpi: boolean;
+    modulo: {
+      id_modulo: number;
+      codigo_modulo: string;
+      nombre_modulo: string;
+      color_ui?: string | null;
+    };
+  }>;
   _count?: {
     modulo_atributos: number;
   };
@@ -124,6 +146,7 @@ export interface PlanMantenimientoArquetipo {
 export interface ArquetipoEquipo {
   id_tipo_equipo: number;
   codigo_tipo: string;
+  codigo_corto?: string;
   nombre_tipo: string;
   nombre_canonico?: string;
   categoria?: string | null;
@@ -193,7 +216,7 @@ export interface ArquetipoEsquemaResponse {
           simbolo: string;
           es_base: boolean;
         }>;
-        opciones: string[];
+        opciones: OpcionJsonItem[];
       }>;
     }>;
   }>;
@@ -270,7 +293,9 @@ export interface ResumenEjecutivoEam {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function getResumenEjecutivoEam(): Promise<ResumenEjecutivoEam> {
-  const { data } = await apiClient.get<ResumenEjecutivoEam>('/catalogos/magnitudes/resumen-ejecutivo');
+  const { data } = await apiClient.get<ResumenEjecutivoEam>(
+    '/catalogos/magnitudes/resumen-ejecutivo',
+  );
   return data;
 }
 
@@ -299,7 +324,10 @@ export async function updateMagnitudEam(
     activo?: boolean;
   },
 ): Promise<MagnitudFisica> {
-  const { data } = await apiClient.patch<MagnitudFisica>(`/catalogos/magnitudes/${codigo}`, payload);
+  const { data } = await apiClient.patch<MagnitudFisica>(
+    `/catalogos/magnitudes/${codigo}`,
+    payload,
+  );
   return data;
 }
 
@@ -338,7 +366,10 @@ export async function updateUnidadEam(
     activo?: boolean;
   },
 ): Promise<UnidadMedidaEam> {
-  const { data } = await apiClient.patch<UnidadMedidaEam>(`/catalogos/unidades/${codigo}`, payload);
+  const { data } = await apiClient.patch<UnidadMedidaEam>(
+    `/catalogos/unidades/${codigo}`,
+    payload,
+  );
   return data;
 }
 
@@ -373,14 +404,17 @@ export async function createAtributoEam(payload: {
   nombre_atributo: string;
   descripcion?: string;
   tipo_control: string;
-  id_magnitud?: number;
+  id_magnitud?: number | null;
   codigo_magnitud?: string;
-  unidad_defecto_codigo?: string;
+  unidad_defecto_codigo?: string | null;
   rol_semantico?: string;
-  opciones_json?: string[];
+  opciones_json?: OpcionJsonItem[];
   validacion_json?: Record<string, any>;
 }): Promise<AtributoTecnico> {
-  const { data } = await apiClient.post<AtributoTecnico>('/catalogos/atributos-tecnicos', payload);
+  const { data } = await apiClient.post<AtributoTecnico>(
+    '/catalogos/atributos-tecnicos',
+    payload,
+  );
   return data;
 }
 
@@ -390,10 +424,10 @@ export async function updateAtributoEam(
     nombre_atributo?: string;
     descripcion?: string;
     tipo_control?: string;
-    id_magnitud?: number;
-    unidad_defecto_codigo?: string;
+    id_magnitud?: number | null;
+    unidad_defecto_codigo?: string | null;
     rol_semantico?: string;
-    opciones_json?: string[];
+    opciones_json?: OpcionJsonItem[];
     validacion_json?: Record<string, any>;
     activo?: boolean;
   },
@@ -497,7 +531,9 @@ export async function getArquetiposEam(): Promise<ArquetipoEquipo[]> {
   return data;
 }
 
-export async function getArquetipoEsquemaEam(idTipoEquipo: number): Promise<ArquetipoEsquemaResponse> {
+export async function getArquetipoEsquemaEam(
+  idTipoEquipo: number,
+): Promise<ArquetipoEsquemaResponse> {
   const { data } = await apiClient.get<ArquetipoEsquemaResponse>(
     `/catalogos/arquetipos/${idTipoEquipo}/esquema`,
   );
@@ -542,7 +578,10 @@ export async function vincularModuloArquetipoEam(
   idTipoEquipo: number,
   payload: { id_modulo: number; obligatorio?: boolean },
 ): Promise<any> {
-  const { data } = await apiClient.post(`/catalogos/arquetipos/${idTipoEquipo}/modulos`, payload);
+  const { data } = await apiClient.post(
+    `/catalogos/arquetipos/${idTipoEquipo}/modulos`,
+    payload,
+  );
   return data;
 }
 

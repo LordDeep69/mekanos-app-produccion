@@ -95,33 +95,33 @@ export default function ConfiguracionPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                Centro de Configuración y Gobernanza del Sistema
+                Centro de Configuración del Sistema
               </h1>
               <p className="text-sm text-slate-500">
-                Administra el metamodelo de activos EAM Universal, catálogos operativos y parámetros corporativos
+                Administra los equipos maestros, fichas técnicas, catálogos operativos y parámetros corporativos
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tarjeta Destacada: Ingeniería EAM Universal (5 Capas) */}
+      {/* Tarjeta Destacada: Catálogo de Equipos Maestros y Fichas Técnicas */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 text-white p-6 md:p-8 shadow-xl border border-slate-700/80">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="space-y-3 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold">
               <Sparkles className="h-3.5 w-3.5" />
-              <span>ARQUITECTURA EAM UNIVERSAL • 5 CAPAS CANÓNICAS</span>
+              <span>GESTIÓN DE ACTIVOS Y FICHAS TÉCNICAS</span>
             </div>
             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
               <Cpu className="h-6 w-6 text-blue-400 shrink-0" />
-              Ingeniería EAM Universal: Activos, Diccionario Técnico, Módulos y Modelos OEM
+              Catálogo de Equipos Maestros, Partes, Campos Técnicos y Modelos de Fábrica
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Gobierna las <strong>11 Magnitudes Físicas y 39 Unidades UoM</strong> (con calculadora dimensional en vivo),
-              el <strong>Diccionario de 145 Atributos Técnicos</strong>, los <strong>Módulos Técnicos Componibles</strong>,
-              los <strong>Arquetipos Canónicos de Equipo</strong> (464 activos operativos) y las plantillas de{' '}
-              <strong>Modelos Maestros OEM con Kits BOM WMS</strong>.
+              Configura los <strong>Tipos de Equipo</strong> (464 activos operativos), las plantillas de{' '}
+              <strong>Modelos de Fábrica y sus Kits de Repuestos (BOM)</strong>, las{' '}
+              <strong>Partes y Subsistemas</strong>, el <strong>Catálogo de 145 Campos Técnicos</strong> y las{' '}
+              <strong>Unidades de Medida</strong> con simulador interactivo de formulario y placa PDF.
             </p>
           </div>
           <div className="shrink-0">
@@ -129,7 +129,7 @@ export default function ConfiguracionPage() {
               href="/configuracion/catalogos-eam"
               className="inline-flex items-center gap-2.5 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/30 transition-all"
             >
-              <span>Abrir Hub de Ingeniería EAM</span>
+              <span>Abrir Catálogo de Equipos Maestros</span>
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>

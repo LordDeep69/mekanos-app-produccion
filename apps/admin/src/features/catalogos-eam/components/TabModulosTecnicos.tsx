@@ -15,6 +15,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ModuloAtributoItem,
   ModuloTecnico,
+  TIPOS_CONTROL_HUMANOS,
+  getTipoControlHumano,
   useAsignarAtributoModuloEam,
   useAtributosEam,
   useCreateAtributoEam,
@@ -50,7 +52,7 @@ export function TabModulosTecnicos() {
   const desasignarMut = useDesasignarAtributoModuloEam();
   const createAttrMut = useCreateAtributoEam();
 
-  // Modal Crear / Editar Módulo
+  // Modal Crear / Editar Parte o Subsistema
   const [showModModal, setShowModModal] = useState(false);
   const [editingMod, setEditingMod] = useState<ModuloTecnico | null>(null);
   const [modForm, setModForm] = useState({
@@ -60,7 +62,7 @@ export function TabModulosTecnicos() {
     color_ui: '#3B82F6',
   });
 
-  // Modal Asignar Atributo Existente
+  // Modal Asignar Campo Existente
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignForm, setAssignForm] = useState({
     id_atributo: '',
@@ -72,12 +74,12 @@ export function TabModulosTecnicos() {
     visible_en_pdf: true,
   });
 
-  // Modal Creación Rápida "In-Place & Elevate" (Crear en Diccionario + Asignar al Módulo en 1 paso)
+  // Modal Crear y Asignar Nuevo Campo en un solo paso
   const [showInPlaceModal, setShowInPlaceModal] = useState(false);
   const [inPlaceForm, setInPlaceForm] = useState({
     codigo_atributo: '',
     nombre_atributo: '',
-    tipo_control: 'NUMERICO',
+    tipo_control: 'NUMERICO_MAGNITUD',
     id_magnitud: '',
     unidad_defecto_codigo: '',
     opciones_csv: '',
@@ -194,31 +196,37 @@ export function TabModulosTecnicos() {
     e.preventDefault();
     if (!selectedModuloCode) return;
 
+    const isSelect =
+      inPlaceForm.tipo_control === 'SELECTOR' || inPlaceForm.tipo_control === 'SELECT';
+    const isNumMag = inPlaceForm.tipo_control === 'NUMERICO_MAGNITUD';
+
     const opciones_json =
-      inPlaceForm.tipo_control === 'SELECT' && inPlaceForm.opciones_csv.trim()
+      isSelect && inPlaceForm.opciones_csv.trim()
         ? inPlaceForm.opciones_csv
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
+            .map((item) => ({
+              valor: item.toUpperCase().replace(/\s+/g, '_'),
+              etiqueta: item,
+            }))
         : undefined;
 
-    // 1. Elevar y crear atributo en el Diccionario Global
+    // 1. Crear el campo técnico en el Catálogo General
     const nuevoAtributo = await createAttrMut.mutateAsync({
       codigo_atributo: inPlaceForm.codigo_atributo,
       nombre_atributo: inPlaceForm.nombre_atributo,
       tipo_control: inPlaceForm.tipo_control,
       id_magnitud:
-        inPlaceForm.tipo_control === 'NUMERICO' && inPlaceForm.id_magnitud
-          ? Number(inPlaceForm.id_magnitud)
-          : undefined,
+        isNumMag && inPlaceForm.id_magnitud ? Number(inPlaceForm.id_magnitud) : undefined,
       unidad_defecto_codigo:
-        inPlaceForm.tipo_control === 'NUMERICO' && inPlaceForm.unidad_defecto_codigo
+        isNumMag && inPlaceForm.unidad_defecto_codigo
           ? inPlaceForm.unidad_defecto_codigo
           : undefined,
       opciones_json,
     });
 
-    // 2. Asignar inmediatamente al Módulo Activo
+    // 2. Asignar inmediatamente a la Parte / Subsistema activo
     await asignarMut.mutateAsync({
       codigoModulo: selectedModuloCode,
       payload: {
@@ -240,7 +248,7 @@ export function TabModulosTecnicos() {
       <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-slate-200">
         <Loader2 className="h-9 w-9 animate-spin text-blue-600 mb-3" />
         <p className="text-sm font-medium text-slate-600">
-          Cargando módulos técnicos componibles...
+          Cargando Partes y Subsistemas...
         </p>
       </div>
     );
@@ -248,25 +256,25 @@ export function TabModulosTecnicos() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* COLUMNA IZQUIERDA: LISTA DE MÓDULOS TÉCNICOS COMPONIBLES */}
-      <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* COLUMNA IZQUIERDA: LISTA DE PARTES Y SUBSISTEMAS */}
+      <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Boxes className="h-5 w-5 text-blue-600" />
-              Módulos Técnicos ({modulos.length})
+              <span>Partes y Subsistemas ({modulos.length})</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Sub-sistemas reutilizables entre arquetipos
+              Secciones reutilizables que componen las fichas de los equipos
             </p>
           </div>
           <button
             type="button"
             onClick={handleOpenNewMod}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>Nuevo Módulo</span>
+            <span>Nueva Parte</span>
           </button>
         </div>
 
@@ -290,9 +298,10 @@ export function TabModulosTecnicos() {
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: mod.color_ui || '#3B82F6' }}
                     />
-                    <span className="text-sm font-bold text-slate-900">{mod.nombre_modulo}</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {mod.nombre_modulo}
+                    </span>
                   </div>
-                  <div className="font-mono text-xs text-slate-500">{mod.codigo_modulo}</div>
                   {mod.descripcion && (
                     <p className="text-xs text-slate-500 leading-relaxed pt-0.5">
                       {mod.descripcion}
@@ -302,7 +311,7 @@ export function TabModulosTecnicos() {
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold">
-                    {totalAttrs} atributos
+                    {totalAttrs} campos
                   </span>
                   <button
                     type="button"
@@ -311,7 +320,7 @@ export function TabModulosTecnicos() {
                       handleOpenEditMod(mod);
                     }}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                    title="Editar módulo"
+                    title="Editar parte o subsistema"
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
@@ -322,16 +331,16 @@ export function TabModulosTecnicos() {
         </div>
       </div>
 
-      {/* COLUMNA DERECHA: MATRIZ DE ATRIBUTOS CON SWITCHES INTERACTIVOS EN CALIENTE */}
+      {/* COLUMNA DERECHA: CAMPOS TÉCNICOS DE LA PARTE Y CONTROLES EN VIVO */}
       <div className="lg:col-span-8 space-y-5">
         {loadingDetalle || !moduloDetalle ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-16 flex flex-col items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
-            <p className="text-sm text-slate-500">Cargando atributos del módulo...</p>
+            <p className="text-sm text-slate-500">Cargando campos de la parte...</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            {/* Cabecera del Módulo Seleccionado */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+            {/* Cabecera de la Parte Seleccionada */}
             <div className="p-6 border-b border-slate-100 bg-slate-50/70 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center flex-wrap gap-2.5">
@@ -339,13 +348,9 @@ export function TabModulosTecnicos() {
                   <h3 className="text-lg font-bold text-slate-900">
                     {moduloDetalle.nombre_modulo}
                   </h3>
-                  <span className="px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-800 font-mono text-xs font-bold">
-                    {moduloDetalle.codigo_modulo}
-                  </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Conmuta en caliente las banderas de obligatoriedad, indexación B-Tree, KPI primario y
-                  visibilidad en informe PDF.
+                  Elige qué campos son obligatorios al registrar el equipo, cuáles sirven para filtrar en el directorio, cuáles se destacan en las tarjetas y cuáles se imprimen en el PDF.
                 </p>
               </div>
 
@@ -366,10 +371,10 @@ export function TabModulosTecnicos() {
                     });
                     setShowAssignModal(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-sm transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-colors"
                 >
                   <Plus className="h-4 w-4 text-blue-600" />
-                  <span>Vincular Atributo Existente</span>
+                  <span>Agregar Campo Existente</span>
                 </button>
 
                 <button
@@ -378,7 +383,7 @@ export function TabModulosTecnicos() {
                     setInPlaceForm({
                       codigo_atributo: '',
                       nombre_atributo: '',
-                      tipo_control: 'NUMERICO',
+                      tipo_control: 'NUMERICO_MAGNITUD',
                       id_magnitud: '',
                       unidad_defecto_codigo: '',
                       opciones_csv: '',
@@ -391,15 +396,15 @@ export function TabModulosTecnicos() {
                     });
                     setShowInPlaceModal(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md transition-all"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-sm transition-all"
                 >
                   <Sparkles className="h-4 w-4" />
-                  <span>+ Crear y Asignar Atributo Rápido (In-Place)</span>
+                  <span>+ Crear Nuevo Campo aquí</span>
                 </button>
               </div>
             </div>
 
-            {/* Grupos Visuales del Módulo */}
+            {/* Secciones Visuales de la Parte */}
             <div className="p-6 space-y-6">
               {gruposVisualesMap.map(([grupoNombre, items]) => (
                 <div
@@ -408,10 +413,10 @@ export function TabModulosTecnicos() {
                 >
                   <div className="px-5 py-3 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
                     <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-                      Grupo Visual: {grupoNombre}
+                      Sección de Ficha: {grupoNombre}
                     </span>
                     <span className="text-xs font-semibold text-slate-500">
-                      {items.length} atributos
+                      {items.length} campos
                     </span>
                   </div>
 
@@ -419,18 +424,23 @@ export function TabModulosTecnicos() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase">
-                          <th className="py-3 px-5">Atributo / Código Canónico</th>
-                          <th className="py-3 px-3">Control / UoM</th>
+                          <th className="py-3 px-5">Campo Técnico</th>
+                          <th className="py-3 px-3">Tipo de Dato y Unidad</th>
                           <th className="py-3 px-3 text-center">Obligatorio</th>
-                          <th className="py-3 px-3 text-center">Filtrable B-Tree</th>
-                          <th className="py-3 px-3 text-center">KPI Ficha</th>
-                          <th className="py-3 px-3 text-center">Visible PDF</th>
+                          <th className="py-3 px-3 text-center">Permitir Filtrar</th>
+                          <th className="py-3 px-3 text-center">Destacar en Tarjeta (KPI)</th>
+                          <th className="py-3 px-3 text-center">Imprimir en PDF</th>
                           <th className="py-3 px-4 text-right">Quitar</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-sm">
                         {items.map((ma) => {
                           const attr = ma.atributo;
+                          const ctrlInfo = getTipoControlHumano(
+                            attr.tipo_control,
+                            Boolean(attr.id_magnitud || attr.unidad_defecto_codigo),
+                          );
+
                           return (
                             <tr
                               key={ma.id_modulo_atributo}
@@ -440,19 +450,24 @@ export function TabModulosTecnicos() {
                                 <div className="font-bold text-slate-900 text-sm">
                                   {attr.nombre_atributo}
                                 </div>
-                                <div className="font-mono text-xs text-slate-500 mt-0.5">
-                                  {attr.codigo_atributo}
-                                </div>
+                                {attr.descripcion && (
+                                  <div className="text-xs text-slate-500 mt-0.5">
+                                    {attr.descripcion}
+                                  </div>
+                                )}
                               </td>
 
                               <td className="py-3.5 px-3">
                                 <div className="flex flex-col gap-1 items-start">
-                                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[11px] font-bold">
-                                    {attr.tipo_control}
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-bold ${ctrlInfo.badgeClass}`}
+                                  >
+                                    <span>{ctrlInfo.iconSymbol}</span>
+                                    <span>{ctrlInfo.shortLabel}</span>
                                   </span>
                                   {attr.unidad_defecto_codigo && (
-                                    <span className="text-[11px] font-mono text-blue-600 font-semibold">
-                                      UoM: {attr.unidad_defecto_codigo}
+                                    <span className="text-[11px] text-blue-700 font-semibold">
+                                      Unidad: {attr.unidad_defecto_codigo}
                                     </span>
                                   )}
                                 </div>
@@ -466,7 +481,7 @@ export function TabModulosTecnicos() {
                                   className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
                                     ma.obligatorio ? 'bg-rose-600' : 'bg-slate-200'
                                   }`}
-                                  title="Conmutar Obligatorio"
+                                  title="Exigir este dato obligatoriamente al registrar el equipo"
                                 >
                                   <span
                                     className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
@@ -476,7 +491,7 @@ export function TabModulosTecnicos() {
                                 </button>
                               </td>
 
-                              {/* Switch Filtrable B-Tree */}
+                              {/* Switch Permitir Filtrar */}
                               <td className="py-3.5 px-3 text-center">
                                 <button
                                   type="button"
@@ -484,7 +499,7 @@ export function TabModulosTecnicos() {
                                   className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
                                     ma.es_filtrable ? 'bg-blue-600' : 'bg-slate-200'
                                   }`}
-                                  title="Conmutar Indexación B-Tree"
+                                  title="Permitir buscar y filtrar equipos por este campo en el directorio"
                                 >
                                   <span
                                     className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
@@ -494,7 +509,7 @@ export function TabModulosTecnicos() {
                                 </button>
                               </td>
 
-                              {/* Switch KPI Ficha */}
+                              {/* Switch Destacar en Tarjeta (KPI) */}
                               <td className="py-3.5 px-3 text-center">
                                 <button
                                   type="button"
@@ -502,7 +517,7 @@ export function TabModulosTecnicos() {
                                   className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
                                     ma.es_kpi ? 'bg-amber-500' : 'bg-slate-200'
                                   }`}
-                                  title="Conmutar KPI Destacado"
+                                  title="Destacar como dato principal en la tarjeta del equipo y cabecera del PDF"
                                 >
                                   <span
                                     className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
@@ -512,7 +527,7 @@ export function TabModulosTecnicos() {
                                 </button>
                               </td>
 
-                              {/* Switch Visible PDF */}
+                              {/* Switch Imprimir en PDF */}
                               <td className="py-3.5 px-3 text-center">
                                 <button
                                   type="button"
@@ -520,7 +535,7 @@ export function TabModulosTecnicos() {
                                   className={`inline-flex items-center justify-center w-9 h-5 rounded-full transition-colors ${
                                     ma.visible_en_pdf ? 'bg-emerald-600' : 'bg-slate-200'
                                   }`}
-                                  title="Conmutar Visible en Ficha / PDF"
+                                  title="Incluir este campo en la placa técnica del informe PDF"
                                 >
                                   <span
                                     className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
@@ -536,7 +551,7 @@ export function TabModulosTecnicos() {
                                   onClick={async () => {
                                     if (
                                       window.confirm(
-                                        `¿Desvincular el atributo "${attr.nombre_atributo}" de este módulo?`,
+                                        `¿Quitar el campo "${attr.nombre_atributo}" de esta parte?`,
                                       )
                                     ) {
                                       await desasignarMut.mutateAsync({
@@ -546,7 +561,7 @@ export function TabModulosTecnicos() {
                                     }
                                   }}
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                  title="Desvincular atributo"
+                                  title="Quitar campo de esta parte"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -564,13 +579,13 @@ export function TabModulosTecnicos() {
         )}
       </div>
 
-      {/* MODAL CREAR / EDITAR MÓDULO TÉCNICO */}
+      {/* MODAL CREAR / EDITAR PARTE O SUBSISTEMA */}
       {showModModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h4 className="text-base font-bold text-slate-900">
-                {editingMod ? `Editar Módulo: ${editingMod.codigo_modulo}` : 'Nuevo Módulo Técnico'}
+                {editingMod ? `Editar Parte: ${editingMod.nombre_modulo}` : 'Nueva Parte o Subsistema'}
               </h4>
               <button
                 type="button"
@@ -583,7 +598,35 @@ export function TabModulosTecnicos() {
             <form onSubmit={handleSaveMod} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Código del Módulo (snake_case) *
+                  Nombre de la Parte o Subsistema *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Tablero de Transferencia Automática (ATS)"
+                  value={modForm.nombre_modulo}
+                  onChange={(e) => {
+                    const nombre = e.target.value;
+                    const slug = editingMod
+                      ? modForm.codigo_modulo
+                      : nombre
+                          .toLowerCase()
+                          .normalize('NFD')
+                          .replace(/[\u0300-\u036f]/g, '')
+                          .replace(/[^a-z0-9]+/g, '_')
+                          .replace(/^_+|_+$/g, '');
+                    setModForm({
+                      ...modForm,
+                      nombre_modulo: nombre,
+                      codigo_modulo: slug,
+                    });
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Código Identificador *
                 </label>
                 <input
                   type="text"
@@ -597,25 +640,12 @@ export function TabModulosTecnicos() {
                       codigo_modulo: e.target.value.toLowerCase().replace(/\s+/g, '_'),
                     })
                   }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm disabled:bg-slate-100"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs bg-slate-50 disabled:bg-slate-100"
                 />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nombre del Módulo *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Tablero de Transferencia Automática (ATS)"
-                  value={modForm.nombre_modulo}
-                  onChange={(e) => setModForm({ ...modForm, nombre_modulo: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Descripción Funcional
+                  Descripción Breve
                 </label>
                 <textarea
                   rows={2}
@@ -636,7 +666,7 @@ export function TabModulosTecnicos() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
                 >
-                  Guardar Módulo
+                  Guardar Parte
                 </button>
               </div>
             </form>
@@ -644,13 +674,13 @@ export function TabModulosTecnicos() {
         </div>
       )}
 
-      {/* MODAL ASIGNAR ATRIBUTO EXISTENTE */}
+      {/* MODAL AGREGAR CAMPO EXISTENTE */}
       {showAssignModal && moduloDetalle && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h4 className="text-base font-bold text-slate-900">
-                Vincular Atributo a {moduloDetalle.nombre_modulo}
+                Agregar Campo Existente a {moduloDetalle.nombre_modulo}
               </h4>
               <button
                 type="button"
@@ -663,27 +693,30 @@ export function TabModulosTecnicos() {
             <form onSubmit={handleSaveAssign} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Seleccionar Atributo del Diccionario *
+                  Seleccionar Campo del Catálogo *
                 </label>
                 <select
                   required
                   value={assignForm.id_atributo}
                   onChange={(e) => setAssignForm({ ...assignForm, id_atributo: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-semibold"
                 >
-                  <option value="">-- Seleccionar Atributo --</option>
-                  {atributosDisponiblesParaAsignar.map((a) => (
-                    <option key={a.id_atributo} value={a.id_atributo}>
-                      {a.nombre_atributo} ({a.codigo_atributo}) [{a.tipo_control}]
-                    </option>
-                  ))}
+                  <option value="">-- Seleccionar Campo Técnico --</option>
+                  {atributosDisponiblesParaAsignar.map((a) => {
+                    const info = getTipoControlHumano(a.tipo_control, Boolean(a.id_magnitud));
+                    return (
+                      <option key={a.id_atributo} value={a.id_atributo}>
+                        {a.nombre_atributo} ({info.shortLabel})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Grupo Visual en Formulario *
+                    Sección en el Formulario *
                   </label>
                   <input
                     type="text"
@@ -698,7 +731,7 @@ export function TabModulosTecnicos() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Orden Visual
+                    Orden de Aparición
                   </label>
                   <input
                     type="number"
@@ -721,7 +754,7 @@ export function TabModulosTecnicos() {
                     }
                     className="rounded text-blue-600"
                   />
-                  <span>Obligatorio en Alta</span>
+                  <span>Obligatorio al Registrar</span>
                 </label>
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
@@ -732,7 +765,7 @@ export function TabModulosTecnicos() {
                     }
                     className="rounded text-blue-600"
                   />
-                  <span>Indexar en B-Tree</span>
+                  <span>Permitir Filtrar en Directorio</span>
                 </label>
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
@@ -741,7 +774,7 @@ export function TabModulosTecnicos() {
                     onChange={(e) => setAssignForm({ ...assignForm, es_kpi: e.target.checked })}
                     className="rounded text-blue-600"
                   />
-                  <span>KPI Primario en Ficha</span>
+                  <span>Destacar en Tarjeta (KPI)</span>
                 </label>
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
@@ -752,7 +785,7 @@ export function TabModulosTecnicos() {
                     }
                     className="rounded text-blue-600"
                   />
-                  <span>Visible en PDF</span>
+                  <span>Imprimir en PDF</span>
                 </label>
               </div>
 
@@ -769,7 +802,7 @@ export function TabModulosTecnicos() {
                   disabled={asignarMut.isPending}
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
                 >
-                  Vincular al Módulo
+                  Agregar a la Parte
                 </button>
               </div>
             </form>
@@ -777,7 +810,7 @@ export function TabModulosTecnicos() {
         </div>
       )}
 
-      {/* MODAL CREACIÓN RÁPIDA "IN-PLACE & ELEVATE" */}
+      {/* MODAL CREAR NUEVO CAMPO Y ASIGNAR EN UN PASO */}
       {showInPlaceModal && moduloDetalle && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden">
@@ -786,11 +819,10 @@ export function TabModulosTecnicos() {
                 <Sparkles className="h-5 w-5" />
                 <div>
                   <h4 className="text-sm font-bold">
-                    Creación Rápida &quot;In-Place &amp; Elevate&quot;
+                    Crear Nuevo Campo Técnico para {moduloDetalle.nombre_modulo}
                   </h4>
                   <p className="text-[11px] text-blue-100">
-                    Crea el atributo en el Diccionario Global y lo asigna a{' '}
-                    <strong>{moduloDetalle.nombre_modulo}</strong> en un solo paso
+                    Se guardará en el Catálogo General y quedará asignado a esta parte de inmediato.
                   </p>
                 </div>
               </div>
@@ -804,10 +836,55 @@ export function TabModulosTecnicos() {
             </div>
 
             <form onSubmit={handleSaveInPlace} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nombre del Campo Técnico *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Temperatura Máxima de Devanado"
+                  value={inPlaceForm.nombre_atributo}
+                  onChange={(e) => {
+                    const nombre = e.target.value;
+                    const slug = nombre
+                      .toLowerCase()
+                      .normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g, '')
+                      .replace(/[^a-z0-9]+/g, '_')
+                      .replace(/^_+|_+$/g, '');
+                    setInPlaceForm({
+                      ...inPlaceForm,
+                      nombre_atributo: nombre,
+                      codigo_atributo: slug,
+                    });
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                />
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Código Canónico (snake_case) *
+                    Tipo de Dato *
+                  </label>
+                  <select
+                    value={inPlaceForm.tipo_control}
+                    onChange={(e) =>
+                      setInPlaceForm({ ...inPlaceForm, tipo_control: e.target.value })
+                    }
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs bg-white font-semibold"
+                  >
+                    {TIPOS_CONTROL_HUMANOS.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.iconSymbol} {t.shortLabel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Código Identificador (Automático) *
                   </label>
                   <input
                     type="text"
@@ -820,49 +897,16 @@ export function TabModulosTecnicos() {
                         codigo_atributo: e.target.value.toLowerCase().replace(/\s+/g, '_'),
                       })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs bg-slate-50"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tipo de Control *
-                  </label>
-                  <select
-                    value={inPlaceForm.tipo_control}
-                    onChange={(e) =>
-                      setInPlaceForm({ ...inPlaceForm, tipo_control: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-semibold"
-                  >
-                    <option value="NUMERICO">NUMERICO (Con UoM)</option>
-                    <option value="TEXTO">TEXTO (Alfanumérico)</option>
-                    <option value="SELECT">SELECT (Lista de Opciones)</option>
-                    <option value="BOOLEANO">BOOLEANO (Sí / No)</option>
-                  </select>
-                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nombre Legible del Atributo *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Temperatura Máxima de Devanado"
-                  value={inPlaceForm.nombre_atributo}
-                  onChange={(e) =>
-                    setInPlaceForm({ ...inPlaceForm, nombre_atributo: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
-                />
-              </div>
-
-              {inPlaceForm.tipo_control === 'NUMERICO' && (
+              {inPlaceForm.tipo_control === 'NUMERICO_MAGNITUD' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-blue-50/70 p-4 rounded-xl border border-blue-200">
                   <div>
                     <label className="block text-xs font-bold text-blue-900 mb-1">
-                      Magnitud Física
+                      Magnitud de Medida
                     </label>
                     <select
                       value={inPlaceForm.id_magnitud}
@@ -877,29 +921,29 @@ export function TabModulosTecnicos() {
                       }}
                       className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
                     >
-                      <option value="">-- Sin Magnitud --</option>
+                      <option value="">-- Seleccionar Magnitud --</option>
                       {magnitudes.map((m) => (
                         <option key={m.id_magnitud} value={m.id_magnitud}>
-                          {m.nombre_magnitud} ({m.codigo_magnitud})
+                          {m.nombre_magnitud}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-blue-900 mb-1">
-                      Unidad Canónica Default
+                      Unidad por Defecto
                     </label>
                     <select
                       value={inPlaceForm.unidad_defecto_codigo}
                       onChange={(e) =>
                         setInPlaceForm({ ...inPlaceForm, unidad_defecto_codigo: e.target.value })
                       }
-                      className="w-full px-3 py-2 rounded-lg border border-blue-300 font-mono text-xs font-semibold bg-white"
+                      className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
                     >
-                      <option value="">-- Seleccionar UoM --</option>
+                      <option value="">-- Seleccionar Unidad --</option>
                       {(magnitudInPlaceObj?.unidades_medida || []).map((u) => (
                         <option key={u.codigo} value={u.codigo}>
-                          [{u.codigo}] {u.nombre} ({u.simbolo})
+                          {u.nombre} ({u.simbolo})
                         </option>
                       ))}
                     </select>
@@ -907,10 +951,11 @@ export function TabModulosTecnicos() {
                 </div>
               )}
 
-              {inPlaceForm.tipo_control === 'SELECT' && (
+              {(inPlaceForm.tipo_control === 'SELECTOR' ||
+                inPlaceForm.tipo_control === 'SELECT') && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Opciones separadas por coma *
+                    Opciones de la Lista (separadas por coma) *
                   </label>
                   <input
                     type="text"
@@ -920,7 +965,7 @@ export function TabModulosTecnicos() {
                     onChange={(e) =>
                       setInPlaceForm({ ...inPlaceForm, opciones_csv: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs"
                   />
                 </div>
               )}
@@ -928,7 +973,7 @@ export function TabModulosTecnicos() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Grupo Visual en {moduloDetalle.nombre_modulo} *
+                    Sección en {moduloDetalle.nombre_modulo} *
                   </label>
                   <input
                     type="text"
@@ -961,7 +1006,7 @@ export function TabModulosTecnicos() {
                       }
                       className="rounded text-blue-600"
                     />
-                    <span>KPI Primario</span>
+                    <span>Destacar (KPI)</span>
                   </label>
                 </div>
               </div>
@@ -977,10 +1022,10 @@ export function TabModulosTecnicos() {
                 <button
                   type="submit"
                   disabled={createAttrMut.isPending || asignarMut.isPending}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-md"
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-sm"
                 >
                   <Check className="h-4 w-4" />
-                  <span>Crear en Diccionario y Asignar</span>
+                  <span>Guardar y Asignar Campo</span>
                 </button>
               </div>
             </form>

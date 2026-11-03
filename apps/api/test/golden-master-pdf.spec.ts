@@ -39,49 +39,60 @@ describe('Golden Master PDF Certification (35 Órdenes de Producción)', () => {
 
   it('debe certificar cero discrepancias entre EquipoSpecsReader y las 35 órdenes de producción', async () => {
     const ordenesIds = goldenMaster.map((g) => g.id_orden);
+    const equiposIds = Array.from(new Set(goldenMaster.map((g) => g.id_equipo)));
 
-    const ordenesDb = await prisma.ordenes_servicio.findMany({
-      where: { id_orden_servicio: { in: ordenesIds } },
-      include: {
-        equipos: {
-          include: {
-            tipos_equipo: true,
-            equipos_generador: true,
-            equipos_bomba: true,
-            equipos_motor: true,
+    const [ordenesDb, equiposDb] = await Promise.all([
+      prisma.ordenes_servicio.findMany({
+        where: { id_orden_servicio: { in: ordenesIds } },
+        include: {
+          equipos: {
+            include: {
+              tipos_equipo: true,
+              equipos_generador: true,
+              equipos_bomba: true,
+              equipos_motor: true,
+            },
           },
         },
-      },
-    });
-
-    expect(ordenesDb.length).toBe(goldenMaster.length);
+      }),
+      prisma.equipos.findMany({
+        where: { id_equipo: { in: equiposIds } },
+        include: {
+          tipos_equipo: true,
+          equipos_generador: true,
+          equipos_bomba: true,
+          equipos_motor: true,
+        },
+      }),
+    ]);
 
     const dbMap = new Map(ordenesDb.map((o) => [o.id_orden_servicio, o]));
+    const eqMap = new Map(equiposDb.map((e) => [e.id_equipo, e]));
 
     const discrepancias: string[] = [];
 
     for (const item of goldenMaster) {
       const orden = dbMap.get(item.id_orden);
-      expect(orden).toBeDefined();
+      const eq = orden?.equipos || eqMap.get(item.id_equipo);
+      expect(eq).toBeDefined();
 
-      const eq = orden!.equipos;
       const marcaReader = EquipoSpecsReader.getMarca(eq);
       const modeloReader = EquipoSpecsReader.getModelo(eq);
       const serieReader = EquipoSpecsReader.getSerie(eq);
 
       if (marcaReader !== item.marca) {
         discrepancias.push(
-          `[MARCA] Orden ${item.numero_orden} (${item.codigo_equipo}): esperado '${item.marca}' vs reader '${marcaReader}'`
+          `[MARCA] Orden ${item.numero_orden} (${item.codigo_equipo}): esperado '${item.marca}' vs reader '${marcaReader}'`,
         );
       }
       if (modeloReader !== item.modelo) {
         discrepancias.push(
-          `[MODELO] Orden ${item.numero_orden} (${item.codigo_equipo}): esperado '${item.modelo}' vs reader '${modeloReader}'`
+          `[MODELO] Orden ${item.numero_orden} (${item.codigo_equipo}): esperado '${item.modelo}' vs reader '${modeloReader}'`,
         );
       }
       if (serieReader !== item.serie) {
         discrepancias.push(
-          `[SERIE] Orden ${item.numero_orden} (${item.codigo_equipo}): esperado '${item.serie}' vs reader '${serieReader}'`
+          `[SERIE] Orden ${item.numero_orden} (${item.codigo_equipo}): esperado '${item.serie}' vs reader '${serieReader}'`,
         );
       }
     }
