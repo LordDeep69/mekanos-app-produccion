@@ -4,12 +4,16 @@ import {
   AlertTriangle,
   Boxes,
   Check,
+  CheckCircle2,
+  ChevronRight,
   Edit3,
+  Filter,
   Layers,
   Loader2,
   Plus,
   Search,
   Sparkles,
+  Tag,
   Trash2,
   X,
 } from 'lucide-react';
@@ -114,9 +118,11 @@ export function TabModulosTecnicos() {
 
   // Modal Asignar Campo Existente
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assignTypeFilter, setAssignTypeFilter] = useState<'ALL' | 'NUM_MAG' | 'SELECT' | 'BOOL' | 'OTROS'>('ALL');
   const [assignForm, setAssignForm] = useState({
     id_atributo: '',
-    grupo_visual: 'Identificación',
+    grupo_visual: 'Especificaciones Técnicas',
     orden_visual: '10',
     obligatorio: false,
     es_kpi: false,
@@ -158,6 +164,80 @@ export function TabModulosTecnicos() {
     );
     return todosAtributos.filter((a) => !yaAsignados.has(a.id_atributo));
   }, [todosAtributos, moduloDetalle]);
+
+  const atributosDisponiblesFiltrados = useMemo(() => {
+    const q = assignSearch.trim().toLowerCase();
+    return atributosDisponiblesParaAsignar.filter((a) => {
+      // Filtro por categoría rápida
+      if (assignTypeFilter === 'NUM_MAG' && !a.id_magnitud && a.tipo_control !== 'NUMERICO_MAGNITUD') {
+        return false;
+      }
+      if (assignTypeFilter === 'SELECT' && a.tipo_control !== 'SELECT' && a.tipo_control !== 'SELECTOR') {
+        return false;
+      }
+      if (assignTypeFilter === 'BOOL' && a.tipo_control !== 'BOOLEANO' && a.tipo_control !== 'BOOLEAN') {
+        return false;
+      }
+      if (assignTypeFilter === 'OTROS') {
+        const isNumMag = Boolean(a.id_magnitud) || a.tipo_control === 'NUMERICO_MAGNITUD';
+        const isSel = a.tipo_control === 'SELECT' || a.tipo_control === 'SELECTOR';
+        const isBool = a.tipo_control === 'BOOLEANO' || a.tipo_control === 'BOOLEAN';
+        if (isNumMag || isSel || isBool) return false;
+      }
+
+      if (!q) return true;
+      const matchNombre = a.nombre_atributo.toLowerCase().includes(q);
+      const matchCodigo = a.codigo_atributo.toLowerCase().includes(q);
+      const matchMagnitud = (a.magnitud?.nombre_magnitud || '').toLowerCase().includes(q);
+      const matchUnidad = (a.unidad_defecto_codigo || '').toLowerCase().includes(q);
+      return matchNombre || matchCodigo || matchMagnitud || matchUnidad;
+    });
+  }, [atributosDisponiblesParaAsignar, assignSearch, assignTypeFilter]);
+
+  const selectedAtributoParaAsignar = useMemo(() => {
+    if (!assignForm.id_atributo) return null;
+    return (
+      atributosDisponiblesParaAsignar.find(
+        (a) => String(a.id_atributo) === String(assignForm.id_atributo),
+      ) || null
+    );
+  }, [atributosDisponiblesParaAsignar, assignForm.id_atributo]);
+
+  const sugerenciasSecciones = useMemo(() => {
+    const list: string[] = [];
+    for (const [nombre] of gruposVisualesMap) {
+      if (nombre && !list.includes(nombre)) list.push(nombre);
+    }
+    const defaults = [
+      'Especificaciones Técnicas',
+      'Desempeño y Capacidad',
+      'Refrigeración',
+      'Eléctrico',
+      'Identificación',
+      'General',
+    ];
+    for (const def of defaults) {
+      if (!list.includes(def)) list.push(def);
+    }
+    return list;
+  }, [gruposVisualesMap]);
+
+  const handleOpenAssignModal = () => {
+    setAssignSearch('');
+    setAssignTypeFilter('ALL');
+    const defaultSection = gruposVisualesMap[0]?.[0] || 'Especificaciones Técnicas';
+    const nextOrder = (moduloDetalle?.modulo_atributos?.length || 0) * 10 + 10;
+    setAssignForm({
+      id_atributo: '',
+      grupo_visual: defaultSection,
+      orden_visual: String(nextOrder),
+      obligatorio: false,
+      es_kpi: false,
+      es_filtrable: true,
+      visible_en_pdf: true,
+    });
+    setShowAssignModal(true);
+  };
 
   const magnitudInPlaceObj = useMemo(
     () =>
@@ -545,20 +625,7 @@ export function TabModulosTecnicos() {
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => {
-                    setAssignForm({
-                      id_atributo: atributosDisponiblesParaAsignar[0]?.id_atributo
-                        ? String(atributosDisponiblesParaAsignar[0].id_atributo)
-                        : '',
-                      grupo_visual: gruposVisualesMap[0]?.[0] || 'Identificación',
-                      orden_visual: '10',
-                      obligatorio: false,
-                      es_kpi: false,
-                      es_filtrable: true,
-                      visible_en_pdf: true,
-                    });
-                    setShowAssignModal(true);
-                  }}
+                  onClick={handleOpenAssignModal}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-colors"
                 >
                   <Plus className="h-4 w-4 text-blue-600" />
@@ -575,7 +642,7 @@ export function TabModulosTecnicos() {
                       id_magnitud: '',
                       unidad_defecto_codigo: '',
                       opciones_csv: '',
-                      grupo_visual: gruposVisualesMap[0]?.[0] || 'Identificación',
+                      grupo_visual: gruposVisualesMap[0]?.[0] || 'Especificaciones Técnicas',
                       orden_visual: '20',
                       obligatorio: false,
                       es_kpi: false,
@@ -595,12 +662,48 @@ export function TabModulosTecnicos() {
             {/* Secciones Visuales de la Parte con Scroll Vertical Interno */}
             <div className="p-6 space-y-6 overflow-y-auto flex-1 overscroll-contain">
               {gruposVisualesMap.length === 0 ? (
-                <div className="p-12 text-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50">
-                  <Layers className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                <div className="p-12 text-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                    <Boxes className="h-6 w-6" />
+                  </div>
                   <p className="text-sm font-bold text-slate-700">Esta parte aún no tiene campos técnicos asignados</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Usa los botones superiores para &ldquo;Agregar Campo Existente&rdquo; o &ldquo;Crear Nuevo Campo aquí&rdquo;.
+                  <p className="text-xs text-slate-400 mt-1 mb-4">
+                    Usa los botones para vincular campos del catálogo global o crear campos exclusivos para esta parte.
                   </p>
+                  <div className="inline-flex flex-wrap items-center justify-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleOpenAssignModal}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Agregar Campo Existente</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInPlaceForm({
+                          codigo_atributo: '',
+                          nombre_atributo: '',
+                          tipo_control: 'NUMERICO_MAGNITUD',
+                          id_magnitud: '',
+                          unidad_defecto_codigo: '',
+                          opciones_csv: '',
+                          grupo_visual: 'Especificaciones Técnicas',
+                          orden_visual: '20',
+                          obligatorio: false,
+                          es_kpi: false,
+                          es_filtrable: true,
+                          visible_en_pdf: true,
+                        });
+                        setShowInPlaceModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-colors"
+                    >
+                      <Sparkles className="h-4 w-4 text-blue-600" />
+                      <span>Crear Nuevo Campo</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 gruposVisualesMap.map(([grupoNombre, items]) => (
@@ -770,7 +873,8 @@ export function TabModulosTecnicos() {
                     </table>
                   </div>
                 </div>
-              ))}
+              ))
+            )}
             </div>
           </>
         )}
@@ -871,64 +975,268 @@ export function TabModulosTecnicos() {
         </div>
       )}
 
-      {/* MODAL AGREGAR CAMPO EXISTENTE */}
+      {/* MODAL AGREGAR CAMPO EXISTENTE (SELECTOR PREMIUM BUSCABLE) */}
       {showAssignModal && moduloDetalle && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h4 className="text-base font-bold text-slate-900">
-                Agregar Campo Existente a {moduloDetalle.nombre_modulo}
-              </h4>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Cabecera del Modal */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 shadow-2xs">
+                  <Plus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 leading-tight">
+                    Agregar Campo Existente a {moduloDetalle.nombre_modulo}
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Busca en los {atributosDisponiblesParaAsignar.length} campos del catálogo técnico global y vincúlalo en 1 clic.
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowAssignModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSaveAssign} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Seleccionar Campo del Catálogo *
-                </label>
-                <select
-                  required
-                  value={assignForm.id_atributo}
-                  onChange={(e) => setAssignForm({ ...assignForm, id_atributo: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-semibold"
-                >
-                  <option value="">-- Seleccionar Campo Técnico --</option>
-                  {atributosDisponiblesParaAsignar.map((a) => {
-                    const info = getTipoControlHumano(a.tipo_control, Boolean(a.id_magnitud));
-                    return (
-                      <option key={a.id_atributo} value={a.id_atributo}>
-                        {a.nombre_atributo} ({info.shortLabel})
-                      </option>
-                    );
-                  })}
-                </select>
+
+            {/* Formulario */}
+            <form onSubmit={handleSaveAssign} className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Buscador y Selector de Campos */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    1. Seleccionar Campo Técnico del Catálogo *
+                  </label>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    {atributosDisponiblesFiltrados.length} de {atributosDisponiblesParaAsignar.length} disponibles
+                  </span>
+                </div>
+
+                {/* Input Buscador */}
+                <div className="relative">
+                  <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={assignSearch}
+                    onChange={(e) => setAssignSearch(e.target.value)}
+                    placeholder="Buscar por nombre, código o magnitud (ej: Capacidad, Gas, Presión, Potencia)..."
+                    className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white shadow-2xs"
+                    autoFocus
+                  />
+                  {assignSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setAssignSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filtros Rápidos por Tipo de Dato */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="text-slate-400 font-semibold mr-1">Filtrar:</span>
+                  <button
+                    type="button"
+                    onClick={() => setAssignTypeFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                      assignTypeFilter === 'ALL'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Todos ({atributosDisponiblesParaAsignar.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssignTypeFilter('NUM_MAG')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                      assignTypeFilter === 'NUM_MAG'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    # Con Unidad
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssignTypeFilter('SELECT')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                      assignTypeFilter === 'SELECT'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    ☰ Listas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssignTypeFilter('BOOL')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                      assignTypeFilter === 'BOOL'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    ✓ Sí / No
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssignTypeFilter('OTROS')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                      assignTypeFilter === 'OTROS'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Aa Texto / Simple
+                  </button>
+                </div>
+
+                {/* Lista de Campos Desplegables / Scroll */}
+                <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs overscroll-contain">
+                  {atributosDisponiblesFiltrados.length === 0 ? (
+                    <div className="p-6 text-center text-slate-400">
+                      <p className="text-xs font-semibold">No se encontraron campos con &ldquo;{assignSearch}&rdquo;</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAssignModal(false);
+                          setInPlaceForm({
+                            codigo_atributo: '',
+                            nombre_atributo: assignSearch,
+                            tipo_control: 'NUMERICO_MAGNITUD',
+                            id_magnitud: '',
+                            unidad_defecto_codigo: '',
+                            opciones_csv: '',
+                            grupo_visual: assignForm.grupo_visual || 'Especificaciones Técnicas',
+                            orden_visual: '20',
+                            obligatorio: false,
+                            es_kpi: false,
+                            es_filtrable: true,
+                            visible_en_pdf: true,
+                          });
+                          setShowInPlaceModal(true);
+                        }}
+                        className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Crear &ldquo;{assignSearch || 'nuevo campo'}&rdquo; desde cero aquí
+                      </button>
+                    </div>
+                  ) : (
+                    atributosDisponiblesFiltrados.map((a) => {
+                      const isSelected = String(assignForm.id_atributo) === String(a.id_atributo);
+                      const info = getTipoControlHumano(a.tipo_control, Boolean(a.id_magnitud));
+                      const opts = Array.isArray(a.opciones_json) ? a.opciones_json : [];
+                      return (
+                        <div
+                          key={a.id_atributo}
+                          onClick={() => setAssignForm({ ...assignForm, id_atributo: String(a.id_atributo) })}
+                          className={`p-3 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
+                            isSelected
+                              ? 'bg-blue-50/90 border-l-4 border-l-blue-600 text-blue-950 font-semibold'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                                isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold truncate leading-snug">{a.nombre_atributo}</p>
+                              <p className="text-[10px] font-mono text-slate-400 truncate">{a.codigo_atributo}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${info.badgeClass}`}
+                            >
+                              <span>{info.iconSymbol}</span>
+                              <span>{info.shortLabel}</span>
+                            </span>
+                            {a.magnitud && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                {a.magnitud.nombre_magnitud}{a.unidad_defecto_codigo ? ` (${a.unidad_defecto_codigo})` : ''}
+                              </span>
+                            )}
+                            {opts.length > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                {opts.length} opciones
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Banner de Confirmación del Campo Seleccionado */}
+                {selectedAtributoParaAsignar && (
+                  <div className="p-2.5 rounded-xl bg-blue-50/80 border border-blue-200 flex items-center justify-between text-xs text-blue-950 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
+                      <span>
+                        Seleccionado: <strong className="font-bold">{selectedAtributoParaAsignar.nombre_atributo}</strong>
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-md font-bold">
+                      {selectedAtributoParaAsignar.codigo_atributo}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Sección en el Formulario *
+              {/* Sección en el Formulario & Orden */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-800">
+                    2. Sección en la Ficha Técnica *
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Ej: Identificación, Desempeño..."
+                    placeholder="Ej: Especificaciones Técnicas, Refrigeración..."
                     value={assignForm.grupo_visual}
                     onChange={(e) =>
                       setAssignForm({ ...assignForm, grupo_visual: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white shadow-2xs"
                   />
+                  {/* Sugerencias de sección en 1 clic */}
+                  <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                    <span className="text-[10px] font-bold text-slate-400 mr-1">Sugerencias:</span>
+                    {sugerenciasSecciones.map((sec) => (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={() => setAssignForm({ ...assignForm, grupo_visual: sec })}
+                        className={`text-[10px] px-2 py-0.5 rounded-md border font-medium transition-colors ${
+                          assignForm.grupo_visual === sec
+                            ? 'bg-blue-100 text-blue-800 border-blue-300 font-bold'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {sec}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Orden de Aparición
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Orden Visual
                   </label>
                   <input
                     type="number"
@@ -936,71 +1244,160 @@ export function TabModulosTecnicos() {
                     onChange={(e) =>
                       setAssignForm({ ...assignForm, orden_visual: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white shadow-2xs"
                   />
+                  <p className="text-[10px] text-slate-400">10, 20, 30...</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800">
-                <label className="inline-flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={assignForm.obligatorio}
-                    onChange={(e) =>
-                      setAssignForm({ ...assignForm, obligatorio: e.target.checked })
-                    }
-                    className="rounded text-blue-600"
-                  />
-                  <span>Obligatorio al Registrar</span>
+              {/* Comportamiento del Campo (4 Switches Modernos) */}
+              <div className="space-y-2 pt-1">
+                <label className="block text-xs font-bold text-slate-800">
+                  3. Comportamiento del Campo en la Plataforma
                 </label>
-                <label className="inline-flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={assignForm.es_filtrable}
-                    onChange={(e) =>
-                      setAssignForm({ ...assignForm, es_filtrable: e.target.checked })
-                    }
-                    className="rounded text-blue-600"
-                  />
-                  <span>Permitir Filtrar en Directorio</span>
-                </label>
-                <label className="inline-flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={assignForm.es_kpi}
-                    onChange={(e) => setAssignForm({ ...assignForm, es_kpi: e.target.checked })}
-                    className="rounded text-blue-600"
-                  />
-                  <span>Destacar en Tarjeta (KPI)</span>
-                </label>
-                <label className="inline-flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={assignForm.visible_en_pdf}
-                    onChange={(e) =>
-                      setAssignForm({ ...assignForm, visible_en_pdf: e.target.checked })
-                    }
-                    className="rounded text-blue-600"
-                  />
-                  <span>Imprimir en PDF</span>
-                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Switch Obligatorio */}
+                  <div
+                    onClick={() => setAssignForm({ ...assignForm, obligatorio: !assignForm.obligatorio })}
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      assignForm.obligatorio
+                        ? 'bg-rose-50/70 border-rose-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Obligatorio al Registrar</span>
+                      <span className="text-[10px] text-slate-500">Exige valor al dar de alta el equipo</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        assignForm.obligatorio ? 'bg-rose-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          assignForm.obligatorio ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switch Permitir Filtrar */}
+                  <div
+                    onClick={() => setAssignForm({ ...assignForm, es_filtrable: !assignForm.es_filtrable })}
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      assignForm.es_filtrable
+                        ? 'bg-blue-50/70 border-blue-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Permitir Filtrar</span>
+                      <span className="text-[10px] text-slate-500">Búsqueda avanzada en /equipos</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        assignForm.es_filtrable ? 'bg-blue-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          assignForm.es_filtrable ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switch Destacar KPI */}
+                  <div
+                    onClick={() => setAssignForm({ ...assignForm, es_kpi: !assignForm.es_kpi })}
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      assignForm.es_kpi
+                        ? 'bg-amber-50/70 border-amber-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Destacar en Tarjeta (KPI)</span>
+                      <span className="text-[10px] text-slate-500">Resaltar en cabecera y PDF</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        assignForm.es_kpi ? 'bg-amber-500' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          assignForm.es_kpi ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switch Imprimir en PDF */}
+                  <div
+                    onClick={() => setAssignForm({ ...assignForm, visible_en_pdf: !assignForm.visible_en_pdf })}
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      assignForm.visible_en_pdf
+                        ? 'bg-emerald-50/70 border-emerald-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Imprimir en PDF</span>
+                      <span className="text-[10px] text-slate-500">Placa técnica del informe de OT</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        assignForm.visible_en_pdf ? 'bg-emerald-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          assignForm.visible_en_pdf ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAssignModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={asignarMut.isPending}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-                >
-                  Agregar a la Parte
-                </button>
+              {/* Botonera Inferior */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0">
+                <div className="text-xs text-slate-500">
+                  {!assignForm.id_atributo && (
+                    <span className="text-amber-600 font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4" />
+                      Selecciona un campo para continuar
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignModal(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!assignForm.id_atributo || asignarMut.isPending}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-sm transition-all inline-flex items-center gap-2"
+                  >
+                    {asignarMut.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Agregando a la Parte...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        <span>Agregar a {moduloDetalle.nombre_modulo}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

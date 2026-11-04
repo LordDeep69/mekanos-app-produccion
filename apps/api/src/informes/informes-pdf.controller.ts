@@ -22,6 +22,7 @@ import {
     Controller,
     Get,
     HttpStatus,
+    InternalServerErrorException,
     Logger,
     NotFoundException,
     Param,
@@ -102,7 +103,10 @@ export class InformesPdfController {
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`❌ Error sirviendo PDF: ${msg}`);
-            throw new NotFoundException(`No se pudo descargar el PDF: ${msg}`);
+            if (msg.includes('NoSuchKey') || msg.includes('no encontrado') || msg.includes('not found')) {
+                throw new NotFoundException(`No se encontró el PDF en almacenamiento: ${msg}`);
+            }
+            throw new InternalServerErrorException(`No se pudo descargar el PDF: ${msg}`);
         }
     }
 
@@ -155,7 +159,10 @@ export class InformesPdfController {
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`❌ Error sirviendo PDF por orden ${idOrden}: ${msg}`);
-            throw new NotFoundException(`No se pudo descargar el PDF: ${msg}`);
+            if (msg.includes('NoSuchKey') || msg.includes('no encontrado') || msg.includes('not found')) {
+                throw new NotFoundException(`No se encontró el PDF en almacenamiento para la orden ${idOrden}: ${msg}`);
+            }
+            throw new InternalServerErrorException(`No se pudo descargar el PDF por orden: ${msg}`);
         }
     }
 
@@ -313,7 +320,10 @@ export class InformesPdfController {
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`❌ Error en previsualización PDF: ${msg}`);
-            throw new NotFoundException(`No se pudo previsualizar el PDF: ${msg}`);
+            if (msg.includes('NoSuchKey') || msg.includes('no encontrado') || msg.includes('not found')) {
+                throw new NotFoundException(`No se encontró el PDF en almacenamiento: ${msg}`);
+            }
+            throw new InternalServerErrorException(`No se pudo previsualizar el PDF: ${msg}`);
         }
     }
 
@@ -358,7 +368,10 @@ export class InformesPdfController {
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`❌ Error en previsualización PDF por orden ${idOrden}: ${msg}`);
-            throw new NotFoundException(`No se pudo previsualizar el PDF: ${msg}`);
+            if (msg.includes('NoSuchKey') || msg.includes('no encontrado') || msg.includes('not found')) {
+                throw new NotFoundException(`No se encontró el PDF en almacenamiento para la orden ${idOrden}: ${msg}`);
+            }
+            throw new InternalServerErrorException(`No se pudo previsualizar el PDF por orden: ${msg}`);
         }
     }
 

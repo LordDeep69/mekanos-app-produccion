@@ -200,7 +200,20 @@ apiClient.interceptors.response.use(
 
       // Log detallado del error para debugging
       if (error.response?.data) {
-        console.error('[API] Detalle del error:', error.response.data);
+        if (typeof Blob !== 'undefined' && error.response.data instanceof Blob) {
+          error.response.data.text().then((text: string) => {
+            try {
+              const parsed = JSON.parse(text);
+              console.error('[API] Detalle del error (Blob decodificado):', parsed);
+            } catch {
+              console.error('[API] Detalle del error (Blob texto):', text);
+            }
+          }).catch(() => {
+            console.error('[API] Detalle del error:', error.response?.data);
+          });
+        } else {
+          console.error('[API] Detalle del error:', error.response.data);
+        }
       }
     } else if (error.request) {
       console.error('[API] Error de red - Sin respuesta del servidor');
