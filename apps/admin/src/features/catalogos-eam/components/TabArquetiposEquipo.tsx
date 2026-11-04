@@ -107,6 +107,7 @@ export function TabArquetiposEquipo() {
   // Modal Editar Tipo de Equipo
   const [showEditArqModal, setShowEditArqModal] = useState(false);
   const [editingArq, setEditingArq] = useState<ArquetipoEquipo | null>(null);
+  const [editArqError, setEditArqError] = useState<string | null>(null);
   const [editArqForm, setEditArqForm] = useState({
     codigo_tipo: '',
     nombre_tipo: '',
@@ -199,6 +200,7 @@ export function TabArquetiposEquipo() {
 
   const handleOpenEditArq = (arq: ArquetipoEquipo) => {
     setEditingArq(arq);
+    setEditArqError(null);
     setEditArqForm({
       codigo_tipo: arq.codigo_corto || arq.codigo_tipo,
       nombre_tipo: arq.nombre_canonico || arq.nombre_tipo,
@@ -212,17 +214,26 @@ export function TabArquetiposEquipo() {
   const handleSaveEditArq = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingArq) return;
-    await updateArqMut.mutateAsync({
-      idTipoEquipo: editingArq.id_tipo_equipo,
-      payload: {
-        codigo_tipo: editArqForm.codigo_tipo,
-        nombre_tipo: editArqForm.nombre_tipo,
-        categoria: editArqForm.categoria,
-        descripcion: editArqForm.descripcion,
-        requiere_horometro: editArqForm.requiere_horometro,
-      },
-    });
-    setShowEditArqModal(false);
+    try {
+      setEditArqError(null);
+      await updateArqMut.mutateAsync({
+        idTipoEquipo: editingArq.id_tipo_equipo,
+        payload: {
+          codigo_tipo: editArqForm.codigo_tipo.trim().toUpperCase(),
+          nombre_tipo: editArqForm.nombre_tipo.trim(),
+          categoria: editArqForm.categoria,
+          descripcion: editArqForm.descripcion?.trim() || undefined,
+          requiere_horometro: editArqForm.requiere_horometro,
+        },
+      });
+      setShowEditArqModal(false);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Error al actualizar el tipo de equipo';
+      setEditArqError(Array.isArray(msg) ? msg.join(', ') : msg);
+    }
   };
 
   const handleOpenDeleteArq = (arq: ArquetipoEquipo) => {
@@ -839,6 +850,11 @@ export function TabArquetiposEquipo() {
               </button>
             </div>
             <form onSubmit={handleSaveEditArq} className="p-6 space-y-4">
+              {editArqError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
+                  {editArqError}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Nombre del Tipo de Equipo *

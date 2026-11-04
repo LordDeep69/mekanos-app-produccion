@@ -1116,15 +1116,14 @@ export class CatalogosEamService {
     if (dto.codigo_tipo !== undefined) {
       const code = dto.codigo_tipo.trim().toUpperCase();
       data.codigo_tipo = code;
-      data.codigo_corto = code;
-    }
-    if (dto.codigo_corto !== undefined) {
-      data.codigo_corto = dto.codigo_corto.trim().toUpperCase();
+      data.prefijo_codigo = code.length <= 20 ? code : code.slice(0, 20);
+    } else if (dto.codigo_corto !== undefined) {
+      const code = dto.codigo_corto.trim().toUpperCase();
+      data.codigo_tipo = code;
+      data.prefijo_codigo = code.length <= 20 ? code : code.slice(0, 20);
     }
     if (dto.nombre_tipo !== undefined) {
-      const name = dto.nombre_tipo.trim();
-      data.nombre_tipo = name;
-      data.nombre_canonico = name;
+      data.nombre_tipo = dto.nombre_tipo.trim();
     }
     if (dto.categoria !== undefined) data.categoria = dto.categoria.trim().toUpperCase() as any;
     if (dto.descripcion !== undefined) data.descripcion = dto.descripcion?.trim() || null;
