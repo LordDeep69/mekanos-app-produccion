@@ -428,9 +428,9 @@ export function TabModelosOemBom() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* COLUMNA IZQUIERDA: CATÁLOGO DE MODELOS DE FÁBRICA */}
-      <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 space-y-3">
+      {/* COLUMNA IZQUIERDA: CATÁLOGO DE MODELOS DE FÁBRICA (ESTÁTICO / STICKY EN DESKTOP) */}
+      <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden lg:sticky lg:top-20 flex flex-col max-h-[calc(100vh-6rem)]">
+        <div className="p-5 border-b border-slate-100 space-y-3 shrink-0">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -444,7 +444,7 @@ export function TabModelosOemBom() {
             <button
               type="button"
               onClick={openNewModelo}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
             >
               <Plus className="h-4 w-4" />
               <span>Nuevo Modelo</span>
@@ -465,7 +465,7 @@ export function TabModelosOemBom() {
           </select>
         </div>
 
-        <div className="divide-y divide-slate-100 max-h-[650px] overflow-y-auto">
+        <div className="divide-y divide-slate-100 flex-1 overflow-y-auto min-h-0">
           {modelos.map((m) => {
             const isSelected = m.id_modelo_equipo === selectedModeloId;
             const bomCount = m._count?.modelos_equipo_bom ?? 0;
@@ -562,6 +562,12 @@ export function TabModelosOemBom() {
                     <h4 className="text-base font-bold text-slate-900">
                       Kit de Repuestos y Consumibles Sugeridos (BOM)
                     </h4>
+                    {modeloDetalle.modelos_equipo_bom && modeloDetalle.modelos_equipo_bom.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                        {modeloDetalle.modelos_equipo_bom.length}{' '}
+                        {modeloDetalle.modelos_equipo_bom.length === 1 ? 'repuesto' : 'repuestos'}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500">
                     Artículos reales del inventario sugeridos para el mantenimiento de{' '}
@@ -597,89 +603,101 @@ export function TabModelosOemBom() {
                     Este modelo aún no tiene repuestos asociados en su kit de mantenimiento.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase">
-                          <th className="py-3 px-4">Repuesto / Insumo de Inventario</th>
-                          <th className="py-3 px-4">Función en el Equipo</th>
-                          <th className="py-3 px-4 text-center">Cant. Sugerida</th>
-                          <th className="py-3 px-4">Notas de Uso</th>
-                          <th className="py-3 px-4 text-right">Quitar</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-sm">
-                        {modeloDetalle.modelos_equipo_bom.map((item) => {
-                          const comp = item.catalogo_componentes;
-                          return (
-                            <tr
-                              key={item.id_modelo_bom}
-                              className="hover:bg-slate-50/80 transition-colors"
-                            >
-                              <td className="py-3.5 px-4">
-                                <div className="font-bold text-slate-900">
-                                  {comp?.descripcion_corta || comp?.referencia_fabricante}
-                                </div>
-                                <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
-                                  <span>
-                                    Ref:{' '}
-                                    <strong className="font-mono text-slate-700">
-                                      {comp?.referencia_fabricante}
-                                    </strong>
+                  <div>
+                    <div className="overflow-x-auto overflow-y-auto max-h-[380px] rounded-xl border border-slate-200 shadow-2xs">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
+                          <tr className="text-[11px] font-bold text-slate-500 uppercase">
+                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">Repuesto / Insumo de Inventario</th>
+                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">Función en el Equipo</th>
+                            <th className="py-3 px-4 text-center bg-slate-50/95 backdrop-blur-xs">Cant. Sugerida</th>
+                            <th className="py-3 px-4 bg-slate-50/95 backdrop-blur-xs">Notas de Uso</th>
+                            <th className="py-3 px-4 text-right bg-slate-50/95 backdrop-blur-xs">Quitar</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-sm">
+                          {modeloDetalle.modelos_equipo_bom.map((item) => {
+                            const comp = item.catalogo_componentes;
+                            return (
+                              <tr
+                                key={item.id_modelo_bom}
+                                className="hover:bg-slate-50/80 transition-colors"
+                              >
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold text-slate-900">
+                                    {comp?.descripcion_corta || comp?.referencia_fabricante}
+                                  </div>
+                                  <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                                    <span>
+                                      Ref:{' '}
+                                      <strong className="font-mono text-slate-700">
+                                        {comp?.referencia_fabricante}
+                                      </strong>
+                                    </span>
+                                    {comp?.marca && (
+                                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">
+                                        {comp.marca}
+                                      </span>
+                                    )}
+                                    {comp?.codigo_interno && (
+                                      <span className="font-mono text-[11px] text-slate-400">
+                                        [{comp.codigo_interno}]
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold">
+                                    {getRolBomHumano(item.rol_bom)}
                                   </span>
-                                  {comp?.marca && (
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">
-                                      {comp.marca}
-                                    </span>
-                                  )}
-                                  {comp?.codigo_interno && (
-                                    <span className="font-mono text-[11px] text-slate-400">
-                                      [{comp.codigo_interno}]
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className="px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold">
-                                  {getRolBomHumano(item.rol_bom)}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-center font-bold text-slate-900">
-                                {Number(item.cantidad_sugerida)}{' '}
-                                <span className="text-xs font-semibold text-slate-500">
-                                  {comp?.codigo_unidad_medida ||
-                                    comp?.unidad_medida ||
-                                    'UND'}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-xs text-slate-600">
-                                {item.notas || '—'}
-                              </td>
-                              <td className="py-3.5 px-4 text-right">
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (
-                                      window.confirm(
-                                        '¿Retirar este repuesto del kit del modelo?',
-                                      )
-                                    ) {
-                                      await removeBomMut.mutateAsync({
-                                        idModelo: modeloDetalle.id_modelo_equipo,
-                                        idBom: item.id_modelo_bom,
-                                      });
-                                    }
-                                  }}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                </td>
+                                <td className="py-3.5 px-4 text-center font-bold text-slate-900">
+                                  {Number(item.cantidad_sugerida)}{' '}
+                                  <span className="text-xs font-semibold text-slate-500">
+                                    {comp?.codigo_unidad_medida ||
+                                      comp?.unidad_medida ||
+                                      'UND'}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-xs text-slate-600">
+                                  {item.notas || '—'}
+                                </td>
+                                <td className="py-3.5 px-4 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (
+                                        window.confirm(
+                                          '¿Retirar este repuesto del kit del modelo?',
+                                        )
+                                      ) {
+                                        await removeBomMut.mutateAsync({
+                                          idModelo: modeloDetalle.id_modelo_equipo,
+                                          idBom: item.id_modelo_bom,
+                                        });
+                                      }
+                                    }}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {modeloDetalle.modelos_equipo_bom.length > 3 && (
+                      <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 px-1">
+                        <span>
+                          Mostrando <strong className="text-slate-600 font-semibold">{modeloDetalle.modelos_equipo_bom.length}</strong> repuestos en este kit
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-500 font-medium">
+                          ↕ Desplaza verticalmente para ver todos los repuestos
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
