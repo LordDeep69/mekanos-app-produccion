@@ -1,20 +1,31 @@
 'use client';
 
 import {
+  AlertTriangle,
   Boxes,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Code2,
   Edit3,
   Factory,
   Loader2,
   Package,
   Plus,
+  RefreshCw,
+  Save,
   Search,
   Sliders,
+  Sparkles,
   Trash2,
+  Unlock,
   Wrench,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { DynamicModularSpecsEditor } from '@/features/equipos/components/DynamicModularSpecsEditor';
 import {
   AtributoTecnico,
   ModeloEquipoOem,
@@ -36,6 +47,55 @@ import {
   useModulosEam,
   useUpdateModeloOemEam,
 } from '../index';
+
+/**
+ * Sugiere un código canónico inteligente para el modelo de fábrica:
+ * ej: MOD-[MARCA]-[MODELO], garantizando unicidad con sufijos (-2, -3) si ya existe.
+ */
+export function sugerirCodigoModelo(
+  marca: string,
+  modelo: string,
+  modelosExistentes: ModeloEquipoOem[],
+  currentId?: number | null,
+): string {
+  const mClean = marca.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const modClean = modelo.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!mClean && !modClean) return '';
+
+  const base = `MOD-${mClean || 'OEM'}-${modClean || 'STD'}`;
+
+  let candidato = base;
+  let contador = 2;
+  const usados = new Set(
+    modelosExistentes
+      .filter((m) => !currentId || m.id_modelo_equipo !== currentId)
+      .map((m) => m.codigo_modelo.toUpperCase().trim()),
+  );
+
+  while (usados.has(candidato)) {
+    candidato = `${base}-${contador}`;
+    contador++;
+  }
+  return candidato;
+}
+
+/**
+ * Sugiere una descripción comercial legible a partir del tipo de equipo, marca y modelo.
+ */
+export function sugerirDescripcionModelo(
+  idTipoEquipo: string | number,
+  marca: string,
+  modelo: string,
+  arquetiposList: any[],
+): string {
+  const arq = arquetiposList.find((a) => String(a.id_tipo_equipo) === String(idTipoEquipo));
+  const nombreTipo = arq ? (arq.nombre_canonico || arq.nombre_tipo || '').trim() : '';
+  const tipoLabel = nombreTipo ? nombreTipo.split('/')[0].trim() : 'Equipo';
+  const m = marca.trim();
+  const mod = modelo.trim();
+  if (!m && !mod) return '';
+  return `${tipoLabel} ${m} ${mod}`.trim();
+}
 
 export function TabModelosOemBom() {
   const [filtroArquetipo, setFiltroArquetipo] = useState<string>('');
@@ -94,7 +154,7 @@ export function TabModelosOemBom() {
   const addBomMut = useAgregarItemBomOemEam();
   const removeBomMut = useEliminarItemBomOemEam();
 
-  // Modal Crear / Editar Modelo de Fábrica
+  // Modal Crear / Editar Identidad del Modelo de Fábrica
   const [showModeloModal, setShowModeloModal] = useState(false);
   const [editingModelo, setEditingModelo] = useState<ModeloEquipoOem | null>(null);
   const [modeloForm, setModeloForm] = useState({
@@ -103,8 +163,76 @@ export function TabModelosOemBom() {
     modelo: '',
     id_tipo_equipo: '1',
     nombre_comercial: '',
-    especificaciones_json_str: '{\n  "_version": 1,\n  "modulos": {}\n}',
   });
+  const [isAutoCodigo, setIsAutoCodigo] = useState(true);
+  const [isAutoNombre, setIsAutoNombre] = useState(true);
+  const [showSpecsInCreate, setShowSpecsInCreate] = useState(false);
+  const [createSpecsModulos, setCreateSpecsModulos] = useState<Record<string, Record<string, any>>>({});
+  const [createSpecsUnidades, setCreateSpecsUnidades] = useState<Record<string, string>>({});
+
+  // Modal Dedicado de Edición Visual de Especificaciones Técnicas de Fábrica
+  const [showSpecsModal, setShowSpecsModal] = useState(false);
+  const [editingSpecsModelo, setEditingSpecsModelo] = useState<ModeloEquipoOem | null>(null);
+  const [specsModulos, setSpecsModulos] = useState<Record<string, Record<string, any>>>({});
+  const [specsUnidades, setSpecsUnidades] = useState<Record<string, string>>({});
+  const [showJsonAvanzado, setShowJsonAvanzado] = useState(false);
+
+  // Validación de unicidad de código en tiempo real
+  const isCodigoDuplicado = useMemo(() => {
+    const cod = modeloForm.codigo_modelo.trim().toUpperCase();
+    if (!cod) return false;
+    return modelos.some(
+      (m) =>
+        (!editingModelo || m.id_modelo_equipo !== editingModelo.id_modelo_equipo) &&
+        m.codigo_modelo.toUpperCase() === cod,
+    );
+  }, [modeloForm.codigo_modelo, modelos, editingModelo]);
+
+  const handleMarcaChange = (val: string) => {
+    const nuevaMarca = val.toUpperCase();
+    const nuevoCodigo = isAutoCodigo
+      ? sugerirCodigoModelo(nuevaMarca, modeloForm.modelo, modelos, editingModelo?.id_modelo_equipo)
+      : modeloForm.codigo_modelo;
+    const nuevoNombre = isAutoNombre
+      ? sugerirDescripcionModelo(modeloForm.id_tipo_equipo, nuevaMarca, modeloForm.modelo, arquetipos)
+      : modeloForm.nombre_comercial;
+
+    setModeloForm((prev) => ({
+      ...prev,
+      marca: nuevaMarca,
+      codigo_modelo: nuevoCodigo,
+      nombre_comercial: nuevoNombre,
+    }));
+  };
+
+  const handleModeloChange = (val: string) => {
+    const nuevoModelo = val;
+    const nuevoCodigo = isAutoCodigo
+      ? sugerirCodigoModelo(modeloForm.marca, nuevoModelo, modelos, editingModelo?.id_modelo_equipo)
+      : modeloForm.codigo_modelo;
+    const nuevoNombre = isAutoNombre
+      ? sugerirDescripcionModelo(modeloForm.id_tipo_equipo, modeloForm.marca, nuevoModelo, arquetipos)
+      : modeloForm.nombre_comercial;
+
+    setModeloForm((prev) => ({
+      ...prev,
+      modelo: nuevoModelo,
+      codigo_modelo: nuevoCodigo,
+      nombre_comercial: nuevoNombre,
+    }));
+  };
+
+  const handleTipoChange = (newIdTipo: string) => {
+    const nuevoNombre = isAutoNombre
+      ? sugerirDescripcionModelo(newIdTipo, modeloForm.marca, modeloForm.modelo, arquetipos)
+      : modeloForm.nombre_comercial;
+
+    setModeloForm((prev) => ({
+      ...prev,
+      id_tipo_equipo: newIdTipo,
+      nombre_comercial: nuevoNombre,
+    }));
+  };
 
   // Modal Agregar Repuesto BOM desde Catálogo WMS
   const [showBomModal, setShowBomModal] = useState(false);
@@ -158,26 +286,19 @@ export function TabModelosOemBom() {
 
   const openNewModelo = () => {
     setEditingModelo(null);
+    const initialTipo = filtroArquetipo || String(arquetipos[0]?.id_tipo_equipo || 1);
     setModeloForm({
       codigo_modelo: '',
       marca: '',
       modelo: '',
-      id_tipo_equipo: String(arquetipos[0]?.id_tipo_equipo || 1),
+      id_tipo_equipo: initialTipo,
       nombre_comercial: '',
-      especificaciones_json_str: JSON.stringify(
-        {
-          _version: 1,
-          modulos: {
-            motor_combustion: {
-              marca_motor: 'CUMMINS',
-              velocidad_nominal_rpm: 1800,
-            },
-          },
-        },
-        null,
-        2,
-      ),
     });
+    setIsAutoCodigo(true);
+    setIsAutoNombre(true);
+    setShowSpecsInCreate(false);
+    setCreateSpecsModulos({});
+    setCreateSpecsUnidades({});
     setShowModeloModal(true);
   };
 
@@ -189,20 +310,38 @@ export function TabModelosOemBom() {
       modelo: m.modelo,
       id_tipo_equipo: String(m.id_tipo_equipo),
       nombre_comercial: m.nombre_comercial || '',
-      especificaciones_json_str: JSON.stringify(m.especificaciones_base || {}, null, 2),
     });
+    setIsAutoCodigo(false);
+    setIsAutoNombre(false);
+    setShowSpecsInCreate(false);
+    setCreateSpecsModulos((m.especificaciones_base as any)?.modulos || {});
+    setCreateSpecsUnidades((m.especificaciones_base as any)?.unidades || {});
     setShowModeloModal(true);
+  };
+
+  const openEditSpecsModal = (m: ModeloEquipoOem) => {
+    setEditingSpecsModelo(m);
+    const base = (m.especificaciones_base as any) || {};
+    setSpecsModulos(base.modulos || {});
+    setSpecsUnidades(base.unidades || {});
+    setShowJsonAvanzado(false);
+    setShowSpecsModal(true);
   };
 
   const handleSaveModelo = async (e: React.FormEvent) => {
     e.preventDefault();
-    let parsedSpecs: Record<string, any> = {};
-    try {
-      parsedSpecs = JSON.parse(modeloForm.especificaciones_json_str || '{}');
-    } catch {
-      window.alert(
-        'El bloque de especificaciones por defecto no tiene un formato válido.',
-      );
+
+    if (isCodigoDuplicado) {
+      toast.error('El código de referencia de plantilla ya existe en otro modelo. Elige uno diferente.');
+      return;
+    }
+
+    const codFinal =
+      modeloForm.codigo_modelo.trim().toUpperCase() ||
+      sugerirCodigoModelo(modeloForm.marca, modeloForm.modelo, modelos, editingModelo?.id_modelo_equipo);
+
+    if (!codFinal) {
+      toast.error('El código de referencia es requerido');
       return;
     }
 
@@ -210,25 +349,55 @@ export function TabModelosOemBom() {
       await updateModMut.mutateAsync({
         idModelo: editingModelo.id_modelo_equipo,
         payload: {
-          marca: modeloForm.marca,
-          modelo: modeloForm.modelo,
+          marca: modeloForm.marca.trim().toUpperCase(),
+          modelo: modeloForm.modelo.trim().toUpperCase(),
           id_tipo_equipo: Number(modeloForm.id_tipo_equipo),
-          nombre_comercial: modeloForm.nombre_comercial,
-          especificaciones_base: parsedSpecs,
+          nombre_comercial: modeloForm.nombre_comercial.trim() || undefined,
+          ...(showSpecsInCreate
+            ? {
+                especificaciones_base: {
+                  _version: 1,
+                  modulos: createSpecsModulos,
+                  unidades: createSpecsUnidades,
+                },
+              }
+            : {}),
         },
       });
+      toast.success('Modelo de fábrica actualizado exitosamente');
     } else {
+      const initialSpecs = showSpecsInCreate
+        ? { _version: 1, modulos: createSpecsModulos, unidades: createSpecsUnidades }
+        : { _version: 1, modulos: {} };
+
       const created = await createModMut.mutateAsync({
-        codigo_modelo: modeloForm.codigo_modelo,
-        marca: modeloForm.marca,
-        modelo: modeloForm.modelo,
+        codigo_modelo: codFinal,
+        marca: modeloForm.marca.trim().toUpperCase(),
+        modelo: modeloForm.modelo.trim().toUpperCase(),
         id_tipo_equipo: Number(modeloForm.id_tipo_equipo),
-        nombre_comercial: modeloForm.nombre_comercial,
-        especificaciones_base: parsedSpecs,
+        nombre_comercial: modeloForm.nombre_comercial.trim() || undefined,
+        especificaciones_base: initialSpecs,
       });
       setSelectedModeloId(created.id_modelo_equipo);
+      toast.success('Nuevo modelo de fábrica registrado');
     }
     setShowModeloModal(false);
+  };
+
+  const handleSaveSpecsModal = async () => {
+    if (!editingSpecsModelo) return;
+    await updateModMut.mutateAsync({
+      idModelo: editingSpecsModelo.id_modelo_equipo,
+      payload: {
+        especificaciones_base: {
+          _version: 1,
+          modulos: specsModulos,
+          unidades: specsUnidades,
+        },
+      },
+    });
+    toast.success('Ficha técnica del modelo guardada exitosamente');
+    setShowSpecsModal(false);
   };
 
   const handleSaveBom = async (e: React.FormEvent) => {
@@ -532,129 +701,138 @@ export function TabModelosOemBom() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => openEditModelo(modeloDetalle)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700"
+                  onClick={() => openEditSpecsModal(modeloDetalle)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-colors cursor-pointer"
                 >
-                  <Edit3 className="h-3.5 w-3.5" />
+                  <Edit3 className="h-3.5 w-3.5 text-blue-600" />
                   <span>Editar Valores de Fábrica</span>
                 </button>
               </div>
 
               <div className="p-5 space-y-5">
-                {Object.entries(
-                  (modeloDetalle.especificaciones_base as any)?.modulos || {},
-                ).map(([modCode, attrsObj]: [string, any]) => {
-                  const nombreModuloHumano =
-                    moduloNameMap.get(modCode) ||
-                    getModuloBadgeInfo(modCode).fullName;
-                  const modBadge = getModuloBadgeInfo(modCode, nombreModuloHumano);
-                  const entries = Object.entries(attrsObj || {});
-
-                  return (
-                    <div
-                      key={modCode}
-                      className="rounded-xl border border-slate-200 p-4 bg-slate-50/40 space-y-3.5"
+                {Object.keys((modeloDetalle.especificaciones_base as any)?.modulos || {}).length === 0 ? (
+                  <div className="p-8 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
+                    <Sliders className="h-8 w-8 text-slate-300 mx-auto" />
+                    <div className="text-xs text-slate-600 font-medium">
+                      Este modelo aún no tiene especificaciones técnicas de fábrica preconfiguradas.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openEditSpecsModal(modeloDetalle)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                     >
-                      <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <Wrench className="h-4 w-4 text-blue-600" />
-                          <span className="text-sm font-extrabold text-slate-900">
-                            Parte: {nombreModuloHumano}
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Configurar Valores de Fábrica</span>
+                    </button>
+                  </div>
+                ) : (
+                  Object.entries(
+                    (modeloDetalle.especificaciones_base as any)?.modulos || {},
+                  ).map(([modCode, attrsObj]: [string, any]) => {
+                    const nombreModuloHumano =
+                      moduloNameMap.get(modCode) ||
+                      getModuloBadgeInfo(modCode).fullName;
+                    const modBadge = getModuloBadgeInfo(modCode, nombreModuloHumano);
+                    const entries = Object.entries(attrsObj || {});
+
+                    return (
+                      <div
+                        key={modCode}
+                        className="rounded-xl border border-slate-200 p-4 bg-slate-50/40 space-y-3.5"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <Wrench className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-extrabold text-slate-900">
+                              Parte: {nombreModuloHumano}
+                            </span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold border ${modBadge.badgeClass}`}
+                          >
+                            {entries.length} datos preconfigurados
                           </span>
                         </div>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[11px] font-bold border ${modBadge.badgeClass}`}
-                        >
-                          {entries.length} datos preconfigurados
-                        </span>
-                      </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                        {entries.map(([k, v]) => {
-                          const { label, formattedValue } = formatSpecHuman(k, v);
-                          return (
-                            <div
-                              key={k}
-                              className="p-3 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between"
-                            >
-                              <div className="text-[11px] font-semibold text-slate-500 leading-snug">
-                                {label}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {entries.map(([k, v]) => {
+                            const { label, formattedValue } = formatSpecHuman(k, v);
+                            return (
+                              <div
+                                key={k}
+                                className="p-3 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between"
+                              >
+                                <div className="text-[11px] font-semibold text-slate-500 leading-snug">
+                                  {label}
+                                </div>
+                                <div className="text-xs font-extrabold text-slate-900 mt-1">
+                                  {formattedValue}
+                                </div>
                               </div>
-                              <div className="text-xs font-extrabold text-slate-900 mt-1">
-                                {formattedValue}
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           </>
         )}
       </div>
 
-      {/* MODAL CREAR / EDITAR MODELO DE FÁBRICA */}
+      {/* MODAL CREAR / EDITAR IDENTIDAD DEL MODELO DE FÁBRICA (SIN TEXTAREA JSON) */}
       {showModeloModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Encabezado */}
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h4 className="text-base font-bold text-slate-900">
-                {editingModelo
-                  ? `Editar Modelo de Fábrica: ${editingModelo.marca} ${editingModelo.modelo}`
-                  : 'Crear Nuevo Modelo de Fábrica'}
-              </h4>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <Factory className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-900">
+                    {editingModelo ? 'Editar Datos del Modelo de Fábrica' : 'Crear Nuevo Modelo de Fábrica'}
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    {editingModelo
+                      ? `Modifica los datos comerciales de ${editingModelo.marca} ${editingModelo.modelo}`
+                      : 'Define la plantilla OEM base para agilizar el registro de nuevos activos'}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowModeloModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSaveModelo} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Código de Referencia de Plantilla *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    disabled={Boolean(editingModelo)}
-                    placeholder="Ej: MOD-CUMMINS-6BT59G2"
-                    value={modeloForm.codigo_modelo}
-                    onChange={(e) =>
-                      setModeloForm({
-                        ...modeloForm,
-                        codigo_modelo: e.target.value.toUpperCase(),
-                      })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm disabled:bg-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tipo de Equipo *
-                  </label>
-                  <select
-                    value={modeloForm.id_tipo_equipo}
-                    onChange={(e) =>
-                      setModeloForm({ ...modeloForm, id_tipo_equipo: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-semibold"
-                  >
-                    {arquetipos.map((a) => (
-                      <option key={a.id_tipo_equipo} value={a.id_tipo_equipo}>
-                        {a.nombre_canonico || a.nombre_tipo}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleSaveModelo} className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Tipo de Equipo */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Tipo de Activo Industrial *
+                </label>
+                <select
+                  value={modeloForm.id_tipo_equipo}
+                  onChange={(e) => handleTipoChange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white shadow-2xs focus:ring-2 focus:ring-blue-500"
+                >
+                  {arquetipos.map((a) => (
+                    <option key={a.id_tipo_equipo} value={a.id_tipo_equipo}>
+                      {a.nombre_canonico || a.nombre_tipo} ({a.codigo_tipo || 'GEN'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
+              {/* Marca y Modelo */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -663,12 +841,10 @@ export function TabModelosOemBom() {
                   <input
                     type="text"
                     required
-                    placeholder="Ej: CUMMINS, PERKINS, GOULDS..."
+                    placeholder="Ej: TRANE, CUMMINS, GOULDS..."
                     value={modeloForm.marca}
-                    onChange={(e) =>
-                      setModeloForm({ ...modeloForm, marca: e.target.value.toUpperCase() })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-bold"
+                    onChange={(e) => handleMarcaChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold uppercase shadow-2xs focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -678,59 +854,361 @@ export function TabModelosOemBom() {
                   <input
                     type="text"
                     required
-                    placeholder="Ej: 6BT5.9-G2"
+                    placeholder="Ej: CGAM-20, C100D5, 3196..."
                     value={modeloForm.modelo}
-                    onChange={(e) => setModeloForm({ ...modeloForm, modelo: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-bold"
+                    onChange={(e) => handleModeloChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold shadow-2xs focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
+              {/* Descripción Comercial */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Descripción Comercial del Modelo
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    Descripción Comercial del Modelo
+                  </label>
+                  {isAutoNombre ? (
+                    <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      Sugerido automáticamente
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAutoNombre(true);
+                        const auto = sugerirDescripcionModelo(
+                          modeloForm.id_tipo_equipo,
+                          modeloForm.marca,
+                          modeloForm.modelo,
+                          arquetipos,
+                        );
+                        setModeloForm((prev) => ({ ...prev, nombre_comercial: auto }));
+                      }}
+                      className="text-[10px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" />
+                      Restablecer sugerido
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
-                  placeholder="Ej: Planta Eléctrica Cummins 6BT5.9-G2 100 kVA Standby"
+                  placeholder="Ej: Chiller Trane CGAM-20 20 TR"
                   value={modeloForm.nombre_comercial}
-                  onChange={(e) =>
-                    setModeloForm({ ...modeloForm, nombre_comercial: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  onChange={(e) => {
+                    setIsAutoNombre(false);
+                    setModeloForm({ ...modeloForm, nombre_comercial: e.target.value });
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm shadow-2xs focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Valores Técnicos Preconfigurados (Estructura por Parte)
-                </label>
-                <textarea
-                  rows={7}
-                  value={modeloForm.especificaciones_json_str}
-                  onChange={(e) =>
-                    setModeloForm({ ...modeloForm, especificaciones_json_str: e.target.value })
-                  }
-                  className="w-full p-3.5 rounded-xl border border-slate-300 font-mono text-xs bg-slate-900 text-emerald-300"
-                />
+              {/* Código de Referencia de Plantilla */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>Código de Referencia de Plantilla *</span>
+                    <span className="text-[10px] font-semibold text-slate-500">(Nomenclatura EAM)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {isAutoCodigo ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsAutoCodigo(false)}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                        title="Habilita la edición manual del código de referencia"
+                      >
+                        <Unlock className="h-3 w-3" />
+                        <span>Personalizar código</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAutoCodigo(true);
+                          const auto = sugerirCodigoModelo(
+                            modeloForm.marca,
+                            modeloForm.modelo,
+                            modelos,
+                            editingModelo?.id_modelo_equipo,
+                          );
+                          setModeloForm((prev) => ({ ...prev, codigo_modelo: auto }));
+                        }}
+                        className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                        title="Vuelve a generar el código canónico automáticamente"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        <span>Generar inteligente</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    readOnly={isAutoCodigo && !editingModelo}
+                    placeholder="Ej: MOD-TRANE-CGAM20"
+                    value={modeloForm.codigo_modelo}
+                    onChange={(e) => {
+                      setIsAutoCodigo(false);
+                      setModeloForm({
+                        ...modeloForm,
+                        codigo_modelo: e.target.value.toUpperCase().replace(/\s+/g, '-'),
+                      });
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border font-mono text-xs font-bold shadow-2xs transition-colors ${
+                      isCodigoDuplicado
+                        ? 'border-rose-500 bg-rose-50 text-rose-900 focus:ring-rose-500'
+                        : isAutoCodigo
+                          ? 'border-emerald-300 bg-emerald-50/50 text-emerald-900'
+                          : 'border-slate-300 bg-white text-slate-900'
+                    }`}
+                  />
+                  {isAutoCodigo && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                      <Check className="h-3 w-3" />
+                      Auto
+                    </span>
+                  )}
+                </div>
+
+                {/* Feedback en vivo de validación */}
+                {isCodigoDuplicado ? (
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>Este código ya está en uso por otro modelo. Modifícalo o pulsa "Generar inteligente".</span>
+                  </div>
+                ) : modeloForm.codigo_modelo ? (
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    <span>Código único garantizado en el catálogo de modelos OEM.</span>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500">
+                    El código se genera automáticamente a partir de la Marca y Modelo ingresados.
+                  </p>
+                )}
               </div>
 
+              {/* Acordeón Opcional: Configurar Especificaciones Técnicas In-Place */}
+              {!editingModelo && (
+                <div className="pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowSpecsInCreate(!showSpecsInCreate)}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sliders className="h-4 w-4 text-indigo-600 shrink-0" />
+                      <div>
+                        <div className="text-xs font-bold text-slate-800">
+                          {showSpecsInCreate
+                            ? 'Ficha Técnica de Fábrica (Desplegada)'
+                            : '+ Configurar Ficha Técnica de Fábrica Ahora (Opcional)'}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {showSpecsInCreate
+                            ? 'Puedes pre-llenar los datos técnicos de fábrica aquí o hacerlo después.'
+                            : 'Pre-configura de una vez variables como Capacidad de Enfriamiento, Gas Refrigerante, etc.'}
+                        </div>
+                      </div>
+                    </div>
+                    {showSpecsInCreate ? (
+                      <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                    )}
+                  </button>
+
+                  {showSpecsInCreate && (
+                    <div className="mt-3 p-4 bg-slate-50/60 rounded-xl border border-slate-200 max-h-[360px] overflow-y-auto">
+                      <DynamicModularSpecsEditor
+                        idTipoEquipo={Number(modeloForm.id_tipo_equipo)}
+                        modulosValues={createSpecsModulos}
+                        origenAtributos={{}}
+                        unidadesPersonalizadas={createSpecsUnidades}
+                        onChangeValor={(mod, attr, val) => {
+                          setCreateSpecsModulos((prev) => ({
+                            ...prev,
+                            [mod]: { ...(prev[mod] || {}), [attr]: val },
+                          }));
+                        }}
+                        onChangeUnidad={(mod, attr, unit, convertedVal) => {
+                          setCreateSpecsUnidades((prev) => ({ ...prev, [attr]: unit }));
+                          if (convertedVal !== undefined && Number.isFinite(convertedVal)) {
+                            setCreateSpecsModulos((prev) => ({
+                              ...prev,
+                              [mod]: { ...(prev[mod] || {}), [attr]: convertedVal },
+                            }));
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botones de Acción */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowModeloModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs"
+                  disabled={isCodigoDuplicado || createModMut.isPending || updateModMut.isPending}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
-                  Guardar Modelo
+                  {createModMut.isPending || updateModMut.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" />
+                      <span>{editingModelo ? 'Guardar Cambios' : 'Guardar Modelo'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VISUAL: EDITAR ESPECIFICACIONES TÉCNICAS DE FÁBRICA */}
+      {showSpecsModal && editingSpecsModelo && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Cabecera */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                  <Sliders className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-bold text-slate-900">
+                      Especificaciones de Fábrica: {editingSpecsModelo.marca} {editingSpecsModelo.modelo}
+                    </h4>
+                    {editingSpecsModelo.tipo_equipo && (
+                      <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-bold">
+                        {editingSpecsModelo.tipo_equipo.nombre_tipo}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Configura los valores predeterminados de cada parte. Se heredarán automáticamente al registrar equipos de este modelo.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSpecsModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Cuerpo: Editor Modular Dinámico EAM */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <DynamicModularSpecsEditor
+                idTipoEquipo={editingSpecsModelo.id_tipo_equipo}
+                codigoTipo={editingSpecsModelo.tipo_equipo?.codigo_tipo}
+                modulosValues={specsModulos}
+                origenAtributos={{}}
+                unidadesPersonalizadas={specsUnidades}
+                onChangeValor={(codigoModulo, codigoAtributo, nuevoValor) => {
+                  setSpecsModulos((prev) => ({
+                    ...prev,
+                    [codigoModulo]: {
+                      ...(prev[codigoModulo] || {}),
+                      [codigoAtributo]: nuevoValor,
+                    },
+                  }));
+                }}
+                onChangeUnidad={(codigoModulo, codigoAtributo, nuevaUnidad, valorConvertido) => {
+                  setSpecsUnidades((prev) => ({
+                    ...prev,
+                    [codigoAtributo]: nuevaUnidad,
+                  }));
+                  if (valorConvertido !== undefined && Number.isFinite(valorConvertido)) {
+                    setSpecsModulos((prev) => ({
+                      ...prev,
+                      [codigoModulo]: {
+                        ...(prev[codigoModulo] || {}),
+                        [codigoAtributo]: valorConvertido,
+                      },
+                    }));
+                  }
+                }}
+                modeloOemActivo={{
+                  marca: editingSpecsModelo.marca,
+                  modelo: editingSpecsModelo.modelo,
+                  nombre_comercial: editingSpecsModelo.nombre_comercial,
+                }}
+              />
+
+              {/* Visor JSON Avanzado (Colapsable y Opcional) */}
+              <div className="pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowJsonAvanzado(!showJsonAvanzado)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Code2 className="h-3.5 w-3.5" />
+                  <span>{showJsonAvanzado ? 'Ocultar JSON técnico' : 'Ver JSON técnico generado (Avanzado)'}</span>
+                </button>
+                {showJsonAvanzado && (
+                  <pre className="mt-2 p-3 rounded-xl bg-slate-900 text-emerald-300 font-mono text-[11px] overflow-x-auto max-h-40">
+                    {JSON.stringify({ _version: 1, modulos: specsModulos, unidades: specsUnidades }, null, 2)}
+                  </pre>
+                )}
+              </div>
+            </div>
+
+            {/* Pie */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div className="text-xs text-slate-500 font-medium">
+                Los cambios aplicarán a nuevos equipos registrados con este modelo.
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowSpecsModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveSpecsModal}
+                  disabled={updateModMut.isPending}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  {updateModMut.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Guardando Ficha...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      <span>Guardar Valores de Fábrica</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
