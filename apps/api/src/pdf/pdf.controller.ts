@@ -738,76 +738,74 @@ export class PdfController {
     }
 
     // Determinar tipo de informe si no se especificó
-    // ✅ FIX 16-DIC-2025: Prioridad de detección:
-    // 1. PRIMERO: Número de orden (OS-ME-BOM2-... = BOMBA, OS-ME-GEN3-... = GENERADOR)
-    // 2. SEGUNDO: Tipo del primer equipo en ordenes_equipos (para multi-equipo)
-    // 3. TERCERO: Tipo del equipo principal de la orden
-    // 4. FALLBACK: GENERADOR_A por defecto
+    // ✅ FIX EAM FASE 5.3: Prioridad alineada con regenerarPdfOrden (POST)
+    // P1: tipos_equipo.nombre_tipo (FUENTE DE VERDAD canónica desde Prisma)
+    // P2: numero_orden (heurística legacy para backward compatibility)
+    // P3: tipos_servicio codigo/nombre (heurística de fallback)
+    // P4: marcaEquipo (último recurso)
     if (!tipo) {
       let tipoEquipoNombre: string | undefined = undefined;
 
-      // ✅ PRIORIDAD 1: Detectar desde número de orden (MÁS CONFIABLE)
-      if (orden.numero_orden) {
-        const numOrden = orden.numero_orden.toUpperCase();
-        if (numOrden.includes('BOM')) {
-          tipoEquipoNombre = 'BOMBA';
-          this.logger.log(`📊 DEBUG PDF - Tipo detectado de número orden: BOMBA`);
-        } else if (numOrden.includes('GEN')) {
-          tipoEquipoNombre = 'GENERADOR';
-          this.logger.log(`📊 DEBUG PDF - Tipo detectado de número orden: GENERADOR`);
-        } else if (numOrden.includes('MOT')) {
-          tipoEquipoNombre = 'MOTOR';
-          this.logger.log(`📊 DEBUG PDF - Tipo detectado de número orden: MOTOR`);
-        }
-      }
-
-      // ✅ PRIORIDAD 2: Intentar desde ordenes_equipos (cualquier equipo vinculado)
-      // ✅ FIX EAM FASE 5.1: Campo correcto es nombre_tipo (no "nombre" que no existe en Prisma)
-      if (!tipoEquipoNombre && orden.ordenes_equipos?.length > 0) {
+      // ✅ PRIORIDAD 1 (FUENTE DE VERDAD): tipos_equipo.nombre_tipo desde ordenes_equipos
+      if (orden.ordenes_equipos?.length > 0) {
         const primerEquipo = orden.ordenes_equipos[0]?.equipos;
         tipoEquipoNombre = primerEquipo?.tipos_equipo?.nombre_tipo || primerEquipo?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (ordenes_equipos): ${tipoEquipoNombre}`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P1 (ordenes_equipos): ${tipoEquipoNombre}`);
         }
       }
 
-      // ✅ PRIORIDAD 3: Intentar desde equipo principal (id_equipo directo)
-      // ✅ FIX EAM FASE 5.1: Campo correcto es nombre_tipo (no "nombre" que no existe en Prisma)
+      // ✅ PRIORIDAD 1b: tipos_equipo.nombre_tipo desde equipo principal (id_equipo directo)
       if (!tipoEquipoNombre) {
         tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (principal): ${tipoEquipoNombre}`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P1b (principal): ${tipoEquipoNombre}`);
         }
       }
 
-      // ✅ PRIORIDAD 4: Intentar desde codigo_tipo del servicio (CORR_BOM, PREV_A_GEN, etc.)
+      // ✅ PRIORIDAD 2 (HEURÍSTICA LEGACY): Detectar desde número de orden
+      if (!tipoEquipoNombre && orden.numero_orden) {
+        const numOrden = orden.numero_orden.toUpperCase();
+        if (numOrden.includes('BOM')) {
+          tipoEquipoNombre = 'BOMBA';
+          this.logger.log(`📊 DEBUG PDF - Tipo detectado P2 (numero_orden): BOMBA`);
+        } else if (numOrden.includes('GEN')) {
+          tipoEquipoNombre = 'GENERADOR';
+          this.logger.log(`📊 DEBUG PDF - Tipo detectado P2 (numero_orden): GENERADOR`);
+        } else if (numOrden.includes('MOT')) {
+          tipoEquipoNombre = 'MOTOR';
+          this.logger.log(`📊 DEBUG PDF - Tipo detectado P2 (numero_orden): MOTOR`);
+        }
+      }
+
+      // ✅ PRIORIDAD 3: Intentar desde codigo_tipo del servicio (CORR_BOM, PREV_A_GEN, etc.)
       if (!tipoEquipoNombre) {
         const codTipo = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
         const nomTipo = (orden.tipos_servicio?.nombre_tipo || '').toUpperCase();
         if (codTipo.includes('BOM') || nomTipo.includes('BOMBA')) {
           tipoEquipoNombre = 'BOMBA';
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (servicio): BOMBA`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P3 (servicio): BOMBA`);
         } else if (codTipo.includes('MOT') || nomTipo.includes('MOTOR')) {
           tipoEquipoNombre = 'MOTOR';
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (servicio): MOTOR`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P3 (servicio): MOTOR`);
         } else if (codTipo.includes('GEN') || nomTipo.includes('GENERADOR')) {
           tipoEquipoNombre = 'GENERADOR';
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (servicio): GENERADOR`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P3 (servicio): GENERADOR`);
         }
       }
 
-      // ✅ PRIORIDAD 5: Intentar desde la marca/nombre del equipo (último recurso)
+      // ✅ PRIORIDAD 4: Intentar desde la marca/nombre del equipo (último recurso)
       if (!tipoEquipoNombre && datosOrden.marcaEquipo) {
         const marcaUpper = datosOrden.marcaEquipo.toUpperCase();
         if (marcaUpper.includes('BOMBA')) {
           tipoEquipoNombre = 'BOMBA';
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (marca): BOMBA`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P4 (marca): BOMBA`);
         } else if (marcaUpper.includes('MOTOR')) {
           tipoEquipoNombre = 'MOTOR';
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (marca): MOTOR`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P4 (marca): MOTOR`);
         } else if (marcaUpper.includes('GENERADOR')) {
           tipoEquipoNombre = 'GENERADOR';
-          this.logger.log(`📊 DEBUG PDF - Tipo equipo (marca): GENERADOR`);
+          this.logger.log(`📊 DEBUG PDF - Tipo equipo P4 (marca): GENERADOR`);
         }
       }
 
@@ -2365,10 +2363,11 @@ export class PdfController {
   }
 
   /**
-   * Mapea el nombre del tipo de equipo a la enum
+   * Mapea el nombre del tipo de equipo a la enum normalizada
+   * ✅ FIX EAM FASE 5.3: Fallback seguro 'EQUIPO' en vez de 'GENERADOR' silencioso
    */
   private mapTipoEquipo(nombre: string | undefined): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string {
-    if (!nombre) return 'GENERADOR';
+    if (!nombre) return 'EQUIPO';
 
     const nombreUpper = nombre.toUpperCase();
     if (nombreUpper.includes('BOMBA')) return 'BOMBA';
