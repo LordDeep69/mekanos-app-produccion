@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Edit3,
   FolderOpen,
   GripVertical,
@@ -234,12 +235,12 @@ export function TabModulosTecnicos() {
     setAssignSearch('');
     setAssignTypeFilter('ALL');
     const hasSections = gruposVisualesMap.length > 0;
-    // Si ya hay secciones → modo "elegir existente"; si está vacío → auto-nombrar con el subsistema
+    // Si ya hay secciones → modo "elegir existente" con la primera; si está vacío → "Especificaciones Principales" (NUNCA el nombre de la parte)
     const defaultSection = hasSections
       ? gruposVisualesMap[0][0]
-      : moduloDetalle?.nombre_modulo || 'Especificaciones Técnicas';
-    setAssignSectionMode(hasSections ? 'existing' : 'new');
-    setAssignNewSection(hasSections ? '' : defaultSection);
+      : 'Especificaciones Principales';
+    setAssignSectionMode('existing');
+    setAssignNewSection('');
     const allItems = moduloDetalle?.modulo_atributos || [];
     // Calcula la sección seleccionada: buscar el máximo orden en esa sección para auto-append
     const sectionItems = allItems.filter((ma) => (ma.grupo_visual || 'General') === defaultSection);
@@ -334,6 +335,45 @@ export function TabModulosTecnicos() {
       setDragOverTarget(null);
 
       // Actualizar cada fila cuyo orden haya cambiado
+      for (const upd of updates) {
+        const original = sectionItems.find((ma) => ma.id_atributo === upd.idAtributo);
+        if (original && original.orden_visual !== upd.newOrder) {
+          await updateFlagMut.mutateAsync({
+            codigoModulo: selectedModuloCode,
+            idAtributo: upd.idAtributo,
+            payload: { orden_visual: upd.newOrder },
+          });
+        }
+      }
+    },
+    [selectedModuloCode, updateFlagMut],
+  );
+
+  // ----- Mover campo con micro-flechas ↑ ↓ (1 clic, accesible) -----
+  const handleMoveField = useCallback(
+    async (
+      grupoNombre: string,
+      fromIdx: number,
+      toIdx: number,
+      sectionItems: ModuloAtributoItem[],
+    ) => {
+      if (
+        toIdx < 0 ||
+        toIdx >= sectionItems.length ||
+        fromIdx === toIdx ||
+        !selectedModuloCode
+      )
+        return;
+
+      const reordered = [...sectionItems];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+
+      const updates = reordered.map((ma, i) => ({
+        idAtributo: ma.id_atributo,
+        newOrder: (i + 1) * 10,
+      }));
+
       for (const upd of updates) {
         const original = sectionItems.find((ma) => ma.id_atributo === upd.idAtributo);
         if (original && original.orden_visual !== upd.newOrder) {
@@ -829,7 +869,7 @@ export function TabModulosTecnicos() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase">
-                          <th className="py-3 px-1.5 w-8" title="Arrastrar para reordenar"></th>
+                          <th className="py-3 px-2 w-14 text-center" title="Reordenar (arrastrar o flechas)">Orden</th>
                           <th className="py-3 px-4">Campo Técnico</th>
                           <th className="py-3 px-3">Tipo de Dato y Unidad</th>
                           <th className="py-3 px-3 text-center">Obligatorio</th>
@@ -861,9 +901,34 @@ export function TabModulosTecnicos() {
                                 isDragOver ? 'border-t-2 !border-t-blue-500' : ''
                               }`}
                             >
-                              {/* Grip Handle */}
-                              <td className="py-3 px-1.5 text-center">
-                                <GripVertical className="h-4 w-4 text-slate-300 hover:text-slate-500 transition-colors mx-auto" />
+                              {/* Grip Handle + Micro-flechas ↑ ↓ */}
+                              <td className="py-2.5 px-2 text-center select-none">
+                                <div className="inline-flex items-center gap-1 justify-center">
+                                  <GripVertical
+                                    className="h-4 w-4 text-slate-300 hover:text-slate-600 transition-colors cursor-grab"
+                                    title="Arrastrar para mover de posición"
+                                  />
+                                  <div className="flex flex-col -space-y-0.5">
+                                    <button
+                                      type="button"
+                                      disabled={idx === 0}
+                                      onClick={() => handleMoveField(grupoNombre, idx, idx - 1, items)}
+                                      className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-20 disabled:pointer-events-none transition-colors"
+                                      title="Subir un puesto"
+                                    >
+                                      <ChevronUp className="h-3 w-3 stroke-[2.5]" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={idx === items.length - 1}
+                                      onClick={() => handleMoveField(grupoNombre, idx, idx + 1, items)}
+                                      className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-20 disabled:pointer-events-none transition-colors"
+                                      title="Bajar un puesto"
+                                    >
+                                      <ChevronDown className="h-3 w-3 stroke-[2.5]" />
+                                    </button>
+                                  </div>
+                                </div>
                               </td>
                               <td className="py-3.5 px-4">
                                 <div className="font-bold text-slate-900 text-sm">
@@ -1317,102 +1382,179 @@ export function TabModulosTecnicos() {
                 )}
               </div>
 
-              {/* Sección en la Ficha Técnica — Selector Inteligente */}
+              {/* Sección en la Ficha Técnica — Selección por Píldoras (Cero Texto Libre por defecto) */}
               <div className="space-y-2 pt-1">
-                <label className="block text-xs font-bold text-slate-800">
-                  2. ¿En qué sección de la ficha aparecerá este campo?
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    2. ¿En qué sección de la ficha aparecerá este campo?
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {assignSectionMode === 'existing' ? (
+                      <span className="text-blue-700 font-bold inline-flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                        <Check className="h-3 w-3 stroke-[3] text-blue-600" />
+                        Sección: {assignForm.grupo_visual}
+                      </span>
+                    ) : (
+                      <span className="text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                        Nueva sub-sección personalizada
+                      </span>
+                    )}
+                  </span>
+                </div>
 
-                {gruposVisualesMap.length > 0 ? (
-                  <>
-                    {/* Tarjetas de secciones existentes */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {gruposVisualesMap.map(([secName, secItems]) => {
-                        const isActive = assignSectionMode === 'existing' && assignForm.grupo_visual === secName;
-                        return (
-                          <button
-                            key={secName}
-                            type="button"
-                            onClick={() => handleSelectAssignSection(secName)}
-                            className={`p-2.5 rounded-xl border text-left transition-all ${
-                              isActive
-                                ? 'bg-blue-50 border-blue-400 shadow-2xs ring-1 ring-blue-300'
-                                : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60 hover:border-slate-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                                isActive ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
-                              }`}>
-                                {isActive && <Check className="h-3 w-3 stroke-[3]" />}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-xs font-bold text-slate-800 block truncate">{secName}</span>
-                                <span className="text-[10px] text-slate-500">{secItems.length} campos · Se ubicará al final</span>
-                              </div>
+                {/* Lista de píldoras / tarjetas interactivas */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {gruposVisualesMap.length > 0 ? (
+                    // CASO A: La parte ya tiene secciones creadas en BD
+                    gruposVisualesMap.map(([secName, secItems]) => {
+                      const isActive =
+                        assignSectionMode === 'existing' && assignForm.grupo_visual === secName;
+                      return (
+                        <button
+                          key={secName}
+                          type="button"
+                          onClick={() => handleSelectAssignSection(secName)}
+                          className={`p-2.5 rounded-xl border text-left transition-all ${
+                            isActive
+                              ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
+                              : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/70 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                                isActive
+                                  ? 'border-blue-600 bg-blue-600 text-white'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {isActive && <Check className="h-3 w-3 stroke-[3]" />}
                             </div>
-                          </button>
-                        );
-                      })}
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-slate-800 block truncate">
+                                {secName}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                {secItems.length} campos · Se ubicará al final
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    // CASO B: La parte es nueva (0 campos) — Píldoras de ingeniería estándar (CERO TEXTO LIBRE)
+                    [
+                      {
+                        name: 'Especificaciones Principales',
+                        desc: 'Recomendada · Datos clave y placa técnica del equipo',
+                      },
+                      {
+                        name: 'Desempeño y Capacidad',
+                        desc: 'Potencia, caudales, presiones y rendimiento',
+                      },
+                      {
+                        name: 'General',
+                        desc: 'Datos generales de identificación y operación',
+                      },
+                    ].map((preset) => {
+                      const isActive =
+                        assignSectionMode === 'existing' && assignForm.grupo_visual === preset.name;
+                      return (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => {
+                            setAssignSectionMode('existing');
+                            setAssignForm((prev) => ({
+                              ...prev,
+                              grupo_visual: preset.name,
+                              orden_visual: '10',
+                            }));
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition-all ${
+                            isActive
+                              ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
+                              : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/70 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                                isActive
+                                  ? 'border-blue-600 bg-blue-600 text-white'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {isActive && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-slate-800 block truncate">
+                                {preset.name}
+                              </span>
+                              <span className="text-[10px] text-slate-500">{preset.desc}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
 
-                      {/* Opción: Crear nueva sección */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAssignSectionMode('new');
-                          setAssignNewSection('');
-                        }}
-                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                  {/* Botón "+ Nueva sub-sección" */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssignSectionMode('new');
+                      setAssignNewSection('');
+                      setAssignForm((prev) => ({ ...prev, grupo_visual: '' }));
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      assignSectionMode === 'new'
+                        ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
+                        : 'bg-slate-50/50 border-dashed border-slate-300 hover:bg-slate-100/70 hover:border-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
                           assignSectionMode === 'new'
-                            ? 'bg-blue-50 border-blue-400 shadow-2xs ring-1 ring-blue-300'
-                            : 'bg-slate-50/50 border-dashed border-slate-300 hover:bg-slate-100/60 hover:border-slate-400'
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-slate-300 bg-white'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                            assignSectionMode === 'new' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
-                          }`}>
-                            {assignSectionMode === 'new' ? <Check className="h-3 w-3 stroke-[3]" /> : <Plus className="h-3 w-3 text-slate-400" />}
-                          </div>
-                          <span className="text-xs font-bold text-slate-600">+ Crear nueva sección</span>
-                        </div>
-                      </button>
+                        {assignSectionMode === 'new' ? (
+                          <Check className="h-3 w-3 stroke-[3]" />
+                        ) : (
+                          <Plus className="h-3 w-3 text-slate-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-700 block">
+                          + Nueva sub-sección
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Escribir nombre personalizado
+                        </span>
+                      </div>
                     </div>
+                  </button>
+                </div>
 
-                    {/* Input para nueva sección (solo si se eligió "crear nueva") */}
-                    {assignSectionMode === 'new' && (
-                      <input
-                        type="text"
-                        placeholder="Nombre de la nueva sección (ej: Refrigeración, Control Eléctrico...)"
-                        value={assignNewSection}
-                        onChange={(e) => {
-                          setAssignNewSection(e.target.value);
-                          setAssignForm((prev) => ({ ...prev, grupo_visual: e.target.value }));
-                        }}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-blue-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white shadow-2xs"
-                        autoFocus
-                      />
-                    )}
-                  </>
-                ) : (
-                  /* Subsistema vacío — Auto-genera con el nombre del subsistema */
-                  <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FolderOpen className="h-4 w-4 text-blue-600 shrink-0" />
-                      <span className="text-xs font-bold text-blue-900">
-                        Se creará la sección automáticamente
-                      </span>
-                    </div>
+                {/* Input condicional (Solo se despliega si pulsa intencionalmente "+ Nueva sub-sección") */}
+                {assignSectionMode === 'new' && (
+                  <div className="pt-1.5 animate-in fade-in duration-150">
                     <input
                       type="text"
-                      value={assignForm.grupo_visual}
-                      onChange={(e) => setAssignForm({ ...assignForm, grupo_visual: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-blue-200 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      required
+                      placeholder="Escribe el nombre de la nueva sección (ej: Refrigeración, Controles Eléctricos...)"
+                      value={assignNewSection}
+                      onChange={(e) => {
+                        setAssignNewSection(e.target.value);
+                        setAssignForm((prev) => ({ ...prev, grupo_visual: e.target.value }));
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-blue-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white shadow-2xs"
+                      autoFocus
                     />
-                    <p className="text-[10px] text-blue-700 mt-1.5 font-medium">
-                      Como esta parte aún no tiene campos, el primer campo creará su primera sección.
-                      Puedes editar el nombre arriba si lo deseas.
-                    </p>
                   </div>
                 )}
               </div>
