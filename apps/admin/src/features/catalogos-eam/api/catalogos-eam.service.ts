@@ -585,6 +585,8 @@ export async function createArquetipoEam(payload: {
 export async function updateArquetipoEam(
   idTipoEquipo: number,
   payload: {
+    codigo_tipo?: string;
+    codigo_corto?: string;
     nombre_tipo?: string;
     categoria?: string;
     descripcion?: string;
@@ -600,6 +602,10 @@ export async function updateArquetipoEam(
     payload,
   );
   return data;
+}
+
+export async function deleteArquetipoEam(idTipoEquipo: number): Promise<void> {
+  await apiClient.delete(`/catalogos/arquetipos/${idTipoEquipo}`);
 }
 
 export async function vincularModuloArquetipoEam(

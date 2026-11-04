@@ -57,6 +57,12 @@ export class ArquetiposController {
     return this.eamService.updateArquetipo(id, dto);
   }
 
+  @Delete(':id')
+  @ApiOperation({ summary: 'Eliminar un tipo de equipo sin activos asociados' })
+  async delete(@Param('id', ParseIntPipe) id: number) {
+    return this.eamService.deleteArquetipo(id);
+  }
+
   @Get(':id/esquema')
   @ApiOperation({
     summary: 'Obtener esquema dinámico completo del arquetipo para renderers UI y App Móvil',

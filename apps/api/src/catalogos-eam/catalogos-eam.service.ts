@@ -1109,7 +1109,19 @@ export class CatalogosEamService {
     }
 
     const data: Prisma.tipos_equipoUpdateInput = {};
-    if (dto.nombre_tipo !== undefined) data.nombre_tipo = dto.nombre_tipo.trim();
+    if (dto.codigo_tipo !== undefined) {
+      const code = dto.codigo_tipo.trim().toUpperCase();
+      data.codigo_tipo = code;
+      data.codigo_corto = code;
+    }
+    if (dto.codigo_corto !== undefined) {
+      data.codigo_corto = dto.codigo_corto.trim().toUpperCase();
+    }
+    if (dto.nombre_tipo !== undefined) {
+      const name = dto.nombre_tipo.trim();
+      data.nombre_tipo = name;
+      data.nombre_canonico = name;
+    }
     if (dto.categoria !== undefined) data.categoria = dto.categoria.trim().toUpperCase() as any;
     if (dto.descripcion !== undefined) data.descripcion = dto.descripcion?.trim() || null;
     if (dto.requiere_horometro !== undefined) data.requiere_horometro = dto.requiere_horometro;
@@ -1121,6 +1133,49 @@ export class CatalogosEamService {
     return this.prisma.tipos_equipo.update({
       where: { id_tipo_equipo: idTipoEquipo },
       data,
+    });
+  }
+
+  async deleteArquetipo(idTipoEquipo: number) {
+    const tipo = await this.prisma.tipos_equipo.findUnique({
+      where: { id_tipo_equipo: idTipoEquipo },
+      include: {
+        _count: {
+          select: {
+            equipos: true,
+            modelos_equipo: true,
+          },
+        },
+      },
+    });
+
+    if (!tipo) {
+      throw new NotFoundException(`No se encontró el tipo de equipo con ID ${idTipoEquipo}`);
+    }
+
+    if (tipo._count.equipos > 0) {
+      throw new ConflictException(
+        `No se puede eliminar el tipo de equipo "${tipo.nombre_tipo}" porque tiene ${tipo._count.equipos} equipos activos registrados. Desactívelo o reasigne los equipos primero.`,
+      );
+    }
+
+    if (tipo._count.modelos_equipo > 0) {
+      throw new ConflictException(
+        `No se puede eliminar el tipo de equipo "${tipo.nombre_tipo}" porque tiene ${tipo._count.modelos_equipo} modelos de fábrica asociados. Elimine o reasigne los modelos primero.`,
+      );
+    }
+
+    // Limpieza de relaciones intermedias antes de eliminar
+    await this.prisma.tipo_equipo_modulos.deleteMany({
+      where: { id_tipo_equipo: idTipoEquipo },
+    });
+
+    await this.prisma.tipo_equipo_planes.deleteMany({
+      where: { id_tipo_equipo: idTipoEquipo },
+    });
+
+    return this.prisma.tipos_equipo.delete({
+      where: { id_tipo_equipo: idTipoEquipo },
     });
   }
 

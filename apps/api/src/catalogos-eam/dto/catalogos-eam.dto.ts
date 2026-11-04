@@ -421,6 +421,16 @@ export class CreateArquetipoDto {
 export class UpdateArquetipoDto {
   @IsOptional()
   @IsString()
+  @MaxLength(30)
+  codigo_tipo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  codigo_corto?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(100)
   nombre_tipo?: string;
 

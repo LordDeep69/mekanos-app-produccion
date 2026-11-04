@@ -18,6 +18,7 @@ import {
   createModuloEam,
   createPlanArquetipoEam,
   createUnidadEam,
+  deleteArquetipoEam,
   deleteAtributoEam,
   deleteMagnitudEam,
   deleteModeloOemEam,
@@ -342,6 +343,16 @@ export function useUpdateArquetipoEam() {
   return useMutation({
     mutationFn: ({ idTipoEquipo, payload }: { idTipoEquipo: number; payload: any }) =>
       updateArquetipoEam(idTipoEquipo, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
+export function useDeleteArquetipoEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (idTipoEquipo: number) => deleteArquetipoEam(idTipoEquipo),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },

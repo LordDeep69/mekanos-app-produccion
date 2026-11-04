@@ -1,9 +1,11 @@
 'use client';
 
 import {
+  AlertTriangle,
   CalendarClock,
   CheckCircle2,
   Cpu,
+  Edit3,
   Eye,
   Layers,
   Loader2,
@@ -14,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArquetipoEquipo,
   DynamicEquipmentFormPreview,
   TIPOS_CONTROL_HUMANOS,
   getCriterioIntervaloHumano,
@@ -24,12 +27,14 @@ import {
   useCreateArquetipoEam,
   useCreateAtributoEam,
   useCreatePlanArquetipoEam,
+  useDeleteArquetipoEam,
   useDeletePlanArquetipoEam,
   useDesvincularModuloArquetipoEam,
   useMagnitudesEam,
   useModelosOemEam,
   useModulosEam,
   useResumenEjecutivoEam,
+  useUpdateArquetipoEam,
   useVincularModuloArquetipoEam,
 } from '../index';
 
@@ -70,6 +75,8 @@ export function TabArquetiposEquipo() {
   );
 
   const createArqMut = useCreateArquetipoEam();
+  const updateArqMut = useUpdateArquetipoEam();
+  const deleteArqMut = useDeleteArquetipoEam();
   const vincularModMut = useVincularModuloArquetipoEam();
   const desvincularModMut = useDesvincularModuloArquetipoEam();
   const createPlanMut = useCreatePlanArquetipoEam();
@@ -82,10 +89,26 @@ export function TabArquetiposEquipo() {
   const [arqForm, setArqForm] = useState({
     codigo_tipo: '',
     nombre_tipo: '',
-    categoria: 'ENERGIA',
+    categoria: 'CLIMATIZACION',
     descripcion: '',
     requiere_horometro: true,
   });
+
+  // Modal Editar Tipo de Equipo
+  const [showEditArqModal, setShowEditArqModal] = useState(false);
+  const [editingArq, setEditingArq] = useState<ArquetipoEquipo | null>(null);
+  const [editArqForm, setEditArqForm] = useState({
+    codigo_tipo: '',
+    nombre_tipo: '',
+    categoria: 'CLIMATIZACION',
+    descripcion: '',
+    requiere_horometro: true,
+  });
+
+  // Modal Eliminar Tipo de Equipo
+  const [showDeleteArqModal, setShowDeleteArqModal] = useState(false);
+  const [deletingArq, setDeletingArq] = useState<ArquetipoEquipo | null>(null);
+  const [deleteArqError, setDeleteArqError] = useState<string | null>(null);
 
   const [showLinkModModal, setShowLinkModModal] = useState(false);
   const [linkModId, setLinkModId] = useState<string>('');
@@ -120,6 +143,57 @@ export function TabArquetiposEquipo() {
     const created = await createArqMut.mutateAsync(arqForm);
     setSelectedArqId(created.id_tipo_equipo);
     setShowNewArqModal(false);
+  };
+
+  const handleOpenEditArq = (arq: ArquetipoEquipo) => {
+    setEditingArq(arq);
+    setEditArqForm({
+      codigo_tipo: arq.codigo_corto || arq.codigo_tipo,
+      nombre_tipo: arq.nombre_canonico || arq.nombre_tipo,
+      categoria: arq.categoria || 'CLIMATIZACION',
+      descripcion: arq.descripcion || '',
+      requiere_horometro: Boolean(arq.requiere_horometro),
+    });
+    setShowEditArqModal(true);
+  };
+
+  const handleSaveEditArq = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingArq) return;
+    await updateArqMut.mutateAsync({
+      idTipoEquipo: editingArq.id_tipo_equipo,
+      payload: {
+        codigo_tipo: editArqForm.codigo_tipo,
+        nombre_tipo: editArqForm.nombre_tipo,
+        categoria: editArqForm.categoria,
+        descripcion: editArqForm.descripcion,
+        requiere_horometro: editArqForm.requiere_horometro,
+      },
+    });
+    setShowEditArqModal(false);
+  };
+
+  const handleOpenDeleteArq = (arq: ArquetipoEquipo) => {
+    setDeletingArq(arq);
+    setDeleteArqError(null);
+    setShowDeleteArqModal(true);
+  };
+
+  const handleConfirmDeleteArq = async () => {
+    if (!deletingArq) return;
+    try {
+      await deleteArqMut.mutateAsync(deletingArq.id_tipo_equipo);
+      if (selectedArqId === deletingArq.id_tipo_equipo) {
+        setSelectedArqId(null);
+      }
+      setShowDeleteArqModal(false);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        'No se pudo eliminar el tipo de equipo';
+      setDeleteArqError(msg);
+    }
   };
 
   const handleLinkModulo = async (e: React.FormEvent) => {
@@ -248,22 +322,51 @@ export function TabArquetiposEquipo() {
                 }`}
               >
                 <div className="space-y-2">
-                  {/* Línea 1: Nombre en Title Case + Horómetro */}
+                  {/* Línea 1: Nombre en Title Case + Acciones y Horómetro */}
                   <div className="flex items-start justify-between gap-2">
                     <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
                       {arq.nombre_canonico || arq.nombre_tipo}
                     </h4>
-                    {arq.requiere_horometro && (
-                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold shrink-0">
-                        Horómetro
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {arq.requiere_horometro && (
+                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          Horómetro
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditArq(arq);
+                        }}
+                        className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="Editar tipo de equipo"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenDeleteArq(arq);
+                        }}
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Eliminar tipo de equipo"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  {/* Línea 2: 1 solo código limpio */}
-                  <div className="flex items-center gap-2">
+                  {/* Línea 2: 1 solo código limpio + Categoría */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-xs font-bold">
                       Código: {codigoLimpio}
                     </span>
+                    {arq.categoria && (
+                      <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-500 text-[10px] font-medium border border-slate-200">
+                        {arq.categoria}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -559,10 +662,10 @@ export function TabArquetiposEquipo() {
                   onChange={(e) => setArqForm({ ...arqForm, categoria: e.target.value })}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
                 >
+                  <option value="CLIMATIZACION">Climatización y Refrigeración</option>
                   <option value="ENERGIA">Generación de Energía</option>
                   <option value="HIDRAULICA">Bombeo e Hidráulica</option>
                   <option value="COMPRESION">Aire Comprimido y Neumática</option>
-                  <option value="CLIMATIZACION">Climatización y Refrigeración</option>
                   <option value="OTRO">Otra Maquinaria Industrial</option>
                 </select>
               </div>
@@ -582,6 +685,248 @@ export function TabArquetiposEquipo() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR TIPO DE EQUIPO */}
+      {showEditArqModal && editingArq && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <Edit3 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 leading-tight">
+                    Editar Tipo de Equipo
+                  </h4>
+                  <p className="text-xs text-slate-500 font-mono">
+                    ID: {editingArq.id_tipo_equipo}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditArqModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditArq} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nombre del Tipo de Equipo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Aire Acondicionado / Chiller"
+                  value={editArqForm.nombre_tipo}
+                  onChange={(e) =>
+                    setEditArqForm({ ...editArqForm, nombre_tipo: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Código / Prefijo Identificador *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: HVAC"
+                  value={editArqForm.codigo_tipo}
+                  onChange={(e) =>
+                    setEditArqForm({ ...editArqForm, codigo_tipo: e.target.value.toUpperCase() })
+                  }
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 uppercase"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Se usa como prefijo para numerar los equipos en la plataforma (ej: HVAC-001).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Categoría</label>
+                <select
+                  value={editArqForm.categoria}
+                  onChange={(e) => setEditArqForm({ ...editArqForm, categoria: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-medium"
+                >
+                  <option value="CLIMATIZACION">Climatización y Refrigeración</option>
+                  <option value="ENERGIA">Generación de Energía</option>
+                  <option value="HIDRAULICA">Bombeo e Hidráulica</option>
+                  <option value="COMPRESION">Aire Comprimido y Neumática</option>
+                  <option value="OTRO">Otra Maquinaria Industrial</option>
+                </select>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">
+                    Requiere Horómetro (Horas de Uso)
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Habilita el seguimiento de horómetro y rutinas por horas
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditArqForm({
+                      ...editArqForm,
+                      requiere_horometro: !editArqForm.requiere_horometro,
+                    })
+                  }
+                  className={`inline-flex items-center w-9 h-5 rounded-full transition-colors shrink-0 ${
+                    editArqForm.requiere_horometro ? 'bg-amber-500' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                      editArqForm.requiere_horometro ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Descripción (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Notas técnicas o alcance del tipo de equipo..."
+                  value={editArqForm.descripcion}
+                  onChange={(e) =>
+                    setEditArqForm({ ...editArqForm, descripcion: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEditArqModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateArqMut.isPending}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  {updateArqMut.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <span>Guardar Cambios</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ADVERTENCIA ELIMINAR TIPO DE EQUIPO */}
+      {showDeleteArqModal && deletingArq && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-rose-50/80">
+              <div className="flex items-center gap-2 text-rose-700">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <h4 className="text-sm font-bold">Eliminar Tipo de Equipo</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteArqModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <p className="text-xs font-bold text-slate-800">
+                  {deletingArq.nombre_canonico || deletingArq.nombre_tipo}
+                </p>
+                <p className="text-[11px] font-mono text-slate-500">
+                  Código: {deletingArq.codigo_corto || deletingArq.codigo_tipo}
+                </p>
+                <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-600 font-semibold">
+                  <span>{deletingArq.equipos_activos ?? deletingArq._count.equipos} equipos activos</span>
+                  <span>•</span>
+                  <span>{deletingArq.tipo_equipo_modulos.length} partes</span>
+                  <span>•</span>
+                  <span>{deletingArq.tipo_equipo_planes.length} planes</span>
+                </div>
+              </div>
+
+              {(deletingArq.equipos_activos ?? deletingArq._count.equipos) > 0 ? (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Acción Bloqueada por Integridad Operativa</p>
+                    <p className="mt-1 text-[11px] text-amber-800 leading-relaxed">
+                      Este tipo de equipo tiene <strong>{deletingArq.equipos_activos ?? deletingArq._count.equipos} equipos activos</strong> registrados en Mekanos.
+                      Para mantener la trazabilidad de órdenes de servicio e historial de fallas, no puede ser eliminado mientras tenga activos vinculados.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900">
+                  <p className="font-bold">¿Confirmas la eliminación definitiva?</p>
+                  <p className="mt-1 text-[11px] text-rose-800 leading-relaxed">
+                    Esta acción desvinculará sus partes técnicas y rutinas de mantenimiento preventivo asociadas. No se puede deshacer.
+                  </p>
+                </div>
+              )}
+
+              {deleteArqError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                  {deleteArqError}
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteArqModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={(deletingArq.equipos_activos ?? deletingArq._count.equipos) > 0 || deleteArqMut.isPending}
+                  onClick={handleConfirmDeleteArq}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  {deleteArqMut.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Eliminando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Eliminar Tipo de Equipo</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
