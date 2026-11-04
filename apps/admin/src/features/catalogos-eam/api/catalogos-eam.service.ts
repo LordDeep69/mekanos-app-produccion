@@ -453,6 +453,13 @@ export async function updateAtributoEam(
   return data;
 }
 
+export async function deleteAtributoEam(codigo: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await apiClient.delete<{ success: boolean; message: string }>(
+    `/catalogos/atributos-tecnicos/${codigo}`,
+  );
+  return data;
+}
+
 // 3. Módulos Técnicos Funcionales
 export async function getModulosEam(): Promise<ModuloTecnico[]> {
   const { data } = await apiClient.get<ModuloTecnico[]>('/catalogos/modulos-tecnicos');
@@ -488,6 +495,13 @@ export async function updateModuloEam(
   const { data } = await apiClient.patch<ModuloTecnico>(
     `/catalogos/modulos-tecnicos/${codigo}`,
     payload,
+  );
+  return data;
+}
+
+export async function deleteModuloEam(codigo: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await apiClient.delete<{ success: boolean; message: string }>(
+    `/catalogos/modulos-tecnicos/${codigo}`,
   );
   return data;
 }

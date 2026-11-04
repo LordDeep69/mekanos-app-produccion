@@ -418,8 +418,80 @@ export class CatalogosEamService {
     };
   }
 
-  convertirUom(dto: ConvertirUomDto) {
+  async convertirUom(dto: ConvertirUomDto) {
     try {
+      const origCod = dto.unidadOrigen.trim().toUpperCase();
+      const destCod = dto.unidadDestino.trim().toUpperCase();
+
+      if (origCod === destCod) {
+        return {
+          valorOriginal: dto.valor,
+          unidadOrigen: dto.unidadOrigen,
+          valorDestino: dto.valor,
+          unidadDestino: dto.unidadDestino,
+        };
+      }
+
+      // Buscar ambas unidades directamente en PostgreSQL (dinámicas / creadas en vivo)
+      const [uOrig, uDest] = await Promise.all([
+        this.prisma.unidades_medida.findFirst({
+          where: {
+            OR: [
+              { codigo: { equals: origCod, mode: 'insensitive' } },
+              { simbolo: { equals: dto.unidadOrigen.trim(), mode: 'insensitive' } },
+            ],
+            activo: true,
+          },
+          include: { magnitud: true },
+        }),
+        this.prisma.unidades_medida.findFirst({
+          where: {
+            OR: [
+              { codigo: { equals: destCod, mode: 'insensitive' } },
+              { simbolo: { equals: dto.unidadDestino.trim(), mode: 'insensitive' } },
+            ],
+            activo: true,
+          },
+          include: { magnitud: true },
+        }),
+      ]);
+
+      if (uOrig && uDest) {
+        // Validar compatibilidad dimensional
+        const magOrig = uOrig.id_magnitud ?? uOrig.tipo_magnitud;
+        const magDest = uDest.id_magnitud ?? uDest.tipo_magnitud;
+
+        if (magOrig !== magDest) {
+          throw new BadRequestException(
+            `Incompatibilidad dimensional: No se puede convertir ${uOrig.nombre} (${uOrig.simbolo}) a ${uDest.nombre} (${uDest.simbolo}) porque pertenecen a magnitudes diferentes.`,
+          );
+        }
+
+        const factorA_orig = Number(uOrig.factor_a) || 1.0;
+        const factorB_orig = Number(uOrig.factor_b) || 0.0;
+        const factorA_dest = Number(uDest.factor_a) || 1.0;
+        const factorB_dest = Number(uDest.factor_b) || 0.0;
+
+        if (factorA_dest === 0) {
+          throw new BadRequestException(
+            `El factor de conversión de la unidad destino (${uDest.simbolo}) no puede ser cero.`,
+          );
+        }
+
+        // 1. Transformar origen a unidad canónica base: y = a_orig * x + b_orig
+        const valorBase = factorA_orig * dto.valor + factorB_orig;
+        // 2. Transformar base a destino: x_dest = (valorBase - b_dest) / a_dest
+        const valorDestino = (valorBase - factorB_dest) / factorA_dest;
+
+        return {
+          valorOriginal: dto.valor,
+          unidadOrigen: dto.unidadOrigen,
+          valorDestino,
+          unidadDestino: dto.unidadDestino,
+        };
+      }
+
+      // Fallback a motor estático UomConversionService
       const valorDestino = this.uomService.convertir(dto.valor, dto.unidadOrigen, dto.unidadDestino);
       return {
         valorOriginal: dto.valor,
@@ -571,6 +643,46 @@ export class CatalogosEamService {
     });
   }
 
+  async deleteAtributo(codigo: string) {
+    const cod = codigo.toLowerCase().trim();
+    const attr = await this.prisma.atributos_tecnicos.findUnique({
+      where: { codigo_atributo: cod },
+      include: {
+        _count: {
+          select: {
+            modulo_atributos: true,
+          },
+        },
+      },
+    });
+
+    if (!attr) {
+      throw new NotFoundException(`No se encontró el atributo técnico con código "${codigo}"`);
+    }
+
+    if (attr._count.modulo_atributos > 0) {
+      throw new BadRequestException(
+        `No se puede eliminar el campo técnico "${attr.nombre_atributo}" porque está asignado a ${attr._count.modulo_atributos} parte(s)/subsistema(s). Quítelo de las partes técnicas antes de eliminar.`,
+      );
+    }
+
+    try {
+      await this.prisma.atributos_tecnicos.delete({
+        where: { codigo_atributo: cod },
+      });
+    } catch {
+      await this.prisma.atributos_tecnicos.update({
+        where: { codigo_atributo: cod },
+        data: { activo: false },
+      });
+    }
+
+    return {
+      success: true,
+      message: `Campo técnico "${attr.nombre_atributo}" eliminado exitosamente.`,
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 3. MÓDULOS TÉCNICOS FUNCIONALES
   // ═══════════════════════════════════════════════════════════════════════════
@@ -710,6 +822,52 @@ export class CatalogosEamService {
       where: { codigo_modulo: codigo.toLowerCase() },
       data,
     });
+  }
+
+  async deleteModulo(codigo: string) {
+    const cod = codigo.toLowerCase().trim();
+    const mod = await this.prisma.modulos_tecnicos.findUnique({
+      where: { codigo_modulo: cod },
+      include: {
+        _count: {
+          select: {
+            tipo_equipo_modulos: true,
+            modulo_atributos: true,
+          },
+        },
+      },
+    });
+
+    if (!mod) {
+      throw new NotFoundException(`No se encontró la parte/subsistema con código "${codigo}"`);
+    }
+
+    if (mod._count.tipo_equipo_modulos > 0) {
+      throw new BadRequestException(
+        `No se puede eliminar la parte/subsistema "${mod.nombre_modulo}" porque está vinculada a ${mod._count.tipo_equipo_modulos} tipo(s) de equipo. Desvincúlela de los tipos de equipo antes de eliminar.`,
+      );
+    }
+
+    // Desvincular atributos internos de la parte
+    await this.prisma.modulo_atributos.deleteMany({
+      where: { id_modulo: mod.id_modulo },
+    });
+
+    try {
+      await this.prisma.modulos_tecnicos.delete({
+        where: { codigo_modulo: cod },
+      });
+    } catch {
+      await this.prisma.modulos_tecnicos.update({
+        where: { codigo_modulo: cod },
+        data: { activo: false },
+      });
+    }
+
+    return {
+      success: true,
+      message: `Parte/subsistema "${mod.nombre_modulo}" eliminada exitosamente.`,
+    };
   }
 
   async updateAtributoModulo(

@@ -84,4 +84,10 @@ export class ModulosTecnicosController {
   ) {
     return this.eamService.desasignarAtributo(codigo, idAtributo);
   }
+
+  @Delete(':codigo')
+  @ApiOperation({ summary: 'Eliminar una parte/subsistema funcional' })
+  async delete(@Param('codigo') codigo: string) {
+    return this.eamService.deleteModulo(codigo);
+  }
 }

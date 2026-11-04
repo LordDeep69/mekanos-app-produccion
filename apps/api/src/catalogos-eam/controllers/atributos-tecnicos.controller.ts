@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
@@ -56,5 +56,11 @@ export class AtributosTecnicosController {
     @Body() dto: UpdateAtributoTecnicoDto,
   ) {
     return this.eamService.updateAtributo(codigo, dto);
+  }
+
+  @Delete(':codigo')
+  @ApiOperation({ summary: 'Eliminar un atributo técnico del catálogo' })
+  async delete(@Param('codigo') codigo: string) {
+    return this.eamService.deleteAtributo(codigo);
   }
 }

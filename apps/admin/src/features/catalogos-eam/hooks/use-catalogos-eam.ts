@@ -18,8 +18,10 @@ import {
   createModuloEam,
   createPlanArquetipoEam,
   createUnidadEam,
+  deleteAtributoEam,
   deleteMagnitudEam,
   deleteModeloOemEam,
+  deleteModuloEam,
   deletePlanArquetipoEam,
   deleteUnidadEam,
   desasignarAtributoModuloEam,
@@ -244,6 +246,16 @@ export function useUpdateAtributoEam() {
   });
 }
 
+export function useDeleteAtributoEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (codigo: string) => deleteAtributoEam(codigo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
 export function useCreateModuloEam() {
   const qc = useQueryClient();
   return useMutation({
@@ -259,6 +271,16 @@ export function useUpdateModuloEam() {
   return useMutation({
     mutationFn: ({ codigo, payload }: { codigo: string; payload: any }) =>
       updateModuloEam(codigo, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
+export function useDeleteModuloEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (codigo: string) => deleteModuloEam(codigo),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },
