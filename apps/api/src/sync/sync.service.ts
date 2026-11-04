@@ -623,6 +623,20 @@ export class SyncService {
           };
         }
 
+        // ✅ SIEMPRE enviar catálogo de actividades y tipos de servicio
+        // (son apenas ~180 registros / ~25 KB) para garantizar que los técnicos no sufran desincronización
+        const [actividadesDelta, tiposServicioDelta] = await Promise.all([
+          this.prisma.catalogo_actividades.findMany({
+            where: { activo: true },
+            include: { catalogo_sistemas: true },
+            orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
+          }),
+          this.prisma.tipos_servicio.findMany({
+            where: { activo: true },
+            orderBy: { nombre_tipo: 'asc' },
+          }),
+        ]);
+
         return {
           serverTimestamp: new Date().toISOString(),
           tecnicoId,
@@ -631,9 +645,27 @@ export class SyncService {
           ordenes: [],
           ordenesEliminadas: ordenesEliminadasIds,
           parametrosMedicion: [],
-          actividadesCatalogo: [],
+          actividadesCatalogo: actividadesDelta.map((a) => ({
+            idActividadCatalogo: a.id_actividad_catalogo,
+            codigoActividad: a.codigo_actividad,
+            descripcionActividad: a.descripcion_actividad,
+            tipoActividad: a.tipo_actividad as string,
+            ordenEjecucion: a.orden_ejecucion,
+            esObligatoria: a.es_obligatoria ?? true,
+            tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
+            instrucciones: a.instrucciones ?? undefined,
+            precauciones: a.precauciones ?? undefined,
+            idParametroMedicion: a.id_parametro_medicion ?? undefined,
+            idTipoServicio: a.id_tipo_servicio,
+            sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+          })),
           estadosOrden: [],
-          tiposServicio: [],
+          tiposServicio: tiposServicioDelta.map((t) => ({
+            id: t.id_tipo_servicio,
+            codigo: t.codigo_tipo,
+            nombre: t.nombre_tipo,
+            descripcion: t.descripcion ?? undefined,
+          })),
           catalogoPendientes: pendientesDelta,
         };
       }
@@ -1139,7 +1171,40 @@ export class SyncService {
       }));
 
     } else {
-      this.logger.log('[Sync Delta] Omitiendo catálogos pesados (ya sincronizados)');
+      this.logger.log('[Sync Delta] Incluyendo catálogo de actividades y tipos de servicio para consistencia');
+      const [actividades, tiposServicio] = await Promise.all([
+        this.prisma.catalogo_actividades.findMany({
+          where: { activo: true },
+          include: { catalogo_sistemas: true },
+          orderBy: [{ id_tipo_servicio: 'asc' }, { orden_ejecucion: 'asc' }],
+        }),
+        this.prisma.tipos_servicio.findMany({
+          where: { activo: true },
+          orderBy: { nombre_tipo: 'asc' },
+        }),
+      ]);
+
+      actividadesDownload = actividades.map((a) => ({
+        idActividadCatalogo: a.id_actividad_catalogo,
+        codigoActividad: a.codigo_actividad,
+        descripcionActividad: a.descripcion_actividad,
+        tipoActividad: a.tipo_actividad as string,
+        ordenEjecucion: a.orden_ejecucion,
+        esObligatoria: a.es_obligatoria || false,
+        tiempoEstimadoMinutos: a.tiempo_estimado_minutos ?? undefined,
+        instrucciones: a.instrucciones ?? undefined,
+        precauciones: a.precauciones ?? undefined,
+        idParametroMedicion: a.id_parametro_medicion ?? undefined,
+        idTipoServicio: a.id_tipo_servicio,
+        sistema: a.catalogo_sistemas?.nombre_sistema ?? 'GENERAL',
+      }));
+
+      tiposServicioDownload = tiposServicio.map((t) => ({
+        id: t.id_tipo_servicio,
+        codigo: t.codigo_tipo,
+        nombre: t.nombre_tipo,
+        descripcion: t.descripcion ?? undefined,
+      }));
     }
 
     // 7. Obtener SIEMPRE catálogo de pendientes frecuentes activos para mantener mobile 100% sincronizado
@@ -1436,6 +1501,10 @@ export class SyncService {
           },
         },
         tipos_servicio: true,
+        // ✅ NUEVO: Incluir actividades del plan
+        ordenes_actividades_plan: {
+          orderBy: { orden_secuencia: 'asc' },
+        },
         // ✅ FIX 28-ENE-2026: Incluir ordenes_equipos para multi-equipos
         ordenes_equipos: {
           include: {
@@ -1635,6 +1704,13 @@ export class SyncService {
       medicionesCriticas: medicionesCriticas,
       fechaCreacion: orden.fecha_creacion?.toISOString() || new Date().toISOString(),
       fechaModificacion: orden.fecha_modificacion?.toISOString(),
+      // ✅ NUEVO: Plan de actividades asignadas a la orden
+      actividadesPlan: (orden as any).ordenes_actividades_plan?.map((p: any) => ({
+        idActividadCatalogo: p.id_actividad_catalogo,
+        ordenSecuencia: p.orden_secuencia,
+        origen: p.origen,
+        esObligatoria: p.es_obligatoria ?? true,
+      })) || [],
       // ✅ FIX 28-ENE-2026: Incluir ordenesEquipos para multi-equipos
       ordenesEquipos: (() => {
         const mapped = orden.ordenes_equipos?.map((oe) => ({

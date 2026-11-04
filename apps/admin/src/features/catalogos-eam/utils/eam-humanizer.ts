@@ -275,6 +275,13 @@ export function getModuloBadgeInfo(codigoModulo?: string | null, nombreModulo?: 
       badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
     };
   }
+  if (code.includes('refrigera') || code.includes('chiller') || code.includes('clima') || code.includes('hvac')) {
+    return {
+      shortName: 'Circuito Refrigeración',
+      fullName: nombreModulo || 'Circuito de Refrigeración',
+      badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+    };
+  }
   if (code.includes('compresor')) {
     return {
       shortName: 'Compresor de Aire',

@@ -803,7 +803,7 @@ export function TabModelosOemBom() {
       {/* MODAL CREAR / EDITAR IDENTIDAD DEL MODELO DE FÁBRICA (SIN TEXTAREA JSON) */}
       {showModeloModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Encabezado */}
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
@@ -880,11 +880,12 @@ export function TabModelosOemBom() {
                 </div>
               </div>
 
-              {/* Descripción Comercial */}
+              {/* Nombre Comercial del Modelo */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    Descripción Comercial del Modelo
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                    <span>Nombre Comercial del Modelo *</span>
+                    <span className="text-[10px] font-normal text-slate-500">(Nombre oficial / Alias del activo)</span>
                   </label>
                   {isAutoNombre ? (
                     <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -913,14 +914,18 @@ export function TabModelosOemBom() {
                 </div>
                 <input
                   type="text"
-                  placeholder="Ej: Chiller Trane CGAM-20 20 TR"
+                  required
+                  placeholder="Ej: Chiller Trane 20 TR / Planta Eléctrica Cummins 100 kVA"
                   value={modeloForm.nombre_comercial}
                   onChange={(e) => {
                     setIsAutoNombre(false);
                     setModeloForm({ ...modeloForm, nombre_comercial: e.target.value });
                   }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm shadow-2xs focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Nombre descriptivo con el que se identificará este modelo en catálogos y que se heredará al registrar equipos en campo.
+                </p>
               </div>
 
               {/* Código de Referencia de Plantilla */}
@@ -1012,38 +1017,49 @@ export function TabModelosOemBom() {
                 )}
               </div>
 
-              {/* Acordeón Opcional: Configurar Especificaciones Técnicas In-Place */}
+              {/* Acordeón Ergonómico: Configurar Especificaciones Técnicas In-Place */}
               {!editingModelo && (
-                <div className="pt-2 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setShowSpecsInCreate(!showSpecsInCreate)}
-                    className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Sliders className="h-4 w-4 text-indigo-600 shrink-0" />
+                <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                  <div className="p-4 bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-white border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-xs shrink-0">
+                        <Sliders className="h-5 w-5" />
+                      </div>
                       <div>
-                        <div className="text-xs font-bold text-slate-800">
-                          {showSpecsInCreate
-                            ? 'Ficha Técnica de Fábrica (Desplegada)'
-                            : '+ Configurar Ficha Técnica de Fábrica Ahora (Opcional)'}
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-slate-900">
+                            Ficha Técnica Predeterminada del Modelo
+                          </h4>
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-[10px] font-bold">
+                            Opcional
+                          </span>
                         </div>
-                        <div className="text-[11px] text-slate-500">
-                          {showSpecsInCreate
-                            ? 'Puedes pre-llenar los datos técnicos de fábrica aquí o hacerlo después.'
-                            : 'Pre-configura de una vez variables como Capacidad de Enfriamiento, Gas Refrigerante, etc.'}
-                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Pre-configura los valores técnicos estándar de fábrica (ej: Capacidad 20 TR, Gas R410A). Se heredarán al crear equipos.
+                        </p>
                       </div>
                     </div>
-                    {showSpecsInCreate ? (
-                      <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
-                    )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSpecsInCreate(!showSpecsInCreate)}
+                      className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                    >
+                      {showSpecsInCreate ? (
+                        <>
+                          <span>Ocultar Ficha</span>
+                          <ChevronUp className="h-4 w-4 text-slate-500" />
+                        </>
+                      ) : (
+                        <>
+                          <span>Desplegar Ficha Técnica</span>
+                          <ChevronDown className="h-4 w-4 text-slate-500" />
+                        </>
+                      )}
+                    </button>
+                  </div>
 
                   {showSpecsInCreate && (
-                    <div className="mt-3 p-4 bg-slate-50/60 rounded-xl border border-slate-200 max-h-[360px] overflow-y-auto">
+                    <div className="p-5 bg-slate-50/40">
                       <DynamicModularSpecsEditor
                         idTipoEquipo={Number(modeloForm.id_tipo_equipo)}
                         modulosValues={createSpecsModulos}

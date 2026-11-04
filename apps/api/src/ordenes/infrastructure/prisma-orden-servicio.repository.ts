@@ -552,6 +552,9 @@ export class PrismaOrdenServicioRepository {
         }
       }
 
+      // 4. Auto-sembrar plan de actividades predeterminado
+      await this.autoSembrarPlanActividades(tx, savedOrden.id_orden_servicio, orden.id_tipo_servicio);
+
       return savedOrden;
     }, {
       // ✅ FIX 06-ENE-2026: Timeout aumentado para Supabase (30s vs 5s default)
@@ -777,6 +780,9 @@ export class PrismaOrdenServicioRepository {
         }
       }
 
+      // 5. Auto-sembrar plan de actividades predeterminado para el tipo de servicio
+      await this.autoSembrarPlanActividades(tx, savedOrden.id_orden_servicio, orden.id_tipo_servicio);
+
       // ✅ Retornar directamente sin consulta adicional
       return savedOrden;
     }, {
@@ -784,6 +790,41 @@ export class PrismaOrdenServicioRepository {
       timeout: 30000,
       maxWait: 10000,
     });
+  }
+
+  /**
+   * Auto-siembra el plan de actividades inicial para la orden si el tipo de servicio tiene catálogo activo.
+   */
+  private async autoSembrarPlanActividades(
+    tx: any,
+    idOrdenServicio: number,
+    idTipoServicio: number | null | undefined,
+  ): Promise<void> {
+    if (!idTipoServicio) return;
+    try {
+      const actividadesBase = await tx.catalogo_actividades.findMany({
+        where: {
+          id_tipo_servicio: Number(idTipoServicio),
+          activo: true,
+        },
+        orderBy: { orden_ejecucion: 'asc' },
+      });
+
+      if (actividadesBase.length > 0) {
+        await tx.ordenes_actividades_plan.createMany({
+          data: actividadesBase.map((act: any, idx: number) => ({
+            id_orden_servicio: idOrdenServicio,
+            id_actividad_catalogo: act.id_actividad_catalogo,
+            orden_secuencia: act.orden_ejecucion ?? idx + 1,
+            origen: 'ADMIN',
+            es_obligatoria: act.es_obligatoria ?? true,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    } catch (errPlan) {
+      // Fallback silencioso para no bloquear creación de orden
+    }
   }
 
   /**

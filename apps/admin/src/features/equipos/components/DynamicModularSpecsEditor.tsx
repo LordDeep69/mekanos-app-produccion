@@ -5,14 +5,17 @@
  * Secciones (`grupo_visual`) a partir del esquema del Tipo de Equipo (`GET /api/catalogos/arquetipos/:id/esquema`).
  *
  * Características:
+ * - Diseño UI/UX Enterprise Premium con ergonomía visual 10/10.
+ * - Iconografía semántica para cada subsistema (Refrigeración, Eléctrico, Combustión, Bombeo, Neumático, etc.).
+ * - Selector de subsistemas flexible que nunca trunca los nombres de las partes.
+ * - Grupos de entrada integrados (número + unidad) al estilo Linear / Stripe.
  * - Soporta los 5 controles humanos:
  *   1. # Número con Unidad (con conversión matemática afín en vivo y = ax + b al cambiar la unidad)
  *   2. # Número Simple
  *   3. ☰ Lista de Opciones (parseo seguro polimórfico sin [object Object])
  *   4. Aa Texto
  *   5. ✓ Sí / No
- * - Muestra insignia visual en campos pre-llenados desde Modelo de Fábrica (`🏭 Pre-llenado de fábrica`)
- *   y cambia a `✏️ Personalizado` cuando el usuario los edita manualmente.
+ * - Badges sutiles de KPI, De fábrica y Personalizado.
  */
 
 'use client';
@@ -29,13 +32,18 @@ import { cn } from '@/lib/utils';
 import {
   CheckCircle2,
   Cpu,
+  Droplets,
   Factory,
+  Flame,
+  Gauge,
   Layers,
   Loader2,
   Pencil,
   Scale,
-  Sparkles,
+  Snowflake,
   Star,
+  Wind,
+  Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -72,6 +80,8 @@ const FACTORES_AFINES_FALLBACK: Record<string, { a: number; b: number }> = {
   HP: { a: 0.74569987, b: 0 },
   CV: { a: 0.73549875, b: 0 },
   W: { a: 0.001, b: 0 },
+  TR: { a: 3.516853, b: 0 },
+  'BTU/H': { a: 0.000293071, b: 0 },
   // PRESIÓN (Base: PSI)
   PSI: { a: 1, b: 0 },
   BAR: { a: 14.5037738, b: 0 },
@@ -99,6 +109,81 @@ const FACTORES_AFINES_FALLBACK: Record<string, { a: number; b: number }> = {
   MM: { a: 0.001, b: 0 },
   IN: { a: 0.0254, b: 0 },
 };
+
+/**
+ * Resuelve icono y paleta semántica por tipo de subsistema
+ */
+function getSubsystemVisuals(codigoModulo?: string | null) {
+  const code = (codigoModulo || '').toLowerCase();
+  if (
+    code.includes('refrigera') ||
+    code.includes('chiller') ||
+    code.includes('clima') ||
+    code.includes('hvac')
+  ) {
+    return {
+      Icon: Snowflake,
+      color: 'text-teal-600',
+      bg: 'bg-teal-50',
+      border: 'border-teal-200',
+    };
+  }
+  if (
+    code.includes('combustion') ||
+    code.includes('diesel') ||
+    code.includes('gasolina') ||
+    code.includes('motor_combustion')
+  ) {
+    return {
+      Icon: Flame,
+      color: 'text-rose-600',
+      bg: 'bg-rose-50',
+      border: 'border-rose-200',
+    };
+  }
+  if (
+    code.includes('motor_electrico') ||
+    code.includes('electrico') ||
+    code.includes('potencia')
+  ) {
+    return {
+      Icon: Zap,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+      border: 'border-blue-200',
+    };
+  }
+  if (code.includes('generador') || code.includes('alternador')) {
+    return {
+      Icon: Gauge,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+      border: 'border-emerald-200',
+    };
+  }
+  if (code.includes('compresor') || code.includes('aire') || code.includes('neumat')) {
+    return {
+      Icon: Wind,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50',
+      border: 'border-purple-200',
+    };
+  }
+  if (code.includes('bomba') || code.includes('hidraul')) {
+    return {
+      Icon: Droplets,
+      color: 'text-cyan-600',
+      bg: 'bg-cyan-50',
+      border: 'border-cyan-200',
+    };
+  }
+  return {
+    Icon: Cpu,
+    color: 'text-indigo-600',
+    bg: 'bg-indigo-50',
+    border: 'border-indigo-200',
+  };
+}
 
 export function DynamicModularSpecsEditor({
   idTipoEquipo,
@@ -183,7 +268,7 @@ export function DynamicModularSpecsEditor({
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-10 flex flex-col items-center justify-center gap-3 text-slate-500">
+      <div className="bg-white rounded-2xl border border-slate-200 p-10 flex flex-col items-center justify-center gap-3 text-slate-500 shadow-2xs">
         <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
         <p className="text-sm font-semibold">
           Cargando ficha técnica modular del tipo de equipo...
@@ -194,13 +279,13 @@ export function DynamicModularSpecsEditor({
 
   if (!esquema || modulos.length === 0) {
     return (
-      <div className="bg-amber-50/70 rounded-2xl border border-amber-200 p-6 text-center space-y-2">
+      <div className="bg-amber-50/70 rounded-2xl border border-amber-200 p-6 text-center space-y-2 shadow-2xs">
         <Cpu className="h-8 w-8 text-amber-600 mx-auto" />
         <p className="text-sm font-bold text-amber-900">
           Este tipo de equipo aún no tiene partes o subsistemas vinculados en el Hub EAM
         </p>
         <p className="text-xs text-amber-700">
-          Puedes vincularle partes (Motor, Generador, Bomba, Compresor, etc.) desde Configuración → Catálogo de Equipos y Fichas Técnicas.
+          Puedes vincularle partes (Motor, Generador, Bomba, Compresor, Refrigeración, etc.) desde Configuración → Catálogo de Equipos Maestros.
         </p>
       </div>
     );
@@ -221,49 +306,51 @@ export function DynamicModularSpecsEditor({
     mod.grupos.reduce((acc, g) => acc + g.atributos.length, 0);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Banner de Plantilla OEM activa si existe */}
       {modeloOemActivo && (
-        <div className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-gradient-to-r from-indigo-50/90 to-blue-50/80 border border-indigo-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-2xs">
+            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-xs shrink-0">
               <Factory className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-900">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-950">
                   Ficha Pre-llenada con Modelo de Fábrica
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
                   {modeloOemActivo.marca} • {modeloOemActivo.modelo}
                 </span>
               </div>
-              <p className="text-xs text-indigo-700 mt-0.5">
-                Los campos marcados con <strong>🏭 Pre-llenado de fábrica</strong> provienen del catálogo OEM. Puedes ajustar cualquier valor para este activo específico.
+              <p className="text-xs text-indigo-800/80 mt-0.5">
+                Los campos marcados con <strong>🏭 De fábrica</strong> provienen de esta plantilla. Puedes modificar o complementar cualquier valor para este equipo.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Pestañas de Partes / Subsistemas del Equipo */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-2xs">
-        <div className="flex items-center justify-between mb-2 px-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+      {/* Selector Horizontal Ergonómico de Partes / Subsistemas del Activo */}
+      <div className="bg-slate-50/90 rounded-2xl border border-slate-200 p-3 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-blue-600" />
             Partes y Subsistemas del Activo ({modulos.length})
           </span>
-          <span className="text-[11px] text-slate-400">
-            Haz clic en cada parte para completar sus especificaciones
+          <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+            Selecciona una parte para editar sus parámetros
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        <div className="flex flex-wrap gap-2.5">
           {modulos.map((mod) => {
             const isSelected = mod.codigo_modulo === moduloActivo.codigo_modulo;
             const badgeInfo = getModuloBadgeInfo(mod.codigo_modulo, mod.nombre_modulo);
+            const { Icon, color, bg } = getSubsystemVisuals(mod.codigo_modulo);
             const llenos = contarDiligenciados(mod.codigo_modulo);
             const total = totalAtributosModulo(mod);
+            const displayName = mod.etiqueta_local || badgeInfo.fullName || mod.nombre_modulo;
 
             return (
               <button
@@ -271,38 +358,49 @@ export function DynamicModularSpecsEditor({
                 type="button"
                 onClick={() => setActiveModuloCode(mod.codigo_modulo)}
                 className={cn(
-                  'text-left p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer',
+                  'group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer text-left',
                   isSelected
-                    ? 'bg-blue-50/80 border-blue-500 ring-2 ring-blue-100 shadow-2xs'
-                    : 'bg-slate-50/60 border-slate-200 hover:bg-white hover:border-slate-300',
+                    ? 'bg-white border-blue-500 shadow-xs ring-2 ring-blue-500/15'
+                    : 'bg-white/80 border-slate-200 hover:bg-white hover:border-slate-300 shadow-2xs',
                 )}
               >
+                <div
+                  className={cn(
+                    'p-2 rounded-lg transition-colors shrink-0',
+                    isSelected ? bg : 'bg-slate-100 group-hover:bg-slate-200/70',
+                  )}
+                >
+                  <Icon className={cn('h-4 w-4', isSelected ? color : 'text-slate-500')} />
+                </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span
                       className={cn(
-                        'text-xs font-extrabold truncate',
-                        isSelected ? 'text-blue-950' : 'text-slate-800',
+                        'text-xs font-bold whitespace-nowrap',
+                        isSelected ? 'text-blue-950 font-extrabold' : 'text-slate-800',
                       )}
                     >
-                      {mod.etiqueta_local || badgeInfo.fullName}
+                      {displayName}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                    {mod.grupos.length} secciones • {total} campos técnicos
-                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500">
+                    <span>{mod.grupos.length} secciones</span>
+                    <span>•</span>
+                    <span
+                      className={cn(
+                        'font-bold font-mono',
+                        llenos > 0 ? 'text-emerald-600' : 'text-slate-400',
+                      )}
+                    >
+                      {llenos > 0 ? `${llenos}/${total} listos` : `${total} campos`}
+                    </span>
+                  </div>
                 </div>
-
-                <span
-                  className={cn(
-                    'px-2.5 py-1 rounded-lg text-xs font-mono font-bold shrink-0 border',
-                    llenos > 0
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-white text-slate-500 border-slate-200',
-                  )}
-                >
-                  {llenos}/{total}
-                </span>
+                {llenos === total && total > 0 && (
+                  <span className="p-0.5 rounded-full bg-emerald-100 text-emerald-700 ml-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  </span>
+                )}
               </button>
             );
           })}
@@ -318,7 +416,7 @@ export function DynamicModularSpecsEditor({
               className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden"
             >
               {/* Encabezado de Sección */}
-              <div className="bg-slate-50/90 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <div className="bg-slate-50/90 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue-600" />
                   <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
@@ -326,12 +424,12 @@ export function DynamicModularSpecsEditor({
                   </h4>
                 </div>
                 <span className="text-[11px] font-semibold text-slate-400">
-                  {grupo.atributos.length} campos
+                  {grupo.atributos.length} variables técnicas
                 </span>
               </div>
 
-              {/* Grilla de Campos Técnicos */}
-              <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {/* Grilla Ergonómica de Campos Técnicos */}
+              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {grupo.atributos.map((attr) => {
                   const codigoMod = moduloActivo.codigo_modulo;
                   const codigoAttr = attr.codigo_atributo;
@@ -339,7 +437,10 @@ export function DynamicModularSpecsEditor({
                   const origen = origenAtributos[codigoAttr];
                   const ctrlHumano = getTipoControlHumano(
                     attr.tipo_control,
-                    Boolean(attr.magnitud || (attr.unidades_disponibles && attr.unidades_disponibles.length > 0)),
+                    Boolean(
+                      attr.magnitud ||
+                        (attr.unidades_disponibles && attr.unidades_disponibles.length > 0),
+                    ),
                   );
 
                   const unidadActual =
@@ -354,12 +455,12 @@ export function DynamicModularSpecsEditor({
                     <div
                       key={codigoAttr}
                       className={cn(
-                        'p-3.5 rounded-xl border transition-all space-y-2',
+                        'p-3 rounded-xl border transition-all space-y-2',
                         origen === 'MODELO'
-                          ? 'bg-indigo-50/30 border-indigo-200'
+                          ? 'bg-indigo-50/20 border-indigo-200/80'
                           : origen === 'CUSTOM' && valActual !== ''
                             ? 'bg-blue-50/20 border-blue-200'
-                            : 'bg-slate-50/40 border-slate-200/80',
+                            : 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs',
                       )}
                     >
                       {/* Etiqueta + Badges de KPI / Obligatorio / Origen */}
@@ -367,7 +468,10 @@ export function DynamicModularSpecsEditor({
                         <label className="text-xs font-bold text-slate-800 leading-snug">
                           {attr.nombre_atributo}
                           {attr.obligatorio && (
-                            <span className="text-rose-600 ml-1 font-extrabold" title="Campo requerido">
+                            <span
+                              className="text-rose-600 ml-1 font-extrabold"
+                              title="Campo requerido"
+                            >
                               *
                             </span>
                           )}
@@ -376,7 +480,7 @@ export function DynamicModularSpecsEditor({
                         <div className="flex items-center gap-1 shrink-0">
                           {attr.es_kpi && (
                             <span
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-0.5"
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-0.5 shadow-2xs"
                               title="Indicador Principal de Placa (KPI)"
                             >
                               <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
@@ -406,45 +510,64 @@ export function DynamicModularSpecsEditor({
 
                       {/* Control Dinámico según Tipo */}
                       {ctrlHumano.value === 'NUMERICO_MAGNITUD' ? (
-                        <div className="flex items-stretch gap-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            value={valActual === null || valActual === undefined ? '' : valActual}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const parsed = raw === '' ? '' : Number(raw);
-                              onChangeValor(codigoMod, codigoAttr, parsed, 'CUSTOM');
-                            }}
-                            placeholder={`Ej: ${attr.valor_defecto || '0'}`}
-                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                          {attr.unidades_disponibles && attr.unidades_disponibles.length > 0 ? (
-                            <select
-                              value={unidadActual}
+                        <div className="space-y-1">
+                          {/* Grupo de Entrada Integrado: Input + Selector de Unidad pegado */}
+                          <div className="flex items-stretch rounded-xl border border-slate-300/90 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 overflow-hidden shadow-2xs transition-all">
+                            <input
+                              type="number"
+                              step="any"
+                              value={
+                                valActual === null || valActual === undefined ? '' : valActual
+                              }
                               onChange={(e) => {
-                                const nuevaU = e.target.value;
-                                const convertido = convertirValorEnVivo(
-                                  valActual,
-                                  unidadActual,
-                                  nuevaU,
-                                );
-                                onChangeUnidad(codigoMod, codigoAttr, nuevaU, convertido);
+                                const raw = e.target.value;
+                                const parsed = raw === '' ? '' : Number(raw);
+                                onChangeValor(codigoMod, codigoAttr, parsed, 'CUSTOM');
                               }}
-                              className="px-2.5 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 shrink-0 cursor-pointer"
-                              title="Cambiar unidad (convierte el valor automáticamente)"
-                            >
-                              {attr.unidades_disponibles.map((u) => (
-                                <option key={u.codigo} value={u.codigo}>
-                                  {u.simbolo || u.codigo}
-                                </option>
-                              ))}
-                            </select>
-                          ) : unidadActual ? (
-                            <span className="px-2.5 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-600 flex items-center">
-                              {unidadActual}
-                            </span>
-                          ) : null}
+                              placeholder={`Ej: ${attr.valor_defecto || '0'}`}
+                              className="w-full px-3 py-2 text-xs font-mono font-bold text-slate-900 border-0 focus:ring-0 focus:outline-none"
+                            />
+                            {attr.unidades_disponibles && attr.unidades_disponibles.length > 0 ? (
+                              <select
+                                value={unidadActual}
+                                onChange={(e) => {
+                                  const nuevaU = e.target.value;
+                                  const convertido = convertirValorEnVivo(
+                                    valActual,
+                                    unidadActual,
+                                    nuevaU,
+                                  );
+                                  onChangeUnidad(codigoMod, codigoAttr, nuevaU, convertido);
+                                }}
+                                className="bg-slate-50 hover:bg-slate-100 border-l border-slate-200 px-2.5 py-2 text-xs font-bold text-blue-900 cursor-pointer focus:ring-0 focus:outline-none transition-colors"
+                                title="Cambiar unidad (convierte el valor en vivo automáticamente)"
+                              >
+                                {attr.unidades_disponibles.map((u) => (
+                                  <option key={u.codigo} value={u.codigo}>
+                                    {u.simbolo || u.codigo}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : unidadActual ? (
+                              <span className="bg-slate-50 border-l border-slate-200 px-2.5 py-2 text-xs font-mono font-bold text-slate-600 flex items-center">
+                                {unidadActual}
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {/* Nota de conversión sutil en 1 sola línea */}
+                          {attr.unidades_disponibles && attr.unidades_disponibles.length > 1 && (
+                            <p className="text-[10px] text-blue-600 font-medium flex items-center gap-1 px-0.5">
+                              <Scale className="h-2.5 w-2.5 text-blue-500 shrink-0" />
+                              <span className="truncate">
+                                Conversión en vivo (
+                                {attr.unidades_disponibles
+                                  .map((u) => u.simbolo || u.codigo)
+                                  .join(' ↔ ')}
+                                )
+                              </span>
+                            </p>
+                          )}
                         </div>
                       ) : ctrlHumano.value === 'NUMERICO_PURO' ? (
                         <input
@@ -457,42 +580,45 @@ export function DynamicModularSpecsEditor({
                             onChangeValor(codigoMod, codigoAttr, parsed, 'CUSTOM');
                           }}
                           placeholder={`Ej: ${attr.valor_defecto || '1'}`}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-mono font-bold text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
                         />
                       ) : ctrlHumano.value === 'BOOLEANO' ? (
-                        <div className="flex items-center gap-2 pt-0.5">
+                        <div className="flex items-center gap-1.5 pt-0.5">
                           <button
                             type="button"
                             onClick={() => onChangeValor(codigoMod, codigoAttr, true, 'CUSTOM')}
                             className={cn(
-                              'flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer',
+                              'flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1',
                               valActual === true || valActual === 'true'
                                 ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                : 'bg-white text-slate-600 border-slate-300 hover:bg-emerald-50',
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:border-emerald-300',
                             )}
                           >
-                            ✓ Sí
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>Sí</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => onChangeValor(codigoMod, codigoAttr, false, 'CUSTOM')}
                             className={cn(
-                              'flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer',
+                              'flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1',
                               valActual === false || valActual === 'false'
-                                ? 'bg-slate-700 text-white border-slate-700 shadow-2xs'
-                                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100',
+                                ? 'bg-slate-800 text-white border-slate-800 shadow-2xs'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100',
                             )}
                           >
-                            No
+                            <span>No</span>
                           </button>
                         </div>
                       ) : ctrlHumano.value === 'SELECTOR' && opciones.length > 0 ? (
                         <select
-                          value={valActual === null || valActual === undefined ? '' : String(valActual)}
+                          value={
+                            valActual === null || valActual === undefined ? '' : String(valActual)
+                          }
                           onChange={(e) =>
                             onChangeValor(codigoMod, codigoAttr, e.target.value, 'CUSTOM')
                           }
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none cursor-pointer"
                         >
                           <option value="">Seleccionar opción...</option>
                           {opciones.map((op) => (
@@ -504,26 +630,18 @@ export function DynamicModularSpecsEditor({
                       ) : (
                         <input
                           type="text"
-                          value={valActual === null || valActual === undefined ? '' : String(valActual)}
+                          value={
+                            valActual === null || valActual === undefined ? '' : String(valActual)
+                          }
                           onChange={(e) =>
                             onChangeValor(codigoMod, codigoAttr, e.target.value, 'CUSTOM')
                           }
-                          placeholder={attr.descripcion || `Ingresar ${attr.nombre_atributo.toLowerCase()}...`}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500"
+                          placeholder={
+                            attr.descripcion || `Ingresar ${attr.nombre_atributo.toLowerCase()}...`
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-medium text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
                         />
                       )}
-
-                      {/* Nota de conversión en vivo cuando es numérico con unidad */}
-                      {ctrlHumano.value === 'NUMERICO_MAGNITUD' &&
-                        attr.unidades_disponibles &&
-                        attr.unidades_disponibles.length > 1 && (
-                          <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                            <Scale className="h-2.5 w-2.5 text-blue-500 shrink-0" />
-                            <span>
-                              Conversión automática disponible ({attr.unidades_disponibles.map((u) => u.simbolo).join(' ↔ ')})
-                            </span>
-                          </p>
-                        )}
                     </div>
                   );
                 })}
