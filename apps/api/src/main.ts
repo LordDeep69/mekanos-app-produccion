@@ -234,10 +234,12 @@ async function bootstrap(): Promise<void> {
     app.useGlobalFilters(new AllExceptionsFilter());
 
     const port = process.env.PORT || 3000;
-    console.log(`🔧 [DEBUG 10/10] Iniciando listener puerto ${port} en 0.0.0.0 (todas las interfaces)...`);
+    console.log(`🔧 [DEBUG 10/10] Iniciando listener puerto ${port} en :: (IPv4 + IPv6 dual-stack)...`);
 
-    // ✅ FIX Windows: Usar 0.0.0.0 para aceptar IPv4 e IPv6
-    await app.listen(port, '0.0.0.0');
+    // ⚡ FIX 04-NOV-2026: `0.0.0.0` solo acepta IPv4. El navegador resuelve
+    // `localhost` a ::1 primero, lo que añadía ~180 ms de fallback por request.
+    // `::` con ipv6Only=false (por defecto) acepta IPv4 e IPv6.
+    await app.listen(port, '::');
 
     const address = app.getHttpServer().address();
     console.log('✅ [BOOTSTRAP COMPLETO] Server address:', JSON.stringify(address));
