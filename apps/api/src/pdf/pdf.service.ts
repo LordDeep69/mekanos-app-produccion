@@ -1012,28 +1012,31 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Determina el tipo de informe basado en el equipo y servicio
+   * Determina el tipo de informe basado en el equipo y servicio.
+   * ✅ FIX EAM FASE 5.4: Soporta categorías extendidas (EMERGENCIA, DIAGNOSTICO, INSPECCION, ESPECIALIZADO)
    */
   determinarTipoInforme(
     tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string,
     tipoServicio: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string
   ): TipoInforme {
-    // ✅ FIX 06-FEB-2026: CORRECTIVO tiene su propio template independiente del equipo
-    if (tipoServicio === 'CORRECTIVO') {
+    // Servicios narrativos (CORRECTIVO, EMERGENCIA, DIAGNÓSTICO) → template narrativo universal
+    const tsUpper = (tipoServicio || '').toUpperCase();
+    if (tsUpper === 'CORRECTIVO' || tsUpper === 'EMERGENCIA' || tsUpper === 'DIAGNOSTICO') {
       return 'CORRECTIVO';
     }
 
     const tEq = (tipoEquipo || '').toUpperCase().trim();
 
+    // Legacy: Bombas y Generadores con templates certificados dedicados
     if (tEq === 'BOMBA' || tEq === 'BOM') {
       return 'BOMBA_A';
     }
 
     if (tEq === 'GENERADOR' || tEq === 'GEN') {
-      return tipoServicio === 'PREVENTIVO_B' ? 'GENERADOR_B' : 'GENERADOR_A';
+      return tsUpper === 'PREVENTIVO_B' ? 'GENERADOR_B' : 'GENERADOR_A';
     }
 
-    // ✅ EAM FASE 5: Compresores, Motores y arquetipos dinámicos usan plantilla Universal EAM
+    // Cualquier otro equipo → UNIVERSAL_EAM (dinámico, se adapta al contenido)
     return 'UNIVERSAL_EAM';
   }
 

@@ -809,15 +809,20 @@ export class PdfController {
         }
       }
 
-      // ✅ FIX 06-FEB-2026: Detectar tipo de servicio REAL desde la orden (CORRECTIVO, PREVENTIVO_A, PREVENTIVO_B)
+      // ✅ FIX EAM FASE 5.4: Detectar categoría de servicio desde el enum canónico tipos_servicio.categoria
+      // Esto garantiza que cualquier nuevo tipo de servicio creado en el Hub se despache correctamente.
       const codigoServicio = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
       const categoriaServicio = (orden.tipos_servicio?.categoria || '').toUpperCase();
-      const tipoServicioReal: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' =
-        (codigoServicio.includes('CORR') || categoriaServicio.includes('CORRECTIVO'))
+      const esNarrativo = ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio)
+        || codigoServicio.includes('CORR');
+      const tipoServicioReal: 'PREVENTIVO_A' | 'PREVENTIVO_B' | 'CORRECTIVO' | string =
+        esNarrativo
           ? 'CORRECTIVO'
           : codigoServicio.includes('PREV_B') || codigoServicio.includes('_B')
             ? 'PREVENTIVO_B'
-            : 'PREVENTIVO_A';
+            : categoriaServicio === 'INSPECCION' || categoriaServicio === 'ESPECIALIZADO'
+              ? 'PREVENTIVO_A'  // Inspección y Especializado usan estructura de checklist
+              : 'PREVENTIVO_A';
 
       this.logger.log(`📊 DEBUG PDF - tipoServicioReal: ${tipoServicioReal} (codigo=${codigoServicio}, categoria=${categoriaServicio})`);
 
@@ -1792,20 +1797,38 @@ export class PdfController {
       }
     }
 
-    // ✅ FIX 15-ENE-2026 & EAM FASE 5: Determinar tipo de informe con soporte Universal EAM
-    let tipoInforme: TipoInforme = 'GENERADOR_A';
+    // ✅ FIX EAM FASE 5.4: Determinar tipo de informe usando tipos_servicio.categoria (enum canónico)
+    // en lugar de heurísticas frágiles sobre codigo_tipo. Esto garantiza que cualquier
+    // nuevo tipo de servicio creado en el Hub EAM se despache al template correcto
+    // automáticamente, sin necesidad de tocar código.
+    let tipoInforme: TipoInforme = 'UNIVERSAL_EAM';
     const codigoTipo = orden.tipos_servicio?.codigo_tipo?.toUpperCase() || '';
+    const categoriaServicio = (orden.tipos_servicio?.categoria || '').toUpperCase();
     const tEq = (datosOrden.tipoEquipo || '').toUpperCase();
 
-    if (codigoTipo.includes('CORR')) {
+    // ─── PASO 1: ¿Es correctivo/emergencia/diagnóstico? → Template narrativo CORRECTIVO ───
+    const esServicioNarrativo = ['CORRECTIVO', 'EMERGENCIA', 'DIAGNOSTICO'].includes(categoriaServicio)
+      || codigoTipo.includes('CORR');
+
+    if (esServicioNarrativo) {
       tipoInforme = 'CORRECTIVO';
-    } else if (codigoTipo.includes('BOM') || tEq.includes('BOMB')) {
+    }
+    // ─── PASO 2: ¿Es equipo legacy con plantilla dedicada? → Templates certificados ───
+    else if (tEq === 'BOMBA' || tEq === 'BOM') {
       tipoInforme = 'BOMBA_A';
-    } else if (codigoTipo.includes('GEN_PREV_B') || (codigoTipo.includes('PREV_B') && tEq.includes('GEN'))) {
-      tipoInforme = 'GENERADOR_B';
-    } else if (tEq.includes('GEN') && (codigoTipo.includes('GEN') || codigoTipo.includes('PREV_A') || !codigoTipo)) {
-      tipoInforme = 'GENERADOR_A';
-    } else {
+    } else if (tEq === 'GENERADOR' || tEq === 'GEN') {
+      // Generador distingue A vs B por codigo_tipo
+      const esPreventivoBLegacy = codigoTipo.includes('GEN_PREV_B')
+        || (codigoTipo.includes('PREV_B') && tEq.includes('GEN'))
+        || codigoTipo.includes('_B');
+      tipoInforme = esPreventivoBLegacy ? 'GENERADOR_B' : 'GENERADOR_A';
+    }
+    // ─── PASO 3: Cualquier otro equipo (nuevo o polimórfico) → UNIVERSAL_EAM ───
+    // Compresores, Motores, Chillers, Torres, y cualquier arquetipo futuro del Hub EAM.
+    // El template se adapta dinámicamente al contenido de la orden (actividades, mediciones, specs).
+    // La diferencia entre PREV_A y PREV_B se refleja en el CONTENIDO (qué actividades tiene la orden),
+    // no en el template — el UNIVERSAL_EAM renderiza lo que haya.
+    else {
       tipoInforme = 'UNIVERSAL_EAM';
     }
 
