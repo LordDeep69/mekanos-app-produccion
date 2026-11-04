@@ -18,8 +18,10 @@ import {
   createModuloEam,
   createPlanArquetipoEam,
   createUnidadEam,
+  deleteMagnitudEam,
   deleteModeloOemEam,
   deletePlanArquetipoEam,
+  deleteUnidadEam,
   desasignarAtributoModuloEam,
   desvincularModuloArquetipoEam,
   eliminarItemBomOemEam,
@@ -180,6 +182,16 @@ export function useUpdateMagnitudEam() {
   });
 }
 
+export function useDeleteMagnitudEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (codigo: string) => deleteMagnitudEam(codigo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
 export function useCreateUnidadEam() {
   const qc = useQueryClient();
   return useMutation({
@@ -195,6 +207,16 @@ export function useUpdateUnidadEam() {
   return useMutation({
     mutationFn: ({ codigo, payload }: { codigo: string; payload: any }) =>
       updateUnidadEam(codigo, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
+export function useDeleteUnidadEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (codigo: string) => deleteUnidadEam(codigo),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },

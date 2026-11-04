@@ -331,6 +331,13 @@ export async function updateMagnitudEam(
   return data;
 }
 
+export async function deleteMagnitudEam(codigo: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await apiClient.delete<{ success: boolean; message: string }>(
+    `/catalogos/magnitudes/${codigo}`,
+  );
+  return data;
+}
+
 export async function getUnidadesEam(magnitud?: string): Promise<UnidadMedidaEam[]> {
   const { data } = await apiClient.get<UnidadMedidaEam[]>('/catalogos/unidades', {
     params: magnitud ? { magnitud } : undefined,
@@ -369,6 +376,13 @@ export async function updateUnidadEam(
   const { data } = await apiClient.patch<UnidadMedidaEam>(
     `/catalogos/unidades/${codigo}`,
     payload,
+  );
+  return data;
+}
+
+export async function deleteUnidadEam(codigo: string): Promise<{ success: boolean; message: string }> {
+  const { data } = await apiClient.delete<{ success: boolean; message: string }>(
+    `/catalogos/unidades/${codigo}`,
   );
   return data;
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  AlertTriangle,
   ArrowRightLeft,
   Calculator,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   Scale,
   Search,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -21,6 +23,8 @@ import {
   useConvertirUomEam,
   useCreateMagnitudEam,
   useCreateUnidadEam,
+  useDeleteMagnitudEam,
+  useDeleteUnidadEam,
   useMagnitudesEam,
   useUpdateMagnitudEam,
   useUpdateUnidadEam,
@@ -62,8 +66,46 @@ export function TabMagnitudesUom() {
 
   const createMagMut = useCreateMagnitudEam();
   const updateMagMut = useUpdateMagnitudEam();
+  const deleteMagMut = useDeleteMagnitudEam();
   const createUnitMut = useCreateUnidadEam();
   const updateUnitMut = useUpdateUnidadEam();
+  const deleteUnitMut = useDeleteUnidadEam();
+
+  // Estado del Modal de Advertencia y Confirmación de Eliminación
+  const [deleteTarget, setDeleteTarget] = useState<{
+    tipo: 'magnitud' | 'unidad';
+    codigo: string;
+    nombre: string;
+    simbolo?: string;
+    extraInfo?: string;
+  } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteError(null);
+    try {
+      if (deleteTarget.tipo === 'magnitud') {
+        await deleteMagMut.mutateAsync(deleteTarget.codigo);
+        // Si se eliminó la magnitud actualmente seleccionada, seleccionar otra
+        if (selectedMagCode === deleteTarget.codigo) {
+          const restantes = magnitudes.filter(
+            (m) => m.codigo_magnitud !== deleteTarget.codigo,
+          );
+          setSelectedMagCode(restantes[0]?.codigo_magnitud || '');
+        }
+      } else {
+        await deleteUnitMut.mutateAsync(deleteTarget.codigo);
+      }
+      setDeleteTarget(null);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Ocurrió un error al procesar la eliminación';
+      setDeleteError(msg);
+    }
+  };
 
   useEffect(() => {
     if (!selectedMagCode && magnitudes.length > 0) {
@@ -488,7 +530,7 @@ export function TabMagnitudesUom() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
                         {numUnidades} unidades
                       </span>
@@ -502,6 +544,27 @@ export function TabMagnitudesUom() {
                         title="Editar magnitud"
                       >
                         <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteError(null);
+                          setDeleteTarget({
+                            tipo: 'magnitud',
+                            codigo: mag.codigo_magnitud,
+                            nombre: mag.nombre_magnitud,
+                            extraInfo: `${numUnidades} unidades asociadas${
+                              mag.unidad_base_codigo
+                                ? ` · Principal: ${mag.unidad_base_codigo}`
+                                : ''
+                            }`,
+                          });
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Eliminar magnitud"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -586,14 +649,35 @@ export function TabMagnitudesUom() {
                           {Number(u.factor_b) === 0 ? '—' : `+ ${Number(u.factor_b)}`}
                         </td>
                         <td className="py-3 px-5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => openEditUnit(u)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-xs font-semibold text-slate-700 hover:text-blue-700 transition-colors"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            <span>Editar</span>
-                          </button>
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => openEditUnit(u)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-xs font-semibold text-slate-700 hover:text-blue-700 transition-colors"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteTarget({
+                                  tipo: 'unidad',
+                                  codigo: u.codigo,
+                                  nombre: u.nombre,
+                                  simbolo: u.simbolo,
+                                  extraInfo: u.es_unidad_base
+                                    ? 'Unidad Principal de la magnitud'
+                                    : `Factor de conversión: × ${Number(u.factor_a)}`,
+                                });
+                              }}
+                              className="p-1.5 rounded-lg border border-transparent text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors"
+                              title="Eliminar unidad de medida"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -841,6 +925,103 @@ export function TabMagnitudesUom() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ADVERTENCIA Y CONFIRMACIÓN DE ELIMINACIÓN */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-rose-100 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Cabecera con alerta visual */}
+            <div className="px-6 pt-6 pb-4 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-base font-bold text-slate-900">
+                  {deleteTarget.tipo === 'magnitud'
+                    ? '¿Eliminar Magnitud de Medida?'
+                    : '¿Eliminar Unidad de Medida?'}
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Esta acción requiere confirmación de seguridad
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-2 space-y-3.5">
+              {/* Tarjeta resumen del elemento a eliminar */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 truncate">
+                    {deleteTarget.nombre}
+                  </span>
+                  <span className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-bold">
+                    {deleteTarget.codigo}
+                  </span>
+                </div>
+                {deleteTarget.extraInfo && (
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {deleteTarget.extraInfo}
+                  </p>
+                )}
+              </div>
+
+              {/* Advertencia de Integridad Referencial */}
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-900">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <strong className="font-bold">Advertencia de trazabilidad:</strong> Se eliminará el elemento de los catálogos activos. Si posee vínculos con órdenes o equipos existentes, se preservará la integridad histórica mediante desactivación controlada.
+                </div>
+              </div>
+
+              {/* Mensaje de error si la validación del backend rechaza la operación */}
+              {deleteError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="font-medium leading-relaxed">{deleteError}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Acciones */}
+            <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end gap-2.5 mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError(null);
+                }}
+                disabled={deleteMagMut.isPending || deleteUnitMut.isPending}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-white hover:border-slate-400 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleteMagMut.isPending || deleteUnitMut.isPending}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
+              >
+                {deleteMagMut.isPending || deleteUnitMut.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                <span>Eliminar Definitivamente</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

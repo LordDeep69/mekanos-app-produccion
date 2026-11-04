@@ -193,6 +193,57 @@ export class CatalogosEamService {
     });
   }
 
+  async deleteMagnitud(codigo: string) {
+    const cod = codigo.toUpperCase();
+    const mag = await this.prisma.catalogo_magnitudes.findUnique({
+      where: { codigo_magnitud: cod },
+      include: {
+        unidades_medida: { where: { activo: true } },
+      },
+    });
+
+    if (!mag) {
+      throw new NotFoundException(`No se encontró la magnitud física con código "${codigo}"`);
+    }
+
+    // Verificar si hay atributos técnicos vinculados
+    const atributosVinculados = await this.prisma.atributos_tecnicos.count({
+      where: {
+        id_magnitud: mag.id_magnitud,
+        activo: true,
+      },
+    });
+
+    if (atributosVinculados > 0) {
+      throw new BadRequestException(
+        `No es posible eliminar la magnitud "${mag.nombre_magnitud}" porque está vinculada a ${atributosVinculados} campo(s) técnico(s) activo(s). Desvincule o reasigne dichos campos antes de eliminar.`,
+      );
+    }
+
+    // Desactivar unidades asociadas
+    await this.prisma.unidades_medida.updateMany({
+      where: { id_magnitud: mag.id_magnitud },
+      data: { activo: false },
+    });
+
+    // Intentar eliminación limpia si no hay históricos, de lo contrario soft-delete
+    try {
+      await this.prisma.catalogo_magnitudes.delete({
+        where: { codigo_magnitud: cod },
+      });
+    } catch {
+      await this.prisma.catalogo_magnitudes.update({
+        where: { codigo_magnitud: cod },
+        data: { activo: false },
+      });
+    }
+
+    return {
+      success: true,
+      message: `Magnitud "${mag.nombre_magnitud}" eliminada exitosamente.`,
+    };
+  }
+
   async getUnidades(codigoMagnitud?: string) {
     const where: Prisma.unidades_medidaWhereInput = { activo: true };
     if (codigoMagnitud) {
@@ -298,6 +349,73 @@ export class CatalogosEamService {
       data,
       include: { magnitud: true },
     });
+  }
+
+  async deleteUnidad(codigo: string) {
+    const cod = codigo.toUpperCase();
+    const unidad = await this.prisma.unidades_medida.findUnique({
+      where: { codigo: cod },
+      include: {
+        magnitud: true,
+        _count: {
+          select: {
+            atributos_tecnicos: true,
+            parametros_medicion: true,
+            catalogo_componentes: true,
+          },
+        },
+      },
+    });
+
+    if (!unidad) {
+      throw new NotFoundException(`No se encontró la unidad de medida con código "${codigo}"`);
+    }
+
+    if (unidad.es_unidad_base) {
+      // Verificar si hay otras unidades activas en la misma magnitud
+      const otrasUnidades = await this.prisma.unidades_medida.count({
+        where: {
+          id_magnitud: unidad.id_magnitud,
+          codigo: { not: cod },
+          activo: true,
+        },
+      });
+      if (otrasUnidades > 0) {
+        throw new BadRequestException(
+          `No se puede eliminar la unidad principal "${unidad.nombre}" (${unidad.simbolo}) porque la magnitud "${unidad.magnitud?.nombre_magnitud || ''}" aún tiene otras unidades activas. Establezca otra unidad como principal primero.`,
+        );
+      }
+    }
+
+    const totalUsos =
+      unidad._count.atributos_tecnicos +
+      unidad._count.parametros_medicion +
+      unidad._count.catalogo_componentes;
+
+    if (totalUsos > 0) {
+      // Soft-delete para proteger integridad referencial de históricos
+      await this.prisma.unidades_medida.update({
+        where: { codigo: cod },
+        data: { activo: false },
+      });
+    } else {
+      // Intentar eliminación física limpia
+      try {
+        await this.prisma.unidades_medida.delete({
+          where: { codigo: cod },
+        });
+      } catch {
+        await this.prisma.unidades_medida.update({
+          where: { codigo: cod },
+          data: { activo: false },
+        });
+      }
+    }
+
+    return {
+      success: true,
+      message: `Unidad de medida "${unidad.nombre}" (${unidad.simbolo}) eliminada exitosamente.`,
+    };
   }
 
   convertirUom(dto: ConvertirUomDto) {

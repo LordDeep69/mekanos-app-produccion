@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
@@ -45,5 +45,11 @@ export class MagnitudesController {
   @ApiOperation({ summary: 'Actualizar propiedades de una magnitud física (PUT)' })
   async updatePut(@Param('codigo') codigo: string, @Body() dto: UpdateMagnitudDto) {
     return this.eamService.updateMagnitud(codigo, dto);
+  }
+
+  @Delete(':codigo')
+  @ApiOperation({ summary: 'Eliminar una magnitud física' })
+  async delete(@Param('codigo') codigo: string) {
+    return this.eamService.deleteMagnitud(codigo);
   }
 }
