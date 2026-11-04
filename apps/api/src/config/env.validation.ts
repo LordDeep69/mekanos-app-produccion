@@ -44,6 +44,14 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET_BOMBAS: z.string().optional(),
   CLOUDINARY_URL_BOMBAS: z.string().optional(),
 
+  // Cloudflare R2 - Base / Canónico
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  R2_ENDPOINT: z.string().url().optional(),
+  R2_PUBLIC_URL: z.string().url().optional(),
+
   // Cloudflare R2 - Plantas
   R2_PLANTAS_ACCOUNT_ID: z.string().optional(),
   R2_PLANTAS_ACCESS_KEY_ID: z.string().optional(),

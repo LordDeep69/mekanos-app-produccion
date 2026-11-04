@@ -129,14 +129,39 @@ export function esFilenameCanonico(filename: string | null | undefined): boolean
 }
 
 /**
- * Extrae la R2 object key (`ordenes/pdfs/...`) desde una URL de R2,
- * sin importar si es pública o firmada. Retorna `null` si no calza.
+ * Extrae la R2 object key desde una URL de R2 o ruta relativa,
+ * sin importar si es pública, firmada o histórica. Retorna `null` si no calza.
  */
 export function extractR2KeyFromUrl(url: string | null | undefined): string | null {
     if (!url) return null;
-    const match = url.match(/ordenes\/pdfs\/([^?#]+)/);
-    if (!match) return null;
-    return `ordenes/pdfs/${match[1]}`;
+
+    // 1. Patrón canónico moderno: ordenes/pdfs/...
+    const matchOrdenes = url.match(/ordenes\/pdfs\/([^?#]+)/);
+    if (matchOrdenes) return `ordenes/pdfs/${matchOrdenes[1]}`;
+
+    // 2. Patrón histórico: informes/ordenes/... o informes/...
+    const matchInformes = url.match(/informes\/([^?#]+)/);
+    if (matchInformes) return `informes/${matchInformes[1]}`;
+
+    // 3. Fallback genérico para URL http(s): extraer pathname limpio
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        try {
+            const parsed = new URL(url);
+            const pathname = parsed.pathname.replace(/^\/+/, '');
+            if (pathname.endsWith('.pdf')) {
+                return pathname;
+            }
+        } catch {
+            // URL malformada
+        }
+    }
+
+    // 4. Clave ya relativa
+    if (url.endsWith('.pdf') && !url.startsWith('/') && !url.includes(':')) {
+        return url;
+    }
+
+    return null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

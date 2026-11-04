@@ -761,17 +761,19 @@ export class PdfController {
       }
 
       // ✅ PRIORIDAD 2: Intentar desde ordenes_equipos (cualquier equipo vinculado)
+      // ✅ FIX EAM FASE 5.1: Campo correcto es nombre_tipo (no "nombre" que no existe en Prisma)
       if (!tipoEquipoNombre && orden.ordenes_equipos?.length > 0) {
         const primerEquipo = orden.ordenes_equipos[0]?.equipos;
-        tipoEquipoNombre = primerEquipo?.tipos_equipo?.nombre;
+        tipoEquipoNombre = primerEquipo?.tipos_equipo?.nombre_tipo || primerEquipo?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
           this.logger.log(`📊 DEBUG PDF - Tipo equipo (ordenes_equipos): ${tipoEquipoNombre}`);
         }
       }
 
       // ✅ PRIORIDAD 3: Intentar desde equipo principal (id_equipo directo)
+      // ✅ FIX EAM FASE 5.1: Campo correcto es nombre_tipo (no "nombre" que no existe en Prisma)
       if (!tipoEquipoNombre) {
-        tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre;
+        tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre;
         if (tipoEquipoNombre) {
           this.logger.log(`📊 DEBUG PDF - Tipo equipo (principal): ${tipoEquipoNombre}`);
         }
@@ -1751,26 +1753,25 @@ export class PdfController {
       cargoCliente: orden.cargo_quien_recibe || 'Cliente / Autorizador',
     };
 
-    // ✅ FIX 24-FEB-2026 (v2): Detectar tipoEquipo real y corregir datosOrden.tipoEquipo
-    // para que el header del template correctivo muestre BOMBA/MOTOR en vez de GENERADOR
+    // ✅ FIX 24-FEB-2026 (v2) + FIX EAM FASE 5.1: Detectar tipoEquipo real y corregir datosOrden.tipoEquipo
+    // Prioridad: P1 tipos_equipo (fuente de verdad Prisma) > P2 numero_orden > P3 tipos_servicio > P4 marca
     {
       let tipoEquipoNombre: string | undefined = undefined;
-      // P1: Número de orden
-      if (orden.numero_orden) {
+      // P1: Fuente de verdad canónica desde tipos_equipo (nombre_tipo es el campo correcto en Prisma)
+      if (orden.ordenes_equipos?.length > 0) {
+        tipoEquipoNombre = orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre_tipo || orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre;
+      }
+      if (!tipoEquipoNombre) {
+        tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre;
+      }
+      // P2: Número de orden (heurística de fallback)
+      if (!tipoEquipoNombre && orden.numero_orden) {
         const numOrden = orden.numero_orden.toUpperCase();
         if (numOrden.includes('BOM')) tipoEquipoNombre = 'BOMBA';
         else if (numOrden.includes('GEN')) tipoEquipoNombre = 'GENERADOR';
         else if (numOrden.includes('MOT')) tipoEquipoNombre = 'MOTOR';
       }
-      // P2: ordenes_equipos (cualquier equipo vinculado)
-      if (!tipoEquipoNombre && orden.ordenes_equipos?.length > 0) {
-        tipoEquipoNombre = orden.ordenes_equipos[0]?.equipos?.tipos_equipo?.nombre;
-      }
-      // P3: Equipo principal
-      if (!tipoEquipoNombre) {
-        tipoEquipoNombre = orden.equipos?.tipos_equipo?.nombre;
-      }
-      // P4: tipos_servicio codigo/nombre
+      // P3: tipos_servicio codigo/nombre (heurística de fallback)
       if (!tipoEquipoNombre) {
         const codTipo2 = (orden.tipos_servicio?.codigo_tipo || '').toUpperCase();
         const nomTipo2 = (orden.tipos_servicio?.nombre_tipo || '').toUpperCase();
@@ -1778,7 +1779,7 @@ export class PdfController {
         else if (codTipo2.includes('MOT') || nomTipo2.includes('MOTOR')) tipoEquipoNombre = 'MOTOR';
         else if (codTipo2.includes('GEN') || nomTipo2.includes('GENERADOR')) tipoEquipoNombre = 'GENERADOR';
       }
-      // P5: marcaEquipo (último recurso)
+      // P4: marcaEquipo (último recurso)
       if (!tipoEquipoNombre && datosOrden.marcaEquipo) {
         const marcaUpper = datosOrden.marcaEquipo.toUpperCase();
         if (marcaUpper.includes('BOMBA')) tipoEquipoNombre = 'BOMBA';
@@ -2480,7 +2481,8 @@ export class PdfController {
     const gen = eq.equipos_generador;
     const mot = eq.equipos_motor;
     const bom = eq.equipos_bomba;
-    const tipoEq = eq.tipos_equipo?.nombre || 'EQUIPO';
+    // ✅ FIX EAM FASE 5.1: Campo correcto es nombre_tipo (no "nombre" que no existe en Prisma)
+    const tipoEq = eq.tipos_equipo?.nombre_tipo || 'EQUIPO';
 
     const clientePersona = orden.clientes?.persona;
     const clienteNombreBase = clientePersona?.razon_social || clientePersona?.nombre_comercial || clientePersona?.nombre_completo || 'N/A';
@@ -2535,7 +2537,7 @@ export class PdfController {
       codigoEquipo: eq.codigo_equipo || 'S/C',
       nombreEquipo: eq.nombre_equipo || undefined,
       tipoEquipo: tipoEq,
-      tipoEquipoNombre: eq.tipos_equipo?.nombre || tipoEq,
+      tipoEquipoNombre: eq.tipos_equipo?.nombre_tipo || tipoEq,
       marca,
       modelo,
       serie,
