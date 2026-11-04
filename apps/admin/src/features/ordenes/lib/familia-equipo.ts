@@ -8,7 +8,7 @@
 
 import type { EquipoSelector } from '../api/catalogos.service';
 
-export type FamiliaEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | 'GLOBAL' | 'MIXTO';
+export type FamiliaEquipo = 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | 'HVAC' | 'GLOBAL' | 'MIXTO';
 
 /**
  * Campos mínimos de un servicio comercial para clasificarlo por familia.
@@ -38,6 +38,10 @@ const FAMILIA_POR_CODIGO_TIPO = new Map<string, FamiliaEquipo>([
     ['MOT', 'MOTOR'],
     ['COMPRESOR', 'COMPRESOR'],
     ['COMP', 'COMPRESOR'],
+    ['HVAC', 'HVAC'],
+    ['CHILLER', 'HVAC'],
+    ['CLIMA', 'HVAC'],
+    ['AIRE_ACONDICIONADO', 'HVAC'],
 ]);
 
 /** Reglas de respaldo por nombre (solo si el tipo declarado no resuelve). */
@@ -45,6 +49,7 @@ const REGLAS_NOMBRE: ReadonlyArray<readonly [readonly string[], FamiliaEquipo]> 
     [['COMPRESOR', 'COMPRESI'], 'COMPRESOR'],
     [['MOTOBOMBA', 'BOMBA', 'BOMBEO', 'HIDRONEUMATICO'], 'BOMBA'],
     [['GENERADOR', 'PLANTA ELECTRICA', 'PLANTA DE EMERGENCIA', 'PLANTA DE LUZ'], 'GENERADOR'],
+    [['CHILLER', 'AIRE ACONDICIONADO', 'CLIMATIZACION', 'HVAC', 'REFRIGERACION'], 'HVAC'],
     [['MOTOR'], 'MOTOR'],
 ];
 
@@ -119,21 +124,22 @@ export function esServicioCompatibleConFamilia(
     const esBom = idEq === 2 || idEq === 5 || cod.startsWith('BOM') || codEq.includes('BOM') || nom.includes('BOMBA');
     const esMot = idEq === 4 || idEq === 6 || cod.startsWith('MOT') || codEq.includes('MOT') || nom.includes('MOTOR');
     const esComp = idEq === 20 || cod.startsWith('COMP') || codEq.includes('COMP') || nom.includes('COMPRESOR');
+    const esHvac = idEq === 21 || cod.startsWith('HVAC') || codEq.includes('HVAC') || nom.includes('CHILLER') || nom.includes('ACONDICIONADO') || nom.includes('CLIMATIZACION');
 
     if (familia === 'GENERADOR') {
-        if (esBom || esMot || esComp) return false;
+        if (esBom || esMot || esComp || esHvac) return false;
         return true;
     }
     if (familia === 'BOMBA') {
-        if (esGen || esMot || esComp) return false;
+        if (esGen || esMot || esComp || esHvac) return false;
         return true;
     }
     if (familia === 'MOTOR') {
-        if (esGen || esBom || esComp) return false;
+        if (esGen || esBom || esComp || esHvac) return false;
         return true;
     }
     if (familia === 'COMPRESOR') {
-        if (esGen || esMot) return false;
+        if (esGen || esMot || esHvac) return false;
         // Los compresores comparten protocolos hidroneumáticos/presión con bombas:
         // admiten servicios específicos de compresor Y correctivos de bomba (BOM_CORR).
         // Se excluyen preventivos de bomba específicos (ej. BOM_PREV_A) para preservar
@@ -143,16 +149,29 @@ export function esServicioCompatibleConFamilia(
         }
         return true;
     }
+    if (familia === 'HVAC') {
+        if (esGen || esBom || esMot || esComp) return false;
+        return true;
+    }
     return true;
 }
 
-export function clasificarServicioCorrectivo(s: ServicioClasificable): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'GLOBAL' {
+export function clasificarServicioCorrectivo(s: ServicioClasificable): 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'HVAC' | 'GLOBAL' {
     const cod = (s.codigo_servicio || '').toUpperCase();
     const nom = (s.nombre_servicio || '').toUpperCase();
     const codEq = (s.tipos_equipo?.codigo_tipo || '').toUpperCase();
     const nomEq = (s.tipos_equipo?.nombre_tipo || '').toUpperCase();
     const idEq = s.id_tipo_equipo;
 
+    if (
+        idEq === 21 ||
+        codEq.includes('HVAC') || nomEq.includes('HVAC') || nomEq.includes('CHILLER') ||
+        cod.startsWith('HVAC-') || cod.includes('-HVAC') ||
+        nom.includes('CHILLER') || nom.includes('AIRE ACONDICIONADO') || nom.includes('CLIMATIZACIÓN') || nom.includes('CLIMATIZACION') ||
+        nom.includes('REFRIGERANTE')
+    ) {
+        return 'HVAC';
+    }
     if (
         idEq === 1 || idEq === 3 ||
         codEq.includes('GEN') || nomEq.includes('GENERADOR') ||

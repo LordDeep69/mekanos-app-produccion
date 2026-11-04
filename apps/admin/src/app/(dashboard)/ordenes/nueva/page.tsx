@@ -1390,14 +1390,14 @@ function PasoAlcance({
     const [busquedaCorrectivo, setBusquedaCorrectivo] = useState('');
 
     // Estado del filtro de correctivos: por defecto "FAMILIA_Y_GLOBAL" para evitar errores de asignación cruzada
-    const defaultTab = (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR')
+    const defaultTab = (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR' || familiaEquipo === 'HVAC')
         ? 'FAMILIA_Y_GLOBAL'
         : 'TODOS';
     const [filtroTab, setFiltroTab] = useState<string>(defaultTab);
 
     // Sincronizar tab cuando cambia la familia del equipo
     useEffect(() => {
-        if (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR') {
+        if (familiaEquipo === 'GENERADOR' || familiaEquipo === 'BOMBA' || familiaEquipo === 'MOTOR' || familiaEquipo === 'COMPRESOR' || familiaEquipo === 'HVAC') {
             setFiltroTab('FAMILIA_Y_GLOBAL');
         } else {
             setFiltroTab('TODOS');
@@ -1433,6 +1433,7 @@ function PasoAlcance({
         if (codTipoServ.includes('BOM')) return 'BOMBA';
         if (codTipoServ.includes('MOT')) return 'MOTOR';
         if (codTipoServ.includes('COMP')) return 'COMPRESOR';
+        if (codTipoServ.includes('HVAC') || codTipoServ.includes('CHILLER') || codTipoServ.includes('CLIMA')) return 'HVAC';
         return familiaEquipo;
     }, [data.tipoServicioSeleccionado, familiaEquipo]);
 
@@ -1447,6 +1448,7 @@ function PasoAlcance({
             if (filtroTab === 'GEN') return cat === 'GENERADOR';
             if (filtroTab === 'BOM') return cat === 'BOMBA';
             if (filtroTab === 'MOT') return cat === 'MOTOR';
+            if (filtroTab === 'HVAC') return cat === 'HVAC';
             return true;
         });
 
@@ -1692,6 +1694,61 @@ function PasoAlcance({
                                                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
                                         )}
                                         title="Ver todo el catálogo sin restricciones"
+                                    >
+                                        Ver Todo
+                                    </button>
+                                </>
+                            ) : familiaEfectiva === 'HVAC' ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('FAMILIA_Y_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'FAMILIA_Y_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Servicios de Climatización / HVAC y generales"
+                                    >
+                                        HVAC / Chiller + Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_FAMILIA')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_FAMILIA'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Solo intervenciones de aire acondicionado y chillers"
+                                    >
+                                        Solo HVAC / Chiller
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('SOLO_GLOBAL')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'SOLO_GLOBAL'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Solo servicios universales"
+                                    >
+                                        Solo Generales
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltroTab('TODOS')}
+                                        className={cn(
+                                            'px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors shrink-0',
+                                            filtroTab === 'TODOS'
+                                                ? 'bg-orange-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
+                                        )}
+                                        title="Ver todo el catálogo"
                                     >
                                         Ver Todo
                                     </button>

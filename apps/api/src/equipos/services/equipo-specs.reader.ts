@@ -207,15 +207,25 @@ export class EquipoSpecsReader {
   static getCapacidadPrincipal(equipo: any): CapacidadPrincipal | null {
     if (!equipo) return null;
 
+    const catCanonica = this.getCategoriaCanonica(equipo);
+
     // 1. JSONB dinámico si está presente
-    const specCap = this.buscarEnEspecificaciones(equipo, ['potencia_principal', 'capacidad_principal', 'capacidad']);
+    const specCap = this.buscarEnEspecificaciones(equipo, [
+      'capacidad_de_enfriamiento',
+      'capacidad_enfriamiento',
+      'capacidad_refrigeracion',
+      'potencia_principal',
+      'capacidad_principal',
+      'capacidad',
+    ]);
     if (specCap) {
-      const match = specCap.match(/^([\d.]+)\s*(.*)$/);
+      const match = String(specCap).match(/^([\d.]+)\s*(.*)$/);
       if (match) {
+        const uom = match[2] || (catCanonica === 'HVAC' ? 'TR' : '');
         return {
           valor: Number(match[1]),
-          unidad: match[2] || '',
-          texto: specCap,
+          unidad: uom,
+          texto: uom ? `${match[1]} ${uom}` : match[1],
         };
       }
     }
@@ -300,6 +310,17 @@ export class EquipoSpecsReader {
       });
     }
 
+    // KPI HVAC: Gas Refrigerante
+    const gasRef = this.buscarEnEspecificaciones(equipo, ['gas_refrigerante', 'refrigerante', 'tipo_gas']);
+    if (gasRef) {
+      kpis.push({
+        codigo: 'gas_refrigerante',
+        etiqueta: 'Gas Refrigerante',
+        valorTexto: gasRef,
+        icono: 'Snowflake',
+      });
+    }
+
     // KPI 2: Motor / Impulsor
     const mot = equipo.equipos_motor;
     if (mot?.marca_motor && mot.marca_motor.toUpperCase() !== 'N/A') {
@@ -366,14 +387,20 @@ export class EquipoSpecsReader {
     // 1. Módulos dinámicos desde JSONB si existen
     const specs = equipo.especificaciones || equipo.especificaciones_tecnicas || equipo.metadata?.especificaciones;
     if (specs && typeof specs === 'object' && Object.keys(specs).length > 0) {
-      for (const [modKey, modVal] of Object.entries(specs)) {
+      const mapaModulos = specs.modulos && typeof specs.modulos === 'object' ? specs.modulos : specs;
+      for (const [modKey, modVal] of Object.entries(mapaModulos)) {
+        if (modKey.startsWith('_') || modKey === 'origen_atributos') continue;
         if (modVal && typeof modVal === 'object' && !Array.isArray(modVal)) {
           const atributos: AtributoPlaca[] = [];
           for (const [attrKey, attrVal] of Object.entries(modVal as Record<string, any>)) {
-            if (attrVal !== undefined && attrVal !== null && String(attrVal).trim() !== '') {
+            if (attrVal !== undefined && attrVal !== null && typeof attrVal !== 'object' && String(attrVal).trim() !== '') {
+              let valorStr = String(attrVal);
+              if (attrKey.includes('capacidad') && !valorStr.match(/[a-zA-Z]/)) {
+                if (categoriaCanonica === 'HVAC') valorStr = `${valorStr} TR`;
+              }
               atributos.push({
                 etiqueta: attrKey.replace(/_/g, ' ').toUpperCase(),
-                valor: String(attrVal),
+                valor: valorStr,
                 rolSemantico: attrKey,
               });
             }
@@ -504,20 +531,23 @@ export class EquipoSpecsReader {
     const specs = equipo.especificaciones || equipo.especificaciones_tecnicas || equipo.metadata?.especificaciones;
     if (!specs || typeof specs !== 'object') return undefined;
 
+    const mapaModulos = specs.modulos && typeof specs.modulos === 'object' ? specs.modulos : specs;
+
     // Búsqueda directa en primer nivel
     for (const c of claves) {
-      if (specs[c] && typeof specs[c] === 'string' && specs[c].trim() !== '') {
-        return specs[c].trim();
+      if (specs[c] !== undefined && specs[c] !== null && typeof specs[c] !== 'object' && String(specs[c]).trim() !== '') {
+        return String(specs[c]).trim();
       }
     }
 
-    // Búsqueda dentro de módulos anidados: specs.motor?.marca, specs.alternador?.marca, etc.
-    for (const modKey of Object.keys(specs)) {
-      const mod = specs[modKey];
-      if (mod && typeof mod === 'object') {
+    // Búsqueda dentro de módulos anidados: specs.modulos.* o specs.*
+    for (const modKey of Object.keys(mapaModulos)) {
+      if (modKey.startsWith('_') || modKey === 'origen_atributos') continue;
+      const mod = mapaModulos[modKey];
+      if (mod && typeof mod === 'object' && !Array.isArray(mod)) {
         for (const c of claves) {
-          if (mod[c] && typeof mod[c] === 'string' && mod[c].trim() !== '') {
-            return mod[c].trim();
+          if (mod[c] !== undefined && mod[c] !== null && typeof mod[c] !== 'object' && String(mod[c]).trim() !== '') {
+            return String(mod[c]).trim();
           }
         }
       }

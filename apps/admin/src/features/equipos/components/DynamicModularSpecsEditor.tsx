@@ -610,24 +610,38 @@ export function DynamicModularSpecsEditor({
                             <span>No</span>
                           </button>
                         </div>
-                      ) : ctrlHumano.value === 'SELECTOR' && opciones.length > 0 ? (
-                        <select
-                          value={
-                            valActual === null || valActual === undefined ? '' : String(valActual)
-                          }
-                          onChange={(e) =>
-                            onChangeValor(codigoMod, codigoAttr, e.target.value, 'CUSTOM')
-                          }
-                          className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none cursor-pointer"
-                        >
-                          <option value="">Seleccionar opción...</option>
-                          {opciones.map((op) => (
-                            <option key={op.key} value={op.value}>
-                              {op.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
+                      ) : ctrlHumano.value === 'SELECTOR' && opciones.length > 0 ? (() => {
+                        const matchOption = (v1: unknown, v2: unknown) => {
+                          if (v1 === v2) return true;
+                          const s1 = String(v1 ?? '').toUpperCase().trim();
+                          const s2 = String(v2 ?? '').toUpperCase().trim();
+                          if (s1 === s2) return true;
+                          if ((s1 === 'H' && s2 === 'CLASE_H') || (s1 === 'CLASE_H' && s2 === 'H')) return true;
+                          if ((s1 === 'F' && s2 === 'CLASE_F') || (s1 === 'CLASE_F' && s2 === 'F')) return true;
+                          if ((s1 === 'B' && s2 === 'CLASE_B') || (s1 === 'CLASE_B' && s2 === 'B')) return true;
+                          if ((s1 === 'A' && s2 === 'CLASE_A') || (s1 === 'CLASE_A' && s2 === 'A')) return true;
+                          return false;
+                        };
+                        const matchedOp = opciones.find((op) => matchOption(valActual, op.value));
+                        const selectVal = matchedOp ? matchedOp.value : (valActual === null || valActual === undefined ? '' : String(valActual));
+
+                        return (
+                          <select
+                            value={selectVal}
+                            onChange={(e) =>
+                              onChangeValor(codigoMod, codigoAttr, e.target.value, 'CUSTOM')
+                            }
+                            className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none cursor-pointer"
+                          >
+                            <option value="">Seleccionar opción...</option>
+                            {opciones.map((op) => (
+                              <option key={op.key} value={op.value}>
+                                {op.label}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })() : (
                         <input
                           type="text"
                           value={

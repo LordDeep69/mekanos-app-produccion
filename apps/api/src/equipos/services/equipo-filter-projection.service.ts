@@ -58,6 +58,8 @@ export class EquipoFilterProjectionService {
     capacidad_bateria_ah: { unidadOrigen: 'AH' },
     cilindrada_cc: { unidadOrigen: 'CC' },
     eficiencia_porcentaje: { unidadOrigen: 'PCT' },
+    capacidad_de_enfriamiento: { unidadOrigen: 'TR' },
+    capacidad_enfriamiento: { unidadOrigen: 'TR' },
   };
 
   // Atributos de texto indexados para búsqueda rápida y facetas
@@ -96,6 +98,7 @@ export class EquipoFilterProjectionService {
     'frecuencia_hz_motor',
     'tipo_aceite',
     'tipo_refrigerante',
+    'gas_refrigerante',
     'referencia_bateria',
     'referencia_sello_mecanico',
   ];
@@ -143,6 +146,18 @@ export class EquipoFilterProjectionService {
     const clavesVistas = new Set<string>();
     const unidadesCustom = doc.unidades_personalizadas || {};
 
+    // Consultar catálogo dinámico de atributos en BD para conocer unidades por defecto y tipo_control
+    const codigosAconsultar = Object.values(doc.modulos).flatMap((m) => Object.keys(m || {}));
+    const attrsDb = codigosAconsultar.length > 0 ? await client.atributos_tecnicos.findMany({
+      where: { codigo_atributo: { in: codigosAconsultar } },
+      select: {
+        codigo_atributo: true,
+        tipo_control: true,
+        unidad_defecto_codigo: true,
+      },
+    }) : [];
+    const mapaAttrsDb = new Map(attrsDb.map((a) => [a.codigo_atributo, a]));
+
     for (const [_, modData] of Object.entries(doc.modulos)) {
       if (!modData || typeof modData !== 'object') continue;
 
@@ -163,12 +178,26 @@ export class EquipoFilterProjectionService {
           continue;
         }
 
-        // Caso 2: Numérico conocido o valor numérico puro
+        // Caso 2: Numérico conocido, valor numérico puro o atributo dinámico NUMERICO
         const cfg = this.atributosNumericos[k];
-        const numVal = typeof v === 'number' ? v : cfg && typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+        const attrDb = mapaAttrsDb.get(k);
+        const esNumericoDb = attrDb?.tipo_control === 'NUMERICO_MAGNITUD' || attrDb?.tipo_control === 'NUMERO';
+        const numVal =
+          typeof v === 'number'
+            ? v
+            : ((cfg || esNumericoDb) && typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))
+                ? Number(v)
+                : typeof v === 'string' && !isNaN(Number(v)) && v.trim() !== '' && !isNaN(parseFloat(v))
+                ? Number(v)
+                : NaN);
 
-        if (!isNaN(numVal) && (typeof v === 'number' || cfg)) {
-          const unidadOrigen = unidadesCustom[k] || cfg?.unidadOrigen || 'UND';
+        if (!isNaN(numVal) && (typeof v === 'number' || cfg || esNumericoDb)) {
+          const unidadOrigen = (
+            unidadesCustom[k] ||
+            attrDb?.unidad_defecto_codigo ||
+            cfg?.unidadOrigen ||
+            'UND'
+          ).toUpperCase().trim();
           let valorBase = numVal;
           let unidadBase = unidadOrigen;
 

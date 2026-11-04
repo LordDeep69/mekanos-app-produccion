@@ -53,6 +53,7 @@ import {
   Settings,
   Shield,
   Timer,
+  Snowflake,
   Wind,
   Wrench,
   X,
@@ -60,7 +61,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 function TipoBadge({ tipo }: { tipo: string }) {
   const config: Record<string, { icon: typeof Zap; color: string; label: string }> = {
@@ -83,6 +84,16 @@ function TipoBadge({ tipo }: { tipo: string }) {
       icon: Wind,
       color: 'bg-cyan-50 text-cyan-800 border-cyan-200',
       label: 'Compresor',
+    },
+    HVAC: {
+      icon: Snowflake,
+      color: 'bg-teal-50 text-teal-800 border-teal-200',
+      label: 'Aire Acondicionado / Chiller',
+    },
+    'AIRE ACONDICIONADO / CHILLER': {
+      icon: Snowflake,
+      color: 'bg-teal-50 text-teal-800 border-teal-200',
+      label: 'Aire Acondicionado / Chiller',
     },
   };
   const { icon: Icon, color, label } = config[tipo] || {
@@ -806,6 +817,23 @@ export default function EquipoDetallePage() {
 
   // Cálculos de KPIs en vivo (Filosofía de Referenciación Zero-Stress)
   const horasActualesNum = Number(equipo.horas_actuales || 0);
+  const kpiDestacado = useMemo(() => {
+    const specs = ((equipo.especificaciones as any)?.modulos || {}) as Record<string, Record<string, any>>;
+    for (const mod of Object.values(specs)) {
+      if (!mod || typeof mod !== 'object') continue;
+      if (mod.capacidad_de_enfriamiento || mod.capacidad_enfriamiento) {
+        const val = mod.capacidad_de_enfriamiento ?? mod.capacidad_enfriamiento;
+        const uom = (equipo.especificaciones as any)?.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
+        return `${val} ${uom}`;
+      }
+      if (mod.potencia_kva) return `${mod.potencia_kva} kVA`;
+      if (mod.potencia_kw) return `${mod.potencia_kw} kW`;
+      if (mod.presion_maxima_psi) return `${mod.presion_maxima_psi} PSI`;
+      if (mod.caudal_maximo_m3h) return `${mod.caudal_maximo_m3h} m³/h`;
+      if (mod.caudal_aire_cfm) return `${mod.caudal_aire_cfm} CFM`;
+    }
+    return null;
+  }, [equipo.especificaciones]);
   const totalOrdenes = fichaLogistica?.resumen?.total_ordenes ?? 0;
   const totalBom = fichaLogistica?.resumen?.total_bom ?? 0;
   const bomCompatibles = fichaLogistica?.repuestos_compatibles || [];
@@ -848,6 +876,12 @@ export default function EquipoDetallePage() {
               <TipoBadge tipo={equipo.tipo} />
               <EstadoBadge estado={equipo.estado_equipo} />
               <CriticidadBadge criticidad={equipo.criticidad} />
+              {kpiDestacado && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-black bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs whitespace-nowrap">
+                  <span>⭐</span>
+                  <span>{kpiDestacado}</span>
+                </span>
+              )}
             </div>
 
             <h1 className="text-lg lg:text-xl font-bold text-slate-900 mt-1.5 truncate">

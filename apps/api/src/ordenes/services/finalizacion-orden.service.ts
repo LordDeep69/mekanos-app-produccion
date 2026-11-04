@@ -1810,14 +1810,14 @@ export class FinalizacionOrdenService {
         const datosPDF = {
             cliente: cliente?.persona?.nombre_comercial || cliente?.persona?.nombre_completo || cliente?.persona?.razon_social || 'N/A',
             direccion: cliente?.persona?.direccion_principal || cliente?.persona?.ciudad || 'N/A',
-            marcaEquipo: equipo?.nombre_equipo || 'N/A',
-            serieEquipo: equipo?.numero_serie_equipo || 'N/A',
-            tipoEquipo: (equipo as any)?.tipos_equipo?.nombre_tipo || 'GENERADOR',
+            marcaEquipo: orden.equipos ? EquipoSpecsReader.getMarca(orden.equipos) : (equipo?.nombre_equipo || 'N/A'),
+            serieEquipo: orden.equipos ? EquipoSpecsReader.getSerie(orden.equipos) : (equipo?.numero_serie_equipo || 'N/A'),
+            tipoEquipo: (equipo as any)?.tipos_equipo?.nombre_tipo || orden.equipos?.tipos_equipo?.nombre_tipo || 'EQUIPO',
             fecha: new Date().toLocaleDateString('es-CO'),
             tecnico: nombreTecnico,
             horaEntrada: dto.horaEntrada,
             horaSalida: dto.horaSalida,
-            tipoServicio: tipoServicio?.nombre || 'PREVENTIVO',
+            tipoServicio: tipoServicio?.nombre_tipo || tipoServicio?.nombre || 'PREVENTIVO',
             numeroOrden: orden.numero_orden,
             datosModulo: { ...datosModuloMapeado, ...(dto.datosModulo || {}) },
             repuestosDetallados: (orden.componentes_usados || []).map((cu: any) => ({
@@ -1836,11 +1836,11 @@ export class FinalizacionOrdenService {
             equipoDetalle: orden.equipos ? {
                 codigoEquipo: orden.equipos.codigo_equipo || 'S/C',
                 nombreEquipo: orden.equipos.nombre_equipo || undefined,
-                tipoEquipo: orden.equipos.tipos_equipo?.nombre || 'EQUIPO',
-                tipoEquipoNombre: orden.equipos.tipos_equipo?.nombre || 'EQUIPO',
-                marca: orden.equipos.equipos_generador?.marca_generador || orden.equipos.equipos_motor?.marca_motor || orden.equipos.equipos_bomba?.marca_bomba || orden.equipos.nombre_equipo || 'N/A',
-                modelo: orden.equipos.equipos_generador?.modelo_generador || orden.equipos.equipos_bomba?.modelo_bomba || orden.equipos.equipos_motor?.modelo_motor || undefined,
-                serie: orden.equipos.equipos_generador?.numero_serie_generador || orden.equipos.equipos_bomba?.numero_serie_bomba || orden.equipos.equipos_motor?.numero_serie_motor || orden.equipos.numero_serie_equipo || 'N/A',
+                tipoEquipo: orden.equipos.tipos_equipo?.nombre_tipo || 'EQUIPO',
+                tipoEquipoNombre: orden.equipos.tipos_equipo?.nombre_tipo || 'EQUIPO',
+                marca: EquipoSpecsReader.getMarca(orden.equipos),
+                modelo: EquipoSpecsReader.getModelo(orden.equipos),
+                serie: EquipoSpecsReader.getSerie(orden.equipos),
                 ubicacion: orden.equipos.ubicacion_texto || undefined,
                 sede: orden.sedes_cliente?.nombre_sede || undefined,
                 cliente: cliente?.persona?.razon_social || cliente?.persona?.nombre_comercial || cliente?.persona?.nombre_completo || 'N/A',
@@ -1860,6 +1860,7 @@ export class FinalizacionOrdenService {
                 horometroIntervencion: dto.datosModulo?.horasTrabajo ?? orden.horometro_final ?? orden.horometro_inicial ?? undefined,
                 horometroAcumulado: orden.equipos.horas_actuales ? Number(orden.equipos.horas_actuales) : undefined,
             } : undefined,
+            placaUniversal: orden.equipos ? EquipoSpecsReader.getPlacaUniversal(orden.equipos) : undefined,
             // ✅ FLEXIBILIZACIÓN PARÁMETROS: Unidades personalizadas para PDF
             configUnidades,
             // Actividades flat (para backward compatibility)

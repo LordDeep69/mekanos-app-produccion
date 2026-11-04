@@ -154,6 +154,7 @@ export interface DatosCorrectivoOrdenPDF {
   datosPorEquipo?: DatosEstructuradosCorrectivoPorEquipo[];
   repuestosDetallados?: RepuestoUtilizadoPDF[];
   equipoDetalle?: DatosEquipoDetalladoPDF;
+  placaUniversal?: any;
 }
 
 /**

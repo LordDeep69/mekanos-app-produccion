@@ -695,6 +695,25 @@ export class CatalogosEamService {
     return this.prisma.modulos_tecnicos.findMany({
       where: { activo: true },
       include: {
+        modulo_atributos: {
+          include: {
+            atributo: {
+              include: {
+                magnitud: true,
+                unidad_defecto: true,
+              },
+            },
+          },
+          orderBy: [
+            { grupo_visual: 'asc' },
+            { orden_visual: 'asc' },
+          ],
+        },
+        tipo_equipo_modulos: {
+          include: {
+            tipo_equipo: true,
+          },
+        },
         _count: {
           select: {
             modulo_atributos: true,

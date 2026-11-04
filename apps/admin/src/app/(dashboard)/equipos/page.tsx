@@ -33,6 +33,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Building2,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -616,8 +617,13 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
 
   const motor = (equipo.motor || (equipo.datos_especificos as any)?.motor || null) as Record<string, any> | null;
 
-  // 1. KPI de Potencia (kVA / kW / HP)
+  // 1. KPI de Potencia (kVA / kW / HP / TR)
   const potenciaTexto = useMemo(() => {
+    const capEnf = Number(specsModulos.capacidad_de_enfriamiento ?? specsModulos.capacidad_enfriamiento);
+    if (Number.isFinite(capEnf) && capEnf > 0) {
+      const uom = (equipo.especificaciones as any)?.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
+      return `${capEnf} ${uom}`;
+    }
     const kva = Number(specsModulos.potencia_kva);
     if (Number.isFinite(kva) && kva > 0) return `${kva} kVA`;
     const kw = Number(specsModulos.potencia_kw);
@@ -633,9 +639,11 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
     return null;
   }, [specsModulos, motor]);
 
-  // 2. KPI de Presión / Caudal / Altura (Compresores y Bombas)
+  // 2. KPI de Presión / Caudal / Altura / Refrigerante
   const metricaFluidoTexto = useMemo(() => {
     const partes: string[] = [];
+    const gasRef = specsModulos.gas_refrigerante;
+    if (isValidTechString(gasRef)) partes.push(String(gasRef).trim());
     const psi = Number(specsModulos.presion_maxima_psi ?? specsModulos.presion_trabajo_psi);
     if (Number.isFinite(psi) && psi > 0) partes.push(`${psi} PSI`);
 
@@ -671,8 +679,8 @@ function EquipoCard({ equipo }: { equipo: EquipoListItem }) {
       return isValidTechString(modBom) ? `${marcaBom.trim()} ${modBom.trim()}` : marcaBom.trim();
     }
 
-    const marcaGen = specsModulos.marca_generador;
-    const modGen = specsModulos.modelo_generador;
+    const marcaGen = specsModulos.marca ?? specsModulos.marca_generador;
+    const modGen = specsModulos.modelo ?? specsModulos.modelo_generador;
     if (isValidTechString(marcaGen)) {
       return isValidTechString(modGen) ? `${marcaGen.trim()} ${modGen.trim()}` : marcaGen.trim();
     }
@@ -1056,6 +1064,10 @@ export default function EquiposPage() {
             label: o.label,
           }));
 
+          const tiposAplica = (mod as any).tipo_equipo_modulos
+            ?.map((tem: any) => tem.tipo_equipo?.codigo_tipo?.toUpperCase())
+            .filter(Boolean) as string[] | undefined;
+
           const existente = mapa.get(attr.codigo_atributo);
           mapa.set(attr.codigo_atributo, {
             codigo_atributo: attr.codigo_atributo,
@@ -1072,7 +1084,7 @@ export default function EquiposPage() {
               unidadesMag.length > 0 ? unidadesMag : existente?.unidades_disponibles || [],
             opciones_sugeridas:
               opcionesEnum.length > 0 ? opcionesEnum : existente?.opciones_sugeridas,
-            aplica_tipos: existente?.aplica_tipos,
+            aplica_tipos: tiposAplica && tiposAplica.length > 0 ? tiposAplica : existente?.aplica_tipos,
           });
         }
       }
@@ -1083,7 +1095,7 @@ export default function EquiposPage() {
 
     // Si hay un tipo seleccionado, mostrar primero los aplicables a ese tipo
     const normTipo = tipoFiltro.toUpperCase();
-    return todos.filter((c) => !c.aplica_tipos || c.aplica_tipos.includes(normTipo));
+    return todos.filter((c) => !c.aplica_tipos || c.aplica_tipos.length === 0 || c.aplica_tipos.includes(normTipo));
   }, [modulosHub, magnitudesHub, tipoFiltro]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1091,6 +1103,22 @@ export default function EquiposPage() {
   // ═══════════════════════════════════════════════════════════════════════════
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [filtroAtributoCodigo, setFiltroAtributoCodigo] = useState<string>('');
+  const [comboboxOpen, setComboboxOpen] = useState(false);
+  const [comboboxSearch, setComboboxSearch] = useState('');
+  const [comboboxModuloFiltro, setComboboxModuloFiltro] = useState<string>('TODOS');
+  const comboboxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target as Node)) {
+        setComboboxOpen(false);
+      }
+    }
+    if (comboboxOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [comboboxOpen]);
   const [filtroAtributoValorMin, setFiltroAtributoValorMin] = useState<number | ''>('');
   const [filtroAtributoValorMax, setFiltroAtributoValorMax] = useState<number | ''>('');
   const [filtroAtributoUnidad, setFiltroAtributoUnidad] = useState<string>('');
@@ -1116,6 +1144,31 @@ export default function EquiposPage() {
     if (!filtroAtributoCodigo) return null;
     return camposFiltrablesBTree.find((c) => c.codigo_atributo === filtroAtributoCodigo) || null;
   }, [camposFiltrablesBTree, filtroAtributoCodigo]);
+
+  const camposFiltradosCombobox = useMemo(() => {
+    let list = camposFiltrablesBTree;
+    if (comboboxModuloFiltro !== 'TODOS') {
+      list = list.filter((c) => c.codigo_modulo === comboboxModuloFiltro);
+    }
+    if (!comboboxSearch.trim()) return list;
+    const q = comboboxSearch.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    return list.filter((c) => {
+      const nom = c.nombre_atributo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const mod = c.nombre_modulo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const cod = c.codigo_atributo.toLowerCase();
+      return nom.includes(q) || mod.includes(q) || cod.includes(q);
+    });
+  }, [camposFiltrablesBTree, comboboxModuloFiltro, comboboxSearch]);
+
+  const modulosDisponiblesCombobox = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const c of camposFiltrablesBTree) {
+      if (c.codigo_modulo && c.nombre_modulo && !mapa.has(c.codigo_modulo)) {
+        mapa.set(c.codigo_modulo, c.nombre_modulo);
+      }
+    }
+    return Array.from(mapa.entries()).map(([codigo, nombre]) => ({ codigo, nombre }));
+  }, [camposFiltrablesBTree]);
 
   // Al cambiar de campo B-Tree, inicializar su unidad por defecto y limpiar valores previos
   const handleSelectCampoBTree = useCallback(
@@ -1762,23 +1815,178 @@ export default function EquiposPage() {
               {/* BLOQUE PRINCIPAL: Filtro B-Tree Polimórfico con Conversión de Unidades */}
               <div className="bg-white p-4 rounded-xl border border-blue-200/80 shadow-2xs space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                  {/* Columna 1: Selector de Campo Filtrable (5 cols) */}
-                  <div className="md:col-span-5">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      1. Campo Técnico a Filtrar
-                    </label>
-                    <select
-                      value={filtroAtributoCodigo}
-                      onChange={(e) => handleSelectCampoBTree(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  {/* Columna 1: Buscador y Selector de Campo Filtrable (5 cols) */}
+                  <div className="md:col-span-5 relative" ref={comboboxRef}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-slate-700">
+                        1. Campo Técnico a Filtrar
+                      </label>
+                      <span className="text-[10px] text-blue-600 font-semibold">
+                        {camposFiltrablesBTree.length} disponibles
+                      </span>
+                    </div>
+
+                    {/* Trigger del Buscador */}
+                    <div
+                      onClick={() => setComboboxOpen(!comboboxOpen)}
+                      className={cn(
+                        "w-full px-3 py-2 border rounded-lg text-xs font-semibold bg-white cursor-pointer flex items-center justify-between transition-all",
+                        comboboxOpen
+                          ? "border-blue-500 ring-2 ring-blue-500/20 shadow-sm"
+                          : "border-slate-300 hover:border-blue-400 shadow-2xs",
+                        filtroAtributoCodigo ? "text-slate-900" : "text-slate-400"
+                      )}
                     >
-                      <option value="">Seleccionar característica técnica (Potencia, Caudal, Marca...)</option>
-                      {camposFiltrablesBTree.map((c) => (
-                        <option key={c.codigo_atributo} value={c.codigo_atributo}>
-                          {c.nombre_atributo} — [{c.nombre_modulo}]
-                        </option>
-                      ))}
-                    </select>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        {campoBTreeActual ? (
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-bold text-slate-900 truncate">
+                              {campoBTreeActual.nombre_atributo}
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-semibold shrink-0">
+                              {campoBTreeActual.nombre_modulo}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 font-normal truncate">
+                            Buscar característica (Potencia, Caudal, Enfriamiento...)...
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                        {filtroAtributoCodigo && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectCampoBTree('');
+                            }}
+                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600"
+                            title="Limpiar campo"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", comboboxOpen && "rotate-180")} />
+                      </div>
+                    </div>
+
+                    {/* Menú Desplegable con Input de Búsqueda y Pestañas */}
+                    {comboboxOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[360px] animate-in fade-in-50 zoom-in-95">
+                        {/* Input de Búsqueda Directa */}
+                        <div className="p-2.5 bg-slate-50 border-b border-slate-200/80 flex items-center gap-2">
+                          <Search className="h-4 w-4 text-slate-400 shrink-0" />
+                          <input
+                            type="text"
+                            autoFocus
+                            value={comboboxSearch}
+                            onChange={(e) => setComboboxSearch(e.target.value)}
+                            placeholder="Escribe para filtrar (ej: enfriamiento, TR, gas, caudal)..."
+                            className="w-full bg-transparent text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                          />
+                          {comboboxSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setComboboxSearch('')}
+                              className="p-0.5 text-slate-400 hover:text-slate-600"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Chips de filtro por Subsistema */}
+                        {modulosDisponiblesCombobox.length > 1 && (
+                          <div className="px-2.5 py-1.5 bg-slate-50/50 border-b border-slate-100 flex items-center gap-1 overflow-x-auto no-scrollbar">
+                            <button
+                              type="button"
+                              onClick={() => setComboboxModuloFiltro('TODOS')}
+                              className={cn(
+                                "px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap transition-colors",
+                                comboboxModuloFiltro === 'TODOS'
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-slate-200/80 text-slate-700 hover:bg-slate-300"
+                              )}
+                            >
+                              Todos ({camposFiltrablesBTree.length})
+                            </button>
+                            {modulosDisponiblesCombobox.map((m) => (
+                              <button
+                                key={m.codigo}
+                                type="button"
+                                onClick={() => setComboboxModuloFiltro(m.codigo)}
+                                className={cn(
+                                  "px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap transition-colors",
+                                  comboboxModuloFiltro === m.codigo
+                                    ? "bg-blue-600 text-white"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                )}
+                              >
+                                {m.nombre}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Lista de Opciones */}
+                        <div className="overflow-y-auto p-1.5 space-y-0.5 flex-1 divide-y divide-slate-100">
+                          {camposFiltradosCombobox.length === 0 ? (
+                            <div className="p-4 text-center text-xs text-slate-500">
+                              <p className="font-semibold text-slate-700">No se encontraron características</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                Intenta con otro término de búsqueda o selecciona "Todos".
+                              </p>
+                            </div>
+                          ) : (
+                            camposFiltradosCombobox.map((c) => {
+                              const isSelected = c.codigo_atributo === filtroAtributoCodigo;
+                              return (
+                                <div
+                                  key={c.codigo_atributo}
+                                  onClick={() => {
+                                    handleSelectCampoBTree(c.codigo_atributo);
+                                    setComboboxOpen(false);
+                                    setComboboxSearch('');
+                                  }}
+                                  className={cn(
+                                    "p-2 rounded-lg flex items-center justify-between cursor-pointer transition-colors text-xs",
+                                    isSelected
+                                      ? "bg-blue-50 text-blue-900 font-bold border border-blue-200"
+                                      : "hover:bg-slate-50 text-slate-800"
+                                  )}
+                                >
+                                  <div className="min-w-0 flex-1 pr-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={cn("font-bold", isSelected ? "text-blue-950" : "text-slate-900")}>
+                                        {c.nombre_atributo}
+                                      </span>
+                                      {c.unidad_defecto && (
+                                        <span className="font-mono text-[10px] px-1 bg-slate-100 text-slate-600 rounded">
+                                          {c.unidad_defecto}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                                      {c.codigo_atributo}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold border border-slate-200">
+                                      {c.nombre_modulo}
+                                    </span>
+                                    {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Columna 2: Controles dinámicos según el Tipo de Campo (7 cols) */}

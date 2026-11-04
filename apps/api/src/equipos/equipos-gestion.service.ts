@@ -49,6 +49,72 @@ import {
 import { EquipoFilterProjectionService } from './services/equipo-filter-projection.service';
 import { UomConversionService } from './services/uom-conversion.service';
 
+
+/**
+ * Normalizadores defensivos de ENUMs de PostgreSQL para tablas satélite legacy
+ */
+function parseClaseAislamientoSegura(val: unknown): clase_aislamiento_enum {
+  if (!val) return clase_aislamiento_enum.F;
+  const str = String(val).toUpperCase().trim();
+  if (str === 'H' || str.includes('CLASE_H') || str.includes('CLASE H')) return clase_aislamiento_enum.H;
+  if (str === 'F' || str.includes('CLASE_F') || str.includes('CLASE F')) return clase_aislamiento_enum.F;
+  if (str === 'B' || str.includes('CLASE_B') || str.includes('CLASE B')) return clase_aislamiento_enum.B;
+  if (str === 'A' || str.includes('CLASE_A') || str.includes('CLASE A')) return clase_aislamiento_enum.A;
+  if (Object.values(clase_aislamiento_enum).includes(str as any)) {
+    return str as clase_aislamiento_enum;
+  }
+  return clase_aislamiento_enum.F;
+}
+
+function parseNumeroFasesSeguro(val: unknown): numero_fases_enum {
+  if (!val) return numero_fases_enum.TRIFASICO;
+  const str = String(val).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (str === '1' || str.includes('MONO') || str.includes('1F')) return numero_fases_enum.MONOFASICO;
+  return numero_fases_enum.TRIFASICO;
+}
+
+function parseTipoCombustibleSeguro(val: unknown): tipo_combustible_enum {
+  if (!val) return tipo_combustible_enum.DIESEL;
+  const str = String(val).toUpperCase().trim();
+  if (Object.values(tipo_combustible_enum).includes(str as any)) {
+    return str as tipo_combustible_enum;
+  }
+  if (str.includes('GASOLINA')) return tipo_combustible_enum.GASOLINA;
+  if (str.includes('NATURAL')) return tipo_combustible_enum.GAS_NATURAL;
+  if (str.includes('GLP')) return tipo_combustible_enum.GLP;
+  if (str.includes('DUAL')) return tipo_combustible_enum.DUAL;
+  if (str.includes('BIODIESEL')) return tipo_combustible_enum.BIODIESEL;
+  return tipo_combustible_enum.DIESEL;
+}
+
+function parseTipoArranqueSeguro(val: unknown): tipo_arranque_enum {
+  if (!val) return tipo_arranque_enum.ELECTRICO;
+  const str = String(val).toUpperCase().trim();
+  if (Object.values(tipo_arranque_enum).includes(str as any)) {
+    return str as tipo_arranque_enum;
+  }
+  if (str.includes('MANUAL')) return tipo_arranque_enum.MANUAL;
+  if (str.includes('NEUMAT') || str.includes('AIRE')) return tipo_arranque_enum.NEUMATICO;
+  if (str.includes('HIDRAUL')) return tipo_arranque_enum.HIDRAULICO;
+  if (str.includes('AUTO')) return tipo_arranque_enum.AUTOMATICO;
+  return tipo_arranque_enum.ELECTRICO;
+}
+
+function parseAplicacionBombaSegura(val: unknown): aplicacion_bomba_enum {
+  if (!val) return aplicacion_bomba_enum.AGUA_POTABLE;
+  const str = String(val).toUpperCase().trim();
+  if (Object.values(aplicacion_bomba_enum).includes(str as any)) {
+    return str as aplicacion_bomba_enum;
+  }
+  if (str.includes('INCENDIO')) return aplicacion_bomba_enum.CONTRAINCENDIOS;
+  if (str.includes('RESIDUAL') || str.includes('ACHIQUE')) return aplicacion_bomba_enum.AGUAS_RESIDUALES;
+  if (str.includes('LLUVIA')) return aplicacion_bomba_enum.AGUAS_LLUVIAS;
+  if (str.includes('RIEGO')) return aplicacion_bomba_enum.RIEGO;
+  if (str.includes('PISCINA')) return aplicacion_bomba_enum.PISCINA;
+  if (str.includes('INDUSTR')) return aplicacion_bomba_enum.INDUSTRIAL;
+  return aplicacion_bomba_enum.AGUA_POTABLE;
+}
+
 @Injectable()
 export class EquiposGestionService {
   private readonly fallbackUomService = new UomConversionService();
@@ -198,7 +264,7 @@ export class EquiposGestionService {
             mElec.factor_potencia_motor !== undefined
               ? Number(mElec.factor_potencia_motor)
               : undefined,
-          clase_aislamiento: mElec.clase_aislamiento_motor || 'F',
+          clase_aislamiento: parseClaseAislamientoSegura(mElec.clase_aislamiento_motor),
           grado_proteccion_ip: mElec.grado_proteccion_ip_motor || 'IP55',
           anio_fabricacion:
             mElec.ano_fabricacion_motor_electrico !== undefined
@@ -807,7 +873,7 @@ export class EquiposGestionService {
 
           if (datosMotor.tipo_motor === TipoMotorEnum.COMBUSTION) {
             datosMotorFinal.tipo_combustible =
-              (datosMotor.tipo_combustible as tipo_combustible_enum) || 'DIESEL';
+              parseTipoCombustibleSeguro(datosMotor.tipo_combustible);
             datosMotorFinal.numero_cilindros = datosMotor.numero_cilindros || null;
             datosMotorFinal.voltaje_arranque_vdc =
               [12, 24, 48].includes(Number(datosMotor.voltaje_arranque_vdc))
@@ -818,7 +884,7 @@ export class EquiposGestionService {
               datosMotor.capacidad_refrigerante_litros || null;
             datosMotorFinal.tiene_turbocargador = datosMotor.tiene_turbocargador ?? false;
             datosMotorFinal.tipo_arranque =
-              (datosMotor.tipo_arranque as tipo_arranque_enum) || 'ELECTRICO';
+              parseTipoArranqueSeguro(datosMotor.tipo_arranque);
             datosMotorFinal.amperaje_arranque = datosMotor.amperaje_arranque || null;
             datosMotorFinal.numero_baterias = datosMotor.numero_baterias || 1;
             datosMotorFinal.referencia_bateria = datosMotor.referencia_bateria || 'N/A';
@@ -844,10 +910,10 @@ export class EquiposGestionService {
           } else {
             datosMotorFinal.voltaje_operacion_vac = datosMotor.voltaje_operacion_vac || '220V';
             datosMotorFinal.numero_fases =
-              (datosMotor.numero_fases as unknown as numero_fases_enum) || 'TRIFASICO';
+              parseNumeroFasesSeguro(datosMotor.numero_fases);
             datosMotorFinal.frecuencia_hz = datosMotor.frecuencia_hz || 60;
             datosMotorFinal.clase_aislamiento =
-              (datosMotor.clase_aislamiento as unknown as clase_aislamiento_enum) || 'F';
+              parseClaseAislamientoSegura(datosMotor.clase_aislamiento);
             datosMotorFinal.grado_proteccion_ip = datosMotor.grado_proteccion_ip || 'IP55';
             datosMotorFinal.amperaje_nominal = datosMotor.amperaje_nominal || null;
             datosMotorFinal.factor_potencia = datosMotor.factor_potencia || 0.85;
@@ -956,7 +1022,7 @@ export class EquiposGestionService {
                 .trim()
                 .toUpperCase(),
               aplicacion_bomba:
-                (db.aplicacion_bomba as unknown as aplicacion_bomba_enum) || 'AGUA_POTABLE',
+                parseAplicacionBombaSegura(db.aplicacion_bomba),
               diametro_aspiracion: db.diametro_aspiracion || 'N/A',
               diametro_descarga: db.diametro_descarga || 'N/A',
               caudal_maximo_m3h: db.caudal_maximo_m3h || 0,
@@ -1277,13 +1343,23 @@ export class EquiposGestionService {
         };
 
         // Determinar unidad de entrada para conversión a base SI
-        const unidadEntrada = (
+        let unidadEntrada = (
           params.filtroAtributoUnidad ||
           this.projectionService?.getUnidadOrigenDefecto(attrCode) ||
           ''
         )
           .trim()
           .toUpperCase();
+
+        if (!unidadEntrada) {
+          const attrDb = await this.prisma.atributos_tecnicos.findUnique({
+            where: { codigo_atributo: attrCode },
+            select: { unidad_defecto_codigo: true },
+          });
+          if (attrDb?.unidad_defecto_codigo) {
+            unidadEntrada = attrDb.unidad_defecto_codigo.toUpperCase().trim();
+          }
+        }
 
         const convertirValorFiltro = (val: number): number => {
           if (!unidadEntrada) return val;
@@ -1889,7 +1965,7 @@ export class EquiposGestionService {
           if (datosMotor.velocidad_nominal_rpm !== undefined)
             motorData.velocidad_nominal_rpm = datosMotor.velocidad_nominal_rpm;
           if (datosMotor.tipo_combustible !== undefined)
-            motorData.tipo_combustible = datosMotor.tipo_combustible as tipo_combustible_enum;
+            motorData.tipo_combustible = parseTipoCombustibleSeguro(datosMotor.tipo_combustible);
           if (datosMotor.numero_cilindros !== undefined)
             motorData.numero_cilindros = datosMotor.numero_cilindros;
           if (datosMotor.cilindrada_cc !== undefined)
@@ -1897,7 +1973,7 @@ export class EquiposGestionService {
           if (datosMotor.tiene_turbocargador !== undefined)
             motorData.tiene_turbocargador = datosMotor.tiene_turbocargador;
           if (datosMotor.tipo_arranque !== undefined)
-            motorData.tipo_arranque = datosMotor.tipo_arranque as tipo_arranque_enum;
+            motorData.tipo_arranque = parseTipoArranqueSeguro(datosMotor.tipo_arranque);
           if (datosMotor.voltaje_arranque_vdc !== undefined)
             motorData.voltaje_arranque_vdc = datosMotor.voltaje_arranque_vdc;
           if (datosMotor.amperaje_arranque !== undefined)
@@ -1934,11 +2010,11 @@ export class EquiposGestionService {
           if (datosMotor.voltaje_operacion_vac !== undefined)
             motorData.voltaje_operacion_vac = datosMotor.voltaje_operacion_vac;
           if (datosMotor.numero_fases !== undefined)
-            motorData.numero_fases = datosMotor.numero_fases as any;
+            motorData.numero_fases = parseNumeroFasesSeguro(datosMotor.numero_fases);
           if (datosMotor.frecuencia_hz !== undefined)
             motorData.frecuencia_hz = datosMotor.frecuencia_hz;
           if (datosMotor.clase_aislamiento !== undefined)
-            motorData.clase_aislamiento = datosMotor.clase_aislamiento as any;
+            motorData.clase_aislamiento = parseClaseAislamientoSegura(datosMotor.clase_aislamiento);
           if (datosMotor.grado_proteccion_ip !== undefined)
             motorData.grado_proteccion_ip = datosMotor.grado_proteccion_ip;
           if (datosMotor.amperaje_nominal !== undefined)

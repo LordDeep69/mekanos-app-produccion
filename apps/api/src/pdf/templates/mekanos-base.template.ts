@@ -1878,6 +1878,7 @@ export const generarDatosClienteConFichaTecnica = (
   }
 ): string => {
   const eq = datos.equipoDetalle;
+  const placa = (datos as any).placaUniversal;
   const clienteNombre = eq?.cliente || datos.cliente || 'N/A';
   const clienteNit = eq?.clienteNit || '';
   const direccion = eq?.direccion || datos.direccion || 'N/A';
@@ -1886,14 +1887,14 @@ export const generarDatosClienteConFichaTecnica = (
   const codigoEquipo = eq?.codigoEquipo || '';
   const nombreEquipo = eq?.nombreEquipo || '';
   const tipoEquipo = eq?.tipoEquipoNombre || eq?.tipoEquipo || datos.tipoEquipo || 'EQUIPO';
-  const marca = eq?.marca || datos.marcaEquipo || 'N/A';
-  const serie = eq?.serie || datos.serieEquipo || 'N/A';
-  const modelo = eq?.modelo || '';
+  const marca = placa?.marca && placa.marca !== 'N/A' ? placa.marca : (eq?.marca || datos.marcaEquipo || 'N/A');
+  const serie = placa?.serie && placa.serie !== 'N/A' ? placa.serie : (eq?.serie || datos.serieEquipo || 'N/A');
+  const modelo = placa?.modelo || eq?.modelo || '';
   
   // Placa técnica de ingeniería
-  const potencia = eq?.potenciaKva
+  const potencia = placa?.capacidadPrincipal?.texto || (eq?.potenciaKva
     ? `${eq.potenciaKva} kVA${eq.potenciaKw ? ` / ${eq.potenciaKw} kW` : ''}`
-    : (eq?.potenciaHp ? `${eq.potenciaHp} HP` : (eq?.potenciaKw ? `${eq.potenciaKw} kW` : ''));
+    : (eq?.potenciaHp ? `${eq.potenciaHp} HP` : (eq?.potenciaKw ? `${eq.potenciaKw} kW` : '')));
   const tension = eq?.voltaje
     ? `${eq.voltaje}${eq.frecuencia ? ` · ${eq.frecuencia}` : ''}${eq.fases ? ` · ${eq.fases}` : ''}`
     : (eq?.frecuencia ? `${eq.frecuencia}` : '');
@@ -1991,6 +1992,37 @@ export const generarDatosClienteConFichaTecnica = (
         <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
           <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">📊 Horómetro Acumulado (Hoja de Vida)</span>
           <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroAcum || horometroInterv || '-'}</span>
+        </div>
+        ` : ''}
+
+        ${placa?.kpis && placa.kpis.length > 0 ? `
+        <div style="grid-column: span 4; display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap;">
+          ${placa.kpis.map((kpi: any) => `
+            <span style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; border-radius: 3px; padding: 2px 6px; font-size: 8px; font-weight: 600;">
+              ${kpi.etiqueta}: <strong>${kpi.valorTexto}</strong>
+            </span>
+          `).join('')}
+        </div>
+        ` : ''}
+
+        ${placa?.bloques && placa.bloques.length > 0 ? `
+        <!-- Sub-sistemas Modulares EAM -->
+        <div style="grid-column: span 4; padding-top: 6px; margin-top: 4px; border-top: 1px dashed #cbd5e1; display: grid; grid-template-columns: repeat(${Math.min(placa.bloques.length, 2)}, 1fr); gap: 6px;">
+          ${placa.bloques.map((b: any) => `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 6px;">
+              <div style="font-size: 8px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; margin-bottom: 3px; text-transform: uppercase;">
+                ${b.nombreModulo}
+              </div>
+              <table style="width: 100%; border-collapse: collapse; font-size: 7.5px;">
+                ${b.atributos.map((attr: any) => `
+                  <tr>
+                    <td style="color: #64748b; font-weight: 600; padding: 1px 0; width: 55%;">${attr.etiqueta}</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 1px 0; text-align: right;">${attr.valor}</td>
+                  </tr>
+                `).join('')}
+              </table>
+            </div>
+          `).join('')}
         </div>
         ` : ''}
       </div>

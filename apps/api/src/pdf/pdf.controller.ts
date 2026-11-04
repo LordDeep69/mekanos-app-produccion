@@ -330,23 +330,12 @@ export class PdfController {
     // ✅ FIX MULTI-SEDE: Priorizar dirección de sede
     const clienteDireccion = orden.sedes_cliente?.direccion_sede || clientePersona?.direccion_principal || 'N/A';
 
-    // Obtener marca y serie según tipo de equipo (usando 'equipos' que es la relación correcta)
+    // Obtener marca y serie unificadas con EquipoSpecsReader (Zero-Trust)
     let marcaEquipo = 'N/A';
     let serieEquipo = 'N/A';
     if (orden.equipos) {
-      if (orden.equipos.equipos_generador) {
-        marcaEquipo = orden.equipos.equipos_generador.marca_generador || 'N/A';
-        serieEquipo = orden.equipos.equipos_generador.numero_serie_generador || orden.equipos.numero_serie_equipo || 'N/A';
-      } else if (orden.equipos.equipos_motor) {
-        marcaEquipo = orden.equipos.equipos_motor.marca_motor || 'N/A';
-        serieEquipo = orden.equipos.equipos_motor.numero_serie_motor || orden.equipos.numero_serie_equipo || 'N/A';
-      } else if (orden.equipos.equipos_bomba) {
-        marcaEquipo = orden.equipos.equipos_bomba.marca_bomba || 'N/A';
-        serieEquipo = orden.equipos.equipos_bomba.numero_serie_bomba || orden.equipos.numero_serie_equipo || 'N/A';
-      } else {
-        marcaEquipo = orden.equipos.nombre_equipo || 'N/A';
-        serieEquipo = orden.equipos.numero_serie_equipo || 'N/A';
-      }
+      marcaEquipo = EquipoSpecsReader.getMarca(orden.equipos);
+      serieEquipo = EquipoSpecsReader.getSerie(orden.equipos);
     }
 
     // ✅ MULTI-EQUIPOS: Construir datos de equipos
@@ -2524,23 +2513,9 @@ export class PdfController {
     let serie = eq.numero_serie_equipo || 'N/A';
     let modelo: string | undefined = undefined;
 
-    if (gen) {
-      marca = gen.marca_generador || mot?.marca_motor || 'N/A';
-      serie = gen.numero_serie_generador || eq.numero_serie_equipo || 'N/A';
-      modelo = gen.modelo_generador || undefined;
-    } else if (bom) {
-      marca = bom.marca_bomba || 'N/A';
-      serie = bom.numero_serie_bomba || eq.numero_serie_equipo || 'N/A';
-      modelo = bom.modelo_bomba || undefined;
-    } else if (mot) {
-      marca = mot.marca_motor || 'N/A';
-      serie = mot.numero_serie_motor || eq.numero_serie_equipo || 'N/A';
-      modelo = mot.modelo_motor || undefined;
-    } else {
-      marca = EquipoSpecsReader.getMarca(eq);
-      serie = EquipoSpecsReader.getSerie(eq);
-      modelo = EquipoSpecsReader.getModelo(eq);
-    }
+    marca = EquipoSpecsReader.getMarca(eq);
+    serie = EquipoSpecsReader.getSerie(eq);
+    modelo = EquipoSpecsReader.getModelo(eq);
 
     const potenciaKva = gen?.potencia_kva ? Number(gen.potencia_kva) : undefined;
     const potenciaKw = gen?.potencia_kw ? Number(gen.potencia_kw) : (mot?.potencia_kw ? Number(mot.potencia_kw) : undefined);
