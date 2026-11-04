@@ -65,7 +65,7 @@ import {
     Lock
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -394,7 +394,6 @@ const SORT_OPTIONS: ModernFilterOption[] = [
 ];
 
 function OrdenesPageContent() {
-    const router = useRouter();
     const searchParams = useSearchParams();
 
     // Inicializar filtros desde URL params
@@ -454,7 +453,7 @@ function OrdenesPageContent() {
 
         const params = new URLSearchParams();
         if (page > 1) params.set('page', String(page));
-        if (busqueda) params.set('busqueda', busqueda);
+        if (busquedaDebounced) params.set('busqueda', busquedaDebounced);
         if (filtroEstado) params.set('estado', filtroEstado);
         if (filtroPrioridad) params.set('prioridad', filtroPrioridad);
         if (filtroTecnico) params.set('tecnico', filtroTecnico);
@@ -472,8 +471,12 @@ function OrdenesPageContent() {
 
         const queryString = params.toString();
         const newPath = queryString ? `/ordenes?${queryString}` : '/ordenes';
-        router.replace(newPath);
-    }, [page, busqueda, filtroEstado, filtroPrioridad, filtroTecnico, fechaDesde, fechaHasta, filtrosCaracteristicas, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, filtroServicioTexto, showAdvancedFilters, router]);
+        // ⚡ 04-NOV-2026: actualizar la URL SIN navegación RSC.
+        // `router.replace()` generaba un round-trip al servidor de Next en cada
+        // cambio de filtros/búsqueda. Con replaceState la URL se actualiza igual
+        // (compartir/recargar) pero sin re-render de servidor.
+        window.history.replaceState(null, '', newPath);
+    }, [page, busquedaDebounced, filtroEstado, filtroPrioridad, filtroTecnico, fechaDesde, fechaHasta, filtrosCaracteristicas, sortBy, sortOrder, filtroTipoServicio, filtroServicioEspecifico, filtroServicioTexto, showAdvancedFilters]);
 
     const pageSize = 12;
 

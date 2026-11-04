@@ -28,6 +28,111 @@ export class PrismaOrdenServicioRepository {
    */
   private readonly logger = new Logger(PrismaOrdenServicioRepository.name);
 
+  // ⚡ OPTIMIZACIÓN 04-NOV-2026: contadores globales de los badges
+  // ("Casos abiertos" y "Con pendientes"). No dependen de la búsqueda, de la
+  // página ni de los filtros, así que se cachean en memoria. Antes se
+  // recalculaban en CADA request (2 round-trips de ~200-400 ms cada uno).
+  private globalCountersCache: { at: number; abiertos: number; conPendientes: number } | null = null;
+  private static readonly GLOBAL_COUNTERS_TTL_MS = 30_000;
+
+  private async getGlobalCounters(): Promise<{ totalCasosAbiertos: number; totalConPendientes: number }> {
+    const now = Date.now();
+    if (
+      this.globalCountersCache &&
+      now - this.globalCountersCache.at < PrismaOrdenServicioRepository.GLOBAL_COUNTERS_TTL_MS
+    ) {
+      return {
+        totalCasosAbiertos: this.globalCountersCache.abiertos,
+        totalConPendientes: this.globalCountersCache.conPendientes,
+      };
+    }
+
+    // Misma semántica que los 2 count anteriores, pero resuelta en UNA consulta.
+    const rows = await this.prisma.$queryRaw<Array<{ abiertos: number; con_pendientes: number }>>`
+      SELECT
+        (SELECT COUNT(*)::int FROM ordenes_servicio os
+          WHERE (os.estado_caso = 'ABIERTO' AND os.nombre_caso IS NOT NULL)
+             OR os.id_orden_padre IS NOT NULL
+             OR os.numero_visita_caso > 1
+             OR EXISTS (SELECT 1 FROM ordenes_pendientes op WHERE op.id_orden_servicio = os.id_orden_servicio AND op.estado IN ('PENDIENTE','EN_GESTION'))
+             OR EXISTS (SELECT 1 FROM ordenes_pendientes op WHERE op.id_orden_resolucion = os.id_orden_servicio AND op.estado IN ('PENDIENTE','EN_GESTION'))
+        ) AS abiertos,
+        (SELECT COUNT(*)::int FROM ordenes_servicio os
+          WHERE EXISTS (SELECT 1 FROM ordenes_pendientes op WHERE op.id_orden_servicio = os.id_orden_servicio AND op.estado IN ('PENDIENTE','EN_GESTION'))
+             OR EXISTS (SELECT 1 FROM ordenes_pendientes op WHERE op.id_orden_resolucion = os.id_orden_servicio AND op.estado IN ('PENDIENTE','EN_GESTION'))
+        ) AS con_pendientes
+    `;
+
+    const abiertos = Number(rows[0]?.abiertos ?? 0);
+    const conPendientes = Number(rows[0]?.con_pendientes ?? 0);
+    this.globalCountersCache = { at: now, abiertos, conPendientes };
+    return { totalCasosAbiertos: abiertos, totalConPendientes: conPendientes };
+  }
+
+  /**
+   * ⚡ OPTIMIZACIÓN 04-NOV-2026: agregados por orden en UNA sola consulta.
+   * Reemplaza 6 `_count` de Prisma + 2 consultas finales (PDFs y pendientes)
+   * por un único round-trip. Semántica idéntica a la implementación anterior.
+   */
+  private async getOrdenAggregates(ordenIds: number[]): Promise<Map<number, {
+    emails: number;
+    actividades: number;
+    plan: number;
+    mediciones: number;
+    evidencias: number;
+    pdfs: number;
+    pendientesTotal: number;
+    pendientesActivos: number;
+  }>> {
+    const result = new Map<number, any>();
+    if (ordenIds.length === 0) return result;
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: number;
+      emails: number;
+      actividades: number;
+      plan: number;
+      mediciones: number;
+      evidencias: number;
+      pdfs: number;
+      pendientes_total: number;
+      pendientes_activos: number;
+    }>>`
+      SELECT
+        o.id_orden_servicio AS id,
+        (SELECT COUNT(*)::int FROM historial_emails_enviados t WHERE t.id_orden_servicio = o.id_orden_servicio) AS emails,
+        (SELECT COUNT(*)::int FROM actividades_ejecutadas t WHERE t.id_orden_servicio = o.id_orden_servicio) AS actividades,
+        (SELECT COUNT(*)::int FROM ordenes_actividades_plan t WHERE t.id_orden_servicio = o.id_orden_servicio) AS plan,
+        (SELECT COUNT(*)::int FROM mediciones_servicio t WHERE t.id_orden_servicio = o.id_orden_servicio) AS mediciones,
+        (SELECT COUNT(*)::int FROM evidencias_fotograficas t WHERE t.id_orden_servicio = o.id_orden_servicio) AS evidencias,
+        (SELECT COUNT(*)::int FROM documentos_generados d WHERE d.id_referencia = o.id_orden_servicio AND d.tipo_documento = 'INFORME_SERVICIO'::tipo_documento_enum) AS pdfs,
+        COALESCE(p.total, 0)::int AS pendientes_total,
+        COALESCE(p.activos, 0)::int AS pendientes_activos
+      FROM ordenes_servicio o
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE op.estado IN ('PENDIENTE','EN_GESTION'))::int AS activos
+        FROM ordenes_pendientes op
+        WHERE op.id_orden_servicio = o.id_orden_servicio OR op.id_orden_resolucion = o.id_orden_servicio
+      ) p ON TRUE
+      WHERE o.id_orden_servicio = ANY(${ordenIds}::int[])
+    `;
+
+    for (const r of rows) {
+      result.set(Number(r.id), {
+        emails: Number(r.emails ?? 0),
+        actividades: Number(r.actividades ?? 0),
+        plan: Number(r.plan ?? 0),
+        mediciones: Number(r.mediciones ?? 0),
+        evidencias: Number(r.evidencias ?? 0),
+        pdfs: Number(r.pdfs ?? 0),
+        pendientesTotal: Number(r.pendientes_total ?? 0),
+        pendientesActivos: Number(r.pendientes_activos ?? 0),
+      });
+    }
+    return result;
+  }
+
   private static readonly HOMOGLYPH_MAP: Record<string, string> = {
     // Mayúsculas griegas → Latinas
     '\u0391': 'A', // Α → A
@@ -103,13 +208,17 @@ export class PrismaOrdenServicioRepository {
    * @param limit Límite de resultados
    * @returns Array de IDs de órdenes_servicio que matchean
    */
-  private async findOrdenIdsByUnaccentSearch(searchText: string, limit: number = 200): Promise<number[]> {
+  private async findOrdenIdsByUnaccentSearch(searchText: string, limit: number = 5000): Promise<number[]> {
     try {
       const tokens = searchText.split(/\s+/).filter(t => t.length > 0);
       if (tokens.length === 0) return [];
 
       // Construir condiciones para cada token (todos deben coincidir - AND)
-      // Cada token puede estar en cualquier campo del cliente (OR)
+      // Cada token puede estar en cualquier campo del cliente, técnico,
+      // servicio, equipo o número de orden.
+      // ⚡ 04-NOV-2026: se añadieron segundo_nombre/segundo_apellido y equipos
+      // para que este conjunto de IDs sea SUPERCONJUNTO de las ramas
+      // multi-token de Prisma (y así poder retirarlas del WHERE).
       const tokenConditions = tokens.map((_token, i) => `(
         unaccent(COALESCE(p.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(p.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
@@ -118,9 +227,13 @@ export class PrismaOrdenServicioRepository {
         OR unaccent(COALESCE(pp.razon_social, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(pp.nombre_comercial, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(pt.primer_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(pt.segundo_nombre, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(pt.primer_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(pt.segundo_apellido, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(cs.nombre_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR unaccent(COALESCE(cs.codigo_servicio, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(eq.nombre_equipo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
+        OR unaccent(COALESCE(eq.codigo_equipo, '')) ILIKE '%' || unaccent($${i + 1}) || '%'
         OR os.numero_orden ILIKE '%' || $${i + 1} || '%'
       )`).join(' AND ');
 
@@ -133,6 +246,7 @@ export class PrismaOrdenServicioRepository {
         LEFT JOIN personas pp ON cp.id_persona = pp.id_persona
         LEFT JOIN empleados e ON os.id_tecnico_asignado = e.id_empleado
         LEFT JOIN personas pt ON e.id_persona = pt.id_persona
+        LEFT JOIN equipos eq ON os.id_equipo = eq.id_equipo
         LEFT JOIN detalle_servicios_orden dso ON os.id_orden_servicio = dso.id_orden_servicio
         LEFT JOIN catalogo_servicios cs ON dso.id_servicio = cs.id_servicio
         WHERE ${tokenConditions}
@@ -287,19 +401,9 @@ export class PrismaOrdenServicioRepository {
         },
       },
     },
-    // ✅ FIX 03-MAR-2026: Incluir conteo de emails enviados para badge en lista
-    // ✅ FIX 23-SEP-2026: Incluir conteo de ordenes_pendientes para badge en lista
-    // ✅ FIX 25-SEP-2026: Telemetría y avance en tiempo real (Estilo Sytex)
-    _count: {
-      select: {
-        historial_emails_enviados: true,
-        ordenes_pendientes: true,
-        actividades_ejecutadas: true,
-        mediciones_servicio: true,
-        evidencias_fotograficas: true,
-        ordenes_actividades_plan: true,
-      },
-    },
+    // ⚡ OPTIMIZACIÓN 04-NOV-2026: los 6 contadores (_count) se retiraron del include.
+    // Antes Prisma emitía 6 consultas adicionales por listado (una por relación).
+    // Ahora se resuelven en UNA sola consulta agregada dentro de findAll().
   };
 
   /**
@@ -1300,7 +1404,6 @@ export class PrismaOrdenServicioRepository {
       const rawSearch = filters.busqueda.trim();
       const s = this.normalizeSearchText(rawSearch); // Normalizar: quitar tildes y homóglifos
       const cleanDigits = s.replace(/[^0-9]/g, '');
-      const tokens = s.split(/\s+/).filter(t => t.length > 0);
 
       // === BÚSQUEDA COMPLEMENTARIA CON SQL RAW (unaccent) ===
       // Buscar IDs adicionales que la búsqueda Prisma podría no encontrar
@@ -1404,65 +1507,12 @@ export class PrismaOrdenServicioRepository {
         }
       );
 
-      // Si hay más de un token (ej. "Centro San Lazaro" o "Luis Torres" o "COMFENALCO JARDIN"), buscar por combinación cruzada de tokens
-      if (tokens.length > 1) {
-        // Cliente contiene todos los tokens entre razon_social, nombre_comercial y nombre_sede
-        orConditions.push({
-          AND: tokens.map(token => ({
-            OR: [
-              { clientes: { persona: { razon_social: { contains: token, mode: 'insensitive' } } } },
-              { clientes: { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } } },
-              { clientes: { nombre_sede: { contains: token, mode: 'insensitive' } } },
-              { clientes: { cliente_principal: { persona: { razon_social: { contains: token, mode: 'insensitive' } } } } },
-              { clientes: { cliente_principal: { persona: { nombre_comercial: { contains: token, mode: 'insensitive' } } } } },
-            ]
-          }))
-        });
-
-        // Técnico contiene todos los tokens en sus nombres/apellidos
-        orConditions.push({
-          empleados_ordenes_servicio_id_tecnico_asignadoToempleados: {
-            persona: {
-              AND: tokens.map(token => ({
-                OR: [
-                  { primer_nombre: { contains: token, mode: 'insensitive' } },
-                  { segundo_nombre: { contains: token, mode: 'insensitive' } },
-                  { primer_apellido: { contains: token, mode: 'insensitive' } },
-                  { segundo_apellido: { contains: token, mode: 'insensitive' } },
-                ]
-              }))
-            }
-          }
-        });
-
-        // Servicios específicos asignados contienen todos los tokens en nombre o código
-        orConditions.push({
-          detalle_servicios_orden: {
-            some: {
-              catalogo_servicios: {
-                AND: tokens.map(token => ({
-                  OR: [
-                    { nombre_servicio: { contains: token, mode: 'insensitive' } },
-                    { codigo_servicio: { contains: token, mode: 'insensitive' } },
-                  ]
-                }))
-              }
-            }
-          }
-        });
-
-        // Equipos contienen todos los tokens en nombre o código
-        orConditions.push({
-          equipos: {
-            AND: tokens.map(token => ({
-              OR: [
-                { nombre_equipo: { contains: token, mode: 'insensitive' } },
-                { codigo_equipo: { contains: token, mode: 'insensitive' } },
-              ]
-            }))
-          }
-        });
-      }
+      // ⚡ OPTIMIZACIÓN 04-NOV-2026: las ramas multi-token de Prisma se retiraron.
+      // Eran la causa de la explosión de LEFT JOINs (búsquedas de 2+ palabras
+      // tardaban 6-45 s). Su semántica queda cubierta —de forma más amplia—
+      // por `findOrdenIdsByUnaccentSearch`, que ya alimenta `orConditions` con
+      // todos los IDs que coinciden token a token en cliente/técnico/servicio/
+      // equipo/número de orden.
 
       // === COMBINAR RESULTADOS: Prisma ILIKE + SQL raw unaccent ===
       // Si la búsqueda con unaccent encontró IDs adicionales, incluirlos en el OR
@@ -1646,97 +1696,41 @@ export class PrismaOrdenServicioRepository {
     const orderBy = { [orderByField]: sortDirection };
 
     // ✅ OPTIMIZACIÓN 05-ENE-2026: Usar INCLUDE_LITE para listas
-    // Reduce de 10+ JOINs a solo 4, mejorando tiempo de ~5s a ~500ms
-    const [itemsRaw, total, totalCasosAbiertos, totalConPendientes] = await Promise.all([
+    // ⚡ OPTIMIZACIÓN 04-NOV-2026:
+    //   - relationLoadStrategy: 'join' → Prisma resuelve las relaciones con
+    //     LATERAL JOINs en la MISMA consulta (antes: 12 round-trips extra).
+    //   - Los 2 contadores globales se cachean (30 s) y se calculan en 1 query.
+    const [itemsRaw, total, globalCounters] = await Promise.all([
       this.prisma.ordenes_servicio.findMany({
         where,
         include: this.INCLUDE_LITE,
+        relationLoadStrategy: 'join',
         orderBy,
         skip: filters?.skip || 0,
         take: filters?.take || 10,
       }),
       this.prisma.ordenes_servicio.count({ where }),
-      this.prisma.ordenes_servicio.count({
-        where: {
-          OR: [
-            { estado_caso: 'ABIERTO', nombre_caso: { not: null } },
-            { id_orden_padre: { not: null } },
-            { numero_visita_caso: { gt: 1 } },
-            { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-            { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-          ],
-        },
-      }),
-      this.prisma.ordenes_servicio.count({
-        where: {
-          OR: [
-            { ordenes_pendientes: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-            { pendientes_asignados_resolver: { some: { estado: { in: ['PENDIENTE', 'EN_GESTION'] } } } },
-          ],
-        },
-      }),
+      this.getGlobalCounters(),
     ]);
+    const { totalCasosAbiertos, totalConPendientes } = globalCounters;
 
-    // ✅ FIX 06-MAY-2026: Contar documentos PDF (INFORME_SERVICIO) para cada orden
+    // ⚡ OPTIMIZACIÓN 04-NOV-2026: PDFs, pendientes y contadores por orden
+    // se obtienen en UNA sola consulta (antes: 8 round-trips separados).
     const ordenIds = itemsRaw.map((o: any) => o.id_orden_servicio);
-    const [documentosCount, pendientesRows] = await Promise.all([
-      ordenIds.length > 0
-        ? this.prisma.documentos_generados.groupBy({
-            by: ['id_referencia'],
-            where: {
-              id_referencia: { in: ordenIds },
-              tipo_documento: 'INFORME_SERVICIO',
-            },
-            _count: true,
-          })
-        : Promise.resolve([]),
-      ordenIds.length > 0
-        ? this.prisma.ordenes_pendientes.findMany({
-            where: {
-              OR: [
-                { id_orden_servicio: { in: ordenIds } },
-                { id_orden_resolucion: { in: ordenIds } },
-              ],
-            },
-            select: {
-              id_orden_pendiente: true,
-              id_orden_servicio: true,
-              id_orden_resolucion: true,
-              estado: true,
-            },
-          })
-        : Promise.resolve([]),
-    ]);
-
-    const pdfCountMap = new Map(documentosCount.map((dc: any) => [dc.id_referencia, dc._count]));
-
-    const pendientesPorOrden = new Map<number, { total: number; activos: number }>();
-    for (const p of pendientesRows) {
-      const esActivo = p.estado === 'PENDIENTE' || p.estado === 'EN_GESTION';
-      const agregarA = (idOrden: number | null) => {
-        if (!idOrden) return;
-        const actual = pendientesPorOrden.get(idOrden) || { total: 0, activos: 0 };
-        actual.total += 1;
-        if (esActivo) actual.activos += 1;
-        pendientesPorOrden.set(idOrden, actual);
-      };
-      if (p.id_orden_servicio) agregarA(p.id_orden_servicio);
-      if (p.id_orden_resolucion && p.id_orden_resolucion !== p.id_orden_servicio) {
-        agregarA(p.id_orden_resolucion);
-      }
-    }
+    const aggregates = await this.getOrdenAggregates(ordenIds);
 
     // ✅ FIX 03-MAR-2026: Transformar _count a total_emails_enviados
     // ✅ FIX 06-MAY-2026: Agregar total_documentos_pdf desde query de documentos
     // ✅ FIX 23-SEP-2026: Agregar total_pendientes desde _count.ordenes_pendientes y pendientesPorOrden
     // ✅ FIX 25-SEP-2026: Calcular telemetría y avance en tiempo real (Estilo Sytex)
     const items = itemsRaw.map((orden: any) => {
-      const { _count, ...rest } = orden;
+      const rest = orden;
+      const agg = aggregates.get(orden.id_orden_servicio);
 
-      const actsEjecutadas = _count?.actividades_ejecutadas || 0;
-      const actsPlan = _count?.ordenes_actividades_plan || 0;
-      const medicionesCount = _count?.mediciones_servicio || 0;
-      const fotosCount = _count?.evidencias_fotograficas || 0;
+      const actsEjecutadas = agg?.actividades || 0;
+      const actsPlan = agg?.plan || 0;
+      const medicionesCount = agg?.mediciones || 0;
+      const fotosCount = agg?.evidencias || 0;
       const totalActs = actsPlan > 0 ? actsPlan : Math.max(actsEjecutadas, 10);
       const pctActs = totalActs > 0 ? Math.min(100, Math.round((actsEjecutadas / totalActs) * 100)) : 0;
       const tieneFirmaTecnico = Boolean(orden.id_firma_tecnico);
@@ -1799,17 +1793,12 @@ export class PrismaOrdenServicioRepository {
         },
       };
 
-      const pInfo = pendientesPorOrden.get(orden.id_orden_servicio) || {
-        total: _count?.ordenes_pendientes || 0,
-        activos: 0,
-      };
-
       return {
         ...rest,
-        total_emails_enviados: _count?.historial_emails_enviados || 0,
-        total_documentos_pdf: pdfCountMap.get(orden.id_orden_servicio) || 0,
-        total_pendientes: Math.max(pInfo.total, _count?.ordenes_pendientes || 0),
-        pendientes_activos: pInfo.activos,
+        total_emails_enviados: agg?.emails || 0,
+        total_documentos_pdf: agg?.pdfs || 0,
+        total_pendientes: agg?.pendientesTotal || 0,
+        pendientes_activos: agg?.pendientesActivos || 0,
         progreso_registro,
       };
     });

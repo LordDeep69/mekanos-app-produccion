@@ -15,7 +15,7 @@ import type {
     CreateOrdenDto,
     OrdenesQueryParams,
 } from '@/types/ordenes';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
     addServicioOrden,
@@ -297,6 +297,10 @@ export function useOrdenes(params?: OrdenesQueryParams) {
     return useQuery({
         queryKey: [...ORDENES_KEY, params],
         queryFn: () => getOrdenes(params),
+        // ⚡ 04-NOV-2026: mantener los resultados anteriores mientras llega la
+        // nueva búsqueda/página. Evita que la tabla parpadee o desaparezca
+        // entre tecleos (la percepción de velocidad mejora mucho).
+        placeholderData: keepPreviousData,
         ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }
