@@ -605,7 +605,8 @@ export class PdfController {
       direccion: clienteDireccion,
       marcaEquipo: marcaEquipo,
       serieEquipo: serieEquipo,
-      tipoEquipo: this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre || ''),
+      // ✅ FIX EAM FASE 5.2: Usar nombre_tipo (campo correcto en Prisma), NO ".nombre" que no existe
+      tipoEquipo: this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre_tipo || ''),
       // ✅ FIX 07-FEB-2026: Usar fecha_inicio_real (fecha real del servicio) cuando existe,
       // fallback a fecha_programada. Antes siempre usaba fecha_programada causando desfase.
       fecha: orden.fecha_inicio_real
@@ -1649,7 +1650,8 @@ export class PdfController {
       direccion: clienteDireccion,
       marcaEquipo,
       serieEquipo,
-      tipoEquipo: this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre || ''),
+      // ✅ FIX EAM FASE 5.2: Usar nombre_tipo (campo correcto en Prisma), NO ".nombre" que no existe
+      tipoEquipo: this.mapTipoEquipo(orden.equipos?.tipos_equipo?.nombre_tipo || ''),
       // ✅ FIX 07-FEB-2026: Usar fecha_inicio_real (fecha real del servicio) cuando existe,
       // fallback a fecha_programada. Antes siempre usaba fecha_programada causando desfase.
       fecha: orden.fecha_inicio_real

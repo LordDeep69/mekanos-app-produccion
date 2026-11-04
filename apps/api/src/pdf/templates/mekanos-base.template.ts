@@ -144,7 +144,7 @@ export interface DatosOrdenPDF {
   // Datos del equipo
   marcaEquipo: string;
   serieEquipo: string;
-  tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR';
+  tipoEquipo: 'GENERADOR' | 'BOMBA' | 'MOTOR' | 'COMPRESOR' | string;
 
   // Datos del servicio
   fecha: string;
