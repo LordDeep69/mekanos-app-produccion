@@ -8,6 +8,7 @@ import {
   Layers,
   Loader2,
   Plus,
+  Search,
   Sparkles,
   Trash2,
   X,
@@ -40,6 +41,29 @@ export function TabModulosTecnicos() {
       setSelectedModuloCode(modulos[0].codigo_modulo);
     }
   }, [modulos, selectedModuloCode]);
+
+  const [searchModQuery, setSearchModQuery] = useState<string>('');
+
+  const modulosFiltrados = useMemo(() => {
+    const q = searchModQuery.trim().toLowerCase();
+    if (!q) return modulos;
+    return modulos.filter((m) => {
+      const matchNombre = m.nombre_modulo.toLowerCase().includes(q);
+      const matchCodigo = m.codigo_modulo.toLowerCase().includes(q);
+      const matchDesc = (m.descripcion || '').toLowerCase().includes(q);
+      return matchNombre || matchCodigo || matchDesc;
+    });
+  }, [modulos, searchModQuery]);
+
+  const selectedModulo = useMemo(
+    () => modulos.find((m) => m.codigo_modulo === selectedModuloCode) || modulos[0] || null,
+    [modulos, selectedModuloCode],
+  );
+
+  const otrosModulos = useMemo(
+    () => modulosFiltrados.filter((m) => m.codigo_modulo !== selectedModuloCode),
+    [modulosFiltrados, selectedModuloCode],
+  );
 
   const { data: moduloDetalle, isLoading: loadingDetalle } =
     useModuloDetalleEam(selectedModuloCode || null);
@@ -282,115 +306,239 @@ export function TabModulosTecnicos() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* COLUMNA IZQUIERDA: LISTA DE PARTES Y SUBSISTEMAS */}
-      <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-3">
+      {/* COLUMNA IZQUIERDA: LISTA DE PARTES Y SUBSISTEMAS (STICKY CON SPOTLIGHT SELECCIONADO ARRIBA) */}
+      <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col sticky top-4 max-h-[calc(100vh-120px)]">
+        {/* Cabecera */}
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Boxes className="h-5 w-5 text-blue-600" />
               <span>Partes y Subsistemas ({modulos.length})</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Secciones reutilizables que componen las fichas de los equipos
+              Secciones reutilizables de fichas técnicas
             </p>
           </div>
           <button
             type="button"
             onClick={handleOpenNewMod}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors shrink-0"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Nueva Parte</span>
           </button>
         </div>
 
-        <div className="divide-y divide-slate-100">
-          {modulos.map((mod) => {
-            const isSelected = mod.codigo_modulo === selectedModuloCode;
-            const totalAttrs = mod._count?.modulo_atributos ?? 0;
-            return (
-              <div
-                key={mod.id_modulo}
-                onClick={() => setSelectedModuloCode(mod.codigo_modulo)}
-                className={`p-5 cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                  isSelected
-                    ? 'bg-blue-50/80 border-l-4 border-l-blue-600'
-                    : 'hover:bg-slate-50'
-                }`}
+        {/* Buscador Rápido de Partes */}
+        <div className="p-3 bg-slate-50/80 border-b border-slate-100 space-y-2 shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Buscar parte o subsistema..."
+              value={searchModQuery}
+              onChange={(e) => setSearchModQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setSearchModQuery('');
+              }}
+              className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-2xs font-medium"
+            />
+            {searchModQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchModQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Limpiar búsqueda (Esc)"
               >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          {searchModQuery.trim() && (
+            <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+              <span>
+                Mostrando <strong className="text-blue-600 font-bold">{modulosFiltrados.length}</strong> de {modulos.length} partes
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearchModQuery('')}
+                className="text-blue-600 hover:underline font-semibold"
+              >
+                Restablecer
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Contenedor scrolleable: Subsistema Seleccionado arriba + Lista de otras partes */}
+        <div className="overflow-y-auto flex-1 p-3 space-y-3">
+          {/* APARTADO DESTACADO ARRIBA: SUBSISTEMA SELECCIONADO EN EDICIÓN */}
+          {selectedModulo && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                  Subsistema Seleccionado
+                </span>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md font-mono">
+                  ACTIVO
+                </span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50/70 border-2 border-blue-500/40 shadow-xs flex items-start justify-between gap-3">
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: mod.color_ui || '#3B82F6' }}
+                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-2xs ring-2 ring-white"
+                      style={{ backgroundColor: selectedModulo.color_ui || '#3B82F6' }}
                     />
-                    <span className="text-sm font-bold text-slate-900">
-                      {mod.nombre_modulo}
+                    <span className="text-sm font-extrabold text-blue-950">
+                      {selectedModulo.nombre_modulo}
                     </span>
                   </div>
-                  {mod.descripcion && (
-                    <p className="text-xs text-slate-500 leading-relaxed pt-0.5">
-                      {mod.descripcion}
+                  {selectedModulo.descripcion && (
+                    <p className="text-xs text-slate-600 leading-relaxed pt-0.5 line-clamp-2">
+                      {selectedModulo.descripcion}
                     </p>
                   )}
-                </div>
-
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold">
-                    {totalAttrs} campos
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenEditMod(mod);
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                      title="Editar parte o subsistema"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteError(null);
-                        setDeleteTarget(mod);
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      title="Eliminar parte o subsistema"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  <div className="pt-1.5 flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white text-[11px] font-bold shadow-2xs">
+                      {selectedModulo._count?.modulo_atributos ?? 0} campos
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-500 font-semibold">
+                      {selectedModulo.codigo_modulo}
+                    </span>
                   </div>
                 </div>
+
+                <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditMod(selectedModulo)}
+                    className="p-1.5 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors"
+                    title="Editar parte o subsistema"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteTarget(selectedModulo);
+                    }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    title="Eliminar parte o subsistema"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* OTRAS PARTES Y SUBSISTEMAS */}
+          <div className="pt-1">
+            <div className="px-1 pb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              {otrosModulos.length > 0
+                ? `Otras Partes (${otrosModulos.length})`
+                : 'Todas las Partes'}
+            </div>
+
+            {modulosFiltrados.length === 0 ? (
+              <div className="p-6 text-center space-y-2 rounded-xl bg-slate-50 border border-slate-100">
+                <Search className="h-5 w-5 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-700">Sin coincidencias</p>
+                <p className="text-[11px] text-slate-400">
+                  No hay resultados para &ldquo;{searchModQuery}&rdquo;
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {otrosModulos.map((mod) => {
+                  const totalAttrs = mod._count?.modulo_atributos ?? 0;
+                  return (
+                    <div
+                      key={mod.id_modulo}
+                      onClick={() => setSelectedModuloCode(mod.codigo_modulo)}
+                      className="p-3 rounded-xl cursor-pointer transition-all flex items-start justify-between gap-3 hover:bg-slate-50 border border-transparent hover:border-slate-200/80 group"
+                    >
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: mod.color_ui || '#3B82F6' }}
+                          />
+                          <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                            {mod.nombre_modulo}
+                          </span>
+                        </div>
+                        {mod.descripcion && (
+                          <p className="text-[11px] text-slate-500 leading-relaxed truncate">
+                            {mod.descripcion}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-bold">
+                          {totalAttrs}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditMod(mod);
+                          }}
+                          className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Editar parte o subsistema"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteError(null);
+                            setDeleteTarget(mod);
+                          }}
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Eliminar parte o subsistema"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* COLUMNA DERECHA: CAMPOS TÉCNICOS DE LA PARTE Y CONTROLES EN VIVO */}
-      <div className="lg:col-span-8 space-y-5">
+      {/* COLUMNA DERECHA: CAMPOS TÉCNICOS CON SCROLL VERTICAL INTERNO */}
+      <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col sticky top-4 max-h-[calc(100vh-120px)]">
         {loadingDetalle || !moduloDetalle ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-16 flex flex-col items-center justify-center">
+          <div className="p-16 flex flex-col items-center justify-center flex-1">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
             <p className="text-sm text-slate-500">Cargando campos de la parte...</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            {/* Cabecera de la Parte Seleccionada */}
-            <div className="p-6 border-b border-slate-100 bg-slate-50/70 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+          <>
+            {/* Cabecera Fija de la Parte Seleccionada */}
+            <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
               <div className="space-y-1">
                 <div className="flex items-center flex-wrap gap-2.5">
                   <Layers className="h-5 w-5 text-blue-600" />
                   <h3 className="text-lg font-bold text-slate-900">
                     {moduloDetalle.nombre_modulo}
                   </h3>
+                  <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-mono font-bold">
+                    {moduloDetalle.codigo_modulo}
+                  </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Elige qué campos son obligatorios al registrar el equipo, cuáles sirven para filtrar en el directorio, cuáles se destacan en las tarjetas y cuáles se imprimen en el PDF.
+                  Elige qué campos son obligatorios al registrar el equipo, cuáles sirven para filtrar, cuáles son KPI y cuáles se imprimen en el PDF.
                 </p>
               </div>
 
@@ -444,14 +592,23 @@ export function TabModulosTecnicos() {
               </div>
             </div>
 
-            {/* Secciones Visuales de la Parte */}
-            <div className="p-6 space-y-6">
-              {gruposVisualesMap.map(([grupoNombre, items]) => (
-                <div
-                  key={grupoNombre}
-                  className="rounded-xl border border-slate-200 overflow-hidden"
-                >
-                  <div className="px-5 py-3 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
+            {/* Secciones Visuales de la Parte con Scroll Vertical Interno */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1 overscroll-contain">
+              {gruposVisualesMap.length === 0 ? (
+                <div className="p-12 text-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50">
+                  <Layers className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-700">Esta parte aún no tiene campos técnicos asignados</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Usa los botones superiores para &ldquo;Agregar Campo Existente&rdquo; o &ldquo;Crear Nuevo Campo aquí&rdquo;.
+                  </p>
+                </div>
+              ) : (
+                gruposVisualesMap.map(([grupoNombre, items]) => (
+                  <div
+                    key={grupoNombre}
+                    className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs"
+                  >
+                    <div className="px-5 py-3 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
                     <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
                       Sección de Ficha: {grupoNombre}
                     </span>
@@ -615,7 +772,7 @@ export function TabModulosTecnicos() {
                 </div>
               ))}
             </div>
-          </div>
+          </>
         )}
       </div>
 
