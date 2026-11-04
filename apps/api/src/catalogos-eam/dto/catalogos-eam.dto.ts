@@ -602,3 +602,39 @@ export class CreateBomItemDto {
   @IsString()
   notas?: string;
 }
+
+export class CreateTipoServicioEamDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  codigo_tipo: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  nombre_tipo: string;
+
+  @IsOptional()
+  @IsString()
+  descripcion?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  categoria: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  id_tipo_equipo?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  duracion_estimada_horas?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(7)
+  color_hex?: string;
+}
+

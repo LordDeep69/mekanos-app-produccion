@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -16,6 +17,7 @@ import { CatalogosEamService } from '../catalogos-eam.service';
 import {
   CreateArquetipoDto,
   CreatePlanArquetipoDto,
+  CreateTipoServicioEamDto,
   UpdateArquetipoDto,
   UpdatePlanArquetipoDto,
 } from '../dto/catalogos-eam.dto';
@@ -37,6 +39,19 @@ export class ArquetiposController {
   @ApiOperation({ summary: 'Crear una nueva clase / arquetipo de equipo' })
   async create(@Body() dto: CreateArquetipoDto) {
     return this.eamService.createArquetipo(dto);
+  }
+
+  @Get('tipos-servicio')
+  @ApiOperation({ summary: 'Listar tipos de servicio disponibles para asignación a planes' })
+  async getTiposServicio(@Query('id_tipo_equipo') idTipoEquipo?: string) {
+    const id = idTipoEquipo ? parseInt(idTipoEquipo, 10) : undefined;
+    return this.eamService.getTiposServicioEam(id);
+  }
+
+  @Post('tipos-servicio')
+  @ApiOperation({ summary: 'Crear un nuevo tipo de servicio en el catálogo para arquetipos' })
+  async createTipoServicio(@Body() dto: CreateTipoServicioEamDto) {
+    return this.eamService.createTipoServicioEam(dto);
   }
 
   @Patch(':id')

@@ -30,6 +30,7 @@ import {
   CreateModeloEquipoDto,
   CreateModuloTecnicoDto,
   CreatePlanArquetipoDto,
+  CreateTipoServicioEamDto,
   CreateUnidadMedidaDto,
   UpdateArquetipoDto,
   UpdateAtributoModuloDto,
@@ -91,7 +92,6 @@ export class CatalogosEamService {
       this.prisma.tipos_servicio.findMany({
         where: {
           activo: true,
-          categoria: { in: ['PREVENTIVO', 'DIAGNOSTICO'] },
           NOT: { codigo_tipo: { contains: 'TEST', mode: 'insensitive' } },
         },
         select: {
@@ -99,8 +99,12 @@ export class CatalogosEamService {
           codigo_tipo: true,
           nombre_tipo: true,
           categoria: true,
+          id_tipo_equipo: true,
+          descripcion: true,
+          color_hex: true,
+          duracion_estimada_horas: true,
         },
-        orderBy: { id_tipo_servicio: 'asc' },
+        orderBy: [{ id_tipo_equipo: 'asc' }, { nombre_tipo: 'asc' }],
       }),
     ]);
 
@@ -1438,6 +1442,69 @@ export class CatalogosEamService {
       },
     });
   }
+
+  async getTiposServicioEam(idTipoEquipo?: number) {
+    const where: Prisma.tipos_servicioWhereInput = {
+      activo: true,
+      NOT: { codigo_tipo: { contains: 'TEST', mode: 'insensitive' } },
+    };
+
+    return this.prisma.tipos_servicio.findMany({
+      where,
+      select: {
+        id_tipo_servicio: true,
+        codigo_tipo: true,
+        nombre_tipo: true,
+        categoria: true,
+        id_tipo_equipo: true,
+        descripcion: true,
+        duracion_estimada_horas: true,
+        color_hex: true,
+      },
+      orderBy: [{ id_tipo_equipo: 'asc' }, { nombre_tipo: 'asc' }],
+    });
+  }
+
+  async createTipoServicioEam(dto: CreateTipoServicioEamDto) {
+    const codigo = dto.codigo_tipo.trim().toUpperCase();
+    const existing = await this.prisma.tipos_servicio.findFirst({
+      where: { codigo_tipo: codigo },
+    });
+    if (existing) {
+      if (!existing.activo) {
+        return this.prisma.tipos_servicio.update({
+          where: { id_tipo_servicio: existing.id_tipo_servicio },
+          data: {
+            activo: true,
+            nombre_tipo: dto.nombre_tipo.trim(),
+            categoria: dto.categoria as any,
+            id_tipo_equipo: dto.id_tipo_equipo || existing.id_tipo_equipo,
+            descripcion: dto.descripcion?.trim() || existing.descripcion,
+          },
+        });
+      }
+      throw new ConflictException(`Ya existe un tipo de servicio con el código '${codigo}'`);
+    }
+
+    return this.prisma.tipos_servicio.create({
+      data: {
+        codigo_tipo: codigo,
+        nombre_tipo: dto.nombre_tipo.trim(),
+        descripcion: dto.descripcion?.trim() || null,
+        categoria: dto.categoria as any,
+        id_tipo_equipo: dto.id_tipo_equipo || null,
+        tiene_checklist: true,
+        tiene_plantilla_informe: true,
+        requiere_mediciones: true,
+        duracion_estimada_horas: dto.duracion_estimada_horas
+          ? new Prisma.Decimal(dto.duracion_estimada_horas)
+          : new Prisma.Decimal(2),
+        color_hex: dto.color_hex || '#0284c7',
+        activo: true,
+      },
+    });
+  }
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 5. MODELOS DE EQUIPO OEM Y KITS BOM

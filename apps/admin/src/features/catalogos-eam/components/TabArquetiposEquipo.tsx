@@ -7,11 +7,16 @@ import {
   Cpu,
   Edit3,
   Eye,
+  Info,
   Layers,
   Loader2,
   Plus,
+  Search,
+  ShieldCheck,
   Sparkles,
+  Tag,
   Trash2,
+  Wrench,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -19,6 +24,7 @@ import {
   ArquetipoEquipo,
   DynamicEquipmentFormPreview,
   TIPOS_CONTROL_HUMANOS,
+  TipoServicioEam,
   getCriterioIntervaloHumano,
   getModuloBadgeInfo,
   useArquetipoEsquemaEam,
@@ -27,6 +33,7 @@ import {
   useCreateArquetipoEam,
   useCreateAtributoEam,
   useCreatePlanArquetipoEam,
+  useCreateTipoServicioEam,
   useDeleteArquetipoEam,
   useDeletePlanArquetipoEam,
   useDesvincularModuloArquetipoEam,
@@ -34,6 +41,7 @@ import {
   useModelosOemEam,
   useModulosEam,
   useResumenEjecutivoEam,
+  useTiposServicioEam,
   useUpdateArquetipoEam,
   useVincularModuloArquetipoEam,
 } from '../index';
@@ -83,6 +91,8 @@ export function TabArquetiposEquipo() {
   const deletePlanMut = useDeletePlanArquetipoEam();
   const createAttrMut = useCreateAtributoEam();
   const asignarAttrMut = useAsignarAtributoModuloEam();
+  const createTipoSrvMut = useCreateTipoServicioEam();
+  const { data: tiposServicioList = [] } = useTiposServicioEam();
 
   // Modales
   const [showNewArqModal, setShowNewArqModal] = useState(false);
@@ -122,6 +132,18 @@ export function TabArquetiposEquipo() {
     frecuencia_uso: '250',
     criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
   });
+  const [planSearch, setPlanSearch] = useState('');
+  const [planCatFilter, setPlanCatFilter] = useState<string>('TODOS');
+  const [showCreateSrvInline, setShowCreateSrvInline] = useState(false);
+  const [creatingSrv, setCreatingSrv] = useState(false);
+  const [srvInlineError, setSrvInlineError] = useState<string | null>(null);
+  const [newSrvForm, setNewSrvForm] = useState({
+    codigo_tipo: '',
+    nombre_tipo: '',
+    categoria: 'PREVENTIVO',
+    duracion_estimada_horas: '2',
+    color_hex: '#0284c7',
+  });
 
   // Modal Creación Rápida de Campo Técnico desde el Tipo de Equipo
   const [showInPlaceModal, setShowInPlaceModal] = useState(false);
@@ -136,7 +158,37 @@ export function TabArquetiposEquipo() {
     obligatorio: true,
   });
 
-  const tiposServicioPreventivos = resumen?.tipos_servicio_preventivos || [];
+  // Catálogo completo de servicios normalizado (específicos de este equipo primero, luego universales)
+  const todosLosServicios = useMemo(() => {
+    const rawList = tiposServicioList.length > 0 ? tiposServicioList : (resumen?.tipos_servicio_preventivos || []);
+    const currentArqId = selectedArquetipo?.id_tipo_equipo;
+    return [...rawList].sort((a, b) => {
+      const aEsEspecifico = currentArqId && a.id_tipo_equipo === currentArqId ? 1 : (a.id_tipo_equipo == null ? 2 : 3);
+      const bEsEspecifico = currentArqId && b.id_tipo_equipo === currentArqId ? 1 : (b.id_tipo_equipo == null ? 2 : 3);
+      if (aEsEspecifico !== bEsEspecifico) return aEsEspecifico - bEsEspecifico;
+      return a.nombre_tipo.localeCompare(b.nombre_tipo);
+    });
+  }, [tiposServicioList, resumen?.tipos_servicio_preventivos, selectedArquetipo?.id_tipo_equipo]);
+
+  const serviciosFiltrados = useMemo(() => {
+    return todosLosServicios.filter((s) => {
+      if (planCatFilter !== 'TODOS') {
+        const cat = s.categoria?.toUpperCase();
+        if (planCatFilter === 'INSPECCION' && cat !== 'INSPECCION' && cat !== 'DIAGNOSTICO') return false;
+        if (planCatFilter !== 'INSPECCION' && cat !== planCatFilter) return false;
+      }
+      if (planSearch.trim()) {
+        const q = planSearch.toLowerCase();
+        const matchName = s.nombre_tipo?.toLowerCase().includes(q);
+        const matchCode = s.codigo_tipo?.toLowerCase().includes(q);
+        const matchCat = s.categoria?.toLowerCase().includes(q);
+        return matchName || matchCode || matchCat;
+      }
+      return true;
+    });
+  }, [todosLosServicios, planCatFilter, planSearch]);
+
+  const tiposServicioPreventivos = todosLosServicios;
 
   const handleSaveNewArq = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,6 +275,63 @@ export function TabArquetiposEquipo() {
       },
     });
     setShowPlanModal(false);
+  };
+
+  const handleCreateTipoServicioInline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSrvForm.codigo_tipo.trim() || !newSrvForm.nombre_tipo.trim()) return;
+    try {
+      setCreatingSrv(true);
+      setSrvInlineError(null);
+      const created = await createTipoSrvMut.mutateAsync({
+        codigo_tipo: newSrvForm.codigo_tipo.trim().toUpperCase(),
+        nombre_tipo: newSrvForm.nombre_tipo.trim(),
+        categoria: newSrvForm.categoria,
+        id_tipo_equipo: selectedArquetipo?.id_tipo_equipo,
+        duracion_estimada_horas: Number(newSrvForm.duracion_estimada_horas) || 2,
+        color_hex: newSrvForm.color_hex,
+      });
+
+      const isInsp = created.categoria === 'INSPECCION' || created.nombre_tipo.toLowerCase().includes('inspecci');
+      setPlanForm({
+        ...planForm,
+        id_tipo_servicio: String(created.id_tipo_servicio),
+        nombre_plan: isInsp ? 'Plan de Visita de Inspección Periódica' : `Plan de ${created.nombre_tipo}`,
+        frecuencia_dias: isInsp ? '30' : '90',
+        frecuencia_uso: isInsp ? '100' : '250',
+      });
+      setShowCreateSrvInline(false);
+      setNewSrvForm({
+        codigo_tipo: '',
+        nombre_tipo: '',
+        categoria: 'PREVENTIVO',
+        duracion_estimada_horas: '2',
+        color_hex: '#0284c7',
+      });
+    } catch (err: any) {
+      setSrvInlineError(err.response?.data?.message || err.message || 'Error al crear el tipo de servicio');
+    } finally {
+      setCreatingSrv(false);
+    }
+  };
+
+  const getCategoriaBadge = (cat?: string) => {
+    switch (cat?.toUpperCase()) {
+      case 'PREVENTIVO':
+        return { label: 'Preventivo', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+      case 'INSPECCION':
+        return { label: 'Inspección', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
+      case 'DIAGNOSTICO':
+        return { label: 'Diagnóstico', bg: 'bg-cyan-50 text-cyan-700 border-cyan-200' };
+      case 'CORRECTIVO':
+        return { label: 'Correctivo', bg: 'bg-amber-50 text-amber-700 border-amber-200' };
+      case 'ESPECIALIZADO':
+        return { label: 'Especializado', bg: 'bg-purple-50 text-purple-700 border-purple-200' };
+      case 'EMERGENCIA':
+        return { label: 'Emergencia', bg: 'bg-red-50 text-red-700 border-red-200' };
+      default:
+        return { label: cat || 'General', bg: 'bg-slate-50 text-slate-700 border-slate-200' };
+    }
   };
 
   const handleSaveInPlaceFromArq = async (e: React.FormEvent) => {
@@ -515,14 +624,28 @@ export function TabArquetiposEquipo() {
               <button
                 type="button"
                 onClick={() => {
-                  const firstSrv = tiposServicioPreventivos[0];
+                  const srvDefault =
+                    todosLosServicios.find((s) => s.id_tipo_equipo === selectedArquetipo.id_tipo_equipo) ||
+                    todosLosServicios.find((s) => s.codigo_tipo === 'INSPECCION') ||
+                    todosLosServicios[0];
+                  const isInsp =
+                    srvDefault?.codigo_tipo === 'INSPECCION' ||
+                    srvDefault?.nombre_tipo?.toLowerCase().includes('inspecci');
+
                   setPlanForm({
-                    id_tipo_servicio: firstSrv ? String(firstSrv.id_tipo_servicio) : '',
-                    nombre_plan: firstSrv ? `Plan Preventivo ${firstSrv.nombre_tipo}` : '',
-                    frecuencia_dias: '90',
-                    frecuencia_uso: '250',
+                    id_tipo_servicio: srvDefault ? String(srvDefault.id_tipo_servicio) : '',
+                    nombre_plan: srvDefault
+                      ? isInsp
+                        ? 'Plan de Visita de Inspección Periódica'
+                        : `Plan Preventivo ${srvDefault.nombre_tipo}`
+                      : '',
+                    frecuencia_dias: isInsp ? '30' : '90',
+                    frecuencia_uso: isInsp ? '100' : '250',
                     criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
                   });
+                  setPlanSearch('');
+                  setPlanCatFilter('TODOS');
+                  setShowCreateSrvInline(false);
                   setShowPlanModal(true);
                 }}
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
@@ -999,11 +1122,21 @@ export function TabArquetiposEquipo() {
       {/* MODAL AGREGAR PLAN PREVENTIVO */}
       {showPlanModal && selectedArquetipo && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h4 className="text-base font-bold text-slate-900">
-                Configurar Plan Preventivo
-              </h4>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-emerald-50/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+                  <CalendarClock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-900">
+                    Configurar Plan Preventivo
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Asociar protocolo de servicio periódico a {selectedArquetipo.nombre_tipo}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowPlanModal(false)}
@@ -1012,75 +1145,325 @@ export function TabArquetiposEquipo() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSavePlan} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Tipo de Servicio Preventivo *
-                </label>
-                <select
-                  required
-                  value={planForm.id_tipo_servicio}
-                  onChange={(e) => {
-                    const idSrv = e.target.value;
-                    const srv = tiposServicioPreventivos.find(
-                      (s) => String(s.id_tipo_servicio) === idSrv,
-                    );
-                    setPlanForm({
-                      ...planForm,
-                      id_tipo_servicio: idSrv,
-                      nombre_plan: srv ? `Plan Preventivo ${srv.nombre_tipo}` : planForm.nombre_plan,
-                    });
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-semibold"
-                >
-                  {tiposServicioPreventivos.map((s) => (
-                    <option key={s.id_tipo_servicio} value={s.id_tipo_servicio}>
-                      {s.nombre_tipo} ({s.codigo_tipo})
-                    </option>
-                  ))}
-                </select>
+
+            <div className="p-6 overflow-y-auto space-y-5">
+              {/* 1. SELECCIÓN DE PROTOCOLO / TIPO DE SERVICIO */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    1. Protocolo o Tipo de Servicio *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateSrvInline(!showCreateSrvInline)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>{showCreateSrvInline ? 'Ocultar Creador' : '+ Crear Nuevo Tipo de Servicio'}</span>
+                  </button>
+                </div>
+
+                {/* FORMULARIO INLINE CREAR SERVICIO SI SE ACTIVA */}
+                {showCreateSrvInline && (
+                  <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-blue-600" />
+                        Crear Nuevo Tipo de Servicio para {selectedArquetipo.nombre_tipo}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateSrvInline(false)}
+                        className="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+
+                    {srvInlineError && (
+                      <div className="p-2.5 rounded-lg bg-red-50 text-red-700 text-xs border border-red-200">
+                        {srvInlineError}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Código / Prefijo *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: HVAC_INSP_MENS"
+                          value={newSrvForm.codigo_tipo}
+                          onChange={(e) =>
+                            setNewSrvForm({
+                              ...newSrvForm,
+                              codigo_tipo: e.target.value.toUpperCase(),
+                            })
+                          }
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-mono uppercase bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Categoría *
+                        </label>
+                        <select
+                          value={newSrvForm.categoria}
+                          onChange={(e) => setNewSrvForm({ ...newSrvForm, categoria: e.target.value })}
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
+                        >
+                          <option value="PREVENTIVO">Preventivo</option>
+                          <option value="INSPECCION">Inspección / Rutina</option>
+                          <option value="DIAGNOSTICO">Diagnóstico Técnico</option>
+                          <option value="CORRECTIVO">Correctivo Programado</option>
+                          <option value="ESPECIALIZADO">Especializado</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Nombre del Servicio *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Visita de Inspección y Limpieza de Serpentines"
+                        value={newSrvForm.nombre_tipo}
+                        onChange={(e) => setNewSrvForm({ ...newSrvForm, nombre_tipo: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={creatingSrv}
+                        onClick={handleCreateTipoServicioInline}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        {creatingSrv ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        )}
+                        <span>Guardar y Seleccionar Servicio</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* BUSCADOR Y PÍLDORAS DE CATEGORÍA */}
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre, código (ej: Inspección, HVAC, Preventivo, Bomba)..."
+                      value={planSearch}
+                      onChange={(e) => setPlanSearch(e.target.value)}
+                      className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { key: 'TODOS', label: `Todos (${todosLosServicios.length})` },
+                      { key: 'INSPECCION', label: 'Inspección' },
+                      { key: 'PREVENTIVO', label: 'Preventivo' },
+                      { key: 'CORRECTIVO', label: 'Correctivo' },
+                      { key: 'DIAGNOSTICO', label: 'Diagnóstico' },
+                    ].map((cat) => (
+                      <button
+                        key={cat.key}
+                        type="button"
+                        onClick={() => setPlanCatFilter(cat.key)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                          planCatFilter === cat.key
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* LISTA DE SERVICIOS SELECCIONABLES */}
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white shadow-inner">
+                  {serviciosFiltrados.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400">
+                      No se encontraron servicios que coincidan con la búsqueda.
+                    </div>
+                  ) : (
+                    serviciosFiltrados.map((s) => {
+                      const isSelected = String(s.id_tipo_servicio) === planForm.id_tipo_servicio;
+                      const esEspecifico =
+                        selectedArquetipo.id_tipo_equipo &&
+                        s.id_tipo_equipo === selectedArquetipo.id_tipo_equipo;
+                      const badgeCat = getCategoriaBadge(s.categoria);
+                      return (
+                        <div
+                          key={s.id_tipo_servicio}
+                          onClick={() => {
+                            const isInsp =
+                              s.codigo_tipo === 'INSPECCION' ||
+                              s.nombre_tipo?.toLowerCase().includes('inspecci');
+                            setPlanForm({
+                              ...planForm,
+                              id_tipo_servicio: String(s.id_tipo_servicio),
+                              nombre_plan: isInsp
+                                ? 'Plan de Visita de Inspección Periódica'
+                                : `Plan Preventivo ${s.nombre_tipo}`,
+                              frecuencia_dias: isInsp ? '30' : '90',
+                              frecuencia_uso: isInsp ? '100' : '250',
+                            });
+                          }}
+                          className={`p-3 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
+                            isSelected
+                              ? 'bg-emerald-50/70 border-l-4 border-l-emerald-600'
+                              : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`text-xs font-bold ${
+                                  isSelected ? 'text-emerald-950 font-black' : 'text-slate-800'
+                                }`}
+                              >
+                                {s.nombre_tipo}
+                              </span>
+                              <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {s.codigo_tipo}
+                              </span>
+                              {esEspecifico && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                                  ★ Específico de este equipo
+                                </span>
+                              )}
+                              {s.id_tipo_equipo == null && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                                  Universal
+                                </span>
+                              )}
+                            </div>
+                            {s.descripcion && (
+                              <p className="text-[11px] text-slate-500 truncate max-w-md">
+                                {s.descripcion}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeCat.bg}`}
+                            >
+                              {badgeCat.label}
+                            </span>
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                isSelected
+                                  ? 'border-emerald-600 bg-emerald-600 text-white'
+                                  : 'border-slate-300'
+                              }`}
+                            >
+                              {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
+              {/* 2. NOMBRE DEL PLAN */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nombre del Plan Preventivo *
+                  2. Nombre del Plan de Mantenimiento *
                 </label>
                 <input
                   type="text"
                   required
                   value={planForm.nombre_plan}
                   onChange={(e) => setPlanForm({ ...planForm, nombre_plan: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  placeholder="Ej: Plan de Visita de Inspección cada 30 días / 100 horas"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Nombre descriptivo que verá el técnico y el cliente en la agenda de OTs.
+                </p>
               </div>
 
+              {/* 3. FRECUENCIAS */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Cada cuántos Días *
                   </label>
                   <input
                     type="number"
                     required
+                    min={1}
                     value={planForm.frecuencia_dias}
                     onChange={(e) => setPlanForm({ ...planForm, frecuencia_dias: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-sm bg-white"
                   />
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <span className="text-[10px] text-slate-400">Atajos:</span>
+                    {[
+                      { label: '30 d (Mes)', val: '30' },
+                      { label: '60 d (Bim)', val: '60' },
+                      { label: '90 d (Trim)', val: '90' },
+                      { label: '180 d (Sem)', val: '180' },
+                    ].map((shortcut) => (
+                      <button
+                        key={shortcut.val}
+                        type="button"
+                        onClick={() => setPlanForm({ ...planForm, frecuencia_dias: shortcut.val })}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700"
+                      >
+                        {shortcut.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div>
+
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Cada cuántas Horas de Uso *
                   </label>
                   <input
                     type="number"
                     required
+                    min={1}
                     value={planForm.frecuencia_uso}
                     onChange={(e) => setPlanForm({ ...planForm, frecuencia_uso: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-sm bg-white"
                   />
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <span className="text-[10px] text-slate-400">Atajos:</span>
+                    {[
+                      { label: '100 h', val: '100' },
+                      { label: '250 h', val: '250' },
+                      { label: '500 h', val: '500' },
+                      { label: '1000 h', val: '1000' },
+                    ].map((shortcut) => (
+                      <button
+                        key={shortcut.val}
+                        type="button"
+                        onClick={() => setPlanForm({ ...planForm, frecuencia_uso: shortcut.val })}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700"
+                      >
+                        {shortcut.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
+              {/* 4. REGLA DE DISPARO */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Regla de Activación del Mantenimiento
@@ -1093,30 +1476,53 @@ export function TabArquetiposEquipo() {
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
                 >
                   <option value="LO_QUE_OCURRA_PRIMERO">
-                    Lo que ocurra primero (Días u Horas)
+                    ⚡ Lo que ocurra primero (Días o Horas de horómetro) - Recomendado
                   </option>
-                  <option value="DIAS">Solo por Calendario (Días)</option>
-                  <option value="HORAS">Solo por Uso (Horas de Horómetro)</option>
+                  <option value="DIAS">📅 Solo por Calendario (Días transcurridos)</option>
+                  <option value="HORAS">⏱️ Solo por Uso (Horas registradas en Horómetro)</option>
                 </select>
               </div>
+            </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div className="text-xs text-slate-500">
+                {planForm.id_tipo_servicio ? (
+                  <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Servicio seleccionado listo
+                  </span>
+                ) : (
+                  <span className="text-amber-600 font-semibold">
+                    ⚠️ Selecciona un protocolo de la lista
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setShowPlanModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                  type="button"
+                  disabled={
+                    !planForm.id_tipo_servicio ||
+                    !planForm.nombre_plan.trim() ||
+                    createPlanMut.isPending
+                  }
+                  onClick={handleSavePlan}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm disabled:opacity-50 transition-colors"
                 >
-                  <CheckCircle2 className="h-4 w-4" />
+                  {createPlanMut.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
                   <span>Guardar Plan Preventivo</span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

@@ -272,6 +272,17 @@ export interface ModeloEquipoOem {
   };
 }
 
+export interface TipoServicioEam {
+  id_tipo_servicio: number;
+  codigo_tipo: string;
+  nombre_tipo: string;
+  categoria: string;
+  id_tipo_equipo?: number | null;
+  descripcion?: string | null;
+  duracion_estimada_horas?: number | null;
+  color_hex?: string | null;
+}
+
 export interface ResumenEjecutivoEam {
   magnitudes: number;
   unidades: number;
@@ -280,12 +291,7 @@ export interface ResumenEjecutivoEam {
   arquetipos: number;
   modelos_oem: number;
   equipos_activos: number;
-  tipos_servicio_preventivos: Array<{
-    id_tipo_servicio: number;
-    codigo_tipo: string;
-    nombre_tipo: string;
-    categoria: string;
-  }>;
+  tipos_servicio_preventivos: TipoServicioEam[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -744,3 +750,27 @@ export async function buscarComponentesWmsEam(search?: string): Promise<Componen
   );
   return data;
 }
+
+export async function getTiposServicioEam(idTipoEquipo?: number): Promise<TipoServicioEam[]> {
+  const { data } = await apiClient.get<TipoServicioEam[]>('/catalogos/arquetipos/tipos-servicio', {
+    params: idTipoEquipo ? { id_tipo_equipo: idTipoEquipo } : undefined,
+  });
+  return data;
+}
+
+export async function createTipoServicioEam(payload: {
+  codigo_tipo: string;
+  nombre_tipo: string;
+  categoria: string;
+  id_tipo_equipo?: number;
+  descripcion?: string;
+  duracion_estimada_horas?: number;
+  color_hex?: string;
+}): Promise<TipoServicioEam> {
+  const { data } = await apiClient.post<TipoServicioEam>(
+    '/catalogos/arquetipos/tipos-servicio',
+    payload,
+  );
+  return data;
+}
+

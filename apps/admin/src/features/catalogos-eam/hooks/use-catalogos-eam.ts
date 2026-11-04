@@ -17,6 +17,7 @@ import {
   createModeloOemEam,
   createModuloEam,
   createPlanArquetipoEam,
+  createTipoServicioEam,
   createUnidadEam,
   deleteArquetipoEam,
   deleteAtributoEam,
@@ -37,6 +38,7 @@ import {
   getModuloDetalleEam,
   getModulosEam,
   getResumenEjecutivoEam,
+  getTiposServicioEam,
   getUnidadesEam,
   updateArquetipoEam,
   updateAtributoEam,
@@ -63,6 +65,7 @@ export const EAM_KEYS = {
   modelosOem: (idTipo?: number) => [...EAM_KEYS.all, 'modelos-oem', idTipo || 'all'] as const,
   modeloOemDetalle: (idModelo: number) => [...EAM_KEYS.all, 'modelo-oem', idModelo] as const,
   componentesWms: (search?: string) => [...EAM_KEYS.all, 'componentes-wms', search || ''] as const,
+  tiposServicio: (idTipo?: number) => [...EAM_KEYS.all, 'tipos-servicio', idTipo || 'all'] as const,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -483,3 +486,29 @@ export function useEliminarItemBomOemEam() {
     },
   });
 }
+
+export function useTiposServicioEam(idTipoEquipo?: number) {
+  return useQuery({
+    queryKey: EAM_KEYS.tiposServicio(idTipoEquipo),
+    queryFn: () => getTiposServicioEam(idTipoEquipo),
+  });
+}
+
+export function useCreateTipoServicioEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      codigo_tipo: string;
+      nombre_tipo: string;
+      categoria: string;
+      id_tipo_equipo?: number;
+      descripcion?: string;
+      duracion_estimada_horas?: number;
+      color_hex?: string;
+    }) => createTipoServicioEam(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
