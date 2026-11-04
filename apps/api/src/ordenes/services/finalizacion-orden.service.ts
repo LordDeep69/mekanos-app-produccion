@@ -1399,7 +1399,8 @@ export class FinalizacionOrdenService {
 
     /**
      * Determina el tipo de informe según el equipo/servicio
-     * ✅ FIX 15-DIC-2025: Corregidos nombres de propiedades según schema Prisma
+     * ✅ FIX 15-DIC-2025 / EAM FASE 5: Corregidos nombres de propiedades según schema Prisma
+     * y dispatch basado en tipos_servicio.categoria (enum canónico)
      */
     private determinarTipoInforme(orden: any): TipoInforme {
         // Extraer relaciones con nombres correctos de Prisma
@@ -1408,25 +1409,32 @@ export class FinalizacionOrdenService {
 
         // Determinar por tipo de equipo (usar tipos_equipo?.nombre_tipo)
         const tipoEquipoNombre = (equipo?.tipos_equipo?.nombre_tipo || '').toLowerCase();
-        const tipoServicioCodigo = (tipoServicio?.codigo || '').toUpperCase();
+        const tipoServicioCodigo = (tipoServicio?.codigo_tipo || tipoServicio?.codigo || '').toUpperCase();
         const tipoServicioNombre = (tipoServicio?.nombre_tipo || '').toUpperCase();
+        const categoriaServicio = (tipoServicio?.categoria || '').toUpperCase();
 
-        this.logger.log(`🔍 Determinando tipo informe: tipoEquipo="${tipoEquipoNombre}", servicioCodigo="${tipoServicioCodigo}", servicioNombre="${tipoServicioNombre}"`);
+        this.logger.log(`🔍 Determinando tipo informe: tipoEquipo="${tipoEquipoNombre}", categoria="${categoriaServicio}", servicioCodigo="${tipoServicioCodigo}", servicioNombre="${tipoServicioNombre}"`);
 
-        // Si es CORRECTIVO → CORRECTIVO (independiente del equipo)
-        // ✅ Compatible con CORRECTIVO (antiguo) y GEN_CORR/BOM_CORR (nuevos)
-        if (tipoServicioCodigo.includes('CORR') || tipoServicioNombre.includes('CORRECTIVO')) {
-            this.logger.log(`📋 Tipo informe seleccionado: CORRECTIVO`);
+        // Si es CORRECTIVO / EMERGENCIA / DIAGNOSTICO → CORRECTIVO (independiente del equipo)
+        // Fuente de verdad: tipos_servicio.categoria (enum canónico)
+        if (
+            categoriaServicio === 'CORRECTIVO' ||
+            categoriaServicio === 'EMERGENCIA' ||
+            categoriaServicio === 'DIAGNOSTICO' ||
+            tipoServicioCodigo.includes('CORR') ||
+            tipoServicioNombre.includes('CORRECTIVO')
+        ) {
+            this.logger.log(`📋 Tipo informe seleccionado: CORRECTIVO (por categoria: ${categoriaServicio || 'heurística'})`);
             return 'CORRECTIVO';
         }
 
-        // Si es bomba → BOMBA_A
+        // Si es bomba → BOMBA_A (legacy)
         if (tipoEquipoNombre.includes('bomba')) {
             this.logger.log(`📋 Tipo informe seleccionado: BOMBA_A`);
             return 'BOMBA_A';
         }
 
-        // Si es generador o planta eléctrica
+        // Si es generador o planta eléctrica (legacy)
         if (tipoEquipoNombre.includes('generador') || tipoEquipoNombre.includes('electrogeno') || tipoEquipoNombre.includes('planta') || tipoEquipoNombre.includes('gen')) {
             if (tipoServicioCodigo.includes('TIPO_B') || tipoServicioCodigo.includes('_B') ||
                 tipoServicioNombre.includes('TIPO B') || tipoServicioNombre.includes('B')) {
