@@ -10,6 +10,7 @@ import {
   Plus,
   Ruler,
   Scale,
+  Search,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ import {
 export function TabMagnitudesUom() {
   const { data: magnitudes = [], isLoading } = useMagnitudesEam();
   const [selectedMagCode, setSelectedMagCode] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Estado Conversor Rápido de Unidades (Compacto en 1 Sola Fila)
   const [calcMagCode, setCalcMagCode] = useState<string>('PRESION');
@@ -68,6 +70,34 @@ export function TabMagnitudesUom() {
       setSelectedMagCode(magnitudes[0].codigo_magnitud);
     }
   }, [magnitudes, selectedMagCode]);
+
+  const magnitudesFiltradas = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return magnitudes;
+    return magnitudes.filter((m) => {
+      const matchNombre = m.nombre_magnitud.toLowerCase().includes(q);
+      const matchCodigo = m.codigo_magnitud.toLowerCase().includes(q);
+      const matchDesc = (m.descripcion || '').toLowerCase().includes(q);
+      const matchBase = (m.unidad_base_codigo || '').toLowerCase().includes(q);
+      const matchUnidades = m.unidades_medida?.some(
+        (u) =>
+          u.nombre.toLowerCase().includes(q) ||
+          u.simbolo.toLowerCase().includes(q) ||
+          u.codigo.toLowerCase().includes(q),
+      );
+      return matchNombre || matchCodigo || matchDesc || matchBase || matchUnidades;
+    });
+  }, [magnitudes, searchQuery]);
+
+  // Si el usuario filtra y la magnitud activa queda fuera de los resultados, auto-seleccionar la primera coincidencia
+  useEffect(() => {
+    if (searchQuery.trim() && magnitudesFiltradas.length > 0) {
+      const exists = magnitudesFiltradas.some((m) => m.codigo_magnitud === selectedMagCode);
+      if (!exists) {
+        setSelectedMagCode(magnitudesFiltradas[0].codigo_magnitud);
+      }
+    }
+  }, [searchQuery, magnitudesFiltradas, selectedMagCode]);
 
   const selectedMagnitud = useMemo(
     () => magnitudes.find((m) => m.codigo_magnitud === selectedMagCode) || magnitudes[0] || null,
@@ -344,7 +374,7 @@ export function TabMagnitudesUom() {
       {/* MAESTRO-DETALLE VISIBLE DE INMEDIATO SIN SCROLL: 11 MAGNITUDES Y SUS UNIDADES */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Columna Izquierda: Lista de Magnitudes Físicas */}
-        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -358,62 +388,126 @@ export function TabMagnitudesUom() {
             <button
               type="button"
               onClick={openNewMagnitud}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors shrink-0"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Nueva Magnitud</span>
             </button>
           </div>
 
-          <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
-            {magnitudes.map((mag) => {
-              const isSelected = selectedMagnitud?.codigo_magnitud === mag.codigo_magnitud;
-              const numUnidades = mag.unidades_medida?.length || 0;
-              return (
-                <div
-                  key={mag.id_magnitud}
-                  onClick={() => setSelectedMagCode(mag.codigo_magnitud)}
-                  className={`p-4 cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                    isSelected
-                      ? 'bg-blue-50/80 border-l-4 border-l-blue-600'
-                      : 'hover:bg-slate-50'
-                  }`}
+          {/* Buscador Rápido y Reactivo de Magnitudes */}
+          <div className="p-3 bg-slate-50/80 border-b border-slate-100 space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar magnitud, unidad o símbolo (ej: Potencia, TR, PSI, kW)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setSearchQuery('');
+                }}
+                className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-2xs font-medium"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                  title="Limpiar búsqueda (Esc)"
                 >
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center flex-wrap gap-2">
-                      <span className="text-sm font-bold text-slate-900">
-                        {mag.nombre_magnitud}
-                      </span>
-                      {mag.unidad_base_codigo && (
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
-                          Principal: {mag.unidad_base_codigo}
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {searchQuery.trim() && (
+              <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+                <span>
+                  Mostrando <strong className="text-blue-600 font-bold">{magnitudesFiltradas.length}</strong> de {magnitudes.length} magnitudes
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
+                >
+                  Restablecer lista
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+            {magnitudesFiltradas.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                  <Search className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-800">No se encontraron magnitudes</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    No hay coincidencias para &ldquo;<span className="text-slate-600 font-medium">{searchQuery}</span>&rdquo;
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Limpiar filtro</span>
+                </button>
+              </div>
+            ) : (
+              magnitudesFiltradas.map((mag) => {
+                const isSelected = selectedMagnitud?.codigo_magnitud === mag.codigo_magnitud;
+                const numUnidades = mag.unidades_medida?.length || 0;
+                return (
+                  <div
+                    key={mag.id_magnitud}
+                    onClick={() => setSelectedMagCode(mag.codigo_magnitud)}
+                    className={`p-4 cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-blue-50/80 border-l-4 border-l-blue-600'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center flex-wrap gap-2">
+                        <span className="text-sm font-bold text-slate-900">
+                          {mag.nombre_magnitud}
                         </span>
+                        {mag.unidad_base_codigo && (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                            Principal: {mag.unidad_base_codigo}
+                          </span>
+                        )}
+                      </div>
+                      {mag.descripcion && (
+                        <div className="text-xs text-slate-500">{mag.descripcion}</div>
                       )}
                     </div>
-                    {mag.descripcion && (
-                      <div className="text-xs text-slate-500">{mag.descripcion}</div>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                      {numUnidades} unidades
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditMagnitud(mag);
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                      title="Editar magnitud"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
+                        {numUnidades} unidades
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditMagnitud(mag);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="Editar magnitud"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
