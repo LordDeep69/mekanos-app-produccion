@@ -23,10 +23,26 @@ const PUBLIC_PREFIXES = [
   '/images',
 ];
 
+// Cookies de sesión de NextAuth (v5 y v4, HTTP y HTTPS)
+const SESSION_COOKIE_NAMES = [
+  'authjs.session-token',
+  '__Secure-authjs.session-token',
+  'next-auth.session-token',
+  '__Secure-next-auth.session-token',
+];
+
+function clearSessionCookies(response: NextResponse) {
+  for (const name of SESSION_COOKIE_NAMES) {
+    response.cookies.delete(name);
+  }
+  return response;
+}
+
 export default auth((req) => {
   const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
   const pathname = nextUrl.pathname;
+  const sessionError = req.auth?.error === 'RefreshTokenError';
+  const isLoggedIn = !!req.auth && !sessionError;
 
   // Verificar si es una ruta pública
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
@@ -35,6 +51,17 @@ export default auth((req) => {
   );
 
   // Rutas públicas: permitir acceso
+  // Sesión con refresh token inválido: limpiar cookie y forzar re-login.
+  // Evita el bucle /dashboard -> API 401 -> /login -> /dashboard.
+  if (sessionError && !isPublicPrefix) {
+    if (pathname === '/login') {
+      return clearSessionCookies(NextResponse.next());
+    }
+    const loginUrl = new URL('/login', nextUrl);
+    loginUrl.searchParams.set('error', 'SessionExpired');
+    return clearSessionCookies(NextResponse.redirect(loginUrl));
+  }
+
   if (isPublicRoute || isPublicPrefix) {
     // Si está logueado y trata de ir a /login, redirigir a dashboard
     if (isLoggedIn && pathname === '/login') {

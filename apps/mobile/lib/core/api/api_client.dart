@@ -268,16 +268,10 @@ class ApiClient {
     String? nextTarget;
 
     if (currentBase == Environment.productionApiUrl) {
-      // Túnel de producción caído -> Conmutar a servidor local (puerto 3001)
+      // Túnel de producción caído -> Conmutar a servidor local NestJS (puerto 3000)
       nextTarget = Environment.localApiUrl;
       debugPrint(
         '⚠️ [API-FAILOVER] Túnel de producción inaccesible. Conmutando a servidor local: $nextTarget',
-      );
-    } else if (currentBase == Environment.localApiUrl) {
-      // Puerto 3001 no respondió -> Conmutar a puerto directo 3000 de NestJS
-      nextTarget = Environment.localDirectApiUrl;
-      debugPrint(
-        '⚠️ [API-FAILOVER] Puerto 3001 no respondió. Conmutando a NestJS directo: $nextTarget',
       );
     }
 

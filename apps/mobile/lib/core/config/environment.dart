@@ -2,7 +2,7 @@
 ///
 /// Soporta:
 /// - Producción vía Cloudflare Tunnel (https://api.mekanosapp.dpdns.org/api)
-/// - Red Local Wi-Fi para pruebas (http://192.168.1.7:3001/api y fallback a 3000)
+/// - Red Local Wi-Fi para pruebas (http://192.168.1.7:3000/api)
 /// - Emulador Android: 10.0.2.2
 /// - Auto-failover inteligente cuando el túnel de Cloudflare esté deshabilitado (Error 1033 / 502 / Offline)
 library;
@@ -21,14 +21,14 @@ class Environment {
   /// 🏠 IP de red local del servidor (PC anfitrión en la red Wi-Fi local)
   static const String _localNetworkIp = '192.168.1.7';
 
-  /// 🔌 Puerto solicitado para servidor local (Next.js proxy / API)
-  static const int localPort = 3001;
+  /// 🔌 Puerto del backend NestJS API (Donde residen los endpoints /api/auth/login, /api/sync, etc.)
+  static const int localPort = 3000;
 
-  /// 🔌 Puerto directo de NestJS API
+  /// 🔌 Puerto alternativo directo
   static const int directApiPort = 3000;
 
   /// 🔧 CAMBIO PROVISIONAL PARA PRUEBAS EN LOCAL:
-  /// - true: Conecta inmediatamente al servidor local (192.168.1.7:3001 con fallback a 3000)
+  /// - true: Conecta inmediatamente al servidor local (192.168.1.7:3000)
   ///         tanto en Debug como en Release (APK de pruebas).
   /// - false: Usa el túnel de producción por defecto, con conmutación automática si está caído.
   /// 👉 Para restablecer cuando termine la prueba, cambiar a: false.
