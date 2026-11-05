@@ -98,7 +98,7 @@ export async function getOrdenes(
 /**
  * Obtener una orden por ID
  */
-export async function getOrden(id: number): Promise<{ success: boolean; data: Orden }> {
+export async function getOrden(id: number | string): Promise<{ success: boolean; data: Orden }> {
     const response = await apiClient.get<{ success: boolean; data: Orden }>(
         `${ORDENES_BASE}/${id}`
     );

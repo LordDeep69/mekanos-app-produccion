@@ -308,11 +308,11 @@ export function useOrdenes(params?: OrdenesQueryParams) {
 /**
  * Hook para obtener una orden por ID
  */
-export function useOrden(id: number) {
+export function useOrden(id: number | string) {
     return useQuery({
         queryKey: [...ORDENES_KEY, id],
         queryFn: () => getOrden(id),
-        enabled: !!id,
+        enabled: Boolean(id) && String(id) !== "NaN",
         ...CacheStrategy.DYNAMIC, // Datos dinámicos - 2 min cache
     });
 }

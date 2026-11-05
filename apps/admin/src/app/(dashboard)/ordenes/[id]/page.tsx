@@ -3312,7 +3312,8 @@ function ModalCancelarOrden({
 
 export default function OrdenDetallePage() {
     const params = useParams();
-    const id = Number(params.id);
+    const rawId = String(params?.id || "");
+    const id = /^\d+$/.test(rawId) ? Number(rawId) : rawId;
     const [activeTab, setActiveTab] = useState<TabId>('general');
 
     // Estados para Modales

@@ -3068,7 +3068,19 @@ export class OrdenesController {
     console.log(`\n========================================`);
     console.log(`🚀 HOLA, SINCRONIZACIÓN REMOTA - Orden ID: ${id}`);
     console.log(`========================================\n`);
-    const result = await this.queryBus.execute(new GetOrdenByIdQuery(parseInt(id, 10)));
+    let ordenIdNumerico = parseInt(id, 10);
+    if (isNaN(ordenIdNumerico) || id.toUpperCase().startsWith("OS-")) {
+      const encontrada = await this.prisma.ordenes_servicio.findFirst({
+        where: { numero_orden: id.trim() },
+        select: { id_orden_servicio: true },
+      });
+      if (!encontrada) {
+        throw new NotFoundException(`Orden de servicio con código '${id}' no encontrada`);
+      }
+      ordenIdNumerico = encontrada.id_orden_servicio;
+    }
+
+    const result = await this.queryBus.execute(new GetOrdenByIdQuery(ordenIdNumerico));
 
     return {
       success: true,
