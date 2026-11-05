@@ -2137,6 +2137,7 @@ export class FinalizacionOrdenService {
         const ordenExistente = await this.prisma.ordenes_servicio.findUnique({
             where: { id_orden_servicio: idOrden },
             select: {
+                id_estado_actual: true,
                 fecha_inicio_real: true,
                 fecha_fin_real: true,
                 duracion_minutos: true,
@@ -2272,15 +2273,15 @@ export class FinalizacionOrdenService {
                 data: {
                     id_orden_servicio: idOrden,
                     // En resubida el estado anterior y el nuevo son COMPLETADA;
-                    // la acción distingue la corrección de una finalización normal.
+                    // en finalización normal, el estado anterior es el que tenía la orden (ej: EN_PROCESO)
                     id_estado_anterior: esResubida
                         ? idEstadoCompletada
-                        : undefined,
+                        : (ordenExistente?.id_estado_actual ?? undefined),
                     id_estado_nuevo: idEstadoCompletada, // ✅ Usar parámetro precargado
-                    accion: esResubida ? 'RESUBIDA_TECNICO' : undefined,
+                    accion: esResubida ? 'RESUBIDA_TECNICO' : 'FINALIZAR',
                     motivo_cambio: esResubida
                         ? 'Corrección autorizada por el administrador'
-                        : undefined,
+                        : 'Finalización de orden de servicio',
                     fecha_cambio: new Date(),
                     observaciones: esResubida
                         ? `Orden corregida y resubida. ${observaciones}`

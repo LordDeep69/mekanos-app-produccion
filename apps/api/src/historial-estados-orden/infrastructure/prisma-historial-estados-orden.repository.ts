@@ -9,7 +9,7 @@ export class PrismaHistorialEstadosOrdenRepository
 {
   constructor(private readonly prisma: PrismaService) {}
 
-  // INCLUDE para lista (orden + estado_anterior + estado_nuevo)
+  // INCLUDE para lista (solo orden_servicio, los estados se resuelven en memoria para evitar el error 42712 de Postgres)
   private readonly INCLUDE_RELATIONS_LIST = {
     ordenes_servicio: {
       select: {
@@ -17,25 +17,9 @@ export class PrismaHistorialEstadosOrdenRepository
         numero_orden: true,
       },
     },
-    estados_orden_historial_estados_orden_id_estado_anteriorToestados_orden: {
-      select: {
-        id_estado: true,
-        codigo_estado: true,
-        nombre_estado: true,
-        color_hex: true,
-      },
-    },
-    estados_orden_historial_estados_orden_id_estado_nuevoToestados_orden: {
-      select: {
-        id_estado: true,
-        codigo_estado: true,
-        nombre_estado: true,
-        color_hex: true,
-      },
-    },
   };
 
-  // INCLUDE para detalle (lista + estado_anterior)
+  // INCLUDE para detalle (orden_servicio con datos extendidos)
   private readonly INCLUDE_RELATIONS_DETAIL = {
     ordenes_servicio: {
       select: {
@@ -45,23 +29,47 @@ export class PrismaHistorialEstadosOrdenRepository
         id_equipo: true,
       },
     },
-    estados_orden_historial_estados_orden_id_estado_anteriorToestados_orden: {
-      select: {
-        id_estado: true,
-        codigo_estado: true,
-        nombre_estado: true,
-        color_hex: true,
-      },
-    },
-    estados_orden_historial_estados_orden_id_estado_nuevoToestados_orden: {
-      select: {
-        id_estado: true,
-        codigo_estado: true,
-        nombre_estado: true,
-        color_hex: true,
-      },
-    },
   };
+
+  /**
+   * Vincula datos de estados (anterior y nuevo) en memoria evitando el error 42712 de PostgreSQL
+   * por nombres de alias truncados a 63 bytes en Prisma.
+   */
+  private async adjuntarEstados(historiales: any[]): Promise<any[]> {
+    if (!historiales || historiales.length === 0) return historiales;
+
+    const estadoIds = [
+      ...new Set(
+        historiales
+          .flatMap((h: any) => [h.id_estado_anterior, h.id_estado_nuevo])
+          .filter((id: any) => id != null && !isNaN(Number(id))),
+      ),
+    ];
+
+    const estadosList =
+      estadoIds.length > 0
+        ? await this.prisma.estados_orden.findMany({
+            where: { id_estado: { in: estadoIds } },
+            select: {
+              id_estado: true,
+              codigo_estado: true,
+              nombre_estado: true,
+              color_hex: true,
+            },
+          })
+        : [];
+
+    const estadosMap = new Map(estadosList.map((e) => [e.id_estado, e]));
+
+    for (const h of historiales) {
+      h.estados_orden_historial_estados_orden_id_estado_anteriorToestados_orden =
+        h.id_estado_anterior ? estadosMap.get(h.id_estado_anterior) || null : null;
+      h.estados_orden_historial_estados_orden_id_estado_nuevoToestados_orden =
+        h.id_estado_nuevo ? estadosMap.get(h.id_estado_nuevo) || null : null;
+    }
+
+    return historiales;
+  }
 
   /**
    * Vincula datos de usuario y nombre de persona sin depender de relaciones rotas en Prisma
@@ -168,6 +176,7 @@ export class PrismaHistorialEstadosOrdenRepository
       include: this.INCLUDE_RELATIONS_DETAIL,
     });
 
+    await this.adjuntarEstados([historial]);
     await this.adjuntarUsuarios([historial]);
     return HistorialEstadosOrdenMapper.toResponse(historial);
   }
@@ -193,6 +202,7 @@ export class PrismaHistorialEstadosOrdenRepository
       this.prisma.historial_estados_orden.count(),
     ]);
 
+    await this.adjuntarEstados(historiales);
     await this.adjuntarUsuarios(historiales);
 
     return {
@@ -235,6 +245,7 @@ export class PrismaHistorialEstadosOrdenRepository
       }),
     ]);
 
+    await this.adjuntarEstados(historiales);
     await this.adjuntarUsuarios(historiales);
 
     return {
@@ -258,6 +269,7 @@ export class PrismaHistorialEstadosOrdenRepository
       return null;
     }
 
+    await this.adjuntarEstados([historial]);
     await this.adjuntarUsuarios([historial]);
     return HistorialEstadosOrdenMapper.toResponse(historial);
   }
