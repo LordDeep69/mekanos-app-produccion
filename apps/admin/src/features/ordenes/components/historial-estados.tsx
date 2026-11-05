@@ -104,7 +104,7 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
 
         async function fetchHistorial() {
             try {
-                const response = await apiClient.get<any>(`/historial-estados-orden/orden/${idOrden}`);
+                const response = await apiClient.get<any>(`/historial-estados-orden/orden/${idOrden}?limit=50`);
                 const data = response.data;
                 const items = Array.isArray(data) ? data : data?.data || [];
                 if (isMounted) {
