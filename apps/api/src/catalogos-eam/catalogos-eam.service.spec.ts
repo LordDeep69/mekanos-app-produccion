@@ -46,6 +46,34 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
           }
           return Promise.resolve(null);
         }),
+        findFirst: jest.fn().mockImplementation(({ where }) => {
+          const cod = (where.codigo?.equals || where.codigo || '').toUpperCase();
+          if (cod === 'KW') {
+            return Promise.resolve({
+              codigo: 'KW',
+              nombre: 'Kilovatio',
+              simbolo: 'kW',
+              id_magnitud: 1,
+              tipo_magnitud: 'POTENCIA',
+              factor_a: 1,
+              factor_b: 0,
+              es_unidad_base: true,
+            });
+          }
+          if (cod === 'HP') {
+            return Promise.resolve({
+              codigo: 'HP',
+              nombre: 'Caballos de Fuerza',
+              simbolo: 'HP',
+              id_magnitud: 1,
+              tipo_magnitud: 'POTENCIA',
+              factor_a: 0.7457,
+              factor_b: 0,
+              es_unidad_base: false,
+            });
+          }
+          return Promise.resolve(null);
+        }),
         create: jest.fn().mockImplementation(({ data }) => Promise.resolve(data)),
       },
       atributos_tecnicos: {
@@ -208,8 +236,8 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
     expect(mockPrisma.catalogo_magnitudes.findMany).toHaveBeenCalled();
   });
 
-  it('debe convertir unidades de medida usando el motor UoM', () => {
-    const res = service.convertirUom({
+  it('debe convertir unidades de medida usando el motor UoM', async () => {
+    const res = await service.convertirUom({
       valor: 100,
       unidadOrigen: 'KW',
       unidadDestino: 'HP',
