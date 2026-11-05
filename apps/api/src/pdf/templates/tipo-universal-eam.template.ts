@@ -154,30 +154,6 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
       margin-top: 2px;
       font-family: monospace;
     }
-    .placa-subsystem-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      padding: 10px 12px;
-    }
-    .placa-subsystem-card {
-      flex: 1;
-      min-width: 45%;
-      border: 1px solid #E2E8F0;
-      border-radius: 6px;
-      overflow: hidden;
-      background: #FFFFFF;
-    }
-    .placa-subsystem-title {
-      background: #F1F5F9;
-      color: #1E293B;
-      font-size: 9px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 4px 8px;
-      border-bottom: 1px solid #E2E8F0;
-      border-left: 3px solid ${MEKANOS_COLORS.secondary};
     }
     .placa-attr-table {
       width: 100%;
@@ -367,7 +343,6 @@ function generarPlacaTecnicaUniversalHTML(
   const ubicacion = eq?.ubicacion || datos.sede || 'PLANTA / CUARTO DE MÁQUINAS';
 
   const kpis: KpiHeader[] = placa.kpis || [];
-  const bloques: BloquePlaca[] = placa.bloques || [];
 
   return `
   <div class="placa-universal-card">
@@ -394,36 +369,6 @@ function generarPlacaTecnicaUniversalHTML(
         <div class="placa-kpi-item">
           <div class="placa-kpi-label">${kpi.etiqueta}</div>
           <div class="placa-kpi-val">${kpi.valorTexto}</div>
-        </div>
-      `,
-        )
-        .join('')}
-    </div>
-    `
-        : ''
-    }
-
-    ${
-      bloques.length > 0
-        ? `
-    <div class="placa-subsystem-grid">
-      ${bloques
-        .map(
-          (bloque) => `
-        <div class="placa-subsystem-card">
-          <div class="placa-subsystem-title">${bloque.nombreModulo}</div>
-          <table class="placa-attr-table">
-            ${bloque.atributos
-              .map(
-                (attr) => `
-              <tr>
-                <td class="placa-attr-label">${attr.etiqueta}</td>
-                <td class="placa-attr-value">${attr.valor}</td>
-              </tr>
-            `,
-              )
-              .join('')}
-          </table>
         </div>
       `,
         )

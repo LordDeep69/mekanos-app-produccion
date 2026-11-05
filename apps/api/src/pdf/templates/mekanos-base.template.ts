@@ -2004,27 +2004,6 @@ export const generarDatosClienteConFichaTecnica = (
           `).join('')}
         </div>
         ` : ''}
-
-        ${placa?.bloques && placa.bloques.length > 0 ? `
-        <!-- Sub-sistemas Modulares EAM -->
-        <div style="grid-column: span 4; padding-top: 6px; margin-top: 4px; border-top: 1px dashed #cbd5e1; display: grid; grid-template-columns: repeat(${Math.min(placa.bloques.length, 2)}, 1fr); gap: 6px;">
-          ${placa.bloques.map((b: any) => `
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 6px;">
-              <div style="font-size: 8px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; margin-bottom: 3px; text-transform: uppercase;">
-                ${b.nombreModulo}
-              </div>
-              <table style="width: 100%; border-collapse: collapse; font-size: 7.5px;">
-                ${b.atributos.map((attr: any) => `
-                  <tr>
-                    <td style="color: #64748b; font-weight: 600; padding: 1px 0; width: 55%;">${attr.etiqueta}</td>
-                    <td style="color: #0f172a; font-weight: 600; padding: 1px 0; text-align: right;">${attr.valor}</td>
-                  </tr>
-                `).join('')}
-              </table>
-            </div>
-          `).join('')}
-        </div>
-        ` : ''}
       </div>
     </div>
 

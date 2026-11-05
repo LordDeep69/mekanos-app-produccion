@@ -234,10 +234,8 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
       expect(html).toContain('125 PSI');
       expect(html).toContain('Caudal FAD');
       expect(html).toContain('28 CFM');
-      expect(html).toContain('UNIDAD DE COMPRESIÓN');
-      expect(html).toContain('Tornillo Rotativo Lubricado');
-      expect(html).toContain('MOTOR ELÉCTRICO PRINCIPAL');
-      expect(html).toContain('SIEMENS');
+      // Sub-sistemas eliminados de cabecera por directiva UX ejecutiva
+      expect(html).not.toContain('UNIDAD DE COMPRESIÓN');
 
       // Checklist dinámico por subsistemas
       expect(html).toContain('SUBSISTEMA: ASPIRACIÓN Y FILTRADO');
