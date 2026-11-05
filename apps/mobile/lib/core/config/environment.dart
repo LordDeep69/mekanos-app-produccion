@@ -32,7 +32,7 @@ class Environment {
   ///         tanto en Debug como en Release (APK de pruebas).
   /// - false: Usa el túnel de producción por defecto, con conmutación automática si está caído.
   /// 👉 Para restablecer cuando termine la prueba, cambiar a: false.
-  static const bool useLocalServerProvisional = true;
+  static const bool useLocalServerProvisional = false;
 
   /// URL activa en tiempo de ejecución (permite failover dinámico)
   static String? _dynamicApiUrl;
