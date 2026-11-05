@@ -59,6 +59,17 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: '0.1.0',
   },
 
+  // ✅ PROXY REWRITES: Permite que solicitudes al puerto 3001 bajo /api/... se redirijan
+  // transparentemente al backend NestJS en el puerto 3000
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:3000/api/:path*',
+      },
+    ];
+  },
+
   // Ignorar errores de TypeScript durante build (deploy rápido)
   // Los errores son de compatibilidad de tipos entre zod v4 y react-hook-form
   typescript: {

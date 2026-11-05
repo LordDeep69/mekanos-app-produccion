@@ -64,6 +64,11 @@ class ApiClient {
     dioInstance.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          // Sincronizar baseUrl con la URL activa en Environment si ocurrió un failover
+          if (options.baseUrl != Environment.apiBaseUrl) {
+            options.baseUrl = Environment.apiBaseUrl;
+          }
+
           final token = await _storage.getAccessToken();
           if (Environment.isDebug) {
             debugPrint(
@@ -89,6 +94,16 @@ class ApiClient {
           return handler.next(response);
         },
         onError: (error, handler) async {
+          // ✅ AUTO-FAILOVER INTELIGENTE:
+          // Si el túnel de producción está caído (Cloudflare 1033 / 502 / timeout) o el host actual falla,
+          // conmuta automáticamente al servidor local (puerto 3001 y fallback a 3000)
+          if (_isConnectivityOrServerDown(error)) {
+            final failoverResponse = await _attemptFailover(error);
+            if (failoverResponse != null) {
+              return handler.resolve(failoverResponse);
+            }
+          }
+
           // ✅ ENTERPRISE: Manejar 401 Unauthorized con auto-refresh
           if (error.response?.statusCode == 401) {
             debugPrint('🔐 [API] Token expirado - intentando refresh...');
@@ -213,6 +228,84 @@ class ApiClient {
     }
   }
   
+  /// Detecta si un error corresponde a caída de conectividad, túnel o servidor
+  bool _isConnectivityOrServerDown(DioException error) {
+    if (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError) {
+      return true;
+    }
+
+    final statusCode = error.response?.statusCode;
+    if (statusCode != null) {
+      // 502 Bad Gateway, 503 Unavailable, 504 Gateway Timeout,
+      // 520-524 Cloudflare origin errors, 530 Cloudflare Tunnel error (1033)
+      if (statusCode >= 502 && statusCode <= 530) {
+        return true;
+      }
+    }
+
+    final responseStr = error.response?.data?.toString() ?? '';
+    final messageStr = error.message?.toString() ?? '';
+    final combined = '$responseStr $messageStr'.toLowerCase();
+
+    if (combined.contains('1033') ||
+        combined.contains('tunnel') ||
+        combined.contains('cloudflare') ||
+        combined.contains('failed host lookup') ||
+        combined.contains('connection refused') ||
+        combined.contains('network is unreachable')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Ejecuta el failover hacia el siguiente host candidato y reintenta la petición
+  Future<Response<dynamic>?> _attemptFailover(DioException error) async {
+    final currentBase = error.requestOptions.baseUrl;
+    String? nextTarget;
+
+    if (currentBase == Environment.productionApiUrl) {
+      // Túnel de producción caído -> Conmutar a servidor local (puerto 3001)
+      nextTarget = Environment.localApiUrl;
+      debugPrint(
+        '⚠️ [API-FAILOVER] Túnel de producción inaccesible. Conmutando a servidor local: $nextTarget',
+      );
+    } else if (currentBase == Environment.localApiUrl) {
+      // Puerto 3001 no respondió -> Conmutar a puerto directo 3000 de NestJS
+      nextTarget = Environment.localDirectApiUrl;
+      debugPrint(
+        '⚠️ [API-FAILOVER] Puerto 3001 no respondió. Conmutando a NestJS directo: $nextTarget',
+      );
+    }
+
+    if (nextTarget == null || nextTarget == currentBase) {
+      return null;
+    }
+
+    // Actualizar configuración activa y Dio
+    Environment.setActiveApiUrl(nextTarget);
+    dio.options.baseUrl = nextTarget;
+
+    try {
+      final retryOptions = error.requestOptions;
+      retryOptions.baseUrl = nextTarget;
+
+      debugPrint('🔁 [API-FAILOVER] Reintentando petición en: ${retryOptions.uri}');
+      final response = await dio.fetch(retryOptions);
+      debugPrint('✅ [API-FAILOVER] Conexión exitosa a: $nextTarget (${response.statusCode})');
+      return response;
+    } catch (retryError) {
+      debugPrint('❌ [API-FAILOVER] Error al contactar $nextTarget: $retryError');
+      if (retryError is DioException && _isConnectivityOrServerDown(retryError)) {
+        return await _attemptFailover(retryError);
+      }
+      return null;
+    }
+  }
+
   /// Emite evento de autenticación expirada
   void _emitAuthExpired() {
     _ref.read(authExpiredEventProvider.notifier).state = DateTime.now();

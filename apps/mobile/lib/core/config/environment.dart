@@ -1,60 +1,104 @@
 /// Configuración de entorno para la app Mekanos
 ///
-/// IMPORTANTE: Esta clase detecta automáticamente el entorno
-/// - Emulador Android: 10.0.2.2 (localhost del host)
-/// - Dispositivo físico: IP de red local del servidor
-/// - Web: localhost directo
+/// Soporta:
+/// - Producción vía Cloudflare Tunnel (https://api.mekanosapp.dpdns.org/api)
+/// - Red Local Wi-Fi para pruebas (http://192.168.1.7:3001/api y fallback a 3000)
+/// - Emulador Android: 10.0.2.2
+/// - Auto-failover inteligente cuando el túnel de Cloudflare esté deshabilitado (Error 1033 / 502 / Offline)
 library;
 
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 class Environment {
   Environment._();
 
-  /// ✅ Backend en producción (Cloudflare Tunnel)
+  /// 🌐 Backend en producción (Cloudflare Tunnel)
   static const String _productionApiUrl =
       'https://api.mekanosapp.dpdns.org/api';
 
-  /// ✅ IP del servidor en red local (tu PC) - Solo para desarrollo
-  static const String _localNetworkIp = '192.168.1.76';
-  static const int _backendPort = 3000;
+  /// 🏠 IP de red local del servidor (PC anfitrión en la red Wi-Fi local)
+  static const String _localNetworkIp = '192.168.1.7';
 
-  /// 🔧 CONFIGURACIÓN: Cambiar a true para usar backend local en desarrollo
-  /// false = usar Render (recomendado para pruebas de integración)
-  /// true = usar localhost (solo si tienes el backend corriendo localmente)
-  static const bool _useLocalBackendInDebug = false;
+  /// 🔌 Puerto solicitado para servidor local (Next.js proxy / API)
+  static const int localPort = 3001;
 
-  /// URL base del backend según el entorno de ejecución
+  /// 🔌 Puerto directo de NestJS API
+  static const int directApiPort = 3000;
+
+  /// 🔧 CAMBIO PROVISIONAL PARA PRUEBAS EN LOCAL:
+  /// - true: Conecta inmediatamente al servidor local (192.168.1.7:3001 con fallback a 3000)
+  ///         tanto en Debug como en Release (APK de pruebas).
+  /// - false: Usa el túnel de producción por defecto, con conmutación automática si está caído.
+  /// 👉 Para restablecer cuando termine la prueba, cambiar a: false.
+  static const bool useLocalServerProvisional = true;
+
+  /// URL activa en tiempo de ejecución (permite failover dinámico)
+  static String? _dynamicApiUrl;
+
+  /// URL base del backend actualmente activa
   static String get apiBaseUrl {
-    // 🚀 PRODUCCIÓN: Siempre usar Render en RELEASE mode
-    if (kReleaseMode) {
-      return _productionApiUrl;
+    if (_dynamicApiUrl != null) {
+      return _dynamicApiUrl!;
     }
+    return _defaultApiUrl;
+  }
 
-    // 🔧 DESARROLLO: Usar Render por defecto, o localhost si está configurado
-    if (!_useLocalBackendInDebug) {
-      return _productionApiUrl;
-    }
+  /// Establece dinámicamente la URL base (usado por el failover automático)
+  static void setActiveApiUrl(String url) {
+    debugPrint('🔄 [Environment] Conmutando URL base activa a: $url');
+    _dynamicApiUrl = url;
+  }
 
-    // Usar localhost/emulador según plataforma
+  /// Restablece la URL a la configuración predeterminada
+  static void resetActiveApiUrl() {
+    debugPrint('🔄 [Environment] Restableciendo URL base a la predeterminada');
+    _dynamicApiUrl = null;
+  }
+
+  /// URL local según la plataforma (puerto 3001)
+  static String get localApiUrl {
     if (kIsWeb) {
-      return 'http://localhost:$_backendPort/api';
+      return 'http://localhost:$localPort/api';
     }
-
     if (Platform.isAndroid) {
-      // Emulador Android usa 10.0.2.2
-      return 'http://10.0.2.2:$_backendPort/api';
+      return 'http://$_localNetworkIp:$localPort/api';
+    }
+    return 'http://localhost:$localPort/api';
+  }
+
+  /// URL de respaldo local directa a NestJS (puerto 3000)
+  static String get localDirectApiUrl {
+    if (kIsWeb) {
+      return 'http://localhost:$directApiPort/api';
+    }
+    if (Platform.isAndroid) {
+      return 'http://$_localNetworkIp:$directApiPort/api';
+    }
+    return 'http://localhost:$directApiPort/api';
+  }
+
+  /// URL de producción
+  static String get productionApiUrl => _productionApiUrl;
+
+  /// URL predeterminada al arrancar
+  static String get _defaultApiUrl {
+    // Si está habilitado el modo provisional para pruebas locales:
+    if (useLocalServerProvisional) {
+      return localApiUrl;
     }
 
-    // iOS Simulator y otros usan localhost
-    return 'http://localhost:$_backendPort/api';
+    // Modo producción estándar:
+    return _productionApiUrl;
   }
 
   /// Timeout para requests HTTP (en segundos)
-  /// ✅ FIX: Aumentado a 320s porque /finalizar-completo tarda ~25s
+  /// Aumentado a 320s porque /finalizar-completo tarda ~25s
   static const int requestTimeout = 320;
+
+  /// Timeout corto para verificaciones de salud / failover (en segundos)
+  static const int healthCheckTimeout = 4;
 
   /// Si estamos en modo debug
   static bool get isDebug {
