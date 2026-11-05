@@ -373,9 +373,15 @@ const correctivoStyles = `
  * ✅ REDISEÑO 06-FEB-2026: Secciones dedicadas por naturaleza de actividad
  */
 export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): string {
+  const esGenerador = esEquipoGenerador(datos);
   const tieneMediciones = Array.isArray(datos.mediciones) && datos.mediciones.length > 0;
   const tieneDatosModulo =
     datos.datosModulo && Object.values(datos.datosModulo).some((v) => v != null && v !== 0);
+
+  // Parámetros operativos: Para generadores requiere datosModulo; para no-generadores requiere mediciones o datosModulo
+  const tieneParametrosOperativos = esGenerador
+    ? Boolean(tieneDatosModulo)
+    : Boolean(tieneMediciones || tieneDatosModulo);
 
   // MULTI-EQUIPOS: Determinar si usar tablas multi-equipo
   const esMultiEquipo =
@@ -421,8 +427,8 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         <!-- 2. DATOS DEL CLIENTE Y SERVICIO (siempre visible) -->
         ${generarDatosCliente(datos)}
         
-        <!-- 3. REGISTRO DE DATOS DEL MÓDULO DE CONTROL (solo si aplica) -->
-        ${tieneDatosModulo ? generarDatosModulo(datos) : ''}
+        <!-- 3. PARÁMETROS OPERATIVOS / MÓDULO DE CONTROL (según la naturaleza del activo) -->
+        ${tieneParametrosOperativos ? generarParametrosOperativosYModulo(datos) : ''}
         
         ${esMultiEquipo && datos.datosPorEquipo && datos.datosPorEquipo.length > 0
       ? generarNarrativaCorrectivoPorEquipo(datos.datosPorEquipo)
@@ -441,10 +447,10 @@ export function generarCorrectivoOrdenHTML(datos: DatosCorrectivoOrdenPDF): stri
         `
     }
         
-        <!-- 8. MEDICIONES TÉCNICAS (solo si aplica) -->
+        <!-- 8. MEDICIONES TÉCNICAS (solo si aplica y no fueron completamente resumidas arriba) -->
         ${esMultiEquipo && datos.medicionesPorEquipo
       ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
-      : tieneMediciones
+      : (tieneMediciones && (esGenerador || (datos.mediciones?.length || 0) > 4))
         ? generarMediciones(datos.mediciones!)
         : ''
     }
@@ -492,11 +498,72 @@ const generarDatosCliente = (datos: DatosCorrectivoOrdenPDF): string => {
   return generarDatosClienteConFichaTecnica(datos as any, { extraHtml: extraEstadoInicial });
 };
 
-const generarDatosModulo = (datos: DatosCorrectivoOrdenPDF): string => {
-  const modulo = datos.datosModulo || {};
+/**
+ * ✅ Determina si el activo corresponde a la familia de Generadores Eléctricos / Plantas
+ */
+function esEquipoGenerador(datos: DatosCorrectivoOrdenPDF): boolean {
+  const tipo = (
+    datos.tipoEquipo ||
+    datos.equipoDetalle?.tipoEquipoNombre ||
+    datos.equipoDetalle?.tipoEquipo ||
+    datos.placaUniversal?.categoriaCanonica ||
+    ''
+  ).toUpperCase();
+  const codigo = (datos.equipoDetalle?.codigoEquipo || '').toUpperCase();
 
-  return `
-    <div class="section">
+  return (
+    tipo.includes('GEN') ||
+    tipo.includes('PLANTA') ||
+    codigo.startsWith('GEN-') ||
+    datos.placaUniversal?.categoriaCanonica === 'GENERADOR'
+  );
+}
+
+/**
+ * ✅ Limpia y formatea el nombre del parámetro técnico para presentación corporativa
+ */
+function formatearLabelParametro(parametro: string): string {
+  if (!parametro) return 'Parámetro';
+  const p = parametro.trim();
+  const pUpper = p.toUpperCase();
+
+  if (pUpper.includes('VOLTAJE') || pUpper.includes('TENSIÓN') || pUpper.includes('TENSION')) {
+    return 'Voltaje de Operación';
+  }
+  if (pUpper.includes('AMPERAJE') || pUpper.includes('CORRIENTE')) {
+    return 'Corriente / Amperaje';
+  }
+  if (pUpper.includes('PRESIÓN DE DESCARGA') || pUpper.includes('PRESION DE DESCARGA') || pUpper.includes('ALTA')) {
+    return 'Presión de Descarga';
+  }
+  if (pUpper.includes('PRESIÓN DE SUCCIÓN') || pUpper.includes('PRESION DE SUCCION') || pUpper.includes('BAJA')) {
+    return 'Presión de Succión';
+  }
+  if (pUpper.includes('PRESOSTATO') && pUpper.includes('ENCENDIDO')) {
+    return 'Presión de Encendido';
+  }
+  if (pUpper.includes('PRESOSTATO') && pUpper.includes('APAGADO')) {
+    return 'Presión de Apagado';
+  }
+  if (pUpper.includes('VIBRACIÓN') || pUpper.includes('VIBRACION')) {
+    return 'Nivel de Vibración';
+  }
+  if (pUpper.includes('TEMPERATURA')) {
+    return 'Temperatura';
+  }
+
+  let limpio = p.replace(/^medici[oó]n\s+de\s+/i, '').trim();
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1);
+}
+
+const generarParametrosOperativosYModulo = (datos: DatosCorrectivoOrdenPDF): string => {
+  const esGen = esEquipoGenerador(datos);
+
+  // ─── CASO 1: Generador Eléctrico -> Módulo de Control de 8 parámetros clásico ───
+  if (esGen) {
+    const modulo = datos.datosModulo || {};
+    return `
+    <div class="section" style="page-break-inside: avoid; break-inside: avoid;">
         <div class="section-subtitle">REGISTRO DE DATOS DEL MÓDULO DE CONTROL</div>
         <div class="mediciones-grid">
             <div class="medicion-item">
@@ -533,7 +600,57 @@ const generarDatosModulo = (datos: DatosCorrectivoOrdenPDF): string => {
             </div>
         </div>
     </div>
-`;
+    `;
+  }
+
+  // ─── CASO 2: Activo Polimórfico (Bomba, Compresor, Chiller, Motor) -> Parámetros Reales ───
+  const items: Array<{ label: string; value: string }> = [];
+
+  if (Array.isArray(datos.mediciones) && datos.mediciones.length > 0) {
+    for (const m of datos.mediciones) {
+      if (m.valorDespues != null && m.valorDespues !== '' && m.valorDespues !== '0' && m.valorDespues !== '-') {
+        items.push({
+          label: formatearLabelParametro(m.parametro),
+          value: `${m.valorDespues}${m.unidad ? ` ${m.unidad}` : ''}`,
+        });
+      }
+    }
+  }
+
+  // Fallback a datosModulo si no había mediciones detalladas pero sí valores capturados
+  if (items.length === 0 && datos.datosModulo) {
+    const mod = datos.datosModulo;
+    if (mod.voltaje) items.push({ label: 'Voltaje de Operación', value: `${mod.voltaje} V` });
+    if (mod.corriente) items.push({ label: 'Corriente / Amperaje', value: `${mod.corriente} A` });
+    if (mod.rpm) items.push({ label: 'Velocidad de Operación', value: `${mod.rpm} RPM` });
+    if (mod.presionAceite) items.push({ label: 'Presión de Trabajo', value: `${mod.presionAceite} PSI` });
+    if (mod.frecuencia) items.push({ label: 'Frecuencia', value: `${mod.frecuencia} Hz` });
+    if (mod.temperaturaRefrigerante) items.push({ label: 'Temperatura', value: `${mod.temperaturaRefrigerante} °C` });
+    if (mod.horasTrabajo) items.push({ label: 'Horas de Trabajo', value: `${mod.horasTrabajo} Hrs` });
+  }
+
+  if (items.length === 0) return '';
+
+  const numCols = items.length <= 2 ? items.length : items.length === 3 ? 3 : 4;
+  const gridColumnsStyle = `grid-template-columns: repeat(${numCols}, 1fr);`;
+
+  return `
+    <div class="section" style="page-break-inside: avoid; break-inside: avoid;">
+        <div class="section-subtitle">REGISTRO DE PARÁMETROS OPERATIVOS</div>
+        <div class="mediciones-grid" style="${gridColumnsStyle}">
+            ${items
+              .map(
+                (item) => `
+            <div class="medicion-item">
+                <div class="medicion-label">${item.label}</div>
+                <div class="medicion-value">${item.value}</div>
+            </div>
+            `,
+              )
+              .join('')}
+        </div>
+    </div>
+  `;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
