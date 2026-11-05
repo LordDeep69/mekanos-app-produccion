@@ -310,11 +310,11 @@ function generarDatosServicioUniversal(datos: DatosOrdenPDF): string {
   const clienteNit = eq?.clienteNit || '';
   const direccion = eq?.direccion || datos.direccion || 'N/A';
   const sede = eq?.sede || datos.sede || '';
-  const fechaServicio = formatearFechaServicio(
-    datos.fecha,
-    datos.fechaSalida,
-    datos.diasDiferentes,
-  );
+  const fechaServicio = formatearFechaServicio({
+    fecha: datos.fecha,
+    fechaSalida: datos.fechaSalida,
+    diasDiferentes: datos.diasDiferentes,
+  });
 
   return `
   <div class="section">
@@ -478,7 +478,11 @@ function generarChecklistUniversal(actividades: any[]): string {
             <tbody>
               ${items
                 .map((act) => {
-                  const estRaw = (act.estado || 'NA').toUpperCase();
+                  const estRaw = (
+                    (act as any).resultado ||
+                    act.estado ||
+                    'NA'
+                  ).toUpperCase();
                   const badgeClass =
                     estRaw === 'B' || estRaw === 'BUENO'
                       ? 'badge-act-b'
