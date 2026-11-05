@@ -625,6 +625,7 @@ export class PdfController {
         descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
         resultado: (act.estado as any) || 'NA',
         observaciones: act.observaciones || '',
+        tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
       })) || [],
       mediciones: orden.mediciones_servicio?.filter((med: any) => !med.excluido_pdf).map((med: any) => ({
         parametro: med.parametros_medicion?.nombre_parametro || 'N/A',
@@ -1675,6 +1676,7 @@ export class PdfController {
         descripcion: act.catalogo_actividades?.descripcion_actividad || act.descripcion || 'N/A',
         resultado: (act.estado as any) || 'NA',
         observaciones: act.observaciones || '',
+        tipoActividad: act.catalogo_actividades?.tipo_actividad || undefined,
       })) || [],
       // Mediciones flat (para backward compatibility y single-equipo)
       mediciones: orden.mediciones_servicio?.filter((med: any) => !med.excluido_pdf).map((med: any) => ({

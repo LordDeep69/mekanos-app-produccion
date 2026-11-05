@@ -262,6 +262,117 @@ describe('FASE 5: Plantilla PDF Universal EAM y Cascada Sync Móvil', () => {
       expect(html).toContain('Carlos Mendoza');
       expect(html).toContain('Ing. Fernando Gómez');
     });
+
+    it('debe renderizar Chiller HVAC con cabecera premium Mekanos, checklist espaciado y segregación de mediciones', () => {
+      const mockChiller: DatosOrdenPDF = {
+        numeroOrden: 'OS-202611-0024',
+        cliente: 'Empresa Test Refactorizada SAS',
+        direccion: 'Calle 100 #45-67',
+        sede: 'Sede Principal',
+        marcaEquipo: 'TRANE',
+        serieEquipo: 'SN-CHILLER-001',
+        tipoEquipo: 'AIRE ACONDICIONADO / CHILLER' as any,
+        tipoServicio: 'PREVENTIVO_A',
+        fecha: '05/11/2026',
+        tecnico: 'JUAN GRAU',
+        horaEntrada: '05:03',
+        horaSalida: '06:05',
+        numeroVisitaCaso: 1,
+        tipoVisita: 'AISLADA',
+        equipoDetalle: {
+          codigoEquipo: 'HVAC-TEST-VLGNBH',
+          nombreEquipo: 'Chiller Trane 20 TR',
+          tipoEquipo: 'AIRE ACONDICIONADO / CHILLER',
+          tipoEquipoNombre: 'AIRE ACONDICIONADO / CHILLER',
+          marca: 'TRANE',
+          modelo: 'CGAM 020',
+          serie: 'SN-CHILLER-001',
+          ubicacion: 'Azotea Torre A',
+          cliente: 'Empresa Test Refactorizada SAS',
+        },
+        placaUniversal: {
+          categoriaCanonica: 'AIRE ACONDICIONADO / CHILLER',
+          marca: 'TRANE',
+          modelo: 'CGAM 020',
+          serie: 'SN-CHILLER-001',
+          potenciaPrincipal: '20 TR',
+          alimentacionElectrica: '220V · 60 Hz · 3F',
+          kpis: [
+            { clave: 'capacidad_enfriamiento', etiqueta: 'Capacidad de Enfriamiento', valor: '20 TR', destacado: true },
+            { clave: 'gas_refrigerante', etiqueta: 'Gas Refrigerante', valor: 'R410A', destacado: true },
+          ],
+          subsistemas: [],
+        },
+        actividades: [
+          {
+            sistema: 'Sistema de Enfriamiento',
+            descripcion: 'INSPECCIÓN VISUAL DE SERPENTÍN EVAPORADOR Y CONDENSADOR',
+            resultado: 'B' as any,
+            observaciones: '',
+            tipoActividad: 'INSPECCION',
+          },
+          {
+            sistema: 'Sistema de Enfriamiento',
+            descripcion: 'LIMPIEZA Y DESINFECCIÓN DE SERPENTINES Y BANDEJA DE CONDENSADOS',
+            resultado: 'M' as any,
+            observaciones: '',
+            tipoActividad: 'LIMPIEZA',
+          },
+          {
+            sistema: 'Sistema de Enfriamiento',
+            descripcion: 'VERIFICACIÓN DE PRESIÓN DE SUCCIÓN / BAJA (PSI)',
+            resultado: 'B' as any,
+            observaciones: '',
+            tipoActividad: 'MEDICION',
+          },
+          {
+            sistema: 'Sistema de Enfriamiento',
+            descripcion: 'VERIFICACIÓN DE PRESIÓN DE DESCARGA / ALTA (PSI)',
+            resultado: 'B' as any,
+            observaciones: '',
+            tipoActividad: 'MEDICION',
+          },
+          {
+            sistema: 'General',
+            descripcion: 'MEDICIÓN DE TEMPERATURA DE ENTRADA Y SALIDA (DELTA T)',
+            resultado: 'B' as any,
+            observaciones: 'TEMP: 80',
+            tipoActividad: 'MEDICION',
+          },
+        ],
+        mediciones: [],
+        evidencias: [],
+      };
+
+      const html = generarTipoUniversalEamHTML(mockChiller);
+
+      // 1. Cabecera oficial Mekanos Base
+      expect(html).toContain('DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO');
+      expect(html).toContain('TAG: HVAC-TEST-VLGNBH');
+      expect(html).toContain('Chiller Trane 20 TR');
+      expect(html).toContain('TRANE');
+      expect(html).toContain('CGAM 020');
+      expect(html).toContain('20 TR');
+      expect(html).toContain('R410A');
+
+      // 2. Checklist sólo contiene 2 tareas de inspección/limpieza y NO las mediciones
+      expect(html).toContain('PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS (2 TAREAS)');
+      expect(html).toContain('INSPECCIÓN VISUAL DE SERPENTÍN EVAPORADOR Y CONDENSADOR');
+      expect(html).toContain('LIMPIEZA Y DESINFECCIÓN DE SERPENTINES');
+      
+      const checklistIdx = html.indexOf('PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS');
+      const medicionesIdx = html.indexOf('PARÁMETROS OPERATIVOS');
+      const checklistPart = html.substring(checklistIdx, medicionesIdx);
+      expect(checklistPart).not.toContain('VERIFICACIÓN DE PRESIÓN DE SUCCIÓN');
+      expect(checklistPart).not.toContain('DELTA T');
+
+      // 3. Parámetros operativos y mediciones
+      expect(html).toContain('REGISTRO DE PARÁMETROS OPERATIVOS');
+      expect(html).toContain('Presión de Succión');
+      expect(html).toContain('Presión de Descarga');
+      expect(html).toContain('Temperatura');
+      expect(html).toContain('80 °C');
+    });
   });
 
   describe('3. Cascada de Parámetros en 3 Niveles (Equipo >> Modelo OEM >> Catálogo)', () => {

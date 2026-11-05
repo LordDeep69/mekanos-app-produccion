@@ -7,10 +7,10 @@
  * Plantas de Emergencia, Sistemas de Bombeo y cualquier arquetipo futuro del Hub).
  * 
  * - Encabezado corporativo Mekanos con logo embebido base64
+ * - Ficha Técnica Unificada del Cliente y Activo (Estándar Mekanos Base)
  * - Trazabilidad de caso / encadenamiento fractal de visitas
- * - Placa Técnica Modular Universal (EquipoSpecsReader + JSONB + KPIs)
- * - Matriz de Telemetría Adaptativa con semáforos de evaluación
- * - Checklist dinámico agrupado por sub-sistemas
+ * - Checklist ergonómico y espacioso segregado de mediciones
+ * - Sección dedicada: Registro de Parámetros Operativos y Telemetría Técnica
  * - Repuestos y fluidos WMS segregados
  * - Galería fotográfica cronológica con lotes
  * - Firmas digitales y pie de página corporativo
@@ -20,8 +20,8 @@ import {
   baseStyles,
   DatosOrdenPDF,
   EvidenciasPorEquipoPDF,
-  formatearFechaServicio,
   generarChecklistMultiEquipo,
+  generarDatosClienteConFichaTecnica,
   generarHeaderConLogo,
   generarLeyendaEquipos,
   generarMedicionesMultiEquipo,
@@ -32,7 +32,6 @@ import {
 import {
   EquipoSpecsReader,
   DatosPlacaUniversal,
-  BloquePlaca,
   KpiHeader,
 } from '../../equipos/services/equipo-specs.reader';
 
@@ -54,6 +53,93 @@ const limpiarPrefijosCaption = (caption: string): string => {
     limpio = limpio.replace(re, '');
   }
   return limpio;
+};
+
+/**
+ * Detecta si una actividad representa una medición o parámetro operacional
+ * que debe ser segregado del checklist hacia la sección de telemetría/parámetros.
+ */
+export const esActividadMedicion = (act: any): boolean => {
+  if (act.tipoActividad) return act.tipoActividad === 'MEDICION';
+  const desc = (act.descripcion || '').toLowerCase();
+  
+  // Excluir ajustes mecánicos de tensión en correas o bandas de transmisión
+  if (desc.includes('banda') || desc.includes('correa')) {
+    return false;
+  }
+  
+  // Excluir pruebas funcionales de verificación de switches o presostatos
+  if (desc.includes('presostato') && (desc.includes('verific') || desc.includes('revis') || desc.includes('prueba'))) {
+    return false;
+  }
+  
+  return (
+    desc.includes('medición') ||
+    desc.includes('medicion') ||
+    desc.includes('presión de') ||
+    desc.includes('presion de') ||
+    desc.includes('voltaje') ||
+    desc.includes('tensión eléctrica') ||
+    desc.includes('tension electrica') ||
+    desc.includes('tensión vac') ||
+    desc.includes('tensión salida') ||
+    desc.includes('amperaje') ||
+    desc.includes('corriente') ||
+    desc.includes('temperatura') ||
+    desc.includes('delta t') ||
+    desc.includes('consumo eléctrico') ||
+    desc.includes('consumo electrico') ||
+    desc.includes('vibración') ||
+    desc.includes('vibracion') ||
+    desc.includes('rpm') ||
+    (desc.includes('medir') && !desc.includes('revisar'))
+  );
+};
+
+export const deducirUnidadParametro = (descripcion: string): string => {
+  const d = (descripcion || '').toUpperCase();
+  if (d.includes('PSI') || d.includes('PRESIÓN') || d.includes('PRESION')) return 'PSI';
+  if (d.includes('VAC') || d.includes('VOLTIOS') || d.includes('VOLTAJE')) return 'VAC';
+  if (d.includes('AMPERAJE') || d.includes('CORRIENTE') || d.includes('AMP')) return 'A';
+  if (d.includes('TEMPERATURA') || d.includes('DELTA T') || d.includes('°C')) return '°C';
+  if (d.includes('RPM')) return 'RPM';
+  if (d.includes('HZ') || d.includes('FRECUENCIA')) return 'Hz';
+  if (d.includes('CFM')) return 'CFM';
+  if (d.includes('M3/H') || d.includes('M³/H') || d.includes('CAUDAL')) return 'm³/h';
+  return '';
+};
+
+export const formatearLabelParametroUniversal = (descripcion: string): string => {
+  const d = (descripcion || '').toUpperCase();
+  if (d.includes('SUCCIÓN') || d.includes('SUCCION') || d.includes('BAJA')) {
+    return 'Presión de Succión (Baja)';
+  }
+  if (d.includes('DESCARGA') || d.includes('ALTA')) {
+    return 'Presión de Descarga (Alta)';
+  }
+  if (d.includes('VOLTAJE') || d.includes('TENSIÓN') || d.includes('TENSION')) {
+    return 'Voltaje de Alimentación';
+  }
+  if (d.includes('AMPERAJE') || d.includes('CORRIENTE') || d.includes('CONSUMO ELÉCTRICO') || d.includes('CONSUMO ELECTRICO')) {
+    return 'Consumo Eléctrico / Amperaje';
+  }
+  if (d.includes('DELTA T') || d.includes('TEMPERATURA')) {
+    return 'Temperatura / Delta T';
+  }
+  if (d.includes('VIBRACIÓN') || d.includes('VIBRACION')) {
+    return 'Nivel de Vibración';
+  }
+  if (d.includes('ACEITE') && d.includes('PRESIÓN')) {
+    return 'Presión de Aceite';
+  }
+
+  let limpio = (descripcion || '')
+    .replace(/^MEDICI[ÓO]N\s+DE\s+/i, '')
+    .replace(/^VERIFICACI[ÓO]N\s+DE\s+/i, '')
+    .replace(/^REVISI[ÓO]N\s+DE\s+/i, '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim();
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 };
 
 export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
@@ -91,92 +177,7 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
   <style>
     ${baseStyles}
 
-    /* Estilos Especializados para la Placa Técnica Universal EAM */
-    .placa-universal-card {
-      border: 1.5px solid #CBD5E1;
-      border-radius: 8px;
-      background: #FFFFFF;
-      margin-bottom: 14px;
-      overflow: hidden;
-      page-break-inside: avoid;
-    }
-    .placa-universal-header {
-      background: linear-gradient(135deg, ${MEKANOS_COLORS.primary} 0%, #1A365D 100%);
-      color: #FFFFFF;
-      padding: 8px 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .placa-universal-header .tag-clase {
-      font-size: 9px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      background: rgba(255, 255, 255, 0.15);
-      padding: 3px 8px;
-      border-radius: 4px;
-    }
-    .placa-universal-header .tag-codigo {
-      font-size: 11px;
-      font-weight: 900;
-      letter-spacing: 0.5px;
-      color: #93C5FD;
-    }
-    .placa-universal-kpi-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 8px 12px;
-      background: #F8FAFC;
-      border-bottom: 1px solid #E2E8F0;
-    }
-    .placa-kpi-item {
-      flex: 1;
-      min-width: 100px;
-      background: #FFFFFF;
-      border: 1px solid #E2E8F0;
-      border-radius: 6px;
-      padding: 6px 8px;
-      text-align: center;
-    }
-    .placa-kpi-label {
-      font-size: 8px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #64748B;
-      letter-spacing: 0.3px;
-    }
-    .placa-kpi-val {
-      font-size: 11px;
-      font-weight: 900;
-      color: #0F172A;
-      margin-top: 2px;
-      font-family: monospace;
-    }
-    }
-    .placa-attr-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 8.5px;
-    }
-    .placa-attr-table td {
-      padding: 3px 6px;
-      border-bottom: 1px solid #F1F5F9;
-      vertical-align: middle;
-    }
-    .placa-attr-label {
-      color: #64748B;
-      font-weight: 600;
-      width: 45%;
-    }
-    .placa-attr-value {
-      color: #0F172A;
-      font-weight: 800;
-      font-family: monospace;
-    }
-
-    /* Tabla de Mediciones y Telemetría Adaptativa */
+    /* Estilos Especializados para Badges de Telemetría */
     .telemetria-badge-normal {
       background: #DCFCE7;
       color: #166534;
@@ -208,13 +209,13 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
       display: inline-block;
     }
 
-    /* Badges de Actividades */
-    .badge-act-b { background: #DCFCE7; color: #166534; font-weight: 900; padding: 2px 5px; border-radius: 3px; font-size: 8.5px; border: 1px solid #86EFAC; }
-    .badge-act-r { background: #FEF3C7; color: #92400E; font-weight: 900; padding: 2px 5px; border-radius: 3px; font-size: 8.5px; border: 1px solid #FCD34D; }
-    .badge-act-m { background: #FEE2E2; color: #991B1B; font-weight: 900; padding: 2px 5px; border-radius: 3px; font-size: 8.5px; border: 1px solid #FCA5A5; }
-    .badge-act-c { background: #DBEAFE; color: #1E40AF; font-weight: 900; padding: 2px 5px; border-radius: 3px; font-size: 8.5px; border: 1px solid #93C5FD; }
-    .badge-act-a { background: #E0E7FF; color: #3730A3; font-weight: 900; padding: 2px 5px; border-radius: 3px; font-size: 8.5px; border: 1px solid #C7D2FE; }
-    .badge-act-na { background: #F1F5F9; color: #64748B; font-weight: 900; padding: 2px 5px; border-radius: 3px; font-size: 8.5px; border: 1px solid #CBD5E1; }
+    /* Badges de Actividades con diseño premium tipo cápsula */
+    .badge-act-b { background: #DCFCE7; color: #15803D; font-weight: 800; padding: 3px 8px; border-radius: 4px; font-size: 8.5px; border: 1px solid #86EFAC; display: inline-block; min-width: 58px; text-align: center; }
+    .badge-act-r { background: #FEF3C7; color: #B45309; font-weight: 800; padding: 3px 8px; border-radius: 4px; font-size: 8.5px; border: 1px solid #FCD34D; display: inline-block; min-width: 58px; text-align: center; }
+    .badge-act-m { background: #FEE2E2; color: #B91C1C; font-weight: 800; padding: 3px 8px; border-radius: 4px; font-size: 8.5px; border: 1px solid #FCA5A5; display: inline-block; min-width: 58px; text-align: center; }
+    .badge-act-c { background: #DBEAFE; color: #1D4ED8; font-weight: 800; padding: 3px 8px; border-radius: 4px; font-size: 8.5px; border: 1px solid #93C5FD; display: inline-block; min-width: 58px; text-align: center; }
+    .badge-act-a { background: #E0E7FF; color: #4338CA; font-weight: 800; padding: 3px 8px; border-radius: 4px; font-size: 8.5px; border: 1px solid #C7D2FE; display: inline-block; min-width: 58px; text-align: center; }
+    .badge-act-na { background: #F1F5F9; color: #64748B; font-weight: 800; padding: 3px 8px; border-radius: 4px; font-size: 8.5px; border: 1px solid #CBD5E1; display: inline-block; min-width: 58px; text-align: center; }
   </style>
 </head>
 <body>
@@ -232,43 +233,40 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
       esMultiEquipo,
     )}
 
-    <!-- 3. DATOS DEL CLIENTE, SEDE Y SERVICIO CON TRAZABILIDAD FRACTAL -->
-    ${generarDatosServicioUniversal(datos)}
+    <!-- 3. DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO (ESTÁNDAR UNIFICADO MEKANOS BASE) -->
+    ${generarDatosClienteConFichaTecnica(datos)}
 
-    <!-- 4. PLACA TÉCNICA MODULAR UNIVERSAL EAM (JSONB + KPIS + SUBSISTEMAS) -->
-    ${generarPlacaTecnicaUniversalHTML(placaUniversal, datos)}
-
-    <!-- 5. CHECKLIST DE INSPECCIÓN DINÁMICO POR SUBSISTEMAS -->
+    <!-- 4. CHECKLIST DE INSPECCIÓN DINÁMICO POR SUBSISTEMAS (SIN MEDICIONES CRÍTICAS) -->
     ${
       esMultiEquipo && datos.actividadesPorEquipo
         ? generarChecklistMultiEquipo(datos.actividadesPorEquipo)
         : generarChecklistUniversal(datos.actividades || [])
     }
 
-    <!-- 6. MATRIZ DE MEDICIONES Y TELEMETRÍA TÉCNICA -->
+    <!-- 5. REGISTRO DE PARÁMETROS OPERATIVOS Y TELEMETRÍA TÉCNICA -->
     ${
       esMultiEquipo && datos.medicionesPorEquipo
         ? generarMedicionesMultiEquipo(datos.medicionesPorEquipo)
         : generarMedicionesUniversal(datos)
     }
 
-    <!-- 7. REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO WMS -->
+    <!-- 6. REPUESTOS, INSUMOS Y FLUIDOS DE SERVICIO WMS -->
     ${generarSeccionRepuestosSegregados(datos.repuestosDetallados, datos.repuestosWms, datos.tipoServicio)}
 
-    <!-- 8. GALERÍA FOTOGRÁFICA DE EVIDENCIAS -->
+    <!-- 7. GALERÍA FOTOGRÁFICA DE EVIDENCIAS -->
     ${
       esMultiEquipo && datos.evidenciasPorEquipo && datos.evidenciasPorEquipo.length > 0
         ? generarEvidenciasMultiEquipo(datos.evidenciasPorEquipo, datos.lotesGaleria)
         : generarEvidenciasUniversal(datos.evidencias || [], datos.lotesGaleria)
     }
 
-    <!-- 9. OBSERVACIONES Y DIAGNÓSTICO -->
+    <!-- 8. OBSERVACIONES Y DIAGNÓSTICO -->
     ${generarObservacionesUniversal(datos)}
 
-    <!-- 10. FIRMAS DIGITALES Y CIERRE -->
+    <!-- 9. FIRMAS DIGITALES Y CIERRE -->
     ${generarFirmasUniversal(datos)}
 
-    <!-- 11. PIE DE PÁGINA CORPORATIVO -->
+    <!-- 10. PIE DE PÁGINA CORPORATIVO -->
     ${generarFooterCorporativo()}
   </div>
 </body>
@@ -280,207 +278,111 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
 // SUB-RENDERIZADORES ATÓMICOS DEL TEMPLATE UNIVERSAL
 // ════════════════════════════════════════════════════════════════════════════
 
-function generarDatosServicioUniversal(datos: DatosOrdenPDF): string {
-  const eq = datos.equipoDetalle;
-  const clienteNombre = eq?.cliente || datos.cliente || 'CLIENTE MEKANOS';
-  const clienteNit = eq?.clienteNit || '';
-  const direccion = eq?.direccion || datos.direccion || 'N/A';
-  const sede = eq?.sede || datos.sede || '';
-  const fechaServicio = formatearFechaServicio({
-    fecha: datos.fecha,
-    fechaSalida: datos.fechaSalida,
-    diasDiferentes: datos.diasDiferentes,
-  });
-
-  return `
-  <div class="section">
-    <table class="datos-table">
-      <tr>
-        <td class="label">CLIENTE:</td>
-        <td class="value">${clienteNombre}${clienteNit ? ` (${clienteNit})` : ''}</td>
-        <td class="label">ORDEN DE SERVICIO:</td>
-        <td class="value"><strong>${datos.numeroOrden}</strong></td>
-      </tr>
-      <tr>
-        <td class="label">SEDE / UBICACIÓN:</td>
-        <td class="value">${sede ? `${sede} · ` : ''}${direccion}</td>
-        <td class="label">FECHA SERVICIO:</td>
-        <td class="value">${fechaServicio}</td>
-      </tr>
-      <tr>
-        <td class="label">TÉCNICO ASIGNADO:</td>
-        <td class="value">${datos.tecnico || 'Personal de Operaciones'}</td>
-        <td class="label">HORARIO:</td>
-        <td class="value">${datos.horaEntrada || '--:--'} a ${datos.horaSalida || '--:--'}</td>
-      </tr>
-      ${
-        datos.numeroVisitaCaso
-          ? `
-      <tr>
-        <td class="label">TRAZABILIDAD CASO:</td>
-        <td class="value" colspan="3">
-          <span style="background: #EFF6FF; color: #1E40AF; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid #BFDBFE;">
-            Visita #${datos.numeroVisitaCaso}${datos.tipoVisita ? ` (${datos.tipoVisita})` : ''}
-          </span>
-          ${datos.numeroOrdenPadre ? `<span style="color: #64748B; font-size: 8px; margin-left: 6px;">Orden anterior: ${datos.numeroOrdenPadre}</span>` : ''}
-        </td>
-      </tr>
-      `
-          : ''
-      }
-    </table>
-  </div>
-  `;
-}
-
-function generarPlacaTecnicaUniversalHTML(
-  placa: DatosPlacaUniversal,
-  datos: DatosOrdenPDF,
-): string {
-  const eq = datos.equipoDetalle;
-  const codigoEquipo = eq?.codigoEquipo || 'S/C';
-  const nombreEquipo = eq?.nombreEquipo || `${placa.marca} ${placa.modelo || ''}`.trim();
-  const ubicacion = eq?.ubicacion || datos.sede || 'PLANTA / CUARTO DE MÁQUINAS';
-
-  const kpis: KpiHeader[] = placa.kpis || [];
-
-  return `
-  <div class="placa-universal-card">
-    <div class="placa-universal-header">
-      <div>
-        <span class="tag-clase">${placa.categoriaCanonica || 'ACTIVO'}</span>
-        <strong style="margin-left: 6px; font-size: 11px;">${nombreEquipo}</strong>
-      </div>
-      <div class="tag-codigo">TAG: ${codigoEquipo}</div>
-    </div>
-
-    <div style="padding: 6px 12px; background: #FFFFFF; font-size: 9px; color: #334155; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between;">
-      <div><strong>Marca:</strong> ${placa.marca} &nbsp;|&nbsp; <strong>Modelo:</strong> ${placa.modelo || 'N/A'} &nbsp;|&nbsp; <strong>Serie:</strong> ${placa.serie}</div>
-      <div><strong>Ubicación:</strong> ${ubicacion}</div>
-    </div>
-
-    ${
-      kpis.length > 0
-        ? `
-    <div class="placa-universal-kpi-bar">
-      ${kpis
-        .map(
-          (kpi) => `
-        <div class="placa-kpi-item">
-          <div class="placa-kpi-label">${kpi.etiqueta}</div>
-          <div class="placa-kpi-val">${kpi.valorTexto}</div>
-        </div>
-      `,
-        )
-        .join('')}
-    </div>
-    `
-        : ''
-    }
-  </div>
-  `;
-}
-
 function generarChecklistUniversal(actividades: any[]): string {
-  if (!actividades || actividades.length === 0) {
+  // Filtrar estrictamente actividades de inspección/mantenimiento (las mediciones van separadas)
+  const actividadesInspeccion = (actividades || []).filter((act) => !esActividadMedicion(act));
+
+  if (!actividadesInspeccion || actividadesInspeccion.length === 0) {
     return `
-    <div class="section">
-      <div class="section-title">📋 ACTIVIDADES Y PROTOCOLO DE INSPECCIÓN</div>
+    <div class="section" style="page-break-inside: avoid; margin-bottom: 12px;">
+      <div class="section-title">📋 PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS</div>
       <div style="padding: 10px; text-align: center; color: #64748B; font-size: 9px;">
-        No se registraron actividades específicas en esta orden.
+        No se registraron actividades específicas de inspección en esta orden.
       </div>
     </div>
     `;
   }
 
-  // Agrupar actividades por sistema
+  // Agrupar actividades por subsistema
   const sistemasMap = new Map<string, any[]>();
-  for (const act of actividades) {
+  for (const act of actividadesInspeccion) {
     const sis = (act.sistema || 'GENERAL').toUpperCase();
     if (!sistemasMap.has(sis)) sistemasMap.set(sis, []);
     sistemasMap.get(sis)!.push(act);
   }
 
   return `
-  <div class="section">
-    <div class="section-title">📋 ACTIVIDADES Y PROTOCOLO DE INSPECCIÓN (${actividades.length} ítems)</div>
-    
+  <div class="section" style="page-break-inside: auto; break-inside: auto; margin-bottom: 14px;">
+    <div class="section-title">📋 PROTOCOLO DE INSPECCIÓN Y ACTIVIDADES PREVENTIVAS (${actividadesInspeccion.length} TAREAS)</div>
+
     ${Array.from(sistemasMap.entries())
-      .map(([sistema, items]) => {
-        return `
-        <div style="margin-bottom: 8px;">
-          <div style="background: #F1F5F9; color: #1E293B; font-size: 9px; font-weight: 800; padding: 4px 8px; border-left: 3px solid ${MEKANOS_COLORS.primary};">
-            SUBSISTEMA: ${sistema}
-          </div>
-          <table class="checklist-table" style="width: 100%; border-collapse: collapse; font-size: 8.5px;">
-            <thead>
-              <tr style="background: #FAFAFA; border-bottom: 1px solid #E2E8F0;">
-                <th style="width: 50%; text-align: left; padding: 4px 6px;">Actividad / Tarea</th>
-                <th style="width: 15%; text-align: center; padding: 4px 6px;">Estado</th>
-                <th style="width: 35%; text-align: left; padding: 4px 6px;">Observaciones Técnicas</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items
-                .map((act) => {
-                  const estRaw = (
-                    (act as any).resultado ||
-                    act.estado ||
-                    'NA'
-                  ).toUpperCase();
-                  const badgeClass =
-                    estRaw === 'B' || estRaw === 'BUENO'
-                      ? 'badge-act-b'
-                      : estRaw === 'R' || estRaw === 'REGULAR'
-                        ? 'badge-act-r'
-                        : estRaw === 'M' || estRaw === 'MALO'
-                          ? 'badge-act-m'
-                          : estRaw === 'C' || estRaw === 'CORREGIDO'
-                            ? 'badge-act-c'
-                            : estRaw === 'A' || estRaw === 'AJUSTADO'
-                              ? 'badge-act-a'
-                              : 'badge-act-na';
-
-                  const estTexto =
-                    estRaw === 'B'
-                      ? 'BUENO'
-                      : estRaw === 'R'
-                        ? 'REGULAR'
-                        : estRaw === 'M'
-                          ? 'MALO'
-                          : estRaw === 'C'
-                            ? 'CORREGIDO'
-                            : estRaw === 'A'
-                              ? 'AJUSTADO'
-                              : estRaw;
-
-                  return `
-                <tr style="border-bottom: 1px solid #F1F5F9;">
-                  <td style="padding: 3px 6px; color: #1E293B;">${act.descripcion}</td>
-                  <td style="padding: 3px 6px; text-align: center;">
-                    <span class="${badgeClass}">${estTexto}</span>
-                  </td>
-                  <td style="padding: 3px 6px; color: #64748B; font-size: 8px;">${act.observaciones || '--'}</td>
-                </tr>
-                `;
-                })
-                .join('')}
-            </tbody>
-          </table>
+      .map(([sistema, items]) => `
+      <div style="margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
+        <div style="background: #F1F5F9; color: #1E3A8A; font-size: 9.5px; font-weight: 800; padding: 6px 10px; border-radius: 4px; border-left: 4px solid #1D4ED8; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
+          <span>⚙️ SUBSISTEMA: ${sistema}</span>
+          <span style="font-size: 8px; color: #475569; font-weight: 700; background: #E2E8F0; padding: 2px 7px; border-radius: 10px;">${items.length} tareas</span>
         </div>
-        `;
-      })
+        <table class="checklist-table" style="width: 100%; border-collapse: collapse; font-size: 9px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 4px; overflow: hidden;">
+          <thead>
+            <tr style="background: #F8FAFC; border-bottom: 1.5px solid #CBD5E1;">
+              <th style="width: 60%; text-align: left; padding: 6px 10px; font-size: 8.5px; font-weight: 700; color: #334155; text-transform: uppercase;">Actividad / Tarea</th>
+              <th style="width: 16%; text-align: center; padding: 6px 8px; font-size: 8.5px; font-weight: 700; color: #334155; text-transform: uppercase;">Estado</th>
+              <th style="width: 24%; text-align: left; padding: 6px 10px; font-size: 8.5px; font-weight: 700; color: #334155; text-transform: uppercase;">Observaciones Técnicas</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items
+              .map((act) => {
+                const estRaw = (
+                  (act as any).resultado ||
+                  act.estado ||
+                  'NA'
+                ).toUpperCase();
+                const badgeClass =
+                  estRaw === 'B' || estRaw === 'BUENO'
+                    ? 'badge-act-b'
+                    : estRaw === 'R' || estRaw === 'REGULAR'
+                      ? 'badge-act-r'
+                      : estRaw === 'M' || estRaw === 'MALO'
+                        ? 'badge-act-m'
+                        : estRaw === 'C' || estRaw === 'CORREGIDO'
+                          ? 'badge-act-c'
+                          : estRaw === 'A' || estRaw === 'AJUSTADO'
+                            ? 'badge-act-a'
+                            : 'badge-act-na';
+
+                const estTexto =
+                  estRaw === 'B'
+                    ? 'BUENO'
+                    : estRaw === 'R'
+                      ? 'REGULAR'
+                      : estRaw === 'M'
+                        ? 'MALO'
+                        : estRaw === 'C'
+                          ? 'CORREGIDO'
+                          : estRaw === 'A'
+                            ? 'AJUSTADO'
+                            : estRaw;
+
+                const obsLimpia = (act.observaciones || '').trim();
+                const obsDisplay = obsLimpia && obsLimpia !== '--' && obsLimpia !== '-' ? obsLimpia : '';
+
+                return `
+              <tr style="border-bottom: 1px solid #F1F5F9;">
+                <td style="padding: 6px 10px; color: #1E293B; line-height: 1.35; font-weight: 500;">${act.descripcion}</td>
+                <td style="padding: 6px 8px; text-align: center; vertical-align: middle;">
+                  <span class="${badgeClass}">${estTexto}</span>
+                </td>
+                <td style="padding: 6px 10px; color: #475569; font-size: 8.5px; line-height: 1.3;">${obsDisplay}</td>
+              </tr>
+              `;
+              })
+              .join('')}
+          </tbody>
+        </table>
+      </div>
+      `)
       .join('')}
 
     <!-- SIMBOLOGÍA DE ESTADOS -->
-    <div style="margin-top: 6px; padding: 4px 8px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 4px; display: flex; gap: 10px; font-size: 7.5px; color: #475569;">
-      <span><strong>CONVENCIONES:</strong></span>
-      <span><span class="badge-act-b">B</span> Bueno</span>
-      <span><span class="badge-act-r">R</span> Regular</span>
-      <span><span class="badge-act-m">M</span> Malo</span>
-      <span><span class="badge-act-c">C</span> Corregido</span>
-      <span><span class="badge-act-a">A</span> Ajustado</span>
-      <span><span class="badge-act-na">NA</span> No Aplica</span>
+    <div class="simbologia-grid" style="margin-top: 8px; padding: 5px 10px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 4px; display: flex; gap: 12px; font-size: 8px; color: #475569; align-items: center; flex-wrap: wrap;">
+      <span style="font-weight: 700; color: #1E293B;">CONVENCIONES:</span>
+      <span><span class="badge-act-b" style="min-width: 20px; padding: 1px 5px;">B</span> Bueno</span>
+      <span><span class="badge-act-r" style="min-width: 20px; padding: 1px 5px;">R</span> Regular</span>
+      <span><span class="badge-act-m" style="min-width: 20px; padding: 1px 5px;">M</span> Malo</span>
+      <span><span class="badge-act-c" style="min-width: 20px; padding: 1px 5px;">C</span> Corregido</span>
+      <span><span class="badge-act-a" style="min-width: 20px; padding: 1px 5px;">A</span> Ajustado</span>
+      <span><span class="badge-act-na" style="min-width: 20px; padding: 1px 5px;">NA</span> No Aplica</span>
     </div>
   </div>
   `;
@@ -489,24 +391,111 @@ function generarChecklistUniversal(actividades: any[]): string {
 function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
   const mediciones = datos.mediciones || [];
   const modulo = datos.datosModulo;
+  const actividadesMedicion = (datos.actividades || []).filter((act) => esActividadMedicion(act));
 
-  if (mediciones.length === 0 && !modulo) return '';
+  // 1. Extraer tarjetas de parámetros operativos
+  const itemsCards: Array<{ label: string; value: string; badge?: string; badgeColor?: string }> = [];
+
+  // A) Desde actividades de medición ejecutadas
+  for (const act of actividadesMedicion) {
+    const label = formatearLabelParametroUniversal(act.descripcion);
+    let valorTexto = '';
+    let badgeText = '';
+    let badgeColor = '';
+
+    const obs = (act.observaciones || '').trim();
+    if (obs && !obs.startsWith('--')) {
+      // Extraer si viene número tipo "TEMP: 80" -> "80 °C"
+      const matchNum = obs.match(/(?:temp|presion|voltaje|amperaje|amp|corriente)?[:\s]*([\d.,]+)\s*([a-zA-Z°/³]*)/i);
+      if (matchNum) {
+        const unidad = matchNum[2] || deducirUnidadParametro(act.descripcion);
+        valorTexto = `${matchNum[1]} ${unidad}`.trim();
+      } else {
+        valorTexto = obs;
+      }
+    }
+
+    const est = ((act as any).resultado || act.estado || '').toUpperCase();
+    if (est === 'B' || est === 'BUENO') {
+      badgeText = 'CONFORME';
+      badgeColor = '#15803D';
+    } else if (est === 'M' || est === 'MALO') {
+      badgeText = 'ALERTA / MALO';
+      badgeColor = '#B91C1C';
+    } else if (est === 'R' || est === 'REGULAR') {
+      badgeText = 'REGULAR';
+      badgeColor = '#B45309';
+    } else if (est === 'C' || est === 'CORREGIDO') {
+      badgeText = 'CORREGIDO';
+      badgeColor = '#1D4ED8';
+    } else if (est === 'A' || est === 'AJUSTADO') {
+      badgeText = 'AJUSTADO';
+      badgeColor = '#4338CA';
+    }
+
+    if (!valorTexto) {
+      valorTexto = badgeText || 'OPERATIVO';
+    }
+
+    itemsCards.push({
+      label,
+      value: valorTexto,
+      badge: badgeText,
+      badgeColor,
+    });
+  }
+
+  // B) Si hay datosModulo (fallbacks operativos) y no se duplicaron
+  if (modulo) {
+    if (modulo.horasTrabajo != null && !itemsCards.some(i => i.label.toLowerCase().includes('horómetr'))) {
+      itemsCards.push({ label: 'Horómetro de Operación', value: `${modulo.horasTrabajo} hrs` });
+    }
+    if (modulo.voltaje != null && !itemsCards.some(i => i.label.toLowerCase().includes('voltaj'))) {
+      itemsCards.push({ label: 'Voltaje de Operación', value: `${modulo.voltaje} V` });
+    }
+    if (modulo.corriente != null && !itemsCards.some(i => i.label.toLowerCase().includes('amperaj') || i.label.toLowerCase().includes('corrient'))) {
+      itemsCards.push({ label: 'Corriente / Amperaje', value: `${modulo.corriente} A` });
+    }
+    if (modulo.rpm != null && !itemsCards.some(i => i.label.toLowerCase().includes('velocidad') || i.label.toLowerCase().includes('rpm'))) {
+      itemsCards.push({ label: 'Velocidad de Operación', value: `${modulo.rpm} RPM` });
+    }
+    if (modulo.presionAceite != null && !itemsCards.some(i => i.label.toLowerCase().includes('presión de aceite') || i.label.toLowerCase().includes('presion de aceite'))) {
+      itemsCards.push({ label: 'Presión de Aceite', value: `${modulo.presionAceite} PSI` });
+    }
+    if (modulo.temperaturaRefrigerante != null && !itemsCards.some(i => i.label.toLowerCase().includes('temperatura'))) {
+      itemsCards.push({ label: 'Temperatura', value: `${modulo.temperaturaRefrigerante} °C` });
+    }
+    if (modulo.frecuencia != null && !itemsCards.some(i => i.label.toLowerCase().includes('frecuencia'))) {
+      itemsCards.push({ label: 'Frecuencia', value: `${modulo.frecuencia} Hz` });
+    }
+  }
+
+  if (itemsCards.length === 0 && mediciones.length === 0) return '';
+
+  const numCols = itemsCards.length <= 2 ? itemsCards.length : itemsCards.length === 3 ? 3 : 4;
+  const gridColumnsStyle = `grid-template-columns: repeat(${numCols}, 1fr);`;
 
   return `
-  <div class="section">
-    <div class="section-title">📊 TELEMETRÍA Y VARIABLES OPERACIONALES</div>
+  <div class="section" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 14px;">
+    <div class="section-title">📊 REGISTRO DE PARÁMETROS OPERATIVOS (TELEMETRÍA Y VARIABLES OPERACIONALES)</div>
     
     ${
-      modulo
+      itemsCards.length > 0
         ? `
-    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;">
-      ${modulo.horasTrabajo != null ? `<div class="placa-kpi-item"><div class="placa-kpi-label">Horómetro</div><div class="placa-kpi-val">${modulo.horasTrabajo} hrs</div></div>` : ''}
-      ${modulo.presionAceite != null ? `<div class="placa-kpi-item"><div class="placa-kpi-label">Presión Aceite</div><div class="placa-kpi-val">${modulo.presionAceite} PSI</div></div>` : ''}
-      ${modulo.temperaturaRefrigerante != null ? `<div class="placa-kpi-item"><div class="placa-kpi-label">Temp. Refrigerante</div><div class="placa-kpi-val">${modulo.temperaturaRefrigerante} °C</div></div>` : ''}
-      ${modulo.cargaBateria != null ? `<div class="placa-kpi-item"><div class="placa-kpi-label">Voltaje Batería</div><div class="placa-kpi-val">${modulo.cargaBateria} VDC</div></div>` : ''}
-      ${modulo.rpm != null ? `<div class="placa-kpi-item"><div class="placa-kpi-label">Velocidad</div><div class="placa-kpi-val">${modulo.rpm} RPM</div></div>` : ''}
-      ${modulo.voltaje != null ? `<div class="placa-kpi-item"><div class="placa-kpi-label">Tensión Salida</div><div class="placa-kpi-val">${modulo.voltaje} V</div></div>` : ''}
-      ${modulo.frecuencia != null ? `<div class="placa-kpi-item"><div class="placa-kpi-label">Frecuencia</div><div class="placa-kpi-val">${modulo.frecuencia} Hz</div></div>` : ''}
+    <div style="display: grid; ${gridColumnsStyle} gap: 8px; margin-bottom: 10px;">
+      ${itemsCards
+        .map(
+          (item) => `
+        <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-top: 3px solid #0284C7; border-radius: 6px; padding: 7px 10px; text-align: center;">
+          <div style="font-size: 8px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.3px;">${item.label}</div>
+          <div style="font-size: 11px; font-weight: 900; color: #0F172A; margin-top: 3px; font-family: monospace;">${item.value}</div>
+          ${item.badge && item.badge !== item.value ? `
+            <div style="font-size: 7.5px; font-weight: 800; color: ${item.badgeColor || '#64748B'}; margin-top: 2px;">● ${item.badge}</div>
+          ` : ''}
+        </div>
+      `,
+        )
+        .join('')}
     </div>
     `
         : ''
@@ -515,13 +504,13 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
     ${
       mediciones.length > 0
         ? `
-    <table class="datos-table" style="width: 100%; font-size: 8.5px;">
+    <table class="datos-table" style="width: 100%; font-size: 8.5px; border-collapse: collapse; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 4px; overflow: hidden;">
       <thead>
         <tr style="background: #F1F5F9; border-bottom: 1.5px solid #CBD5E1;">
-          <th style="padding: 4px 6px; text-align: left;">Parámetro / Variable</th>
-          <th style="padding: 4px 6px; text-align: center;">Valor Medido</th>
-          <th style="padding: 4px 6px; text-align: center;">Rango de Referencia</th>
-          <th style="padding: 4px 6px; text-align: center;">Evaluación</th>
+          <th style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 700; color: #334155; text-transform: uppercase;">Parámetro / Variable</th>
+          <th style="padding: 6px 8px; text-align: center; font-size: 8px; font-weight: 700; color: #334155; text-transform: uppercase;">Valor Medido</th>
+          <th style="padding: 6px 8px; text-align: center; font-size: 8px; font-weight: 700; color: #334155; text-transform: uppercase;">Rango de Referencia</th>
+          <th style="padding: 6px 8px; text-align: center; font-size: 8px; font-weight: 700; color: #334155; text-transform: uppercase;">Evaluación</th>
         </tr>
       </thead>
       <tbody>
@@ -553,12 +542,12 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
 
             return `
           <tr style="border-bottom: 1px solid #F1F5F9;">
-            <td style="padding: 3px 6px; font-weight: 600;">${m.parametro}</td>
-            <td style="padding: 3px 6px; text-align: center; font-family: monospace; font-weight: 800;">
+            <td style="padding: 5px 8px; font-weight: 600; color: #1E293B;">${m.parametro}</td>
+            <td style="padding: 5px 8px; text-align: center; font-family: monospace; font-weight: 800; color: #0F172A;">
               ${m.valor} ${m.unidad || ''}
             </td>
-            <td style="padding: 3px 6px; text-align: center; color: #64748B;">${rangoTexto}</td>
-            <td style="padding: 3px 6px; text-align: center;">${badge}</td>
+            <td style="padding: 5px 8px; text-align: center; color: #64748B;">${rangoTexto}</td>
+            <td style="padding: 5px 8px; text-align: center;">${badge}</td>
           </tr>
           `;
           })
@@ -574,21 +563,11 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
 
 function generarEvidenciasUniversal(
   evidencias: any[],
-  lotesGaleria?: LoteGaleriaPDF[],
+  _lotesGaleria?: LoteGaleriaPDF[],
 ): string {
-  if (!evidencias || evidencias.length === 0) {
-    return `
-    <div class="section">
-      <div class="section-title">📷 REGISTRO FOTOGRÁFICO DE INTERVENCIÓN</div>
-      <div style="padding: 10px; text-align: center; color: #64748B; font-size: 9px;">
-        No se adjuntaron registros fotográficos en este reporte.
-      </div>
-    </div>
-    `;
-  }
+  if (!evidencias || evidencias.length === 0) return '';
 
-  // Agrupar por fase ANTES, DURANTE, DESPUES, GENERAL
-  const grupos: Record<string, any[]> = {
+  const grupos: Record<string, Array<{ url: string; caption: string; idLote?: number }>> = {
     ANTES: [],
     DURANTE: [],
     DESPUES: [],
@@ -596,7 +575,9 @@ function generarEvidenciasUniversal(
   };
 
   for (const ev of evidencias) {
-    const rawUrl = typeof ev === 'string' ? ev : ev.url;
+    const rawUrl = typeof ev === 'string' ? ev : ev.url || '';
+    if (!rawUrl) continue;
+
     const rawCaption = typeof ev === 'string' ? '' : ev.caption || '';
     const upper = (rawCaption + ' ' + (ev.tipo || '')).toUpperCase();
 

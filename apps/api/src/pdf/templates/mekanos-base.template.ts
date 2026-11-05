@@ -99,6 +99,7 @@ export interface RepuestoUtilizadoPDF {
   ubicacionBodega?: string;
   estadoRetirado?: string;
   observaciones?: string;
+  tipoActividad?: string;
 }
 
 export interface DatosEquipoDetalladoPDF {
@@ -1895,10 +1896,25 @@ export const generarDatosClienteConFichaTecnica = (
   const potencia = placa?.capacidadPrincipal?.texto || (eq?.potenciaKva
     ? `${eq.potenciaKva} kVA${eq.potenciaKw ? ` / ${eq.potenciaKw} kW` : ''}`
     : (eq?.potenciaHp ? `${eq.potenciaHp} HP` : (eq?.potenciaKw ? `${eq.potenciaKw} kW` : '')));
-  const tension = eq?.voltaje
+  let tension = eq?.voltaje
     ? `${eq.voltaje}${eq.frecuencia ? ` · ${eq.frecuencia}` : ''}${eq.fases ? ` · ${eq.fases}` : ''}`
     : (eq?.frecuencia ? `${eq.frecuencia}` : '');
-  const rpm = eq?.rpm ? `${eq.rpm}` : '';
+  if (!tension && placa?.kpis) {
+    const kpiTension = placa.kpis.find((k: any) =>
+      k.etiqueta?.toLowerCase().includes('voltaje') ||
+      k.etiqueta?.toLowerCase().includes('tensión') ||
+      k.etiqueta?.toLowerCase().includes('tension')
+    );
+    if (kpiTension) tension = kpiTension.valorTexto;
+  }
+  let rpm = eq?.rpm ? `${eq.rpm}` : '';
+  if (!rpm && placa?.kpis) {
+    const kpiRpm = placa.kpis.find((k: any) =>
+      k.etiqueta?.toLowerCase().includes('rpm') ||
+      k.etiqueta?.toLowerCase().includes('velocidad')
+    );
+    if (kpiRpm) rpm = kpiRpm.valorTexto;
+  }
   const horometroInterv = eq?.horometroIntervencion != null
     ? `${eq.horometroIntervencion} h`
     : (datos.datosModulo?.horasTrabajo != null ? `${datos.datosModulo.horasTrabajo} h` : '');
@@ -1909,7 +1925,7 @@ export const generarDatosClienteConFichaTecnica = (
     <div class="section-title">DATOS DEL CLIENTE Y FICHA TÉCNICA DEL ACTIVO</div>
     ${(datos.numeroVisitaCaso && datos.numeroVisitaCaso > 1) || datos.numeroOrdenPadre ? `
     <div style="margin: 4px 0 6px 0; padding: 5px 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #1d4ed8; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; font-size: 8.5px; color: #1e3a8a; font-weight: 700;">
-      <span>🔗 SECUENCIA DE SERVICIO: VISITA #${datos.numeroVisitaCaso || 2} (${datos.tipoVisita || 'CONTINUACION'})</span>
+      <span>🔗 SECUENCIA DE SERVICIO: Visita #${datos.numeroVisitaCaso || 2} (${datos.tipoVisita || 'CONTINUACION'})</span>
       ${datos.numeroOrdenPadre ? `<span style="background: #dbeafe; color: #1e40af; padding: 1.5px 6px; border-radius: 3px; font-family: monospace;">VINCULADA A ${datos.numeroOrdenPadre}</span>` : ''}
     </div>
     ` : ''}
@@ -1956,7 +1972,7 @@ export const generarDatosClienteConFichaTecnica = (
     <div style="margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 4px; background: #ffffff; overflow: hidden;">
       <div style="background: #f1f5f9; padding: 4px 8px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          ${codigoEquipo ? `<span style="background: #244673; color: #ffffff; font-family: monospace; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px;">${codigoEquipo}</span>` : ''}
+          ${codigoEquipo ? `<span style="background: #244673; color: #ffffff; font-family: monospace; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px;">TAG: ${codigoEquipo}</span>` : ''}
           <span style="font-weight: 700; font-size: 10px; color: #1e293b;">
             ${nombreEquipo || `${tipoEquipo} ${marca}`}
           </span>
@@ -1999,7 +2015,7 @@ export const generarDatosClienteConFichaTecnica = (
         <div style="grid-column: span 4; display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap;">
           ${placa.kpis.map((kpi: any) => `
             <span style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; border-radius: 3px; padding: 2px 6px; font-size: 8px; font-weight: 600;">
-              ${kpi.etiqueta}: <strong>${kpi.valorTexto}</strong>
+              ${kpi.etiqueta || kpi.nombre || kpi.codigo || kpi.clave}: <strong>${kpi.valorTexto || kpi.valor || kpi.valor_texto || ''}</strong>
             </span>
           `).join('')}
         </div>
