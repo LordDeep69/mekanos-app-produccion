@@ -815,11 +815,19 @@ export default function EquipoDetallePage() {
   const datosEspecificos = (equipo.datos_especificos || {}) as Record<string, any>;
   const motor = (datosEspecificos?.motor || null) as Record<string, any> | null;
 
-  const tipoEquipoCode = (equipo.tipos_equipo?.codigo_tipo || equipo.tipo_equipo || '').toUpperCase();
+  const rawTipoEquipo =
+    equipo.tipos_equipo?.codigo_tipo ||
+    (typeof equipo.tipo_equipo === 'object' && equipo.tipo_equipo !== null
+      ? (equipo.tipo_equipo as any).codigo_tipo || (equipo.tipo_equipo as any).nombre_tipo
+      : typeof equipo.tipo_equipo === 'string'
+      ? equipo.tipo_equipo
+      : '') ||
+    '';
+  const tipoEquipoCode = String(rawTipoEquipo).toUpperCase();
   const modulosSpecs = ((equipo.especificaciones as any)?.modulos || {}) as Record<string, any>;
   const tieneModuloCombustion = Boolean(modulosSpecs.motor_combustion);
   const esGenerador = tipoEquipoCode === 'GEN' || tipoEquipoCode === 'GENERADOR' || Boolean(equipo.tipos_equipo?.es_generador);
-  const combustible = (motor?.tipo_combustible || '').toUpperCase();
+  const combustible = String(motor?.tipo_combustible || '').toUpperCase();
   const esCombustibleDieselOGas = combustible === 'DIESEL' || combustible === 'GASOLINA' || combustible === 'GAS';
   const tieneAceiteReal = Boolean(motor?.capacidad_aceite_litros || motor?.tipo_aceite);
   const tieneMotorCombustion = tieneModuloCombustion || esGenerador || (motor && (esCombustibleDieselOGas || tieneAceiteReal) && combustible !== 'ELECTRICO');
