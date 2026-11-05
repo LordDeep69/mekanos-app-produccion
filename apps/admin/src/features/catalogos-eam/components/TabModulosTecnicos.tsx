@@ -235,10 +235,10 @@ export function TabModulosTecnicos() {
     setAssignSearch('');
     setAssignTypeFilter('ALL');
     const hasSections = gruposVisualesMap.length > 0;
-    // Si ya hay secciones → modo "elegir existente" con la primera; si está vacío → "Especificaciones Principales" (NUNCA el nombre de la parte)
+    // Si ya hay secciones → modo "elegir existente" con la primera; si está vacío → "Especificaciones Técnicas" (NUNCA el nombre de la parte)
     const defaultSection = hasSections
       ? gruposVisualesMap[0][0]
-      : 'Especificaciones Principales';
+      : 'Especificaciones Técnicas';
     setAssignSectionMode('existing');
     setAssignNewSection('');
     const allItems = moduloDetalle?.modulo_atributos || [];
@@ -452,12 +452,22 @@ export function TabModulosTecnicos() {
   const handleSaveAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedModuloCode || !assignForm.id_atributo) return;
+
+    const allItems = moduloDetalle?.modulo_atributos || [];
+    const targetSection =
+      assignSectionMode === 'new' && assignNewSection.trim()
+        ? assignNewSection.trim()
+        : assignForm.grupo_visual || 'Especificaciones Técnicas';
+    const sectionItems = allItems.filter((ma) => (ma.grupo_visual || 'General') === targetSection);
+    const maxOrder = sectionItems.reduce((max, ma) => Math.max(max, ma.orden_visual || 0), 0);
+    const autoOrder = maxOrder + 10;
+
     await asignarMut.mutateAsync({
       codigoModulo: selectedModuloCode,
       payload: {
         id_atributo: Number(assignForm.id_atributo),
-        grupo_visual: assignForm.grupo_visual || 'General',
-        orden_visual: Number(assignForm.orden_visual) || 10,
+        grupo_visual: targetSection,
+        orden_visual: autoOrder,
         obligatorio: assignForm.obligatorio,
         es_kpi: assignForm.es_kpi,
         es_filtrable: assignForm.es_filtrable,
@@ -501,13 +511,19 @@ export function TabModulosTecnicos() {
       opciones_json,
     });
 
-    // 2. Asignar inmediatamente a la Parte / Subsistema activo
+    // 2. Asignar inmediatamente a la Parte / Subsistema activo con orden auto-calculado
+    const allItems = moduloDetalle?.modulo_atributos || [];
+    const targetSection = inPlaceForm.grupo_visual?.trim() || 'Especificaciones Técnicas';
+    const sectionItems = allItems.filter((ma) => (ma.grupo_visual || 'General') === targetSection);
+    const maxOrder = sectionItems.reduce((max, ma) => Math.max(max, ma.orden_visual || 0), 0);
+    const autoOrder = maxOrder + 10;
+
     await asignarMut.mutateAsync({
       codigoModulo: selectedModuloCode,
       payload: {
         id_atributo: nuevoAtributo.id_atributo,
-        grupo_visual: inPlaceForm.grupo_visual || 'General',
-        orden_visual: Number(inPlaceForm.orden_visual) || 20,
+        grupo_visual: targetSection,
+        orden_visual: autoOrder,
         obligatorio: inPlaceForm.obligatorio,
         es_kpi: inPlaceForm.es_kpi,
         es_filtrable: inPlaceForm.es_filtrable,
@@ -1446,7 +1462,7 @@ export function TabModulosTecnicos() {
                     // CASO B: La parte es nueva (0 campos) — Píldoras de ingeniería estándar (CERO TEXTO LIBRE)
                     [
                       {
-                        name: 'Especificaciones Principales',
+                        name: 'Especificaciones Técnicas',
                         desc: 'Recomendada · Datos clave y placa técnica del equipo',
                       },
                       {
@@ -1454,8 +1470,12 @@ export function TabModulosTecnicos() {
                         desc: 'Potencia, caudales, presiones y rendimiento',
                       },
                       {
-                        name: 'General',
-                        desc: 'Datos generales de identificación y operación',
+                        name: 'Identificación',
+                        desc: 'Marca, modelo, serie y fabricante',
+                      },
+                      {
+                        name: 'Control y Seguridad',
+                        desc: 'Protecciones, presostatos y sensores',
                       },
                     ].map((preset) => {
                       const isActive =
@@ -1873,22 +1893,44 @@ export function TabModulosTecnicos() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Sección en {moduloDetalle.nombre_modulo} *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={inPlaceForm.grupo_visual}
-                    onChange={(e) =>
-                      setInPlaceForm({ ...inPlaceForm, grupo_visual: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
-                  />
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <label className="block text-xs font-bold text-slate-700">
+                  Sección en la Ficha Técnica ({moduloDetalle.nombre_modulo}) *
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Especificaciones Técnicas',
+                    'Desempeño y Capacidad',
+                    'Identificación',
+                    'Control y Seguridad',
+                  ].map((sec) => (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() => setInPlaceForm({ ...inPlaceForm, grupo_visual: sec })}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                        inPlaceForm.grupo_visual === sec
+                          ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {sec}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-end pb-1 gap-4">
+                <input
+                  type="text"
+                  required
+                  placeholder="O escribe otra sección personalizada..."
+                  value={inPlaceForm.grupo_visual}
+                  onChange={(e) =>
+                    setInPlaceForm({ ...inPlaceForm, grupo_visual: e.target.value })
+                  }
+                  className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-6 pt-1">
                   <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
                     <input
                       type="checkbox"
@@ -1912,7 +1954,6 @@ export function TabModulosTecnicos() {
                     <span>Destacar (KPI)</span>
                   </label>
                 </div>
-              </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button

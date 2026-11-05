@@ -34,6 +34,22 @@ import {
   parseOpcionesSeguras,
 } from '../utils/eam-humanizer';
 
+const getDynamicNumericPlaceholder = (codigo: string, nombre: string): string => {
+  const c = (codigo || '').toLowerCase();
+  const n = (nombre || '').toLowerCase();
+  if (c.includes('rpm') || c.includes('velocidad') || n.includes('rpm')) return 'Ej: 1800';
+  if (c.includes('ano') || c.includes('año') || c.includes('fabricacion')) return 'Ej: 2024';
+  if (c.includes('factor') || c.includes('fp') || c.includes('cos')) return 'Ej: 0.85';
+  if (c.includes('frecuencia') || c.includes('hz')) return 'Ej: 60';
+  if (c.includes('voltaje') || c.includes('vac') || c.includes('vdc')) return 'Ej: 220';
+  if (c.includes('amperaje') || c.includes('amp') || c.includes('corriente')) return 'Ej: 15';
+  if (c.includes('fases') || c.includes('polos')) return 'Ej: 3';
+  if (c.includes('temperatura') || c.includes('temp')) return 'Ej: 80';
+  if (c.includes('presion') || c.includes('psi')) return 'Ej: 120';
+  if (c.includes('horas') || c.includes('horometro')) return 'Ej: 1500';
+  return '0.00';
+};
+
 interface DynamicEquipmentFormPreviewProps {
   esquema: ArquetipoEsquemaResponse;
   modelosOem?: ModeloEquipoOem[];
@@ -577,7 +593,10 @@ export function DynamicEquipmentFormPreview({
                                   <input
                                     type="number"
                                     step="any"
-                                    placeholder="Ej: 1800"
+                                    placeholder={getDynamicNumericPlaceholder(
+                                      attr.codigo_atributo,
+                                      attr.nombre_atributo,
+                                    )}
                                     value={val}
                                     onChange={(e) =>
                                       handleFieldChange(

@@ -550,11 +550,24 @@ export function FichaTecnicaPolimorficaEam({
                 {/* Secciones (grupo_visual) dentro del Subsistema */}
                 <div className="p-4 space-y-4 flex-1">
                   {mod.grupos.map((grupo) => {
+                    const getEffectiveValue = (attrItem: typeof grupo.atributos[0]) => {
+                      let val = valoresMod[attrItem.codigo_atributo] ?? valoresPlanos[attrItem.codigo_atributo];
+                      if (!isMeaningfulValue(val)) {
+                        const code = attrItem.codigo_atributo.toLowerCase();
+                        if (code.includes('serie') || code.includes('serial')) {
+                          val = (equipo as any).numero_serie_equipo || equipo.numero_serie || null;
+                        } else if (code === 'marca' || code === 'marca_equipo') {
+                          val = equipo.marca || null;
+                        } else if (code === 'modelo' || code === 'modelo_equipo') {
+                          val = equipo.modelo || null;
+                        }
+                      }
+                      return val;
+                    };
+
                     // Mostrar todos los atributos con valor o, si ninguno tiene valor, mostrar los principales
                     const atributosConValor = grupo.atributos.filter((attr) =>
-                      isMeaningfulValue(
-                        valoresMod[attr.codigo_atributo] ?? valoresPlanos[attr.codigo_atributo],
-                      ),
+                      isMeaningfulValue(getEffectiveValue(attr)),
                     );
                     const listaMostrar =
                       atributosConValor.length > 0
@@ -572,9 +585,7 @@ export function FichaTecnicaPolimorficaEam({
 
                         <div className="divide-y divide-slate-100">
                           {listaMostrar.map((attr) => {
-                            const rawVal =
-                              valoresMod[attr.codigo_atributo] ??
-                              valoresPlanos[attr.codigo_atributo];
+                            const rawVal = getEffectiveValue(attr);
                             const origen = origenesActuales[attr.codigo_atributo];
 
                             return (

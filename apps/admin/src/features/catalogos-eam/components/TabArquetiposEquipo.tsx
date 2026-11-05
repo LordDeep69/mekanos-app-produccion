@@ -159,11 +159,36 @@ export function TabArquetiposEquipo() {
     obligatorio: true,
   });
 
-  // Catálogo completo de servicios normalizado (específicos de este equipo primero, luego universales)
+  // Helper para generar nombres de plan sin redundancias léxicas tipo "Plan Preventivo Preventivo..."
+  const construirNombrePlan = (srv: any) => {
+    if (!srv) return '';
+    const nom = (srv.nombre_tipo || '').trim();
+    const isInsp = srv.codigo_tipo === 'INSPECCION' || nom.toLowerCase().includes('inspecci');
+    if (isInsp) {
+      if (nom.toLowerCase().startsWith('plan')) return nom;
+      return `Plan de ${nom}`;
+    }
+    if (nom.toLowerCase().startsWith('plan')) {
+      return nom;
+    }
+    if (nom.toLowerCase().startsWith('preventivo') || nom.toLowerCase().startsWith('mantenimiento')) {
+      return `Plan ${nom}`;
+    }
+    return `Plan Preventivo ${nom}`;
+  };
+
+  // Catálogo completo de servicios normalizado (específicos de este equipo primero, luego universales; excluye correctivos y emergencias)
   const todosLosServicios = useMemo(() => {
     const rawList = tiposServicioList.length > 0 ? tiposServicioList : (resumen?.tipos_servicio_preventivos || []);
+    const soloPreventivos = rawList.filter((s) => {
+      const cat = (s.categoria || '').toUpperCase();
+      const nom = (s.nombre_tipo || '').toLowerCase();
+      if (cat === 'CORRECTIVO' || cat === 'EMERGENCIA') return false;
+      if (nom.includes('correctivo') || nom.includes('emergencia')) return false;
+      return true;
+    });
     const currentArqId = selectedArquetipo?.id_tipo_equipo;
-    return [...rawList].sort((a, b) => {
+    return [...soloPreventivos].sort((a, b) => {
       const aEsEspecifico = currentArqId && a.id_tipo_equipo === currentArqId ? 1 : (a.id_tipo_equipo == null ? 2 : 3);
       const bEsEspecifico = currentArqId && b.id_tipo_equipo === currentArqId ? 1 : (b.id_tipo_equipo == null ? 2 : 3);
       if (aEsEspecifico !== bEsEspecifico) return aEsEspecifico - bEsEspecifico;
@@ -645,11 +670,7 @@ export function TabArquetiposEquipo() {
 
                   setPlanForm({
                     id_tipo_servicio: srvDefault ? String(srvDefault.id_tipo_servicio) : '',
-                    nombre_plan: srvDefault
-                      ? isInsp
-                        ? 'Plan de Visita de Inspección Periódica'
-                        : `Plan Preventivo ${srvDefault.nombre_tipo}`
-                      : '',
+                    nombre_plan: construirNombrePlan(srvDefault),
                     frecuencia_dias: isInsp ? '30' : '90',
                     frecuencia_uso: isInsp ? '100' : '250',
                     criterio_intervalo: 'LO_QUE_OCURRA_PRIMERO',
@@ -1329,9 +1350,7 @@ export function TabArquetiposEquipo() {
                             setPlanForm({
                               ...planForm,
                               id_tipo_servicio: String(s.id_tipo_servicio),
-                              nombre_plan: isInsp
-                                ? 'Plan de Visita de Inspección Periódica'
-                                : `Plan Preventivo ${s.nombre_tipo}`,
+                              nombre_plan: construirNombrePlan(s),
                               frecuencia_dias: isInsp ? '30' : '90',
                               frecuencia_uso: isInsp ? '100' : '250',
                             });

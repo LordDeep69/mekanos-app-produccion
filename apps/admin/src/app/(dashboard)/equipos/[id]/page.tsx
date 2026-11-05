@@ -815,6 +815,15 @@ export default function EquipoDetallePage() {
   const datosEspecificos = (equipo.datos_especificos || {}) as Record<string, any>;
   const motor = (datosEspecificos?.motor || null) as Record<string, any> | null;
 
+  const tipoEquipoCode = (equipo.tipos_equipo?.codigo_tipo || equipo.tipo_equipo || '').toUpperCase();
+  const modulosSpecs = ((equipo.especificaciones as any)?.modulos || {}) as Record<string, any>;
+  const tieneModuloCombustion = Boolean(modulosSpecs.motor_combustion);
+  const esGenerador = tipoEquipoCode === 'GEN' || tipoEquipoCode === 'GENERADOR' || Boolean(equipo.tipos_equipo?.es_generador);
+  const combustible = (motor?.tipo_combustible || '').toUpperCase();
+  const esCombustibleDieselOGas = combustible === 'DIESEL' || combustible === 'GASOLINA' || combustible === 'GAS';
+  const tieneAceiteReal = Boolean(motor?.capacidad_aceite_litros || motor?.tipo_aceite);
+  const tieneMotorCombustion = tieneModuloCombustion || esGenerador || (motor && (esCombustibleDieselOGas || tieneAceiteReal) && combustible !== 'ELECTRICO');
+
   // Cálculos de KPIs en vivo (Filosofía de Referenciación Zero-Stress)
   const horasActualesNum = Number(equipo.horas_actuales || 0);
   const kpiDestacado = useMemo(() => {
@@ -1174,7 +1183,7 @@ export default function EquipoDetallePage() {
       {activeTab === 'ficha' && (
         <div className="space-y-5">
           {/* Banner Destacado: Especificaciones de Lubricación, Fluidos y Baterías */}
-          {motor && (
+          {tieneMotorCombustion && motor && (
             <div className="bg-white rounded-xl border border-blue-200 shadow-2xs overflow-hidden">
               <div className="px-4 py-3 bg-blue-50/70 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-2">

@@ -218,14 +218,18 @@ const MAPA_ROLES_BOM: Record<string, string> = {
   FILTRO_ACEITE_TITULAR: 'Filtro de Aceite Principal',
   FILTRO_COMBUSTIBLE_TITULAR: 'Filtro de Combustible',
   FILTRO_AIRE_TITULAR: 'Filtro de Aire de Admisión',
+  FILTRO_DESECADOR_REFRIGERACION: 'Filtro / Secador de Refrigeración',
+  GAS_REFRIGERANTE: 'Gas Refrigerante / Químico',
   SEPARADOR_AGUA_COMBUSTIBLE: 'Separador Agua / Combustible',
   LUBRICANTE_MOTOR: 'Aceite Lubricante',
-  REFRIGERANTE_MOTOR: 'Líquido Refrigerante',
-  CORREA_VENTILADOR: 'Correa de Transmisión / Ventilador',
+  REFRIGERANTE_MOTOR: 'Líquido Refrigerante (Anticongelante)',
+  CORREA_VENTILADOR: 'Correa / Elemento de Transmisión',
+  CONTACTOR_ELECTRICO: 'Contactor / Componente Eléctrico',
+  SENSOR_TERMOSTATO: 'Sensor / Termostato',
   SELLO_MECANICO_BOMBA: 'Sello Mecánico',
   RODAMIENTO_TITULAR: 'Rodamiento / Balinera',
   BATERIA_ARRANQUE: 'Batería de Arranque',
-  REPUESTO_GENERAL: 'Repuesto / Insumo General',
+  REPUESTO_GENERAL: 'Consumible General',
 };
 
 export const ROLES_BOM_OPTIONS = Object.entries(MAPA_ROLES_BOM).map(([value, label]) => ({

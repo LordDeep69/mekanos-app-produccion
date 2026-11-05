@@ -470,9 +470,13 @@ export const baseStyles = `
   
   /* Las filas individuales de tabla NO deben cortarse */
   .checklist-table tr,
-  .repuestos-tabla tr {
-    page-break-inside: avoid;
-    break-inside: avoid;
+  .checklist-table td,
+  .checklist-table th,
+  .repuestos-tabla tr,
+  .repuestos-tabla td,
+  .repuestos-tabla th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   
   /* Los títulos de sección deben quedarse con su contenido */

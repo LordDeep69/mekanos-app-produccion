@@ -646,8 +646,8 @@ export function TabModelosOemBom() {
                                     )}
                                   </div>
                                 </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold">
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <span className="px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold whitespace-nowrap">
                                     {getRolBomHumano(item.rol_bom)}
                                   </span>
                                 </td>
@@ -760,13 +760,13 @@ export function TabModelosOemBom() {
                       >
                         <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
                           <div className="flex items-center gap-2">
-                            <Wrench className="h-4 w-4 text-blue-600" />
-                            <span className="text-sm font-extrabold text-slate-900">
+                            <Wrench className="h-4 w-4 text-blue-600 shrink-0" />
+                            <span className="text-sm font-extrabold text-slate-900 whitespace-nowrap">
                               Parte: {nombreModuloHumano}
                             </span>
                           </div>
                           <span
-                            className={`px-2 py-0.5 rounded text-[11px] font-bold border ${modBadge.badgeClass}`}
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold border whitespace-nowrap ${modBadge.badgeClass}`}
                           >
                             {entries.length} datos preconfigurados
                           </span>

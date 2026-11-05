@@ -177,6 +177,15 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
   <style>
     ${baseStyles}
 
+    /* Blindaje Anti-Corte en Tablas y Filas */
+    .checklist-table tr, .checklist-table td, .checklist-table th, .subsistema-block {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .checklist-table thead {
+      display: table-header-group;
+    }
+
     /* Estilos Especializados para Badges de Telemetría */
     .telemetria-badge-normal {
       background: #DCFCE7;
@@ -310,7 +319,7 @@ function generarChecklistUniversal(actividades: any[]): string {
 
     ${Array.from(sistemasMap.entries())
       .map(([sistema, items]) => `
-      <div style="margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
+      <div class="subsistema-block" style="margin-bottom: 12px; page-break-inside: avoid !important; break-inside: avoid !important;">
         <div style="background: #F1F5F9; color: #1E3A8A; font-size: 9.5px; font-weight: 800; padding: 6px 10px; border-radius: 4px; border-left: 4px solid #1D4ED8; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
           <span>⚙️ SUBSISTEMA: ${sistema}</span>
           <span style="font-size: 8px; color: #475569; font-weight: 700; background: #E2E8F0; padding: 2px 7px; border-radius: 10px;">${items.length} tareas</span>
@@ -361,7 +370,7 @@ function generarChecklistUniversal(actividades: any[]): string {
                 const obsDisplay = obsLimpia && obsLimpia !== '--' && obsLimpia !== '-' ? obsLimpia : '';
 
                 return `
-              <tr style="border-bottom: 1px solid #F1F5F9;">
+              <tr style="border-bottom: 1px solid #F1F5F9; page-break-inside: avoid !important; break-inside: avoid !important;">
                 <td style="padding: 6px 10px; color: #1E293B; line-height: 1.35; font-weight: 500;">${act.descripcion}</td>
                 <td style="padding: 6px 8px; text-align: center; vertical-align: middle;">
                   <span class="${badgeClass}">${estTexto}</span>
@@ -434,10 +443,13 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
     } else if (est === 'A' || est === 'AJUSTADO') {
       badgeText = 'AJUSTADO';
       badgeColor = '#4338CA';
+    } else {
+      badgeText = 'CONFORME';
+      badgeColor = '#15803D';
     }
 
     if (!valorTexto) {
-      valorTexto = badgeText || 'OPERATIVO';
+      valorTexto = 'NORMAL';
     }
 
     itemsCards.push({
@@ -490,11 +502,9 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
         .map(
           (item) => `
         <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-top: 3px solid #0284C7; border-radius: 6px; padding: 7px 10px; text-align: center;">
-          <div style="font-size: 8px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.3px;">${item.label}</div>
+          <div style="font-size: 8px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.3px; min-height: 20px; display: flex; align-items: center; justify-content: center;">${item.label}</div>
           <div style="font-size: 11px; font-weight: 900; color: #0F172A; margin-top: 3px; font-family: monospace;">${item.value}</div>
-          ${item.badge && item.badge !== item.value ? `
-            <div style="font-size: 7.5px; font-weight: 800; color: ${item.badgeColor || '#64748B'}; margin-top: 2px;">● ${item.badge}</div>
-          ` : ''}
+          <div style="font-size: 7.5px; font-weight: 800; color: ${item.badgeColor || '#15803D'}; margin-top: 2px;">● ${item.badge || 'CONFORME'}</div>
         </div>
       `,
         )

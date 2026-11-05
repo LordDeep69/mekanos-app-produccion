@@ -29,6 +29,23 @@ import {
   useMagnitudesEam,
 } from '@/features/catalogos-eam';
 import { cn } from '@/lib/utils';
+
+const getDynamicNumericPlaceholder = (codigo: string, nombre: string, def?: string): string => {
+  if (def) return `Ej: ${def}`;
+  const c = (codigo || '').toLowerCase();
+  const n = (nombre || '').toLowerCase();
+  if (c.includes('rpm') || c.includes('velocidad') || n.includes('rpm')) return 'Ej: 1800';
+  if (c.includes('ano') || c.includes('año') || c.includes('fabricacion')) return 'Ej: 2024';
+  if (c.includes('factor') || c.includes('fp') || c.includes('cos')) return 'Ej: 0.85';
+  if (c.includes('frecuencia') || c.includes('hz')) return 'Ej: 60';
+  if (c.includes('voltaje') || c.includes('vac') || c.includes('vdc')) return 'Ej: 220';
+  if (c.includes('amperaje') || c.includes('amp') || c.includes('corriente')) return 'Ej: 15';
+  if (c.includes('fases') || c.includes('polos')) return 'Ej: 3';
+  if (c.includes('temperatura') || c.includes('temp')) return 'Ej: 80';
+  if (c.includes('presion') || c.includes('psi')) return 'Ej: 120';
+  if (c.includes('horas') || c.includes('horometro')) return 'Ej: 1500';
+  return '0.00';
+};
 import {
   CheckCircle2,
   Cpu,
@@ -524,7 +541,11 @@ export function DynamicModularSpecsEditor({
                                 const parsed = raw === '' ? '' : Number(raw);
                                 onChangeValor(codigoMod, codigoAttr, parsed, 'CUSTOM');
                               }}
-                              placeholder={`Ej: ${attr.valor_defecto || '0'}`}
+                              placeholder={getDynamicNumericPlaceholder(
+                                attr.codigo_atributo,
+                                attr.nombre_atributo,
+                                attr.valor_defecto,
+                              )}
                               className="w-full px-3 py-2 text-xs font-mono font-bold text-slate-900 border-0 focus:ring-0 focus:outline-none"
                             />
                             {attr.unidades_disponibles && attr.unidades_disponibles.length > 0 ? (
@@ -579,7 +600,11 @@ export function DynamicModularSpecsEditor({
                             const parsed = raw === '' ? '' : Number(raw);
                             onChangeValor(codigoMod, codigoAttr, parsed, 'CUSTOM');
                           }}
-                          placeholder={`Ej: ${attr.valor_defecto || '1'}`}
+                          placeholder={getDynamicNumericPlaceholder(
+                            attr.codigo_atributo,
+                            attr.nombre_atributo,
+                            attr.valor_defecto,
+                          )}
                           className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-mono font-bold text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
                         />
                       ) : ctrlHumano.value === 'BOOLEANO' ? (
