@@ -260,14 +260,17 @@ export const generarTipoUniversalEamHTML = (datos: DatosOrdenPDF): string => {
         : generarEvidenciasUniversal(datos.evidencias || [], datos.lotesGaleria)
     }
 
-    <!-- 8. OBSERVACIONES Y DIAGNÓSTICO -->
-    ${generarObservacionesUniversal(datos)}
+    <!-- BLOQUE ATÓMICO DE CIERRE (OBSERVACIONES, FIRMAS Y FOOTER) -->
+    <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 14px;">
+      <!-- 8. OBSERVACIONES Y DIAGNÓSTICO -->
+      ${generarObservacionesUniversal(datos)}
 
-    <!-- 9. FIRMAS DIGITALES Y CIERRE -->
-    ${generarFirmasUniversal(datos)}
+      <!-- 9. FIRMAS DIGITALES Y CIERRE -->
+      ${generarFirmasUniversal(datos)}
 
-    <!-- 10. PIE DE PÁGINA CORPORATIVO -->
-    ${generarFooterCorporativo()}
+      <!-- 10. PIE DE PÁGINA CORPORATIVO -->
+      ${generarFooterCorporativo()}
+    </div>
   </div>
 </body>
 </html>
@@ -314,10 +317,10 @@ function generarChecklistUniversal(actividades: any[]): string {
         </div>
         <table class="checklist-table" style="width: 100%; border-collapse: collapse; font-size: 9px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 4px; overflow: hidden;">
           <thead>
-            <tr style="background: #F8FAFC; border-bottom: 1.5px solid #CBD5E1;">
-              <th style="width: 60%; text-align: left; padding: 6px 10px; font-size: 8.5px; font-weight: 700; color: #334155; text-transform: uppercase;">Actividad / Tarea</th>
-              <th style="width: 16%; text-align: center; padding: 6px 8px; font-size: 8.5px; font-weight: 700; color: #334155; text-transform: uppercase;">Estado</th>
-              <th style="width: 24%; text-align: left; padding: 6px 10px; font-size: 8.5px; font-weight: 700; color: #334155; text-transform: uppercase;">Observaciones Técnicas</th>
+            <tr style="background: #244673; border-bottom: 1.5px solid #1E3A8A;">
+              <th style="width: 60%; text-align: left; padding: 6px 10px; font-size: 8.5px; font-weight: 700; color: #FFFFFF !important; background: #244673 !important; text-transform: uppercase; border: none;">Actividad / Tarea</th>
+              <th style="width: 16%; text-align: center; padding: 6px 8px; font-size: 8.5px; font-weight: 700; color: #FFFFFF !important; background: #244673 !important; text-transform: uppercase; border: none;">Estado</th>
+              <th style="width: 24%; text-align: left; padding: 6px 10px; font-size: 8.5px; font-weight: 700; color: #FFFFFF !important; background: #244673 !important; text-transform: uppercase; border: none;">Observaciones Técnicas</th>
             </tr>
           </thead>
           <tbody>
@@ -472,7 +475,7 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
 
   if (itemsCards.length === 0 && mediciones.length === 0) return '';
 
-  const numCols = itemsCards.length <= 2 ? itemsCards.length : itemsCards.length === 3 ? 3 : 4;
+  const numCols = itemsCards.length <= 5 ? itemsCards.length : itemsCards.length === 6 ? 3 : 4;
   const gridColumnsStyle = `grid-template-columns: repeat(${numCols}, 1fr);`;
 
   return `
@@ -673,27 +676,41 @@ ${obs}
 }
 
 function generarFirmasUniversal(datos: DatosOrdenPDF): string {
+  const nombreClienteRaw = (datos.nombreCliente || '').trim();
+  const nombreClienteValido =
+    nombreClienteRaw && !['.', '-', '--', '..', '...'].includes(nombreClienteRaw)
+      ? nombreClienteRaw
+      : 'Recibido a Satisfacción';
+
+  const cargoClienteRaw = (datos.cargoCliente || '').trim();
+  const cargoClienteValido =
+    cargoClienteRaw && !['.', '-', '--', '..', '...'].includes(cargoClienteRaw)
+      ? cargoClienteRaw
+      : 'Representante del Cliente / Autorizador';
+
   return `
-  <div class="firmas-container" style="page-break-inside: avoid; margin-top: 14px;">
-    <div class="firma-box">
-      ${
-        datos.firmaTecnico
-          ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" style="max-height: 50px;" /></div>`
-          : `<div class="firma-line"></div>`
-      }
-      <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || 'Técnico de Servicio'}</div>
-      <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable de Mantenimiento'}</div>
-      <div class="firma-label">MEKANOS S.A.S · Departamento Técnico</div>
-    </div>
-    <div class="firma-box">
-      ${
-        datos.firmaCliente
-          ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" style="max-height: 50px;" /></div>`
-          : `<div class="firma-line"></div>`
-      }
-      <div class="firma-nombre">${datos.nombreCliente || 'Recibido a Satisfacción'}</div>
-      <div class="firma-cargo">${datos.cargoCliente || 'Representante del Cliente / Autorizador'}</div>
-      <div class="firma-label">Firma y Aprobación del Cliente</div>
+  <div class="firmas-container" style="display: table !important; width: 100% !important; border-collapse: separate !important; border-spacing: 20px 0 !important; margin-top: 14px; page-break-inside: avoid !important; break-inside: avoid !important;">
+    <div style="display: table-row;">
+      <div class="firma-box" style="display: table-cell; width: 50%; vertical-align: top; page-break-inside: avoid !important; break-inside: avoid !important;">
+        ${
+          datos.firmaTecnico
+            ? `<div class="firma-imagen"><img src="${datos.firmaTecnico}" alt="Firma Técnico" style="max-height: 50px;" /></div>`
+            : `<div class="firma-line"></div>`
+        }
+        <div class="firma-nombre">${datos.nombreTecnico || datos.tecnico || 'Técnico de Servicio'}</div>
+        <div class="firma-cargo">${datos.cargoTecnico || 'Técnico Responsable de Mantenimiento'}</div>
+        <div class="firma-label">MEKANOS S.A.S · Departamento Técnico</div>
+      </div>
+      <div class="firma-box" style="display: table-cell; width: 50%; vertical-align: top; page-break-inside: avoid !important; break-inside: avoid !important;">
+        ${
+          datos.firmaCliente
+            ? `<div class="firma-imagen"><img src="${datos.firmaCliente}" alt="Firma Cliente" style="max-height: 50px;" /></div>`
+            : `<div class="firma-line"></div>`
+        }
+        <div class="firma-nombre">${nombreClienteValido}</div>
+        <div class="firma-cargo">${cargoClienteValido}</div>
+        <div class="firma-label">Firma y Aprobación del Cliente</div>
+      </div>
     </div>
   </div>
   `;
