@@ -364,8 +364,11 @@ const CAMPOS_BTREE_CANONICOS: CampoFiltrableBTree[] = [
 // COMPONENTES AUXILIARES DE ETIQUETAS (BADGES)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TipoBadge({ tipo }: { tipo: TipoEquipo | string }) {
-  const normalized = (tipo || '').toUpperCase();
+function TipoBadge({ tipo }: { tipo: TipoEquipo | string | any }) {
+  const raw = typeof tipo === 'string'
+    ? tipo
+    : (tipo?.codigo_tipo || tipo?.nombre_tipo || tipo?.nombre || '');
+  const normalized = String(raw || '').toUpperCase().trim();
   const config = {
     GENERADOR: {
       icon: Zap,
@@ -428,7 +431,8 @@ function TipoBadge({ tipo }: { tipo: TipoEquipo | string }) {
   );
 }
 
-function EstadoBadge({ estado }: { estado: string }) {
+function EstadoBadge({ estado }: { estado: string | any }) {
+  const normEstado = String(typeof estado === 'string' ? estado : (estado?.nombre || estado?.estado || estado || '')).toUpperCase();
   const colors: Record<string, string> = {
     OPERATIVO: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     STANDBY: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -451,15 +455,16 @@ function EstadoBadge({ estado }: { estado: string }) {
     <span
       className={cn(
         'px-2 py-0.5 rounded-md text-[11px] font-semibold border whitespace-nowrap',
-        colors[estado] || 'bg-slate-100 text-slate-700 border-slate-200',
+        colors[normEstado] || 'bg-slate-100 text-slate-700 border-slate-200',
       )}
     >
-      {labels[estado] || estado}
+      {labels[normEstado] || normEstado || 'Operativo'}
     </span>
   );
 }
 
-function CriticidadBadge({ criticidad }: { criticidad: string }) {
+function CriticidadBadge({ criticidad }: { criticidad: string | any }) {
+  const normCrit = String(typeof criticidad === 'string' ? criticidad : (criticidad?.nombre || criticidad?.criticidad || criticidad || 'MEDIA')).toUpperCase();
   const config: Record<string, { color: string; dot: string }> = {
     BAJA: { color: 'text-slate-600 bg-slate-50 border-slate-200', dot: 'bg-blue-500' },
     MEDIA: { color: 'text-amber-700 bg-amber-50/60 border-amber-200', dot: 'bg-amber-500' },
@@ -467,7 +472,7 @@ function CriticidadBadge({ criticidad }: { criticidad: string }) {
     CRITICA: { color: 'text-rose-700 bg-rose-50 border-rose-200', dot: 'bg-rose-600' },
   };
 
-  const { color, dot } = config[criticidad] || config.MEDIA;
+  const { color, dot } = config[normCrit] || config.MEDIA;
 
   return (
     <span
@@ -477,7 +482,7 @@ function CriticidadBadge({ criticidad }: { criticidad: string }) {
       )}
     >
       <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
-      {criticidad}
+      {normCrit}
     </span>
   );
 }
@@ -1065,7 +1070,10 @@ export default function EquiposPage() {
           }));
 
           const tiposAplica = (mod as any).tipo_equipo_modulos
-            ?.map((tem: any) => tem.tipo_equipo?.codigo_tipo?.toUpperCase())
+            ?.map((tem: any) => {
+              const raw = tem.tipo_equipo?.codigo_tipo || (typeof tem.tipo_equipo === 'string' ? tem.tipo_equipo : '');
+              return raw ? String(raw).toUpperCase().trim() : null;
+            })
             .filter(Boolean) as string[] | undefined;
 
           const existente = mapa.get(attr.codigo_atributo);
@@ -2174,7 +2182,7 @@ export default function EquiposPage() {
                         }}
                         className={cn(
                           'px-2.5 py-0.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer',
-                          filtroAtributoTexto.toUpperCase() === sug.value.toUpperCase()
+                          String(filtroAtributoTexto).toUpperCase() === String(sug.value).toUpperCase()
                             ? 'bg-blue-600 text-white border-blue-600'
                             : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-blue-50 hover:text-blue-700',
                         )}

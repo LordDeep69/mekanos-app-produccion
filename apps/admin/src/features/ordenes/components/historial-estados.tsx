@@ -22,6 +22,10 @@ import {
     Loader2,
     ChevronDown,
     ChevronUp,
+    FileText,
+    RefreshCw,
+    Lock,
+    Unlock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api/client';
@@ -47,6 +51,8 @@ export interface HistorialItem {
     motivo_cambio?: string | null;
     motivoCambio?: string | null;
     observaciones?: string | null;
+    accion?: string | null;
+    metadata?: any | null;
     fecha_cambio?: string;
     fechaCambio?: string;
     realizado_por?: number;
@@ -76,6 +82,57 @@ const ESTADO_CONFIG: Record<string, { label: string; color: string; bgColor: str
     APROBADA: { label: 'Aprobada', color: 'text-emerald-600', bgColor: 'bg-emerald-100', icon: FileCheck },
     CANCELADA: { label: 'Cancelada', color: 'text-red-600', bgColor: 'bg-red-100', icon: XCircle },
 };
+
+const ACCION_CONFIG: Record<
+    string,
+    { label: string; color: string; bgColor: string; icon: React.ElementType }
+> = {
+    MODIFICAR_OBSERVACIONES_CIERRE: {
+        label: 'Observaciones Editadas',
+        color: 'text-indigo-700',
+        bgColor: 'bg-indigo-100',
+        icon: FileText,
+    },
+    HABILITAR_EDICION_TECNICO: {
+        label: 'Edición Técnica Habilitada',
+        color: 'text-amber-700',
+        bgColor: 'bg-amber-100',
+        icon: Unlock,
+    },
+    REVOCAR_EDICION_TECNICO: {
+        label: 'Edición Técnica Revocada',
+        color: 'text-slate-700',
+        bgColor: 'bg-slate-200',
+        icon: Lock,
+    },
+    RESUBIDA_TECNICO: {
+        label: 'Resubida por Técnico',
+        color: 'text-teal-700',
+        bgColor: 'bg-teal-100',
+        icon: RefreshCw,
+    },
+    TRANSFERIR_DATOS: {
+        label: 'Transferencia de Datos',
+        color: 'text-purple-700',
+        bgColor: 'bg-purple-100',
+        icon: Clock,
+    },
+};
+
+function stripHtml(html: string): string {
+    if (!html) return '';
+    return html
+        .replace(/<br\s*[\/]?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .trim();
+}
 
 function formatFechaSegura(rawFecha: any): string {
     if (!rawFecha) return 'Fecha registrada';
@@ -128,7 +185,7 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
         return () => {
             isMounted = false;
         };
-    }, [idOrden]);
+    }, [idOrden, orden?.fecha_modificacion, orden?.observaciones_cierre]);
 
     if (isLoading) {
         return (
@@ -225,7 +282,8 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                               codigoAnterior
                             : null;
 
-                        const config = ESTADO_CONFIG[codigoNuevo] || {
+                        const accionConfig = item.accion ? ACCION_CONFIG[item.accion] : null;
+                        const config = accionConfig || ESTADO_CONFIG[codigoNuevo] || {
                             label: nombreNuevo,
                             color: 'text-gray-700',
                             bgColor: 'bg-gray-100',
@@ -238,13 +296,28 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                         const fechaStr = formatFechaSegura(rawFecha);
 
                         const motivoTexto =
-                            item.motivo || item.motivo_cambio || item.motivoCambio || null;
+                            item.motivo_cambio ||
+                            item.motivoCambio ||
+                            (item.motivo && item.motivo !== item.observaciones ? item.motivo : null);
+
+                        const rawObservaciones = item.observaciones?.trim() || null;
+                        const cleanObservaciones = rawObservaciones ? stripHtml(rawObservaciones) : null;
+                        const tieneObservacionDetalle =
+                            cleanObservaciones &&
+                            cleanObservaciones !== motivoTexto &&
+                            cleanObservaciones.length > 0;
 
                         const rawEmail = item.usuario?.email || item.usuarioRealizador?.email || '';
                         const fallbackAdmin = rawEmail.includes('admin@') || rawEmail.includes('superpa83') || item.realizado_por === 1;
                         const usuarioNombre =
                             item.usuario?.nombre ||
                             (fallbackAdmin ? 'Administrador del Sistema' : (rawEmail || (item.realizado_por ? `Usuario #${item.realizado_por}` : 'Administrador del Sistema')));
+
+                        const mostrarTransicion =
+                            !item.accion &&
+                            codigoAnterior &&
+                            codigoAnterior !== codigoNuevo &&
+                            nombreAnterior;
 
                         return (
                             <div
@@ -275,7 +348,7 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                                             >
                                                 {config.label}
                                             </span>
-                                            {nombreAnterior && (
+                                            {mostrarTransicion && (
                                                 <span className="text-[11px] text-gray-400">
                                                     ← desde {nombreAnterior}
                                                 </span>
@@ -284,10 +357,29 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                                         <span className="text-[11px] font-medium text-gray-500">{fechaStr}</span>
                                     </div>
 
-                                    {(motivoTexto || item.observaciones) && (
+                                    {motivoTexto && (
                                         <div className="mt-1.5 text-xs text-gray-600 flex items-start gap-1.5">
                                             <MessageSquare className="h-3.5 w-3.5 text-gray-400 mt-0.5 shrink-0" />
-                                            <span>{motivoTexto || item.observaciones}</span>
+                                            <span>{motivoTexto}</span>
+                                        </div>
+                                    )}
+
+                                    {tieneObservacionDetalle && (
+                                        <div className="mt-2 p-2.5 rounded-lg bg-white/95 border border-gray-200/80 text-xs text-gray-700 shadow-2xs">
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 mb-1">
+                                                <FileText className="h-3 w-3 text-indigo-500 shrink-0" />
+                                                <span>
+                                                    {item.accion === 'MODIFICAR_OBSERVACIONES_CIERRE'
+                                                        ? 'Observación guardada:'
+                                                        : 'Observación registrada:'}
+                                                </span>
+                                            </div>
+                                            <div
+                                                className="whitespace-pre-line text-gray-700 line-clamp-4 hover:line-clamp-none transition-all cursor-pointer font-sans leading-relaxed"
+                                                title="Clic para expandir / contraer"
+                                            >
+                                                {cleanObservaciones}
+                                            </div>
                                         </div>
                                     )}
 

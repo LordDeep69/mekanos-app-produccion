@@ -512,6 +512,7 @@ export function useUpdateObservacionesCierre() {
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
             queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+            queryClient.invalidateQueries({ queryKey: ['orden-historial', variables.id] });
             toast.success('Observaciones de cierre actualizadas');
         },
         onError: (error: unknown) => {

@@ -780,6 +780,26 @@ export default function EquipoDetallePage() {
 
   const equipo = data?.data;
 
+  // Cálculos de KPIs en vivo (Top-level hook para cumplir estrictamente con las Reglas de Hooks de React)
+  const kpiDestacado = useMemo(() => {
+    if (!equipo) return null;
+    const specs = ((equipo.especificaciones as any)?.modulos || {}) as Record<string, Record<string, any>>;
+    for (const mod of Object.values(specs)) {
+      if (!mod || typeof mod !== 'object') continue;
+      if (mod.capacidad_de_enfriamiento || mod.capacidad_enfriamiento) {
+        const val = mod.capacidad_de_enfriamiento ?? mod.capacidad_enfriamiento;
+        const uom = (equipo.especificaciones as any)?.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
+        return `${val} ${uom}`;
+      }
+      if (mod.potencia_kva) return `${mod.potencia_kva} kVA`;
+      if (mod.potencia_kw) return `${mod.potencia_kw} kW`;
+      if (mod.presion_maxima_psi) return `${mod.presion_maxima_psi} PSI`;
+      if (mod.caudal_maximo_m3h) return `${mod.caudal_maximo_m3h} m³/h`;
+      if (mod.caudal_aire_cfm) return `${mod.caudal_aire_cfm} CFM`;
+    }
+    return null;
+  }, [equipo?.especificaciones]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[420px]">
@@ -834,23 +854,6 @@ export default function EquipoDetallePage() {
 
   // Cálculos de KPIs en vivo (Filosofía de Referenciación Zero-Stress)
   const horasActualesNum = Number(equipo.horas_actuales || 0);
-  const kpiDestacado = useMemo(() => {
-    const specs = ((equipo.especificaciones as any)?.modulos || {}) as Record<string, Record<string, any>>;
-    for (const mod of Object.values(specs)) {
-      if (!mod || typeof mod !== 'object') continue;
-      if (mod.capacidad_de_enfriamiento || mod.capacidad_enfriamiento) {
-        const val = mod.capacidad_de_enfriamiento ?? mod.capacidad_enfriamiento;
-        const uom = (equipo.especificaciones as any)?.unidades_personalizadas?.capacidad_de_enfriamiento || 'TR';
-        return `${val} ${uom}`;
-      }
-      if (mod.potencia_kva) return `${mod.potencia_kva} kVA`;
-      if (mod.potencia_kw) return `${mod.potencia_kw} kW`;
-      if (mod.presion_maxima_psi) return `${mod.presion_maxima_psi} PSI`;
-      if (mod.caudal_maximo_m3h) return `${mod.caudal_maximo_m3h} m³/h`;
-      if (mod.caudal_aire_cfm) return `${mod.caudal_aire_cfm} CFM`;
-    }
-    return null;
-  }, [equipo.especificaciones]);
   const totalOrdenes = fichaLogistica?.resumen?.total_ordenes ?? 0;
   const totalBom = fichaLogistica?.resumen?.total_bom ?? 0;
   const bomCompatibles = fichaLogistica?.repuestos_compatibles || [];

@@ -3187,7 +3187,7 @@ export class OrdenesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Actualizar observaciones de cierre',
-    description: 'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA.',
+    description: 'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA y registra la auditoría.',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
   @ApiResponse({ status: 200, description: 'Observaciones actualizadas exitosamente' })
@@ -3196,6 +3196,8 @@ export class OrdenesController {
   async updateObservacionesCierre(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { observaciones_cierre: string },
+    @UserId() userId: number,
+    @CurrentUser() user: any,
   ) {
     // 1. Verificar que la orden existe y obtener estado actual
     const orden = await this.prisma.ordenes_servicio.findUnique({
@@ -3216,14 +3218,37 @@ export class OrdenesController {
       );
     }
 
-    // 3. Actualizar SOLO observaciones_cierre (operación atómica)
-    const updated = await this.prisma.ordenes_servicio.update({
-      where: { id_orden_servicio: id },
-      data: {
-        observaciones_cierre: body.observaciones_cierre,
-        fecha_modificacion: new Date(),
-      },
-    });
+    const adminId = Number(userId) || Number(user?.id) || Number(user?.id_usuario) || 1;
+    const fechaCambio = new Date();
+
+    // 3. Actualizar observaciones_cierre y registrar auditoría en historial en la misma transacción
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.ordenes_servicio.update({
+        where: { id_orden_servicio: id },
+        data: {
+          observaciones_cierre: body.observaciones_cierre,
+          fecha_modificacion: fechaCambio,
+          modificado_por: adminId,
+        },
+      }),
+      this.prisma.historial_estados_orden.create({
+        data: {
+          id_orden_servicio: id,
+          id_estado_anterior: orden.id_estado_actual,
+          id_estado_nuevo: orden.id_estado_actual,
+          accion: 'MODIFICAR_OBSERVACIONES_CIERRE',
+          motivo_cambio: 'Edición de observaciones de cierre desde Portal Admin',
+          observaciones: body.observaciones_cierre,
+          realizado_por: adminId,
+          fecha_cambio: fechaCambio,
+          metadata: {
+            origen: 'PORTAL_ADMIN',
+            observacion_anterior: orden.observaciones_cierre,
+            observacion_nueva: body.observaciones_cierre,
+          } as any,
+        },
+      }),
+    ]);
 
     return {
       success: true,
@@ -3231,6 +3256,7 @@ export class OrdenesController {
       data: {
         id_orden_servicio: updated.id_orden_servicio,
         observaciones_cierre: updated.observaciones_cierre,
+        fecha_modificacion: updated.fecha_modificacion,
       },
     };
   }
