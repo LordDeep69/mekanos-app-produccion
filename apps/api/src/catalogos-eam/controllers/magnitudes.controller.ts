@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } fro
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CatalogosEamService } from '../catalogos-eam.service';
-import { CreateMagnitudDto, UpdateMagnitudDto } from '../dto/catalogos-eam.dto';
+import { ActivarMagnitudBancoDto, CreateMagnitudDto, UpdateMagnitudDto } from '../dto/catalogos-eam.dto';
 
 @ApiTags('EAM - Magnitudes Físicas')
 @ApiBearerAuth()
@@ -15,6 +15,18 @@ export class MagnitudesController {
   @ApiOperation({ summary: 'Obtener resumen ejecutivo de las 5 capas del ecosistema EAM' })
   async getResumenEjecutivo() {
     return this.eamService.getResumenEjecutivo();
+  }
+
+  @Get('banco')
+  @ApiOperation({ summary: 'Obtener el catálogo canónico de magnitudes y unidades del banco QUDT/UCUM' })
+  async getBanco() {
+    return this.eamService.getBancoMagnitudes();
+  }
+
+  @Post('activar-banco')
+  @ApiOperation({ summary: 'Activar una magnitud preconfigurada del banco QUDT/UCUM con todas sus unidades canónicas' })
+  async activarBanco(@Body() dto: ActivarMagnitudBancoDto) {
+    return this.eamService.activarMagnitudBanco(dto.codigo_magnitud);
   }
 
   @Get()

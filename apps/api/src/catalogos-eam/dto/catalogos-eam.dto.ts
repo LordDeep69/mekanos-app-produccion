@@ -9,6 +9,7 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 export class ConvertirUomDto {
@@ -22,6 +23,33 @@ export class ConvertirUomDto {
   @IsString()
   @IsNotEmpty()
   unidadDestino: string;
+}
+
+export class CreateUnidadBaseInlineDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(10)
+  codigo: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  nombre: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(10)
+  simbolo: string;
+
+  @IsOptional()
+  @IsBoolean()
+  permite_decimales?: boolean;
+}
+
+export class ActivarMagnitudBancoDto {
+  @IsString()
+  @IsNotEmpty()
+  codigo_magnitud: string;
 }
 
 export class CreateMagnitudDto {
@@ -47,6 +75,11 @@ export class CreateMagnitudDto {
   @IsOptional()
   @IsBoolean()
   es_sistema?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateUnidadBaseInlineDto)
+  unidad_base?: CreateUnidadBaseInlineDto;
 }
 
 export class UpdateMagnitudDto {

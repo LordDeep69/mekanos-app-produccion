@@ -20,7 +20,9 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { UomConversionService } from '../equipos/services/uom-conversion.service';
+import { BANCO_UNIVERSAL_QUDT } from './data/banco-qudt.data';
 import {
+  ActivarMagnitudBancoDto,
   AsignarAtributoModuloDto,
   ConvertirUomDto,
   CreateArquetipoDto,
@@ -124,6 +126,109 @@ export class CatalogosEamService {
   // 1. MAGNITUDES FÍSICAS Y UoM
   // ═══════════════════════════════════════════════════════════════════════════
 
+  getBancoMagnitudes() {
+    return BANCO_UNIVERSAL_QUDT;
+  }
+
+  async activarMagnitudBanco(codigoMagnitud: string) {
+    const cod = codigoMagnitud.trim().toUpperCase();
+    const preset = BANCO_UNIVERSAL_QUDT.find((p) => p.codigo_magnitud === cod);
+    if (!preset) {
+      throw new NotFoundException(`No existe la magnitud "${cod}" en el Banco Canónico QUDT`);
+    }
+
+    const existe = await this.prisma.catalogo_magnitudes.findUnique({
+      where: { codigo_magnitud: preset.codigo_magnitud },
+      include: { unidades_medida: true },
+    });
+
+    if (existe) {
+      // Sincronizar unidades si faltan
+      return this.prisma.$transaction(async (tx) => {
+        for (const u of preset.unidades) {
+          const uExiste = await tx.unidades_medida.findUnique({
+            where: { codigo: u.codigo },
+          });
+          if (!uExiste) {
+            await tx.unidades_medida.create({
+              data: {
+                codigo: u.codigo,
+                nombre: u.nombre,
+                simbolo: u.simbolo,
+                tipo_magnitud: preset.codigo_magnitud.slice(0, 20),
+                id_magnitud: existe.id_magnitud,
+                factor_a: new Prisma.Decimal(u.factor_a),
+                factor_b: new Prisma.Decimal(u.factor_b ?? 0.0),
+                es_unidad_base: u.es_unidad_base,
+                permite_decimales: u.permite_decimales ?? true,
+                activo: true,
+              },
+            });
+          }
+        }
+        return tx.catalogo_magnitudes.findUnique({
+          where: { id_magnitud: existe.id_magnitud },
+          include: {
+            unidades_medida: {
+              where: { activo: true },
+              orderBy: { es_unidad_base: 'desc' },
+            },
+          },
+        });
+      });
+    }
+
+    // Transacción atómica: Magnitud + todas sus Unidades estándar
+    return this.prisma.$transaction(async (tx) => {
+      const mag = await tx.catalogo_magnitudes.create({
+        data: {
+          codigo_magnitud: preset.codigo_magnitud,
+          nombre_magnitud: preset.nombre_magnitud,
+          descripcion: preset.descripcion,
+          unidad_base_codigo: preset.unidad_base_codigo,
+          es_sistema: true,
+          activo: true,
+        },
+      });
+
+      for (const u of preset.unidades) {
+        await tx.unidades_medida.upsert({
+          where: { codigo: u.codigo },
+          create: {
+            codigo: u.codigo,
+            nombre: u.nombre,
+            simbolo: u.simbolo,
+            tipo_magnitud: preset.codigo_magnitud.slice(0, 20),
+            id_magnitud: mag.id_magnitud,
+            factor_a: new Prisma.Decimal(u.factor_a),
+            factor_b: new Prisma.Decimal(u.factor_b ?? 0.0),
+            es_unidad_base: u.es_unidad_base,
+            permite_decimales: u.permite_decimales ?? true,
+            activo: true,
+          },
+          update: {
+            id_magnitud: mag.id_magnitud,
+            factor_a: new Prisma.Decimal(u.factor_a),
+            factor_b: new Prisma.Decimal(u.factor_b ?? 0.0),
+            es_unidad_base: u.es_unidad_base,
+            permite_decimales: u.permite_decimales ?? true,
+            activo: true,
+          },
+        });
+      }
+
+      return tx.catalogo_magnitudes.findUnique({
+        where: { id_magnitud: mag.id_magnitud },
+        include: {
+          unidades_medida: {
+            where: { activo: true },
+            orderBy: { es_unidad_base: 'desc' },
+          },
+        },
+      });
+    });
+  }
+
   async getMagnitudes() {
     return this.prisma.catalogo_magnitudes.findMany({
       where: { activo: true },
@@ -163,15 +268,61 @@ export class CatalogosEamService {
       throw new ConflictException(`Ya existe la magnitud física con código ${codigo}`);
     }
 
-    return this.prisma.catalogo_magnitudes.create({
-      data: {
-        codigo_magnitud: codigo,
-        nombre_magnitud: dto.nombre_magnitud.trim(),
-        descripcion: dto.descripcion?.trim() || null,
-        unidad_base_codigo: dto.unidad_base_codigo?.trim().toUpperCase() || null,
-        es_sistema: dto.es_sistema ?? false,
-        activo: true,
-      },
+    const unidadBaseCod =
+      dto.unidad_base?.codigo?.trim().toUpperCase() ||
+      dto.unidad_base_codigo?.trim().toUpperCase() ||
+      null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const mag = await tx.catalogo_magnitudes.create({
+        data: {
+          codigo_magnitud: codigo,
+          nombre_magnitud: dto.nombre_magnitud.trim(),
+          descripcion: dto.descripcion?.trim() || null,
+          unidad_base_codigo: unidadBaseCod,
+          es_sistema: dto.es_sistema ?? false,
+          activo: true,
+        },
+      });
+
+      if (dto.unidad_base) {
+        const uCod = dto.unidad_base.codigo.trim().toUpperCase();
+        await tx.unidades_medida.upsert({
+          where: { codigo: uCod },
+          create: {
+            codigo: uCod,
+            nombre: dto.unidad_base.nombre.trim(),
+            simbolo: dto.unidad_base.simbolo.trim(),
+            tipo_magnitud: codigo.slice(0, 20),
+            id_magnitud: mag.id_magnitud,
+            factor_a: new Prisma.Decimal(1.0),
+            factor_b: new Prisma.Decimal(0.0),
+            es_unidad_base: true,
+            permite_decimales: dto.unidad_base.permite_decimales ?? true,
+            activo: true,
+          },
+          update: {
+            nombre: dto.unidad_base.nombre.trim(),
+            simbolo: dto.unidad_base.simbolo.trim(),
+            id_magnitud: mag.id_magnitud,
+            factor_a: new Prisma.Decimal(1.0),
+            factor_b: new Prisma.Decimal(0.0),
+            es_unidad_base: true,
+            permite_decimales: dto.unidad_base.permite_decimales ?? true,
+            activo: true,
+          },
+        });
+      }
+
+      return tx.catalogo_magnitudes.findUnique({
+        where: { id_magnitud: mag.id_magnitud },
+        include: {
+          unidades_medida: {
+            where: { activo: true },
+            orderBy: { es_unidad_base: 'desc' },
+          },
+        },
+      });
     });
   }
 
@@ -309,6 +460,24 @@ export class CatalogosEamService {
       }
     }
 
+    let factorA = dto.factor_a ?? 1.0;
+    let factorB = dto.factor_b ?? 0.0;
+    if (dto.es_unidad_base) {
+      factorA = 1.0;
+      factorB = 0.0;
+    }
+
+    if (dto.es_unidad_base && idMagnitud) {
+      await this.prisma.unidades_medida.updateMany({
+        where: { id_magnitud: idMagnitud },
+        data: { es_unidad_base: false },
+      });
+      await this.prisma.catalogo_magnitudes.update({
+        where: { id_magnitud: idMagnitud },
+        data: { unidad_base_codigo: codigo },
+      });
+    }
+
     return this.prisma.unidades_medida.create({
       data: {
         codigo,
@@ -316,8 +485,8 @@ export class CatalogosEamService {
         simbolo: dto.simbolo.trim(),
         tipo_magnitud: tipoMagnitud,
         id_magnitud: idMagnitud || null,
-        factor_a: new Prisma.Decimal(dto.factor_a ?? 1.0),
-        factor_b: new Prisma.Decimal(dto.factor_b ?? 0.0),
+        factor_a: new Prisma.Decimal(factorA),
+        factor_b: new Prisma.Decimal(factorB),
         es_unidad_base: dto.es_unidad_base ?? false,
         permite_decimales: dto.permite_decimales ?? true,
         activo: true,
@@ -342,9 +511,31 @@ export class CatalogosEamService {
         ? { connect: { id_magnitud: dto.id_magnitud } }
         : { disconnect: true };
     }
-    if (dto.factor_a !== undefined) data.factor_a = new Prisma.Decimal(dto.factor_a);
-    if (dto.factor_b !== undefined) data.factor_b = new Prisma.Decimal(dto.factor_b);
-    if (dto.es_unidad_base !== undefined) data.es_unidad_base = dto.es_unidad_base;
+
+    const esUnidadBase = dto.es_unidad_base !== undefined ? dto.es_unidad_base : unidad.es_unidad_base;
+
+    if (esUnidadBase) {
+      data.factor_a = new Prisma.Decimal(1.0);
+      data.factor_b = new Prisma.Decimal(0.0);
+      data.es_unidad_base = true;
+
+      const targetMagId = dto.id_magnitud !== undefined ? dto.id_magnitud : unidad.id_magnitud;
+      if (targetMagId) {
+        await this.prisma.unidades_medida.updateMany({
+          where: { id_magnitud: targetMagId, NOT: { codigo: codigo.toUpperCase() } },
+          data: { es_unidad_base: false },
+        });
+        await this.prisma.catalogo_magnitudes.update({
+          where: { id_magnitud: targetMagId },
+          data: { unidad_base_codigo: codigo.toUpperCase() },
+        });
+      }
+    } else {
+      if (dto.factor_a !== undefined) data.factor_a = new Prisma.Decimal(dto.factor_a);
+      if (dto.factor_b !== undefined) data.factor_b = new Prisma.Decimal(dto.factor_b);
+      if (dto.es_unidad_base !== undefined) data.es_unidad_base = dto.es_unidad_base;
+    }
+
     if (dto.permite_decimales !== undefined) data.permite_decimales = dto.permite_decimales;
     if (dto.activo !== undefined) data.activo = dto.activo;
 

@@ -7,6 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  activarMagnitudBancoEam,
   agregarItemBomOemEam,
   asignarAtributoModuloEam,
   buscarComponentesWmsEam,
@@ -32,6 +33,7 @@ import {
   getArquetipoEsquemaEam,
   getArquetiposEam,
   getAtributosEam,
+  getBancoMagnitudesEam,
   getMagnitudesEam,
   getModeloOemDetalleEam,
   getModelosOemEam,
@@ -66,6 +68,7 @@ export const EAM_KEYS = {
   modeloOemDetalle: (idModelo: number) => [...EAM_KEYS.all, 'modelo-oem', idModelo] as const,
   componentesWms: (search?: string) => [...EAM_KEYS.all, 'componentes-wms', search || ''] as const,
   tiposServicio: (idTipo?: number) => [...EAM_KEYS.all, 'tipos-servicio', idTipo || 'all'] as const,
+  bancoMagnitudes: () => [...EAM_KEYS.all, 'banco-magnitudes'] as const,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -83,6 +86,13 @@ export function useMagnitudesEam() {
   return useQuery({
     queryKey: EAM_KEYS.magnitudes(),
     queryFn: getMagnitudesEam,
+  });
+}
+
+export function useBancoMagnitudesEam() {
+  return useQuery({
+    queryKey: EAM_KEYS.bancoMagnitudes(),
+    queryFn: getBancoMagnitudesEam,
   });
 }
 
@@ -171,6 +181,16 @@ export function useCreateMagnitudEam() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createMagnitudEam,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
+export function useActivarMagnitudBancoEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (codigo_magnitud: string) => activarMagnitudBancoEam(codigo_magnitud),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },

@@ -306,6 +306,21 @@ export async function getResumenEjecutivoEam(): Promise<ResumenEjecutivoEam> {
 }
 
 // 1. Magnitudes y Unidades UoM
+export async function getBancoMagnitudesEam(): Promise<any[]> {
+  const { data } = await apiClient.get<any[]>('/catalogos/magnitudes/banco');
+  return data;
+}
+
+export async function activarMagnitudBancoEam(
+  codigo_magnitud: string,
+): Promise<MagnitudFisica> {
+  const { data } = await apiClient.post<MagnitudFisica>(
+    '/catalogos/magnitudes/activar-banco',
+    { codigo_magnitud },
+  );
+  return data;
+}
+
 export async function getMagnitudesEam(): Promise<MagnitudFisica[]> {
   const { data } = await apiClient.get<MagnitudFisica[]>('/catalogos/magnitudes');
   return data;
@@ -316,6 +331,12 @@ export async function createMagnitudEam(payload: {
   nombre_magnitud: string;
   descripcion?: string;
   unidad_base_codigo?: string;
+  unidad_base?: {
+    codigo: string;
+    nombre: string;
+    simbolo: string;
+    permite_decimales?: boolean;
+  };
 }): Promise<MagnitudFisica> {
   const { data } = await apiClient.post<MagnitudFisica>('/catalogos/magnitudes', payload);
   return data;
