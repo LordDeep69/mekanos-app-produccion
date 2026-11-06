@@ -1071,7 +1071,12 @@ export default function EquiposPage() {
 
           const tiposAplica = (mod as any).tipo_equipo_modulos
             ?.map((tem: any) => {
-              const raw = tem.tipo_equipo?.codigo_tipo || (typeof tem.tipo_equipo === 'string' ? tem.tipo_equipo : '');
+              if (!tem) return null;
+              const te = tem.tipo_equipo;
+              const raw =
+                typeof te === 'string'
+                  ? te
+                  : (te?.codigo_tipo || te?.nombre_tipo || te?.nombre || '');
               return raw ? String(raw).toUpperCase().trim() : null;
             })
             .filter(Boolean) as string[] | undefined;
@@ -1102,8 +1107,8 @@ export default function EquiposPage() {
     if (!tipoFiltro) return todos;
 
     // Si hay un tipo seleccionado, mostrar primero los aplicables a ese tipo
-    const normTipo = tipoFiltro.toUpperCase();
-    return todos.filter((c) => !c.aplica_tipos || c.aplica_tipos.length === 0 || c.aplica_tipos.includes(normTipo));
+    const normTipo = tipoFiltro ? String(tipoFiltro).toUpperCase().trim() : '';
+    return todos.filter((c) => !c.aplica_tipos || c.aplica_tipos.length === 0 || (normTipo && c.aplica_tipos.includes(normTipo)));
   }, [modulosHub, magnitudesHub, tipoFiltro]);
 
   // ═══════════════════════════════════════════════════════════════════════════
