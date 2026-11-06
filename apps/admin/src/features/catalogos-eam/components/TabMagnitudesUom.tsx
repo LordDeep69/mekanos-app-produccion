@@ -105,13 +105,14 @@ export function TabMagnitudesUom() {
   const [showMagModal, setShowMagModal] = useState(false);
   const [editingMag, setEditingMag] = useState<MagnitudFisica | null>(null);
   const [customSlugMag, setCustomSlugMag] = useState(false);
+  const [filtroSelectorUnidad, setFiltroSelectorUnidad] = useState('');
   const [magForm, setMagForm] = useState({
     codigo_magnitud: '',
     nombre_magnitud: '',
     descripcion: '',
     unidad_base_codigo: '',
-    // Creación atómica de unidad base inicial
-    crearUnidadBase: true,
+    // Modo de selección de unidad base en creación: 'SELECTOR' o 'CREAR'
+    modoUnidadBase: 'SELECTOR' as 'SELECTOR' | 'CREAR',
     base_nombre: '',
     base_simbolo: '',
     base_codigo: '',
@@ -302,15 +303,73 @@ export function TabMagnitudesUom() {
     }
   };
 
+  // Catálogo unificado de todas las unidades existentes en la base de datos + banco canónico QUDT
+  const todasLasUnidadesDisponibles = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        codigo: string;
+        nombre: string;
+        simbolo: string;
+        categoria?: string;
+        origen: 'EXISTENTE' | 'QUDT';
+      }
+    >();
+
+    // 1. Unidades existentes actualmente en la base de datos
+    for (const m of magnitudes) {
+      for (const u of m.unidades_medida || []) {
+        map.set(u.codigo.toUpperCase(), {
+          codigo: u.codigo.toUpperCase(),
+          nombre: u.nombre,
+          simbolo: u.simbolo,
+          categoria: m.nombre_magnitud,
+          origen: 'EXISTENTE',
+        });
+      }
+    }
+
+    // 2. Unidades canónicas del Banco Universal QUDT
+    for (const preset of BANCO_UNIVERSAL_QUDT) {
+      for (const u of preset.unidades) {
+        const cod = u.codigo.toUpperCase();
+        if (!map.has(cod)) {
+          map.set(cod, {
+            codigo: cod,
+            nombre: u.nombre,
+            simbolo: u.simbolo,
+            categoria: preset.nombre_magnitud,
+            origen: 'QUDT',
+          });
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [magnitudes]);
+
+  const unidadesFiltradasSelector = useMemo(() => {
+    const q = filtroSelectorUnidad.trim().toLowerCase();
+    if (!q) return todasLasUnidadesDisponibles;
+    return todasLasUnidadesDisponibles.filter(
+      (u) =>
+        u.nombre.toLowerCase().includes(q) ||
+        u.simbolo.toLowerCase().includes(q) ||
+        u.codigo.toLowerCase().includes(q) ||
+        (u.categoria && u.categoria.toLowerCase().includes(q)),
+    );
+  }, [todasLasUnidadesDisponibles, filtroSelectorUnidad]);
+
   const openNewMagnitud = () => {
     setEditingMag(null);
     setCustomSlugMag(false);
+    setFiltroSelectorUnidad('');
     setMagForm({
       codigo_magnitud: '',
       nombre_magnitud: '',
       descripcion: '',
       unidad_base_codigo: '',
-      crearUnidadBase: true,
+      modoUnidadBase: 'SELECTOR',
       base_nombre: '',
       base_simbolo: '',
       base_codigo: '',
@@ -322,12 +381,13 @@ export function TabMagnitudesUom() {
   const openEditMagnitud = (mag: MagnitudFisica) => {
     setEditingMag(mag);
     setCustomSlugMag(true);
+    setFiltroSelectorUnidad('');
     setMagForm({
       codigo_magnitud: mag.codigo_magnitud,
       nombre_magnitud: mag.nombre_magnitud,
       descripcion: mag.descripcion || '',
       unidad_base_codigo: mag.unidad_base_codigo || '',
-      crearUnidadBase: false,
+      modoUnidadBase: 'SELECTOR',
       base_nombre: '',
       base_simbolo: '',
       base_codigo: '',
@@ -362,7 +422,12 @@ export function TabMagnitudesUom() {
         descripcion: magForm.descripcion?.trim() || undefined,
       };
 
-      if (magForm.crearUnidadBase && magForm.base_nombre && magForm.base_simbolo) {
+      if (!magForm.base_codigo && !magForm.base_nombre) {
+        alert('Por favor selecciona o define la unidad principal de referencia para la magnitud.');
+        return;
+      }
+
+      if (magForm.base_nombre && magForm.base_simbolo) {
         const uCod = (
           magForm.base_codigo ||
           generarCodigoDesdeSimbolo(magForm.base_simbolo, magForm.base_nombre)
@@ -1198,7 +1263,7 @@ export function TabMagnitudesUom() {
                 />
               </div>
 
-              {/* 4° DEFINICIÓN DE UNIDAD BASE (SUB-CARD ELEGANTE) */}
+              {/* 4° UNIDAD PRINCIPAL DE REFERENCIA (SELECTOR DEL BANCO O CREACIÓN PERSONALIZADA) */}
               {!editingMag ? (
                 <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200/80 space-y-3">
                   <div className="flex items-center justify-between">
@@ -1214,88 +1279,210 @@ export function TabMagnitudesUom() {
                   </div>
 
                   <p className="text-[11px] text-blue-900/70 leading-relaxed">
-                    Toda magnitud física requiere una unidad canónica contra la cual se calculan los factores de conversión de las demás unidades.
+                    Toda magnitud física requiere una unidad canónica inicial contra la cual se calculan los factores de conversión de las demás unidades.
                   </p>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Nombre de Unidad Base *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej: Kilogramo"
-                        value={magForm.base_nombre}
-                        onChange={(e) => {
-                          const n = e.target.value;
-                          setMagForm((prev) => ({
-                            ...prev,
-                            base_nombre: n,
-                            base_codigo: prev.customSlugBaseUnit
-                              ? prev.base_codigo
-                              : prev.base_simbolo
-                              ? generarCodigoDesdeSimbolo(prev.base_simbolo, n)
-                              : generarSlugCodigo(n, 10),
-                          }));
-                        }}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium"
-                      />
-                    </div>
+                  {magForm.modoUnidadBase === 'SELECTOR' ? (
+                    <div className="space-y-2.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-slate-700">
+                          Seleccionar Unidad del Banco ({todasLasUnidadesDisponibles.length} estándar) *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMagForm((prev) => ({
+                              ...prev,
+                              modoUnidadBase: 'CREAR',
+                              base_codigo: '',
+                              base_nombre: '',
+                              base_simbolo: '',
+                            }))
+                          }
+                          className="text-[11px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>+ Crear unidad personalizada</span>
+                        </button>
+                      </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Símbolo * (sensible a mayúsculas)
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej: kg"
-                        value={magForm.base_simbolo}
-                        onChange={(e) => {
-                          const sym = e.target.value;
-                          setMagForm((prev) => ({
-                            ...prev,
-                            base_simbolo: sym,
-                            base_codigo: prev.customSlugBaseUnit
-                              ? prev.base_codigo
-                              : generarCodigoDesdeSimbolo(sym, prev.base_nombre),
-                          }));
-                        }}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs font-bold"
-                      />
-                    </div>
-                  </div>
+                      {/* Buscador Rápido del Selector */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder="Filtrar unidades por nombre o símbolo (ej: kg, m/s, bar, psi, rpm, ciclos)..."
+                          value={filtroSelectorUnidad}
+                          onChange={(e) => setFiltroSelectorUnidad(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                        />
+                      </div>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[11px] font-bold text-slate-700">
-                        Código de Unidad Base
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setMagForm((prev) => ({
-                            ...prev,
-                            customSlugBaseUnit: !prev.customSlugBaseUnit,
-                          }))
-                        }
-                        className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold"
+                      {/* Selector Desplegable de Unidades */}
+                      <select
+                        required
+                        value={magForm.base_codigo}
+                        onChange={(e) => {
+                          const cod = e.target.value;
+                          const encontrada = todasLasUnidadesDisponibles.find(
+                            (u) => u.codigo === cod,
+                          );
+                          if (encontrada) {
+                            setMagForm((prev) => ({
+                              ...prev,
+                              base_codigo: encontrada.codigo,
+                              base_nombre: encontrada.nombre,
+                              base_simbolo: encontrada.simbolo,
+                              unidad_base_codigo: encontrada.codigo,
+                            }));
+                          } else {
+                            setMagForm((prev) => ({
+                              ...prev,
+                              base_codigo: '',
+                              base_nombre: '',
+                              base_simbolo: '',
+                              unidad_base_codigo: '',
+                            }));
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
                       >
-                        {magForm.customSlugBaseUnit ? 'Auto-código' : 'Personalizar código'}
-                      </button>
+                        <option value="">
+                          -- Selecciona la unidad base deseada ({unidadesFiltradasSelector.length} opciones) --
+                        </option>
+                        {unidadesFiltradasSelector.map((u) => (
+                          <option key={u.codigo} value={u.codigo}>
+                            {u.simbolo} — {u.nombre} ({u.categoria || u.codigo})
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* Previsualización de la unidad seleccionada */}
+                      {magForm.base_codigo ? (
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-900 animate-in fade-in duration-150">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <span>
+                              Unidad seleccionada: <strong>{magForm.base_nombre}</strong> (
+                              <span className="font-mono font-bold">{magForm.base_simbolo}</span>)
+                            </span>
+                          </div>
+                          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-200/60 text-emerald-950">
+                            Código: {magForm.base_codigo}
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-500 italic">
+                          Selecciona una unidad canónica de la lista o pulsa en &ldquo;+ Crear unidad personalizada&rdquo; si no está en el banco estándar.
+                        </p>
+                      )}
                     </div>
-                    <input
-                      type="text"
-                      disabled={!magForm.customSlugBaseUnit}
-                      placeholder="Ej: KG"
-                      value={magForm.base_codigo}
-                      onChange={(e) =>
-                        setMagForm({ ...magForm, base_codigo: e.target.value.toUpperCase() })
-                      }
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-xs disabled:bg-white/50"
-                    />
-                  </div>
+                  ) : (
+                    /* MODO CREACIÓN MANUAL PERSONALIZADA */
+                    <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-800">
+                          Creación de Unidad Personalizada
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMagForm((prev) => ({
+                              ...prev,
+                              modoUnidadBase: 'SELECTOR',
+                              base_codigo: '',
+                              base_nombre: '',
+                              base_simbolo: '',
+                            }))
+                          }
+                          className="text-[11px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors"
+                        >
+                          <ArrowRightLeft className="h-3 w-3" />
+                          <span>Volver al selector estándar</span>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            Nombre de Unidad Base *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ej: Kilogramo"
+                            value={magForm.base_nombre}
+                            onChange={(e) => {
+                              const n = e.target.value;
+                              setMagForm((prev) => ({
+                                ...prev,
+                                base_nombre: n,
+                                base_codigo: prev.customSlugBaseUnit
+                                  ? prev.base_codigo
+                                  : prev.base_simbolo
+                                  ? generarCodigoDesdeSimbolo(prev.base_simbolo, n)
+                                  : generarSlugCodigo(n, 10),
+                              }));
+                            }}
+                            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            Símbolo * (sensible a mayúsculas)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ej: kg"
+                            value={magForm.base_simbolo}
+                            onChange={(e) => {
+                              const sym = e.target.value;
+                              setMagForm((prev) => ({
+                                ...prev,
+                                base_simbolo: sym,
+                                base_codigo: prev.customSlugBaseUnit
+                                  ? prev.base_codigo
+                                  : generarCodigoDesdeSimbolo(sym, prev.base_nombre),
+                              }));
+                            }}
+                            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-bold text-slate-700">
+                            Código de Unidad Base
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMagForm((prev) => ({
+                                ...prev,
+                                customSlugBaseUnit: !prev.customSlugBaseUnit,
+                              }))
+                            }
+                            className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold"
+                          >
+                            {magForm.customSlugBaseUnit ? 'Auto-código' : 'Personalizar código'}
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          disabled={!magForm.customSlugBaseUnit}
+                          placeholder="Ej: KG"
+                          value={magForm.base_codigo}
+                          onChange={(e) =>
+                            setMagForm({ ...magForm, base_codigo: e.target.value.toUpperCase() })
+                          }
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-xs disabled:bg-white/50"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* Modo edición: Selector limpio de la unidad principal */
