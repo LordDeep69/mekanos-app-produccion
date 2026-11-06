@@ -16,6 +16,12 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $transaction: jest.fn().mockImplementation((cb) => {
+        if (typeof cb === 'function') {
+          return cb(mockPrisma);
+        }
+        return Promise.resolve(cb);
+      }),
       catalogo_magnitudes: {
         findMany: jest.fn().mockResolvedValue([
           { codigo_magnitud: 'POTENCIA', nombre_magnitud: 'Potencia Eléctrica/Mecánica' },
@@ -26,11 +32,21 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
               id_magnitud: 1,
               codigo_magnitud: 'POTENCIA',
               nombre_magnitud: 'Potencia Eléctrica/Mecánica',
+              unidades_medida: [],
+            });
+          }
+          if (where.id_magnitud === 12) {
+            return Promise.resolve({
+              id_magnitud: 12,
+              codigo_magnitud: 'VISCOSIDAD',
+              nombre_magnitud: 'Viscosidad Cinemática',
+              unidades_medida: [],
             });
           }
           return Promise.resolve(null);
         }),
         create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id_magnitud: 12, ...data })),
+        update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id_magnitud: 1, ...data })),
       },
       unidades_medida: {
         findMany: jest.fn().mockResolvedValue([
@@ -75,6 +91,8 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
           return Promise.resolve(null);
         }),
         create: jest.fn().mockImplementation(({ data }) => Promise.resolve(data)),
+        upsert: jest.fn().mockImplementation(({ create }) => Promise.resolve(create)),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       atributos_tecnicos: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -310,6 +328,22 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
     expect(updated.obligatorio).toBe(true);
     expect(updated.es_kpi).toBe(true);
     expect(mockPrisma.modulo_atributos.update).toHaveBeenCalledTimes(1);
+  });
+
+
+  it('debe exponer el banco canónico universal de magnitudes QUDT/UCUM', () => {
+    const banco = service.getBancoMagnitudes();
+    expect(Array.isArray(banco)).toBe(true);
+    expect(banco.length).toBeGreaterThan(10);
+    const torquePreset = banco.find((p) => p.codigo_magnitud === 'TORQUE');
+    expect(torquePreset).toBeDefined();
+    expect(torquePreset?.unidades.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('debe activar atómicamente una magnitud del banco canónico QUDT si no existe', async () => {
+    const activada = await service.activarMagnitudBanco('NIVEL_SONORO');
+    expect(activada).toBeDefined();
+    expect(mockPrisma.catalogo_magnitudes.create).toHaveBeenCalled();
   });
 
   it('debe permitir crear nuevas magnitudes físicas y unidades de medida', async () => {
