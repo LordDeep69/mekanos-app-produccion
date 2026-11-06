@@ -24,6 +24,7 @@ import {
   Eye,
   FileSpreadsheet,
   FileText,
+  Filter,
   Gauge,
   History,
   Info,
@@ -33,6 +34,7 @@ import {
   RotateCcw,
   Search,
   Table as TableIcon,
+  Tag,
   User,
   Wrench,
   X,
@@ -149,6 +151,10 @@ export function TrazabilidadServiciosCliente({
   const [modalOrden, setModalOrden] = useState<TrazabilidadItem | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [downloadingOrderId, setDownloadingOrderId] = useState<number | null>(null);
+  // Filtros premium de equipo (client-side)
+  const [tipoEquipoFiltro, setTipoEquipoFiltro] = useState<string>('TODOS');
+  const [equiposSeleccionados, setEquiposSeleccionados] = useState<Set<number>>(new Set());
+  const [equipoPickerOpen, setEquipoPickerOpen] = useState(false);
   const invalidateReportes = useInvalidarReportes();
 
   // Consulta al backend
@@ -160,6 +166,33 @@ export function TrazabilidadServiciosCliente({
   });
 
   const ordenes: TrazabilidadItem[] = useMemo(() => data?.ordenes || [], [data]);
+
+  // Derivados client-side: tipos de equipo únicos disponibles en las órdenes cargadas
+  const tiposEquipoDisponibles = useMemo(() => {
+    const tipos = new Set<string>();
+    ordenes.forEach((o) => getEquiposList(o).forEach((eq) => { if (eq.tipo_nombre) tipos.add(eq.tipo_nombre); }));
+    return Array.from(tipos).sort();
+  }, [ordenes]);
+
+  // Derivados client-side: equipos únicos disponibles en las órdenes cargadas
+  const equiposDisponibles = useMemo(() => {
+    const map = new Map<number, { id_equipo: number; nombre_equipo: string; tipo_nombre: string }>();
+    ordenes.forEach((o) =>
+      getEquiposList(o).forEach((eq) => {
+        if (!map.has(eq.id_equipo)) {
+          map.set(eq.id_equipo, { id_equipo: eq.id_equipo, nombre_equipo: eq.nombre_equipo, tipo_nombre: eq.tipo_nombre });
+        }
+      })
+    );
+    return Array.from(map.values()).sort((a, b) => a.nombre_equipo.localeCompare(b.nombre_equipo));
+  }, [ordenes]);
+
+  // Órdenes filtradas client-side (encima de los filtros de categoría/fecha/búsqueda del backend)
+  const ordenesFiltradas = useMemo(() => {
+    return ordenes
+      .filter((o) => tipoEquipoFiltro === 'TODOS' || getEquiposList(o).some((eq) => eq.tipo_nombre === tipoEquipoFiltro))
+      .filter((o) => equiposSeleccionados.size === 0 || getEquiposList(o).some((eq) => equiposSeleccionados.has(eq.id_equipo)));
+  }, [ordenes, tipoEquipoFiltro, equiposSeleccionados]);
 
   // Manejador de Presets de Fecha
   const applyDatePreset = (preset: DatePreset) => {
@@ -201,10 +234,10 @@ export function TrazabilidadServiciosCliente({
   };
 
   const expandAllRows = () => {
-    if (expandedRows.size === ordenes.length) {
+    if (expandedRows.size === ordenesFiltradas.length) {
       setExpandedRows(new Set());
     } else {
-      setExpandedRows(new Set(ordenes.map((o) => o.id_orden_servicio)));
+      setExpandedRows(new Set(ordenesFiltradas.map((o) => o.id_orden_servicio)));
     }
   };
 
@@ -220,7 +253,7 @@ export function TrazabilidadServiciosCliente({
 
   // Exportar a CSV limpio para informes y juntas de consejo
   const handleExportCSV = () => {
-    if (ordenes.length === 0) return;
+    if (ordenesFiltradas.length === 0) return;
 
     const headers = [
       'ID Orden',
@@ -238,7 +271,7 @@ export function TrazabilidadServiciosCliente({
       'Observaciones Cierre',
     ];
 
-    const rows = ordenes.map((o) => {
+    const rows = ordenesFiltradas.map((o) => {
       const serviciosHijos = o.detalle_servicios_orden
         ?.map((d) => d.catalogo_servicios?.nombre_servicio || '')
         .filter(Boolean)
@@ -472,7 +505,7 @@ export function TrazabilidadServiciosCliente({
                 variant="default"
                 size="sm"
                 onClick={() => setIsPdfModalOpen(true)}
-                disabled={ordenes.length === 0}
+                disabled={ordenesFiltradas.length === 0}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5 h-9 rounded-xl shadow-xs transition-all active:scale-95"
                 title="Generar y previsualizar Informe Ejecutivo PDF"
               >
@@ -485,7 +518,7 @@ export function TrazabilidadServiciosCliente({
                 variant="outline"
                 size="sm"
                 onClick={handleExportCSV}
-                disabled={ordenes.length === 0}
+                disabled={ordenesFiltradas.length === 0}
                 className="rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs gap-1.5 h-9"
                 title="Exportar Bitácora a Excel/CSV"
               >
@@ -532,13 +565,13 @@ export function TrazabilidadServiciosCliente({
 
             {/* Alternador de Vistas (Tabla / Timeline) & Expandir Todo */}
             <div className="flex items-center gap-2 self-end sm:self-auto">
-              {viewMode === 'table' && ordenes.length > 0 && (
+              {viewMode === 'table' && ordenesFiltradas.length > 0 && (
                 <button
                   type="button"
                   onClick={expandAllRows}
                   className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors px-2 py-1"
                 >
-                  {expandedRows.size === ordenes.length ? 'Colapsar todo' : 'Expandir todo'}
+                  {expandedRows.size === ordenesFiltradas.length ? 'Colapsar todo' : 'Expandir todo'}
                 </button>
               )}
 
@@ -570,6 +603,135 @@ export function TrazabilidadServiciosCliente({
               </div>
             </div>
           </div>
+
+          {/* Fila de Filtros Premium por Equipo */}
+          {(tiposEquipoDisponibles.length > 0 || equiposDisponibles.length > 0) && (
+            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100">
+              {/* Filtro por Tipo de Equipo */}
+              {tiposEquipoDisponibles.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide flex items-center gap-1 shrink-0">
+                    <Tag className="h-3 w-3" /> Tipo:
+                  </span>
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 overflow-x-auto max-w-full">
+                    <button
+                      type="button"
+                      onClick={() => { setTipoEquipoFiltro('TODOS'); setEquiposSeleccionados(new Set()); }}
+                      className={cn(
+                        'px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0',
+                        tipoEquipoFiltro === 'TODOS'
+                          ? 'bg-white text-slate-900 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      )}
+                    >
+                      Todos los tipos
+                    </button>
+                    {tiposEquipoDisponibles.map((tipo) => (
+                      <button
+                        key={tipo}
+                        type="button"
+                        onClick={() => { setTipoEquipoFiltro(tipo); setEquiposSeleccionados(new Set()); }}
+                        className={cn(
+                          'px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0',
+                          tipoEquipoFiltro === tipo
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        )}
+                      >
+                        {tipo}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filtro por Equipo Específico (Multi-select popover) */}
+              {equiposDisponibles.length > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setEquipoPickerOpen((prev) => !prev)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
+                      equiposSeleccionados.size > 0
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    )}
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    {equiposSeleccionados.size > 0 ? `${equiposSeleccionados.size} equipo(s)` : 'Equipos'}
+                    <ChevronDown className={cn('h-3 w-3 transition-transform duration-200', equipoPickerOpen && 'rotate-180')} />
+                  </button>
+
+                  {equipoPickerOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setEquipoPickerOpen(false)} />
+                      <div className="absolute top-full left-0 mt-1.5 z-20 bg-white rounded-2xl border border-slate-200 shadow-xl min-w-[260px] max-h-72 overflow-y-auto">
+                        <div className="p-3 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Filter className="h-3.5 w-3.5 text-blue-600" />
+                            Filtrar por equipo
+                          </span>
+                          {equiposSeleccionados.size > 0 && (
+                            <button
+                              onClick={() => setEquiposSeleccionados(new Set())}
+                              className="text-[11px] text-blue-600 font-bold hover:underline"
+                            >
+                              Limpiar ({equiposSeleccionados.size})
+                            </button>
+                          )}
+                        </div>
+                        <div className="p-2 space-y-0.5">
+                          {equiposDisponibles
+                            .filter((eq) => tipoEquipoFiltro === 'TODOS' || eq.tipo_nombre === tipoEquipoFiltro)
+                            .map((eq) => (
+                              <label
+                                key={eq.id_equipo}
+                                className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={equiposSeleccionados.has(eq.id_equipo)}
+                                  onChange={(e) => {
+                                    setEquiposSeleccionados((prev) => {
+                                      const next = new Set(prev);
+                                      if (e.target.checked) {
+                                        next.add(eq.id_equipo);
+                                      } else {
+                                        next.delete(eq.id_equipo);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  className="rounded accent-blue-600 h-3.5 w-3.5 shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <div className="text-xs font-semibold text-slate-800 truncate">{eq.nombre_equipo}</div>
+                                  {eq.tipo_nombre && (
+                                    <div className="text-[10px] text-slate-400 truncate">{eq.tipo_nombre}</div>
+                                  )}
+                                </div>
+                              </label>
+                            ))}
+                          {equiposDisponibles.filter((eq) => tipoEquipoFiltro === 'TODOS' || eq.tipo_nombre === tipoEquipoFiltro).length === 0 && (
+                            <p className="text-xs text-slate-400 italic px-3 py-2">Sin equipos para este tipo</p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Badge de resultados filtrados */}
+              {(tipoEquipoFiltro !== 'TODOS' || equiposSeleccionados.size > 0) && (
+                <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                  <span className="font-black text-slate-800">{ordenesFiltradas.length}</span>
+                  de {ordenes.length} órdenes
+                </span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -590,20 +752,23 @@ export function TrazabilidadServiciosCliente({
             Reintentar
           </Button>
         </div>
-      ) : ordenes.length === 0 ? (
+      ) : ordenesFiltradas.length === 0 ? (
         <div className="p-16 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200 space-y-3">
           <History className="h-12 w-12 text-slate-300 mx-auto" />
           <p className="font-bold text-slate-800 text-base">No hay registros de servicios para los filtros seleccionados</p>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
             Prueba ajustando el rango de fecha o los términos de búsqueda para visualizar las intervenciones de este cliente.
           </p>
-          {(search || fechaDesde || fechaHasta || categoriaFiltro !== 'TODOS') && (
+          {(search || fechaDesde || fechaHasta || categoriaFiltro !== 'TODOS' || tipoEquipoFiltro !== 'TODOS' || equiposSeleccionados.size > 0) && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 setSearch('');
                 setCategoriaFiltro('TODOS');
+                setTipoEquipoFiltro('TODOS');
+                setEquiposSeleccionados(new Set());
+                setEquipoPickerOpen(false);
                 applyDatePreset('all');
               }}
               className="rounded-xl font-bold text-xs gap-1.5"
@@ -631,7 +796,7 @@ export function TrazabilidadServiciosCliente({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {ordenes.map((orden, idx) => {
+                {ordenesFiltradas.map((orden, idx) => {
                   const isExpanded = expandedRows.has(orden.id_orden_servicio);
                   const fechaIntervencion = orden.fecha_programada || orden.fecha_creacion;
                   const pdfUrl = getPdfUrl(orden);
@@ -1047,7 +1212,7 @@ export function TrazabilidadServiciosCliente({
       ) : (
         /* ================= VISTA LÍNEA DE TIEMPO (TIMELINE NARRATIVO) ================= */
         <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-          {ordenes.map((orden) => {
+          {ordenesFiltradas.map((orden) => {
             const fechaIntervencion = orden.fecha_programada || orden.fecha_creacion;
             const pdfUrl = getPdfUrl(orden);
             const tieneCorrectivosEspecificos = orden.detalle_servicios_orden && orden.detalle_servicios_orden.length > 0;
@@ -1439,7 +1604,7 @@ export function TrazabilidadServiciosCliente({
           fechaHasta: fechaHasta || undefined,
           search: search.trim() || undefined,
         }}
-        totalOrdenes={ordenes.length}
+        totalOrdenes={ordenesFiltradas.length}
       />
     </div>
   );
