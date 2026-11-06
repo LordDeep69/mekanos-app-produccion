@@ -29,6 +29,12 @@ export class MagnitudesController {
     return this.eamService.activarMagnitudBanco(dto.codigo_magnitud);
   }
 
+  @Post('reactivar-todas')
+  @ApiOperation({ summary: 'Reactivar todas las magnitudes y unidades del sistema' })
+  async reactivarTodas() {
+    return this.eamService.reactivarTodasMagnitudes();
+  }
+
   @Get()
   @ApiOperation({ summary: 'Listar todas las magnitudes físicas canónicas del sistema' })
   async findAll() {

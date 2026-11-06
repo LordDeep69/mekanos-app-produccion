@@ -8,7 +8,10 @@ import {
   Check,
   CheckCircle2,
   Edit3,
+  EyeOff,
+  Eye,
   Gauge,
+  Package,
   Globe,
   Info,
   Layers,
@@ -36,6 +39,8 @@ import {
   useMagnitudesEam,
   useUpdateMagnitudEam,
   useUpdateUnidadEam,
+  useSetActivoMagnitudEam,
+  useReactivarTodasMagnitudesEam,
 } from '../index';
 import {
   BANCO_UNIVERSAL_QUDT,
@@ -93,13 +98,17 @@ export function TabMagnitudesUom() {
   const [calcDestino, setCalcDestino] = useState<string>('BAR');
   const convertirMut = useConvertirUomEam();
 
-  // Banco Universal QUDT / UCUM Explorer Modal
+  // Banco Universal ISO 80000 Explorer Modal
   const [showBancoModal, setShowBancoModal] = useState(false);
   const [bancoSearch, setBancoSearch] = useState('');
   const [bancoCat, setBancoCat] = useState<CategoriaMagnitud | 'TODAS'>('TODAS');
+  const [filtroDisciplina, setFiltroDisciplina] = useState<CategoriaMagnitud | 'TODAS'>('TODAS');
+  const [pestanaBanco, setPestanaBanco] = useState<'OCULTAS' | 'CATALOGO'>('OCULTAS');
   const [activandoPreset, setActivandoPreset] = useState<string | null>(null);
   const [bancoFeedback, setBancoFeedback] = useState<{ tipo: 'success' | 'error'; msg: string } | null>(null);
   const activarBancoMut = useActivarMagnitudBancoEam();
+  const setActivoMut = useSetActivoMagnitudEam();
+  const reactivarTodasMut = useReactivarTodasMagnitudesEam();
 
   // Modales CRUD Magnitud y Unidad
   const [showMagModal, setShowMagModal] = useState(false);
@@ -181,10 +190,31 @@ export function TabMagnitudesUom() {
     }
   }, [magnitudes, selectedMagCode]);
 
+  const MAGNITUD_CATEGORIA_MAP = useMemo(() => {
+    const map = new Map<string, CategoriaMagnitud>();
+    for (const preset of BANCO_UNIVERSAL_QUDT) {
+      map.set(preset.codigo_magnitud, preset.categoria);
+    }
+    return map;
+  }, []);
+
+  const numOcultas = useMemo(() => {
+    return BANCO_UNIVERSAL_QUDT.filter(
+      (p) => !magnitudes.some((m) => m.codigo_magnitud === p.codigo_magnitud),
+    ).length;
+  }, [magnitudes]);
+
   const magnitudesFiltradas = useMemo(() => {
+    let list = magnitudes;
+    if (filtroDisciplina !== 'TODAS') {
+      list = list.filter((m) => {
+        const cat = MAGNITUD_CATEGORIA_MAP.get(m.codigo_magnitud);
+        return cat === filtroDisciplina;
+      });
+    }
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return magnitudes;
-    return magnitudes.filter((m) => {
+    if (!q) return list;
+    return list.filter((m) => {
       const matchNombre = m.nombre_magnitud.toLowerCase().includes(q);
       const matchCodigo = m.codigo_magnitud.toLowerCase().includes(q);
       const matchDesc = (m.descripcion || '').toLowerCase().includes(q);
@@ -197,7 +227,7 @@ export function TabMagnitudesUom() {
       );
       return matchNombre || matchCodigo || matchDesc || matchBase || matchUnidades;
     });
-  }, [magnitudes, searchQuery]);
+  }, [magnitudes, searchQuery, filtroDisciplina, MAGNITUD_CATEGORIA_MAP]);
 
   // Si el usuario filtra y la magnitud activa queda fuera de los resultados, auto-seleccionar la primera coincidencia
   useEffect(() => {
@@ -260,11 +290,15 @@ export function TabMagnitudesUom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [magnitudes.length]);
 
-  // Filtrado reactivo de presets del Banco Canónico QUDT/UCUM
+  // Filtrado reactivo de presets del Banco Universal
   const presetsFiltrados = useMemo(() => {
     let list = BANCO_UNIVERSAL_QUDT;
-    if (bancoCat !== 'TODAS') {
-      list = list.filter((p) => p.categoria === bancoCat);
+    if (pestanaBanco === 'OCULTAS') {
+      list = list.filter((p) => !magnitudes.some((m) => m.codigo_magnitud === p.codigo_magnitud));
+    } else {
+      if (bancoCat !== 'TODAS') {
+        list = list.filter((p) => p.categoria === bancoCat);
+      }
     }
     const q = bancoSearch.trim().toLowerCase();
     if (!q) return list;
@@ -281,7 +315,22 @@ export function TabMagnitudesUom() {
       );
       return mNom || mCod || mDesc || mBase || mUnits;
     });
-  }, [bancoCat, bancoSearch]);
+  }, [bancoCat, bancoSearch, pestanaBanco, magnitudes]);
+
+  const handleReactivarTodas = async () => {
+    setBancoFeedback(null);
+    try {
+      await reactivarTodasMut.mutateAsync();
+      setBancoFeedback({
+        tipo: 'success',
+        msg: '¡Todas las magnitudes del catálogo han sido reactivadas exitosamente!',
+      });
+      setTimeout(() => setBancoFeedback(null), 4500);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Error al reactivar magnitudes';
+      setBancoFeedback({ tipo: 'error', msg });
+    }
+  };
 
   const handleActivarPreset = async (preset: MagnitudPreset) => {
     setActivandoPreset(preset.codigo_magnitud);
@@ -303,7 +352,7 @@ export function TabMagnitudesUom() {
     }
   };
 
-  // Catálogo unificado de todas las unidades existentes en la base de datos + banco canónico QUDT
+  // Catálogo unificado de todas las unidades existentes en la base de datos + banco de magnitudes
   const todasLasUnidadesDisponibles = useMemo(() => {
     const map = new Map<
       string,
@@ -682,10 +731,10 @@ export function TabMagnitudesUom() {
                   setShowBancoModal(true);
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors shadow-2xs"
-                title="Explorar e incorporar magnitudes canónicas estándar (QUDT & UCUM)"
+                title="Explorar e incorporar magnitudes estándar del banco universal"
               >
-                <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
-                <span>Banco QUDT</span>
+                <Package className="h-3.5 w-3.5 text-indigo-600" />
+                <span>Banco de Magnitudes</span>
               </button>
               <button
                 type="button"
@@ -954,7 +1003,7 @@ export function TabMagnitudesUom() {
         </div>
       </div>
 
-      {/* MODAL EXPLORADOR DEL BANCO UNIVERSAL CANÓNICO (QUDT & UCUM) */}
+      {/* MODAL EXPLORADOR DEL BANCO UNIVERSAL CANÓNICO (ISO 80000) */}
       {showBancoModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
@@ -966,9 +1015,9 @@ export function TabMagnitudesUom() {
                 </div>
                 <div>
                   <h4 className="text-base font-extrabold text-white flex items-center gap-2">
-                    <span>Banco Universal de Magnitudes Físicas</span>
+                    <span>Banco Universal de Magnitudes</span>
                     <span className="px-2 py-0.5 rounded-full bg-indigo-500/30 border border-indigo-400/40 text-[10px] font-bold text-indigo-200 uppercase tracking-wider">
-                      QUDT / UCUM
+                      ISO 80000
                     </span>
                   </h4>
                   <p className="text-xs text-indigo-200/70">

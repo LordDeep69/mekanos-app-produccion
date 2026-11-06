@@ -3142,13 +3142,13 @@ model marcas {
 }
 
 model unidades_medida {
-  codigo                String                   @id @db.VarChar(10)
-  nombre                String                   @db.VarChar(50)
-  simbolo               String                   @db.VarChar(10)
-  tipo_magnitud         String                   @default("CANTIDAD") @db.VarChar(20)
+  codigo                String                   @id @db.VarChar(20)
+  nombre                String                   @db.VarChar(100)
+  simbolo               String                   @db.VarChar(25)
+  tipo_magnitud         String                   @default("CANTIDAD") @db.VarChar(50)
   id_magnitud           Int?
-  factor_a              Decimal                  @default(1.0) @db.Decimal(18, 10)
-  factor_b              Decimal                  @default(0.0) @db.Decimal(18, 10)
+  factor_a              Decimal                  @default(1.0) @db.Decimal(28, 10)
+  factor_b              Decimal                  @default(0.0) @db.Decimal(28, 10)
   es_unidad_base        Boolean                  @default(false)
   permite_decimales     Boolean                  @default(false)
   activo                Boolean                  @default(true)
@@ -3194,7 +3194,7 @@ model catalogo_magnitudes {
   codigo_magnitud    String               @unique @db.VarChar(50)
   nombre_magnitud    String               @db.VarChar(100)
   descripcion        String?
-  unidad_base_codigo String?              @db.VarChar(10)
+  unidad_base_codigo String?              @db.VarChar(20)
   es_sistema         Boolean              @default(true)
   activo             Boolean              @default(true)
   fecha_creacion     DateTime             @default(now()) @db.Timestamp(6)
@@ -3211,7 +3211,7 @@ model atributos_tecnicos {
   descripcion           String?
   tipo_control          String               @db.VarChar(30)
   id_magnitud           Int?
-  unidad_defecto_codigo String?              @db.VarChar(10)
+  unidad_defecto_codigo String?              @db.VarChar(20)
   rol_semantico         String               @default("ESTANDAR") @db.VarChar(40)
   opciones_json         Json?
   validacion_json       Json?

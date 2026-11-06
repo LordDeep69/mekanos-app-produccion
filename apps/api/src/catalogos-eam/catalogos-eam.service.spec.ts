@@ -331,8 +331,8 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
   });
 
 
-  it('debe exponer el banco canónico universal de magnitudes QUDT/UCUM', () => {
-    const banco = service.getBancoMagnitudes();
+  it('debe exponer el banco canónico universal de magnitudes QUDT/UCUM', async () => {
+    const banco = await service.getBancoMagnitudes();
     expect(Array.isArray(banco)).toBe(true);
     expect(banco.length).toBeGreaterThan(10);
     const torquePreset = banco.find((p) => p.codigo_magnitud === 'TORQUE');

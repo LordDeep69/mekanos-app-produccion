@@ -28,7 +28,7 @@ export class ConvertirUomDto {
 export class CreateUnidadBaseInlineDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(10)
+  @MaxLength(20)
   codigo: string;
 
   @IsString()
@@ -69,7 +69,7 @@ export class CreateMagnitudDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(10)
+  @MaxLength(20)
   unidad_base_codigo?: string;
 
   @IsOptional()
@@ -94,7 +94,7 @@ export class UpdateMagnitudDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(10)
+  @MaxLength(20)
   unidad_base_codigo?: string;
 
   @IsOptional()
@@ -105,22 +105,22 @@ export class UpdateMagnitudDto {
 export class CreateUnidadMedidaDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(10)
+  @MaxLength(20)
   codigo: string;
 
   @IsString()
   @IsNotEmpty()
-  @MaxLength(50)
+  @MaxLength(100)
   nombre: string;
 
   @IsString()
   @IsNotEmpty()
-  @MaxLength(10)
+  @MaxLength(25)
   simbolo: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   tipo_magnitud?: string;
 
   @IsOptional()
@@ -155,12 +155,12 @@ export class CreateUnidadMedidaDto {
 export class UpdateUnidadMedidaDto {
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  @MaxLength(100)
   nombre?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(10)
+  @MaxLength(25)
   simbolo?: string;
 
   @IsOptional()
@@ -223,7 +223,7 @@ export class CreateAtributoTecnicoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(10)
+  @MaxLength(20)
   unidad_defecto_codigo?: string;
 
   @IsOptional()
@@ -265,7 +265,7 @@ export class UpdateAtributoTecnicoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(10)
+  @MaxLength(20)
   unidad_defecto_codigo?: string;
 
   @IsOptional()

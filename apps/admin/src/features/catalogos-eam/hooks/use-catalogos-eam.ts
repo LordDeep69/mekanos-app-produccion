@@ -8,6 +8,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   activarMagnitudBancoEam,
+  reactivarTodasMagnitudesEam,
+  setActivoMagnitudEam,
   agregarItemBomOemEam,
   asignarAtributoModuloEam,
   buscarComponentesWmsEam,
@@ -526,6 +528,28 @@ export function useCreateTipoServicioEam() {
       duracion_estimada_horas?: number;
       color_hex?: string;
     }) => createTipoServicioEam(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
+
+export function useSetActivoMagnitudEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ codigo, activo }: { codigo: string; activo: boolean }) =>
+      setActivoMagnitudEam(codigo, activo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
+
+export function useReactivarTodasMagnitudesEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => reactivarTodasMagnitudesEam(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EAM_KEYS.all });
     },

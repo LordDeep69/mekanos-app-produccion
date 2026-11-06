@@ -126,15 +126,28 @@ export class CatalogosEamService {
   // 1. MAGNITUDES FÍSICAS Y UoM
   // ═══════════════════════════════════════════════════════════════════════════
 
-  getBancoMagnitudes() {
-    return BANCO_UNIVERSAL_QUDT;
+  async getBancoMagnitudes() {
+    const dbMags = await this.prisma.catalogo_magnitudes.findMany({
+      select: { id_magnitud: true, codigo_magnitud: true, activo: true },
+    });
+    const dbMap = new Map(dbMags.map((m) => [m.codigo_magnitud, m]));
+
+    return BANCO_UNIVERSAL_QUDT.map((preset) => {
+      const enDb = dbMap.get(preset.codigo_magnitud);
+      return {
+        ...preset,
+        id_magnitud: enDb?.id_magnitud,
+        en_db: !!enDb,
+        activo: enDb ? enDb.activo : false,
+      };
+    });
   }
 
   async activarMagnitudBanco(codigoMagnitud: string) {
     const cod = codigoMagnitud.trim().toUpperCase();
     const preset = BANCO_UNIVERSAL_QUDT.find((p) => p.codigo_magnitud === cod);
     if (!preset) {
-      throw new NotFoundException(`No existe la magnitud "${cod}" en el Banco Canónico QUDT`);
+      throw new NotFoundException(`No existe la magnitud "${cod}" en el Banco Canónico`);
     }
 
     const existe = await this.prisma.catalogo_magnitudes.findUnique({
@@ -143,8 +156,18 @@ export class CatalogosEamService {
     });
 
     if (existe) {
-      // Sincronizar unidades si faltan
+      // Reactivar magnitud y sincronizar unidades
       return this.prisma.$transaction(async (tx) => {
+        await tx.catalogo_magnitudes.update({
+          where: { id_magnitud: existe.id_magnitud },
+          data: { activo: true },
+        });
+
+        await tx.unidades_medida.updateMany({
+          where: { id_magnitud: existe.id_magnitud },
+          data: { activo: true },
+        });
+
         for (const u of preset.unidades) {
           const uExiste = await tx.unidades_medida.findUnique({
             where: { codigo: u.codigo },
@@ -155,7 +178,7 @@ export class CatalogosEamService {
                 codigo: u.codigo,
                 nombre: u.nombre,
                 simbolo: u.simbolo,
-                tipo_magnitud: preset.codigo_magnitud.slice(0, 20),
+                tipo_magnitud: preset.codigo_magnitud,
                 id_magnitud: existe.id_magnitud,
                 factor_a: new Prisma.Decimal(u.factor_a),
                 factor_b: new Prisma.Decimal(u.factor_b ?? 0.0),
@@ -198,7 +221,7 @@ export class CatalogosEamService {
             codigo: u.codigo,
             nombre: u.nombre,
             simbolo: u.simbolo,
-            tipo_magnitud: preset.codigo_magnitud.slice(0, 20),
+            tipo_magnitud: preset.codigo_magnitud,
             id_magnitud: mag.id_magnitud,
             factor_a: new Prisma.Decimal(u.factor_a),
             factor_b: new Prisma.Decimal(u.factor_b ?? 0.0),
@@ -227,6 +250,16 @@ export class CatalogosEamService {
         },
       });
     });
+  }
+
+  async reactivarTodasMagnitudes() {
+    await this.prisma.catalogo_magnitudes.updateMany({
+      data: { activo: true },
+    });
+    await this.prisma.unidades_medida.updateMany({
+      data: { activo: true },
+    });
+    return { ok: true, message: 'Todas las magnitudes y unidades han sido reactivadas exitosamente' };
   }
 
   async getMagnitudes() {

@@ -321,6 +321,24 @@ export async function activarMagnitudBancoEam(
   return data;
 }
 
+export async function reactivarTodasMagnitudesEam(): Promise<{ ok: boolean; message: string }> {
+  const { data } = await apiClient.post<{ ok: boolean; message: string }>(
+    '/catalogos/magnitudes/reactivar-todas',
+  );
+  return data;
+}
+
+export async function setActivoMagnitudEam(
+  codigo: string,
+  activo: boolean,
+): Promise<MagnitudFisica> {
+  const { data } = await apiClient.patch<MagnitudFisica>(
+    `/catalogos/magnitudes/${codigo}`,
+    { activo },
+  );
+  return data;
+}
+
 export async function getMagnitudesEam(): Promise<MagnitudFisica[]> {
   const { data } = await apiClient.get<MagnitudFisica[]>('/catalogos/magnitudes');
   return data;
