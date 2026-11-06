@@ -51,6 +51,19 @@ import {
   MagnitudPreset,
 } from '../data/banco-universal-qudt';
 
+const DISCIPLINAS_COLUMNA: Array<{ id: CategoriaMagnitud | 'TODAS'; label: string }> = [
+  { id: 'TODAS', label: 'Todas' },
+  { id: 'MECANICA_POTENCIA', label: 'Mecánica & Potencia' },
+  { id: 'FLUIDOS_PRESION', label: 'Fluidos & Presión' },
+  { id: 'TERMICA_HVAC', label: 'Térmica & HVAC' },
+  { id: 'ELECTRICIDAD', label: 'Electricidad & Señal' },
+  { id: 'VIBRACION_ACUSTICA', label: 'Vibración' },
+  { id: 'QUIMICA_AGUA', label: 'Química & Agua' },
+  { id: 'OPTICA_ILUMINACION', label: 'Óptica' },
+  { id: 'TI_DIGITAL', label: 'TI & Telecom' },
+  { id: 'OPERACION_DESGASTE', label: 'Operación' },
+];
+
 function generarSlugCodigo(nombre: string, maxLen = 20): string {
   return nombre
     .normalize('NFD')
@@ -777,6 +790,33 @@ export function TabMagnitudesUom() {
               )}
             </div>
 
+            {/* Píldoras compactas por disciplina para filtrado inmediato */}
+            <div className="flex flex-wrap items-center gap-1 pt-1.5 border-t border-slate-200/60">
+              {DISCIPLINAS_COLUMNA.map((p) => {
+                const isSelected = filtroDisciplina === p.id;
+                const count =
+                  p.id === 'TODAS'
+                    ? magnitudes.length
+                    : magnitudes.filter(
+                        (m) => MAGNITUD_CATEGORIA_MAP.get(m.codigo_magnitud) === p.id,
+                      ).length;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setFiltroDisciplina(p.id)}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                      isSelected
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    {p.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
             {searchQuery.trim() && (
               <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
                 <span>
@@ -861,24 +901,30 @@ export function TabMagnitudesUom() {
                       </button>
                       <button
                         type="button"
-                        onClick={(e) => {
+                        disabled={setActivoMut.isPending}
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          setDeleteError(null);
-                          setDeleteTarget({
-                            tipo: 'magnitud',
-                            codigo: mag.codigo_magnitud,
-                            nombre: mag.nombre_magnitud,
-                            extraInfo: `${numUnidades} unidades asociadas${
-                              mag.unidad_base_codigo
-                                ? ` · Principal: ${mag.unidad_base_codigo}`
-                                : ''
-                            }`,
-                          });
+                          try {
+                            await setActivoMut.mutateAsync({
+                              codigo: mag.codigo_magnitud,
+                              activo: false,
+                            });
+                            toast({
+                              title: 'Magnitud Ocultada',
+                              description: `"${mag.nombre_magnitud}" se ha archivado. Puedes reactivarla desde el Banco de Magnitudes.`,
+                            });
+                          } catch (err: any) {
+                            toast({
+                              title: 'Error al ocultar',
+                              description: err?.message || 'No se pudo ocultar la magnitud',
+                              variant: 'destructive',
+                            });
+                          }
                         }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        title="Eliminar magnitud"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                        title="Ocultar magnitud"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <EyeOff className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -1524,7 +1570,7 @@ export function TabMagnitudesUom() {
                           className="text-[11px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors"
                         >
                           <Plus className="h-3 w-3" />
-                          <span>+ Crear unidad personalizada</span>
+                          <span>Crear unidad personalizada</span>
                         </button>
                       </div>
 
@@ -1533,13 +1579,13 @@ export function TabMagnitudesUom() {
                         <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-between text-xs text-emerald-950 animate-in fade-in duration-150">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                            <span className="font-bold text-emerald-900 shrink-0">✓ Unidad Seleccionada:</span>
+                            <span className="font-bold text-emerald-900 shrink-0">✓ Unidad Base Seleccionada:</span>
                             <span className="font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[11px] border border-emerald-300 shrink-0">
-                              {magForm.base_simbolo || magForm.base_codigo}
+                              [{magForm.base_simbolo || magForm.base_codigo}]
                             </span>
                             <span className="font-semibold truncate">{magForm.base_nombre}</span>
                             <span className="text-[10px] text-emerald-700/80 font-mono shrink-0">
-                              (Código: {magForm.base_codigo} • Factor Base: 1.0)
+                              ({magForm.base_codigo} • Factor: 1.0)
                             </span>
                           </div>
                           <button
@@ -1555,7 +1601,7 @@ export function TabMagnitudesUom() {
                             }}
                             className="ml-2 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-[11px] font-bold transition-colors shrink-0 shadow-2xs"
                           >
-                            Cambiar unidad
+                            Cambiar
                           </button>
                         </div>
                       ) : (
@@ -1736,7 +1782,7 @@ export function TabMagnitudesUom() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-800">
-                          Magnitud Activa en Formularios y Catálogos
+                          Estado: Magnitud Activa en Formularios y Catálogos
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -1749,7 +1795,7 @@ export function TabMagnitudesUom() {
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Si la desactivas, se ocultará de los selectores diarios pero se conservará intacta en el Banco de Magnitudes.
+                        Si desactivas esta magnitud, se ocultará de los selectores diarios y quedará archivada en el Banco de Magnitudes para cuando decidas reactivarla.
                       </p>
                     </div>
                     <button

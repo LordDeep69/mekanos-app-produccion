@@ -116,7 +116,7 @@ export function FichaTecnicaPolimorficaEam({
       return directId;
     }
     if (arquetipos && equipo.tipo) {
-      const rawTipo = typeof equipo.tipo === 'string' ? equipo.tipo : (equipo.tipo?.codigo_tipo || equipo.tipo?.nombre_tipo || equipo.tipo?.nombre || '');
+      const rawTipo = typeof equipo.tipo === 'string' ? equipo.tipo : ((equipo.tipo as any)?.codigo_tipo || (equipo.tipo as any)?.nombre_tipo || (equipo.tipo as any)?.nombre || '');
       const norm = String(rawTipo || '').toUpperCase().trim();
       const match = arquetipos.find(
         (a) =>
@@ -445,7 +445,7 @@ export function FichaTecnicaPolimorficaEam({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
-                  Placa de Especificaciones de Ingeniería ({equipo.tipo_equipo?.nombre_tipo || (typeof equipo.tipo === 'string' ? equipo.tipo : (equipo.tipo?.nombre_tipo || equipo.tipo?.nombre || 'Equipo'))})
+                  Placa de Especificaciones de Ingeniería ({equipo.tipo_equipo?.nombre_tipo || (typeof equipo.tipo === 'string' ? equipo.tipo : ((equipo.tipo as any)?.nombre_tipo || (equipo.tipo as any)?.nombre || 'Equipo'))})
                 </h2>
                 {equipo.modelo_oem && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
