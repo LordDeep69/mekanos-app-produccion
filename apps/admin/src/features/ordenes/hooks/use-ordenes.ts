@@ -509,10 +509,16 @@ export function useUpdateObservacionesCierre() {
     return useMutation({
         mutationFn: ({ id, observaciones_cierre }: { id: number; observaciones_cierre: string }) =>
             updateObservacionesCierre(id, observaciones_cierre),
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
-            queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
-            toast.success('Observaciones de cierre actualizadas');
+        onSuccess: (response, variables) => {
+            // Si el texto visible no cambió, el API no escribe ni historial ni
+            // fecha de modificación: no hace falta refrescar la orden.
+            if (!response.data?.sin_cambios) {
+                queryClient.invalidateQueries({ queryKey: [...ORDENES_KEY, variables.id] });
+                queryClient.invalidateQueries({ queryKey: ORDENES_KEY });
+                queryClient.invalidateQueries({ queryKey: ['orden', variables.id] });
+                queryClient.invalidateQueries({ queryKey: ['orden-historial', variables.id] });
+            }
+            toast.success(response.message || 'Observaciones de cierre actualizadas');
         },
         onError: (error: unknown) => {
             const err = error as { response?: { data?: { message?: string | string[] } } };

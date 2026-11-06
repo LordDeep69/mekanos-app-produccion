@@ -1,5 +1,10 @@
 import { PrismaService } from '@mekanos/database';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
+  AuditoriaObservacionesCierre,
+  crearMetadataObservacionesCierre,
+} from '../domain/observaciones-cierre-audit';
 
 /**
  * Repository para ordenes_servicio
@@ -790,7 +795,10 @@ export class PrismaOrdenServicioRepository {
    * Crear o actualizar orden de servicio
    * ✅ ENTERPRISE: Validación de integridad atómica pre-guardado
    */
-  async save(data: any): Promise<any> {
+  async save(
+    data: any,
+    auditoriaObservacionesCierre?: AuditoriaObservacionesCierre,
+  ): Promise<any> {
     // Convertir entity a plain object si es necesario
     const plainData = data.toObject ? data.toObject() : data;
 
@@ -932,14 +940,49 @@ export class PrismaOrdenServicioRepository {
         throw new BadRequestException('No se detectaron campos editables en la solicitud.');
       }
 
-      return this.prisma.ordenes_servicio.update({
+      const fechaModificacion = new Date();
+      const operacionActualizacion = this.prisma.ordenes_servicio.update({
         where: { id_orden_servicio },
         data: {
           ...updateData,
-          fecha_modificacion: new Date(),
+          fecha_modificacion: fechaModificacion,
         },
         // ❌ ELIMINADO include pesado - evita timeout
       });
+
+      if (!auditoriaObservacionesCierre) {
+        return operacionActualizacion;
+      }
+
+      // La actualización de la orden y su entrada de auditoría se confirman
+      // juntas: si el historial falla, la orden no queda modificada.
+      const [ordenActualizada] = await this.prisma.$transaction([
+        operacionActualizacion,
+        this.prisma.historial_estados_orden.create({
+          data: {
+            id_orden_servicio,
+            id_estado_anterior:
+              auditoriaObservacionesCierre.idEstadoAnterior ?? null,
+            id_estado_nuevo: auditoriaObservacionesCierre.idEstadoNuevo,
+            accion: ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
+            motivo_cambio:
+              auditoriaObservacionesCierre.motivo ??
+              'Edición de observaciones de cierre',
+            observaciones:
+              auditoriaObservacionesCierre.observacionNueva ?? null,
+            realizado_por: auditoriaObservacionesCierre.realizadoPor,
+            fecha_cambio: fechaModificacion,
+            metadata: crearMetadataObservacionesCierre({
+              origen: auditoriaObservacionesCierre.origen,
+              anterior: auditoriaObservacionesCierre.observacionAnterior,
+              nueva: auditoriaObservacionesCierre.observacionNueva,
+              extra: { accion: 'EDICION' },
+            }) as any,
+          },
+        }),
+      ]);
+
+      return ordenActualizada;
     } else {
       // CREATE: Nueva orden
       return this.prisma.ordenes_servicio.create({

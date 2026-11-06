@@ -218,11 +218,23 @@ export async function updateOrden(
  * Permite edición incluso en órdenes COMPLETADAS
  * Diseñado para Portal Admin
  */
+export interface UpdateObservacionesCierreResponse {
+    success: boolean;
+    message: string;
+    data: {
+        id_orden_servicio: number;
+        observaciones_cierre: string;
+        fecha_modificacion?: string;
+        sin_cambios: boolean;
+        id_historial: number | null;
+    };
+}
+
 export async function updateObservacionesCierre(
     id: number,
     observaciones_cierre: string
-): Promise<{ success: boolean; message: string; data: { id_orden_servicio: number; observaciones_cierre: string } }> {
-    const response = await apiClient.patch<{ success: boolean; message: string; data: { id_orden_servicio: number; observaciones_cierre: string } }>(
+): Promise<UpdateObservacionesCierreResponse> {
+    const response = await apiClient.patch<UpdateObservacionesCierreResponse>(
         `${ORDENES_BASE}/${id}/observaciones-cierre`,
         { observaciones_cierre }
     );

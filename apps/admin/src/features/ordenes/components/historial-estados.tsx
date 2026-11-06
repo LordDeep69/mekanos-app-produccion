@@ -22,6 +22,10 @@ import {
     Loader2,
     ChevronDown,
     ChevronUp,
+    FileText,
+    RefreshCw,
+    Lock,
+    Unlock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api/client';
@@ -47,6 +51,8 @@ export interface HistorialItem {
     motivo_cambio?: string | null;
     motivoCambio?: string | null;
     observaciones?: string | null;
+    accion?: string | null;
+    metadata?: any | null;
     fecha_cambio?: string;
     fechaCambio?: string;
     realizado_por?: number;
@@ -76,6 +82,76 @@ const ESTADO_CONFIG: Record<string, { label: string; color: string; bgColor: str
     APROBADA: { label: 'Aprobada', color: 'text-emerald-600', bgColor: 'bg-emerald-100', icon: FileCheck },
     CANCELADA: { label: 'Cancelada', color: 'text-red-600', bgColor: 'bg-red-100', icon: XCircle },
 };
+
+const ACCION_CONFIG: Record<
+    string,
+    { label: string; color: string; bgColor: string; icon: React.ElementType }
+> = {
+    MODIFICAR_OBSERVACIONES_CIERRE: {
+        label: 'Observaciones Editadas',
+        color: 'text-indigo-700',
+        bgColor: 'bg-indigo-100',
+        icon: FileText,
+    },
+    FINALIZAR: {
+        label: 'Cierre del Técnico',
+        color: 'text-emerald-700',
+        bgColor: 'bg-emerald-100',
+        icon: CheckCircle2,
+    },
+    HABILITAR_EDICION_TECNICO: {
+        label: 'Edición Técnica Habilitada',
+        color: 'text-amber-700',
+        bgColor: 'bg-amber-100',
+        icon: Unlock,
+    },
+    REVOCAR_EDICION_TECNICO: {
+        label: 'Edición Técnica Revocada',
+        color: 'text-slate-700',
+        bgColor: 'bg-slate-200',
+        icon: Lock,
+    },
+    RESUBIDA_TECNICO: {
+        label: 'Resubida por Técnico',
+        color: 'text-teal-700',
+        bgColor: 'bg-teal-100',
+        icon: RefreshCw,
+    },
+    TRANSFERIR_DATOS: {
+        label: 'Transferencia de Datos',
+        color: 'text-purple-700',
+        bgColor: 'bg-purple-100',
+        icon: Clock,
+    },
+};
+
+function stripHtml(html: string): string {
+    if (!html) return '';
+    return html
+        .replace(/<br\s*[\/]?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .trim();
+}
+
+/**
+ * Los registros históricos de finalización guardan el texto con un prefijo
+ * narrativo ("Orden finalizada. ..."). Para mostrar sólo lo que escribió el
+ * técnico se elimina ese prefijo; los registros nuevos ya traen el texto puro
+ * en metadata.
+ */
+function stripPrefijoCierre(text: string): string {
+    return text
+        .replace(/^Orden finalizada\.\s*/i, '')
+        .replace(/^Orden corregida y resubida\.\s*/i, '')
+        .trim();
+}
 
 function formatFechaSegura(rawFecha: any): string {
     if (!rawFecha) return 'Fecha registrada';
@@ -128,7 +204,7 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
         return () => {
             isMounted = false;
         };
-    }, [idOrden]);
+    }, [idOrden, orden?.fecha_modificacion, orden?.observaciones_cierre]);
 
     if (isLoading) {
         return (
@@ -225,7 +301,8 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                               codigoAnterior
                             : null;
 
-                        const config = ESTADO_CONFIG[codigoNuevo] || {
+                        const accionConfig = item.accion ? ACCION_CONFIG[item.accion] : null;
+                        const config = accionConfig || ESTADO_CONFIG[codigoNuevo] || {
                             label: nombreNuevo,
                             color: 'text-gray-700',
                             bgColor: 'bg-gray-100',
@@ -238,13 +315,67 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                         const fechaStr = formatFechaSegura(rawFecha);
 
                         const motivoTexto =
-                            item.motivo || item.motivo_cambio || item.motivoCambio || null;
+                            item.motivo_cambio ||
+                            item.motivoCambio ||
+                            (item.motivo && item.motivo !== item.observaciones ? item.motivo : null);
+
+                        const meta = (item.metadata ?? {}) as Record<string, unknown>;
+                        const metaAnterior =
+                            typeof meta.observacion_anterior === 'string'
+                                ? meta.observacion_anterior
+                                : null;
+                        const metaNueva =
+                            typeof meta.observacion_nueva === 'string'
+                                ? meta.observacion_nueva
+                                : null;
+
+                        const esEdicionObservaciones =
+                            item.accion === 'MODIFICAR_OBSERVACIONES_CIERRE';
+                        const esCierreTecnico =
+                            item.accion === 'FINALIZAR' ||
+                            item.accion === 'RESUBIDA_TECNICO';
+
+                        // Para cierres antiguos se limpia el prefijo narrativo;
+                        // los nuevos ya traen el texto puro en metadata.
+                        const rawObservacionesBase =
+                            esEdicionObservaciones || esCierreTecnico
+                                ? metaNueva ?? item.observaciones
+                                : item.observaciones;
+                        const rawObservaciones = rawObservacionesBase?.trim() || null;
+                        const cleanObservaciones = rawObservaciones
+                            ? stripHtml(
+                                  esCierreTecnico && !metaNueva
+                                      ? stripPrefijoCierre(rawObservaciones)
+                                      : rawObservaciones,
+                              )
+                            : null;
+                        const observacionAnterior =
+                            esEdicionObservaciones && metaAnterior
+                                ? stripHtml(metaAnterior)
+                                : null;
+                        const tieneObservacionDetalle =
+                            !esEdicionObservaciones &&
+                            cleanObservaciones &&
+                            cleanObservaciones !== motivoTexto &&
+                            cleanObservaciones.length > 0;
+                        const etiquetaObservacion =
+                            item.accion === 'FINALIZAR'
+                                ? 'Observación original del técnico:'
+                                : item.accion === 'RESUBIDA_TECNICO'
+                                  ? 'Observación corregida por el técnico:'
+                                  : 'Observación registrada:';
 
                         const rawEmail = item.usuario?.email || item.usuarioRealizador?.email || '';
                         const fallbackAdmin = rawEmail.includes('admin@') || rawEmail.includes('superpa83') || item.realizado_por === 1;
                         const usuarioNombre =
                             item.usuario?.nombre ||
                             (fallbackAdmin ? 'Administrador del Sistema' : (rawEmail || (item.realizado_por ? `Usuario #${item.realizado_por}` : 'Administrador del Sistema')));
+
+                        const mostrarTransicion =
+                            !item.accion &&
+                            codigoAnterior &&
+                            codigoAnterior !== codigoNuevo &&
+                            nombreAnterior;
 
                         return (
                             <div
@@ -275,7 +406,7 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                                             >
                                                 {config.label}
                                             </span>
-                                            {nombreAnterior && (
+                                            {mostrarTransicion && (
                                                 <span className="text-[11px] text-gray-400">
                                                     ← desde {nombreAnterior}
                                                 </span>
@@ -284,12 +415,68 @@ export function HistorialEstados({ idOrden, orden }: HistorialEstadosProps) {
                                         <span className="text-[11px] font-medium text-gray-500">{fechaStr}</span>
                                     </div>
 
-                                    {(motivoTexto || item.observaciones) && (
+                                    {motivoTexto && (
                                         <div className="mt-1.5 text-xs text-gray-600 flex items-start gap-1.5">
                                             <MessageSquare className="h-3.5 w-3.5 text-gray-400 mt-0.5 shrink-0" />
-                                            <span>{motivoTexto || item.observaciones}</span>
+                                            <span>{motivoTexto}</span>
                                         </div>
                                     )}
+
+                                    {esEdicionObservaciones ? (
+                                        <div className="mt-2 rounded-lg bg-white/95 border border-indigo-100 shadow-2xs overflow-hidden">
+                                            <div className="px-2.5 py-1.5 bg-indigo-50/80 border-b border-indigo-100 flex items-center gap-1.5 text-[11px] font-bold text-indigo-700">
+                                                <FileText className="h-3 w-3 shrink-0" />
+                                                <span>Cambio en observaciones de cierre</span>
+                                            </div>
+                                            <div className="p-2.5 space-y-2">
+                                                <div>
+                                                    <span className="inline-block px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-bold uppercase tracking-wide mb-1">
+                                                        Antes
+                                                    </span>
+                                                    <div
+                                                        className={cn(
+                                                            'whitespace-pre-line text-xs leading-relaxed rounded-md px-2 py-1.5 border line-clamp-4 hover:line-clamp-none transition-all cursor-pointer',
+                                                            observacionAnterior
+                                                                ? 'text-gray-600 bg-gray-50 border-gray-200'
+                                                                : 'text-gray-400 bg-gray-50 border-gray-200 italic',
+                                                        )}
+                                                        title="Clic para expandir / contraer"
+                                                    >
+                                                        {observacionAnterior || 'Sin observación'}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wide mb-1">
+                                                        Después
+                                                    </span>
+                                                    <div
+                                                        className={cn(
+                                                            'whitespace-pre-line text-xs leading-relaxed rounded-md px-2 py-1.5 border line-clamp-4 hover:line-clamp-none transition-all cursor-pointer',
+                                                            cleanObservaciones
+                                                                ? 'text-gray-800 bg-emerald-50/40 border-emerald-100'
+                                                                : 'text-gray-400 bg-gray-50 border-gray-200 italic',
+                                                        )}
+                                                        title="Clic para expandir / contraer"
+                                                    >
+                                                        {cleanObservaciones || 'Sin observación (campo vaciado)'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : tieneObservacionDetalle ? (
+                                        <div className="mt-2 p-2.5 rounded-lg bg-white/95 border border-gray-200/80 text-xs text-gray-700 shadow-2xs">
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 mb-1">
+                                                <FileText className="h-3 w-3 text-indigo-500 shrink-0" />
+                                                <span>{etiquetaObservacion}</span>
+                                            </div>
+                                            <div
+                                                className="whitespace-pre-line text-gray-700 line-clamp-4 hover:line-clamp-none transition-all cursor-pointer font-sans leading-relaxed"
+                                                title="Clic para expandir / contraer"
+                                            >
+                                                {cleanObservaciones}
+                                            </div>
+                                        </div>
+                                    ) : null}
 
                                     <div className="mt-2 text-[11px] text-gray-500 flex items-center gap-1">
                                         <User className="h-3 w-3 text-gray-400" />

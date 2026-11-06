@@ -60,6 +60,12 @@ import { ProgresoRegistroService, HeartbeatProgresoDto } from './services/progre
 
 // Decorators
 import { UserId } from './decorators/user-id.decorator';
+import {
+  ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
+  crearMetadataObservacionesCierre,
+  normalizarObservacionCierre,
+  observacionesCierreEquivalentes,
+} from './domain/observaciones-cierre-audit';
 import { VALIDACIONES_POR_ESTADO } from './domain/workflow-estados';
 
 /**
@@ -3170,55 +3176,133 @@ export class OrdenesController {
    * PATCH /api/ordenes/:id/observaciones-cierre
    * Endpoint ATÓMICO para actualizar SOLO el campo observaciones_cierre
    * Diseñado para Portal Admin - permite edición incluso en órdenes COMPLETADAS
+   *
+   * La lectura, el update y la auditoría van en la MISMA transacción:
+   * - Si el texto no cambió, no se escribe nada (ni historial ni fecha de modificación).
+   * - Si cambió sólo el formato HTML pero el texto visible es el mismo, se guarda
+   *   el nuevo formato pero no se genera una entrada de auditoría vacía.
    */
   @Patch(':id/observaciones-cierre')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Actualizar observaciones de cierre',
-    description: 'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA.',
+    description: 'Actualiza SOLO el campo observaciones_cierre de una orden. Permite edición en estado COMPLETADA y registra la auditoría en historial_estados_orden.',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID de la orden' })
   @ApiResponse({ status: 200, description: 'Observaciones actualizadas exitosamente' })
   @ApiResponse({ status: 404, description: 'Orden no encontrada' })
-  @ApiResponse({ status: 400, description: 'No se puede modificar orden en estado APROBADA/CANCELADA' })
+  @ApiResponse({ status: 400, description: 'No se puede modificar orden en estado CANCELADA' })
   async updateObservacionesCierre(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { observaciones_cierre: string },
+    @UserId() userId: number,
+    @CurrentUser() user: any,
   ) {
-    // 1. Verificar que la orden existe y obtener estado actual
-    const orden = await this.prisma.ordenes_servicio.findUnique({
-      where: { id_orden_servicio: id },
-      include: { estados_orden: true },
-    });
-
-    if (!orden) {
-      throw new NotFoundException(`Orden ${id} no encontrada`);
-    }
-
-    // 2. Validar que no sea estado final bloqueado (solo CANCELADA)
-    // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
-    const estadoCodigo = orden.estados_orden?.codigo_estado;
-    if (estadoCodigo === 'CANCELADA') {
+    if (!body || typeof body.observaciones_cierre !== 'string') {
       throw new BadRequestException(
-        `No se puede modificar una orden en estado ${estadoCodigo}`,
+        'Debes enviar observaciones_cierre como texto.',
       );
     }
 
-    // 3. Actualizar SOLO observaciones_cierre (operación atómica)
-    const updated = await this.prisma.ordenes_servicio.update({
-      where: { id_orden_servicio: id },
-      data: {
-        observaciones_cierre: body.observaciones_cierre,
-        fecha_modificacion: new Date(),
-      },
+    const adminId =
+      Number(userId) || Number(user?.id) || Number(user?.id_usuario) || 1;
+
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // 1. Leer la orden dentro de la transacción para no auditar sobre datos obsoletos
+      const orden = await tx.ordenes_servicio.findUnique({
+        where: { id_orden_servicio: id },
+        include: { estados_orden: true },
+      });
+
+      if (!orden) {
+        throw new NotFoundException(`Orden ${id} no encontrada`);
+      }
+
+      // 2. Validar que no sea estado final bloqueado (solo CANCELADA)
+      // ✅ FIX 09-ABR-2026: APROBADA NO es estado final, es el estado inicial
+      const estadoCodigo = orden.estados_orden?.codigo_estado;
+      if (estadoCodigo === 'CANCELADA') {
+        throw new BadRequestException(
+          `No se puede modificar una orden en estado ${estadoCodigo}`,
+        );
+      }
+
+      if (orden.id_estado_actual == null) {
+        throw new InternalServerErrorException(
+          `La orden ${orden.numero_orden ?? id} no tiene un estado actual válido. ` +
+          `No se puede registrar la auditoría de observaciones de cierre.`,
+        );
+      }
+
+      const anterior = normalizarObservacionCierre(orden.observaciones_cierre);
+      const nueva = normalizarObservacionCierre(body.observaciones_cierre);
+
+      // 3. Si el valor exacto no cambió, no se toca la orden ni el historial
+      if (anterior === nueva) {
+        return {
+          updated: orden,
+          historial: null as { id_historial: number } | null,
+          sinCambios: true,
+        };
+      }
+
+      const fechaCambio = new Date();
+
+      // 4. Persistir el nuevo valor (incluido el formato HTML del editor)
+      const updated = await tx.ordenes_servicio.update({
+        where: { id_orden_servicio: id },
+        data: {
+          observaciones_cierre: body.observaciones_cierre,
+          fecha_modificacion: fechaCambio,
+          modificado_por: adminId,
+        },
+      });
+
+      // 5. Auditar sólo si cambió el texto visible. Un simple cambio de
+      //    formato (texto plano → <p>texto</p>) no ensucia el historial.
+      let historial: { id_historial: number } | null = null;
+      if (
+        !observacionesCierreEquivalentes(
+          orden.observaciones_cierre,
+          body.observaciones_cierre,
+        )
+      ) {
+        historial = await tx.historial_estados_orden.create({
+          data: {
+            id_orden_servicio: id,
+            id_estado_anterior: orden.id_estado_actual,
+            id_estado_nuevo: orden.id_estado_actual,
+            accion: ACCION_MODIFICAR_OBSERVACIONES_CIERRE,
+            motivo_cambio:
+              'Edición de observaciones de cierre desde Portal Admin',
+            observaciones: body.observaciones_cierre,
+            realizado_por: adminId,
+            fecha_cambio: fechaCambio,
+            metadata: crearMetadataObservacionesCierre({
+              origen: 'PORTAL_ADMIN',
+              anterior: orden.observaciones_cierre,
+              nueva: body.observaciones_cierre,
+              extra: { accion: 'EDICION' },
+            }) as any,
+          },
+          select: { id_historial: true },
+        });
+      }
+
+      return { updated, historial, sinCambios: false };
     });
 
     return {
       success: true,
-      message: 'Observaciones de cierre actualizadas exitosamente',
+      message: resultado.sinCambios
+        ? 'Sin cambios en las observaciones de cierre'
+        : 'Observaciones de cierre actualizadas exitosamente',
       data: {
-        id_orden_servicio: updated.id_orden_servicio,
-        observaciones_cierre: updated.observaciones_cierre,
+        id_orden_servicio: resultado.updated.id_orden_servicio,
+        observaciones_cierre: resultado.updated.observaciones_cierre,
+        fecha_modificacion: resultado.updated.fecha_modificacion,
+        sin_cambios: resultado.sinCambios,
+        id_historial: resultado.historial?.id_historial ?? null,
       },
     };
   }
@@ -4264,6 +4348,12 @@ export class OrdenesController {
         equipos_transferidos: false,
         equipos_conservados: true,
         campos_directos_sobrescritos: true,
+        // La transferencia también reemplaza las observaciones de cierre del
+        // destino con las del origen. Se deja el antes/después explícito para
+        // que la auditoría no dependa de reconstruir el estado anterior.
+        observacion_cierre_anterior:
+          ordenDestino.observaciones_cierre ?? null,
+        observacion_cierre_nueva: ordenOrigen.observaciones_cierre ?? null,
         // Conteo de lo SOBREESCRITO, tomado del `deleteMany` de PASO A (no de un
         // `count` posterior, que siempre devolvería 0 al haber borrado ya).
         sobrescrito_en_destino: {
