@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException
 } from '@nestjs/common';
+import { crearMetadataObservacionesCierre } from '../ordenes/domain/observaciones-cierre-audit';
 import { validarTransicion } from '../ordenes/domain/workflow-estados';
 import {
   SyncActividadCatalogoDto,
@@ -190,13 +191,18 @@ export class SyncService {
           fecha_modificacion: new Date(),
         };
 
+        const esFinalizacion = dto.cambioEstado.nuevoEstado === 'COMPLETADA';
+        const esResubidaSync = esFinalizacion && estadoActual === 'COMPLETADA';
+
         // Campos específicos por estado
         if (dto.cambioEstado.nuevoEstado === 'EN_PROCESO') {
           updateData.fecha_inicio_real = new Date(dto.cambioEstado.timestamp);
         }
-        if (dto.cambioEstado.nuevoEstado === 'COMPLETADA') {
+        if (esFinalizacion) {
           updateData.fecha_fin_real = new Date(dto.cambioEstado.timestamp);
-          updateData.observaciones_cierre = dto.cambioEstado.observaciones;
+          if (dto.cambioEstado.observaciones !== undefined) {
+            updateData.observaciones_cierre = dto.cambioEstado.observaciones;
+          }
         }
 
         await tx.ordenes_servicio.update({
@@ -204,16 +210,37 @@ export class SyncService {
           data: updateData,
         });
 
-        // Crear historial
+        // Crear historial. La observación original/corregida del técnico queda
+        // identificada con la misma acción que usa la finalización online, para
+        // que el Portal Admin la muestre como cierre técnico y no como un
+        // cambio de estado genérico.
         await tx.historial_estados_orden.create({
           data: {
             id_orden_servicio: dto.idOrdenServicio,
             id_estado_anterior: ordenServidor.id_estado_actual,
             id_estado_nuevo: nuevoEstadoDB.id_estado,
+            accion: esFinalizacion
+              ? esResubidaSync
+                ? 'RESUBIDA_TECNICO'
+                : 'FINALIZAR'
+              : undefined,
             motivo_cambio: dto.cambioEstado.motivo,
             observaciones: dto.cambioEstado.observaciones,
             fecha_cambio: new Date(dto.cambioEstado.timestamp),
             realizado_por: tecnicoId,
+            metadata:
+              esFinalizacion && dto.cambioEstado.observaciones !== undefined
+                ? (crearMetadataObservacionesCierre({
+                    origen: 'SINCRONIZACION_MOVIL',
+                    anterior: ordenServidor.observaciones_cierre,
+                    nueva: dto.cambioEstado.observaciones,
+                    extra: {
+                      evento: esResubidaSync
+                        ? 'RESUBIDA_TECNICO'
+                        : 'FINALIZACION_TECNICO',
+                    },
+                  }) as any)
+                : undefined,
           },
         });
       }

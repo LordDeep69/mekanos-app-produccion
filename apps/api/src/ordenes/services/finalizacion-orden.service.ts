@@ -44,6 +44,7 @@ import { PdfService, TipoInforme } from '../../pdf/pdf.service';
 import { CloudinaryService } from '../../storage/cloudinary.service';
 import { R2StorageService } from '../../storage/r2-storage.service';
 import { PendienteFinalizacionDto } from '../dto/finalizar-orden-completo.dto';
+import { crearMetadataObservacionesCierre } from '../domain/observaciones-cierre-audit';
 
 // ============================================================================
 // INTERFACES Y TIPOS
@@ -2154,6 +2155,7 @@ export class FinalizacionOrdenService {
                 fecha_inicio_real: true,
                 fecha_fin_real: true,
                 duracion_minutos: true,
+                observaciones_cierre: true,
             },
         });
 
@@ -2295,11 +2297,24 @@ export class FinalizacionOrdenService {
                     motivo_cambio: esResubida
                         ? 'Corrección autorizada por el administrador'
                         : 'Finalización de orden de servicio',
-                    fecha_cambio: new Date(),
+                    fecha_cambio: fechaModificacionValue,
                     observaciones: esResubida
                         ? `Orden corregida y resubida. ${observaciones}`
                         : `Orden finalizada. ${observaciones}`,
                     realizado_por: usuarioId,
+                    // La observación original del técnico queda también en
+                    // metadata, sin el prefijo narrativo, para que el Portal
+                    // Admin pueda mostrar el "antes / después" sin ambigüedad.
+                    metadata: crearMetadataObservacionesCierre({
+                        origen: 'FINALIZACION_MOVIL',
+                        anterior: ordenExistente?.observaciones_cierre,
+                        nueva: observaciones,
+                        extra: {
+                            evento: esResubida
+                                ? 'RESUBIDA_TECNICO'
+                                : 'FINALIZACION_TECNICO',
+                        },
+                    }) as any,
                 },
             }),
         ]);

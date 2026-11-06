@@ -1,5 +1,6 @@
 import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { observacionesCierreEquivalentes } from '../domain/observaciones-cierre-audit';
 import { permiteEdicion, validarTransicion } from '../domain/workflow-estados';
 import { PrismaOrdenServicioRepository } from '../infrastructure/prisma-orden-servicio.repository';
 import { UpdateOrdenCommand } from './update-orden.command';
@@ -169,23 +170,45 @@ export class UpdateOrdenHandler implements ICommandHandler<UpdateOrdenCommand> {
     }
 
     // 5. Actualizar orden (campos permitidos + observaciones_cierre)
-    return await this.repository.save({
-      id_orden_servicio: ordenId,
-      id_sede: dto.id_sede !== undefined ? dto.id_sede : ordenExistente.id_sede,
-      id_tipo_servicio: dto.id_tipo_servicio !== undefined ? dto.id_tipo_servicio : ordenExistente.id_tipo_servicio,
-      fecha_programada: dto.fecha_programada !== undefined ? dto.fecha_programada : ordenExistente.fecha_programada,
-      hora_programada: dto.hora_programada !== undefined ? dto.hora_programada : ordenExistente.hora_programada,
-      prioridad: dto.prioridad || ordenExistente.prioridad,
-      origen_solicitud: dto.origen_solicitud || ordenExistente.origen_solicitud,
-      descripcion_inicial: dto.descripcion_inicial !== undefined ? dto.descripcion_inicial : ordenExistente.descripcion_inicial,
-      trabajo_realizado: dto.trabajo_realizado !== undefined ? dto.trabajo_realizado : ordenExistente.trabajo_realizado,
-      observaciones_tecnico: dto.observaciones_tecnico !== undefined ? dto.observaciones_tecnico : ordenExistente.observaciones_tecnico,
-      observaciones_cierre: dto.observaciones_cierre !== undefined ? dto.observaciones_cierre : ordenExistente.observaciones_cierre,
-      requiere_firma_cliente: dto.requiere_firma_cliente !== undefined ? dto.requiere_firma_cliente : ordenExistente.requiere_firma_cliente,
-      id_tecnico_asignado: dto.id_tecnico_asignado !== undefined ? dto.id_tecnico_asignado : ordenExistente.id_tecnico_asignado,
-      fecha_asignacion: fechaAsignacion,
-      id_estado_actual: nuevoEstadoId,
-      modificado_por: userId,
-    });
+    //    Si cambió la observación de cierre, la auditoría se confirma en la
+    //    misma transacción que el update (ver repository.save).
+    const cambioObservacionesCierre =
+      dto.observaciones_cierre !== undefined &&
+      !observacionesCierreEquivalentes(
+        ordenExistente.observaciones_cierre,
+        dto.observaciones_cierre,
+      );
+
+    return await this.repository.save(
+      {
+        id_orden_servicio: ordenId,
+        id_sede: dto.id_sede !== undefined ? dto.id_sede : ordenExistente.id_sede,
+        id_tipo_servicio: dto.id_tipo_servicio !== undefined ? dto.id_tipo_servicio : ordenExistente.id_tipo_servicio,
+        fecha_programada: dto.fecha_programada !== undefined ? dto.fecha_programada : ordenExistente.fecha_programada,
+        hora_programada: dto.hora_programada !== undefined ? dto.hora_programada : ordenExistente.hora_programada,
+        prioridad: dto.prioridad || ordenExistente.prioridad,
+        origen_solicitud: dto.origen_solicitud || ordenExistente.origen_solicitud,
+        descripcion_inicial: dto.descripcion_inicial !== undefined ? dto.descripcion_inicial : ordenExistente.descripcion_inicial,
+        trabajo_realizado: dto.trabajo_realizado !== undefined ? dto.trabajo_realizado : ordenExistente.trabajo_realizado,
+        observaciones_tecnico: dto.observaciones_tecnico !== undefined ? dto.observaciones_tecnico : ordenExistente.observaciones_tecnico,
+        observaciones_cierre: dto.observaciones_cierre !== undefined ? dto.observaciones_cierre : ordenExistente.observaciones_cierre,
+        requiere_firma_cliente: dto.requiere_firma_cliente !== undefined ? dto.requiere_firma_cliente : ordenExistente.requiere_firma_cliente,
+        id_tecnico_asignado: dto.id_tecnico_asignado !== undefined ? dto.id_tecnico_asignado : ordenExistente.id_tecnico_asignado,
+        fecha_asignacion: fechaAsignacion,
+        id_estado_actual: nuevoEstadoId,
+        modificado_por: userId,
+      },
+      cambioObservacionesCierre
+        ? {
+            origen: 'API_GENERICA',
+            observacionAnterior: ordenExistente.observaciones_cierre,
+            observacionNueva: dto.observaciones_cierre,
+            idEstadoAnterior: ordenExistente.id_estado_actual,
+            idEstadoNuevo: nuevoEstadoId,
+            realizadoPor: userId,
+            motivo: 'Edición de observaciones de cierre desde API de órdenes',
+          }
+        : undefined,
+    );
   }
 }
