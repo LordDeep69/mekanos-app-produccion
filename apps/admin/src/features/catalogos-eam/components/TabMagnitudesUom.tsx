@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import {
   MagnitudFisica,
   UnidadMedidaEam,
@@ -41,6 +42,7 @@ import {
   useUpdateUnidadEam,
   useSetActivoMagnitudEam,
   useReactivarTodasMagnitudesEam,
+  useSetActivoDisciplinaEam,
 } from '../index';
 import {
   BANCO_UNIVERSAL_QUDT,
@@ -103,12 +105,14 @@ export function TabMagnitudesUom() {
   const [bancoSearch, setBancoSearch] = useState('');
   const [bancoCat, setBancoCat] = useState<CategoriaMagnitud | 'TODAS'>('TODAS');
   const [filtroDisciplina, setFiltroDisciplina] = useState<CategoriaMagnitud | 'TODAS'>('TODAS');
-  const [pestanaBanco, setPestanaBanco] = useState<'OCULTAS' | 'CATALOGO'>('OCULTAS');
+  const [pestanaBanco, setPestanaBanco] = useState<'CATALOGO' | 'OCULTAS'>('CATALOGO');
   const [activandoPreset, setActivandoPreset] = useState<string | null>(null);
   const [bancoFeedback, setBancoFeedback] = useState<{ tipo: 'success' | 'error'; msg: string } | null>(null);
   const activarBancoMut = useActivarMagnitudBancoEam();
   const setActivoMut = useSetActivoMagnitudEam();
   const reactivarTodasMut = useReactivarTodasMagnitudesEam();
+  const setActivoDisciplinaMut = useSetActivoDisciplinaEam();
+  const { toast } = useToast();
 
   // Modales CRUD Magnitud y Unidad
   const [showMagModal, setShowMagModal] = useState(false);
@@ -1007,11 +1011,11 @@ export function TabMagnitudesUom() {
       {showBancoModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-            {/* Cabecera */}
+            {/* Cabecera Principal */}
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-400">
-                  <Sparkles className="h-5 w-5" />
+                  <Package className="h-5 w-5" />
                 </div>
                 <div>
                   <h4 className="text-base font-extrabold text-white flex items-center gap-2">
@@ -1021,7 +1025,7 @@ export function TabMagnitudesUom() {
                     </span>
                   </h4>
                   <p className="text-xs text-indigo-200/70">
-                    Estándares ontológicos internacionales (NASA / W3C / ISO 80000). Activa magnitudes completas con factores exactos en 1 clic.
+                    Estándares ontológicos internacionales (NASA / W3C / ISO 80000). Activa y gestiona magnitudes completas en 1 clic.
                   </p>
                 </div>
               </div>
@@ -1034,36 +1038,158 @@ export function TabMagnitudesUom() {
               </button>
             </div>
 
-            {/* Barra de Búsqueda y Categorías */}
-            <div className="p-4 bg-slate-50 border-b border-slate-100 space-y-3">
+            {/* Selector de Pestañas del Banco */}
+            <div className="px-6 pt-3 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPestanaBanco('CATALOGO')}
+                  className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+                    pestanaBanco === 'CATALOGO'
+                      ? 'border-indigo-600 text-indigo-800 bg-white rounded-t-xl shadow-2xs'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Package className="h-4 w-4" />
+                  <span>Catálogo Maestro por Disciplina</span>
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black border border-indigo-200">
+                    {BANCO_UNIVERSAL_QUDT.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPestanaBanco('OCULTAS')}
+                  className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+                    pestanaBanco === 'OCULTAS'
+                      ? 'border-indigo-600 text-indigo-800 bg-white rounded-t-xl shadow-2xs'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <EyeOff className="h-4 w-4" />
+                  <span>Magnitudes Ocultas</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    numOcultas > 0
+                      ? 'bg-amber-500 text-white animate-pulse'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    {numOcultas}
+                  </span>
+                </button>
+              </div>
+
+              {pestanaBanco === 'OCULTAS' && numOcultas > 0 && (
+                <button
+                  type="button"
+                  onClick={handleReactivarTodas}
+                  disabled={reactivarTodasMut.isPending}
+                  className="mb-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {reactivarTodasMut.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                  <span>+ Reactivar Todas ({numOcultas})</span>
+                </button>
+              )}
+            </div>
+
+            {/* Barra de Filtros y Búsqueda */}
+            <div className="p-4 bg-slate-50 border-b border-slate-100 space-y-2.5">
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Buscar magnitud, unidad o símbolo (ej: masa, kg, velocidad, aceleración, viscosidad, ciclos)..."
+                  placeholder="Buscar magnitud, unidad o símbolo (ej: masa, kg, velocidad, viscosidad, btu, kw)..."
                   value={bancoSearch}
                   onChange={(e) => setBancoSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs font-medium"
                 />
               </div>
 
-              {/* Categorías Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                {CATEGORIAS_QUDT.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setBancoCat(cat.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
-                      bancoCat === cat.id
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
+              {/* Botones de Disciplina (flex-wrap sin scrollbar) */}
+              {pestanaBanco === 'CATALOGO' && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {CATEGORIAS_QUDT.map((cat) => {
+                      const count = cat.id === 'TODAS'
+                        ? BANCO_UNIVERSAL_QUDT.length
+                        : BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === cat.id).length;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setBancoCat(cat.id)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                            bancoCat === cat.id
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {cat.label} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Acción Rápida: Activar / Ocultar toda la disciplina */}
+                  {bancoCat !== 'TODAS' && (
+                    <div className="flex items-center justify-between pt-1.5 px-1 border-t border-slate-200/70 text-xs">
+                      <span className="text-slate-600 font-medium">
+                        Disciplina: <strong className="text-slate-900">{CATEGORIAS_QUDT.find((c) => c.id === bancoCat)?.label}</strong> (
+                        {BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === bancoCat).length} magnitudes)
+                      </span>
+                      {(() => {
+                        const magsCat = BANCO_UNIVERSAL_QUDT.filter((p) => p.categoria === bancoCat);
+                        const todasActivas = magsCat.every((p) =>
+                          magnitudes.some((m) => m.codigo_magnitud === p.codigo_magnitud),
+                        );
+                        return (
+                          <button
+                            type="button"
+                            disabled={setActivoDisciplinaMut.isPending}
+                            onClick={async () => {
+                              const nuevoEstado = !todasActivas;
+                              setBancoFeedback(null);
+                              try {
+                                await setActivoDisciplinaMut.mutateAsync({
+                                  categoria: bancoCat,
+                                  activo: nuevoEstado,
+                                });
+                                setBancoFeedback({
+                                  tipo: 'success',
+                                  msg: `Disciplina ${CATEGORIAS_QUDT.find((c) => c.id === bancoCat)?.label} ${
+                                    nuevoEstado ? 'activada' : 'ocultada'
+                                  } completamente (${magsCat.length} magnitudes).`,
+                                });
+                                setTimeout(() => setBancoFeedback(null), 4000);
+                              } catch (err: any) {
+                                setBancoFeedback({
+                                  tipo: 'error',
+                                  msg: err?.response?.data?.message || err?.message || 'Error al actualizar disciplina',
+                                });
+                              }
+                            }}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs ${
+                              todasActivas
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300'
+                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            }`}
+                          >
+                            {todasActivas ? <EyeOff className="h-3.5 w-3.5 text-amber-600" /> : <Eye className="h-3.5 w-3.5 text-emerald-600" />}
+                            <span>
+                              {todasActivas
+                                ? `Ocultar toda esta disciplina (${magsCat.length})`
+                                : `Activar toda esta disciplina (${magsCat.length})`}
+                            </span>
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {bancoFeedback && (
                 <div
@@ -1092,12 +1218,26 @@ export function TabMagnitudesUom() {
               )}
             </div>
 
-            {/* Listado de Tarjetas de Magnitud */}
+            {/* Listado de Tarjetas */}
             <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-slate-50/50">
               {presetsFiltrados.length === 0 ? (
-                <div className="p-12 text-center text-slate-400 text-xs">
-                  No se encontraron magnitudes estándar para la búsqueda &ldquo;{bancoSearch}&rdquo;.
-                </div>
+                pestanaBanco === 'OCULTAS' ? (
+                  <div className="p-12 text-center space-y-3 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="h-6 w-6" />
+                    </div>
+                    <p className="text-sm font-bold text-slate-900">
+                      ✓ Las {BANCO_UNIVERSAL_QUDT.length} magnitudes del banco mundial están activas
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                      Si ocultas alguna magnitud de tu lista principal, aparecerá aquí para cuando quieras reactivarla.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-12 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
+                    No se encontraron magnitudes estándar para la búsqueda &ldquo;{bancoSearch}&rdquo;.
+                  </div>
+                )
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {presetsFiltrados.map((preset) => {
@@ -1113,7 +1253,7 @@ export function TabMagnitudesUom() {
                         className={`rounded-2xl border p-4.5 bg-white flex flex-col justify-between gap-3 transition-all ${
                           yaActivada
                             ? 'border-emerald-200 shadow-2xs'
-                            : 'border-slate-200 hover:border-indigo-300 hover:shadow-sm'
+                            : 'border-amber-200 bg-amber-50/20 hover:border-amber-300'
                         }`}
                       >
                         <div className="space-y-2">
@@ -1137,7 +1277,12 @@ export function TabMagnitudesUom() {
                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                                 <span>Activa</span>
                               </span>
-                            ) : null}
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 text-[11px] font-bold border border-amber-300 shrink-0">
+                                <EyeOff className="h-3.5 w-3.5 text-amber-600" />
+                                <span>Oculta</span>
+                              </span>
+                            )}
                           </div>
 
                           <p className="text-xs text-slate-500 leading-relaxed">
@@ -1147,8 +1292,12 @@ export function TabMagnitudesUom() {
                           {/* Unidades incluidas */}
                           <div className="pt-2 border-t border-slate-100 space-y-1.5">
                             <div className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
-                              <span>Unidad Base: <strong className="font-mono text-indigo-700">{preset.unidad_base_codigo}</strong></span>
-                              <span className="text-[10px] text-slate-400">{preset.unidades.length} unidades canónicas</span>
+                              <span>
+                                Unidad Base: <strong className="font-mono text-indigo-700">{preset.unidad_base_codigo}</strong>
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                {preset.unidades.length} unidades canónicas
+                              </span>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {preset.unidades.map((u) => (
@@ -1168,32 +1317,56 @@ export function TabMagnitudesUom() {
                           </div>
                         </div>
 
-                        {/* Botón de Acción */}
+                        {/* Botón de Acción Explícito */}
                         <div className="pt-2">
                           {yaActivada ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedMagCode(preset.codigo_magnitud);
-                                setShowBancoModal(false);
-                              }}
-                              className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-                            >
-                              <span>Ver en Catálogo</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedMagCode(preset.codigo_magnitud);
+                                  setShowBancoModal(false);
+                                }}
+                                className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                              >
+                                <span>Ver en Catálogo</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setActivoMut.mutate(
+                                    { codigo: preset.codigo_magnitud, activo: false },
+                                    {
+                                      onSuccess: () => {
+                                        setBancoFeedback({
+                                          tipo: 'success',
+                                          msg: `Magnitud "${preset.nombre_magnitud}" ocultada. Puedes reactivarla en cualquier momento desde la pestaña "Magnitudes Ocultas".`,
+                                        });
+                                        setTimeout(() => setBancoFeedback(null), 4000);
+                                      },
+                                    }
+                                  );
+                                }}
+                                className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                                title="Ocultar esta magnitud del catálogo diario"
+                              >
+                                <EyeOff className="h-3.5 w-3.5" />
+                                <span>Ocultar</span>
+                              </button>
+                            </div>
                           ) : (
                             <button
                               type="button"
                               disabled={activarBancoMut.isPending}
                               onClick={() => handleActivarPreset(preset)}
-                              className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                             >
                               {isProcessing ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <Plus className="h-4 w-4" />
                               )}
-                              <span>Activar en 1 Clic ({preset.unidades.length} UoM)</span>
+                              <span>+ Reactivar en 1 Clic ({preset.unidades.length} UoM)</span>
                             </button>
                           )}
                         </div>
@@ -1312,7 +1485,7 @@ export function TabMagnitudesUom() {
                 />
               </div>
 
-              {/* 4° UNIDAD PRINCIPAL DE REFERENCIA (SELECTOR DEL BANCO O CREACIÓN PERSONALIZADA) */}
+              {/* 4° UNIDAD PRINCIPAL DE REFERENCIA (COMBOBOX UNIFICADO PRÉMIUM SIN SELECT NATIVO) */}
               {!editingMag ? (
                 <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200/80 space-y-3">
                   <div className="flex items-center justify-between">
@@ -1355,75 +1528,87 @@ export function TabMagnitudesUom() {
                         </button>
                       </div>
 
-                      {/* Buscador Rápido del Selector */}
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                        <input
-                          type="text"
-                          placeholder="Filtrar unidades por nombre o símbolo (ej: kg, m/s, bar, psi, rpm, ciclos)..."
-                          value={filtroSelectorUnidad}
-                          onChange={(e) => setFiltroSelectorUnidad(e.target.value)}
-                          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
-                        />
-                      </div>
-
-                      {/* Selector Desplegable de Unidades */}
-                      <select
-                        required
-                        value={magForm.base_codigo}
-                        onChange={(e) => {
-                          const cod = e.target.value;
-                          const encontrada = todasLasUnidadesDisponibles.find(
-                            (u) => u.codigo === cod,
-                          );
-                          if (encontrada) {
-                            setMagForm((prev) => ({
-                              ...prev,
-                              base_codigo: encontrada.codigo,
-                              base_nombre: encontrada.nombre,
-                              base_simbolo: encontrada.simbolo,
-                              unidad_base_codigo: encontrada.codigo,
-                            }));
-                          } else {
-                            setMagForm((prev) => ({
-                              ...prev,
-                              base_codigo: '',
-                              base_nombre: '',
-                              base_simbolo: '',
-                              unidad_base_codigo: '',
-                            }));
-                          }
-                        }}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
-                      >
-                        <option value="">
-                          -- Selecciona la unidad base deseada ({unidadesFiltradasSelector.length} opciones) --
-                        </option>
-                        {unidadesFiltradasSelector.map((u) => (
-                          <option key={u.codigo} value={u.codigo}>
-                            {u.simbolo} — {u.nombre} ({u.categoria || u.codigo})
-                          </option>
-                        ))}
-                      </select>
-
-                      {/* Previsualización de la unidad seleccionada */}
+                      {/* Tarjeta de Selección Confirmada vs Buscador Integrado */}
                       {magForm.base_codigo ? (
-                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-900 animate-in fade-in duration-150">
-                          <div className="flex items-center gap-2">
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-between text-xs text-emerald-950 animate-in fade-in duration-150">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                            <span>
-                              Unidad seleccionada: <strong>{magForm.base_nombre}</strong> (
-                              <span className="font-mono font-bold">{magForm.base_simbolo}</span>)
+                            <span className="font-bold text-emerald-900 shrink-0">✓ Unidad Seleccionada:</span>
+                            <span className="font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[11px] border border-emerald-300 shrink-0">
+                              {magForm.base_simbolo || magForm.base_codigo}
+                            </span>
+                            <span className="font-semibold truncate">{magForm.base_nombre}</span>
+                            <span className="text-[10px] text-emerald-700/80 font-mono shrink-0">
+                              (Código: {magForm.base_codigo} • Factor Base: 1.0)
                             </span>
                           </div>
-                          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-200/60 text-emerald-950">
-                            Código: {magForm.base_codigo}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMagForm((prev) => ({
+                                ...prev,
+                                base_codigo: '',
+                                base_nombre: '',
+                                base_simbolo: '',
+                                unidad_base_codigo: '',
+                              }));
+                            }}
+                            className="ml-2 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-[11px] font-bold transition-colors shrink-0 shadow-2xs"
+                          >
+                            Cambiar unidad
+                          </button>
                         </div>
                       ) : (
-                        <p className="text-[11px] text-slate-500 italic">
-                          Selecciona una unidad canónica de la lista o pulsa en &ldquo;+ Crear unidad personalizada&rdquo; si no está en el banco estándar.
-                        </p>
+                        /* Buscador Conectado con Lista Estilizada */
+                        <div className="rounded-xl border border-slate-300 overflow-hidden bg-white shadow-2xs">
+                          <div className="relative border-b border-slate-200">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                            <input
+                              type="text"
+                              autoFocus
+                              placeholder="Buscar unidad por nombre, código o símbolo (ej: kg, bar, psi, rpm, voltios)..."
+                              value={filtroSelectorUnidad}
+                              onChange={(e) => setFiltroSelectorUnidad(e.target.value)}
+                              className="w-full pl-8 pr-3 py-2 bg-white text-xs font-medium placeholder-slate-400 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="max-h-44 overflow-y-auto divide-y divide-slate-100 bg-white">
+                            {unidadesFiltradasSelector.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-slate-400">
+                                No se encontraron unidades para &ldquo;{filtroSelectorUnidad}&rdquo;
+                              </div>
+                            ) : (
+                              unidadesFiltradasSelector.map((u) => (
+                                <button
+                                  key={u.codigo}
+                                  type="button"
+                                  onClick={() => {
+                                    setMagForm((prev) => ({
+                                      ...prev,
+                                      base_codigo: u.codigo,
+                                      base_nombre: u.nombre,
+                                      base_simbolo: u.simbolo,
+                                      unidad_base_codigo: u.codigo,
+                                    }));
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-blue-50/70 transition-colors group"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px] group-hover:bg-blue-100 group-hover:text-blue-900 shrink-0">
+                                      {u.simbolo}
+                                    </span>
+                                    <span className="font-medium text-slate-800 truncate">{u.nombre}</span>
+                                    <span className="text-[10px] text-slate-400 font-mono shrink-0">({u.codigo})</span>
+                                  </div>
+                                  <span className="text-[10px] font-semibold text-slate-400 group-hover:text-blue-600 shrink-0 ml-2">
+                                    {u.categoria || 'Canónica'}
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -1444,59 +1629,38 @@ export function TabMagnitudesUom() {
                               base_simbolo: '',
                             }))
                           }
-                          className="text-[11px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 transition-colors"
+                          className="text-[11px] text-blue-600 hover:text-blue-700 font-bold"
                         >
-                          <ArrowRightLeft className="h-3 w-3" />
-                          <span>Volver al selector estándar</span>
+                          ← Volver al catálogo de unidades
                         </button>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Nombre de Unidad Base *
+                            Nombre de la Unidad *
                           </label>
                           <input
                             type="text"
                             required
-                            placeholder="Ej: Kilogramo"
+                            placeholder="Ej: Toneladas Métricas"
                             value={magForm.base_nombre}
-                            onChange={(e) => {
-                              const n = e.target.value;
-                              setMagForm((prev) => ({
-                                ...prev,
-                                base_nombre: n,
-                                base_codigo: prev.customSlugBaseUnit
-                                  ? prev.base_codigo
-                                  : prev.base_simbolo
-                                  ? generarCodigoDesdeSimbolo(prev.base_simbolo, n)
-                                  : generarSlugCodigo(n, 10),
-                              }));
-                            }}
-                            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-medium"
+                            onChange={(e) => handleNombreUnidadBaseChange(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
                           />
                         </div>
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Símbolo * (sensible a mayúsculas)
+                            Símbolo Visual *
                           </label>
                           <input
                             type="text"
                             required
-                            placeholder="Ej: kg"
+                            placeholder="Ej: t, kg, PSI, °C"
                             value={magForm.base_simbolo}
-                            onChange={(e) => {
-                              const sym = e.target.value;
-                              setMagForm((prev) => ({
-                                ...prev,
-                                base_simbolo: sym,
-                                base_codigo: prev.customSlugBaseUnit
-                                  ? prev.base_codigo
-                                  : generarCodigoDesdeSimbolo(sym, prev.base_nombre),
-                              }));
-                            }}
-                            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs font-bold"
+                            onChange={(e) => handleSimboloUnidadBaseChange(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-xs font-bold"
                           />
                         </div>
                       </div>
@@ -1504,55 +1668,111 @@ export function TabMagnitudesUom() {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[11px] font-bold text-slate-700">
-                            Código de Unidad Base
+                            Código Identificador Único *
                           </label>
                           <button
                             type="button"
-                            onClick={() =>
-                              setMagForm((prev) => ({
-                                ...prev,
-                                customSlugBaseUnit: !prev.customSlugBaseUnit,
-                              }))
-                            }
+                            onClick={() => setCustomSlugUnitBase(!customSlugUnitBase)}
                             className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold"
                           >
-                            {magForm.customSlugBaseUnit ? 'Auto-código' : 'Personalizar código'}
+                            {customSlugUnitBase ? 'Auto-generar' : 'Personalizar'}
                           </button>
                         </div>
                         <input
                           type="text"
-                          disabled={!magForm.customSlugBaseUnit}
-                          placeholder="Ej: KG"
+                          required
+                          disabled={!customSlugUnitBase}
+                          placeholder="Ej: TON_MET"
                           value={magForm.base_codigo}
                           onChange={(e) =>
-                            setMagForm({ ...magForm, base_codigo: e.target.value.toUpperCase() })
+                            setMagForm({
+                              ...magForm,
+                              base_codigo: e.target.value.toUpperCase(),
+                              unidad_base_codigo: e.target.value.toUpperCase(),
+                            })
                           }
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-xs disabled:bg-white/50"
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-xs disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                /* Modo edición: Selector limpio de la unidad principal */
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Unidad Principal de Referencia
-                  </label>
-                  <select
-                    value={magForm.unidad_base_codigo}
-                    onChange={(e) =>
-                      setMagForm({ ...magForm, unidad_base_codigo: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm bg-white"
-                  >
-                    <option value="">-- Sin asignar --</option>
-                    {(editingMag.unidades_medida || []).map((u) => (
-                      <option key={u.codigo} value={u.codigo}>
-                        {u.simbolo} — {u.nombre} ({u.codigo})
-                      </option>
-                    ))}
-                  </select>
+                /* Modo edición: Selector limpio de la unidad principal y Switch de Activación */
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Unidad Principal de Referencia
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
+                      {(editingMag.unidades_medida || []).map((u) => {
+                        const isSel = magForm.unidad_base_codigo === u.codigo;
+                        return (
+                          <button
+                            key={u.codigo}
+                            type="button"
+                            onClick={() => setMagForm({ ...magForm, unidad_base_codigo: u.codigo })}
+                            className={`p-2.5 rounded-lg border text-left text-xs transition-all flex items-center justify-between ${
+                              isSel
+                                ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold shadow-2xs ring-1 ring-blue-500'
+                                : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px] shrink-0">
+                                {u.simbolo}
+                              </span>
+                              <span className="truncate">{u.nombre}</span>
+                            </div>
+                            {isSel && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-1" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* TARJETA DE ESTADO: ACTIVAR / OCULTAR MAGNITUD */}
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-800">
+                          Magnitud Activa en Formularios y Catálogos
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            magForm.activo !== false
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {magForm.activo !== false ? '✓ Activa' : 'Oculta'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Si la desactivas, se ocultará de los selectores diarios pero se conservará intacta en el Banco de Magnitudes.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={magForm.activo !== false}
+                      onClick={() =>
+                        setMagForm((prev: any) => ({
+                          ...prev,
+                          activo: prev.activo === false ? true : false,
+                        }))
+                      }
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        magForm.activo !== false ? 'bg-emerald-600' : 'bg-slate-300'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          magForm.activo !== false ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               )}
 

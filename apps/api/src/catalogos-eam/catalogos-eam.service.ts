@@ -63,7 +63,7 @@ const PARES_CANONICOS: Record<number, { primarioId: number; aliasIds: number[]; 
 const ALIAS_SECUNDARIOS_OCULTOS = new Set<number>([3, 5, 4]);
 
 @Injectable()
-export class CatalogosEamService {
+export class CatalogosEamService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uomService: UomConversionService,
@@ -252,6 +252,38 @@ export class CatalogosEamService {
     });
   }
 
+  async setActivoDisciplina(categoria: string, activo: boolean) {
+    const presetCodigos = BANCO_UNIVERSAL_QUDT
+      .filter((p) => p.categoria === categoria)
+      .map((p) => p.codigo_magnitud);
+
+    if (presetCodigos.length === 0) {
+      throw new NotFoundException(`No se encontraron magnitudes para la disciplina ${categoria}`);
+    }
+
+    await this.prisma.catalogo_magnitudes.updateMany({
+      where: { codigo_magnitud: { in: presetCodigos } },
+      data: { activo },
+    });
+
+    await this.prisma.unidades_medida.updateMany({
+      where: { tipo_magnitud: { in: presetCodigos } },
+      data: { activo },
+    });
+
+    if (this.uomService) {
+      await this.uomService.recargarDesdeBD();
+    }
+
+    return {
+      ok: true,
+      categoria,
+      activo,
+      afectadas: presetCodigos.length,
+      message: `Disciplina ${categoria} ${activo ? 'activada' : 'ocultada'} exitosamente (${presetCodigos.length} magnitudes)`,
+    };
+  }
+
   async reactivarTodasMagnitudes() {
     await this.prisma.catalogo_magnitudes.updateMany({
       data: { activo: true },
@@ -259,6 +291,7 @@ export class CatalogosEamService {
     await this.prisma.unidades_medida.updateMany({
       data: { activo: true },
     });
+    if (this.uomService) { await this.uomService.recargarDesdeBD(); }
     return { ok: true, message: 'Todas las magnitudes y unidades han sido reactivadas exitosamente' };
   }
 

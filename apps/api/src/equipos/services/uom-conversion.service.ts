@@ -12,7 +12,7 @@
  *   x_dest = ((a_origen * x_origen + b_origen) - b_destino) / a_destino
  */
 
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 export interface InfoUnidad {
@@ -48,7 +48,8 @@ export interface OpcionesFormateo {
 }
 
 @Injectable()
-export class UomConversionService {
+export class UomConversionService implements OnModuleInit {
+  private readonly logger = new Logger(UomConversionService.name);
   /**
    * Catálogo canónico estático in-memory.
    * Garantiza Zero-Latency, ejecución determinista y disponibilidad sin mockeo de BD.
@@ -491,6 +492,11 @@ export class UomConversionService {
    * Sincroniza el catálogo dinámico de unidades desde PostgreSQL en tiempo de ejecución.
    * Si no hay conexión o falla, el servicio opera de forma ininterrumpida con el catálogo estático.
    */
+  async onModuleInit() {
+    const loaded = await this.recargarDesdeBD();
+    this.logger.log(`[UoM] Motor Dimensional hidratado con ${loaded} unidades canónicas desde PostgreSQL`);
+  }
+
   public async recargarDesdeBD(): Promise<number> {
     if (!this.prisma) return 0;
     try {

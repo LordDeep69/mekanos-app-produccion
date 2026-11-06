@@ -10,6 +10,7 @@ import {
   activarMagnitudBancoEam,
   reactivarTodasMagnitudesEam,
   setActivoMagnitudEam,
+  setActivoDisciplinaEam,
   agregarItemBomOemEam,
   asignarAtributoModuloEam,
   buscarComponentesWmsEam,
@@ -534,6 +535,17 @@ export function useCreateTipoServicioEam() {
   });
 }
 
+
+export function useSetActivoDisciplinaEam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ categoria, activo }: { categoria: string; activo: boolean }) =>
+      setActivoDisciplinaEam(categoria, activo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EAM_KEYS.all });
+    },
+  });
+}
 
 export function useSetActivoMagnitudEam() {
   const qc = useQueryClient();

@@ -328,6 +328,17 @@ export async function reactivarTodasMagnitudesEam(): Promise<{ ok: boolean; mess
   return data;
 }
 
+export async function setActivoDisciplinaEam(
+  categoria: string,
+  activo: boolean,
+): Promise<{ ok: boolean; message: string }> {
+  const { data } = await apiClient.patch<{ ok: boolean; message: string }>(
+    `/catalogos/magnitudes/disciplina/${encodeURIComponent(categoria)}/activo`,
+    { activo },
+  );
+  return data;
+}
+
 export async function setActivoMagnitudEam(
   codigo: string,
   activo: boolean,

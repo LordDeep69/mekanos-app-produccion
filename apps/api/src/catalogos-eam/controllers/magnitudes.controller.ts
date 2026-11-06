@@ -29,6 +29,15 @@ export class MagnitudesController {
     return this.eamService.activarMagnitudBanco(dto.codigo_magnitud);
   }
 
+  @Patch('disciplina/:categoria/activo')
+  @ApiOperation({ summary: 'Activar u ocultar todas las magnitudes de una disciplina completa' })
+  async setActivoDisciplina(
+    @Param('categoria') categoria: string,
+    @Body() dto: { activo: boolean },
+  ) {
+    return this.eamService.setActivoDisciplina(categoria, dto.activo);
+  }
+
   @Post('reactivar-todas')
   @ApiOperation({ summary: 'Reactivar todas las magnitudes y unidades del sistema' })
   async reactivarTodas() {
