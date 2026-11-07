@@ -426,6 +426,37 @@ export function TabMagnitudesUom() {
     );
   }, [todasLasUnidadesDisponibles, filtroSelectorUnidad]);
 
+  // Códigos existentes en el sistema para garantía de unicidad estricta
+  const codigosMagnitudesExistentes = useMemo(() => {
+    return new Set(magnitudes.map((m) => m.codigo_magnitud.toUpperCase()));
+  }, [magnitudes]);
+
+  const codigosUnidadesExistentes = useMemo(() => {
+    return new Set(todasLasUnidadesDisponibles.map((u) => u.codigo.toUpperCase()));
+  }, [todasLasUnidadesDisponibles]);
+
+  // Validaciones en tiempo real de colisión / duplicidad
+  const isCodigoMagDuplicado = useMemo(() => {
+    if (editingMag) return false;
+    const cod = (magForm.codigo_magnitud || '').trim().toUpperCase();
+    if (!cod) return false;
+    return codigosMagnitudesExistentes.has(cod);
+  }, [magForm.codigo_magnitud, codigosMagnitudesExistentes, editingMag]);
+
+  const isCodigoUnitDuplicado = useMemo(() => {
+    const cod = (unitForm.codigo || '').trim().toUpperCase();
+    if (!cod) return false;
+    if (editingUnit && editingUnit.codigo.toUpperCase() === cod) return false;
+    return codigosUnidadesExistentes.has(cod);
+  }, [unitForm.codigo, codigosUnidadesExistentes, editingUnit]);
+
+  const isCodigoBaseUnitDuplicado = useMemo(() => {
+    if (magForm.modoUnidadBase !== 'CREAR') return false;
+    const cod = (magForm.base_codigo || '').trim().toUpperCase();
+    if (!cod) return false;
+    return codigosUnidadesExistentes.has(cod);
+  }, [magForm.base_codigo, magForm.modoUnidadBase, codigosUnidadesExistentes]);
+
   const openNewMagnitud = () => {
     setEditingMag(null);
     setCustomSlugMag(false);
@@ -463,11 +494,54 @@ export function TabMagnitudesUom() {
   };
 
   const handleNombreMagChange = (nombre: string) => {
-    setMagForm((prev) => ({
-      ...prev,
-      nombre_magnitud: nombre,
-      codigo_magnitud: customSlugMag ? prev.codigo_magnitud : generarSlugCodigo(nombre, 25),
-    }));
+    setMagForm((prev) => {
+      const nuevoCodigo = customSlugMag
+        ? prev.codigo_magnitud
+        : generarCodigoMagnitudInteligente(nombre, codigosMagnitudesExistentes, 30);
+      return {
+        ...prev,
+        nombre_magnitud: nombre,
+        codigo_magnitud: nuevoCodigo,
+      };
+    });
+  };
+
+  const handleNombreUnidadBaseChange = (nombre: string) => {
+    setMagForm((prev) => {
+      const nuevoCod = prev.customSlugBaseUnit
+        ? prev.base_codigo
+        : generarCodigoUnidadInteligente(
+            prev.base_simbolo,
+            nombre,
+            codigosUnidadesExistentes,
+            prev.codigo_magnitud,
+          );
+      return {
+        ...prev,
+        base_nombre: nombre,
+        base_codigo: nuevoCod,
+        unidad_base_codigo: nuevoCod,
+      };
+    });
+  };
+
+  const handleSimboloUnidadBaseChange = (simbolo: string) => {
+    setMagForm((prev) => {
+      const nuevoCod = prev.customSlugBaseUnit
+        ? prev.base_codigo
+        : generarCodigoUnidadInteligente(
+            simbolo,
+            prev.base_nombre,
+            codigosUnidadesExistentes,
+            prev.codigo_magnitud,
+          );
+      return {
+        ...prev,
+        base_simbolo: simbolo,
+        base_codigo: nuevoCod,
+        unidad_base_codigo: nuevoCod,
+      };
+    });
   };
 
   const handleSaveMagnitud = async (e: React.FormEvent) => {
@@ -496,7 +570,12 @@ export function TabMagnitudesUom() {
       if (magForm.base_nombre && magForm.base_simbolo) {
         const uCod = (
           magForm.base_codigo ||
-          generarCodigoDesdeSimbolo(magForm.base_simbolo, magForm.base_nombre)
+          generarCodigoUnidadInteligente(
+            magForm.base_simbolo,
+            magForm.base_nombre,
+            codigosUnidadesExistentes,
+            payload.codigo_magnitud,
+          )
         ).trim().toUpperCase();
 
         payload.unidad_base = {
@@ -550,9 +629,12 @@ export function TabMagnitudesUom() {
     setUnitForm((prev) => {
       const cod = customSlugUnit
         ? prev.codigo
-        : prev.simbolo
-        ? generarCodigoDesdeSimbolo(prev.simbolo, nombre)
-        : generarSlugCodigo(nombre, 10);
+        : generarCodigoUnidadInteligente(
+            prev.simbolo,
+            nombre,
+            codigosUnidadesExistentes,
+            selectedMagnitud?.codigo_magnitud,
+          );
       return { ...prev, nombre, codigo: cod };
     });
   };
@@ -561,7 +643,12 @@ export function TabMagnitudesUom() {
     setUnitForm((prev) => {
       const cod = customSlugUnit
         ? prev.codigo
-        : generarCodigoDesdeSimbolo(simbolo, prev.nombre);
+        : generarCodigoUnidadInteligente(
+            simbolo,
+            prev.nombre,
+            codigosUnidadesExistentes,
+            selectedMagnitud?.codigo_magnitud,
+          );
       return { ...prev, simbolo, codigo: cod };
     });
   };
@@ -1136,7 +1223,7 @@ export function TabMagnitudesUom() {
                   ) : (
                     <Check className="h-3.5 w-3.5" />
                   )}
-                  <span>+ Reactivar Todas ({numOcultas})</span>
+                  <span>Reactivar Todas ({numOcultas})</span>
                 </button>
               )}
             </div>
@@ -1412,7 +1499,7 @@ export function TabMagnitudesUom() {
                               ) : (
                                 <Plus className="h-4 w-4" />
                               )}
-                              <span>+ Reactivar en 1 Clic ({preset.unidades.length} UoM)</span>
+                              <span>Reactivar en 1 Clic ({preset.unidades.length} UoM)</span>
                             </button>
                           )}
                         </div>
@@ -1508,13 +1595,25 @@ export function TabMagnitudesUom() {
                   onChange={(e) =>
                     setMagForm({ ...magForm, codigo_magnitud: e.target.value.toUpperCase() })
                   }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm disabled:bg-slate-100 disabled:text-slate-600"
+                  className={`w-full px-3.5 py-2 rounded-xl border font-mono text-sm transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                    isCodigoMagDuplicado
+                      ? 'border-rose-400 bg-rose-50/30 text-rose-900 focus:ring-rose-500'
+                      : 'border-slate-300 focus:ring-blue-500'
+                  }`}
                 />
-                {!customSlugMag && !editingMag && (
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Generado automáticamente a partir del nombre. Haz clic en personalizar si requieres un código específico.
+                {isCodigoMagDuplicado ? (
+                  <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+                    ✕ El código "{magForm.codigo_magnitud.toUpperCase()}" ya existe en el catálogo. Modifícalo para que sea único.
                   </p>
-                )}
+                ) : magForm.codigo_magnitud && !editingMag ? (
+                  <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
+                    ✓ Código único garantizado disponible
+                  </p>
+                ) : !customSlugMag && !editingMag ? (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Generado inteligentemente a partir del nombre con garantía de unicidad.
+                  </p>
+                ) : null}
               </div>
 
               {/* 3° DESCRIPCIÓN */}
@@ -1718,16 +1817,21 @@ export function TabMagnitudesUom() {
                           </label>
                           <button
                             type="button"
-                            onClick={() => setCustomSlugUnitBase(!customSlugUnitBase)}
+                            onClick={() =>
+                              setMagForm((prev) => ({
+                                ...prev,
+                                customSlugBaseUnit: !prev.customSlugBaseUnit,
+                              }))
+                            }
                             className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold"
                           >
-                            {customSlugUnitBase ? 'Auto-generar' : 'Personalizar'}
+                            {magForm.customSlugBaseUnit ? 'Auto-generar' : 'Personalizar'}
                           </button>
                         </div>
                         <input
                           type="text"
                           required
-                          disabled={!customSlugUnitBase}
+                          disabled={!magForm.customSlugBaseUnit}
                           placeholder="Ej: TON_MET"
                           value={magForm.base_codigo}
                           onChange={(e) =>
@@ -1737,8 +1841,17 @@ export function TabMagnitudesUom() {
                               unidad_base_codigo: e.target.value.toUpperCase(),
                             })
                           }
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-xs disabled:bg-slate-100 disabled:text-slate-500"
+                          className={`w-full px-3 py-1.5 rounded-lg border font-mono text-xs disabled:bg-slate-100 disabled:text-slate-500 ${
+                            isCodigoBaseUnitDuplicado
+                              ? 'border-rose-400 bg-rose-50 text-rose-900'
+                              : 'border-slate-300'
+                          }`}
                         />
+                        {isCodigoBaseUnitDuplicado && (
+                          <p className="text-[10px] text-rose-600 font-bold mt-1">
+                            ✕ Este código de unidad ya existe en el sistema.
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1832,8 +1945,15 @@ export function TabMagnitudesUom() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createMagMut.isPending || updateMagMut.isPending}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs"
+                  disabled={
+                    createMagMut.isPending ||
+                    updateMagMut.isPending ||
+                    isCodigoMagDuplicado ||
+                    isCodigoBaseUnitDuplicado ||
+                    !magForm.nombre_magnitud.trim() ||
+                    !magForm.codigo_magnitud.trim()
+                  }
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Guardar Magnitud
                 </button>
@@ -1925,8 +2045,21 @@ export function TabMagnitudesUom() {
                     onChange={(e) =>
                       setUnitForm({ ...unitForm, codigo: e.target.value.toUpperCase() })
                     }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-sm disabled:bg-slate-100 disabled:text-slate-600"
+                    className={`w-full px-3 py-2 rounded-xl border font-mono text-sm transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                      isCodigoUnitDuplicado
+                        ? 'border-rose-400 bg-rose-50/30 text-rose-900 focus:ring-rose-500'
+                        : 'border-slate-300 focus:ring-indigo-500'
+                    }`}
                   />
+                  {isCodigoUnitDuplicado ? (
+                    <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+                      ✕ El código "{unitForm.codigo.toUpperCase()}" ya está en uso. Las unidades tienen clave primaria global.
+                    </p>
+                  ) : unitForm.codigo && !editingUnit ? (
+                    <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
+                      ✓ Código de unidad único disponible
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -2004,8 +2137,15 @@ export function TabMagnitudesUom() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createUnitMut.isPending || updateUnitMut.isPending}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs"
+                  disabled={
+                    createUnitMut.isPending ||
+                    updateUnitMut.isPending ||
+                    isCodigoUnitDuplicado ||
+                    !unitForm.nombre.trim() ||
+                    !unitForm.simbolo.trim() ||
+                    !unitForm.codigo.trim()
+                  }
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Guardar Unidad
                 </button>
