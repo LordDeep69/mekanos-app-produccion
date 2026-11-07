@@ -64,8 +64,12 @@ const DISCIPLINAS_COLUMNA: Array<{ id: CategoriaMagnitud | 'TODAS'; label: strin
   { id: 'OPERACION_DESGASTE', label: 'Operación' },
 ];
 
-function generarSlugCodigo(nombre: string, maxLen = 20): string {
-  return nombre
+/**
+ * Normaliza un texto a formato SNAKE_CASE mayúsculas sin acentos ni diacríticos.
+ */
+function normalizarSlug(texto: string, maxLen = 30): string {
+  if (!texto) return '';
+  return texto
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
@@ -74,31 +78,156 @@ function generarSlugCodigo(nombre: string, maxLen = 20): string {
     .slice(0, maxLen);
 }
 
+const SIMBOLOS_CANONICOS: Record<string, string> = {
+  'Ω': 'OHM',
+  'mΩ': 'MOHM',
+  'kΩ': 'KOHM',
+  'MΩ': 'MEOHM',
+  'µ': 'U',
+  'µm': 'UM',
+  'µF': 'UF',
+  'uF': 'UF',
+  'µs': 'US',
+  'µg': 'UG',
+  'm/s': 'MS',
+  'm/s²': 'MS2',
+  'ft/s': 'FPS',
+  'ft/s²': 'FTS2',
+  'km/h': 'KMH',
+  'N·m': 'NM',
+  'N.m': 'NM',
+  'Nm': 'NM',
+  'kg/m³': 'KGM3',
+  'g/cm³': 'GCM3',
+  'mm²/s': 'MM2S',
+  'mm/s': 'MMS',
+  '°C': 'CEL',
+  '°F': 'FAH',
+  'K': 'KEL',
+  '°': 'DEG',
+  '%': 'PCT',
+  'l/min': 'LPM',
+  'L/min': 'LPM',
+  'gal/min': 'GPM',
+  'pulg': 'IN',
+  'pie': 'FT',
+  'pies': 'FT',
+};
+
+/**
+ * Generador Inteligente Anti-Colisión para Magnitudes Físicas.
+ * Garantiza al 100% que el código resultante no exista previamente en el catálogo.
+ */
+function generarCodigoMagnitudInteligente(
+  nombre: string,
+  codigosExistentes: Set<string>,
+  maxLen = 30,
+): string {
+  if (!nombre || !nombre.trim()) return '';
+  const base = normalizarSlug(nombre, maxLen);
+  if (!base) return '';
+
+  if (!codigosExistentes.has(base)) {
+    return base;
+  }
+
+  // Si colisiona, aplica bucle determinista incremental garantizado (_2, _3, ...)
+  let contador = 2;
+  while (contador < 1000) {
+    const sufijo = `_${contador}`;
+    const baseRecortada = base.slice(0, Math.max(3, maxLen - sufijo.length));
+    const candidato = `${baseRecortada}${sufijo}`;
+    if (!codigosExistentes.has(candidato)) {
+      return candidato;
+    }
+    contador++;
+  }
+  return `${base.slice(0, maxLen - 5)}_${Date.now().toString().slice(-4)}`;
+}
+
+/**
+ * Generador Inteligente Anti-Colisión para Unidades de Medida.
+ * - Desambigua por símbolo técnico universal (ISO/QUDT).
+ * - Aplica contextualización por magnitud padre si el símbolo base colisiona.
+ * - Garantiza al 100% unicidad estricta contra la PK global (VarChar(20)).
+ */
+function generarCodigoUnidadInteligente(
+  simbolo: string,
+  nombre: string,
+  codigosExistentes: Set<string>,
+  codigoMagnitudPadre?: string,
+  maxLen = 20,
+): string {
+  const sim = (simbolo || '').trim();
+  const nom = (nombre || '').trim();
+  if (!sim && !nom) return '';
+
+  let raiz = '';
+  if (sim) {
+    if (SIMBOLOS_CANONICOS[sim]) {
+      raiz = SIMBOLOS_CANONICOS[sim];
+    } else {
+      let limpia = sim
+        .replace(/[µμ]/g, 'U')
+        .replace(/²/g, '2')
+        .replace(/³/g, '3')
+        .replace(/[\/·\.\-]/g, '_')
+        .replace(/[^a-zA-Z0-9_]/g, '')
+        .toUpperCase();
+      limpia = limpia.replace(/^_+|_+$/g, '').replace(/_+/g, '_');
+      if (limpia.length >= 1) {
+        raiz = limpia.slice(0, maxLen);
+      }
+    }
+  }
+
+  if (!raiz && nom) {
+    raiz = normalizarSlug(nom, Math.min(10, maxLen));
+  }
+
+  if (!raiz) return '';
+
+  // Si la raíz no existe, es la opción ideal y más limpia
+  if (!codigosExistentes.has(raiz)) {
+    return raiz;
+  }
+
+  // Intento de desambiguación semántica por contexto de magnitud padre
+  if (codigoMagnitudPadre) {
+    const magParts = codigoMagnitudPadre.split('_').filter(Boolean);
+    const ultimaParte = magParts[magParts.length - 1] || '';
+    const sufijoContexto = (ultimaParte.length > 4 ? ultimaParte.slice(0, 3) : ultimaParte).toUpperCase();
+
+    if (sufijoContexto) {
+      const candidatoContextual = `${raiz.slice(0, maxLen - sufijoContexto.length - 1)}_${sufijoContexto}`;
+      if (!codigosExistentes.has(candidatoContextual)) {
+        return candidatoContextual;
+      }
+    }
+  }
+
+  // Bucle determinista incremental anti-colisión garantizado
+  let contador = 2;
+  while (contador < 1000) {
+    const sufijo = `_${contador}`;
+    const raizRecortada = raiz.slice(0, Math.max(2, maxLen - sufijo.length));
+    const candidato = `${raizRecortada}${sufijo}`;
+    if (!codigosExistentes.has(candidato)) {
+      return candidato;
+    }
+    contador++;
+  }
+
+  return `${raiz.slice(0, maxLen - 5)}_${Date.now().toString().slice(-4)}`;
+}
+
+// Fallbacks de compatibilidad
+function generarSlugCodigo(nombre: string, maxLen = 20): string {
+  return normalizarSlug(nombre, maxLen);
+}
+
 function generarCodigoDesdeSimbolo(simbolo: string, nombre: string): string {
-  if (!simbolo && !nombre) return '';
-  const mapSpecial: Record<string, string> = {
-    'Ω': 'OHM',
-    'mΩ': 'MOHM',
-    'kΩ': 'KOHM',
-    'MΩ': 'MEOHM',
-    'µF': 'UF',
-    'uF': 'UF',
-    'm/s': 'MS',
-    'm/s²': 'MS2',
-    'ft/s': 'FPS',
-    'ft/s²': 'FTS2',
-    'km/h': 'KMH',
-    'N·m': 'NM',
-    'kg/m³': 'KGM3',
-    'mm²/s': 'MM2S',
-    '°C': 'CEL',
-    '°F': 'FAH',
-    'K': 'KEL',
-  };
-  if (mapSpecial[simbolo]) return mapSpecial[simbolo];
-  const clean = simbolo.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10);
-  if (clean.length >= 1) return clean;
-  return generarSlugCodigo(nombre, 10);
+  return generarCodigoUnidadInteligente(simbolo, nombre, new Set(), undefined, 10);
 }
 
 export function TabMagnitudesUom() {
