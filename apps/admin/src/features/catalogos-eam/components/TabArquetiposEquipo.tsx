@@ -18,7 +18,10 @@ import {
   Trash2,
   Wrench,
   X,
+  Lock,
+  Unlock,
 } from 'lucide-react';
+import { generarCodigoTipoEquipo, verificarCodigoDuplicado } from '../utils/eam-code-generator';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArquetipoEquipo,
@@ -94,6 +97,17 @@ export function TabArquetiposEquipo() {
   const createTipoSrvMut = useCreateTipoServicioEam();
   const { data: tiposServicioList = [] } = useTiposServicioEam();
 
+  // Estados de autogeneración inteligente y universo de tipos de equipo
+  const [isAutoCodigoTipo, setIsAutoCodigoTipo] = useState(true);
+
+  const codigosTiposExistentes = useMemo(() => {
+    return new Set(
+      arquetipos
+        .map((a) => (a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim())
+        .filter(Boolean),
+    );
+  }, [arquetipos]);
+
   // Modales
   const [showNewArqModal, setShowNewArqModal] = useState(false);
   const [arqForm, setArqForm] = useState({
@@ -120,6 +134,24 @@ export function TabArquetiposEquipo() {
   const [showDeleteArqModal, setShowDeleteArqModal] = useState(false);
   const [deletingArq, setDeletingArq] = useState<ArquetipoEquipo | null>(null);
   const [deleteArqError, setDeleteArqError] = useState<string | null>(null);
+
+  const isCodigoTipoDuplicado = useMemo(() => {
+    return verificarCodigoDuplicado(
+      arqForm.codigo_tipo,
+      codigosTiposExistentes,
+      undefined,
+      false,
+    );
+  }, [arqForm.codigo_tipo, codigosTiposExistentes]);
+
+  const isCodigoEditTipoDuplicado = useMemo(() => {
+    return verificarCodigoDuplicado(
+      editArqForm.codigo_tipo,
+      codigosTiposExistentes,
+      (editingArq?.codigo_corto || editingArq?.codigo_tipo || '').toUpperCase(),
+      false,
+    );
+  }, [editArqForm.codigo_tipo, codigosTiposExistentes, editingArq]);
 
   const [showLinkModModal, setShowLinkModModal] = useState(false);
   const [linkModId, setLinkModId] = useState<string>('');
@@ -784,21 +816,6 @@ export function TabArquetiposEquipo() {
             <form onSubmit={handleSaveNewArq} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Código Corto Identificador *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: CHILLER"
-                  value={arqForm.codigo_tipo}
-                  onChange={(e) =>
-                    setArqForm({ ...arqForm, codigo_tipo: e.target.value.toUpperCase() })
-                  }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Nombre del Tipo de Equipo *
                 </label>
                 <input
@@ -806,9 +823,69 @@ export function TabArquetiposEquipo() {
                   required
                   placeholder="Ej: Unidad Enfriadora de Agua (Chiller)"
                   value={arqForm.nombre_tipo}
-                  onChange={(e) => setArqForm({ ...arqForm, nombre_tipo: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  onChange={(e) => {
+                    const nombre = e.target.value;
+                    const autoCod = isAutoCodigoTipo
+                      ? generarCodigoTipoEquipo(nombre, codigosTiposExistentes)
+                      : arqForm.codigo_tipo;
+                    setArqForm({
+                      ...arqForm,
+                      nombre_tipo: nombre,
+                      codigo_tipo: autoCod,
+                    });
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium"
                 />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    Código Corto Identificador *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nuevoModo = !isAutoCodigoTipo;
+                      setIsAutoCodigoTipo(nuevoModo);
+                      if (nuevoModo) {
+                        const auto = generarCodigoTipoEquipo(arqForm.nombre_tipo, codigosTiposExistentes);
+                        setArqForm((prev) => ({ ...prev, codigo_tipo: auto }));
+                      }
+                    }}
+                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    {isAutoCodigoTipo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                    <span>{isAutoCodigoTipo ? 'Personalizar código' : 'Auto-generar'}</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  disabled={isAutoCodigoTipo}
+                  placeholder="Ej: CHILLER"
+                  value={arqForm.codigo_tipo}
+                  onChange={(e) =>
+                    setArqForm({ ...arqForm, codigo_tipo: e.target.value.toUpperCase() })
+                  }
+                  className={`w-full px-3.5 py-2 rounded-xl border font-mono text-sm transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                    isCodigoTipoDuplicado
+                      ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                      : 'border-slate-300'
+                  }`}
+                />
+                {isCodigoTipoDuplicado ? (
+                  <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+                    ✕ Este código "{arqForm.codigo_tipo}" ya está en uso. Modifícalo para que sea único.
+                  </p>
+                ) : arqForm.codigo_tipo ? (
+                  <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
+                    ✓ Código único garantizado disponible
+                  </p>
+                ) : isAutoCodigoTipo ? (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Generado automáticamente a partir del nombre con garantía de unicidad.
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Categoría</label>
@@ -834,7 +911,13 @@ export function TabArquetiposEquipo() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+                  disabled={
+                    createArqMut.isPending ||
+                    isCodigoTipoDuplicado ||
+                    !arqForm.nombre_tipo.trim() ||
+                    !arqForm.codigo_tipo.trim()
+                  }
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Guardar Tipo de Equipo
                 </button>
@@ -904,11 +987,21 @@ export function TabArquetiposEquipo() {
                   onChange={(e) =>
                     setEditArqForm({ ...editArqForm, codigo_tipo: e.target.value.toUpperCase() })
                   }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 uppercase"
+                  className={`w-full px-3.5 py-2 rounded-xl border font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 uppercase transition-colors ${
+                    isCodigoEditTipoDuplicado
+                      ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:border-rose-500'
+                      : 'border-slate-300 focus:border-blue-500'
+                  }`}
                 />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Se usa como prefijo para numerar los equipos en la plataforma (ej: HVAC-001).
-                </p>
+                {isCodigoEditTipoDuplicado ? (
+                  <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+                    ✕ Este código "{editArqForm.codigo_tipo}" ya pertenece a otro tipo de equipo.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Se usa como prefijo para numerar los equipos en la plataforma (ej: HVAC-001).
+                  </p>
+                )}
               </div>
 
               <div>

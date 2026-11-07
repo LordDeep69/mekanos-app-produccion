@@ -103,6 +103,8 @@ export function TabModelosOemBom() {
   const { data: modelos = [], isLoading } = useModelosOemEam(
     filtroArquetipo ? Number(filtroArquetipo) : undefined,
   );
+  // Lista global no filtrada para garantizar unicidad absoluta en toda la base de datos
+  const { data: todosLosModelos = [] } = useModelosOemEam();
   const { data: todosAtributos = [] } = useAtributosEam();
   const { data: todosModulos = [] } = useModulosEam();
   const { data: magnitudes = [] } = useMagnitudesEam();
@@ -177,21 +179,21 @@ export function TabModelosOemBom() {
   const [specsUnidades, setSpecsUnidades] = useState<Record<string, string>>({});
   const [showJsonAvanzado, setShowJsonAvanzado] = useState(false);
 
-  // Validación de unicidad de código en tiempo real
+  // Validación de unicidad de código en tiempo real contra el 100% de los modelos de la BD
   const isCodigoDuplicado = useMemo(() => {
     const cod = modeloForm.codigo_modelo.trim().toUpperCase();
     if (!cod) return false;
-    return modelos.some(
+    return (todosLosModelos.length > 0 ? todosLosModelos : modelos).some(
       (m) =>
         (!editingModelo || m.id_modelo_equipo !== editingModelo.id_modelo_equipo) &&
         m.codigo_modelo.toUpperCase() === cod,
     );
-  }, [modeloForm.codigo_modelo, modelos, editingModelo]);
+  }, [modeloForm.codigo_modelo, todosLosModelos, modelos, editingModelo]);
 
   const handleMarcaChange = (val: string) => {
     const nuevaMarca = val.toUpperCase();
     const nuevoCodigo = isAutoCodigo
-      ? sugerirCodigoModelo(nuevaMarca, modeloForm.modelo, modelos, editingModelo?.id_modelo_equipo)
+      ? sugerirCodigoModelo(nuevaMarca, modeloForm.modelo, todosLosModelos.length > 0 ? todosLosModelos : modelos, editingModelo?.id_modelo_equipo)
       : modeloForm.codigo_modelo;
     const nuevoNombre = isAutoNombre
       ? sugerirDescripcionModelo(modeloForm.id_tipo_equipo, nuevaMarca, modeloForm.modelo, arquetipos)
@@ -208,7 +210,7 @@ export function TabModelosOemBom() {
   const handleModeloChange = (val: string) => {
     const nuevoModelo = val;
     const nuevoCodigo = isAutoCodigo
-      ? sugerirCodigoModelo(modeloForm.marca, nuevoModelo, modelos, editingModelo?.id_modelo_equipo)
+      ? sugerirCodigoModelo(modeloForm.marca, nuevoModelo, todosLosModelos.length > 0 ? todosLosModelos : modelos, editingModelo?.id_modelo_equipo)
       : modeloForm.codigo_modelo;
     const nuevoNombre = isAutoNombre
       ? sugerirDescripcionModelo(modeloForm.id_tipo_equipo, modeloForm.marca, nuevoModelo, arquetipos)
@@ -954,7 +956,7 @@ export function TabModelosOemBom() {
                           const auto = sugerirCodigoModelo(
                             modeloForm.marca,
                             modeloForm.modelo,
-                            modelos,
+                            todosLosModelos.length > 0 ? todosLosModelos : modelos,
                             editingModelo?.id_modelo_equipo,
                           );
                           setModeloForm((prev) => ({ ...prev, codigo_modelo: auto }));

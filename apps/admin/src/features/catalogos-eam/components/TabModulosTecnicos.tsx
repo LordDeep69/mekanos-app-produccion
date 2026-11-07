@@ -19,7 +19,10 @@ import {
   Tag,
   Trash2,
   X,
+  Lock,
+  Unlock,
 } from 'lucide-react';
+import { generarCodigoParteModulo, generarCodigoCampoTecnico, verificarCodigoDuplicado } from '../utils/eam-code-generator';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ModuloAtributoItem,
@@ -109,6 +112,18 @@ export function TabModulosTecnicos() {
     }
   };
 
+  // Estados de autogeneración inteligente y universos de unicidad
+  const [isAutoCodigoModulo, setIsAutoCodigoModulo] = useState(true);
+  const [isAutoCodigoAtributo, setIsAutoCodigoAtributo] = useState(true);
+
+  const codigosModulosExistentes = useMemo(() => {
+    return new Set(modulos.map((m) => m.codigo_modulo.toLowerCase()));
+  }, [modulos]);
+
+  const codigosAtributosExistentes = useMemo(() => {
+    return new Set(todosLosAtributos.map((a) => a.codigo_atributo.toLowerCase()));
+  }, [todosLosAtributos]);
+
   // Modal Crear / Editar Parte o Subsistema
   const [showModModal, setShowModModal] = useState(false);
   const [editingMod, setEditingMod] = useState<ModuloTecnico | null>(null);
@@ -155,6 +170,21 @@ export function TabModulosTecnicos() {
     es_filtrable: true,
     visible_en_pdf: true,
   });
+
+  const isCodigoModuloDuplicado = useMemo(() => {
+    return verificarCodigoDuplicado(
+      modForm.codigo_modulo,
+      codigosModulosExistentes,
+      editingMod?.codigo_modulo,
+    );
+  }, [modForm.codigo_modulo, codigosModulosExistentes, editingMod]);
+
+  const isCodigoAtributoDuplicado = useMemo(() => {
+    return verificarCodigoDuplicado(
+      inPlaceForm.codigo_atributo,
+      codigosAtributosExistentes,
+    );
+  }, [inPlaceForm.codigo_atributo, codigosAtributosExistentes]);
 
   const gruposVisualesMap = useMemo(() => {
     const map = new Map<string, ModuloAtributoItem[]>();
@@ -406,6 +436,7 @@ export function TabModulosTecnicos() {
 
   const handleOpenNewMod = () => {
     setEditingMod(null);
+    setIsAutoCodigoModulo(true);
     setModForm({
       codigo_modulo: '',
       nombre_modulo: '',
@@ -417,6 +448,7 @@ export function TabModulosTecnicos() {
 
   const handleOpenEditMod = (mod: ModuloTecnico) => {
     setEditingMod(mod);
+    setIsAutoCodigoModulo(false);
     setModForm({
       codigo_modulo: mod.codigo_modulo,
       nombre_modulo: mod.nombre_modulo,
@@ -1165,7 +1197,14 @@ export function TabModulosTecnicos() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+                  disabled={
+                    createModMut.isPending ||
+                    updateModMut.isPending ||
+                    isCodigoModuloDuplicado ||
+                    !modForm.nombre_modulo.trim() ||
+                    !modForm.codigo_modulo.trim()
+                  }
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Guardar Parte
                 </button>
@@ -1965,8 +2004,14 @@ export function TabModulosTecnicos() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createAttrMut.isPending || asignarMut.isPending}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-sm"
+                  disabled={
+                    createAttrMut.isPending ||
+                    asignarMut.isPending ||
+                    isCodigoAtributoDuplicado ||
+                    !inPlaceForm.nombre_atributo.trim() ||
+                    !inPlaceForm.codigo_atributo.trim()
+                  }
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Check className="h-4 w-4" />
                   <span>Guardar y Asignar Campo</span>

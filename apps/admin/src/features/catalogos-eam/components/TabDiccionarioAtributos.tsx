@@ -11,7 +11,11 @@ import {
   Tag,
   Trash2,
   X,
+  CheckCircle2,
+  Lock,
+  Unlock,
 } from 'lucide-react';
+import { generarCodigoCampoTecnico, verificarCodigoDuplicado } from '../utils/eam-code-generator';
 import { useMemo, useState } from 'react';
 import {
   AtributoTecnico,
@@ -31,6 +35,12 @@ import {
 
 export function TabDiccionarioAtributos() {
   const [search, setSearch] = useState('');
+  const [isAutoCodigo, setIsAutoCodigo] = useState(true);
+
+  // Universo de códigos existentes para garantizar unicidad determinista
+  const codigosAtributosExistentes = useMemo(() => {
+    return new Set(atributos.map((a) => a.codigo_atributo.toLowerCase()));
+  }, [atributos]);
   const [filtroModulo, setFiltroModulo] = useState('');
   const [filtroMagnitud, setFiltroMagnitud] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
@@ -108,7 +118,16 @@ export function TabDiccionarioAtributos() {
     [magnitudes, form.id_magnitud],
   );
 
+  const isCodigoDuplicado = useMemo(() => {
+    return verificarCodigoDuplicado(
+      form.codigo_atributo,
+      codigosAtributosExistentes,
+      editingAttr?.codigo_atributo,
+    );
+  }, [form.codigo_atributo, codigosAtributosExistentes, editingAttr]);
+
   const openCreateModal = () => {
+    setIsAutoCodigo(true);
     setEditingAttr(null);
     setForm({
       codigo_atributo: '',
@@ -125,6 +144,7 @@ export function TabDiccionarioAtributos() {
 
   const openEditModal = (attr: AtributoTecnico) => {
     setEditingAttr(attr);
+    setIsAutoCodigo(false);
     const parsedOps = parseOpcionesSeguras(attr.opciones_json);
     setForm({
       codigo_atributo: attr.codigo_atributo,
@@ -502,24 +522,64 @@ export function TabDiccionarioAtributos() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Código Identificador *
-                </label>
-                  <input
-                    type="text"
-                    required
-                    disabled={Boolean(editingAttr)}
-                    placeholder="Ej: presion_descarga_bar"
-                    value={form.codigo_atributo}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        codigo_atributo: e.target.value.toLowerCase().replace(/\s+/g, '_'),
-                      })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs bg-slate-50 disabled:bg-slate-100"
-                  />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    Código Identificador *
+                  </label>
+                  {!editingAttr && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nuevoModo = !isAutoCodigo;
+                        setIsAutoCodigo(nuevoModo);
+                        if (nuevoModo) {
+                          const auto = generarCodigoCampoTecnico(
+                            form.nombre_atributo,
+                            codigosAtributosExistentes,
+                            form.unidad_defecto_codigo || undefined,
+                          );
+                          setForm((prev) => ({ ...prev, codigo_atributo: auto }));
+                        }
+                      }}
+                      className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {isAutoCodigo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      <span>{isAutoCodigo ? 'Personalizar código' : 'Auto-generar'}</span>
+                    </button>
+                  )}
                 </div>
+                <input
+                  type="text"
+                  required
+                  disabled={Boolean(editingAttr) || isAutoCodigo}
+                  placeholder="Ej: presion_descarga_bar"
+                  value={form.codigo_atributo}
+                  onChange={(e) => {
+                    setForm({
+                      ...form,
+                      codigo_atributo: e.target.value.toLowerCase().replace(/\s+/g, '_'),
+                    });
+                  }}
+                  className={`w-full px-3.5 py-2 rounded-xl border font-mono text-xs transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                    isCodigoDuplicado
+                      ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                      : 'border-slate-300'
+                  }`}
+                />
+                {isCodigoDuplicado ? (
+                  <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+                    ✕ Este código "{form.codigo_atributo}" ya existe en el diccionario. Modifícalo para que sea único.
+                  </p>
+                ) : form.codigo_atributo && !editingAttr ? (
+                  <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
+                    ✓ Código único garantizado disponible
+                  </p>
+                ) : isAutoCodigo && !editingAttr ? (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Generado automáticamente garantizando unicidad. Pulsa en "Personalizar código" para editarlo.
+                  </p>
+                ) : null}
+              </div>
 
               {(form.tipo_control === 'NUMERICO_MAGNITUD' ||
                 form.tipo_control === 'NUMERICO') && (
@@ -630,8 +690,14 @@ export function TabDiccionarioAtributos() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createAttrMut.isPending || updateAttrMut.isPending}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs"
+                  disabled={
+                    createAttrMut.isPending ||
+                    updateAttrMut.isPending ||
+                    isCodigoDuplicado ||
+                    !form.nombre_atributo.trim() ||
+                    !form.codigo_atributo.trim()
+                  }
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Guardar Campo Técnico
                 </button>
