@@ -2560,6 +2560,9 @@ export class PdfController {
       presionPsi,
       horometroIntervencion: horometroInterv != null ? Number(horometroInterv) : undefined,
       horometroAcumulado: horometroAcum != null ? Number(horometroAcum) : undefined,
+      unidadUso: eq.tipos_equipo?.unidad_uso || undefined,
+      etiquetaContador: eq.tipos_equipo?.etiqueta_contador || undefined,
+      requiereHorometro: eq.tipos_equipo?.requiere_horometro ?? undefined,
     };
   }
 

@@ -281,6 +281,8 @@ describe('CatalogosEamService (Metamodelo EAM)', () => {
     const esquema = await service.getArquetipoEsquema(1);
     expect(esquema).toBeDefined();
     expect(esquema.arquetipo.codigo_tipo).toBe('GEN');
+    expect(esquema.arquetipo.unidad_uso).toBe('HORAS');
+    expect(esquema.arquetipo.etiqueta_contador).toBe('Horómetro');
     expect(esquema.modulos.length).toBe(1);
     expect(esquema.modulos[0].codigo_modulo).toBe('motor_combustion');
     expect(esquema.modulos[0].grupos.length).toBe(1);

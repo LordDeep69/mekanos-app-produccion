@@ -301,6 +301,53 @@ export function DynamicEquipmentFormPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esquema, formValues, selectedUnits]);
 
+  // Metrología dinámica del arquetipo (Horómetro / Ciclos / Odómetro / Calendario)
+  const arq = esquema.arquetipo;
+  const unidadUso = arq.unidad_uso || 'HORAS';
+  const etiquetaRaw = arq.etiqueta_contador;
+  const requiereContador = arq.requiere_horometro !== false && unidadUso !== 'CAL';
+
+  const etiquetaMedidor = etiquetaRaw
+    ? `Control por ${etiquetaRaw}`
+    : unidadUso === 'CICLOS'
+    ? 'Control por Ciclos de Viaje'
+    : unidadUso === 'KM_ODO'
+    ? 'Control por Odómetro'
+    : unidadUso === 'UPM'
+    ? 'Control por Unidades de Producción'
+    : unidadUso === 'CAL'
+    ? 'Mantenimiento por Calendario'
+    : 'Control por Horómetro';
+
+  const sufijoUso =
+    unidadUso === 'CICLOS'
+      ? 'ciclos'
+      : unidadUso === 'KM_ODO'
+      ? 'km'
+      : unidadUso === 'UPM'
+      ? 'und'
+      : unidadUso === 'CAL'
+      ? ''
+      : 'horas';
+
+  const labelIntervencion =
+    unidadUso === 'CICLOS'
+      ? `${etiquetaRaw || 'Ciclos'} Intervención`
+      : unidadUso === 'KM_ODO'
+      ? `${etiquetaRaw || 'Kilometraje'} Intervención`
+      : unidadUso === 'UPM'
+      ? `${etiquetaRaw || 'Producción'} Intervención`
+      : `${etiquetaRaw || 'Horómetro'} Intervención`;
+
+  const labelAcumulado =
+    unidadUso === 'CICLOS'
+      ? `${etiquetaRaw || 'Ciclos'} Acumulados (Hoja de Vida)`
+      : unidadUso === 'KM_ODO'
+      ? `${etiquetaRaw || 'Kilometraje'} Acumulado`
+      : unidadUso === 'UPM'
+      ? `${etiquetaRaw || 'Producción'} Acumulada`
+      : `${etiquetaRaw || 'Horómetro'} Acumulado (Hoja de Vida)`;
+
   return (
     <div className="bg-white rounded-2xl border-2 border-indigo-200/90 shadow-md overflow-hidden">
       {/* BARRA SUPERIOR DEL SIMULADOR CON CONMUTADOR DE 2 MODOS Y PRE-LLENADO OEM */}
@@ -644,9 +691,14 @@ export function DynamicEquipmentFormPreview({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {esquema.arquetipo.requiere_horometro && (
+                {requiereContador && (
                   <span className="px-2.5 py-1 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-bold">
-                    Control por Horómetro
+                    {etiquetaMedidor}
+                  </span>
+                )}
+                {unidadUso === 'CAL' && (
+                  <span className="px-2.5 py-1 rounded bg-slate-700/60 border border-slate-600 text-slate-300 text-xs font-bold">
+                    Mantenimiento por Calendario
                   </span>
                 )}
                 <span className="px-3 py-1 rounded bg-slate-800 border border-slate-700 text-xs font-bold text-slate-200">
@@ -654,6 +706,28 @@ export function DynamicEquipmentFormPreview({
                 </span>
               </div>
             </div>
+
+            {/* Franja de Contador Operativo Simulador (Horómetro / Ciclos / Odómetro) */}
+            {requiereContador && (
+              <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <span className="font-bold">Métrica de Operación:</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-extrabold text-[11px] border border-blue-200">
+                    {etiquetaMedidor}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-2xs flex items-center gap-2">
+                    <span className="text-[11px] text-slate-500 font-semibold">{labelIntervencion}:</span>
+                    <span className="font-extrabold text-slate-900 font-mono">0 {sufijoUso}</span>
+                  </div>
+                  <div className="bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-2xs flex items-center gap-2">
+                    <span className="text-[11px] text-slate-500 font-semibold">{labelAcumulado}:</span>
+                    <span className="font-extrabold text-slate-900 font-mono">0 {sufijoUso}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Franja de Indicadores Principales (KPIs Destacados de Cabecera) */}
             {kpisDestacados.length > 0 && (
@@ -742,7 +816,10 @@ export function DynamicEquipmentFormPreview({
                       >
                         <div className="text-xs font-bold text-slate-900">{plan.nombre_plan}</div>
                         <div className="text-xs font-semibold text-emerald-700">
-                          Cada {plan.frecuencia_dias ?? 90} días o {plan.frecuencia_uso ?? 250} horas
+                          Cada {plan.frecuencia_dias ?? 90} días
+                          {plan.frecuencia_uso && sufijoUso
+                            ? ` o ${plan.frecuencia_uso} ${sufijoUso}`
+                            : ''}
                         </div>
                         <div className="text-[11px] text-slate-500">
                           {getCriterioIntervaloHumano(plan.criterio_intervalo)}

@@ -131,9 +131,12 @@ export interface DatosEquipoDetalladoPDF {
   caudalGpm?: string | number;
   presionPsi?: string | number;
 
-  // Horómetros
+  // Horómetros / Metrología dinámica EAM
   horometroIntervencion?: number | string;
   horometroAcumulado?: number | string;
+  unidadUso?: string;
+  etiquetaContador?: string;
+  requiereHorometro?: boolean;
 }
 
 export interface DatosOrdenPDF {
@@ -1919,10 +1922,41 @@ export const generarDatosClienteConFichaTecnica = (
     );
     if (kpiRpm) rpm = kpiRpm.valorTexto;
   }
+  // Metrología del contador de uso (Horómetro / Ciclos / Odómetro / Calendario)
+  const unidadUso = eq?.unidadUso || placa?.unidadUso || 'HORAS';
+  const etiquetaRaw = eq?.etiquetaContador || placa?.etiquetaContador;
+  const requiereContador = (eq?.requiereHorometro ?? placa?.requiereHorometro ?? true) && unidadUso !== 'CAL';
+
+  let sufijoUso = 'h';
+  let labelInterv = '⏱️ Horómetro Intervención';
+  let labelAcum = '📊 Horómetro Acumulado (Hoja de Vida)';
+  let badgeControl = etiquetaRaw
+    ? `Control por ${etiquetaRaw}`
+    : 'Control por Horómetro';
+
+  if (unidadUso === 'CICLOS') {
+    sufijoUso = 'ciclos';
+    labelInterv = `🔄 ${etiquetaRaw || 'Ciclos'} Intervención`;
+    labelAcum = `📊 ${etiquetaRaw || 'Ciclos'} Acumulados (Hoja de Vida)`;
+    badgeControl = etiquetaRaw ? `Control por ${etiquetaRaw}` : 'Control por Ciclos de Viaje';
+  } else if (unidadUso === 'KM_ODO') {
+    sufijoUso = 'km';
+    labelInterv = `🚗 ${etiquetaRaw || 'Kilometraje'} Intervención`;
+    labelAcum = `📊 ${etiquetaRaw || 'Kilometraje'} Acumulado`;
+    badgeControl = etiquetaRaw ? `Control por ${etiquetaRaw}` : 'Control por Odómetro';
+  } else if (unidadUso === 'UPM') {
+    sufijoUso = 'und';
+    labelInterv = `📦 ${etiquetaRaw || 'Producción'} Intervención`;
+    labelAcum = `📊 ${etiquetaRaw || 'Producción'} Acumulada`;
+    badgeControl = etiquetaRaw ? `Control por ${etiquetaRaw}` : 'Control por Unidades de Producción';
+  } else if (unidadUso === 'CAL') {
+    badgeControl = 'Mantenimiento por Calendario';
+  }
+
   const horometroInterv = eq?.horometroIntervencion != null
-    ? `${eq.horometroIntervencion} h`
-    : (datos.datosModulo?.horasTrabajo != null ? `${datos.datosModulo.horasTrabajo} h` : '');
-  const horometroAcum = eq?.horometroAcumulado != null ? `${eq.horometroAcumulado} h` : '';
+    ? `${eq.horometroIntervencion} ${sufijoUso}`.trim()
+    : (datos.datosModulo?.horasTrabajo != null ? `${datos.datosModulo.horasTrabajo} ${sufijoUso}`.trim() : '');
+  const horometroAcum = eq?.horometroAcumulado != null ? `${eq.horometroAcumulado} ${sufijoUso}`.trim() : '';
 
   return `
   <div class="section ficha-tecnica-box" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 12px;">
@@ -1981,9 +2015,20 @@ export const generarDatosClienteConFichaTecnica = (
             ${nombreEquipo || `${tipoEquipo} ${marca}`}
           </span>
         </div>
-        <span style="font-size: 8px; font-weight: 700; color: #3290A6; text-transform: uppercase;">
-          ${tipoEquipo}
-        </span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 8px; font-weight: 700; color: #3290A6; text-transform: uppercase;">
+            ${tipoEquipo}
+          </span>
+          ${requiereContador ? `
+          <span style="font-size: 7.5px; font-weight: 700; color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 3px; padding: 1px 5px;">
+            ${badgeControl}
+          </span>
+          ` : unidadUso === 'CAL' ? `
+          <span style="font-size: 7.5px; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px; padding: 1px 5px;">
+            Por Calendario
+          </span>
+          ` : ''}
+        </div>
       </div>
 
       <div style="padding: 5px 8px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 9px;">
@@ -2004,13 +2049,13 @@ export const generarDatosClienteConFichaTecnica = (
           <span style="color: #0f172a; font-weight: 600;">${tension || (rpm ? `${rpm}` : '-')}</span>
         </div>
         
-        ${horometroInterv || horometroAcum ? `
+        ${requiereContador && (horometroInterv || horometroAcum) ? `
         <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
-          <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">⏱️ Horómetro Intervención</span>
+          <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">${labelInterv}</span>
           <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroInterv || horometroAcum}</span>
         </div>
         <div style="display: flex; flex-direction: column; grid-column: span 2; background: #f8fafc; padding: 3px 6px; border-radius: 3px; border: 1px solid #e2e8f0; margin-top: 2px;">
-          <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">📊 Horómetro Acumulado (Hoja de Vida)</span>
+          <span style="font-size: 7.5px; color: #475569; font-weight: 600; text-transform: uppercase;">${labelAcum}</span>
           <span style="color: #0f172a; font-weight: 700; font-size: 9.5px;">${horometroAcum || horometroInterv || '-'}</span>
         </div>
         ` : ''}

@@ -601,6 +601,7 @@ export function TabMagnitudesUom() {
       base_simbolo: '',
       base_codigo: '',
       customSlugBaseUnit: false,
+      activo: true,
     });
     setShowMagModal(true);
   };

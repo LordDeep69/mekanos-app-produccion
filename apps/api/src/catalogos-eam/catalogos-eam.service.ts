@@ -1357,6 +1357,11 @@ export class CatalogosEamService implements OnModuleInit {
         resultado.push({
           ...t,
           categoria: categoriaHumana,
+          unidad_uso: t.unidad_uso || 'HORAS',
+          etiqueta_contador:
+            t.etiqueta_contador ||
+            (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
+          prefijo_codigo: t.prefijo_codigo || t.codigo_tipo,
           nombre_canonico: par.nombreCanonico,
           codigo_corto:
             t.id_tipo_equipo === 1 || t.id_tipo_equipo === 3
@@ -1381,6 +1386,11 @@ export class CatalogosEamService implements OnModuleInit {
         resultado.push({
           ...t,
           categoria: categoriaHumana,
+          unidad_uso: t.unidad_uso || 'HORAS',
+          etiqueta_contador:
+            t.etiqueta_contador ||
+            (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
+          prefijo_codigo: t.prefijo_codigo || t.codigo_tipo,
           nombre_canonico: nombreLimpio,
           codigo_corto: t.codigo_tipo,
           ids_sincronizados: [t.id_tipo_equipo],
@@ -1392,6 +1402,55 @@ export class CatalogosEamService implements OnModuleInit {
 
     resultado.sort((a, b) => (b.equipos_activos ?? 0) - (a.equipos_activos ?? 0));
     return resultado;
+  }
+
+  async getArquetipoById(idTipoEquipo: number) {
+    const t = await this.prisma.tipos_equipo.findUnique({
+      where: { id_tipo_equipo: idTipoEquipo },
+      include: {
+        tipo_equipo_modulos: {
+          include: {
+            modulo: {
+              include: {
+                _count: {
+                  select: { modulo_atributos: true },
+                },
+              },
+            },
+          },
+          orderBy: { orden_visual: 'asc' },
+        },
+        tipo_equipo_planes: {
+          where: { activo: true },
+          include: {
+            tipo_servicio: true,
+          },
+        },
+        _count: {
+          select: {
+            equipos: true,
+            modelos_equipo: true,
+          },
+        },
+      },
+    });
+
+    if (!t) {
+      throw new NotFoundException(`Arquetipo con ID ${idTipoEquipo} no encontrado`);
+    }
+
+    const categoriaHumana = resolverCategoriaHumana(t);
+    return {
+      ...t,
+      categoria: categoriaHumana,
+      unidad_uso: t.unidad_uso || 'HORAS',
+      etiqueta_contador:
+        t.etiqueta_contador ||
+        (t.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
+      prefijo_codigo: t.prefijo_codigo || t.codigo_tipo,
+      nombre_canonico: t.nombre_tipo,
+      codigo_corto: t.codigo_tipo,
+    };
   }
 
   async createArquetipo(dto: CreateArquetipoDto) {
@@ -1625,13 +1684,22 @@ export class CatalogosEamService implements OnModuleInit {
       };
     });
 
+    const macroCategoria = resolverCategoriaHumana(tipo);
     return {
       arquetipo: {
         id_tipo_equipo: tipo.id_tipo_equipo,
         codigo_tipo: tipo.codigo_tipo,
         nombre_tipo: tipo.nombre_tipo,
-        categoria: tipo.categoria,
+        categoria: macroCategoria,
         requiere_horometro: tipo.requiere_horometro,
+        unidad_uso: tipo.unidad_uso || 'HORAS',
+        etiqueta_contador:
+          tipo.etiqueta_contador ||
+          (tipo.unidad_uso === 'CICLOS' ? 'Ciclos de Viaje' : 'Horómetro'),
+        prefijo_codigo: tipo.prefijo_codigo || tipo.codigo_tipo,
+        formato_ficha_tecnica: tipo.formato_ficha_tecnica,
+        usa_plantilla_universal: tipo.usa_plantilla_universal,
+        metadata: tipo.metadata,
       },
       modulos: modulosEstructurados,
       planes_mantenimiento: tipo.tipo_equipo_planes.map((p) => ({

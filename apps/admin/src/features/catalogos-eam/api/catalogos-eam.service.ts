@@ -185,6 +185,12 @@ export interface ArquetipoEsquemaResponse {
     nombre_tipo: string;
     categoria?: string | null;
     requiere_horometro: boolean;
+    unidad_uso?: string | null;
+    etiqueta_contador?: string | null;
+    prefijo_codigo?: string | null;
+    formato_ficha_tecnica?: string | null;
+    usa_plantilla_universal?: boolean;
+    metadata?: any;
   };
   modulos: Array<{
     id_modulo: number;

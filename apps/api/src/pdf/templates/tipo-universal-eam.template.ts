@@ -462,8 +462,33 @@ function generarMedicionesUniversal(datos: DatosOrdenPDF): string {
 
   // B) Si hay datosModulo (fallbacks operativos) y no se duplicaron
   if (modulo) {
-    if (modulo.horasTrabajo != null && !itemsCards.some(i => i.label.toLowerCase().includes('horómetr'))) {
-      itemsCards.push({ label: 'Horómetro de Operación', value: `${modulo.horasTrabajo} hrs` });
+    if (
+      modulo.horasTrabajo != null &&
+      !itemsCards.some(
+        (i) =>
+          i.label.toLowerCase().includes('horómetr') ||
+          i.label.toLowerCase().includes('horometr') ||
+          i.label.toLowerCase().includes('ciclos') ||
+          i.label.toLowerCase().includes('odómetr') ||
+          i.label.toLowerCase().includes('odometr'),
+      )
+    ) {
+      const uUso = placaUniversal.unidadUso || 'HORAS';
+      const etiqRaw = placaUniversal.etiquetaContador;
+      const labelUso =
+        etiqRaw ||
+        (uUso === 'CICLOS'
+          ? 'Ciclos de Operación'
+          : uUso === 'KM_ODO'
+          ? 'Odómetro de Operación'
+          : 'Horómetro de Operación');
+      const sufijoUso =
+        uUso === 'CICLOS'
+          ? 'ciclos'
+          : uUso === 'KM_ODO'
+          ? 'km'
+          : 'hrs';
+      itemsCards.push({ label: labelUso, value: `${modulo.horasTrabajo} ${sufijoUso}` });
     }
     if (modulo.voltaje != null && !itemsCards.some(i => i.label.toLowerCase().includes('voltaj'))) {
       itemsCards.push({ label: 'Voltaje de Operación', value: `${modulo.voltaje} V` });

@@ -78,6 +78,12 @@ export class ArquetiposController {
     return this.eamService.deleteArquetipo(id);
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener un arquetipo por ID con sus módulos y planes' })
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.eamService.getArquetipoById(id);
+  }
+
   @Get(':id/esquema')
   @ApiOperation({
     summary: 'Obtener esquema dinámico completo del arquetipo para renderers UI y App Móvil',

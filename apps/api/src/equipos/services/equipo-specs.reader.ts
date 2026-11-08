@@ -57,6 +57,9 @@ export interface DatosPlacaUniversal {
   capacidadPrincipal?: CapacidadPrincipal;
   kpis: KpiHeader[];
   bloques: BloquePlaca[];
+  unidadUso?: string;
+  etiquetaContador?: string;
+  requiereHorometro?: boolean;
 }
 
 export interface EquipoSpecsUnificadas {
@@ -498,6 +501,10 @@ export class EquipoSpecsReader {
       });
     }
 
+    const unidadUso = equipo.tipos_equipo?.unidad_uso || equipo.unidad_uso || undefined;
+    const etiquetaContador = equipo.tipos_equipo?.etiqueta_contador || equipo.etiqueta_contador || undefined;
+    const requiereHorometro = equipo.tipos_equipo?.requiere_horometro ?? equipo.requiere_horometro ?? undefined;
+
     return {
       categoriaCanonica,
       marca,
@@ -506,6 +513,9 @@ export class EquipoSpecsReader {
       capacidadPrincipal,
       kpis,
       bloques,
+      unidadUso,
+      etiquetaContador,
+      requiereHorometro,
     };
   }
 
