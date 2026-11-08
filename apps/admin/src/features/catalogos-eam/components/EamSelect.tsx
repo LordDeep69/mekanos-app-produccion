@@ -8,8 +8,8 @@ export interface EamSelectOption {
   value: string;
   label: string;
   key?: string;
-  badge?: string;
-  description?: string;
+  badge?: string | null;
+  description?: string | null;
   icon?: React.ReactNode;
 }
 
@@ -102,10 +102,12 @@ export function EamSelect({
 
   const selectedOption = useMemo(() => {
     const strVal = String(value ?? '').trim();
-    if (!strVal) return null;
-    return options.find(
+    const match = options.find(
       (op) => String(op.value).trim().toLowerCase() === strVal.toLowerCase(),
-    ) || { value: strVal, label: strVal };
+    );
+    if (match) return match;
+    if (strVal) return { value: strVal, label: strVal };
+    return null;
   }, [options, value]);
 
   const shouldShowSearch = useMemo(() => {
@@ -243,8 +245,8 @@ export function EamSelect({
         title={title}
         disabled={disabled}
         onClick={handleToggle}
-        className={`w-full flex items-center justify-between gap-2 rounded-xl border text-xs font-semibold shadow-2xs transition-all duration-150 focus:outline-none focus:ring-2 cursor-pointer ${
-          isCompact ? 'h-8 px-2.5' : 'h-9 px-3'
+        className={`w-full flex items-center justify-between gap-2 rounded-xl border font-semibold shadow-2xs transition-all duration-150 focus:outline-none focus:ring-2 cursor-pointer ${
+          isCompact ? 'h-8 px-2.5 text-xs' : 'h-10 px-3.5 text-xs'
         } ${triggerClasses} ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''} ${className}`}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
@@ -293,7 +295,7 @@ export function EamSelect({
               bottom: coords.openUpward ? window.innerHeight - coords.top + 4 : undefined,
               left: coords.left,
               width: Math.max(coords.width, 220),
-              zIndex: 9999,
+              zIndex: 99999,
             }}
             className={`rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
               isDark
@@ -568,7 +570,7 @@ export function EamUomSelect({
               bottom: coords.openUpward ? window.innerHeight - coords.top + 4 : undefined,
               right: coords.right,
               width: 220,
-              zIndex: 9999,
+              zIndex: 99999,
             }}
             className="rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
           >

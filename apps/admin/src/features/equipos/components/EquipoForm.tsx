@@ -57,6 +57,7 @@ import { useCrearEquipo } from '../lib/equipos.service';
 import type { CreateEquipoPayload, TipoEquipo } from '../types';
 import { ConfigParametros, ConfigParametrosEditor } from './ConfigParametrosEditor';
 import { DynamicModularSpecsEditor } from './DynamicModularSpecsEditor';
+import { EamSelect } from '@/components/ui/eam-select';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ESQUEMA DE VALIDACIÓN (ZOD) - PASO 2 (IDENTIFICACIÓN Y OPERACIÓN)
@@ -373,7 +374,12 @@ export function EquipoForm({
   } = form;
 
   const idCliente = useWatch({ control, name: 'datosEquipo.id_cliente' });
+  const idSede = useWatch({ control, name: 'datosEquipo.id_sede' });
   const enGarantia = useWatch({ control, name: 'datosEquipo.en_garantia' });
+  const estadoEquipo = useWatch({ control, name: 'datosEquipo.estado_equipo' });
+  const criticidad = useWatch({ control, name: 'datosEquipo.criticidad' });
+  const tipoContrato = useWatch({ control, name: 'datosEquipo.tipo_contrato' });
+  const estadoPintura = useWatch({ control, name: 'datosEquipo.estado_pintura' });
   const { data: sedesOptions, isLoading: loadingSedes } = useSedesSelector(idCliente || 0);
 
   // Sincronizar id_tipo_equipo, tipo y planes preventivos al cambiar el Tipo de Equipo
@@ -944,22 +950,23 @@ export function EquipoForm({
                   <label className="block text-xs font-bold text-indigo-950 mb-1.5">
                     Plantilla de Modelo Comercial para {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
                   </label>
-                  <select
-                    value={selectedModeloOemId || ''}
-                    onChange={(e) => handleSelectModeloOem(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">
-                      — Registrar desde cero (sin plantilla de modelo de fábrica) —
-                    </option>
-                    {(modelosOem || []).map((m) => (
-                      <option key={m.id_modelo_equipo} value={m.id_modelo_equipo}>
-                        🏭 {m.marca} — {m.modelo}{' '}
-                        {m.nombre_comercial ? `(${m.nombre_comercial})` : ''} • [
-                        {m.modelos_equipo_bom?.length || m._count?.modelos_equipo_bom || 0} repuestos BOM]
-                      </option>
-                    ))}
-                  </select>
+                  <EamSelect
+                    value={selectedModeloOemId ? String(selectedModeloOemId) : ''}
+                    onChange={(val) => handleSelectModeloOem(val)}
+                    options={[
+                      {
+                        value: '',
+                        label: '— Registrar desde cero (sin plantilla de fábrica) —',
+                      },
+                      ...(modelosOem || []).map((m) => ({
+                        value: String(m.id_modelo_equipo),
+                        label: `🏭 ${m.marca} — ${m.modelo} ${m.nombre_comercial ? `(${m.nombre_comercial})` : ''}`,
+                        badge: `${m.modelos_equipo_bom?.length || m._count?.modelos_equipo_bom || 0} BOM`,
+                      })),
+                    ]}
+                    placeholder="— Registrar desde cero (sin plantilla) —"
+                    searchable
+                  />
                 </div>
 
                 {/* Si eligió un modelo OEM, mostrar resumen + Checkbox de Herencia de Kit BOM */}
@@ -1186,24 +1193,32 @@ export function EquipoForm({
                 <label className="text-xs font-bold text-slate-700">
                   Sede / Sucursal <span className="text-slate-400 font-normal">(opcional)</span>
                 </label>
-                <select
-                  {...register('datosEquipo.id_sede', { valueAsNumber: true })}
+                <EamSelect
+                  value={idSede ? String(idSede) : ''}
+                  onChange={(val) =>
+                    setValue('datosEquipo.id_sede', val ? Number(val) : undefined, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
                   disabled={!idCliente || loadingSedes}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white disabled:bg-slate-100 disabled:text-slate-400"
-                >
-                  <option value="">
-                    {loadingSedes
-                      ? 'Cargando sedes...'
-                      : sedesOptions?.length === 0
-                        ? 'Sede Principal (sin sub-sedes registradas)'
-                        : 'Seleccionar sede (opcional)...'}
-                  </option>
-                  {sedesOptions?.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    {
+                      value: '',
+                      label: loadingSedes
+                        ? 'Cargando sedes...'
+                        : sedesOptions?.length === 0
+                          ? 'Sede Principal (sin sub-sedes registradas)'
+                          : 'Seleccionar sede (opcional)...',
+                    },
+                    ...(sedesOptions || []).map((opt) => ({
+                      value: String(opt.value),
+                      label: opt.label,
+                    })),
+                  ]}
+                  placeholder="Seleccionar sede..."
+                  searchable
+                />
               </div>
 
               {/* Código de Inventario con Prefijo Inteligente del Arquetipo */}
@@ -1319,57 +1334,85 @@ export function EquipoForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Estado Operativo *</label>
-                <select
-                  {...register('datosEquipo.estado_equipo')}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                >
-                  <option value="OPERATIVO">Operativo</option>
-                  <option value="STANDBY">Standby / Reserva</option>
-                  <option value="EN_REPARACION">En Reparación</option>
-                  <option value="FUERA_SERVICIO">Fuera de Servicio</option>
-                  <option value="INACTIVO">Inactivo</option>
-                  <option value="BAJA">Baja</option>
-                </select>
+                <EamSelect
+                  value={estadoEquipo || 'OPERATIVO'}
+                  onChange={(val) =>
+                    setValue('datosEquipo.estado_equipo', val as any, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                  options={[
+                    { value: 'OPERATIVO', label: 'Operativo', badge: 'Activo' },
+                    { value: 'STANDBY', label: 'Standby / Reserva' },
+                    { value: 'EN_REPARACION', label: 'En Reparación', badge: 'Taller' },
+                    { value: 'FUERA_SERVICIO', label: 'Fuera de Servicio' },
+                    { value: 'INACTIVO', label: 'Inactivo' },
+                    { value: 'BAJA', label: 'Baja Definitiva' },
+                  ]}
+                  placeholder="Estado operativo..."
+                />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Nivel de Criticidad *</label>
-                <select
-                  {...register('datosEquipo.criticidad')}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                >
-                  <option value="BAJA">Baja</option>
-                  <option value="MEDIA">Media</option>
-                  <option value="ALTA">Alta</option>
-                  <option value="CRITICA">Crítica (Vital)</option>
-                </select>
+                <EamSelect
+                  value={criticidad || 'MEDIA'}
+                  onChange={(val) =>
+                    setValue('datosEquipo.criticidad', val as any, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                  options={[
+                    { value: 'BAJA', label: 'Baja' },
+                    { value: 'MEDIA', label: 'Media' },
+                    { value: 'ALTA', label: 'Alta', badge: 'Prioritario' },
+                    { value: 'CRITICA', label: 'Crítica (Vital)', badge: 'Zero Downtime' },
+                  ]}
+                  placeholder="Criticidad..."
+                />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Modalidad de Contrato</label>
-                <select
-                  {...register('datosEquipo.tipo_contrato')}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                >
-                  <option value="SIN_CONTRATO">Sin Contrato Fijo</option>
-                  <option value="PREVENTIVO">Contrato Preventivo</option>
-                  <option value="INTEGRAL">Contrato Integral</option>
-                  <option value="POR_LLAMADA">Atención por Llamada</option>
-                </select>
+                <EamSelect
+                  value={tipoContrato || 'SIN_CONTRATO'}
+                  onChange={(val) =>
+                    setValue('datosEquipo.tipo_contrato', val as any, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                  options={[
+                    { value: 'SIN_CONTRATO', label: 'Sin Contrato Fijo' },
+                    { value: 'PREVENTIVO', label: 'Contrato Preventivo' },
+                    { value: 'INTEGRAL', label: 'Contrato Integral', badge: 'Full SLA' },
+                    { value: 'POR_LLAMADA', label: 'Atención por Llamada' },
+                  ]}
+                  placeholder="Modalidad de contrato..."
+                />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Estado de Pintura</label>
-                <select
-                  {...register('datosEquipo.estado_pintura')}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                >
-                  <option value="EXCELENTE">Excelente</option>
-                  <option value="BUENO">Bueno</option>
-                  <option value="REGULAR">Regular</option>
-                  <option value="MALO">Malo</option>
-                  <option value="NO_APLICA">No Aplica</option>
-                </select>
+                <EamSelect
+                  value={estadoPintura || 'BUENO'}
+                  onChange={(val) =>
+                    setValue('datosEquipo.estado_pintura', val as any, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                  options={[
+                    { value: 'EXCELENTE', label: 'Excelente' },
+                    { value: 'BUENO', label: 'Bueno' },
+                    { value: 'REGULAR', label: 'Regular' },
+                    { value: 'MALO', label: 'Malo' },
+                    { value: 'NO_APLICA', label: 'No Aplica' },
+                  ]}
+                  placeholder="Estado pintura..."
+                />
               </div>
             </div>
 
@@ -1530,23 +1573,24 @@ export function EquipoForm({
                           <label className="block text-[10px] font-bold text-slate-600 mb-1">
                             Regla de Disparo
                           </label>
-                          <select
+                          <EamSelect
+                            size="sm"
                             value={plan.criterio_intervalo}
-                            onChange={(e) => {
-                              const crit = e.target
-                                .value as PlanPreventivoHeredadoState['criterio_intervalo'];
+                            onChange={(val) => {
+                              const crit = val as PlanPreventivoHeredadoState['criterio_intervalo'];
                               setPlanesHeredados((prev) =>
                                 prev.map((p, i) =>
                                   i === idx ? { ...p, criterio_intervalo: crit } : p,
                                 ),
                               );
                             }}
-                            className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-[11px] font-semibold"
-                          >
-                            <option value="LO_QUE_OCURRA_PRIMERO">Lo que ocurra 1°</option>
-                            <option value="DIAS">Solo por Días</option>
-                            <option value="HORAS">Solo por Horas</option>
-                          </select>
+                            options={[
+                              { value: 'LO_QUE_OCURRA_PRIMERO', label: 'Lo que ocurra 1°' },
+                              { value: 'DIAS', label: 'Solo por Días' },
+                              { value: 'HORAS', label: 'Solo por Horas' },
+                            ]}
+                            placeholder="Regla..."
+                          />
                         </div>
                       </div>
                     )}

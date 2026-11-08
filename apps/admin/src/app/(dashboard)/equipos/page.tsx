@@ -66,6 +66,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EamSelect } from '@/components/ui/eam-select';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CATÁLOGO BASE DE CAMPOS FILTRABLES B-TREE (Respaldo Instantáneo + Fusión Hub)
@@ -1636,44 +1637,45 @@ export default function EquiposPage() {
         {/* Fila 2: Filtros y ordenación */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Filtro Tipo Dinámico (Conectado al Hub EAM) */}
-          <select
-            value={tipoFiltro}
-            onChange={(e) => {
-              setTipoFiltro(e.target.value);
-              setPage(1);
-            }}
-            className={cn(
-              'px-3 py-1.5 border rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500',
-              tipoFiltro ? 'border-blue-300 bg-blue-50 text-blue-800 font-semibold' : 'border-slate-300 text-slate-700',
-            )}
-          >
-            <option value="">Todos los tipos de equipo ({totalParque})</option>
-            {tiposEquipoOpciones.map((op) => (
-              <option key={op.value} value={op.value}>
-                {op.label}
-              </option>
-            ))}
-          </select>
+          <div className="w-64">
+            <EamSelect
+              size="sm"
+              value={tipoFiltro}
+              onChange={(val) => {
+                setTipoFiltro(val);
+                setPage(1);
+              }}
+              placeholder={`Todos los tipos de equipo (${totalParque})`}
+              options={[
+                { value: '', label: `Todos los tipos de equipo (${totalParque})` },
+                ...tiposEquipoOpciones.map((op) => ({
+                  value: op.value,
+                  label: op.label,
+                })),
+              ]}
+            />
+          </div>
 
           {/* Filtro Estado */}
-          <select
-            value={estadoFiltro}
-            onChange={(e) => {
-              setEstadoFiltro(e.target.value);
-              setPage(1);
-            }}
-            className={cn(
-              'px-3 py-1.5 border rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500',
-              estadoFiltro ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 text-slate-700',
-            )}
-          >
-            <option value="">Todos los estados</option>
-            <option value="OPERATIVO">Operativo</option>
-            <option value="STANDBY">Standby</option>
-            <option value="EN_REPARACION">En Reparación</option>
-            <option value="FUERA_SERVICIO">Fuera de Servicio</option>
-            <option value="BAJA">Baja</option>
-          </select>
+          <div className="w-48">
+            <EamSelect
+              size="sm"
+              value={estadoFiltro}
+              onChange={(val) => {
+                setEstadoFiltro(val);
+                setPage(1);
+              }}
+              placeholder="Todos los estados"
+              options={[
+                { value: '', label: 'Todos los estados' },
+                { value: 'OPERATIVO', label: 'Operativo', badge: 'Activo' },
+                { value: 'STANDBY', label: 'Standby', badge: 'Alerta' },
+                { value: 'EN_REPARACION', label: 'En Reparación', badge: 'Taller' },
+                { value: 'FUERA_SERVICIO', label: 'Fuera de Servicio', badge: 'Crítico' },
+                { value: 'BAJA', label: 'Baja', badge: 'Histórico' },
+              ]}
+            />
+          </div>
 
           <div className="h-5 w-px bg-slate-200 hidden sm:block" />
 
@@ -2054,20 +2056,19 @@ export default function EquiposPage() {
                               <Scale className="h-3 w-3" />
                               Unidad de Búsqueda
                             </label>
-                            <select
+                            <EamSelect
+                              size="sm"
                               value={filtroAtributoUnidad}
-                              onChange={(e) => {
-                                setFiltroAtributoUnidad(e.target.value);
+                              onChange={(val) => {
+                                setFiltroAtributoUnidad(val);
                                 setPage(1);
                               }}
-                              className="w-full px-2.5 py-2 border border-blue-300 bg-blue-50/60 rounded-lg text-xs font-bold text-blue-900 focus:ring-2 focus:ring-blue-500"
-                            >
-                              {campoBTreeActual.unidades_disponibles.map((u) => (
-                                <option key={u.codigo} value={u.codigo}>
-                                  {u.simbolo} — {u.nombre}
-                                </option>
-                              ))}
-                            </select>
+                              options={campoBTreeActual.unidades_disponibles.map((u) => ({
+                                value: u.codigo,
+                                label: `${u.simbolo} — ${u.nombre}`,
+                              }))}
+                              placeholder="Unidad..."
+                            />
                           </div>
                         )}
                       </div>

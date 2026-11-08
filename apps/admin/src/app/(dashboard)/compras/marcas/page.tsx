@@ -44,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { EamSelect } from '@/components/ui/eam-select';
 
 // Generador de paleta determinista para avatares de marca sin logo
 const BRAND_GRADIENTS = [
@@ -858,22 +859,17 @@ export default function MarcasPage() {
                 <Label htmlFor="select_origen" className="text-xs font-bold text-red-700">
                   1. Marca Origen (Alias duplicado a retirar)
                 </Label>
-                <select
-                  id="select_origen"
-                  value={mergeOrigenId || ''}
-                  onChange={(e) => setMergeOrigenId(Number(e.target.value))}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-2xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                >
-                  <option value="" disabled>
-                    Selecciona la marca redundante...
-                  </option>
-                  {marcas.map((m) => (
-                    <option key={m.id_marca} value={m.id_marca}>
-                      {m.nombre} ({m._count?.catalogo_componentes ?? 0} repuestos asociados)
-                    </option>
-                  ))}
-                </select>
+                <EamSelect
+                  value={mergeOrigenId ? String(mergeOrigenId) : ''}
+                  onChange={(val) => setMergeOrigenId(val ? Number(val) : null)}
+                  searchable={true}
+                  placeholder="Selecciona la marca redundante..."
+                  options={marcas.map((m) => ({
+                    value: String(m.id_marca),
+                    label: `${m.nombre} (${m._count?.catalogo_componentes ?? 0} repuestos asociados)`,
+                    badge: `${m._count?.catalogo_componentes ?? 0} arts`,
+                  }))}
+                />
               </div>
 
               <div className="flex justify-center my-1">
@@ -886,24 +882,19 @@ export default function MarcasPage() {
                 <Label htmlFor="select_destino" className="text-xs font-bold text-emerald-700">
                   2. Marca Destino (Registro canónico principal)
                 </Label>
-                <select
-                  id="select_destino"
-                  value={mergeDestinoId || ''}
-                  onChange={(e) => setMergeDestinoId(Number(e.target.value))}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-2xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                >
-                  <option value="" disabled>
-                    Selecciona la marca canónica receptora...
-                  </option>
-                  {marcas
+                <EamSelect
+                  value={mergeDestinoId ? String(mergeDestinoId) : ''}
+                  onChange={(val) => setMergeDestinoId(val ? Number(val) : null)}
+                  searchable={true}
+                  placeholder="Selecciona la marca canónica receptora..."
+                  options={marcas
                     .filter((m) => m.id_marca !== mergeOrigenId)
-                    .map((m) => (
-                      <option key={m.id_marca} value={m.id_marca}>
-                        {m.nombre} ({m._count?.catalogo_componentes ?? 0} repuestos asociados)
-                      </option>
-                    ))}
-                </select>
+                    .map((m) => ({
+                      value: String(m.id_marca),
+                      label: `${m.nombre} (${m._count?.catalogo_componentes ?? 0} repuestos asociados)`,
+                      badge: `${m._count?.catalogo_componentes ?? 0} arts`,
+                    }))}
+                />
               </div>
             </div>
 

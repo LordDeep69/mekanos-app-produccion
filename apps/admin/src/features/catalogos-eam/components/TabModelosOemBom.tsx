@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { DynamicModularSpecsEditor } from '@/features/equipos/components/DynamicModularSpecsEditor';
 import {
   AtributoTecnico,
+  EamSelect,
   MarcaCombobox,
   ModeloEquipoOem,
   ROLES_BOM_OPTIONS,
@@ -494,18 +495,20 @@ export function TabModelosOemBom() {
             </button>
           </div>
 
-          <select
+          <EamSelect
             value={filtroArquetipo}
-            onChange={(e) => setFiltroArquetipo(e.target.value)}
-            className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 bg-slate-50"
-          >
-            <option value="">Todos los Tipos de Equipo</option>
-            {arquetipos.map((a) => (
-              <option key={a.id_tipo_equipo} value={a.id_tipo_equipo}>
-                {a.nombre_canonico || a.nombre_tipo}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => setFiltroArquetipo(val)}
+            options={[
+              { value: '', label: 'Todos los Tipos de Equipo' },
+              ...arquetipos.map((a) => ({
+                value: String(a.id_tipo_equipo),
+                label: a.nombre_canonico || a.nombre_tipo,
+                badge: a.codigo_tipo || 'GEN',
+              })),
+            ]}
+            placeholder="Todos los Tipos de Equipo"
+            searchable
+          />
         </div>
 
         <div className="divide-y divide-slate-100 flex-1 overflow-y-auto min-h-0">
@@ -880,17 +883,17 @@ export function TabModelosOemBom() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Tipo de Activo Industrial *
                 </label>
-                <select
-                  value={modeloForm.id_tipo_equipo}
-                  onChange={(e) => handleTipoChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 bg-white shadow-2xs focus:ring-2 focus:ring-blue-500"
-                >
-                  {arquetipos.map((a) => (
-                    <option key={a.id_tipo_equipo} value={a.id_tipo_equipo}>
-                      {a.nombre_canonico || a.nombre_tipo} ({a.codigo_tipo || 'GEN'})
-                    </option>
-                  ))}
-                </select>
+                <EamSelect
+                  value={String(modeloForm.id_tipo_equipo)}
+                  onChange={(val) => handleTipoChange(val)}
+                  options={arquetipos.map((a) => ({
+                    value: String(a.id_tipo_equipo),
+                    label: `${a.nombre_canonico || a.nombre_tipo} (${a.codigo_tipo || 'GEN'})`,
+                    badge: a.codigo_tipo || 'GEN',
+                  }))}
+                  placeholder="Seleccionar tipo de activo..."
+                  searchable
+                />
               </div>
 
               {/* Marca y Modelo */}
@@ -1314,30 +1317,20 @@ export function TabModelosOemBom() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Buscar Artículo en Inventario
                 </label>
-                <div className="relative mb-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Filtrar por referencia, marca o descripción..."
-                    value={searchWms}
-                    onChange={(e) => setSearchWms(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs"
-                  />
-                </div>
-                <select
-                  required
+                <EamSelect
                   value={bomForm.id_componente}
-                  onChange={(e) => setBomForm({ ...bomForm, id_componente: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white font-semibold"
-                >
-                  <option value="">-- Seleccionar Repuesto / Insumo --</option>
-                  {componentesWms.map((c) => (
-                    <option key={c.id_componente} value={c.id_componente}>
-                      [{c.referencia_fabricante}] {c.descripcion_corta || c.marca} (Stock:{' '}
-                      {c.stock_actual ?? 0} {c.codigo_unidad_medida || c.unidad_medida || 'UND'})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setBomForm({ ...bomForm, id_componente: val })}
+                  options={[
+                    { value: '', label: '-- Seleccionar Repuesto / Insumo --' },
+                    ...componentesWms.map((c) => ({
+                      value: String(c.id_componente),
+                      label: `[${c.referencia_fabricante}] ${c.descripcion_corta || c.marca}`,
+                      badge: `Stock: ${c.stock_actual ?? 0} ${c.codigo_unidad_medida || c.unidad_medida || 'UND'}`,
+                    })),
+                  ]}
+                  placeholder="-- Seleccionar Repuesto / Insumo --"
+                  searchable
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1345,17 +1338,15 @@ export function TabModelosOemBom() {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Función en el Equipo *
                   </label>
-                  <select
+                  <EamSelect
                     value={bomForm.rol_bom}
-                    onChange={(e) => setBomForm({ ...bomForm, rol_bom: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                  >
-                    {ROLES_BOM_OPTIONS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setBomForm({ ...bomForm, rol_bom: val })}
+                    options={ROLES_BOM_OPTIONS.map((r) => ({
+                      value: r.value,
+                      label: r.label,
+                    }))}
+                    placeholder="Seleccionar función..."
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">

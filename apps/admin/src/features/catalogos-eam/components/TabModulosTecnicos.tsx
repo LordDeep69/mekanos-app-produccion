@@ -25,6 +25,7 @@ import {
 import { generarCodigoParteModulo, generarCodigoCampoTecnico, verificarCodigoDuplicado } from '../utils/eam-code-generator';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  EamSelect,
   ModuloAtributoItem,
   ModuloTecnico,
   TIPOS_CONTROL_HUMANOS,
@@ -1944,19 +1945,17 @@ export function TabModulosTecnicos() {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Tipo de Dato *
                   </label>
-                  <select
+                  <EamSelect
                     value={inPlaceForm.tipo_control}
-                    onChange={(e) =>
-                      setInPlaceForm({ ...inPlaceForm, tipo_control: e.target.value })
+                    onChange={(val) =>
+                      setInPlaceForm({ ...inPlaceForm, tipo_control: val })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs bg-white font-semibold"
-                  >
-                    {TIPOS_CONTROL_HUMANOS.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.iconSymbol} {t.shortLabel}
-                      </option>
-                    ))}
-                  </select>
+                    options={TIPOS_CONTROL_HUMANOS.map((t) => ({
+                      value: t.value,
+                      label: `${t.iconSymbol} ${t.shortLabel}`,
+                    }))}
+                    placeholder="Tipo de dato..."
+                  />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -2019,10 +2018,9 @@ export function TabModulosTecnicos() {
                     <label className="block text-xs font-bold text-blue-900 mb-1">
                       Magnitud de Medida
                     </label>
-                    <select
+                    <EamSelect
                       value={inPlaceForm.id_magnitud}
-                      onChange={(e) => {
-                        const idMag = e.target.value;
+                      onChange={(idMag) => {
                         const magObj = magnitudes.find((m) => String(m.id_magnitud) === idMag);
                         const nuevaU = magObj?.unidad_base_codigo || '';
                         const auto = isAutoCodigoAtributo
@@ -2039,24 +2037,25 @@ export function TabModulosTecnicos() {
                           codigo_atributo: auto,
                         });
                       }}
-                      className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
-                    >
-                      <option value="">-- Seleccionar Magnitud --</option>
-                      {magnitudes.map((m) => (
-                        <option key={m.id_magnitud} value={m.id_magnitud}>
-                          {m.nombre_magnitud}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: '-- Seleccionar Magnitud --' },
+                        ...magnitudes.map((m) => ({
+                          value: String(m.id_magnitud),
+                          label: m.nombre_magnitud,
+                          badge: m.unidad_base_codigo,
+                        })),
+                      ]}
+                      placeholder="-- Seleccionar Magnitud --"
+                      searchable
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-blue-900 mb-1">
                       Unidad por Defecto
                     </label>
-                    <select
+                    <EamSelect
                       value={inPlaceForm.unidad_defecto_codigo}
-                      onChange={(e) => {
-                        const nuevaU = e.target.value;
+                      onChange={(nuevaU) => {
                         const auto = isAutoCodigoAtributo
                           ? generarCodigoCampoTecnico(
                               inPlaceForm.nombre_atributo,
@@ -2070,15 +2069,17 @@ export function TabModulosTecnicos() {
                           codigo_atributo: auto,
                         });
                       }}
-                      className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
-                    >
-                      <option value="">-- Seleccionar Unidad --</option>
-                      {(magnitudInPlaceObj?.unidades_medida || []).map((u) => (
-                        <option key={u.codigo} value={u.codigo}>
-                          {u.nombre} ({u.simbolo})
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: '-- Seleccionar Unidad --' },
+                        ...(magnitudInPlaceObj?.unidades_medida || []).map((u) => ({
+                          value: u.codigo,
+                          label: `${u.nombre} (${u.simbolo})`,
+                          badge: u.simbolo,
+                        })),
+                      ]}
+                      placeholder="-- Seleccionar Unidad --"
+                      searchable
+                    />
                   </div>
                 </div>
               )}

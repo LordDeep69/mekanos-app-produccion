@@ -22,6 +22,7 @@ import {
 import { apiClient } from '@/lib/api/client';
 import { cn, formatDateSafe } from '@/lib/utils';
 import { getPendienteEstadoColor, getPendienteEstadoLabel, getPrioridadColor } from '@/types/ordenes';
+import { EamSelect } from '@/components/ui/eam-select';
 
 interface EquipoPendientesTabProps {
   idEquipo: number;
@@ -500,16 +501,17 @@ export function EquipoPendientesTab({
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                     Prioridad
                   </label>
-                  <select
+                  <EamSelect
                     value={prioridad}
-                    onChange={(e) => setPrioridad(e.target.value as any)}
-                    className="w-full text-sm p-2 border border-slate-300 rounded-xl bg-white"
-                  >
-                    <option value="NORMAL">Normal</option>
-                    <option value="ALTA">Alta</option>
-                    <option value="URGENTE">Urgente</option>
-                    <option value="EMERGENCIA">Emergencia</option>
-                  </select>
+                    onChange={(val) => setPrioridad(val as any)}
+                    options={[
+                      { value: 'NORMAL', label: 'Normal', badge: 'Estándar' },
+                      { value: 'ALTA', label: 'Alta', badge: 'Atención' },
+                      { value: 'URGENTE', label: 'Urgente', badge: 'Prioritario' },
+                      { value: 'EMERGENCIA', label: 'Emergencia', badge: 'Crítico' },
+                    ]}
+                    placeholder="Prioridad..."
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">

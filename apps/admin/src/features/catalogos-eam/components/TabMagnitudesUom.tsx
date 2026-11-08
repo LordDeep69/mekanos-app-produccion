@@ -29,6 +29,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import {
+  EamSelect,
   MagnitudFisica,
   UnidadMedidaEam,
   useActivarMagnitudBancoEam,
@@ -861,37 +862,44 @@ export function TabMagnitudesUom() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={calcMagCode}
-            onChange={(e) => handleSelectCalcMagnitud(e.target.value)}
-            className="h-9 px-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-semibold focus:ring-2 focus:ring-blue-500"
-          >
-            {magnitudes.map((m) => (
-              <option key={m.codigo_magnitud} value={m.codigo_magnitud}>
-                {m.nombre_magnitud}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-[170px]">
+            <EamSelect
+              variant="dark"
+              size="sm"
+              value={calcMagCode}
+              onChange={(val) => handleSelectCalcMagnitud(val)}
+              options={magnitudes.map((m) => ({
+                value: m.codigo_magnitud,
+                label: m.nombre_magnitud,
+              }))}
+              placeholder="Magnitud..."
+              searchable
+            />
+          </div>
 
           <input
             type="number"
             step="any"
             value={calcValor}
             onChange={(e) => setCalcValor(e.target.value)}
-            className="h-9 w-24 px-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono text-xs font-bold focus:ring-2 focus:ring-blue-500"
+            className="h-8 w-24 px-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-mono text-xs font-bold focus:ring-2 focus:ring-blue-500"
           />
 
-          <select
-            value={calcOrigen}
-            onChange={(e) => setCalcOrigen(e.target.value)}
-            className="h-9 px-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-semibold focus:ring-2 focus:ring-blue-500"
-          >
-            {unidadesCalcDisponibles.map((u) => (
-              <option key={u.codigo} value={u.codigo}>
-                {u.simbolo} — {u.nombre}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-[140px]">
+            <EamSelect
+              variant="dark"
+              size="sm"
+              value={calcOrigen}
+              onChange={(val) => setCalcOrigen(val)}
+              options={unidadesCalcDisponibles.map((u) => ({
+                value: u.codigo,
+                label: `${u.simbolo} — ${u.nombre}`,
+                badge: u.simbolo,
+              }))}
+              placeholder="Origen..."
+              searchable
+            />
+          </div>
 
           <button
             type="button"
@@ -900,28 +908,32 @@ export function TabMagnitudesUom() {
               setCalcOrigen(calcDestino);
               setCalcDestino(tmp);
             }}
-            className="h-9 w-9 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-200 transition-colors"
+            className="h-8 w-8 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-200 transition-colors cursor-pointer"
             title="Invertir unidades"
           >
             <ArrowRightLeft className="h-3.5 w-3.5" />
           </button>
 
-          <select
-            value={calcDestino}
-            onChange={(e) => setCalcDestino(e.target.value)}
-            className="h-9 px-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-semibold focus:ring-2 focus:ring-blue-500"
-          >
-            {unidadesCalcDisponibles.map((u) => (
-              <option key={u.codigo} value={u.codigo}>
-                {u.simbolo} — {u.nombre}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-[140px]">
+            <EamSelect
+              variant="dark"
+              size="sm"
+              value={calcDestino}
+              onChange={(val) => setCalcDestino(val)}
+              options={unidadesCalcDisponibles.map((u) => ({
+                value: u.codigo,
+                label: `${u.simbolo} — ${u.nombre}`,
+                badge: u.simbolo,
+              }))}
+              placeholder="Destino..."
+              searchable
+            />
+          </div>
 
           <button
             type="submit"
             disabled={convertirMut.isPending}
-            className="h-9 px-3.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all"
+            className="h-8 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
           >
             {convertirMut.isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

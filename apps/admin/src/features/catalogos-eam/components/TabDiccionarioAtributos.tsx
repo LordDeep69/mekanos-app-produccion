@@ -19,6 +19,7 @@ import { generarCodigoCampoTecnico, verificarCodigoDuplicado } from '../utils/ea
 import { useMemo, useState } from 'react';
 import {
   AtributoTecnico,
+  EamSelect,
   ROLES_SEMANTICOS_OPTIONS,
   TIPOS_CONTROL_HUMANOS,
   getModuloBadgeInfo,
@@ -227,46 +228,58 @@ export function TabDiccionarioAtributos() {
           <div className="flex flex-wrap items-center gap-2">
             <Filter className="h-4 w-4 text-slate-400 shrink-0" />
             {/* Filtro por Parte / Subsistema */}
-            <select
-              value={filtroModulo}
-              onChange={(e) => setFiltroModulo(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 bg-white"
-            >
-              <option value="">Todas las Partes / Subsistemas</option>
-              {modulos.map((m) => (
-                <option key={m.codigo_modulo} value={m.codigo_modulo}>
-                  Parte: {m.nombre_modulo}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[200px]">
+              <EamSelect
+                size="sm"
+                value={filtroModulo}
+                onChange={(val) => setFiltroModulo(val)}
+                options={[
+                  { value: '', label: 'Todas las Partes / Subsistemas' },
+                  ...modulos.map((m) => ({
+                    value: m.codigo_modulo,
+                    label: `Parte: ${m.nombre_modulo}`,
+                  })),
+                ]}
+                placeholder="Todas las Partes"
+                searchable
+              />
+            </div>
 
             {/* Filtro por Tipo de Dato Humano */}
-            <select
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 bg-white"
-            >
-              <option value="">Todos los Tipos de Dato</option>
-              {TIPOS_CONTROL_HUMANOS.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.iconSymbol} {t.shortLabel}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[190px]">
+              <EamSelect
+                size="sm"
+                value={filtroTipo}
+                onChange={(val) => setFiltroTipo(val)}
+                options={[
+                  { value: '', label: 'Todos los Tipos de Dato' },
+                  ...TIPOS_CONTROL_HUMANOS.map((t) => ({
+                    value: t.value,
+                    label: `${t.iconSymbol} ${t.shortLabel}`,
+                  })),
+                ]}
+                placeholder="Todos los Tipos"
+              />
+            </div>
 
             {/* Filtro por Magnitud */}
-            <select
-              value={filtroMagnitud}
-              onChange={(e) => setFiltroMagnitud(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 bg-white"
-            >
-              <option value="">Todas las Magnitudes de Medida</option>
-              {magnitudes.map((m) => (
-                <option key={m.codigo_magnitud} value={m.codigo_magnitud}>
-                  {m.nombre_magnitud}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[200px]">
+              <EamSelect
+                size="sm"
+                value={filtroMagnitud}
+                onChange={(val) => setFiltroMagnitud(val)}
+                options={[
+                  { value: '', label: 'Todas las Magnitudes' },
+                  ...magnitudes.map((m) => ({
+                    value: m.codigo_magnitud,
+                    label: m.nombre_magnitud,
+                    badge: m.unidad_base_codigo,
+                  })),
+                ]}
+                placeholder="Todas las Magnitudes"
+                searchable
+              />
+            </div>
           </div>
         </div>
 
@@ -510,17 +523,15 @@ export function TabDiccionarioAtributos() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Tipo de Dato *
                 </label>
-                <select
+                <EamSelect
                   value={form.tipo_control}
-                  onChange={(e) => setForm({ ...form, tipo_control: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white font-semibold shadow-2xs focus:ring-2 focus:ring-blue-500"
-                >
-                  {TIPOS_CONTROL_HUMANOS.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.fullLabel}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setForm({ ...form, tipo_control: val })}
+                  options={TIPOS_CONTROL_HUMANOS.map((t) => ({
+                    value: t.value,
+                    label: t.fullLabel,
+                  }))}
+                  placeholder="Seleccionar tipo de dato..."
+                />
               </div>
 
               <div>
@@ -590,10 +601,9 @@ export function TabDiccionarioAtributos() {
                     <label className="block text-xs font-bold text-blue-900 mb-1">
                       Magnitud Física Asociada
                     </label>
-                    <select
+                    <EamSelect
                       value={form.id_magnitud}
-                      onChange={(e) => {
-                        const idMag = e.target.value;
+                      onChange={(idMag) => {
                         const magObj = magnitudes.find((m) => String(m.id_magnitud) === idMag);
                         const nuevaU = magObj?.unidad_base_codigo || '';
                         const auto = isAutoCodigo && !editingAttr
@@ -610,25 +620,26 @@ export function TabDiccionarioAtributos() {
                           codigo_atributo: auto,
                         });
                       }}
-                      className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
-                    >
-                      <option value="">-- Sin Magnitud --</option>
-                      {magnitudes.map((m) => (
-                        <option key={m.id_magnitud} value={m.id_magnitud}>
-                          {m.nombre_magnitud}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: '-- Sin Magnitud --' },
+                        ...magnitudes.map((m) => ({
+                          value: String(m.id_magnitud),
+                          label: m.nombre_magnitud,
+                          badge: m.unidad_base_codigo,
+                        })),
+                      ]}
+                      placeholder="-- Sin Magnitud --"
+                      searchable
+                    />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-blue-900 mb-1">
                       Unidad de Medida por Defecto
                     </label>
-                    <select
+                    <EamSelect
                       value={form.unidad_defecto_codigo}
-                      onChange={(e) => {
-                        const unidad = e.target.value;
+                      onChange={(unidad) => {
                         const auto = isAutoCodigo && !editingAttr
                           ? generarCodigoCampoTecnico(form.nombre_atributo, codigosAtributosExistentes, unidad || undefined)
                           : form.codigo_atributo;
@@ -638,15 +649,17 @@ export function TabDiccionarioAtributos() {
                           codigo_atributo: auto,
                         });
                       }}
-                      className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
-                    >
-                      <option value="">-- Seleccionar Unidad --</option>
-                      {(magnitudSeleccionadaModal?.unidades_medida || []).map((u) => (
-                        <option key={u.codigo} value={u.codigo}>
-                          {u.nombre} ({u.simbolo})
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: '-- Seleccionar Unidad --' },
+                        ...(magnitudSeleccionadaModal?.unidades_medida || []).map((u) => ({
+                          value: u.codigo,
+                          label: `${u.nombre} (${u.simbolo})`,
+                          badge: u.simbolo,
+                        })),
+                      ]}
+                      placeholder="-- Seleccionar Unidad --"
+                      searchable
+                    />
                   </div>
                 </div>
               )}
@@ -672,17 +685,15 @@ export function TabDiccionarioAtributos() {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Categoría del Campo
                   </label>
-                  <select
+                  <EamSelect
                     value={form.rol_semantico}
-                    onChange={(e) => setForm({ ...form, rol_semantico: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                  >
-                    {ROLES_SEMANTICOS_OPTIONS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setForm({ ...form, rol_semantico: val })}
+                    options={ROLES_SEMANTICOS_OPTIONS.map((r) => ({
+                      value: r.value,
+                      label: r.label,
+                    }))}
+                    placeholder="Categoría del campo..."
+                  />
                 </div>
 
                 <div>

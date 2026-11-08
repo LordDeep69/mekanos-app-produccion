@@ -30,6 +30,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { EamSelect } from '@/components/ui/eam-select';
 import {
   BOM_APLICACIONES,
   useActualizarBomEquipo,
@@ -344,18 +345,24 @@ function ModalVincularBom({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Aplicación en la máquina *</label>
-                <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={inputCls}>
-                  {BOM_APLICACIONES.map((a) => (
-                    <option key={a.value} value={a.value}>{a.label}</option>
-                  ))}
-                </select>
+                <EamSelect
+                  value={categoria}
+                  onChange={(val) => setCategoria(val)}
+                  options={BOM_APLICACIONES}
+                  placeholder="Seleccionar aplicación..."
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Rol en el Kit del Equipo *</label>
-                <select value={rolRepuesto} onChange={(e) => setRolRepuesto(e.target.value as RolRepuestoBom)} className={inputCls}>
-                  <option value="TITULAR">★ Titular / Principal del Kit</option>
-                  <option value="ALTERNATIVO">⇄ Alternativa Homologada</option>
-                </select>
+                <EamSelect
+                  value={rolRepuesto}
+                  onChange={(val) => setRolRepuesto(val as RolRepuestoBom)}
+                  options={[
+                    { value: 'TITULAR', label: '★ Titular / Principal del Kit' },
+                    { value: 'ALTERNATIVO', label: '⇄ Alternativa Homologada' },
+                  ]}
+                  placeholder="Seleccionar rol..."
+                />
               </div>
             </div>
 
@@ -500,18 +507,24 @@ function ModalEditarBom({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Aplicación en la máquina *</label>
-                <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className={inputCls}>
-                  {BOM_APLICACIONES.map((a) => (
-                    <option key={a.value} value={a.value}>{a.label}</option>
-                  ))}
-                </select>
+                <EamSelect
+                  value={categoria}
+                  onChange={(val) => setCategoria(val)}
+                  options={BOM_APLICACIONES}
+                  placeholder="Seleccionar aplicación..."
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Rol en el Kit del Equipo *</label>
-                <select value={rolRepuesto} onChange={(e) => setRolRepuesto(e.target.value as RolRepuestoBom)} className={inputCls}>
-                  <option value="TITULAR">★ Titular / Principal del Kit</option>
-                  <option value="ALTERNATIVO">⇄ Alternativa Homologada</option>
-                </select>
+                <EamSelect
+                  value={rolRepuesto}
+                  onChange={(val) => setRolRepuesto(val as RolRepuestoBom)}
+                  options={[
+                    { value: 'TITULAR', label: '★ Titular / Principal del Kit' },
+                    { value: 'ALTERNATIVO', label: '⇄ Alternativa Homologada' },
+                  ]}
+                  placeholder="Seleccionar rol..."
+                />
               </div>
             </div>
 

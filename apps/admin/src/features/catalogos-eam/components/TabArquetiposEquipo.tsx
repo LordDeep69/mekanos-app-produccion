@@ -43,6 +43,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArquetipoEquipo,
   DynamicEquipmentFormPreview,
+  EamSelect,
   TIPOS_CONTROL_HUMANOS,
   TipoServicioEam,
   getCriterioIntervaloHumano,
@@ -2266,10 +2267,10 @@ export function TabArquetiposEquipo() {
                         <label className="block text-[11px] font-bold text-slate-600 mb-1">
                           Categoría *
                         </label>
-                        <select
+                        <EamSelect
+                          size="sm"
                           value={newSrvForm.categoria}
-                          onChange={(e) => {
-                            const cat = e.target.value;
+                          onChange={(cat) => {
                             const auto = isAutoCodigoSrv
                               ? generarCodigoTipoServicio(newSrvForm.nombre_tipo, cat, codigosServiciosExistentes)
                               : newSrvForm.codigo_tipo;
@@ -2279,14 +2280,15 @@ export function TabArquetiposEquipo() {
                               codigo_tipo: auto,
                             });
                           }}
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
-                        >
-                          <option value="PREVENTIVO">Preventivo</option>
-                          <option value="INSPECCION">Inspección / Rutina</option>
-                          <option value="DIAGNOSTICO">Diagnóstico Técnico</option>
-                          <option value="CORRECTIVO">Correctivo Programado</option>
-                          <option value="ESPECIALIZADO">Especializado</option>
-                        </select>
+                          options={[
+                            { value: 'PREVENTIVO', label: 'Preventivo' },
+                            { value: 'INSPECCION', label: 'Inspección / Rutina' },
+                            { value: 'DIAGNOSTICO', label: 'Diagnóstico Técnico' },
+                            { value: 'CORRECTIVO', label: 'Correctivo Programado' },
+                            { value: 'ESPECIALIZADO', label: 'Especializado' },
+                          ]}
+                          placeholder="Categoría..."
+                        />
                       </div>
                     </div>
 
@@ -2521,19 +2523,21 @@ export function TabArquetiposEquipo() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Regla de Activación del Mantenimiento
                 </label>
-                <select
+                <EamSelect
                   value={planForm.criterio_intervalo}
-                  onChange={(e) =>
-                    setPlanForm({ ...planForm, criterio_intervalo: e.target.value })
+                  onChange={(val) =>
+                    setPlanForm({ ...planForm, criterio_intervalo: val })
                   }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                >
-                  <option value="LO_QUE_OCURRA_PRIMERO">
-                    ⚡ Lo que ocurra primero (Días o Horas de horómetro) - Recomendado
-                  </option>
-                  <option value="DIAS">📅 Solo por Calendario (Días transcurridos)</option>
-                  <option value="HORAS">⏱️ Solo por Uso (Horas registradas en Horómetro)</option>
-                </select>
+                  options={[
+                    {
+                      value: 'LO_QUE_OCURRA_PRIMERO',
+                      label: '⚡ Lo que ocurra primero (Días o Horas de horómetro) - Recomendado',
+                    },
+                    { value: 'DIAS', label: '📅 Solo por Calendario (Días transcurridos)' },
+                    { value: 'HORAS', label: '⏱️ Solo por Uso (Horas registradas en Horómetro)' },
+                  ]}
+                  placeholder="Seleccionar regla..."
+                />
               </div>
             </div>
 
@@ -2604,20 +2608,17 @@ export function TabArquetiposEquipo() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   ¿A qué Parte / Subsistema pertenece este campo? *
                 </label>
-                <select
-                  required
+                <EamSelect
                   value={inPlaceForm.codigo_modulo}
-                  onChange={(e) =>
-                    setInPlaceForm({ ...inPlaceForm, codigo_modulo: e.target.value })
+                  onChange={(val) =>
+                    setInPlaceForm({ ...inPlaceForm, codigo_modulo: val })
                   }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-semibold"
-                >
-                  {selectedArquetipo.tipo_equipo_modulos.map((tem) => (
-                    <option key={tem.id_modulo} value={tem.modulo.codigo_modulo}>
-                      {tem.modulo.nombre_modulo}
-                    </option>
-                  ))}
-                </select>
+                  options={selectedArquetipo.tipo_equipo_modulos.map((tem) => ({
+                    value: tem.modulo.codigo_modulo,
+                    label: tem.modulo.nombre_modulo,
+                  }))}
+                  placeholder="Seleccionar parte..."
+                />
               </div>
 
               <div>
@@ -2653,19 +2654,17 @@ export function TabArquetiposEquipo() {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Tipo de Dato *
                   </label>
-                  <select
+                  <EamSelect
                     value={inPlaceForm.tipo_control}
-                    onChange={(e) =>
-                      setInPlaceForm({ ...inPlaceForm, tipo_control: e.target.value })
+                    onChange={(val) =>
+                      setInPlaceForm({ ...inPlaceForm, tipo_control: val })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                  >
-                    {TIPOS_CONTROL_HUMANOS.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.iconSymbol} {t.shortLabel}
-                      </option>
-                    ))}
-                  </select>
+                    options={TIPOS_CONTROL_HUMANOS.map((t) => ({
+                      value: t.value,
+                      label: `${t.iconSymbol} ${t.shortLabel}`,
+                    }))}
+                    placeholder="Tipo de dato..."
+                  />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -2727,10 +2726,9 @@ export function TabArquetiposEquipo() {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Magnitud de Medida
                   </label>
-                  <select
+                  <EamSelect
                     value={inPlaceForm.id_magnitud}
-                    onChange={(e) => {
-                      const idMag = e.target.value;
+                    onChange={(idMag) => {
                       const mag = magnitudes.find((m) => String(m.id_magnitud) === idMag);
                       const nuevaU = mag?.unidad_base_codigo || '';
                       const auto = isAutoCodigoAtributo
@@ -2747,15 +2745,17 @@ export function TabArquetiposEquipo() {
                         codigo_atributo: auto,
                       });
                     }}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs bg-white font-semibold"
-                  >
-                    <option value="">-- Seleccionar Magnitud --</option>
-                    {magnitudes.map((m) => (
-                      <option key={m.id_magnitud} value={m.id_magnitud}>
-                        {m.nombre_magnitud} (Unidad base: {m.unidad_base_codigo})
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: '', label: '-- Seleccionar Magnitud --' },
+                      ...magnitudes.map((m) => ({
+                        value: String(m.id_magnitud),
+                        label: `${m.nombre_magnitud} (Unidad base: ${m.unidad_base_codigo})`,
+                        badge: m.unidad_base_codigo,
+                      })),
+                    ]}
+                    placeholder="-- Seleccionar Magnitud --"
+                    searchable
+                  />
                 </div>
               )}
 
