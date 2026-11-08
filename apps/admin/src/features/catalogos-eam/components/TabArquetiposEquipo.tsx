@@ -664,6 +664,39 @@ export function TabArquetiposEquipo() {
   const [showLinkModModal, setShowLinkModModal] = useState(false);
   const [linkModId, setLinkModId] = useState<string>('');
   const [linkModObligatorio, setLinkModObligatorio] = useState<boolean>(true);
+  const [linkModSearch, setLinkModSearch] = useState<string>('');
+  const [deletingModuloTem, setDeletingModuloTem] = useState<any | null>(null);
+
+  const yaVinculadosModulosIds = useMemo(() => {
+    return new Set(
+      (selectedArquetipo?.tipo_equipo_modulos || []).map((tem) => tem.modulo.id_modulo),
+    );
+  }, [selectedArquetipo?.tipo_equipo_modulos]);
+
+  const modulosFiltradosParaVincular = useMemo(() => {
+    const q = linkModSearch.trim().toLowerCase();
+    if (!q) return modulosDisponibles;
+    return modulosDisponibles.filter(
+      (m) =>
+        m.nombre_modulo.toLowerCase().includes(q) ||
+        m.codigo_modulo.toLowerCase().includes(q),
+    );
+  }, [modulosDisponibles, linkModSearch]);
+
+  const moduloSeleccionadoParaVincular = useMemo(() => {
+    return modulosDisponibles.find((m) => String(m.id_modulo) === linkModId) || null;
+  }, [modulosDisponibles, linkModId]);
+
+  const handleOpenLinkModal = () => {
+    const yaIds = new Set(
+      (selectedArquetipo?.tipo_equipo_modulos || []).map((tem) => tem.modulo.id_modulo),
+    );
+    const primerDisp = modulosDisponibles.find((m) => !yaIds.has(m.id_modulo));
+    setLinkModId(primerDisp ? String(primerDisp.id_modulo) : '');
+    setLinkModObligatorio(true);
+    setLinkModSearch('');
+    setShowLinkModModal(true);
+  };
 
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [planForm, setPlanForm] = useState({
@@ -1177,16 +1210,8 @@ export function TabArquetiposEquipo() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setLinkModId(
-                      modulosDisponibles[0]?.id_modulo
-                        ? String(modulosDisponibles[0].id_modulo)
-                        : '',
-                    );
-                    setLinkModObligatorio(true);
-                    setShowLinkModModal(true);
-                  }}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors"
+                  onClick={handleOpenLinkModal}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>Agregar Parte</span>
@@ -1194,62 +1219,96 @@ export function TabArquetiposEquipo() {
               </div>
             </div>
 
-            <div className="p-5 space-y-3.5">
-              {selectedArquetipo.tipo_equipo_modulos.map((tem) => {
-                const mod = tem.modulo;
-                const countAttrs = mod._count?.modulo_atributos ?? 0;
-                const badgeInfo = getModuloBadgeInfo(mod.codigo_modulo, mod.nombre_modulo);
-                return (
-                  <div
-                    key={tem.id_tipo_equipo_modulo}
-                    className="p-4 rounded-xl border border-slate-200 hover:border-blue-200 bg-slate-50/40 flex items-center justify-between gap-4"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center flex-wrap gap-2">
-                        <span className="font-bold text-slate-900 text-sm">
-                          {mod.nombre_modulo}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
-                            tem.obligatorio
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : 'bg-slate-100 text-slate-600 border-slate-200'
-                          }`}
-                        >
-                          {tem.obligatorio ? 'Parte Principal (Obligatoria)' : 'Parte Opcional'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-500 flex items-center gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${badgeInfo.badgeClass}`}
-                        >
-                          {countAttrs} campos técnicos en ficha
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (
-                          window.confirm(
-                            `¿Quitar la parte "${mod.nombre_modulo}" de este tipo de equipo?`,
-                          )
-                        ) {
-                          await desvincularModMut.mutateAsync({
-                            idTipoEquipo: selectedArquetipo.id_tipo_equipo,
-                            idModulo: mod.id_modulo,
-                          });
-                        }
-                      }}
-                      className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      title="Quitar parte de este tipo de equipo"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+            <div className="p-5 space-y-3">
+              {selectedArquetipo.tipo_equipo_modulos.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 space-y-2.5">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-2xs">
+                    <Layers className="h-6 w-6" />
                   </div>
-                );
-              })}
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800">
+                      Sin partes o subsistemas vinculados
+                    </h5>
+                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-0.5 leading-relaxed">
+                      Vincula las partes que componen este activo (ej: Cabina y Sistema de Puertas, Máquina de Tracción) para estructurar su ficha técnica.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenLinkModal}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Vincular Primera Parte</span>
+                  </button>
+                </div>
+              ) : (
+                selectedArquetipo.tipo_equipo_modulos.map((tem) => {
+                  const mod = tem.modulo;
+                  const countAttrs = mod._count?.modulo_atributos ?? mod.modulo_atributos?.length ?? 0;
+                  const badgeInfo = getModuloBadgeInfo(mod.codigo_modulo, mod.nombre_modulo);
+                  return (
+                    <div
+                      key={tem.id_tipo_equipo_modulo}
+                      className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 bg-white hover:shadow-2xs transition-all flex items-center justify-between gap-3 group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${badgeInfo.badgeClass}`}
+                        >
+                          <Layers className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center flex-wrap gap-2">
+                            <span className="font-extrabold text-slate-900 text-sm">
+                              {mod.nombre_modulo}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await vincularModMut.mutateAsync({
+                                  idTipoEquipo: selectedArquetipo.id_tipo_equipo,
+                                  payload: {
+                                    id_modulo: mod.id_modulo,
+                                    obligatorio: !tem.obligatorio,
+                                  },
+                                });
+                              }}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                tem.obligatorio
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                              }`}
+                              title="Haz clic para alternar entre Obligatoria y Opcional"
+                            >
+                              <ShieldCheck className="h-3 w-3 shrink-0" />
+                              <span>{tem.obligatorio ? 'Parte Principal (Obligatoria)' : 'Parte Opcional'}</span>
+                            </button>
+                          </div>
+                          <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono text-slate-500 bg-slate-100">
+                              {mod.codigo_modulo}
+                            </span>
+                            <span>•</span>
+                            <span className="text-[11px] font-semibold text-slate-600">
+                              {countAttrs} campos técnicos en ficha
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeletingModuloTem(tem)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Quitar parte de este tipo de equipo"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -1769,67 +1828,293 @@ export function TabArquetiposEquipo() {
         </div>
       )}
 
-      {/* MODAL AGREGAR PARTE / SUBSISTEMA */}
+      {/* MODAL AGREGAR PARTE / SUBSISTEMA PRÉMIUM */}
       {showLinkModModal && selectedArquetipo && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h4 className="text-base font-bold text-slate-900">
-                Agregar Parte a {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
-              </h4>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header Prémium */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                  <Layers className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 leading-tight">
+                    Vincular Parte o Subsistema
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Añade secciones técnicas a la ficha de{' '}
+                    <strong className="text-slate-700">
+                      {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
+                    </strong>
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowLinkModModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleLinkModulo} className="p-6 space-y-4">
+
+            <form onSubmit={handleLinkModulo} className="p-6 flex flex-col flex-1 overflow-y-auto space-y-4">
+              {/* Buscador de Partes */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Seleccionar Parte / Subsistema *
-                </label>
-                <select
-                  required
-                  value={linkModId}
-                  onChange={(e) => setLinkModId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-semibold"
-                >
-                  {modulosDisponibles.map((m) => (
-                    <option key={m.id_modulo} value={m.id_modulo}>
-                      {m.nombre_modulo}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-800">
+                    Seleccionar Parte / Subsistema del Catálogo Maestro *
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {modulosDisponibles.length} disponibles en catálogo
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
-                    type="checkbox"
-                    checked={linkModObligatorio}
-                    onChange={(e) => setLinkModObligatorio(e.target.checked)}
-                    className="rounded text-blue-600"
+                    type="text"
+                    value={linkModSearch}
+                    onChange={(e) => setLinkModSearch(e.target.value)}
+                    placeholder="Buscar por nombre o código (ej: Cabina, Tracción, Motor)..."
+                    className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-300 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-medium"
+                    autoFocus
                   />
-                  <span>Es una parte principal obligatoria en este tipo de equipo</span>
-                </label>
+                  {linkModSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setLinkModSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+
+              {/* Lista visual interactiva de Partes */}
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {modulosFiltradosParaVincular.map((m) => {
+                  const isAlreadyLinked = yaVinculadosModulosIds.has(m.id_modulo);
+                  const isSelected = linkModId === String(m.id_modulo);
+                  const badgeInfo = getModuloBadgeInfo(m.codigo_modulo, m.nombre_modulo);
+                  const countAttrs = m._count?.modulo_atributos ?? m.modulo_atributos?.length ?? 0;
+
+                  if (isAlreadyLinked) {
+                    return (
+                      <div
+                        key={m.id_modulo}
+                        className="p-3 rounded-xl border border-slate-200 bg-slate-100/70 opacity-60 flex items-center justify-between gap-3 cursor-not-allowed"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-500 flex items-center justify-center shrink-0">
+                            <Layers className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-600 truncate">
+                              {m.nombre_modulo}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {m.codigo_modulo}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-600 shrink-0">
+                          ✓ Ya vinculada a este equipo
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={m.id_modulo}
+                      type="button"
+                      onClick={() => setLinkModId(String(m.id_modulo))}
+                      className={`w-full p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/20 shadow-xs'
+                          : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/80'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${badgeInfo.badgeClass}`}
+                        >
+                          <Layers className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
+                              {m.nombre_modulo}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono text-slate-500 bg-slate-100">
+                              {m.codigo_modulo}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            {countAttrs} campos técnicos configurados en su ficha
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {isSelected ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-blue-600 text-white shadow-2xs">
+                            <Check className="h-3 w-3 stroke-[3]" />
+                            <span>Elegida</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-400 group-hover:text-blue-600">
+                            Seleccionar
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {modulosFiltradosParaVincular.length === 0 && (
+                  <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    No se encontraron partes con el término "{linkModSearch}".
+                  </div>
+                )}
+              </div>
+
+              {/* Configuración de Obligatoriedad con Switch Interactivo */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3">
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-bold text-slate-800">Parte Principal Obligatoria</span>
+                    <span
+                      className={`px-2 py-0.2 rounded text-[10px] font-bold ${
+                        linkModObligatorio
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      {linkModObligatorio ? 'Exigida al registrar el equipo' : 'Opcional / Modular'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-tight">
+                    {linkModObligatorio
+                      ? 'Los campos técnicos de esta parte serán requeridos al registrar nuevos activos de este arquetipo.'
+                      : 'Esta sección solo se completará en activos que cuenten físicamente con este subsistema.'}
+                  </p>
+                </div>
+
+                {/* Toggle Switch */}
                 <button
                   type="button"
-                  onClick={() => setShowLinkModModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700"
+                  onClick={() => setLinkModObligatorio(!linkModObligatorio)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    linkModObligatorio ? 'bg-blue-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      linkModObligatorio ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Resumen & Botones de Acción */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                <div className="text-[11px] text-slate-500 min-w-0 truncate">
+                  {moduloSeleccionadoParaVincular ? (
+                    <span className="font-semibold text-slate-700">
+                      Se vinculará:{' '}
+                      <strong className="text-blue-700 font-bold">{moduloSeleccionadoParaVincular.nombre_modulo}</strong>
+                    </span>
+                  ) : (
+                    <span>Elige una parte de la lista para continuar</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowLinkModModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={vincularModMut.isPending || !linkModId || yaVinculadosModulosIds.has(Number(linkModId))}
+                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                  >
+                    {vincularModMut.isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Vinculando...</span>
+                      </>
+                    ) : (
+                      <span>Vincular Parte al Equipo</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FROSTED CONFIRMACIÓN DESVINCULAR PARTE */}
+      {deletingModuloTem && selectedArquetipo && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-slate-900">
+                  ¿Quitar "{deletingModuloTem.modulo.nombre_modulo}"?
+                </h4>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  Esta parte y sus campos técnicos configurados ya no se requerirán en la plantilla de{' '}
+                  <strong className="text-slate-700">
+                    {selectedArquetipo.nombre_canonico || selectedArquetipo.nombre_tipo}
+                  </strong>.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  disabled={desvincularModMut.isPending}
+                  onClick={() => setDeletingModuloTem(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+                  type="button"
+                  disabled={desvincularModMut.isPending}
+                  onClick={async () => {
+                    await desvincularModMut.mutateAsync({
+                      idTipoEquipo: selectedArquetipo.id_tipo_equipo,
+                      idModulo: deletingModuloTem.modulo.id_modulo,
+                    });
+                    setDeletingModuloTem(null);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold disabled:opacity-50 inline-flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                 >
-                  Agregar Parte
+                  {desvincularModMut.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Desvinculando...</span>
+                    </>
+                  ) : (
+                    <span>Sí, Quitar Parte</span>
+                  )}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
