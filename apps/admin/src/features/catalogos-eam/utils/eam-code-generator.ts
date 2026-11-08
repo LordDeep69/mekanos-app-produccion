@@ -59,8 +59,15 @@ export function resolverColisionDeterminista(
   const { maxLen = 50, separator = '_', caseSensitive = false } = opciones;
   if (!base) return '';
 
-  const check = (val: string) =>
-    caseSensitive ? codigosExistentes.has(val) : codigosExistentes.has(val.toLowerCase().trim());
+  // Conjunto canónico normalizado para comparación insensible a mayúsculas/minúsculas
+  const lookupSet: Set<string> = caseSensitive
+    ? codigosExistentes
+    : new Set(Array.from(codigosExistentes || []).map((c) => (c || '').toLowerCase().trim()));
+
+  const check = (val: string) => {
+    const v = (val || '').trim();
+    return caseSensitive ? lookupSet.has(v) : lookupSet.has(v.toLowerCase());
+  };
 
   if (!check(base)) {
     return base;
@@ -82,6 +89,7 @@ export function resolverColisionDeterminista(
 
 /**
  * Verifica si un código ya existe en el conjunto, permitiendo ignorar el código original en modo edición.
+ * Es insensible a mayúsculas/minúsculas por defecto.
  */
 export function verificarCodigoDuplicado(
   codigo: string,
@@ -91,10 +99,23 @@ export function verificarCodigoDuplicado(
 ): boolean {
   const cod = (codigo || '').trim();
   if (!cod) return false;
-  if (codigoActualIgnorar && (caseSensitive ? cod === codigoActualIgnorar : cod.toLowerCase() === codigoActualIgnorar.toLowerCase())) {
-    return false;
+  if (codigoActualIgnorar) {
+    const ign = codigoActualIgnorar.trim();
+    if (caseSensitive ? cod === ign : cod.toLowerCase() === ign.toLowerCase()) {
+      return false;
+    }
   }
-  return caseSensitive ? codigosExistentes.has(cod) : codigosExistentes.has(cod.toLowerCase());
+  if (!codigosExistentes) return false;
+  if (caseSensitive) {
+    return codigosExistentes.has(cod);
+  }
+  const codLower = cod.toLowerCase();
+  for (const item of codigosExistentes) {
+    if ((item || '').trim().toLowerCase() === codLower) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

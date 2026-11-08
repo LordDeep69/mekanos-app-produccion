@@ -42,6 +42,9 @@ export default function CatalogoServiciosComercialesPage() {
         limit: 100,
     });
 
+    // Universo completo para garantizar detección de colisiones global sin importar filtros en pantalla
+    const { data: todosLosServicios } = useServiciosComerciales({ limit: 500 });
+
     const {
         data: tiposServicio,
         isLoading: loadingTipos,
@@ -257,7 +260,7 @@ export default function CatalogoServiciosComercialesPage() {
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     servicio={editingServicio}
-                    servicios={servicios || []}
+                    servicios={todosLosServicios || servicios || []}
                     tiposServicio={tiposServicio || []}
                     tiposServicioLoading={loadingTipos}
                     tiposServicioError={errorTipos}
