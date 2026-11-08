@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
@@ -12,11 +13,145 @@ import { CreateMarcaDto } from './dto/create-marca.dto';
 import { QueryMarcaDto } from './dto/query-marca.dto';
 import { FusionarMarcasDto } from './dto/fusionar-marcas.dto';
 
+const MARCAS_ESTANDAR_OEM: Array<{
+  nombre: string;
+  pais_origen?: string;
+  descripcion?: string;
+}> = [
+  // Generación Eléctrica y Fuerza Motriz
+  { nombre: 'CUMMINS', pais_origen: 'Estados Unidos', descripcion: 'Fabricante de motores diésel, gas y generadores' },
+  { nombre: 'PERKINS', pais_origen: 'Reino Unido', descripcion: 'Motores diésel industriales y agrícolas' },
+  { nombre: 'CATERPILLAR', pais_origen: 'Estados Unidos', descripcion: 'Maquinaria pesada, motores y grupos electrógenos' },
+  { nombre: 'DOOSAN', pais_origen: 'Corea del Sur', descripcion: 'Equipos industriales, motores y generadores' },
+  { nombre: 'VOLVO PENTA', pais_origen: 'Suecia', descripcion: 'Motores marinos e industriales de combustión' },
+  { nombre: 'DEUTZ', pais_origen: 'Alemania', descripcion: 'Motores diésel refrigerados por aire y agua' },
+  { nombre: 'JOHN DEERE', pais_origen: 'Estados Unidos', descripcion: 'Motores diésel industriales y maquinaria pesada' },
+  { nombre: 'KOHLER', pais_origen: 'Estados Unidos', descripcion: 'Grupos electrógenos y motores industriales' },
+  { nombre: 'SDMO', pais_origen: 'Francia', descripcion: 'Grupos electrógenos y plantas de energía' },
+  // Generadores Eléctricos / Alternadores
+  { nombre: 'STAMFORD', pais_origen: 'Reino Unido', descripcion: 'Alternadores síncronos industriales' },
+  { nombre: 'MARATHON', pais_origen: 'Estados Unidos', descripcion: 'Generadores eléctricos y alternadores' },
+  { nombre: 'LEROY SOMER', pais_origen: 'Francia', descripcion: 'Alternadores y motores eléctricos industriales' },
+  // Bombeo e Hidráulica
+  { nombre: 'GOULDS', pais_origen: 'Estados Unidos', descripcion: 'Bombas centrífugas industriales y sumergibles' },
+  { nombre: 'PEDROLLO', pais_origen: 'Italia', descripcion: 'Bombas eléctricas de agua y sistemas de presión' },
+  { nombre: 'BARNES', pais_origen: 'Colombia / EE.UU.', descripcion: 'Bombas autocebantes, sumergibles y de achique' },
+  { nombre: 'KSB', pais_origen: 'Alemania', descripcion: 'Bombas centrífugas y válvulas de proceso' },
+  { nombre: 'GRUNDFOS', pais_origen: 'Dinamarca', descripcion: 'Sistemas avanzados de bombeo e hidroflo' },
+  // Motores Eléctricos y Automatización
+  { nombre: 'WEG', pais_origen: 'Brasil', descripcion: 'Motores eléctricos, variadores y transformadores' },
+  { nombre: 'SIEMENS', pais_origen: 'Alemania', descripcion: 'Automatización industrial, motores y control' },
+  { nombre: 'BALDOR', pais_origen: 'Estados Unidos', descripcion: 'Motores eléctricos industriales y reductores (ABB)' },
+  { nombre: 'ABB', pais_origen: 'Suiza', descripcion: 'Electrificación, robótica, variadores y potencia' },
+  { nombre: 'SCHNEIDER ELECTRIC', pais_origen: 'Francia', descripcion: 'Distribución eléctrica, arrancadores y protecciones' },
+  // Climatización, Refrigeración y HVAC
+  { nombre: 'TRANE', pais_origen: 'Estados Unidos', descripcion: 'Sistemas HVAC, chillers y unidades manejadoras' },
+  { nombre: 'CARRIER', pais_origen: 'Estados Unidos', descripcion: 'Climatización industrial, chillers y refrigeración' },
+  { nombre: 'YORK', pais_origen: 'Estados Unidos', descripcion: 'Chillers centrífugos, rooftop y climatización (JCI)' },
+  { nombre: 'DAIKIN', pais_origen: 'Japón', descripcion: 'Sistemas VRF, chillers y bombas de calor' },
+  // Transporte Vertical, Elevación y Carga
+  { nombre: 'OTIS', pais_origen: 'Estados Unidos', descripcion: 'Ascensores de pasajeros, montacargas y escaleras mecánicas' },
+  { nombre: 'SCHINDLER', pais_origen: 'Suiza', descripcion: 'Ascensores, escaleras mecánicas y pasillos rodantes' },
+  { nombre: 'KONE', pais_origen: 'Finlandia', descripcion: 'Ascensores y puertas automáticas eco-eficientes' },
+  { nombre: 'MITSUBISHI', pais_origen: 'Japón', descripcion: 'Ascensores de alta velocidad y tracción' },
+  { nombre: 'THYSSENKRUPP', pais_origen: 'Alemania', descripcion: 'Sistemas de elevación y movilidad urbana (TK Elevator)' },
+  // Aire Comprimido y Neumática
+  { nombre: 'KAESER', pais_origen: 'Alemania', descripcion: 'Compresores de tornillo y tratamiento de aire' },
+  { nombre: 'INGERSOLL RAND', pais_origen: 'Estados Unidos', descripcion: 'Compresores industriales y herramientas neumáticas' },
+  { nombre: 'ATLAS COPCO', pais_origen: 'Suecia', descripcion: 'Compresores de aire, generadores de nitrógeno y vacío' },
+  { nombre: 'SULLAIR', pais_origen: 'Estados Unidos', descripcion: 'Compresores de tornillo rotativo estacionarios y portátiles' },
+];
+
 @Injectable()
-export class MarcasService {
+export class MarcasService implements OnModuleInit {
   private readonly logger = new Logger(MarcasService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit() {
+    try {
+      await this.seedMarcasEstandar();
+    } catch (err: any) {
+      this.logger.warn(`No se pudo sincronizar el banco maestro de marcas OEM en arranque: ${err?.message || err}`);
+    }
+  }
+
+  /**
+   * Sincronización idempotente del banco maestro de marcas industriales OEM y marcas existentes en modelos.
+   */
+  async seedMarcasEstandar() {
+    const existentes = await this.prisma.marcas.findMany({
+      select: { nombre: true, slug: true },
+    });
+    const nombresSet = new Set(existentes.map((e) => e.nombre.toUpperCase().trim()));
+    const slugsSet = new Set(existentes.map((e) => e.slug.toLowerCase().trim()));
+
+    let creadas = 0;
+
+    // 1. Sembrar marcas estándar OEM
+    for (const item of MARCAS_ESTANDAR_OEM) {
+      const nombreNorm = item.nombre.toUpperCase().trim();
+      if (!nombresSet.has(nombreNorm)) {
+        let baseSlug = slugify(nombreNorm) || 'marca';
+        let slugFinal = baseSlug;
+        let count = 1;
+        while (slugsSet.has(slugFinal)) {
+          slugFinal = `${baseSlug}-${count++}`;
+        }
+        await this.prisma.marcas.create({
+          data: {
+            nombre: nombreNorm,
+            slug: slugFinal,
+            descripcion: item.descripcion || null,
+            pais_origen: item.pais_origen || null,
+            es_fabricante_oem: true,
+            activo: true,
+          },
+        });
+        nombresSet.add(nombreNorm);
+        slugsSet.add(slugFinal);
+        creadas++;
+      }
+    }
+
+    // 2. Sembrar marcas adicionales que ya existan en modelos_equipo
+    try {
+      const distinctModelos = await this.prisma.modelos_equipo.findMany({
+        select: { marca: true },
+        distinct: ['marca'],
+      });
+      for (const m of distinctModelos) {
+        if (!m.marca || !m.marca.trim()) continue;
+        const nombreNorm = m.marca.toUpperCase().trim();
+        if (!nombresSet.has(nombreNorm)) {
+          let baseSlug = slugify(nombreNorm) || 'marca';
+          let slugFinal = baseSlug;
+          let count = 1;
+          while (slugsSet.has(slugFinal)) {
+            slugFinal = `${baseSlug}-${count++}`;
+          }
+          await this.prisma.marcas.create({
+            data: {
+              nombre: nombreNorm,
+              slug: slugFinal,
+              descripcion: 'Marca sincronizada automáticamente desde catálogo de modelos OEM',
+              es_fabricante_oem: true,
+              activo: true,
+            },
+          });
+          nombresSet.add(nombreNorm);
+          slugsSet.add(slugFinal);
+          creadas++;
+        }
+      }
+    } catch {
+      // Ignorar si la tabla no está accesible
+    }
+
+    if (creadas > 0) {
+      this.logger.log(`Catálogo Maestro de Marcas inicializado: ${creadas} nuevas marcas OEM sembradas.`);
+    }
+  }
 
   /**
    * Búsqueda rápida optimizada para Comboboxes y selectores de catálogo.
@@ -115,9 +250,19 @@ export class MarcasService {
     });
 
     if (existente) {
-      throw new ConflictException(
-        `Ya existe una marca registrada con el nombre '${existente.nombre}' (ID: ${existente.id_marca}).`,
-      );
+      this.logger.log(`Marca ya existente detectada: '${existente.nombre}' (ID: ${existente.id_marca}). Retornando registro existente.`);
+      return {
+        id_marca: existente.id_marca,
+        nombre: existente.nombre,
+        slug: existente.slug,
+        descripcion: existente.descripcion,
+        pais_origen: existente.pais_origen,
+        sitio_web: existente.sitio_web,
+        logo_url: existente.logo_url,
+        es_fabricante_oem: existente.es_fabricante_oem,
+        activo: existente.activo,
+        fecha_creacion: existente.fecha_creacion,
+      };
     }
 
     // 2. Generación o validación de slug único

@@ -27,6 +27,7 @@ export interface Marca {
   id_marca: number;
   nombre: string;
   slug?: string;
+  descripcion?: string | null;
   pais_origen?: string | null;
   es_fabricante_oem: boolean;
   sitio_web?: string | null;

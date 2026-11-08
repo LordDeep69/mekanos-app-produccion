@@ -34,6 +34,7 @@ import {
   parseOpcionesSeguras,
 } from '../utils/eam-humanizer';
 import { EamSelect, EamUomSelect } from './EamSelect';
+import { MarcaCombobox } from './MarcaCombobox';
 
 const getDynamicNumericPlaceholder = (codigo: string, nombre: string): string => {
   const c = (codigo || '').toLowerCase();
@@ -640,6 +641,21 @@ export function DynamicEquipmentFormPreview({
                                       )
                                     }
                                     className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                                  />
+                                ) : attr.codigo_atributo === 'marca' ||
+                                  attr.codigo_atributo.startsWith('marca_') ||
+                                  attr.rol_semantico === 'MARCA_PRINCIPAL' ? (
+                                  <MarcaCombobox
+                                    size="sm"
+                                    value={val}
+                                    onChange={(newVal) =>
+                                      handleFieldChange(
+                                        mod.codigo_modulo,
+                                        attr.codigo_atributo,
+                                        newVal,
+                                      )
+                                    }
+                                    placeholder="Buscar o registrar marca..."
                                   />
                                 ) : (
                                   <input

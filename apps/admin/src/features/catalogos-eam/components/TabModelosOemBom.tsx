@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { DynamicModularSpecsEditor } from '@/features/equipos/components/DynamicModularSpecsEditor';
 import {
   AtributoTecnico,
+  MarcaCombobox,
   ModeloEquipoOem,
   ROLES_BOM_OPTIONS,
   getModuloBadgeInfo,
@@ -192,6 +193,7 @@ export function TabModelosOemBom() {
 
   const handleMarcaChange = (val: string) => {
     const nuevaMarca = val.toUpperCase();
+    const oldMarca = modeloForm.marca;
     const nuevoCodigo = isAutoCodigo
       ? sugerirCodigoModelo(nuevaMarca, modeloForm.modelo, todosLosModelos.length > 0 ? todosLosModelos : modelos, editingModelo?.id_modelo_equipo)
       : modeloForm.codigo_modelo;
@@ -205,10 +207,30 @@ export function TabModelosOemBom() {
       codigo_modelo: nuevoCodigo,
       nombre_comercial: nuevoNombre,
     }));
+
+    // Herencia en tiempo real: sincronizar con subsistemas que estén vacíos o coincidieran con la marca anterior
+    setCreateSpecsModulos((prev) => {
+      const next = { ...prev };
+      let updated = false;
+      for (const [modKey, fields] of Object.entries(next)) {
+        const modFields = { ...fields };
+        for (const [fieldKey, fieldVal] of Object.entries(modFields)) {
+          if (fieldKey === 'marca' || fieldKey.startsWith('marca_')) {
+            if (!fieldVal || fieldVal === oldMarca) {
+              modFields[fieldKey] = nuevaMarca;
+              updated = true;
+            }
+          }
+        }
+        next[modKey] = modFields;
+      }
+      return updated ? next : prev;
+    });
   };
 
   const handleModeloChange = (val: string) => {
     const nuevoModelo = val;
+    const oldModelo = modeloForm.modelo;
     const nuevoCodigo = isAutoCodigo
       ? sugerirCodigoModelo(modeloForm.marca, nuevoModelo, todosLosModelos.length > 0 ? todosLosModelos : modelos, editingModelo?.id_modelo_equipo)
       : modeloForm.codigo_modelo;
@@ -222,6 +244,25 @@ export function TabModelosOemBom() {
       codigo_modelo: nuevoCodigo,
       nombre_comercial: nuevoNombre,
     }));
+
+    // Herencia en tiempo real: sincronizar con subsistemas que estén vacíos o coincidieran con el modelo anterior
+    setCreateSpecsModulos((prev) => {
+      const next = { ...prev };
+      let updated = false;
+      for (const [modKey, fields] of Object.entries(next)) {
+        const modFields = { ...fields };
+        for (const [fieldKey, fieldVal] of Object.entries(modFields)) {
+          if (fieldKey === 'modelo' || fieldKey.startsWith('modelo_')) {
+            if (!fieldVal || fieldVal === oldModelo) {
+              modFields[fieldKey] = nuevoModelo;
+              updated = true;
+            }
+          }
+        }
+        next[modKey] = modFields;
+      }
+      return updated ? next : prev;
+    });
   };
 
   const handleTipoChange = (newIdTipo: string) => {
@@ -858,13 +899,11 @@ export function TabModelosOemBom() {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Marca del Fabricante *
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej: TRANE, CUMMINS, GOULDS..."
+                  <MarcaCombobox
                     value={modeloForm.marca}
-                    onChange={(e) => handleMarcaChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold uppercase shadow-2xs focus:ring-2 focus:ring-blue-500"
+                    onChange={(nueva) => handleMarcaChange(nueva)}
+                    placeholder="Buscar o registrar marca (ej: OTIS, TRANE)..."
+                    required
                   />
                 </div>
                 <div>
@@ -1081,6 +1120,11 @@ export function TabModelosOemBom() {
                               [mod]: { ...(prev[mod] || {}), [attr]: convertedVal },
                             }));
                           }
+                        }}
+                        modeloOemActivo={{
+                          marca: modeloForm.marca,
+                          modelo: modeloForm.modelo,
+                          nombre_comercial: modeloForm.nombre_comercial,
                         }}
                       />
                     </div>

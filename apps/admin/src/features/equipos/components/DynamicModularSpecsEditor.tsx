@@ -23,6 +23,7 @@
 import {
   EamSelect,
   EamUomSelect,
+  MarcaCombobox,
   getModuloBadgeInfo,
   getTipoControlHumano,
   parseOpcionesSeguras,
@@ -56,6 +57,7 @@ import {
   Flame,
   Gauge,
   Layers,
+  Link2,
   Loader2,
   Pencil,
   Scale,
@@ -242,6 +244,41 @@ export function DynamicModularSpecsEditor({
       setActiveModuloCode(modulos[0].codigo_modulo);
     }
   }, [modulos, activeModuloCode]);
+
+  // Herencia automática en tiempo real: Encabezado Modelo OEM -> Subsistemas
+  useEffect(() => {
+    if (!modeloOemActivo || !esquema?.modulos) return;
+    const marcaOem = modeloOemActivo.marca?.trim().toUpperCase();
+    const modeloOem = modeloOemActivo.modelo?.trim();
+
+    for (const mod of esquema.modulos) {
+      for (const grp of mod.grupos) {
+        for (const attr of grp.atributos) {
+          const cMod = mod.codigo_modulo;
+          const cAttr = attr.codigo_atributo;
+          const val = modulosValues[cMod]?.[cAttr];
+
+          const isMarca =
+            cAttr === 'marca' ||
+            cAttr.startsWith('marca_') ||
+            attr.rol_semantico === 'MARCA_PRINCIPAL';
+
+          const isModelo =
+            cAttr === 'modelo' ||
+            cAttr.startsWith('modelo_') ||
+            attr.rol_semantico === 'MODELO_PRINCIPAL';
+
+          if (isMarca && marcaOem && (val === '' || val === undefined || val === null)) {
+            onChangeValor(cMod, cAttr, marcaOem, 'MODELO');
+          }
+
+          if (isModelo && modeloOem && (val === '' || val === undefined || val === null)) {
+            onChangeValor(cMod, cAttr, modeloOem, 'MODELO');
+          }
+        }
+      }
+    }
+  }, [esquema, modeloOemActivo?.marca, modeloOemActivo?.modelo]);
 
   // Diccionario de factores afines combinando magnitudes del Hub + respaldo
   const mapaUnidades = useMemo(() => {
@@ -470,6 +507,32 @@ export function DynamicModularSpecsEditor({
 
                   const opciones = parseOpcionesSeguras(attr.opciones);
 
+                  const isMarcaField =
+                    codigoAttr === 'marca' ||
+                    codigoAttr.startsWith('marca_') ||
+                    attr.rol_semantico === 'MARCA_PRINCIPAL';
+
+                  const isModeloField =
+                    codigoAttr === 'modelo' ||
+                    codigoAttr.startsWith('modelo_') ||
+                    attr.rol_semantico === 'MODELO_PRINCIPAL';
+
+                  const isVinculadoOemMarca = Boolean(
+                    isMarcaField &&
+                      modeloOemActivo?.marca &&
+                      valActual &&
+                      String(valActual).trim().toUpperCase() === modeloOemActivo.marca.trim().toUpperCase(),
+                  );
+
+                  const isVinculadoOemModelo = Boolean(
+                    isModeloField &&
+                      modeloOemActivo?.modelo &&
+                      valActual &&
+                      String(valActual).trim().toUpperCase() === modeloOemActivo.modelo.trim().toUpperCase(),
+                  );
+
+                  const isVinculadoOem = isVinculadoOemMarca || isVinculadoOemModelo;
+
                   return (
                     <div
                       key={codigoAttr}
@@ -497,6 +560,24 @@ export function DynamicModularSpecsEditor({
                         </label>
 
                         <div className="flex items-center gap-1 shrink-0">
+                          {isVinculadoOem && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 shadow-2xs"
+                              title="Valor vinculado y sincronizado automáticamente con el modelo OEM principal"
+                            >
+                              <Link2 className="h-2.5 w-2.5 text-blue-600" />
+                              Vinculado al Modelo OEM
+                            </span>
+                          )}
+                          {!isVinculadoOem && isMarcaField && valActual && modeloOemActivo?.marca && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shadow-2xs"
+                              title="Marca personalizada específica para este subsistema"
+                            >
+                              <Pencil className="h-2.5 w-2.5 text-amber-600" />
+                              Personalizado
+                            </span>
+                          )}
                           {attr.es_kpi && (
                             <span
                               className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-0.5 shadow-2xs"
@@ -506,7 +587,7 @@ export function DynamicModularSpecsEditor({
                               KPI
                             </span>
                           )}
-                          {origen === 'MODELO' && valActual !== '' && (
+                          {origen === 'MODELO' && !isVinculadoOem && valActual !== '' && (
                             <span
                               className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-0.5"
                               title="Valor heredado de la plantilla de Modelo de Fábrica"
@@ -515,7 +596,7 @@ export function DynamicModularSpecsEditor({
                               De fábrica
                             </span>
                           )}
-                          {origen === 'CUSTOM' && valActual !== '' && modeloOemActivo && (
+                          {origen === 'CUSTOM' && !isMarcaField && valActual !== '' && modeloOemActivo && (
                             <span
                               className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5"
                               title="Valor ajustado manualmente para este equipo"
@@ -657,7 +738,44 @@ export function DynamicModularSpecsEditor({
                             placeholder="Seleccionar opción..."
                           />
                         );
-                      })() : (
+                      })() : isMarcaField ? (
+                        <MarcaCombobox
+                          size="sm"
+                          value={valActual ? String(valActual) : ''}
+                          onChange={(nuevaMarca) =>
+                            onChangeValor(codigoMod, codigoAttr, nuevaMarca, 'CUSTOM')
+                          }
+                          placeholder="Seleccionar o registrar marca..."
+                        />
+                      ) : isModeloField ? (
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={valActual === null || valActual === undefined ? '' : String(valActual)}
+                            onChange={(e) =>
+                              onChangeValor(codigoMod, codigoAttr, e.target.value, 'CUSTOM')
+                            }
+                            placeholder={attr.descripcion || 'Ingresar modelo...'}
+                            className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-semibold text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
+                          />
+                          {modeloOemActivo?.modelo &&
+                            (!valActual ||
+                              String(valActual).trim().toUpperCase() !==
+                                modeloOemActivo.modelo.trim().toUpperCase()) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onChangeValor(codigoMod, codigoAttr, modeloOemActivo.modelo, 'MODELO')
+                                }
+                                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Copiar el modelo comercial del encabezado a este subsistema"
+                              >
+                                <Link2 className="h-2.5 w-2.5" />
+                                <span>Usar modelo OEM ({modeloOemActivo.modelo})</span>
+                              </button>
+                            )}
+                        </div>
+                      ) : (
                         <input
                           type="text"
                           value={
