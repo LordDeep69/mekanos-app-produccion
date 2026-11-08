@@ -33,6 +33,7 @@ import {
   getModuloBadgeInfo,
   parseOpcionesSeguras,
 } from '../utils/eam-humanizer';
+import { EamSelect, EamUomSelect } from './EamSelect';
 
 const getDynamicNumericPlaceholder = (codigo: string, nombre: string): string => {
   const c = (codigo || '').toLowerCase();
@@ -324,18 +325,23 @@ export function DynamicEquipmentFormPreview({
               <span className="text-[11px] font-semibold text-slate-300">
                 Pre-llenar con Modelo:
               </span>
-              <select
-                value={selectedOemId}
-                onChange={(e) => handleSelectOemModel(e.target.value)}
-                className="bg-slate-900 text-white text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-600 focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Formulario en Blanco --</option>
-                {modelosDelArquetipo.map((m) => (
-                  <option key={m.id_modelo_equipo} value={m.id_modelo_equipo}>
-                    {m.marca} {m.modelo}
-                  </option>
-                ))}
-              </select>
+              <div className="w-56">
+                <EamSelect
+                  variant="dark"
+                  size="sm"
+                  value={selectedOemId}
+                  options={[
+                    { value: '', label: '-- Formulario en Blanco --' },
+                    ...modelosDelArquetipo.map((m) => ({
+                      value: String(m.id_modelo_equipo),
+                      label: `${m.marca} ${m.modelo}`,
+                      badge: m.nombre_comercial ? m.nombre_comercial : undefined,
+                    })),
+                  ]}
+                  onChange={(val) => handleSelectOemModel(val)}
+                  placeholder="-- Formulario en Blanco --"
+                />
+              </div>
             </div>
           )}
 
@@ -525,28 +531,25 @@ export function DynamicEquipmentFormPreview({
                                     </button>
                                   </div>
                                 ) : ctrl === 'SELECTOR' || ctrl === 'SELECT' ? (
-                                  <select
+                                  <EamSelect
                                     value={String(val)}
-                                    onChange={(e) =>
+                                    onChange={(selectedVal) =>
                                       handleFieldChange(
                                         mod.codigo_modulo,
                                         attr.codigo_atributo,
-                                        e.target.value,
+                                        selectedVal,
                                       )
                                     }
-                                    className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-slate-50/70 focus:bg-white text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="">-- Seleccionar opción --</option>
-                                    {opciones.map((op) => (
-                                      <option key={op.key} value={op.value}>
-                                        {op.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    options={opciones.map((op) => ({
+                                      value: op.value,
+                                      label: op.label,
+                                    }))}
+                                    placeholder="-- Seleccionar opción --"
+                                  />
                                 ) : ctrl === 'NUMERICO_MAGNITUD' ||
                                   (attr.unidades_disponibles &&
                                     attr.unidades_disponibles.length > 0) ? (
-                                  <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                                  <div className="flex items-center rounded-xl border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
                                     <input
                                       type="number"
                                       step="any"
@@ -561,33 +564,17 @@ export function DynamicEquipmentFormPreview({
                                       }
                                       className="w-full h-9 px-3 text-xs font-bold text-slate-900 border-0 focus:ring-0 focus:outline-none"
                                     />
-                                    {attr.unidades_disponibles &&
-                                    attr.unidades_disponibles.length > 0 ? (
-                                      <select
-                                        value={activeUnit}
-                                        onChange={(e) =>
-                                          handleUnitChange(
-                                            mod.codigo_modulo,
-                                            attr.codigo_atributo,
-                                            e.target.value,
-                                          )
-                                        }
-                                        className="h-9 px-2.5 bg-blue-50 border-l border-slate-300 text-blue-800 font-bold text-xs focus:outline-none cursor-pointer"
-                                        title="Cambiar unidad convierte automáticamente el valor numérico"
-                                      >
-                                        {attr.unidades_disponibles.map((u) => (
-                                          <option key={u.codigo} value={u.codigo}>
-                                            {u.simbolo || u.codigo}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      activeUnit && (
-                                        <span className="h-9 px-2.5 bg-slate-100 border-l border-slate-300 text-slate-700 font-bold text-xs flex items-center">
-                                          {activeUnit}
-                                        </span>
-                                      )
-                                    )}
+                                    <EamUomSelect
+                                      value={activeUnit}
+                                      units={attr.unidades_disponibles}
+                                      onChange={(newUnitCode) =>
+                                        handleUnitChange(
+                                          mod.codigo_modulo,
+                                          attr.codigo_atributo,
+                                          newUnitCode,
+                                        )
+                                      }
+                                    />
                                   </div>
                                 ) : ctrl === 'NUMERICO_PURO' || ctrl === 'NUMERICO' ? (
                                   <input

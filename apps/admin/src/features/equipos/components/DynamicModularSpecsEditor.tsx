@@ -21,6 +21,8 @@
 'use client';
 
 import {
+  EamSelect,
+  EamUomSelect,
   getModuloBadgeInfo,
   getTipoControlHumano,
   parseOpcionesSeguras,
@@ -544,15 +546,15 @@ export function DynamicModularSpecsEditor({
                               placeholder={getDynamicNumericPlaceholder(
                                 attr.codigo_atributo,
                                 attr.nombre_atributo,
-                                attr.valor_defecto,
+                                attr.valor_defecto || undefined,
                               )}
                               className="w-full px-3 py-2 text-xs font-mono font-bold text-slate-900 border-0 focus:ring-0 focus:outline-none"
                             />
                             {attr.unidades_disponibles && attr.unidades_disponibles.length > 0 ? (
-                              <select
+                              <EamUomSelect
                                 value={unidadActual}
-                                onChange={(e) => {
-                                  const nuevaU = e.target.value;
+                                units={attr.unidades_disponibles}
+                                onChange={(nuevaU) => {
                                   const convertido = convertirValorEnVivo(
                                     valActual,
                                     unidadActual,
@@ -560,15 +562,7 @@ export function DynamicModularSpecsEditor({
                                   );
                                   onChangeUnidad(codigoMod, codigoAttr, nuevaU, convertido);
                                 }}
-                                className="bg-slate-50 hover:bg-slate-100 border-l border-slate-200 px-2.5 py-2 text-xs font-bold text-blue-900 cursor-pointer focus:ring-0 focus:outline-none transition-colors"
-                                title="Cambiar unidad (convierte el valor en vivo automáticamente)"
-                              >
-                                {attr.unidades_disponibles.map((u) => (
-                                  <option key={u.codigo} value={u.codigo}>
-                                    {u.simbolo || u.codigo}
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             ) : unidadActual ? (
                               <span className="bg-slate-50 border-l border-slate-200 px-2.5 py-2 text-xs font-mono font-bold text-slate-600 flex items-center">
                                 {unidadActual}
@@ -603,7 +597,7 @@ export function DynamicModularSpecsEditor({
                           placeholder={getDynamicNumericPlaceholder(
                             attr.codigo_atributo,
                             attr.nombre_atributo,
-                            attr.valor_defecto,
+                            attr.valor_defecto || undefined,
                           )}
                           className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-mono font-bold text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
                         />
@@ -651,20 +645,17 @@ export function DynamicModularSpecsEditor({
                         const selectVal = matchedOp ? matchedOp.value : (valActual === null || valActual === undefined ? '' : String(valActual));
 
                         return (
-                          <select
+                          <EamSelect
                             value={selectVal}
-                            onChange={(e) =>
-                              onChangeValor(codigoMod, codigoAttr, e.target.value, 'CUSTOM')
+                            onChange={(val) =>
+                              onChangeValor(codigoMod, codigoAttr, val, 'CUSTOM')
                             }
-                            className="w-full px-3 py-2 bg-white border border-slate-300/90 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none cursor-pointer"
-                          >
-                            <option value="">Seleccionar opción...</option>
-                            {opciones.map((op) => (
-                              <option key={op.key} value={op.value}>
-                                {op.label}
-                              </option>
-                            ))}
-                          </select>
+                            options={opciones.map((op) => ({
+                              value: op.value,
+                              label: op.label,
+                            }))}
+                            placeholder="Seleccionar opción..."
+                          />
                         );
                       })() : (
                         <input
