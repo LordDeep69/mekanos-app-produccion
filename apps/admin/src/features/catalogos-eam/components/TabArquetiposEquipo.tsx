@@ -55,6 +55,69 @@ import {
   useVincularModuloArquetipoEam,
 } from '../index';
 
+export const MACRO_CATEGORIAS_INDUSTRIALES = [
+  'Generación de Energía y Respaldo Eléctrico',
+  'Bombeo, Redes Hidráulicas y Presión',
+  'Aire Comprimido y Sistemas Neumáticos',
+  'Climatización, Refrigeración y HVAC',
+  'Transporte Vertical, Elevación y Carga',
+  'Transformación Eléctrica y Subestaciones',
+  'Mecánica Pesada y Flotas Móviles',
+  'Líneas de Producción, Envasado y Manufactura',
+  'Otra Maquinaria Industrial',
+] as const;
+
+export const PRESETS_MEDIDOR_USO = [
+  {
+    id: 'HORAS',
+    label: 'Horómetro (Horas de Operación)',
+    unidad: 'HORAS',
+    etiqueta: 'Horómetro',
+    requiere_horometro: true,
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+  },
+  {
+    id: 'CICLOS',
+    label: 'Ciclos / Maniobras / Viajes',
+    unidad: 'CICLOS',
+    etiqueta: 'Ciclos de Viaje',
+    requiere_horometro: true,
+    badgeClass: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+  },
+  {
+    id: 'KM_ODO',
+    label: 'Odómetro (Kilómetros de Recorrido)',
+    unidad: 'KM_ODO',
+    etiqueta: 'Odómetro',
+    requiere_horometro: true,
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  },
+  {
+    id: 'UPM',
+    label: 'Producción (Unidades / Envases)',
+    unidad: 'UPM',
+    etiqueta: 'Contador de Producción',
+    requiere_horometro: true,
+    badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+  },
+  {
+    id: 'NA',
+    label: 'Sin Contador / No Aplica',
+    unidad: 'UND',
+    etiqueta: 'N/A',
+    requiere_horometro: false,
+    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+  },
+  {
+    id: 'CUSTOM',
+    label: 'Personalizado...',
+    unidad: '',
+    etiqueta: '',
+    requiere_horometro: true,
+    badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+  },
+] as const;
+
 export function TabArquetiposEquipo() {
   const { data: arquetiposRaw = [], isLoading } = useArquetiposEam();
   const { data: modulosDisponibles = [] } = useModulosEam();
@@ -130,7 +193,12 @@ export function TabArquetiposEquipo() {
   const [arqForm, setArqForm] = useState({
     codigo_tipo: '',
     nombre_tipo: '',
-    categoria: 'CLIMATIZACION',
+    categoria: 'Transporte Vertical, Elevación y Carga',
+    categoria_custom: '',
+    is_custom_categoria: false,
+    medidor_preset: 'HORAS',
+    unidad_uso: 'HORAS',
+    etiqueta_contador: 'Horómetro',
     descripcion: '',
     requiere_horometro: true,
   });
@@ -142,7 +210,12 @@ export function TabArquetiposEquipo() {
   const [editArqForm, setEditArqForm] = useState({
     codigo_tipo: '',
     nombre_tipo: '',
-    categoria: 'CLIMATIZACION',
+    categoria: 'Transporte Vertical, Elevación y Carga',
+    categoria_custom: '',
+    is_custom_categoria: false,
+    medidor_preset: 'HORAS',
+    unidad_uso: 'HORAS',
+    etiqueta_contador: 'Horómetro',
     descripcion: '',
     requiere_horometro: true,
   });
@@ -281,7 +354,20 @@ export function TabArquetiposEquipo() {
 
   const handleSaveNewArq = async (e: React.FormEvent) => {
     e.preventDefault();
-    const created = await createArqMut.mutateAsync(arqForm);
+    const finalCategoria = arqForm.is_custom_categoria
+      ? (arqForm.categoria_custom.trim() || 'Otra Maquinaria Industrial')
+      : arqForm.categoria;
+
+    const created = await createArqMut.mutateAsync({
+      codigo_tipo: arqForm.codigo_tipo.trim().toUpperCase(),
+      prefijo_codigo: arqForm.codigo_tipo.trim().toUpperCase(),
+      nombre_tipo: arqForm.nombre_tipo.trim(),
+      categoria: finalCategoria,
+      descripcion: arqForm.descripcion?.trim() || undefined,
+      requiere_horometro: arqForm.requiere_horometro,
+      unidad_uso: arqForm.unidad_uso,
+      etiqueta_contador: arqForm.etiqueta_contador,
+    });
     setSelectedArqId(created.id_tipo_equipo);
     setShowNewArqModal(false);
   };
@@ -289,12 +375,31 @@ export function TabArquetiposEquipo() {
   const handleOpenEditArq = (arq: ArquetipoEquipo) => {
     setEditingArq(arq);
     setEditArqError(null);
+    const existingCat = arq.categoria || 'Generación de Energía y Respaldo Eléctrico';
+    const isStandardCat = MACRO_CATEGORIAS_INDUSTRIALES.includes(existingCat as any);
+
+    const preset = PRESETS_MEDIDOR_USO.find(
+      (p) => p.unidad === arq.unidad_uso && p.etiqueta === arq.etiqueta_contador,
+    );
+    const presetId = preset
+      ? preset.id
+      : arq.requiere_horometro === false
+        ? 'NA'
+        : arq.unidad_uso || arq.etiqueta_contador
+          ? 'CUSTOM'
+          : 'HORAS';
+
     setEditArqForm({
       codigo_tipo: arq.codigo_corto || arq.codigo_tipo,
       nombre_tipo: arq.nombre_canonico || arq.nombre_tipo,
-      categoria: arq.categoria || 'CLIMATIZACION',
+      categoria: isStandardCat ? existingCat : 'OTRA_CUSTOM',
+      categoria_custom: isStandardCat ? '' : existingCat,
+      is_custom_categoria: !isStandardCat,
+      medidor_preset: presetId,
+      unidad_uso: arq.unidad_uso || (preset ? preset.unidad : 'HORAS'),
+      etiqueta_contador: arq.etiqueta_contador || (preset ? preset.etiqueta : 'Horómetro'),
       descripcion: arq.descripcion || '',
-      requiere_horometro: Boolean(arq.requiere_horometro),
+      requiere_horometro: Boolean(arq.requiere_horometro ?? true),
     });
     setShowEditArqModal(true);
   };
@@ -304,14 +409,21 @@ export function TabArquetiposEquipo() {
     if (!editingArq) return;
     try {
       setEditArqError(null);
+      const finalCategoria = editArqForm.is_custom_categoria
+        ? (editArqForm.categoria_custom.trim() || 'Otra Maquinaria Industrial')
+        : editArqForm.categoria;
+
       await updateArqMut.mutateAsync({
         idTipoEquipo: editingArq.id_tipo_equipo,
         payload: {
           codigo_tipo: editArqForm.codigo_tipo.trim().toUpperCase(),
+          prefijo_codigo: editArqForm.codigo_tipo.trim().toUpperCase(),
           nombre_tipo: editArqForm.nombre_tipo.trim(),
-          categoria: editArqForm.categoria,
+          categoria: finalCategoria,
           descripcion: editArqForm.descripcion?.trim() || undefined,
           requiere_horometro: editArqForm.requiere_horometro,
+          unidad_uso: editArqForm.unidad_uso,
+          etiqueta_contador: editArqForm.etiqueta_contador,
         },
       });
       setShowEditArqModal(false);
@@ -536,9 +648,13 @@ export function TabArquetiposEquipo() {
                       {arq.nombre_canonico || arq.nombre_tipo}
                     </h4>
                     <div className="flex items-center gap-1 shrink-0">
-                      {arq.requiere_horometro && (
-                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
-                          Horómetro
+                      {arq.requiere_horometro === false ? (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
+                          Sin Contador
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200">
+                          {arq.etiqueta_contador || 'Horómetro'}
                         </span>
                       )}
                       <button
@@ -571,7 +687,7 @@ export function TabArquetiposEquipo() {
                       Código: {codigoLimpio}
                     </span>
                     {arq.categoria && (
-                      <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-500 text-[10px] font-medium border border-slate-200">
+                      <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-600 text-[10px] font-medium border border-slate-200" title={arq.categoria}>
                         {arq.categoria}
                       </span>
                     )}
@@ -833,18 +949,18 @@ export function TabArquetiposEquipo() {
       {/* MODAL NUEVO TIPO DE EQUIPO */}
       {showNewArqModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h4 className="text-base font-bold text-slate-900">Crear Nuevo Tipo de Equipo</h4>
               <button
                 type="button"
                 onClick={() => setShowNewArqModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSaveNewArq} className="p-6 space-y-4">
+            <form onSubmit={handleSaveNewArq} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Nombre del Tipo de Equipo *
@@ -852,7 +968,7 @@ export function TabArquetiposEquipo() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej: Unidad Enfriadora de Agua (Chiller)"
+                  placeholder="Ej: Ascensor de Pasajeros, Puente Grúa..."
                   value={arqForm.nombre_tipo}
                   onChange={(e) => {
                     const nombre = e.target.value;
@@ -868,10 +984,11 @@ export function TabArquetiposEquipo() {
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium"
                 />
               </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-slate-700">
-                    Código Corto Identificador *
+                    Código Corto Identificador / Prefijo TAG *
                   </label>
                   <button
                     type="button"
@@ -893,10 +1010,10 @@ export function TabArquetiposEquipo() {
                   type="text"
                   required
                   disabled={isAutoCodigoTipo}
-                  placeholder="Ej: CHILLER"
+                  placeholder="Ej: ELEV, GEN, HVAC"
                   value={arqForm.codigo_tipo}
                   onChange={(e) =>
-                    setArqForm({ ...arqForm, codigo_tipo: e.target.value.toUpperCase() })
+                    setArqForm({ ...arqForm, codigo_tipo: e.target.value.toUpperCase().replace(/\s+/g, '_') })
                   }
                   className={`w-full px-3.5 py-2 rounded-xl border font-mono text-sm transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
                     isCodigoTipoDuplicado
@@ -914,29 +1031,129 @@ export function TabArquetiposEquipo() {
                   </p>
                 ) : isAutoCodigoTipo ? (
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Generado automáticamente a partir del nombre con garantía de unicidad.
+                    Prefijo conciso de 3 a 5 letras para TAGs de equipos (ej: ELEV-001).
                   </p>
                 ) : null}
               </div>
+
+              {/* Selector de Macro-Categoría Industrial Universal */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Categoría</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Macro-Categoría Industrial *
+                </label>
                 <select
-                  value={arqForm.categoria}
-                  onChange={(e) => setArqForm({ ...arqForm, categoria: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                  value={arqForm.is_custom_categoria ? 'OTRA_CUSTOM' : arqForm.categoria}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'OTRA_CUSTOM') {
+                      setArqForm({ ...arqForm, is_custom_categoria: true });
+                    } else {
+                      setArqForm({ ...arqForm, categoria: val, is_custom_categoria: false });
+                    }
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-medium"
                 >
-                  <option value="CLIMATIZACION">Climatización y Refrigeración</option>
-                  <option value="ENERGIA">Generación de Energía</option>
-                  <option value="HIDRAULICA">Bombeo e Hidráulica</option>
-                  <option value="COMPRESION">Aire Comprimido y Neumática</option>
-                  <option value="OTRO">Otra Maquinaria Industrial</option>
+                  {MACRO_CATEGORIAS_INDUSTRIALES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                  <option value="OTRA_CUSTOM">+ Otra categoría personalizada...</option>
                 </select>
+                {arqForm.is_custom_categoria && (
+                  <div className="mt-2 animate-in fade-in duration-150">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Escribe la categoría personalizada..."
+                      value={arqForm.categoria_custom}
+                      onChange={(e) => setArqForm({ ...arqForm, categoria_custom: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-blue-400 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      autoFocus
+                    />
+                  </div>
+                )}
               </div>
+
+              {/* Selector de Medidor de Uso / Contador de Desgaste */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800">
+                    Medidor de Uso / Contador de Desgaste *
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Define la métrica con la que este activo registra su desgaste y ejecuta mantenimientos preventivos.
+                  </p>
+                </div>
+
+                <select
+                  value={arqForm.medidor_preset}
+                  onChange={(e) => {
+                    const presetId = e.target.value;
+                    const preset = PRESETS_MEDIDOR_USO.find((p) => p.id === presetId);
+                    if (preset) {
+                      setArqForm({
+                        ...arqForm,
+                        medidor_preset: presetId,
+                        unidad_uso: preset.unidad,
+                        etiqueta_contador: preset.etiqueta,
+                        requiere_horometro: preset.requiere_horometro,
+                      });
+                    }
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold bg-white text-slate-800"
+                >
+                  {PRESETS_MEDIDOR_USO.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+
+                {arqForm.medidor_preset === 'CUSTOM' && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 animate-in fade-in duration-150">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                        Etiqueta del Contador *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej: Golpes de Troquel"
+                        value={arqForm.etiqueta_contador}
+                        onChange={(e) => setArqForm({ ...arqForm, etiqueta_contador: e.target.value })}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                        Código de Unidad *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej: GOLPES, CYC"
+                        value={arqForm.unidad_uso}
+                        onChange={(e) => setArqForm({ ...arqForm, unidad_uso: e.target.value.toUpperCase() })}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium uppercase font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[10px] text-slate-500 font-medium">Muestra en tarjeta y ficha:</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {arqForm.etiqueta_contador || 'Horómetro'} ({arqForm.unidad_uso || 'HORAS'})
+                  </span>
+                </div>
+              </div>
+
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowNewArqModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -946,9 +1163,11 @@ export function TabArquetiposEquipo() {
                     createArqMut.isPending ||
                     isCodigoTipoDuplicado ||
                     !arqForm.nombre_tipo.trim() ||
-                    !arqForm.codigo_tipo.trim()
+                    !arqForm.codigo_tipo.trim() ||
+                    (arqForm.is_custom_categoria && !arqForm.categoria_custom.trim()) ||
+                    (arqForm.medidor_preset === 'CUSTOM' && (!arqForm.etiqueta_contador.trim() || !arqForm.unidad_uso.trim()))
                   }
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
                 >
                   Guardar Tipo de Equipo
                 </button>
@@ -961,7 +1180,7 @@ export function TabArquetiposEquipo() {
       {/* MODAL EDITAR TIPO DE EQUIPO */}
       {showEditArqModal && editingArq && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
@@ -984,7 +1203,7 @@ export function TabArquetiposEquipo() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSaveEditArq} className="p-6 space-y-4">
+            <form onSubmit={handleSaveEditArq} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               {editArqError && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
                   {editArqError}
@@ -1013,10 +1232,10 @@ export function TabArquetiposEquipo() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej: HVAC"
+                  placeholder="Ej: ELEV, HVAC, GEN"
                   value={editArqForm.codigo_tipo}
                   onChange={(e) =>
-                    setEditArqForm({ ...editArqForm, codigo_tipo: e.target.value.toUpperCase() })
+                    setEditArqForm({ ...editArqForm, codigo_tipo: e.target.value.toUpperCase().replace(/\s+/g, '_') })
                   }
                   className={`w-full px-3.5 py-2 rounded-xl border font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 uppercase transition-colors ${
                     isCodigoEditTipoDuplicado
@@ -1030,53 +1249,122 @@ export function TabArquetiposEquipo() {
                   </p>
                 ) : (
                   <p className="text-[10px] text-slate-400 mt-1">
-                    Se usa como prefijo para numerar los equipos en la plataforma (ej: HVAC-001).
+                    Se usa como prefijo para numerar los equipos en la plataforma (ej: ELEV-001).
                   </p>
                 )}
               </div>
 
+              {/* Selector de Macro-Categoría Industrial */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Categoría</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Macro-Categoría Industrial *
+                </label>
                 <select
-                  value={editArqForm.categoria}
-                  onChange={(e) => setEditArqForm({ ...editArqForm, categoria: e.target.value })}
+                  value={editArqForm.is_custom_categoria ? 'OTRA_CUSTOM' : editArqForm.categoria}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'OTRA_CUSTOM') {
+                      setEditArqForm({ ...editArqForm, is_custom_categoria: true });
+                    } else {
+                      setEditArqForm({ ...editArqForm, categoria: val, is_custom_categoria: false });
+                    }
+                  }}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-medium"
                 >
-                  <option value="CLIMATIZACION">Climatización y Refrigeración</option>
-                  <option value="ENERGIA">Generación de Energía</option>
-                  <option value="HIDRAULICA">Bombeo e Hidráulica</option>
-                  <option value="COMPRESION">Aire Comprimido y Neumática</option>
-                  <option value="OTRO">Otra Maquinaria Industrial</option>
+                  {MACRO_CATEGORIAS_INDUSTRIALES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                  <option value="OTRA_CUSTOM">+ Otra categoría personalizada...</option>
                 </select>
+                {editArqForm.is_custom_categoria && (
+                  <div className="mt-2 animate-in fade-in duration-150">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Escribe la categoría personalizada..."
+                      value={editArqForm.categoria_custom}
+                      onChange={(e) => setEditArqForm({ ...editArqForm, categoria_custom: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-blue-400 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      autoFocus
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between gap-3">
+              {/* Selector de Medidor de Uso / Contador de Desgaste */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
                 <div>
-                  <span className="text-xs font-bold text-slate-800 block">
-                    Requiere Horómetro (Horas de Uso)
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    Habilita el seguimiento de horómetro y rutinas por horas
+                  <label className="block text-xs font-bold text-slate-800">
+                    Medidor de Uso / Contador de Desgaste *
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Define la métrica con la que este activo registra su desgaste y ejecuta mantenimientos preventivos.
+                  </p>
+                </div>
+
+                <select
+                  value={editArqForm.medidor_preset}
+                  onChange={(e) => {
+                    const presetId = e.target.value;
+                    const preset = PRESETS_MEDIDOR_USO.find((p) => p.id === presetId);
+                    if (preset) {
+                      setEditArqForm({
+                        ...editArqForm,
+                        medidor_preset: presetId,
+                        unidad_uso: preset.unidad,
+                        etiqueta_contador: preset.etiqueta,
+                        requiere_horometro: preset.requiere_horometro,
+                      });
+                    }
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold bg-white text-slate-800"
+                >
+                  {PRESETS_MEDIDOR_USO.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+
+                {editArqForm.medidor_preset === 'CUSTOM' && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 animate-in fade-in duration-150">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                        Etiqueta del Contador *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej: Golpes de Troquel"
+                        value={editArqForm.etiqueta_contador}
+                        onChange={(e) => setEditArqForm({ ...editArqForm, etiqueta_contador: e.target.value })}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                        Código de Unidad *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej: GOLPES, CYC"
+                        value={editArqForm.unidad_uso}
+                        onChange={(e) => setEditArqForm({ ...editArqForm, unidad_uso: e.target.value.toUpperCase() })}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium uppercase font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[10px] text-slate-500 font-medium">Muestra en tarjeta y ficha:</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {editArqForm.etiqueta_contador || 'Horómetro'} ({editArqForm.unidad_uso || 'HORAS'})
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setEditArqForm({
-                      ...editArqForm,
-                      requiere_horometro: !editArqForm.requiere_horometro,
-                    })
-                  }
-                  className={`inline-flex items-center w-9 h-5 rounded-full transition-colors shrink-0 ${
-                    editArqForm.requiere_horometro ? 'bg-amber-500' : 'bg-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
-                      editArqForm.requiere_horometro ? 'translate-x-4' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
               </div>
 
               <div>
@@ -1098,13 +1386,20 @@ export function TabArquetiposEquipo() {
                 <button
                   type="button"
                   onClick={() => setShowEditArqModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={updateArqMut.isPending}
+                  disabled={
+                    updateArqMut.isPending ||
+                    isCodigoEditTipoDuplicado ||
+                    !editArqForm.nombre_tipo.trim() ||
+                    !editArqForm.codigo_tipo.trim() ||
+                    (editArqForm.is_custom_categoria && !editArqForm.categoria_custom.trim()) ||
+                    (editArqForm.medidor_preset === 'CUSTOM' && (!editArqForm.etiqueta_contador.trim() || !editArqForm.unidad_uso.trim()))
+                  }
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
                 >
                   {updateArqMut.isPending ? (

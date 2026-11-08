@@ -16,6 +16,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
@@ -61,6 +62,41 @@ const PARES_CANONICOS: Record<number, { primarioId: number; aliasIds: number[]; 
 };
 
 const ALIAS_SECUNDARIOS_OCULTOS = new Set<number>([3, 5, 4]);
+
+const MAPA_CATEGORIAS_HUMANAS: Record<string, string> = {
+  CLIMATIZACION: 'Climatización, Refrigeración y HVAC',
+  ENERGIA: 'Generación de Energía y Respaldo Eléctrico',
+  HIDRAULICA: 'Bombeo, Redes Hidráulicas y Presión',
+  COMPRESION: 'Aire Comprimido y Sistemas Neumáticos',
+  OTRO: 'Otra Maquinaria Industrial',
+};
+
+function resolverCategoriaHumana(t: { categoria?: any; metadata?: any }): string {
+  const meta = t.metadata as Record<string, any> | null;
+  if (meta?.macro_categoria && typeof meta.macro_categoria === 'string') {
+    return meta.macro_categoria;
+  }
+  const rawCat = (t.categoria || 'OTRO').toString().toUpperCase();
+  return MAPA_CATEGORIAS_HUMANAS[rawCat] || rawCat;
+}
+
+function mapearCategoriaDbEnum(catString?: string): 'ENERGIA' | 'HIDRAULICA' | 'CLIMATIZACION' | 'COMPRESION' | 'OTRO' {
+  if (!catString) return 'OTRO';
+  const c = catString.toUpperCase();
+  if (c.includes('ENERGIA') || c.includes('GENERACION') || c.includes('ELECTRICO') || c.includes('SUBESTACION') || c.includes('TRANSFORMACION')) {
+    return 'ENERGIA';
+  }
+  if (c.includes('HIDRAULICA') || c.includes('BOMBEO') || c.includes('PRESION') || c.includes('REDES')) {
+    return 'HIDRAULICA';
+  }
+  if (c.includes('CLIMATIZACION') || c.includes('REFRIGERACION') || c.includes('HVAC') || c.includes('CHILLER')) {
+    return 'CLIMATIZACION';
+  }
+  if (c.includes('COMPRESION') || c.includes('NEUMATICA') || c.includes('AIRE COMPRIMIDO')) {
+    return 'COMPRESION';
+  }
+  return 'OTRO';
+}
 
 @Injectable()
 export class CatalogosEamService implements OnModuleInit {
@@ -1297,6 +1333,8 @@ export class CatalogosEamService implements OnModuleInit {
       }
 
       const par = PARES_CANONICOS[t.id_tipo_equipo];
+      const categoriaHumana = resolverCategoriaHumana(t);
+
       if (par) {
         const idsGrupo = [par.primarioId, ...par.aliasIds];
         let totalEquipos = 0;
@@ -1318,6 +1356,7 @@ export class CatalogosEamService implements OnModuleInit {
 
         resultado.push({
           ...t,
+          categoria: categoriaHumana,
           nombre_canonico: par.nombreCanonico,
           codigo_corto:
             t.id_tipo_equipo === 1 || t.id_tipo_equipo === 3
@@ -1341,6 +1380,7 @@ export class CatalogosEamService implements OnModuleInit {
           t.codigo_tipo === 'COMP' ? 'Compresor de Aire Industrial' : t.nombre_tipo;
         resultado.push({
           ...t,
+          categoria: categoriaHumana,
           nombre_canonico: nombreLimpio,
           codigo_corto: t.codigo_tipo,
           ids_sincronizados: [t.id_tipo_equipo],
@@ -1363,19 +1403,29 @@ export class CatalogosEamService implements OnModuleInit {
       throw new ConflictException(`Ya existe un arquetipo con el código ${codigo}`);
     }
 
+    const categoriaEnum = mapearCategoriaDbEnum(dto.categoria);
+    const prefijo = (dto.prefijo_codigo || codigo).trim().toUpperCase();
+    const macroCategoria = dto.categoria?.trim() || MAPA_CATEGORIAS_HUMANAS[categoriaEnum] || 'Otra Maquinaria Industrial';
+
     return this.prisma.tipos_equipo.create({
       data: {
         codigo_tipo: codigo,
+        prefijo_codigo: prefijo.slice(0, 20),
         nombre_tipo: dto.nombre_tipo.trim(),
-        categoria: (dto.categoria?.trim().toUpperCase() || 'OTRO') as any,
+        categoria: categoriaEnum,
         descripcion: dto.descripcion?.trim() || null,
         requiere_horometro: dto.requiere_horometro ?? true,
+        unidad_uso: dto.unidad_uso?.trim() || 'HORAS',
+        etiqueta_contador: dto.etiqueta_contador?.trim() || 'Horómetro',
         formato_ficha_tecnica: 'FICHA_UNIVERSAL_EAM',
         icono_ui: dto.icono?.trim() || 'cpu',
         color_hex: dto.color?.trim() || '#3B82F6',
         orden: dto.orden ?? 10,
         usa_plantilla_universal: true,
         activo: true,
+        metadata: {
+          macro_categoria: macroCategoria,
+        },
       },
     });
   }
@@ -1398,12 +1448,24 @@ export class CatalogosEamService implements OnModuleInit {
       data.codigo_tipo = code;
       data.prefijo_codigo = code.length <= 20 ? code : code.slice(0, 20);
     }
+    if (dto.prefijo_codigo !== undefined) {
+      data.prefijo_codigo = dto.prefijo_codigo.trim().toUpperCase().slice(0, 20);
+    }
     if (dto.nombre_tipo !== undefined) {
       data.nombre_tipo = dto.nombre_tipo.trim();
     }
-    if (dto.categoria !== undefined) data.categoria = dto.categoria.trim().toUpperCase() as any;
+    if (dto.categoria !== undefined) {
+      data.categoria = mapearCategoriaDbEnum(dto.categoria);
+      const metaActual = (tipo.metadata as Record<string, any>) || {};
+      data.metadata = {
+        ...metaActual,
+        macro_categoria: dto.categoria.trim(),
+      };
+    }
     if (dto.descripcion !== undefined) data.descripcion = dto.descripcion?.trim() || null;
     if (dto.requiere_horometro !== undefined) data.requiere_horometro = dto.requiere_horometro;
+    if (dto.unidad_uso !== undefined) data.unidad_uso = dto.unidad_uso.trim();
+    if (dto.etiqueta_contador !== undefined) data.etiqueta_contador = dto.etiqueta_contador.trim();
     if (dto.icono !== undefined) data.icono_ui = dto.icono?.trim();
     if (dto.color !== undefined) data.color_hex = dto.color?.trim();
     if (dto.orden !== undefined) data.orden = dto.orden;

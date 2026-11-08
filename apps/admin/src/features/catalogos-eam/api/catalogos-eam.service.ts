@@ -147,11 +147,14 @@ export interface ArquetipoEquipo {
   id_tipo_equipo: number;
   codigo_tipo: string;
   codigo_corto?: string;
+  prefijo_codigo?: string | null;
   nombre_tipo: string;
   nombre_canonico?: string;
   categoria?: string | null;
   descripcion?: string | null;
   requiere_horometro: boolean;
+  unidad_uso?: string | null;
+  etiqueta_contador?: string | null;
   icono?: string | null;
   color?: string | null;
   orden?: number | null;
@@ -626,10 +629,13 @@ export async function getArquetipoEsquemaEam(
 
 export async function createArquetipoEam(payload: {
   codigo_tipo: string;
+  prefijo_codigo?: string;
   nombre_tipo: string;
   categoria?: string;
   descripcion?: string;
   requiere_horometro?: boolean;
+  unidad_uso?: string;
+  etiqueta_contador?: string;
   icono?: string;
   color?: string;
   orden?: number;
@@ -643,10 +649,13 @@ export async function updateArquetipoEam(
   payload: {
     codigo_tipo?: string;
     codigo_corto?: string;
+    prefijo_codigo?: string;
     nombre_tipo?: string;
     categoria?: string;
     descripcion?: string;
     requiere_horometro?: boolean;
+    unidad_uso?: string;
+    etiqueta_contador?: string;
     icono?: string;
     color?: string;
     orden?: number;

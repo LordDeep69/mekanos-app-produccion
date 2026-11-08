@@ -171,25 +171,96 @@ export function generarCodigoModeloOem(
   return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
 }
 
+const DICCIONARIO_TAGS_INDUSTRIALES: Array<{ pattern: RegExp; tag: string }> = [
+  { pattern: /\b(ascensor|elevador)\b/, tag: 'ELEV' },
+  { pattern: /\bmontacargas\b/, tag: 'MONT' },
+  { pattern: /\bescalera\b/, tag: 'ESC' },
+  { pattern: /\b(chiller|enfriador|climatizad|aire acondicionado|fan coil|uma|hvac)\b/, tag: 'HVAC' },
+  { pattern: /\b(generador|planta electrica|grupo electrogeno)\b/, tag: 'GEN' },
+  { pattern: /\b(bomba|motobomba|electrobomba)\b/, tag: 'BOM' },
+  { pattern: /\bcompresor\b/, tag: 'COMP' },
+  { pattern: /\b(motor electrico|motor reductor|motoreductor)\b/, tag: 'MOT' },
+  { pattern: /\b(transformador|subestacion)\b/, tag: 'TRAFO' },
+  { pattern: /\b(grua|puente grua|polipasto)\b/, tag: 'GRUA' },
+  { pattern: /\b(caldera|generador de vapor)\b/, tag: 'CALD' },
+  { pattern: /\btorre de enfriamiento\b/, tag: 'TORR' },
+  { pattern: /\b(ventilador|extractor|soplador)\b/, tag: 'VENT' },
+  { pattern: /\b(ups|banco de baterias|inversor)\b/, tag: 'UPS' },
+  { pattern: /\b(tablero|transferencia|ats)\b/, tag: 'ATS' },
+  { pattern: /\b(prensa|troqueladora)\b/, tag: 'PREN' },
+  { pattern: /\b(torno|fresadora|cnc)\b/, tag: 'CNC' },
+  { pattern: /\b(extrusora|inyectora)\b/, tag: 'EXTR' },
+  { pattern: /\b(enfriador de aceite|intercooler)\b/, tag: 'COOL' },
+  { pattern: /\bpurificador\b/, tag: 'PURIF' },
+  { pattern: /\bsecador\b/, tag: 'SEC' },
+];
+
+const STOPWORDS_ES = new Set([
+  'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas',
+  'para', 'en', 'y', 'e', 'o', 'u', 'a', 'al', 'con', 'sin', 'por', 'sobre',
+  'tipo', 'equipo', 'sistema', 'unidad', 'planta', 'maquina', 'maquinaria'
+]);
+
 /**
- * 4. Tipos de Equipo / Arquetipos (VarChar 30, mayúsculas con guiones bajos)
- * Ej: "Unidad Enfriadora de Agua (Chiller)" -> "CHILLER"
+ * 4. Tipos de Equipo / Arquetipos (Prefijo TAG conciso de 3 a 5 letras mayúsculas)
+ * Ej: "Ascensor de Pasajeros" -> "ELEV"
+ * Ej: "Aire Acondicionado (Chiller)" -> "HVAC"
+ * Ej: "Planta Eléctrica Diésel" -> "GEN"
  */
 export function generarCodigoTipoEquipo(
   nombre: string,
   codigosExistentes: Set<string>,
-  maxLen = 30,
+  maxLen = 10,
 ): string {
   if (!nombre.trim()) return '';
+
+  // 1. Si contiene paréntesis conciso (ej: "Ascensor de Pasajeros (ELEV)" o "Tablero (ATS)")
   const matchParentesis = nombre.match(/\(([^)]+)\)/);
-  if (matchParentesis && matchParentesis[1].trim().length >= 2) {
-    const pClean = normalizarTexto(matchParentesis[1]).toUpperCase().replace(/[^A-Z0-9]/g, '_');
-    if (pClean.length >= 2 && !codigosExistentes.has(pClean.toLowerCase())) {
-      return pClean.slice(0, maxLen);
+  if (matchParentesis && matchParentesis[1].trim().length >= 2 && matchParentesis[1].trim().length <= 6) {
+    const pClean = normalizarTexto(matchParentesis[1]).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (pClean.length >= 2) {
+      return resolverColisionDeterminista(pClean, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
     }
   }
-  const base = generarSlugGenerico(nombre, { maxLen, uppercase: true, separator: '_' });
-  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+
+  // 2. Mapeo por diccionario industrial especializado (3-5 letras)
+  const norm = normalizarTexto(nombre);
+  const dictMatch = DICCIONARIO_TAGS_INDUSTRIALES.find((d) => d.pattern.test(norm));
+  if (dictMatch) {
+    return resolverColisionDeterminista(dictMatch.tag, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
+  }
+
+  // 3. Extracción de acrónimo inteligente (3 a 5 letras mayúsculas)
+  const palabras = norm
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter((p) => p.length > 0 && !STOPWORDS_ES.has(p.toLowerCase()));
+
+  let tagCandidato = '';
+
+  if (palabras.length >= 2) {
+    // Acrónimo de iniciales (ej: Banda Transportadora -> BTR)
+    const iniciales = palabras.map((p) => p[0]).join('');
+    if (iniciales.length >= 3 && iniciales.length <= 5) {
+      tagCandidato = iniciales;
+    } else if (iniciales.length < 3) {
+      const consonantes = palabras[0].slice(1).replace(/[AEIOU]/g, '');
+      tagCandidato = (iniciales[0] + consonantes.slice(0, 2) + (iniciales[1] || '')).slice(0, 4);
+    } else {
+      tagCandidato = iniciales.slice(0, 4);
+    }
+  } else if (palabras.length === 1) {
+    const p = palabras[0];
+    if (p.length <= 5) {
+      tagCandidato = p;
+    } else {
+      tagCandidato = p.slice(0, 4);
+    }
+  } else {
+    tagCandidato = 'EQP';
+  }
+
+  return resolverColisionDeterminista(tagCandidato || 'EQP', codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
 }
 
 export const SIMBOLOS_CANONICOS: Record<string, string> = {

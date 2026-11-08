@@ -417,6 +417,11 @@ export class CreateArquetipoDto {
   @MaxLength(30)
   codigo_tipo: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  prefijo_codigo?: string;
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
@@ -424,7 +429,7 @@ export class CreateArquetipoDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  @MaxLength(100)
   categoria?: string;
 
   @IsOptional()
@@ -434,6 +439,16 @@ export class CreateArquetipoDto {
   @IsOptional()
   @IsBoolean()
   requiere_horometro?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  unidad_uso?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  etiqueta_contador?: string;
 
   @IsOptional()
   @IsString()
@@ -464,12 +479,17 @@ export class UpdateArquetipoDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(20)
+  prefijo_codigo?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(100)
   nombre_tipo?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  @MaxLength(100)
   categoria?: string;
 
   @IsOptional()
@@ -479,6 +499,16 @@ export class UpdateArquetipoDto {
   @IsOptional()
   @IsBoolean()
   requiere_horometro?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  unidad_uso?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  etiqueta_contador?: string;
 
   @IsOptional()
   @IsString()
