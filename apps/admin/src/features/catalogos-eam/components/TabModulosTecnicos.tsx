@@ -170,6 +170,21 @@ export function TabModulosTecnicos() {
     visible_en_pdf: true,
   });
 
+  // Modal Editar Asignación de Campo en esta parte (cambiar sección o switches)
+  const [editingAssignment, setEditingAssignment] = useState<ModuloAtributoItem | null>(null);
+  const [editAssignSectionMode, setEditAssignSectionMode] = useState<'existing' | 'new'>('existing');
+  const [editAssignNewSection, setEditAssignNewSection] = useState('');
+  const [editAssignForm, setEditAssignForm] = useState({
+    grupo_visual: 'Especificaciones Técnicas',
+    obligatorio: false,
+    es_kpi: false,
+    es_filtrable: true,
+    visible_en_pdf: true,
+  });
+
+  // Modal Confirmación Prémium para Quitar Campo de Parte
+  const [unassignTarget, setUnassignTarget] = useState<ModuloAtributoItem | null>(null);
+
   // Drag & Drop state para reordenar campos
   const dragRowRef = useRef<{ grupoNombre: string; idx: number } | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<{ grupoNombre: string; idx: number } | null>(null);
@@ -358,6 +373,57 @@ export function TabModulosTecnicos() {
         [field]: !item[field],
       },
     });
+  };
+
+  const handleOpenEditAssignment = (ma: ModuloAtributoItem) => {
+    setEditingAssignment(ma);
+    const sec = ma.grupo_visual || 'Especificaciones Técnicas';
+    setEditAssignSectionMode('existing');
+    setEditAssignNewSection('');
+    setEditAssignForm({
+      grupo_visual: sec,
+      obligatorio: Boolean(ma.obligatorio),
+      es_kpi: Boolean(ma.es_kpi),
+      es_filtrable: ma.es_filtrable ?? true,
+      visible_en_pdf: ma.visible_en_pdf ?? true,
+    });
+  };
+
+  const handleSaveEditAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedModuloCode || !editingAssignment) return;
+    const grupoFinal =
+      editAssignSectionMode === 'new'
+        ? editAssignNewSection.trim()
+        : editAssignForm.grupo_visual;
+    if (!grupoFinal) return;
+
+    await updateFlagMut.mutateAsync({
+      codigoModulo: selectedModuloCode,
+      idAtributo: editingAssignment.id_atributo,
+      payload: {
+        grupo_visual: grupoFinal,
+        obligatorio: editAssignForm.obligatorio,
+        es_kpi: editAssignForm.es_kpi,
+        es_filtrable: editAssignForm.es_filtrable,
+        visible_en_pdf: editAssignForm.visible_en_pdf,
+      },
+    });
+
+    setEditingAssignment(null);
+  };
+
+  const handleConfirmUnassign = async () => {
+    if (!unassignTarget || !moduloDetalle) return;
+    try {
+      await desasignarMut.mutateAsync({
+        codigoModulo: moduloDetalle.codigo_modulo,
+        idAtributo: unassignTarget.id_atributo,
+      });
+      setUnassignTarget(null);
+    } catch (err) {
+      console.error('Error desasignando campo:', err);
+    }
   };
 
   // ----- Drag & Drop: Reordenar campos dentro de una sección -----
@@ -977,7 +1043,7 @@ export function TabModulosTecnicos() {
                           <th className="py-3 px-3 text-center">Permitir Filtrar</th>
                           <th className="py-3 px-3 text-center">Destacar en Tarjeta (KPI)</th>
                           <th className="py-3 px-3 text-center">Imprimir en PDF</th>
-                          <th className="py-3 px-4 text-right">Quitar</th>
+                          <th className="py-3 px-4 text-right">Acciones</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-sm">
@@ -1132,25 +1198,24 @@ export function TabModulosTecnicos() {
                               </td>
 
                               <td className="py-3.5 px-4 text-right">
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (
-                                      window.confirm(
-                                        `¿Quitar el campo "${attr.nombre_atributo}" de esta parte?`,
-                                      )
-                                    ) {
-                                      await desasignarMut.mutateAsync({
-                                        codigoModulo: moduloDetalle.codigo_modulo,
-                                        idAtributo: attr.id_atributo,
-                                      });
-                                    }
-                                  }}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                  title="Quitar campo de esta parte"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditAssignment(ma)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                    title="Editar sección y configuración de este campo en esta parte"
+                                  >
+                                    <Edit3 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setUnassignTarget(ma)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Quitar campo de esta parte"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2219,6 +2284,396 @@ export function TabModulosTecnicos() {
                 <span>Eliminar Definitivamente</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMACIÓN PRÉMIUM PARA QUITAR CAMPO DE ESTA PARTE */}
+      {unassignTarget && moduloDetalle && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-rose-100 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-6 pt-6 pb-4 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-base font-bold text-slate-900">
+                  ¿Quitar Campo de esta Parte?
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Confirmación de desvinculación
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUnassignTarget(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-2 space-y-3.5">
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 truncate">
+                    {unassignTarget.atributo.nombre_atributo}
+                  </span>
+                  <span className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-bold shrink-0">
+                    {unassignTarget.atributo.codigo_atributo}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                  <span>Parte: <strong className="text-slate-700">{moduloDetalle.nombre_modulo}</strong></span>
+                  <span>•</span>
+                  <span>Sección: <strong className="text-slate-700">{unassignTarget.grupo_visual || 'General'}</strong></span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 flex items-start gap-2.5 text-blue-900">
+                <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <strong className="font-bold">No destructivo:</strong> Esta acción únicamente retira este campo de la ficha de <span className="font-medium">{moduloDetalle.nombre_modulo}</span>. El campo técnico y su historial permanecerán intactos en el Catálogo Global (Pestaña 4).
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-end gap-2.5 mt-2">
+              <button
+                type="button"
+                onClick={() => setUnassignTarget(null)}
+                disabled={desasignarMut.isPending}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-white hover:border-slate-400 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUnassign}
+                disabled={desasignarMut.isPending}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
+              >
+                {desasignarMut.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                <span>Sí, Quitar de esta Parte</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR ASIGNACIÓN DE CAMPO EN ESTA PARTE */}
+      {editingAssignment && moduloDetalle && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Cabecera */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <Edit3 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Editar Configuración de Campo
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Parte: <strong className="text-slate-700">{moduloDetalle.nombre_modulo}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAssignment(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditAssignment} className="p-6 space-y-5 overflow-y-auto">
+              {/* Ficha Resumen del Campo */}
+              <div className="p-3.5 rounded-xl bg-blue-50/50 border border-blue-100 flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">
+                    {editingAssignment.atributo.nombre_atributo}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-500">
+                    {editingAssignment.atributo.codigo_atributo}
+                  </span>
+                </div>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border bg-white border-blue-200 text-blue-700">
+                  {getTipoControlHumano(editingAssignment.atributo.tipo_control, Boolean(editingAssignment.atributo.id_magnitud || editingAssignment.atributo.unidad_defecto_codigo)).shortLabel}
+                </span>
+              </div>
+
+              {/* Sección en la Ficha Técnica */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    ¿En qué sección de la ficha debe aparecer?
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {editAssignSectionMode === 'existing' ? (
+                      <span className="text-blue-700 font-bold inline-flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                        <Check className="h-3 w-3 stroke-[3] text-blue-600" />
+                        Sección: {editAssignForm.grupo_visual}
+                      </span>
+                    ) : (
+                      <span className="text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                        Nueva sub-sección personalizada
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                {/* Grid de píldoras de secciones */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {seccionesDisponibles.map((sec) => {
+                    const isActive =
+                      editAssignSectionMode === 'existing' && editAssignForm.grupo_visual === sec.name;
+                    return (
+                      <button
+                        key={sec.name}
+                        type="button"
+                        onClick={() => {
+                          setEditAssignSectionMode('existing');
+                          setEditAssignNewSection('');
+                          setEditAssignForm((prev) => ({ ...prev, grupo_visual: sec.name }));
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          isActive
+                            ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
+                            : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/70 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                              isActive
+                                ? 'border-blue-600 bg-blue-600 text-white'
+                                : 'border-slate-300 bg-white'
+                            }`}
+                          >
+                            {isActive && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-800 block truncate">
+                              {sec.name}
+                            </span>
+                            <span className="text-[10px] text-slate-500">{sec.desc}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {/* Opción "+ Nueva sub-sección" */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditAssignSectionMode('new');
+                      setEditAssignNewSection('');
+                      setEditAssignForm((prev) => ({ ...prev, grupo_visual: '' }));
+                    }}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      editAssignSectionMode === 'new'
+                        ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
+                        : 'bg-slate-50/50 border-dashed border-slate-300 hover:bg-slate-100/70 hover:border-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                          editAssignSectionMode === 'new'
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-slate-300 bg-white'
+                        }`}
+                      >
+                        {editAssignSectionMode === 'new' ? (
+                          <Check className="h-3 w-3 stroke-[3]" />
+                        ) : (
+                          <Plus className="h-3 w-3 text-slate-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-700 block">
+                          + Nueva sub-sección
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Escribir nombre personalizado
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {editAssignSectionMode === 'new' && (
+                  <div className="pt-1.5 animate-in fade-in duration-150">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Escribe el nombre de la nueva sección (ej: Control de Cabina, Guiado...)"
+                      value={editAssignNewSection}
+                      onChange={(e) => {
+                        setEditAssignNewSection(e.target.value);
+                        setEditAssignForm((prev) => ({ ...prev, grupo_visual: e.target.value }));
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-blue-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white shadow-2xs"
+                      autoFocus
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Comportamiento del Campo (4 Switches) */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-800">
+                  Comportamiento del Campo en la Plataforma
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Switch Obligatorio */}
+                  <div
+                    onClick={() =>
+                      setEditAssignForm({ ...editAssignForm, obligatorio: !editAssignForm.obligatorio })
+                    }
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      editAssignForm.obligatorio
+                        ? 'bg-rose-50/70 border-rose-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Obligatorio al Registrar</span>
+                      <span className="text-[10px] text-slate-500">Exige valor al dar de alta el equipo</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        editAssignForm.obligatorio ? 'bg-rose-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          editAssignForm.obligatorio ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switch Permitir Filtrar */}
+                  <div
+                    onClick={() =>
+                      setEditAssignForm({ ...editAssignForm, es_filtrable: !editAssignForm.es_filtrable })
+                    }
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      editAssignForm.es_filtrable
+                        ? 'bg-blue-50/70 border-blue-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Permitir Filtrar</span>
+                      <span className="text-[10px] text-slate-500">Búsqueda avanzada en /equipos</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        editAssignForm.es_filtrable ? 'bg-blue-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          editAssignForm.es_filtrable ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switch Destacar KPI */}
+                  <div
+                    onClick={() =>
+                      setEditAssignForm({ ...editAssignForm, es_kpi: !editAssignForm.es_kpi })
+                    }
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      editAssignForm.es_kpi
+                        ? 'bg-amber-50/70 border-amber-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Destacar en Tarjeta (KPI)</span>
+                      <span className="text-[10px] text-slate-500">Resaltar en cabecera y PDF</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        editAssignForm.es_kpi ? 'bg-amber-500' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          editAssignForm.es_kpi ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Switch Imprimir en PDF */}
+                  <div
+                    onClick={() =>
+                      setEditAssignForm({
+                        ...editAssignForm,
+                        visible_en_pdf: !editAssignForm.visible_en_pdf,
+                      })
+                    }
+                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                      editAssignForm.visible_en_pdf
+                        ? 'bg-emerald-50/70 border-emerald-300 shadow-2xs'
+                        : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Imprimir en PDF</span>
+                      <span className="text-[10px] text-slate-500">Placa técnica del informe de OT</span>
+                    </div>
+                    <div
+                      className={`inline-flex items-center w-8 h-4.5 rounded-full transition-colors shrink-0 ${
+                        editAssignForm.visible_en_pdf ? 'bg-emerald-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full bg-white shadow transform transition-transform ${
+                          editAssignForm.visible_en_pdf ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingAssignment(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateFlagMut.isPending || (editAssignSectionMode === 'new' && !editAssignNewSection.trim())}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                >
+                  {updateFlagMut.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  <span>Guardar Configuración</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
