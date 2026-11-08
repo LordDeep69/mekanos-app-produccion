@@ -37,10 +37,6 @@ export function TabDiccionarioAtributos() {
   const [search, setSearch] = useState('');
   const [isAutoCodigo, setIsAutoCodigo] = useState(true);
 
-  // Universo de códigos existentes para garantizar unicidad determinista
-  const codigosAtributosExistentes = useMemo(() => {
-    return new Set(atributos.map((a) => a.codigo_atributo.toLowerCase()));
-  }, [atributos]);
   const [filtroModulo, setFiltroModulo] = useState('');
   const [filtroMagnitud, setFiltroMagnitud] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
@@ -51,6 +47,11 @@ export function TabDiccionarioAtributos() {
     magnitud: filtroMagnitud || undefined,
     tipoDato: filtroTipo || undefined,
   });
+
+  // Universo de códigos existentes para garantizar unicidad determinista
+  const codigosAtributosExistentes = useMemo(() => {
+    return new Set(atributos.map((a) => a.codigo_atributo.toLowerCase()));
+  }, [atributos]);
 
   const createAttrMut = useCreateAtributoEam();
   const updateAttrMut = useUpdateAtributoEam();

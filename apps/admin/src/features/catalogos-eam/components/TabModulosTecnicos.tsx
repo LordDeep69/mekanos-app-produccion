@@ -121,8 +121,8 @@ export function TabModulosTecnicos() {
   }, [modulos]);
 
   const codigosAtributosExistentes = useMemo(() => {
-    return new Set(todosLosAtributos.map((a) => a.codigo_atributo.toLowerCase()));
-  }, [todosLosAtributos]);
+    return new Set(todosAtributos.map((a) => a.codigo_atributo.toLowerCase()));
+  }, [todosAtributos]);
 
   // Modal Crear / Editar Parte o Subsistema
   const [showModModal, setShowModModal] = useState(false);
