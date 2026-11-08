@@ -487,21 +487,22 @@ export function TabDiccionarioAtributos() {
                   value={form.nombre_atributo}
                   onChange={(e) => {
                     const nombre = e.target.value;
-                    const slug = editingAttr
+                    const auto = editingAttr
                       ? form.codigo_atributo
-                      : nombre
-                          .toLowerCase()
-                          .normalize('NFD')
-                          .replace(/[\u0300-\u036f]/g, '')
-                          .replace(/[^a-z0-9]+/g, '_')
-                          .replace(/^_+|_+$/g, '');
+                      : isAutoCodigo
+                        ? generarCodigoCampoTecnico(
+                            nombre,
+                            codigosAtributosExistentes,
+                            form.unidad_defecto_codigo || undefined,
+                          )
+                        : form.codigo_atributo;
                     setForm({
                       ...form,
                       nombre_atributo: nombre,
-                      codigo_atributo: slug,
+                      codigo_atributo: auto,
                     });
                   }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium"
                 />
               </div>
 
@@ -594,10 +595,19 @@ export function TabDiccionarioAtributos() {
                       onChange={(e) => {
                         const idMag = e.target.value;
                         const magObj = magnitudes.find((m) => String(m.id_magnitud) === idMag);
+                        const nuevaU = magObj?.unidad_base_codigo || '';
+                        const auto = isAutoCodigo && !editingAttr
+                          ? generarCodigoCampoTecnico(
+                              form.nombre_atributo,
+                              codigosAtributosExistentes,
+                              nuevaU || undefined,
+                            )
+                          : form.codigo_atributo;
                         setForm({
                           ...form,
                           id_magnitud: idMag,
-                          unidad_defecto_codigo: magObj?.unidad_base_codigo || '',
+                          unidad_defecto_codigo: nuevaU,
+                          codigo_atributo: auto,
                         });
                       }}
                       className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
@@ -617,9 +627,17 @@ export function TabDiccionarioAtributos() {
                     </label>
                     <select
                       value={form.unidad_defecto_codigo}
-                      onChange={(e) =>
-                        setForm({ ...form, unidad_defecto_codigo: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const unidad = e.target.value;
+                        const auto = isAutoCodigo && !editingAttr
+                          ? generarCodigoCampoTecnico(form.nombre_atributo, codigosAtributosExistentes, unidad || undefined)
+                          : form.codigo_atributo;
+                        setForm({
+                          ...form,
+                          unidad_defecto_codigo: unidad,
+                          codigo_atributo: auto,
+                        });
+                      }}
                       className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
                     >
                       <option value="">-- Seleccionar Unidad --</option>

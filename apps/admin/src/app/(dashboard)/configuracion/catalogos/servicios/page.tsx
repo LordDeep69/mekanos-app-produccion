@@ -22,10 +22,14 @@ import {
     Tag,
     Trash2,
     Wrench,
-    X
+    X,
+    Lock,
+    Unlock,
+    CheckCircle2
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { calculateSmartMatchScore } from '@/lib/search-utils';
+import { generarCodigoServicioComercial, verificarCodigoDuplicado } from '@/features/catalogos-eam';
 
 export default function CatalogoServiciosComercialesPage() {
     const [busqueda, setBusqueda] = useState('');
@@ -253,6 +257,7 @@ export default function CatalogoServiciosComercialesPage() {
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     servicio={editingServicio}
+                    servicios={servicios || []}
                     tiposServicio={tiposServicio || []}
                     tiposServicioLoading={loadingTipos}
                     tiposServicioError={errorTipos}
@@ -350,7 +355,18 @@ function sugerirCodigoServicio(nombre: string, categoria?: string): string {
     return baseParts.join('-');
 }
 
-function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, tiposServicioLoading, tiposServicioError, onReintentarTipos, onSubmit, isLoading }: any) {
+function ServicioComercialModal({ isOpen, onClose, servicio, servicios = [], tiposServicio, tiposServicioLoading, tiposServicioError, onReintentarTipos, onSubmit, isLoading }: any) {
+    const codigosExistentes = useMemo(() => {
+        return new Set<string>(
+            (servicios || [])
+                .filter((s: any) => !servicio || s.id_servicio !== servicio.id_servicio)
+                .map((s: any) => (s.codigo_servicio || '').toUpperCase().trim())
+                .filter(Boolean)
+        );
+    }, [servicios, servicio]);
+
+    const [isAutoCodigo, setIsAutoCodigo] = useState(!servicio);
+
     const [formData, setFormData] = useState({
         nombre_servicio: servicio?.nombre_servicio || '',
         codigo_servicio: servicio?.codigo_servicio || '',
@@ -364,11 +380,19 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, tipo
         incluye_repuestos: servicio?.incluye_repuestos ?? false,
     });
 
-    const [isManualCode, setIsManualCode] = useState(!!servicio);
+    const isCodigoDuplicado = useMemo(() => {
+        return verificarCodigoDuplicado(
+            formData.codigo_servicio,
+            codigosExistentes,
+            servicio?.codigo_servicio,
+        );
+    }, [formData.codigo_servicio, codigosExistentes, servicio]);
 
     const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newNombre = e.target.value;
-        const newCode = (!isManualCode && !servicio) ? sugerirCodigoServicio(newNombre, formData.categoria) : formData.codigo_servicio;
+        const newCode = (isAutoCodigo && !servicio)
+            ? generarCodigoServicioComercial(newNombre, formData.categoria, codigosExistentes)
+            : formData.codigo_servicio;
         setFormData({
             ...formData,
             nombre_servicio: newNombre,
@@ -378,7 +402,9 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, tipo
 
     const handleCategoriaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newCat = e.target.value;
-        const newCode = (!isManualCode && !servicio) ? sugerirCodigoServicio(formData.nombre_servicio, newCat) : formData.codigo_servicio;
+        const newCode = (isAutoCodigo && !servicio)
+            ? generarCodigoServicioComercial(formData.nombre_servicio, newCat, codigosExistentes)
+            : formData.codigo_servicio;
         setFormData({
             ...formData,
             categoria: newCat,
@@ -386,15 +412,19 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, tipo
         });
     };
 
-    const handleRegenerarCodigo = () => {
-        const generated = sugerirCodigoServicio(formData.nombre_servicio, formData.categoria);
-        setFormData((prev) => ({ ...prev, codigo_servicio: generated }));
-        setIsManualCode(false);
+    const handleToggleAutoCodigo = () => {
+        const nuevoModo = !isAutoCodigo;
+        setIsAutoCodigo(nuevoModo);
+        if (nuevoModo) {
+            const auto = generarCodigoServicioComercial(formData.nombre_servicio, formData.categoria, codigosExistentes);
+            setFormData((prev) => ({ ...prev, codigo_servicio: auto }));
+        }
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const finalCode = formData.codigo_servicio.trim() || sugerirCodigoServicio(formData.nombre_servicio, formData.categoria);
+        if (isCodigoDuplicado) return;
+        const finalCode = formData.codigo_servicio.trim() || generarCodigoServicioComercial(formData.nombre_servicio, formData.categoria, codigosExistentes);
         const data: any = {
             ...formData,
             codigo_servicio: finalCode.toUpperCase().trim(),
@@ -433,33 +463,47 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, tipo
                         </div>
                         <div className="col-span-2 sm:col-span-1">
                             <div className="flex items-center justify-between mb-1.5">
-                                <label className="block text-sm font-bold text-gray-700">Código Comercial</label>
+                                <label className="block text-sm font-bold text-gray-700">Código Comercial *</label>
                                 {!servicio && (
                                     <button
                                         type="button"
-                                        onClick={handleRegenerarCodigo}
-                                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
-                                        title="Generar código automático basado en palabras clave"
+                                        onClick={handleToggleAutoCodigo}
+                                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors cursor-pointer"
                                     >
-                                        <Wrench className="h-3 w-3" />
-                                        <span>Auto-generar</span>
+                                        {isAutoCodigo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                                        <span>{isAutoCodigo ? 'Personalizar código' : 'Auto-generar'}</span>
                                     </button>
                                 )}
                             </div>
                             <input
                                 type="text"
+                                required
                                 value={formData.codigo_servicio}
                                 onChange={(e) => {
                                     setFormData({ ...formData, codigo_servicio: e.target.value.toUpperCase().trim() });
-                                    setIsManualCode(true);
                                 }}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono uppercase bg-slate-50 focus:bg-white"
+                                className={`w-full px-4 py-2 border rounded-xl outline-none text-sm font-mono uppercase transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                                    isCodigoDuplicado
+                                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                                        : 'border-gray-300 bg-slate-50 focus:bg-white'
+                                }`}
                                 placeholder="Auto-generado (ej: CORR-CAMB-FILT-AIRE)"
-                                disabled={!!servicio}
+                                disabled={Boolean(servicio) || isAutoCodigo}
                             />
-                            <p className="text-[10px] text-gray-400 mt-1">
-                                {servicio ? 'El código comercial es inmutable.' : 'Se genera automáticamente de las palabras clave del servicio.'}
-                            </p>
+                            {isCodigoDuplicado ? (
+                                <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                                    ✕ Este código ya está en uso. Modifícalo para que sea único.
+                                </p>
+                            ) : formData.codigo_servicio && !servicio ? (
+                                <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>Código único garantizado disponible</span>
+                                </p>
+                            ) : (
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                    {servicio ? 'El código comercial es inmutable.' : 'Se genera automáticamente garantizando unicidad.'}
+                                </p>
+                            )}
                         </div>
                     </div>
 
@@ -616,8 +660,8 @@ function ServicioComercialModal({ isOpen, onClose, servicio, tiposServicio, tipo
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={isLoading}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                        disabled={isLoading || isCodigoDuplicado || !formData.nombre_servicio.trim() || !formData.codigo_servicio.trim()}
+                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
                         {servicio ? 'Guardar Cambios' : 'Crear Servicio'}

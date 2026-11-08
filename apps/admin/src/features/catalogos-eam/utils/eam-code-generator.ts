@@ -289,3 +289,195 @@ export function generarCodigoUnidadInteligente(
 
   return `${raiz.slice(0, maxLen - 5)}_${Date.now().toString().slice(-4)}`;
 }
+
+/**
+ * 7. Servicios Comerciales (VarChar 40, formato CORR-ACCION-OBJETO o PREV-...)
+ * Ej: "Cambio de Filtro de Combustible" -> "CORR-CAMB-FILT-COMB" (o con -2 si colisiona)
+ */
+export function generarCodigoServicioComercial(
+  nombre: string,
+  categoria: string = 'CORRECTIVO',
+  codigosExistentes: Set<string>,
+  maxLen = 40,
+): string {
+  const cleanNombre = (nombre || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (!cleanNombre.trim()) return '';
+
+  const actionMap: [RegExp, string][] = [
+    [/REEMPLAZ|CAMBI|SUSTITU/i, 'CAMB'],
+    [/REPARAC|REPARAR|ARREGL/i, 'REP'],
+    [/REVISI|INSPECC|EVALUA/i, 'REV'],
+    [/SUMINISTR|ENTREGA|DOTAC/i, 'SUM'],
+    [/INSTALAC|MONTAJE/i, 'INST'],
+    [/CALIBRAC|AJUSTE|SINCRONIZ/i, 'CALIB'],
+    [/LIMPIEZA|LAVAD|DESENGRAS/i, 'LIMP'],
+    [/DIAGNOST|ESCANEO|ANALIS/i, 'DIAG'],
+    [/MANTENIMIENTO|RUTINA/i, 'MNT'],
+    [/PRUEBA|TESTEO|MEDIC/i, 'PRB'],
+    [/REBOBINAD|EMBOBINAD/i, 'REBOB'],
+    [/PROGRAMAC|CONFIGURAC/i, 'PROG'],
+  ];
+
+  const nounMap: [RegExp, string][] = [
+    [/MODULO|CONTROLADOR|CONTROL|DEEP\s*SEA|COMAP/i, 'MOD-CTRL'],
+    [/FILTRO.*AIRE/i, 'FILT-AIRE'],
+    [/FILTRO.*ACEITE/i, 'FILT-ACTE'],
+    [/FILTRO.*COMBUSTIBLE|FILTRO.*ACPM|FILTRO.*DIESEL/i, 'FILT-COMB'],
+    [/FILTRO.*RACOR|TRAMPA.*AGUA/i, 'FILT-RACOR'],
+    [/FILTRO/i, 'FILTRO'],
+    [/ACEITE|LUBRICANTE/i, 'LUB-ACTE'],
+    [/REFRIGERANTE|ANTICONGELANTE/i, 'REFRIG'],
+    [/INYECTOR/i, 'INYECT'],
+    [/BOMBA.*INYEC/i, 'BOM-INY'],
+    [/BOMBA.*AGUA/i, 'BOM-AGUA'],
+    [/BOMBA/i, 'BOMBA'],
+    [/SENSOR.*PRES/i, 'SENS-PRES'],
+    [/SENSOR.*TEMP/i, 'SENS-TEMP'],
+    [/SENSOR/i, 'SENSOR'],
+    [/ALTERNADOR/i, 'ALT'],
+    [/MOTOR.*ARRANQUE|STARTER/i, 'ARRANQ'],
+    [/BATERIA/i, 'BAT'],
+    [/CARGADOR.*BATER/i, 'CARG-BAT'],
+    [/CORREA/i, 'CORREA'],
+    [/RADIADOR/i, 'RADIAD'],
+    [/TRANSFERENCIA|ATS/i, 'ATS'],
+    [/PLANTA|GENERADOR/i, 'GEN'],
+    [/TANQUE|COMBUSTIBLE/i, 'COMB'],
+    [/CABINA/i, 'CABINA'],
+    [/PUERTA/i, 'PUERTA'],
+    [/TRACCION/i, 'TRACC'],
+    [/FREN(O|OS)/i, 'FRENO'],
+    [/CABLE/i, 'CABLE'],
+    [/POLEA/i, 'POLEA'],
+    [/VARIADOR/i, 'VARIAD'],
+  ];
+
+  const catUpper = (categoria || '').toUpperCase();
+  const prefix = catUpper === 'CORRECTIVO' ? 'CORR' : catUpper === 'PREVENTIVO' ? 'PREV' : 'SRV';
+
+  let action = '';
+  for (const [regex, code] of actionMap) {
+    if (regex.test(cleanNombre)) {
+      action = code;
+      break;
+    }
+  }
+
+  let noun = '';
+  for (const [regex, code] of nounMap) {
+    if (regex.test(cleanNombre)) {
+      noun = code;
+      break;
+    }
+  }
+
+  if (!action && !noun) {
+    const words = cleanNombre
+      .replace(/[^A-Z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter((w) => !['DE', 'DEL', 'LA', 'EL', 'Y', 'EN', 'PARA', 'CON', 'A', 'LOS', 'LAS', 'UN', 'UNA', 'AL'].includes(w));
+    action = words.slice(0, 3).map((w) => w.substring(0, 4)).join('-');
+  }
+
+  const baseParts = [prefix, action, noun].filter(Boolean);
+  const base = baseParts.join('-').slice(0, maxLen);
+
+  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });
+}
+
+/**
+ * 8. Tipos de Servicio / Protocolos (VarChar 30, mayúsculas con guiones bajos)
+ * Ej: "Mantenimiento Preventivo A - Ascensor" -> "PREV_A_ASCENSOR"
+ */
+export function generarCodigoTipoServicio(
+  nombre: string,
+  categoria: string = 'PREVENTIVO',
+  codigosExistentes: Set<string>,
+  maxLen = 30,
+): string {
+  if (!nombre || !nombre.trim()) return '';
+  const nomClean = normalizarTexto(nombre).toUpperCase();
+
+  let base = '';
+  if (nomClean.includes('TIPO A') || nomClean.includes('TIPO_A') || nomClean.includes(' NIVEL A')) {
+    base = 'PREV_A';
+  } else if (nomClean.includes('TIPO B') || nomClean.includes('TIPO_B') || nomClean.includes(' NIVEL B')) {
+    base = 'PREV_B';
+  } else if (nomClean.includes('TIPO C') || nomClean.includes('TIPO_C') || nomClean.includes(' NIVEL C')) {
+    base = 'PREV_C';
+  } else if (nomClean.includes('INSPECC') || nomClean.includes('RUTINA')) {
+    base = 'INSP';
+  } else if (nomClean.includes('OVERHAUL') || nomClean.includes('MAYOR')) {
+    base = 'OVERHAUL';
+  } else if (categoria === 'CORRECTIVO') {
+    base = 'CORR';
+  }
+
+  const slug = generarSlugGenerico(nombre, { maxLen: 20, uppercase: true, separator: '_' });
+  const candidato = base ? `${base}_${slug.replace(new RegExp(`^${base}_?`, 'i'), '')}` : slug;
+  const candidatoLimpio = candidato.replace(/^_+|_+$/g, '').slice(0, maxLen);
+
+  return resolverColisionDeterminista(candidatoLimpio, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+}
+
+/**
+ * 9. Sistemas de Inspección (VarChar 30, mayúsculas con guiones bajos)
+ * Ej: "Sistema de Tracción y Cables" -> "SIS_TRACCION_CABLES"
+ */
+export function generarCodigoSistema(
+  nombre: string,
+  codigosExistentes: Set<string>,
+  maxLen = 30,
+): string {
+  if (!nombre || !nombre.trim()) return '';
+  let slug = generarSlugGenerico(nombre, { maxLen: maxLen - 4, uppercase: true, separator: '_' });
+  let base = slug.startsWith('SIS_') || slug.startsWith('SISTEMA_') ? slug : `SIS_${slug}`;
+  base = base.slice(0, maxLen);
+  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+}
+
+/**
+ * 10. Actividades de Inspección / Tareas Checklist (VarChar 40, mayúsculas con guiones bajos)
+ * Ej: "Verificar tensión de cables de tracción" -> "ACT_VERIF_TENSION_CABLES"
+ */
+export function generarCodigoActividad(
+  descripcion: string,
+  codigosExistentes: Set<string>,
+  maxLen = 40,
+): string {
+  if (!descripcion || !descripcion.trim()) return '';
+  const descLimpia = normalizarTexto(descripcion).toUpperCase();
+  const palabras = descLimpia
+    .replace(/[^A-Z0-9\s]/g, '')
+    .split(/\s+/)
+    .filter((w) => !['DE', 'DEL', 'LA', 'EL', 'Y', 'EN', 'PARA', 'CON', 'A', 'LOS', 'LAS', 'UN', 'UNA', 'AL', 'QUE', 'SE'].includes(w));
+
+  const clave = palabras.slice(0, 4).join('_');
+  const base = `ACT_${clave}`.slice(0, maxLen);
+  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+}
+
+/**
+ * 11. Parámetros de Medición Frecuente (VarChar 30, mayúsculas con guiones bajos)
+ * Ej: "Tensión de Alimentación L1-L2" -> "VOLT_L1_L2" o "TENSION_L1_L2"
+ */
+export function generarCodigoParametro(
+  nombre: string,
+  codigosExistentes: Set<string>,
+  unidad?: string,
+  maxLen = 30,
+): string {
+  if (!nombre || !nombre.trim()) return '';
+  let base = generarSlugGenerico(nombre, { maxLen, uppercase: true, separator: '_' });
+  if (unidad && unidad.trim()) {
+    const uClean = generarSlugGenerico(unidad, { maxLen: 6, uppercase: true, separator: '_' });
+    if (uClean && !base.endsWith(`_${uClean}`)) {
+      base = `${base.slice(0, maxLen - uClean.length - 1)}_${uClean}`;
+    }
+  }
+  return resolverColisionDeterminista(base, codigosExistentes, { maxLen, separator: '_', caseSensitive: false });
+}

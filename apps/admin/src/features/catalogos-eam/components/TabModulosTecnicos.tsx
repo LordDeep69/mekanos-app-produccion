@@ -952,10 +952,11 @@ export function TabModulosTecnicos() {
                               {/* Grip Handle + Micro-flechas ↑ ↓ */}
                               <td className="py-2.5 px-2 text-center select-none">
                                 <div className="inline-flex items-center gap-1 justify-center">
-                                  <GripVertical
-                                    className="h-4 w-4 text-slate-300 hover:text-slate-600 transition-colors cursor-grab"
-                                    title="Arrastrar para mover de posición"
-                                  />
+                                  <span title="Arrastrar para mover de posición">
+                                    <GripVertical
+                                      className="h-4 w-4 text-slate-300 hover:text-slate-600 transition-colors cursor-grab"
+                                    />
+                                  </span>
                                   <div className="flex flex-col -space-y-0.5">
                                     <button
                                       type="button"
@@ -1140,31 +1141,47 @@ export function TabModulosTecnicos() {
                   value={modForm.nombre_modulo}
                   onChange={(e) => {
                     const nombre = e.target.value;
-                    const slug = editingMod
+                    const auto = editingMod
                       ? modForm.codigo_modulo
-                      : nombre
-                          .toLowerCase()
-                          .normalize('NFD')
-                          .replace(/[\u0300-\u036f]/g, '')
-                          .replace(/[^a-z0-9]+/g, '_')
-                          .replace(/^_+|_+$/g, '');
+                      : isAutoCodigoModulo
+                        ? generarCodigoParteModulo(nombre, codigosModulosExistentes)
+                        : modForm.codigo_modulo;
                     setModForm({
                       ...modForm,
                       nombre_modulo: nombre,
-                      codigo_modulo: slug,
+                      codigo_modulo: auto,
                     });
                   }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Código Identificador *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    Código Identificador *
+                  </label>
+                  {!editingMod && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nuevoModo = !isAutoCodigoModulo;
+                        setIsAutoCodigoModulo(nuevoModo);
+                        if (nuevoModo) {
+                          const auto = generarCodigoParteModulo(modForm.nombre_modulo, codigosModulosExistentes);
+                          setModForm((prev) => ({ ...prev, codigo_modulo: auto }));
+                        }
+                      }}
+                      className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {isAutoCodigoModulo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      <span>{isAutoCodigoModulo ? 'Personalizar código' : 'Auto-generar'}</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
-                  disabled={Boolean(editingMod)}
+                  disabled={Boolean(editingMod) || isAutoCodigoModulo}
                   placeholder="Ej: tablero_transferencia_ats"
                   value={modForm.codigo_modulo}
                   onChange={(e) =>
@@ -1173,8 +1190,25 @@ export function TabModulosTecnicos() {
                       codigo_modulo: e.target.value.toLowerCase().replace(/\s+/g, '_'),
                     })
                   }
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs bg-slate-50 disabled:bg-slate-100"
+                  className={`w-full px-3.5 py-2 rounded-xl border font-mono text-xs transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                    isCodigoModuloDuplicado
+                      ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                      : 'border-slate-300'
+                  }`}
                 />
+                {isCodigoModuloDuplicado ? (
+                  <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+                    ✕ Este código "{modForm.codigo_modulo}" ya existe. Modifícalo para que sea único.
+                  </p>
+                ) : modForm.codigo_modulo && !editingMod ? (
+                  <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in">
+                    ✓ Código único garantizado disponible
+                  </p>
+                ) : isAutoCodigoModulo && !editingMod ? (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Generado automáticamente garantizando unicidad. Pulsa en "Personalizar código" para editarlo.
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1809,19 +1843,20 @@ export function TabModulosTecnicos() {
                   value={inPlaceForm.nombre_atributo}
                   onChange={(e) => {
                     const nombre = e.target.value;
-                    const slug = nombre
-                      .toLowerCase()
-                      .normalize('NFD')
-                      .replace(/[\u0300-\u036f]/g, '')
-                      .replace(/[^a-z0-9]+/g, '_')
-                      .replace(/^_+|_+$/g, '');
+                    const auto = isAutoCodigoAtributo
+                      ? generarCodigoCampoTecnico(
+                          nombre,
+                          codigosAtributosExistentes,
+                          inPlaceForm.unidad_defecto_codigo || undefined,
+                        )
+                      : inPlaceForm.codigo_atributo;
                     setInPlaceForm({
                       ...inPlaceForm,
                       nombre_atributo: nombre,
-                      codigo_atributo: slug,
+                      codigo_atributo: auto,
                     });
                   }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium"
                 />
               </div>
 
@@ -1845,12 +1880,34 @@ export function TabModulosTecnicos() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Código Identificador (Automático) *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      Código Identificador *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nuevoModo = !isAutoCodigoAtributo;
+                        setIsAutoCodigoAtributo(nuevoModo);
+                        if (nuevoModo) {
+                          const auto = generarCodigoCampoTecnico(
+                            inPlaceForm.nombre_atributo,
+                            codigosAtributosExistentes,
+                            inPlaceForm.unidad_defecto_codigo || undefined,
+                          );
+                          setInPlaceForm((prev) => ({ ...prev, codigo_atributo: auto }));
+                        }
+                      }}
+                      className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {isAutoCodigoAtributo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      <span>{isAutoCodigoAtributo ? 'Personalizar' : 'Auto'}</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
+                    disabled={isAutoCodigoAtributo}
                     placeholder="Ej: temperatura_devanado_c"
                     value={inPlaceForm.codigo_atributo}
                     onChange={(e) =>
@@ -1859,8 +1916,21 @@ export function TabModulosTecnicos() {
                         codigo_atributo: e.target.value.toLowerCase().replace(/\s+/g, '_'),
                       })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs bg-slate-50"
+                    className={`w-full px-3.5 py-2 rounded-xl border font-mono text-xs transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                      isCodigoAtributoDuplicado
+                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                        : 'border-slate-300'
+                    }`}
                   />
+                  {isCodigoAtributoDuplicado ? (
+                    <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                      ✕ Código ya existente. Modifícalo.
+                    </p>
+                  ) : inPlaceForm.codigo_atributo ? (
+                    <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                      ✓ Código único disponible
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -1875,10 +1945,19 @@ export function TabModulosTecnicos() {
                       onChange={(e) => {
                         const idMag = e.target.value;
                         const magObj = magnitudes.find((m) => String(m.id_magnitud) === idMag);
+                        const nuevaU = magObj?.unidad_base_codigo || '';
+                        const auto = isAutoCodigoAtributo
+                          ? generarCodigoCampoTecnico(
+                              inPlaceForm.nombre_atributo,
+                              codigosAtributosExistentes,
+                              nuevaU || undefined,
+                            )
+                          : inPlaceForm.codigo_atributo;
                         setInPlaceForm({
                           ...inPlaceForm,
                           id_magnitud: idMag,
-                          unidad_defecto_codigo: magObj?.unidad_base_codigo || '',
+                          unidad_defecto_codigo: nuevaU,
+                          codigo_atributo: auto,
                         });
                       }}
                       className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
@@ -1897,9 +1976,21 @@ export function TabModulosTecnicos() {
                     </label>
                     <select
                       value={inPlaceForm.unidad_defecto_codigo}
-                      onChange={(e) =>
-                        setInPlaceForm({ ...inPlaceForm, unidad_defecto_codigo: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const nuevaU = e.target.value;
+                        const auto = isAutoCodigoAtributo
+                          ? generarCodigoCampoTecnico(
+                              inPlaceForm.nombre_atributo,
+                              codigosAtributosExistentes,
+                              nuevaU || undefined,
+                            )
+                          : inPlaceForm.codigo_atributo;
+                        setInPlaceForm({
+                          ...inPlaceForm,
+                          unidad_defecto_codigo: nuevaU,
+                          codigo_atributo: auto,
+                        });
+                      }}
                       className="w-full px-3 py-2 rounded-lg border border-blue-300 text-xs font-semibold bg-white"
                     >
                       <option value="">-- Seleccionar Unidad --</option>

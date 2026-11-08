@@ -21,7 +21,12 @@ import {
   Lock,
   Unlock,
 } from 'lucide-react';
-import { generarCodigoTipoEquipo, verificarCodigoDuplicado } from '../utils/eam-code-generator';
+import {
+  generarCodigoTipoEquipo,
+  generarCodigoCampoTecnico,
+  generarCodigoTipoServicio,
+  verificarCodigoDuplicado,
+} from '../utils/eam-code-generator';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArquetipoEquipo,
@@ -32,6 +37,7 @@ import {
   getModuloBadgeInfo,
   useArquetipoEsquemaEam,
   useArquetiposEam,
+  useAtributosEam,
   useAsignarAtributoModuloEam,
   useCreateArquetipoEam,
   useCreateAtributoEam,
@@ -96,9 +102,12 @@ export function TabArquetiposEquipo() {
   const asignarAttrMut = useAsignarAtributoModuloEam();
   const createTipoSrvMut = useCreateTipoServicioEam();
   const { data: tiposServicioList = [] } = useTiposServicioEam();
+  const { data: todosAtributos = [] } = useAtributosEam();
 
   // Estados de autogeneración inteligente y universo de tipos de equipo
   const [isAutoCodigoTipo, setIsAutoCodigoTipo] = useState(true);
+  const [isAutoCodigoAtributo, setIsAutoCodigoAtributo] = useState(true);
+  const [isAutoCodigoSrv, setIsAutoCodigoSrv] = useState(true);
 
   const codigosTiposExistentes = useMemo(() => {
     return new Set(
@@ -107,6 +116,14 @@ export function TabArquetiposEquipo() {
         .filter(Boolean),
     );
   }, [arquetipos]);
+
+  const codigosAtributosExistentes = useMemo(() => {
+    return new Set(todosAtributos.map((a) => a.codigo_atributo.toLowerCase()));
+  }, [todosAtributos]);
+
+  const codigosServiciosExistentes = useMemo(() => {
+    return new Set(tiposServicioList.map((s) => s.codigo_tipo.toUpperCase()));
+  }, [tiposServicioList]);
 
   // Modales
   const [showNewArqModal, setShowNewArqModal] = useState(false);
@@ -190,6 +207,20 @@ export function TabArquetiposEquipo() {
     grupo_visual: 'General',
     obligatorio: true,
   });
+
+  const isCodigoAtributoDuplicado = useMemo(() => {
+    return verificarCodigoDuplicado(
+      inPlaceForm.codigo_atributo,
+      codigosAtributosExistentes,
+    );
+  }, [inPlaceForm.codigo_atributo, codigosAtributosExistentes]);
+
+  const isCodigoSrvDuplicado = useMemo(() => {
+    return verificarCodigoDuplicado(
+      newSrvForm.codigo_tipo,
+      codigosServiciosExistentes,
+    );
+  }, [newSrvForm.codigo_tipo, codigosServiciosExistentes]);
 
   // Helper para generar nombres de plan sin redundancias léxicas tipo "Plan Preventivo Preventivo..."
   const construirNombrePlan = (srv: any) => {
@@ -1316,23 +1347,81 @@ export function TabArquetiposEquipo() {
                       </div>
                     )}
 
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Nombre del Servicio *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Visita de Inspección y Limpieza de Serpentines"
+                        value={newSrvForm.nombre_tipo}
+                        onChange={(e) => {
+                          const nombre = e.target.value;
+                          const auto = isAutoCodigoSrv
+                            ? generarCodigoTipoServicio(nombre, newSrvForm.categoria, codigosServiciosExistentes)
+                            : newSrvForm.codigo_tipo;
+                          setNewSrvForm({
+                            ...newSrvForm,
+                            nombre_tipo: nombre,
+                            codigo_tipo: auto,
+                          });
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white font-medium"
+                      />
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                          Código / Prefijo *
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-bold text-slate-600">
+                            Código / Prefijo *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nuevoModo = !isAutoCodigoSrv;
+                              setIsAutoCodigoSrv(nuevoModo);
+                              if (nuevoModo) {
+                                const auto = generarCodigoTipoServicio(
+                                  newSrvForm.nombre_tipo,
+                                  newSrvForm.categoria,
+                                  codigosServiciosExistentes,
+                                );
+                                setNewSrvForm((prev) => ({ ...prev, codigo_tipo: auto }));
+                              }
+                            }}
+                            className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                          >
+                            {isAutoCodigoSrv ? <Unlock className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                            <span>{isAutoCodigoSrv ? 'Personalizar' : 'Auto'}</span>
+                          </button>
+                        </div>
                         <input
                           type="text"
+                          disabled={isAutoCodigoSrv}
                           placeholder="Ej: HVAC_INSP_MENS"
                           value={newSrvForm.codigo_tipo}
                           onChange={(e) =>
                             setNewSrvForm({
                               ...newSrvForm,
-                              codigo_tipo: e.target.value.toUpperCase(),
+                              codigo_tipo: e.target.value.toUpperCase().replace(/\s+/g, '_'),
                             })
                           }
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-mono uppercase bg-white"
+                          className={`w-full px-3 py-1.5 rounded-lg border text-xs font-mono uppercase transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                            isCodigoSrvDuplicado
+                              ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                              : 'border-slate-300 bg-white'
+                          }`}
                         />
+                        {isCodigoSrvDuplicado ? (
+                          <p className="text-[10px] text-rose-600 font-bold mt-1">
+                            ✕ Código duplicado. Modifícalo.
+                          </p>
+                        ) : newSrvForm.codigo_tipo ? (
+                          <p className="text-[10px] text-emerald-600 font-medium mt-1">
+                            ✓ Código único disponible
+                          </p>
+                        ) : null}
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 mb-1">
@@ -1340,7 +1429,17 @@ export function TabArquetiposEquipo() {
                         </label>
                         <select
                           value={newSrvForm.categoria}
-                          onChange={(e) => setNewSrvForm({ ...newSrvForm, categoria: e.target.value })}
+                          onChange={(e) => {
+                            const cat = e.target.value;
+                            const auto = isAutoCodigoSrv
+                              ? generarCodigoTipoServicio(newSrvForm.nombre_tipo, cat, codigosServiciosExistentes)
+                              : newSrvForm.codigo_tipo;
+                            setNewSrvForm({
+                              ...newSrvForm,
+                              categoria: cat,
+                              codigo_tipo: auto,
+                            });
+                          }}
                           className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
                         >
                           <option value="PREVENTIVO">Preventivo</option>
@@ -1350,19 +1449,6 @@ export function TabArquetiposEquipo() {
                           <option value="ESPECIALIZADO">Especializado</option>
                         </select>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                        Nombre del Servicio *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ej: Visita de Inspección y Limpieza de Serpentines"
-                        value={newSrvForm.nombre_tipo}
-                        onChange={(e) => setNewSrvForm({ ...newSrvForm, nombre_tipo: e.target.value })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
-                      />
                     </div>
 
                     <div className="flex justify-end gap-2 pt-1">
@@ -1706,19 +1792,20 @@ export function TabArquetiposEquipo() {
                   value={inPlaceForm.nombre_atributo}
                   onChange={(e) => {
                     const nombre = e.target.value;
-                    const slug = nombre
-                      .toLowerCase()
-                      .normalize('NFD')
-                      .replace(/[\u0300-\u036f]/g, '')
-                      .replace(/[^a-z0-9]+/g, '_')
-                      .replace(/^_+|_+$/g, '');
+                    const auto = isAutoCodigoAtributo
+                      ? generarCodigoCampoTecnico(
+                          nombre,
+                          codigosAtributosExistentes,
+                          inPlaceForm.unidad_defecto_codigo || undefined,
+                        )
+                      : inPlaceForm.codigo_atributo;
                     setInPlaceForm({
                       ...inPlaceForm,
                       nombre_atributo: nombre,
-                      codigo_atributo: slug,
+                      codigo_atributo: auto,
                     });
                   }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium"
                 />
               </div>
 
@@ -1742,12 +1829,35 @@ export function TabArquetiposEquipo() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Código Interno (Automático)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      Código Identificador *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nuevoModo = !isAutoCodigoAtributo;
+                        setIsAutoCodigoAtributo(nuevoModo);
+                        if (nuevoModo) {
+                          const auto = generarCodigoCampoTecnico(
+                            inPlaceForm.nombre_atributo,
+                            codigosAtributosExistentes,
+                            inPlaceForm.unidad_defecto_codigo || undefined,
+                          );
+                          setInPlaceForm((prev) => ({ ...prev, codigo_atributo: auto }));
+                        }
+                      }}
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {isAutoCodigoAtributo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      <span>{isAutoCodigoAtributo ? 'Personalizar' : 'Auto'}</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
+                    disabled={isAutoCodigoAtributo}
+                    placeholder="Ej: caudal_nominal_operacion"
                     value={inPlaceForm.codigo_atributo}
                     onChange={(e) =>
                       setInPlaceForm({
@@ -1755,8 +1865,21 @@ export function TabArquetiposEquipo() {
                         codigo_atributo: e.target.value.toLowerCase().replace(/\s+/g, '_'),
                       })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs bg-slate-50"
+                    className={`w-full px-3.5 py-2 rounded-xl border font-mono text-xs transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                      isCodigoAtributoDuplicado
+                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                        : 'border-slate-300'
+                    }`}
                   />
+                  {isCodigoAtributoDuplicado ? (
+                    <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                      ✕ Código ya existente. Modifícalo.
+                    </p>
+                  ) : inPlaceForm.codigo_atributo ? (
+                    <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                      ✓ Código único disponible
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -1770,10 +1893,19 @@ export function TabArquetiposEquipo() {
                     onChange={(e) => {
                       const idMag = e.target.value;
                       const mag = magnitudes.find((m) => String(m.id_magnitud) === idMag);
+                      const nuevaU = mag?.unidad_base_codigo || '';
+                      const auto = isAutoCodigoAtributo
+                        ? generarCodigoCampoTecnico(
+                            inPlaceForm.nombre_atributo,
+                            codigosAtributosExistentes,
+                            nuevaU || undefined,
+                          )
+                        : inPlaceForm.codigo_atributo;
                       setInPlaceForm({
                         ...inPlaceForm,
                         id_magnitud: idMag,
-                        unidad_defecto_codigo: mag?.unidad_base_codigo || '',
+                        unidad_defecto_codigo: nuevaU,
+                        codigo_atributo: auto,
                       });
                     }}
                     className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs bg-white font-semibold"
@@ -1798,7 +1930,12 @@ export function TabArquetiposEquipo() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold"
+                  disabled={
+                    isCodigoAtributoDuplicado ||
+                    !inPlaceForm.nombre_atributo.trim() ||
+                    !inPlaceForm.codigo_atributo.trim()
+                  }
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Crear y Asignar Campo
                 </button>

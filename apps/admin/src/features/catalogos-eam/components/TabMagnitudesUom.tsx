@@ -272,6 +272,7 @@ export function TabMagnitudesUom() {
     base_simbolo: '',
     base_codigo: '',
     customSlugBaseUnit: false,
+    activo: true,
   });
 
   const [showUnitModal, setShowUnitModal] = useState(false);
@@ -618,6 +619,7 @@ export function TabMagnitudesUom() {
       base_simbolo: '',
       base_codigo: '',
       customSlugBaseUnit: false,
+      activo: (mag as any).activo !== false,
     });
     setShowMagModal(true);
   };

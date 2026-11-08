@@ -37,9 +37,12 @@ import {
     Trash2,
     Wrench,
     X,
-    Zap
+    Zap,
+    Lock,
+    Unlock
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { generarCodigoActividad, verificarCodigoDuplicado } from '@/features/catalogos-eam';
 
 // Helper para color de tipo de actividad
 function getTipoActividadColor(tipo: string) {
@@ -541,6 +544,7 @@ export default function ActividadesCatalogoPage() {
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     actividad={editingActividad}
+                    actividades={actividades || []}
                     tiposServicio={tiposServicio || []}
                     sistemas={sistemas || []}
                     parametros={parametros || []}
@@ -575,7 +579,18 @@ export default function ActividadesCatalogoPage() {
     );
 }
 
-function ActividadModal({ isOpen, onClose, actividad, tiposServicio, sistemas, parametros, onSubmit, isLoading }: any) {
+function ActividadModal({ isOpen, onClose, actividad, actividades = [], tiposServicio, sistemas, parametros, onSubmit, isLoading }: any) {
+    const codigosExistentes = useMemo(() => {
+        return new Set<string>(
+            (actividades || [])
+                .filter((a: any) => !actividad || (a.idActividad || a.id_actividad) !== (actividad.idActividad || actividad.id_actividad))
+                .map((a: any) => (a.codigoActividad || a.codigo_actividad || '').toUpperCase().trim())
+                .filter(Boolean)
+        );
+    }, [actividades, actividad]);
+
+    const [isAutoCodigo, setIsAutoCodigo] = useState(!actividad);
+
     const [formData, setFormData] = useState({
         descripcion_actividad: actividad?.descripcion_actividad || '',
         codigo_actividad: actividad?.codigo_actividad || '',
@@ -590,10 +605,42 @@ function ActividadModal({ isOpen, onClose, actividad, tiposServicio, sistemas, p
         precauciones: actividad?.precauciones || '',
     });
 
+    const isCodigoDuplicado = useMemo(() => {
+        return verificarCodigoDuplicado(
+            formData.codigo_actividad,
+            codigosExistentes,
+            actividad?.codigo_actividad || actividad?.codigoActividad,
+        );
+    }, [formData.codigo_actividad, codigosExistentes, actividad]);
+
+    const handleDescripcionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const newDesc = e.target.value;
+        const auto = (isAutoCodigo && !actividad)
+            ? generarCodigoActividad(newDesc, codigosExistentes)
+            : formData.codigo_actividad;
+        setFormData({
+            ...formData,
+            descripcion_actividad: newDesc,
+            codigo_actividad: auto,
+        });
+    };
+
+    const handleToggleAutoCodigo = () => {
+        const nuevoModo = !isAutoCodigo;
+        setIsAutoCodigo(nuevoModo);
+        if (nuevoModo) {
+            const auto = generarCodigoActividad(formData.descripcion_actividad, codigosExistentes);
+            setFormData((prev) => ({ ...prev, codigo_actividad: auto }));
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (isCodigoDuplicado) return;
+        const finalCode = formData.codigo_actividad.trim() || generarCodigoActividad(formData.descripcion_actividad, codigosExistentes);
         const data: any = {
             ...formData,
+            codigo_actividad: finalCode.toUpperCase().trim(),
             id_tipo_servicio: Number(formData.id_tipo_servicio),
             id_sistema: formData.id_sistema ? Number(formData.id_sistema) : null,
             id_parametro_medicion: formData.id_parametro_medicion ? Number(formData.id_parametro_medicion) : null,
@@ -623,24 +670,50 @@ function ActividadModal({ isOpen, onClose, actividad, tiposServicio, sistemas, p
                             required
                             rows={2}
                             value={formData.descripcion_actividad}
-                            onChange={(e) => setFormData({ ...formData, descripcion_actividad: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
+                            onChange={handleDescripcionChange}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none font-medium"
                             placeholder="Ej: Verificar nivel de aceite del motor y estado del filtro..."
                         />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Código Único *</label>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-sm font-bold text-gray-700">Código Único *</label>
+                                {!actividad && (
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleAutoCodigo}
+                                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors cursor-pointer"
+                                    >
+                                        {isAutoCodigo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                                        <span>{isAutoCodigo ? 'Personalizar' : 'Auto'}</span>
+                                    </button>
+                                )}
+                            </div>
                             <input
-                                required
                                 type="text"
+                                required
                                 value={formData.codigo_actividad}
                                 onChange={(e) => setFormData({ ...formData, codigo_actividad: e.target.value.toUpperCase().trim() })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono"
+                                className={`w-full px-4 py-2 border rounded-xl outline-none text-sm font-mono uppercase transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                                    isCodigoDuplicado
+                                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                                        : 'border-gray-300'
+                                }`}
                                 placeholder="ACT_001"
-                                disabled={!!actividad}
+                                disabled={Boolean(actividad) || isAutoCodigo}
                             />
+                            {isCodigoDuplicado ? (
+                                <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                                    ✕ Código en uso. Modifícalo.
+                                </p>
+                            ) : formData.codigo_actividad && !actividad ? (
+                                <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>Código único disponible</span>
+                                </p>
+                            ) : null}
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1.5">Tipo de Actividad *</label>
@@ -786,8 +859,8 @@ function ActividadModal({ isOpen, onClose, actividad, tiposServicio, sistemas, p
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={isLoading}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                        disabled={isLoading || isCodigoDuplicado || !formData.descripcion_actividad.trim() || !formData.codigo_actividad.trim()}
+                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
                         {actividad ? 'Guardar Cambios' : 'Crear Actividad'}

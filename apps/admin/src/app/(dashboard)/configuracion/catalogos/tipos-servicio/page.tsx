@@ -15,9 +15,13 @@ import {
     Search,
     Trash2,
     Wrench,
-    X
+    X,
+    Lock,
+    Unlock,
+    CheckCircle2
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { generarCodigoTipoServicio, verificarCodigoDuplicado } from '@/features/catalogos-eam';
 import {
     CATEGORIAS_SERVICIO,
     useCreateTipoServicio,
@@ -247,6 +251,7 @@ export default function TiposServicioPage() {
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     tipo={editingTipo}
+                    tipos={tipos}
                     onSubmit={async (formData: any) => {
                         const payload = {
                             nombreTipo: formData.nombre_tipo,
@@ -373,8 +378,20 @@ function PlantillaObservacionEditor({
     );
 }
 
-function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) {
+function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoading }: any) {
     const [activeTab, setActiveTab] = useState<'general' | 'plantilla'>('general');
+
+    const codigosExistentes = useMemo(() => {
+        return new Set<string>(
+            (tipos || [])
+                .filter((t: any) => !tipo || t.id_tipo_servicio !== tipo.id_tipo_servicio)
+                .map((t: any) => (t.codigo_tipo || '').toUpperCase().trim())
+                .filter(Boolean)
+        );
+    }, [tipos, tipo]);
+
+    const [isAutoCodigo, setIsAutoCodigo] = useState(!tipo);
+
     const [formData, setFormData] = useState({
         nombre_tipo: tipo?.nombre_tipo || '',
         codigo_tipo: tipo?.codigo_tipo || '',
@@ -386,8 +403,50 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
         plantilla_observacion: tipo?.plantilla_observacion || '',
     });
 
+    const isCodigoDuplicado = useMemo(() => {
+        return verificarCodigoDuplicado(
+            formData.codigo_tipo,
+            codigosExistentes,
+            tipo?.codigo_tipo,
+        );
+    }, [formData.codigo_tipo, codigosExistentes, tipo]);
+
+    const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newNombre = e.target.value;
+        const auto = (isAutoCodigo && !tipo)
+            ? generarCodigoTipoServicio(newNombre, formData.categoria, codigosExistentes)
+            : formData.codigo_tipo;
+        setFormData({
+            ...formData,
+            nombre_tipo: newNombre,
+            codigo_tipo: auto,
+        });
+    };
+
+    const handleCategoriaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newCat = e.target.value;
+        const auto = (isAutoCodigo && !tipo)
+            ? generarCodigoTipoServicio(formData.nombre_tipo, newCat, codigosExistentes)
+            : formData.codigo_tipo;
+        setFormData({
+            ...formData,
+            categoria: newCat,
+            codigo_tipo: auto,
+        });
+    };
+
+    const handleToggleAutoCodigo = () => {
+        const nuevoModo = !isAutoCodigo;
+        setIsAutoCodigo(nuevoModo);
+        if (nuevoModo) {
+            const auto = generarCodigoTipoServicio(formData.nombre_tipo, formData.categoria, codigosExistentes);
+            setFormData((prev) => ({ ...prev, codigo_tipo: auto }));
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (isCodigoDuplicado) return;
         const rawDuracion = formData.duracion_estimada_horas;
         let parsedDuracion: number | undefined = undefined;
         if (rawDuracion !== '' && rawDuracion !== null && rawDuracion !== undefined) {
@@ -397,8 +456,11 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
             }
         }
 
+        const finalCode = formData.codigo_tipo.trim() || generarCodigoTipoServicio(formData.nombre_tipo, formData.categoria, codigosExistentes);
+
         onSubmit({
             ...formData,
+            codigo_tipo: finalCode.toUpperCase().trim(),
             duracion_estimada_horas: parsedDuracion
         });
     };
@@ -469,22 +531,48 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
                                     required
                                     type="text"
                                     value={formData.nombre_tipo}
-                                    onChange={(e) => setFormData({ ...formData, nombre_tipo: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                    onChange={handleNombreChange}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium transition-all"
                                     placeholder="Ej: Preventivo Tipo A"
                                 />
                             </div>
                             <div className="col-span-2 sm:col-span-1">
-                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Código Único *</label>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-sm font-bold text-gray-700">Código Único *</label>
+                                    {!tipo && (
+                                        <button
+                                            type="button"
+                                            onClick={handleToggleAutoCodigo}
+                                            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors cursor-pointer"
+                                        >
+                                            {isAutoCodigo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                                            <span>{isAutoCodigo ? 'Personalizar' : 'Auto'}</span>
+                                        </button>
+                                    )}
+                                </div>
                                 <input
-                                    required
                                     type="text"
+                                    required
                                     value={formData.codigo_tipo}
                                     onChange={(e) => setFormData({ ...formData, codigo_tipo: e.target.value.toUpperCase().trim() })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-all"
+                                    className={`w-full px-4 py-2 border rounded-xl outline-none text-sm font-mono uppercase transition-all disabled:bg-slate-100 disabled:text-slate-600 ${
+                                        isCodigoDuplicado
+                                            ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                                            : 'border-gray-300'
+                                    }`}
                                     placeholder="PREV_A"
-                                    disabled={!!tipo}
+                                    disabled={Boolean(tipo) || isAutoCodigo}
                                 />
+                                {isCodigoDuplicado ? (
+                                    <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                                        ✕ Código en uso. Modifícalo.
+                                    </p>
+                                ) : formData.codigo_tipo && !tipo ? (
+                                    <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                        <span>Código único disponible</span>
+                                    </p>
+                                ) : null}
                             </div>
                         </div>
 
@@ -493,7 +581,7 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
                             <select
                                 required
                                 value={formData.categoria}
-                                onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+                                onChange={handleCategoriaChange}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                             >
                                 {CATEGORIAS_SERVICIO.map(cat => (
@@ -580,8 +668,8 @@ function TipoServicioModal({ isOpen, onClose, tipo, onSubmit, isLoading }: any) 
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={isLoading}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                        disabled={isLoading || isCodigoDuplicado || !formData.nombre_tipo.trim() || !formData.codigo_tipo.trim()}
+                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
                         {tipo ? 'Guardar Cambios' : 'Crear Tipo'}

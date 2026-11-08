@@ -21,9 +21,13 @@ import {
     ToggleLeft,
     Trash2,
     Type,
-    X
+    X,
+    Lock,
+    Unlock,
+    CheckCircle2
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { generarCodigoParametro, verificarCodigoDuplicado } from '@/features/catalogos-eam';
 
 // Helper para obtener el label de la categoría
 function getCategoriaLabel(cat: string) {
@@ -220,6 +224,7 @@ export default function ParametrosMedicionPage() {
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     parametro={editingParametro}
+                    parametros={parametros}
                     onSubmit={async (formData: any) => {
                         const dto = {
                             codigoParametro: formData.codigo_parametro,
@@ -251,7 +256,18 @@ export default function ParametrosMedicionPage() {
     );
 }
 
-function ParametroModal({ isOpen, onClose, parametro, onSubmit, isLoading }: any) {
+function ParametroModal({ isOpen, onClose, parametro, parametros = [], onSubmit, isLoading }: any) {
+    const codigosExistentes = useMemo(() => {
+        return new Set<string>(
+            (parametros || [])
+                .filter((p: any) => !parametro || p.id_parametro_medicion !== parametro.id_parametro_medicion)
+                .map((p: any) => (p.codigo_parametro || '').toUpperCase().trim())
+                .filter(Boolean)
+        );
+    }, [parametros, parametro]);
+
+    const [isAutoCodigo, setIsAutoCodigo] = useState(!parametro);
+
     const [formData, setFormData] = useState({
         nombre_parametro: parametro?.nombre_parametro || '',
         codigo_parametro: parametro?.codigo_parametro || '',
@@ -269,9 +285,55 @@ function ParametroModal({ isOpen, onClose, parametro, onSubmit, isLoading }: any
         decimales_precision: parametro?.decimales_precision ?? 2,
     });
 
+    const isCodigoDuplicado = useMemo(() => {
+        return verificarCodigoDuplicado(
+            formData.codigo_parametro,
+            codigosExistentes,
+            parametro?.codigo_parametro,
+        );
+    }, [formData.codigo_parametro, codigosExistentes, parametro]);
+
+    const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newNom = e.target.value;
+        const auto = (isAutoCodigo && !parametro)
+            ? generarCodigoParametro(newNom, codigosExistentes, formData.unidad_medida || undefined)
+            : formData.codigo_parametro;
+        setFormData({
+            ...formData,
+            nombre_parametro: newNom,
+            codigo_parametro: auto,
+        });
+    };
+
+    const handleUnidadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newU = e.target.value;
+        const auto = (isAutoCodigo && !parametro)
+            ? generarCodigoParametro(formData.nombre_parametro, codigosExistentes, newU || undefined)
+            : formData.codigo_parametro;
+        setFormData({
+            ...formData,
+            unidad_medida: newU,
+            codigo_parametro: auto,
+        });
+    };
+
+    const handleToggleAutoCodigo = () => {
+        const nuevoModo = !isAutoCodigo;
+        setIsAutoCodigo(nuevoModo);
+        if (nuevoModo) {
+            const auto = generarCodigoParametro(formData.nombre_parametro, codigosExistentes, formData.unidad_medida || undefined);
+            setFormData((prev) => ({ ...prev, codigo_parametro: auto }));
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const data: any = { ...formData };
+        if (isCodigoDuplicado) return;
+        const finalCode = formData.codigo_parametro.trim() || generarCodigoParametro(formData.nombre_parametro, codigosExistentes, formData.unidad_medida || undefined);
+        const data: any = {
+            ...formData,
+            codigo_parametro: finalCode.toUpperCase().trim(),
+        };
         if (formData.tipo_dato === 'NUMERICO') {
             data.valor_minimo_normal = formData.valor_minimo_normal !== '' ? Number(formData.valor_minimo_normal) : null;
             data.valor_maximo_normal = formData.valor_maximo_normal !== '' ? Number(formData.valor_maximo_normal) : null;
@@ -304,22 +366,60 @@ function ParametroModal({ isOpen, onClose, parametro, onSubmit, isLoading }: any
                                 required
                                 type="text"
                                 value={formData.nombre_parametro}
-                                onChange={(e) => setFormData({ ...formData, nombre_parametro: e.target.value })}
+                                onChange={handleNombreChange}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                 placeholder="Ej: Presión de Aceite"
                             />
                         </div>
                         <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Código Único *</label>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-sm font-bold text-gray-700">Código Único *</label>
+                                {!parametro && (
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleAutoCodigo}
+                                        className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 transition-colors"
+                                    >
+                                        {isAutoCodigo ? (
+                                            <>
+                                                <Lock className="w-3 h-3 text-blue-500" />
+                                                <span>Personalizar</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Unlock className="w-3 h-3 text-amber-500" />
+                                                <span className="text-amber-600">Automático</span>
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
                             <input
                                 required
                                 type="text"
                                 value={formData.codigo_parametro}
                                 onChange={(e) => setFormData({ ...formData, codigo_parametro: e.target.value.toUpperCase().trim() })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono"
+                                className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono uppercase ${
+                                    isCodigoDuplicado
+                                        ? 'border-red-500 bg-red-50/50 text-red-900'
+                                        : isAutoCodigo
+                                        ? 'border-blue-200 bg-blue-50/40 text-blue-900'
+                                        : 'border-gray-300'
+                                }`}
                                 placeholder="PRES_ACEITE"
-                                disabled={!!parametro}
+                                disabled={!!parametro || isAutoCodigo}
                             />
+                            {isCodigoDuplicado ? (
+                                <p className="mt-1 text-xs text-red-600 font-medium flex items-center gap-1">
+                                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    Este código ya existe en el catálogo. Modifícalo para que sea único.
+                                </p>
+                            ) : formData.codigo_parametro.trim() ? (
+                                <p className="mt-1 text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                    Código único garantizado disponible
+                                </p>
+                            ) : null}
                         </div>
                     </div>
 
@@ -330,7 +430,7 @@ function ParametroModal({ isOpen, onClose, parametro, onSubmit, isLoading }: any
                                 required
                                 type="text"
                                 value={formData.unidad_medida}
-                                onChange={(e) => setFormData({ ...formData, unidad_medida: e.target.value })}
+                                onChange={handleUnidadChange}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                 placeholder="PSI, °C, RPM..."
                             />
@@ -472,8 +572,8 @@ function ParametroModal({ isOpen, onClose, parametro, onSubmit, isLoading }: any
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={isLoading}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                        disabled={isLoading || isCodigoDuplicado || !formData.nombre_parametro.trim() || !formData.codigo_parametro.trim()}
+                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
                         {parametro ? 'Guardar Cambios' : 'Crear Parámetro'}

@@ -21,9 +21,17 @@ import {
     Plus,
     Search,
     Trash2,
-    X
+    X,
+    Lock,
+    Unlock,
+    CheckCircle2
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import {
+    generarCodigoSistema,
+    verificarCodigoDuplicado,
+    useArquetiposEam
+} from '@/features/catalogos-eam';
 
 // Helpers para indicadores de uso
 const NIVEL_USO_CONFIG: Record<NivelUso, { label: string; color: string; bgColor: string }> = {
@@ -40,6 +48,7 @@ export default function SistemasPage() {
 
     const { data: response, isLoading, isError, refetch } = useCatalogoSistemasConUso({ limit: 100 });
     const sistemas = response?.data || [];
+    const { data: arquetipos = [] } = useArquetiposEam();
     const crearSistema = useCreateCatalogoSistema();
     const actualizarSistema = useUpdateCatalogoSistema();
     const eliminarSistema = useDeleteCatalogoSistema();
@@ -227,6 +236,8 @@ export default function SistemasPage() {
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     sistema={editingSistema}
+                    sistemas={sistemas}
+                    arquetipos={arquetipos}
                     onSubmit={async (formData: any) => {
                         const dto = {
                             codigoSistema: formData.codigo_sistema,
@@ -250,7 +261,18 @@ export default function SistemasPage() {
     );
 }
 
-function SistemaModal({ isOpen, onClose, sistema, onSubmit, isLoading }: any) {
+function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = [], onSubmit, isLoading }: any) {
+    const codigosExistentes = useMemo(() => {
+        return new Set<string>(
+            (sistemas || [])
+                .filter((s: any) => !sistema || s.id_sistema !== sistema.id_sistema)
+                .map((s: any) => (s.codigo_sistema || '').toUpperCase().trim())
+                .filter(Boolean)
+        );
+    }, [sistemas, sistema]);
+
+    const [isAutoCodigo, setIsAutoCodigo] = useState(!sistema);
+
     const [formData, setFormData] = useState({
         nombre_sistema: sistema?.nombre_sistema || '',
         codigo_sistema: sistema?.codigo_sistema || '',
@@ -260,10 +282,58 @@ function SistemaModal({ isOpen, onClose, sistema, onSubmit, isLoading }: any) {
         aplica_a: sistema?.aplica_a || [],
     });
 
+    const isCodigoDuplicado = useMemo(() => {
+        return verificarCodigoDuplicado(
+            formData.codigo_sistema,
+            codigosExistentes,
+            sistema?.codigo_sistema,
+        );
+    }, [formData.codigo_sistema, codigosExistentes, sistema]);
+
+    const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newNombre = e.target.value;
+        const auto = (isAutoCodigo && !sistema)
+            ? generarCodigoSistema(newNombre, codigosExistentes)
+            : formData.codigo_sistema;
+        setFormData({
+            ...formData,
+            nombre_sistema: newNombre,
+            codigo_sistema: auto,
+        });
+    };
+
+    const handleToggleAutoCodigo = () => {
+        const nuevoModo = !isAutoCodigo;
+        setIsAutoCodigo(nuevoModo);
+        if (nuevoModo) {
+            const auto = generarCodigoSistema(formData.nombre_sistema, codigosExistentes);
+            setFormData((prev) => ({ ...prev, codigo_sistema: auto }));
+        }
+    };
+
+    const opcionesTipos = useMemo(() => {
+        if (arquetipos && arquetipos.length > 0) {
+            return arquetipos.map((a: any) => ({
+                codigo: (a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim(),
+                label: `${a.nombre_canonico || a.nombre_tipo} (${(a.codigo_corto || a.codigo_tipo || '').toUpperCase().trim()})`,
+            }));
+        }
+        return [
+            { codigo: 'GENERADOR', label: '⚡ Generador / Planta' },
+            { codigo: 'BOMBA', label: '💧 Bomba / Motobomba' },
+            { codigo: 'COMPRESOR', label: '💨 Compresor de Aire' },
+            { codigo: 'MOTOR', label: '⚙️ Motor Independiente' },
+            { codigo: 'HVAC', label: '❄️ Climatización / HVAC' },
+        ];
+    }, [arquetipos]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (isCodigoDuplicado) return;
+        const finalCode = formData.codigo_sistema.trim() || generarCodigoSistema(formData.nombre_sistema, codigosExistentes);
         onSubmit({
             ...formData,
+            codigo_sistema: finalCode.toUpperCase().trim(),
             orden_visualizacion: Number(formData.orden_visualizacion)
         });
     };
@@ -289,22 +359,48 @@ function SistemaModal({ isOpen, onClose, sistema, onSubmit, isLoading }: any) {
                                 required
                                 type="text"
                                 value={formData.nombre_sistema}
-                                onChange={(e) => setFormData({ ...formData, nombre_sistema: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                onChange={handleNombreChange}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
                                 placeholder="Ej: Sistema Eléctrico"
                             />
                         </div>
                         <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Código Único *</label>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-sm font-bold text-gray-700">Código Único *</label>
+                                {!sistema && (
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleAutoCodigo}
+                                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors cursor-pointer"
+                                    >
+                                        {isAutoCodigo ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                                        <span>{isAutoCodigo ? 'Personalizar' : 'Auto'}</span>
+                                    </button>
+                                )}
+                            </div>
                             <input
-                                required
                                 type="text"
+                                required
                                 value={formData.codigo_sistema}
                                 onChange={(e) => setFormData({ ...formData, codigo_sistema: e.target.value.toUpperCase().trim() })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono"
+                                className={`w-full px-4 py-2 border rounded-xl outline-none text-sm font-mono uppercase transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
+                                    isCodigoDuplicado
+                                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
+                                        : 'border-gray-300'
+                                }`}
                                 placeholder="SIS_ELEC"
-                                disabled={!!sistema}
+                                disabled={Boolean(sistema) || isAutoCodigo}
                             />
+                            {isCodigoDuplicado ? (
+                                <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                                    ✕ Código en uso. Modifícalo.
+                                </p>
+                            ) : formData.codigo_sistema && !sistema ? (
+                                <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>Código único disponible</span>
+                                </p>
+                            ) : null}
                         </div>
                     </div>
 
@@ -360,13 +456,7 @@ function SistemaModal({ isOpen, onClose, sistema, onSubmit, isLoading }: any) {
                             </span>
                         </div>
                         <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                            {[
-                                { codigo: 'GENERADOR', label: '⚡ Generador / Planta' },
-                                { codigo: 'BOMBA', label: '💧 Bomba / Motobomba' },
-                                { codigo: 'COMPRESOR', label: '💨 Compresor de Aire' },
-                                { codigo: 'MOTOR', label: '⚙️ Motor Independiente' },
-                                { codigo: 'HVAC', label: '❄️ Climatización / HVAC' },
-                            ].map((opt) => {
+                            {opcionesTipos.map((opt: any) => {
                                 const selected = Array.isArray(formData.aplica_a) && formData.aplica_a.includes(opt.codigo);
                                 return (
                                     <button
@@ -419,8 +509,8 @@ function SistemaModal({ isOpen, onClose, sistema, onSubmit, isLoading }: any) {
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={isLoading}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                        disabled={isLoading || isCodigoDuplicado || !formData.nombre_sistema.trim() || !formData.codigo_sistema.trim()}
+                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
                         {sistema ? 'Guardar Cambios' : 'Crear Sistema'}
