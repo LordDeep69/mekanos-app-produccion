@@ -13,7 +13,7 @@
 
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Check,
@@ -68,12 +68,7 @@ export function MarcaCombobox({
     left: number;
     width: number;
     openUpward: boolean;
-  }>({
-    top: 0,
-    left: 0,
-    width: 240,
-    openUpward: false,
-  });
+  } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -81,42 +76,55 @@ export function MarcaCombobox({
 
   const currentValue = (value || '').trim().toUpperCase();
 
-  // Calcular posición del popover respecto a la ventana
-  const updatePosition = () => {
-    if (!triggerRef.current) return;
+  // Calcular posición del popover respecto a la ventana con precisión inmediata
+  const calculatePosition = useCallback(() => {
+    if (!triggerRef.current) return null;
     const rect = triggerRef.current.getBoundingClientRect();
     const dropdownHeight = 280;
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUpward = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
 
-    setCoords({
+    return {
       top: openUpward ? rect.top - 8 : rect.bottom + 6,
       left: rect.left,
       width: Math.max(rect.width, 260),
       openUpward,
-    });
+    };
+  }, []);
+
+  const handleToggle = () => {
+    if (disabled) return;
+    if (!isOpen) {
+      const nextCoords = calculatePosition();
+      if (nextCoords) setCoords(nextCoords);
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+      setCoords(null);
+    }
   };
 
   useEffect(() => {
     if (!isOpen) return;
 
-    updatePosition();
-    const handleScroll = () => updatePosition();
-    const handleResize = () => updatePosition();
+    const handleScrollOrResize = () => {
+      const nextCoords = calculatePosition();
+      if (nextCoords) setCoords(nextCoords);
+    };
 
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
 
     const timer = setTimeout(() => {
       searchInputRef.current?.focus();
     }, 40);
 
     return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
       clearTimeout(timer);
     };
-  }, [isOpen]);
+  }, [isOpen, calculatePosition]);
 
   // Cierre al hacer clic fuera
   useEffect(() => {
@@ -131,6 +139,7 @@ export function MarcaCombobox({
         return;
       }
       setIsOpen(false);
+      setCoords(null);
       setSearchTerm('');
     }
 
@@ -165,6 +174,7 @@ export function MarcaCombobox({
   const handleSelectMarca = (m: Marca) => {
     onChange(m.nombre.toUpperCase(), m);
     setIsOpen(false);
+    setCoords(null);
     setSearchTerm('');
   };
 
@@ -180,6 +190,7 @@ export function MarcaCombobox({
       toast.success(`Marca '${nueva.nombre}' registrada como Fabricante OEM oficial`);
       onChange(nueva.nombre, nueva);
       setIsOpen(false);
+      setCoords(null);
       setSearchTerm('');
     } catch (err: any) {
       toast.error(err?.response?.data?.message || `No se pudo registrar la marca '${cleanNombre}'`);
@@ -196,10 +207,7 @@ export function MarcaCombobox({
         id={id}
         type="button"
         disabled={disabled}
-        onClick={() => {
-          if (disabled) return;
-          setIsOpen(!isOpen);
-        }}
+        onClick={handleToggle}
         className={cn(
           'w-full flex items-center justify-between text-left transition-all border outline-none cursor-pointer',
           isSmall
@@ -258,6 +266,7 @@ export function MarcaCombobox({
       {/* Popover Portal Flotante */}
       {mounted &&
         isOpen &&
+        coords &&
         createPortal(
           <div
             ref={popoverRef}
@@ -268,8 +277,13 @@ export function MarcaCombobox({
               left: coords.left,
               width: coords.width,
               zIndex: 99999,
+              transformOrigin: coords.openUpward ? 'bottom left' : 'top left',
             }}
-            className="bg-white rounded-2xl border border-slate-200/90 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[340px]"
+            className={cn(
+              'bg-white rounded-2xl border border-slate-200/90 shadow-2xl overflow-hidden flex flex-col max-h-[340px]',
+              'animate-in fade-in zoom-in-95 duration-100',
+              coords.openUpward ? 'origin-bottom' : 'origin-top',
+            )}
           >
             {/* Cabecera con Buscador en Vivo */}
             <div className="p-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
@@ -282,6 +296,7 @@ export function MarcaCombobox({
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
                     setIsOpen(false);
+                    setCoords(null);
                   } else if (e.key === 'Enter') {
                     e.preventDefault();
                     if (marcasFiltradas.length > 0) {
