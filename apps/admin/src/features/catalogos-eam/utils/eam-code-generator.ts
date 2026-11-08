@@ -172,27 +172,27 @@ export function generarCodigoModeloOem(
 }
 
 const DICCIONARIO_TAGS_INDUSTRIALES: Array<{ pattern: RegExp; tag: string }> = [
-  { pattern: /\b(ascensor|elevador)\b/, tag: 'ELEV' },
-  { pattern: /\bmontacargas\b/, tag: 'MONT' },
-  { pattern: /\bescalera\b/, tag: 'ESC' },
-  { pattern: /\b(chiller|enfriador|climatizad|aire acondicionado|fan coil|uma|hvac)\b/, tag: 'HVAC' },
-  { pattern: /\b(generador|planta electrica|grupo electrogeno)\b/, tag: 'GEN' },
-  { pattern: /\b(bomba|motobomba|electrobomba)\b/, tag: 'BOM' },
-  { pattern: /\bcompresor\b/, tag: 'COMP' },
-  { pattern: /\b(motor electrico|motor reductor|motoreductor)\b/, tag: 'MOT' },
-  { pattern: /\b(transformador|subestacion)\b/, tag: 'TRAFO' },
-  { pattern: /\b(grua|puente grua|polipasto)\b/, tag: 'GRUA' },
-  { pattern: /\b(caldera|generador de vapor)\b/, tag: 'CALD' },
-  { pattern: /\btorre de enfriamiento\b/, tag: 'TORR' },
-  { pattern: /\b(ventilador|extractor|soplador)\b/, tag: 'VENT' },
-  { pattern: /\b(ups|banco de baterias|inversor)\b/, tag: 'UPS' },
-  { pattern: /\b(tablero|transferencia|ats)\b/, tag: 'ATS' },
-  { pattern: /\b(prensa|troqueladora)\b/, tag: 'PREN' },
-  { pattern: /\b(torno|fresadora|cnc)\b/, tag: 'CNC' },
-  { pattern: /\b(extrusora|inyectora)\b/, tag: 'EXTR' },
-  { pattern: /\b(enfriador de aceite|intercooler)\b/, tag: 'COOL' },
-  { pattern: /\bpurificador\b/, tag: 'PURIF' },
-  { pattern: /\bsecador\b/, tag: 'SEC' },
+  { pattern: /\b(ascensor|elevador)\b/i, tag: 'ELEV' },
+  { pattern: /\bmontacargas\b/i, tag: 'MONT' },
+  { pattern: /\bescalera\b/i, tag: 'ESC' },
+  { pattern: /\b(chiller|enfriador|climatizad|aire acondicionado|fan coil|uma|hvac)\b/i, tag: 'HVAC' },
+  { pattern: /\b(generador|planta electrica|grupo electrogeno)\b/i, tag: 'GEN' },
+  { pattern: /\b(bomba|motobomba|electrobomba)\b/i, tag: 'BOM' },
+  { pattern: /\bcompresor\b/i, tag: 'COMP' },
+  { pattern: /\b(motor electrico|motor reductor|motoreductor)\b/i, tag: 'MOT' },
+  { pattern: /\b(transformador|subestacion)\b/i, tag: 'TRAFO' },
+  { pattern: /\b(grua|puente grua|polipasto)\b/i, tag: 'GRUA' },
+  { pattern: /\b(caldera|generador de vapor)\b/i, tag: 'CALD' },
+  { pattern: /\btorre de enfriamiento\b/i, tag: 'TORR' },
+  { pattern: /\b(ventilador|extractor|soplador)\b/i, tag: 'VENT' },
+  { pattern: /\b(ups|banco de baterias|inversor)\b/i, tag: 'UPS' },
+  { pattern: /\b(tablero|transferencia|ats)\b/i, tag: 'ATS' },
+  { pattern: /\b(prensa|troqueladora)\b/i, tag: 'PREN' },
+  { pattern: /\b(torno|fresadora|cnc)\b/i, tag: 'CNC' },
+  { pattern: /\b(extrusora|inyectora)\b/i, tag: 'EXTR' },
+  { pattern: /\b(enfriador de aceite|intercooler)\b/i, tag: 'COOL' },
+  { pattern: /\bpurificador\b/i, tag: 'PURIF' },
+  { pattern: /\bsecador\b/i, tag: 'SEC' },
 ];
 
 const STOPWORDS_ES = new Set([
@@ -224,7 +224,7 @@ export function generarCodigoTipoEquipo(
   }
 
   // 2. Mapeo por diccionario industrial especializado (3-5 letras)
-  const norm = normalizarTexto(nombre);
+  const norm = normalizarTexto(nombre).toLowerCase();
   const dictMatch = DICCIONARIO_TAGS_INDUSTRIALES.find((d) => d.pattern.test(norm));
   if (dictMatch) {
     return resolverColisionDeterminista(dictMatch.tag, codigosExistentes, { maxLen, separator: '-', caseSensitive: false });

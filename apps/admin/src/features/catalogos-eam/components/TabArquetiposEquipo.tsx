@@ -2,24 +2,36 @@
 
 import {
   AlertTriangle,
+  ArrowUpDown,
+  Boxes,
   CalendarClock,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  Clock,
   Cpu,
+  Droplets,
   Edit3,
   Eye,
+  Factory,
+  Gauge,
   Info,
   Layers,
   Loader2,
+  Lock,
   Plus,
+  RotateCw,
   Search,
   ShieldCheck,
   Sparkles,
   Tag,
   Trash2,
+  Truck,
+  Unlock,
+  Wind,
   Wrench,
   X,
-  Lock,
-  Unlock,
+  Zap,
 } from 'lucide-react';
 import {
   generarCodigoTipoEquipo,
@@ -27,7 +39,7 @@ import {
   generarCodigoTipoServicio,
   verificarCodigoDuplicado,
 } from '../utils/eam-code-generator';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArquetipoEquipo,
   DynamicEquipmentFormPreview,
@@ -71,52 +83,445 @@ export const PRESETS_MEDIDOR_USO = [
   {
     id: 'HORAS',
     label: 'Horómetro (Horas de Operación)',
+    titulo: 'Horómetro de Operación',
+    subtitulo: 'Horas acumuladas de marcha (generadores, bombas, compresores, motores)',
     unidad: 'HORAS',
     etiqueta: 'Horómetro',
     requiere_horometro: true,
     badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+    icon: Clock,
+    color: 'text-amber-600 bg-amber-50 border-amber-200',
   },
   {
     id: 'CICLOS',
     label: 'Ciclos / Maniobras / Viajes',
+    titulo: 'Ciclos y Maniobras',
+    subtitulo: 'Viajes, arranques y aperturas (ascensores, grúas, válvulas, prensas)',
     unidad: 'CICLOS',
     etiqueta: 'Ciclos de Viaje',
     requiere_horometro: true,
     badgeClass: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    icon: RotateCw,
+    color: 'text-cyan-600 bg-cyan-50 border-cyan-200',
   },
   {
     id: 'KM_ODO',
     label: 'Odómetro (Kilómetros de Recorrido)',
+    titulo: 'Odómetro de Distancia',
+    subtitulo: 'Kilómetros recorridos (flotas vehiculares, montacargas, camiones)',
     unidad: 'KM_ODO',
     etiqueta: 'Odómetro',
     requiere_horometro: true,
     badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    icon: Gauge,
+    color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
   },
   {
     id: 'UPM',
     label: 'Producción (Unidades / Envases)',
+    titulo: 'Unidades de Producción',
+    subtitulo: 'Piezas, envases o bultos procesados (líneas industriales y envasado)',
     unidad: 'UPM',
     etiqueta: 'Contador de Producción',
     requiere_horometro: true,
     badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+    icon: Boxes,
+    color: 'text-purple-600 bg-purple-50 border-purple-200',
   },
   {
     id: 'NA',
     label: 'Sin Contador / No Aplica',
+    titulo: 'Sin Contador Físico',
+    subtitulo: 'Mantenimiento preventivo por calendario (días, semanas o meses)',
     unidad: 'UND',
     etiqueta: 'N/A',
     requiere_horometro: false,
     badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+    icon: CalendarClock,
+    color: 'text-slate-600 bg-slate-50 border-slate-200',
   },
   {
     id: 'CUSTOM',
     label: 'Personalizado...',
+    titulo: 'Métrica Personalizada',
+    subtitulo: 'Define tu propia métrica industrial (golpes, disparos, m³, etc.)',
     unidad: '',
     etiqueta: '',
     requiere_horometro: true,
     badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    icon: Sparkles,
+    color: 'text-indigo-600 bg-indigo-50 border-indigo-200',
   },
-] as const;
+];
+
+export function getCategoryBadgeInfo(categoryName?: string) {
+  const norm = categoryName?.toLowerCase() || '';
+  if (norm.includes('vertical') || norm.includes('ascensor') || norm.includes('elevaci') || norm.includes('carga')) {
+    return { icon: ArrowUpDown, color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200', tag: 'Elevación' };
+  }
+  if (norm.includes('energ') || norm.includes('eléctric') || norm.includes('generaci')) {
+    return { icon: Zap, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', tag: 'Energía' };
+  }
+  if (norm.includes('hidrául') || norm.includes('bombeo') || norm.includes('presión')) {
+    return { icon: Droplets, color: 'text-cyan-600', bg: 'bg-cyan-50 border-cyan-200', tag: 'Hidráulica' };
+  }
+  if (norm.includes('comprimido') || norm.includes('neumátic') || norm.includes('aire')) {
+    return { icon: Wind, color: 'text-sky-600', bg: 'bg-sky-50 border-sky-200', tag: 'Neumática' };
+  }
+  if (norm.includes('clima') || norm.includes('refrig') || norm.includes('hvac') || norm.includes('chiller')) {
+    return { icon: Cpu, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', tag: 'HVAC' };
+  }
+  if (norm.includes('transfor') || norm.includes('subestaci')) {
+    return { icon: Zap, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', tag: 'Subestación' };
+  }
+  if (norm.includes('pesada') || norm.includes('flota') || norm.includes('móvil') || norm.includes('vehicul')) {
+    return { icon: Truck, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200', tag: 'Móvil' };
+  }
+  if (norm.includes('producc') || norm.includes('envas') || norm.includes('manuf') || norm.includes('línea')) {
+    return { icon: Factory, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200', tag: 'Planta' };
+  }
+  return { icon: Boxes, color: 'text-slate-600', bg: 'bg-slate-50 border-slate-200', tag: 'General' };
+}
+
+/** Componente Premium para Selección de Macro-Categoría Industrial */
+function MacroCategoriaSelector({
+  value,
+  isCustom,
+  customValue,
+  availableCategories,
+  onChange,
+  onCustomChange,
+}: {
+  value: string;
+  isCustom: boolean;
+  customValue: string;
+  availableCategories: string[];
+  onChange: (category: string, isCustom: boolean) => void;
+  onCustomChange: (customCategory: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const activeCategoryName = isCustom ? (customValue || 'Categoría Personalizada') : value;
+  const currentBadge = getCategoryBadgeInfo(activeCategoryName);
+  const CurrentIcon = currentBadge.icon;
+
+  const filteredCategories = useMemo(() => {
+    if (!filterText.trim()) return availableCategories;
+    const q = filterText.toLowerCase();
+    return availableCategories.filter((c) => c.toLowerCase().includes(q));
+  }, [availableCategories, filterText]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <label className="block text-xs font-bold text-slate-700 mb-1">
+        Macro-Categoría Industrial *
+      </label>
+
+      {/* Botón Trigger de Estilo SaaS Premium */}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:border-blue-400 hover:bg-slate-50/50 transition-all text-left shadow-2xs group cursor-pointer"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${currentBadge.bg}`}>
+            <CurrentIcon className={`h-4 w-4 ${currentBadge.color}`} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-slate-800 truncate">
+              {isCustom ? (customValue.trim() ? customValue : 'Escribe tu categoría personalizada...') : value}
+            </div>
+            <div className="text-[10px] text-slate-400 font-medium">
+              {isCustom ? 'Categoría definida por el usuario' : 'Macro-categoría universal del EAM'}
+            </div>
+          </div>
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 shrink-0 ml-2 ${
+            isOpen ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {/* Popover Flotante Frosted */}
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 z-50 space-y-1.5 animate-in fade-in zoom-in-95 duration-150">
+          {availableCategories.length > 5 && (
+            <div className="relative px-1 pt-1 pb-1">
+              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Buscar macro-categoría..."
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+              />
+            </div>
+          )}
+
+          <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+            {filteredCategories.map((cat) => {
+              const badge = getCategoryBadgeInfo(cat);
+              const Icon = badge.icon;
+              const isSelected = !isCustom && value === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    onChange(cat, false);
+                    setIsOpen(false);
+                    setFilterText('');
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-blue-50 text-blue-900 font-bold border border-blue-200'
+                      : 'hover:bg-slate-100/80 text-slate-700 font-medium'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${badge.bg}`}>
+                      <Icon className={`h-3.5 w-3.5 ${badge.color}`} />
+                    </div>
+                    <span className="text-xs truncate">{cat}</span>
+                  </div>
+                  {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
+                </button>
+              );
+            })}
+            {filteredCategories.length === 0 && (
+              <div className="p-3 text-center text-xs text-slate-400">
+                No se encontraron categorías coincidentes
+              </div>
+            )}
+          </div>
+
+          <div className="pt-1.5 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => {
+                onChange('', true);
+                setIsOpen(false);
+                setFilterText('');
+              }}
+              className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
+                isCustom
+                  ? 'bg-indigo-50 text-indigo-900 font-bold border border-indigo-200'
+                  : 'hover:bg-slate-100/80 text-slate-700 font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-indigo-100 border border-indigo-200">
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-700" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-indigo-700">+ Otra categoría personalizada...</span>
+                  <p className="text-[10px] text-indigo-500">Crea una nueva macro-categoría para tus activos</p>
+                </div>
+              </div>
+              {isCustom && <Check className="h-4 w-4 text-indigo-600 shrink-0 ml-2" />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tarjeta de entrada cuando se selecciona Personalizada */}
+      {isCustom && (
+        <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-indigo-50/70 to-blue-50/70 border border-indigo-200 animate-in fade-in duration-150 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-indigo-900 flex items-center gap-1.5">
+              <Sparkles className="h-3 w-3 text-indigo-600" />
+              <span>Nombre de la Nueva Categoría Industrial *</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => onChange(availableCategories[0] || 'Generación de Energía y Respaldo Eléctrico', false)}
+              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer"
+            >
+              Volver a predefinidas
+            </button>
+          </div>
+          <input
+            type="text"
+            required
+            placeholder="Ej: Transporte Vertical, Elevación y Carga, Minería..."
+            value={customValue}
+            onChange={(e) => onCustomChange(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-indigo-300 bg-white text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+            autoFocus
+          />
+          <p className="text-[10px] text-indigo-700/80 font-medium">
+            ✓ Esta categoría se registrará permanentemente en PostgreSQL y quedará disponible para futuros equipos.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Componente Premium para Selección de Medidor de Uso / Contador de Desgaste */
+function MedidorUsoGrid({
+  presetId,
+  unidadUso,
+  etiquetaContador,
+  requiereHorometro,
+  onChange,
+  onCustomEtiquetaChange,
+  onCustomUnidadChange,
+}: {
+  presetId: string;
+  unidadUso: string;
+  etiquetaContador: string;
+  requiereHorometro: boolean;
+  onChange: (update: {
+    medidor_preset: string;
+    unidad_uso: string;
+    etiqueta_contador: string;
+    requiere_horometro: boolean;
+  }) => void;
+  onCustomEtiquetaChange: (val: string) => void;
+  onCustomUnidadChange: (val: string) => void;
+}) {
+  return (
+    <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3">
+      <div>
+        <label className="block text-xs font-bold text-slate-800">
+          Medidor de Uso / Contador de Desgaste *
+        </label>
+        <p className="text-[11px] text-slate-500">
+          Define la métrica con la que este tipo de activo mide su ciclo de vida y programa sus mantenimientos preventivos.
+        </p>
+      </div>
+
+      {/* Grid de 6 tarjetas seleccionables */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {PRESETS_MEDIDOR_USO.map((p) => {
+          const isSelected = presetId === p.id;
+          const Icon = p.icon;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                onChange({
+                  medidor_preset: p.id,
+                  unidad_uso: p.unidad,
+                  etiqueta_contador: p.etiqueta,
+                  requiere_horometro: p.requiere_horometro,
+                });
+              }}
+              className={`relative p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 cursor-pointer ${
+                isSelected
+                  ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/20 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
+              }`}
+            >
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${p.color}`}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1 mb-0.5">
+                  <span className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
+                    {p.titulo}
+                  </span>
+                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold shrink-0 border ${p.badgeClass}`}>
+                    {p.id === 'CUSTOM' ? 'CUSTOM' : p.id === 'NA' ? 'CAL' : p.unidad}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-tight line-clamp-2">
+                  {p.subtitulo}
+                </p>
+              </div>
+              {isSelected && (
+                <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-2xs">
+                  <Check className="h-2.5 w-2.5 stroke-[3]" />
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Configuración adicional si seleccionó Personalizado */}
+      {presetId === 'CUSTOM' && (
+        <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/70 to-blue-50/70 border border-indigo-200 animate-in fade-in duration-150 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
+            <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Configuración de Métrica Personalizada</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                Nombre / Etiqueta del Contador *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ej: Golpes de Troquel, Disparos..."
+                value={etiquetaContador}
+                onChange={(e) => onCustomEtiquetaChange(e.target.value)}
+                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                Código Corto de Unidad *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ej: GOLPES, DISP, M3..."
+                value={unidadUso}
+                onChange={(e) => onCustomUnidadChange(e.target.value.toUpperCase().replace(/\s+/g, '_'))}
+                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono uppercase font-bold focus:ring-2 focus:ring-indigo-500/20 bg-white"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-indigo-700 font-medium">
+            ✓ Esta métrica se guardará en PostgreSQL en las columnas `etiqueta_contador` y `unidad_uso`.
+          </p>
+        </div>
+      )}
+
+      {/* Resumen del contador seleccionado */}
+      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white border border-slate-200 text-[11px]">
+        <span className="text-slate-500 font-medium">Métrica activa para este tipo de equipo:</span>
+        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+          {requiereHorometro ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>{etiquetaContador || 'Medidor de Uso'}</span>
+              <span className="font-mono text-[10px] text-slate-500">({unidadUso || 'USO'})</span>
+            </>
+          ) : (
+            <>
+              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+              <span className="text-slate-600">Planificación 100% por Calendario (Sin contador de desgaste)</span>
+            </>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function TabArquetiposEquipo() {
   const { data: arquetiposRaw = [], isLoading } = useArquetiposEam();
@@ -134,6 +539,19 @@ export function TabArquetiposEquipo() {
       if (actB !== actA) return actB - actA;
       return (a.id_tipo_equipo || 0) - (b.id_tipo_equipo || 0);
     });
+  }, [arquetiposRaw]);
+
+  // Categorías disponibles dinámicamente: combina las presets universales con cualquier categoría guardada en DB
+  const categoriasDisponibles = useMemo(() => {
+    const cats = new Set<string>(MACRO_CATEGORIAS_INDUSTRIALES);
+    if (arquetiposRaw) {
+      for (const a of arquetiposRaw) {
+        if (a.categoria && typeof a.categoria === 'string' && a.categoria.trim()) {
+          cats.add(a.categoria.trim());
+        }
+      }
+    }
+    return Array.from(cats);
   }, [arquetiposRaw]);
 
   const [selectedArqId, setSelectedArqId] = useState<number | null>(null);
@@ -376,7 +794,7 @@ export function TabArquetiposEquipo() {
     setEditingArq(arq);
     setEditArqError(null);
     const existingCat = arq.categoria || 'Generación de Energía y Respaldo Eléctrico';
-    const isStandardCat = MACRO_CATEGORIAS_INDUSTRIALES.includes(existingCat as any);
+    const isStandardCat = categoriasDisponibles.includes(existingCat as any);
 
     const preset = PRESETS_MEDIDOR_USO.find(
       (p) => p.unidad === arq.unidad_uso && p.etiqueta === arq.etiqueta_contador,
@@ -649,12 +1067,15 @@ export function TabArquetiposEquipo() {
                     </h4>
                     <div className="flex items-center gap-1 shrink-0">
                       {arq.requiere_horometro === false ? (
-                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
-                          Sin Contador
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
+                          <CalendarClock className="h-3 w-3 shrink-0" />
+                          <span>Sin Contador</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200">
-                          {arq.etiqueta_contador || 'Horómetro'}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200">
+                          <Clock className="h-3 w-3 shrink-0 text-amber-600" />
+                          <span>{arq.etiqueta_contador || 'Horómetro'}</span>
+                          {arq.unidad_uso && <span className="font-mono text-[9px] opacity-75">({arq.unidad_uso})</span>}
                         </span>
                       )}
                       <button
@@ -686,11 +1107,19 @@ export function TabArquetiposEquipo() {
                     <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-xs font-bold">
                       Código: {codigoLimpio}
                     </span>
-                    {arq.categoria && (
-                      <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-600 text-[10px] font-medium border border-slate-200" title={arq.categoria}>
-                        {arq.categoria}
-                      </span>
-                    )}
+                    {arq.categoria && (() => {
+                      const cBadge = getCategoryBadgeInfo(arq.categoria);
+                      const CIcon = cBadge.icon;
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${cBadge.bg} ${cBadge.color}`}
+                          title={arq.categoria}
+                        >
+                          <CIcon className="h-3 w-3 shrink-0" />
+                          <span className="truncate max-w-[170px]">{arq.categoria}</span>
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -894,7 +1323,7 @@ export function TabArquetiposEquipo() {
                         </span>
                         <span>•</span>
                         <span className="font-bold text-amber-700">
-                          Cada {Number(plan.frecuencia_uso ?? 250)} horas
+                          Cada {Number(plan.frecuencia_uso ?? 250)} {selectedArquetipo.unidad_uso ? selectedArquetipo.unidad_uso.toLowerCase() : 'horas'}
                         </span>
                         <span>•</span>
                         <span className="text-slate-600 font-medium">
@@ -949,13 +1378,13 @@ export function TabArquetiposEquipo() {
       {/* MODAL NUEVO TIPO DE EQUIPO */}
       {showNewArqModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h4 className="text-base font-bold text-slate-900">Crear Nuevo Tipo de Equipo</h4>
               <button
                 type="button"
                 onClick={() => setShowNewArqModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1036,118 +1465,33 @@ export function TabArquetiposEquipo() {
                 ) : null}
               </div>
 
-              {/* Selector de Macro-Categoría Industrial Universal */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Macro-Categoría Industrial *
-                </label>
-                <select
-                  value={arqForm.is_custom_categoria ? 'OTRA_CUSTOM' : arqForm.categoria}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'OTRA_CUSTOM') {
-                      setArqForm({ ...arqForm, is_custom_categoria: true });
-                    } else {
-                      setArqForm({ ...arqForm, categoria: val, is_custom_categoria: false });
-                    }
-                  }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-medium"
-                >
-                  {MACRO_CATEGORIAS_INDUSTRIALES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                  <option value="OTRA_CUSTOM">+ Otra categoría personalizada...</option>
-                </select>
-                {arqForm.is_custom_categoria && (
-                  <div className="mt-2 animate-in fade-in duration-150">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Escribe la categoría personalizada..."
-                      value={arqForm.categoria_custom}
-                      onChange={(e) => setArqForm({ ...arqForm, categoria_custom: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-blue-400 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      autoFocus
-                    />
-                  </div>
-                )}
-              </div>
+              {/* Selector Premium de Macro-Categoría Industrial */}
+              <MacroCategoriaSelector
+                value={arqForm.categoria}
+                isCustom={arqForm.is_custom_categoria}
+                customValue={arqForm.categoria_custom}
+                availableCategories={categoriasDisponibles}
+                onChange={(cat, isCustom) =>
+                  setArqForm({
+                    ...arqForm,
+                    categoria: cat,
+                    is_custom_categoria: isCustom,
+                    categoria_custom: isCustom ? arqForm.categoria_custom : '',
+                  })
+                }
+                onCustomChange={(val) => setArqForm({ ...arqForm, categoria_custom: val })}
+              />
 
-              {/* Selector de Medidor de Uso / Contador de Desgaste */}
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800">
-                    Medidor de Uso / Contador de Desgaste *
-                  </label>
-                  <p className="text-[11px] text-slate-500">
-                    Define la métrica con la que este activo registra su desgaste y ejecuta mantenimientos preventivos.
-                  </p>
-                </div>
-
-                <select
-                  value={arqForm.medidor_preset}
-                  onChange={(e) => {
-                    const presetId = e.target.value;
-                    const preset = PRESETS_MEDIDOR_USO.find((p) => p.id === presetId);
-                    if (preset) {
-                      setArqForm({
-                        ...arqForm,
-                        medidor_preset: presetId,
-                        unidad_uso: preset.unidad,
-                        etiqueta_contador: preset.etiqueta,
-                        requiere_horometro: preset.requiere_horometro,
-                      });
-                    }
-                  }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold bg-white text-slate-800"
-                >
-                  {PRESETS_MEDIDOR_USO.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-
-                {arqForm.medidor_preset === 'CUSTOM' && (
-                  <div className="grid grid-cols-2 gap-2 pt-1 animate-in fade-in duration-150">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                        Etiqueta del Contador *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej: Golpes de Troquel"
-                        value={arqForm.etiqueta_contador}
-                        onChange={(e) => setArqForm({ ...arqForm, etiqueta_contador: e.target.value })}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                        Código de Unidad *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej: GOLPES, CYC"
-                        value={arqForm.unidad_uso}
-                        onChange={(e) => setArqForm({ ...arqForm, unidad_uso: e.target.value.toUpperCase() })}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium uppercase font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[10px] text-slate-500 font-medium">Muestra en tarjeta y ficha:</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                    {arqForm.etiqueta_contador || 'Horómetro'} ({arqForm.unidad_uso || 'HORAS'})
-                  </span>
-                </div>
-              </div>
+              {/* Selector Premium de Medidor de Uso / Contador de Desgaste */}
+              <MedidorUsoGrid
+                presetId={arqForm.medidor_preset}
+                unidadUso={arqForm.unidad_uso}
+                etiquetaContador={arqForm.etiqueta_contador}
+                requiereHorometro={arqForm.requiere_horometro}
+                onChange={(u) => setArqForm({ ...arqForm, ...u })}
+                onCustomEtiquetaChange={(val) => setArqForm({ ...arqForm, etiqueta_contador: val })}
+                onCustomUnidadChange={(val) => setArqForm({ ...arqForm, unidad_uso: val })}
+              />
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
@@ -1180,7 +1524,7 @@ export function TabArquetiposEquipo() {
       {/* MODAL EDITAR TIPO DE EQUIPO */}
       {showEditArqModal && editingArq && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
@@ -1198,7 +1542,7 @@ export function TabArquetiposEquipo() {
               <button
                 type="button"
                 onClick={() => setShowEditArqModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1254,118 +1598,33 @@ export function TabArquetiposEquipo() {
                 )}
               </div>
 
-              {/* Selector de Macro-Categoría Industrial */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Macro-Categoría Industrial *
-                </label>
-                <select
-                  value={editArqForm.is_custom_categoria ? 'OTRA_CUSTOM' : editArqForm.categoria}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'OTRA_CUSTOM') {
-                      setEditArqForm({ ...editArqForm, is_custom_categoria: true });
-                    } else {
-                      setEditArqForm({ ...editArqForm, categoria: val, is_custom_categoria: false });
-                    }
-                  }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white font-medium"
-                >
-                  {MACRO_CATEGORIAS_INDUSTRIALES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                  <option value="OTRA_CUSTOM">+ Otra categoría personalizada...</option>
-                </select>
-                {editArqForm.is_custom_categoria && (
-                  <div className="mt-2 animate-in fade-in duration-150">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Escribe la categoría personalizada..."
-                      value={editArqForm.categoria_custom}
-                      onChange={(e) => setEditArqForm({ ...editArqForm, categoria_custom: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-blue-400 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                      autoFocus
-                    />
-                  </div>
-                )}
-              </div>
+              {/* Selector Premium de Macro-Categoría Industrial */}
+              <MacroCategoriaSelector
+                value={editArqForm.categoria}
+                isCustom={editArqForm.is_custom_categoria}
+                customValue={editArqForm.categoria_custom}
+                availableCategories={categoriasDisponibles}
+                onChange={(cat, isCustom) =>
+                  setEditArqForm({
+                    ...editArqForm,
+                    categoria: cat,
+                    is_custom_categoria: isCustom,
+                    categoria_custom: isCustom ? editArqForm.categoria_custom : '',
+                  })
+                }
+                onCustomChange={(val) => setEditArqForm({ ...editArqForm, categoria_custom: val })}
+              />
 
-              {/* Selector de Medidor de Uso / Contador de Desgaste */}
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800">
-                    Medidor de Uso / Contador de Desgaste *
-                  </label>
-                  <p className="text-[11px] text-slate-500">
-                    Define la métrica con la que este activo registra su desgaste y ejecuta mantenimientos preventivos.
-                  </p>
-                </div>
-
-                <select
-                  value={editArqForm.medidor_preset}
-                  onChange={(e) => {
-                    const presetId = e.target.value;
-                    const preset = PRESETS_MEDIDOR_USO.find((p) => p.id === presetId);
-                    if (preset) {
-                      setEditArqForm({
-                        ...editArqForm,
-                        medidor_preset: presetId,
-                        unidad_uso: preset.unidad,
-                        etiqueta_contador: preset.etiqueta,
-                        requiere_horometro: preset.requiere_horometro,
-                      });
-                    }
-                  }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold bg-white text-slate-800"
-                >
-                  {PRESETS_MEDIDOR_USO.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-
-                {editArqForm.medidor_preset === 'CUSTOM' && (
-                  <div className="grid grid-cols-2 gap-2 pt-1 animate-in fade-in duration-150">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                        Etiqueta del Contador *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej: Golpes de Troquel"
-                        value={editArqForm.etiqueta_contador}
-                        onChange={(e) => setEditArqForm({ ...editArqForm, etiqueta_contador: e.target.value })}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                        Código de Unidad *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej: GOLPES, CYC"
-                        value={editArqForm.unidad_uso}
-                        onChange={(e) => setEditArqForm({ ...editArqForm, unidad_uso: e.target.value.toUpperCase() })}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium uppercase font-mono"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[10px] text-slate-500 font-medium">Muestra en tarjeta y ficha:</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                    {editArqForm.etiqueta_contador || 'Horómetro'} ({editArqForm.unidad_uso || 'HORAS'})
-                  </span>
-                </div>
-              </div>
+              {/* Selector Premium de Medidor de Uso / Contador de Desgaste */}
+              <MedidorUsoGrid
+                presetId={editArqForm.medidor_preset}
+                unidadUso={editArqForm.unidad_uso}
+                etiquetaContador={editArqForm.etiqueta_contador}
+                requiereHorometro={editArqForm.requiere_horometro}
+                onChange={(u) => setEditArqForm({ ...editArqForm, ...u })}
+                onCustomEtiquetaChange={(val) => setEditArqForm({ ...editArqForm, etiqueta_contador: val })}
+                onCustomUnidadChange={(val) => setEditArqForm({ ...editArqForm, unidad_uso: val })}
+              />
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1941,7 +2200,7 @@ export function TabArquetiposEquipo() {
 
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Cada cuántas Horas de Uso *
+                    Cada cuántos {selectedArquetipo.etiqueta_contador || 'Horas de Uso'} ({selectedArquetipo.unidad_uso || 'HORAS'}) *
                   </label>
                   <input
                     type="number"
@@ -1954,10 +2213,10 @@ export function TabArquetiposEquipo() {
                   <div className="flex items-center gap-1.5 mt-2">
                     <span className="text-[10px] text-slate-400">Atajos:</span>
                     {[
-                      { label: '100 h', val: '100' },
-                      { label: '250 h', val: '250' },
-                      { label: '500 h', val: '500' },
-                      { label: '1000 h', val: '1000' },
+                      { label: `100 ${selectedArquetipo.unidad_uso || 'h'}`, val: '100' },
+                      { label: `250 ${selectedArquetipo.unidad_uso || 'h'}`, val: '250' },
+                      { label: `500 ${selectedArquetipo.unidad_uso || 'h'}`, val: '500' },
+                      { label: `1000 ${selectedArquetipo.unidad_uso || 'h'}`, val: '1000' },
                     ].map((shortcut) => (
                       <button
                         key={shortcut.val}
