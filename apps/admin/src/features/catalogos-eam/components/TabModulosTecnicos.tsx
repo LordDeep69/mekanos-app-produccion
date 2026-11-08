@@ -155,6 +155,7 @@ export function TabModulosTecnicos() {
 
   // Modal Asignar Campo Existente
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignSelectorOpen, setAssignSelectorOpen] = useState(true);
   const [assignSearch, setAssignSearch] = useState('');
   const [assignTypeFilter, setAssignTypeFilter] = useState<'ALL' | 'NUM_MAG' | 'SELECT' | 'BOOL' | 'OTROS'>('ALL');
   const [assignSectionMode, setAssignSectionMode] = useState<'existing' | 'new'>('existing');
@@ -315,6 +316,7 @@ export function TabModulosTecnicos() {
   const handleOpenAssignModal = () => {
     setAssignSearch('');
     setAssignTypeFilter('ALL');
+    setAssignSelectorOpen(true);
     const hasSections = gruposVisualesMap.length > 0;
     // Si ya hay secciones → modo "elegir existente" con la primera; si está vacío → "Especificaciones Técnicas" (NUNCA el nombre de la parte)
     const defaultSection = hasSections
@@ -1335,190 +1337,216 @@ export function TabModulosTecnicos() {
                   <label className="block text-xs font-bold text-slate-800">
                     1. Seleccionar Campo Técnico del Catálogo *
                   </label>
-                  <span className="text-[11px] font-semibold text-slate-500">
-                    {atributosDisponiblesFiltrados.length} de {atributosDisponiblesParaAsignar.length} disponibles
-                  </span>
+                  {(!selectedAtributoParaAsignar || assignSelectorOpen) && (
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {atributosDisponiblesFiltrados.length} de {atributosDisponiblesParaAsignar.length} disponibles
+                    </span>
+                  )}
                 </div>
 
-                {/* Input Buscador */}
-                <div className="relative">
-                  <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={assignSearch}
-                    onChange={(e) => setAssignSearch(e.target.value)}
-                    placeholder="Buscar por nombre, código o magnitud (ej: Capacidad, Gas, Presión, Potencia)..."
-                    className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white shadow-2xs"
-                    autoFocus
-                  />
-                  {assignSearch && (
+                {selectedAtributoParaAsignar && !assignSelectorOpen ? (
+                  /* Tarjeta compacta del campo seleccionado (selector colapsado para máxima fluidez y espacio) */
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-blue-200 flex items-center justify-between gap-3 text-xs text-blue-950 shadow-2xs animate-in fade-in duration-150">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Check className="h-4 w-4 stroke-[3]" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-900 truncate text-sm">
+                            {selectedAtributoParaAsignar.nombre_atributo}
+                          </p>
+                          <span className="text-[10px] font-mono text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-md font-bold shrink-0">
+                            {selectedAtributoParaAsignar.codigo_atributo}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 font-medium">
+                          <span>{getTipoControlHumano(selectedAtributoParaAsignar.tipo_control, Boolean(selectedAtributoParaAsignar.id_magnitud)).shortLabel}</span>
+                          {selectedAtributoParaAsignar.magnitud && (
+                            <span>• {selectedAtributoParaAsignar.magnitud.nombre_magnitud} ({selectedAtributoParaAsignar.unidad_defecto_codigo || 'Estándar'})</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setAssignSearch('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      onClick={() => setAssignSelectorOpen(true)}
+                      className="px-3 py-1.5 rounded-xl border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 font-bold text-xs transition-colors shrink-0 shadow-2xs cursor-pointer"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      Cambiar campo
                     </button>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Input Buscador */}
+                    <div className="relative">
+                      <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={assignSearch}
+                        onChange={(e) => setAssignSearch(e.target.value)}
+                        placeholder="Buscar por nombre, código o magnitud (ej: Capacidad, Gas, Presión, Potencia)..."
+                        className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white shadow-2xs"
+                        autoFocus
+                      />
+                      {assignSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setAssignSearch('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
 
-                {/* Filtros Rápidos por Tipo de Dato */}
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="text-slate-400 font-semibold mr-1">Filtrar:</span>
-                  <button
-                    type="button"
-                    onClick={() => setAssignTypeFilter('ALL')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                      assignTypeFilter === 'ALL'
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    Todos ({atributosDisponiblesParaAsignar.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssignTypeFilter('NUM_MAG')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                      assignTypeFilter === 'NUM_MAG'
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    # Con Unidad
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssignTypeFilter('SELECT')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                      assignTypeFilter === 'SELECT'
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    ☰ Listas
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssignTypeFilter('BOOL')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                      assignTypeFilter === 'BOOL'
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    ✓ Sí / No
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssignTypeFilter('OTROS')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
-                      assignTypeFilter === 'OTROS'
-                        ? 'bg-blue-600 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    Aa Texto / Simple
-                  </button>
-                </div>
-
-                {/* Lista de Campos Desplegables / Scroll */}
-                <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs overscroll-contain">
-                  {atributosDisponiblesFiltrados.length === 0 ? (
-                    <div className="p-6 text-center text-slate-400">
-                      <p className="text-xs font-semibold">No se encontraron campos con &ldquo;{assignSearch}&rdquo;</p>
+                    {/* Filtros Rápidos por Tipo de Dato */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="text-slate-400 font-semibold mr-1">Filtrar:</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setShowAssignModal(false);
-                          setInPlaceForm({
-                            codigo_atributo: '',
-                            nombre_atributo: assignSearch,
-                            tipo_control: 'NUMERICO_MAGNITUD',
-                            id_magnitud: '',
-                            unidad_defecto_codigo: '',
-                            opciones_csv: '',
-                            grupo_visual: assignForm.grupo_visual || 'Especificaciones Técnicas',
-                            orden_visual: '20',
-                            obligatorio: false,
-                            es_kpi: false,
-                            es_filtrable: true,
-                            visible_en_pdf: true,
-                          });
-                          setShowInPlaceModal(true);
-                        }}
-                        className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
+                        onClick={() => setAssignTypeFilter('ALL')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                          assignTypeFilter === 'ALL'
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
                       >
-                        <Sparkles className="h-3.5 w-3.5" />
-                        Crear &ldquo;{assignSearch || 'nuevo campo'}&rdquo; desde cero aquí
+                        Todos ({atributosDisponiblesParaAsignar.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssignTypeFilter('NUM_MAG')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                          assignTypeFilter === 'NUM_MAG'
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        # Con Unidad
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssignTypeFilter('SELECT')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                          assignTypeFilter === 'SELECT'
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        ☰ Listas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssignTypeFilter('BOOL')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                          assignTypeFilter === 'BOOL'
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        ✓ Sí / No
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAssignTypeFilter('OTROS')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                          assignTypeFilter === 'OTROS'
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Aa Texto / Simple
                       </button>
                     </div>
-                  ) : (
-                    atributosDisponiblesFiltrados.map((a) => {
-                      const isSelected = String(assignForm.id_atributo) === String(a.id_atributo);
-                      const info = getTipoControlHumano(a.tipo_control, Boolean(a.id_magnitud));
-                      const opts = Array.isArray(a.opciones_json) ? a.opciones_json : [];
-                      return (
-                        <div
-                          key={a.id_atributo}
-                          onClick={() => setAssignForm({ ...assignForm, id_atributo: String(a.id_atributo) })}
-                          className={`p-3 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
-                            isSelected
-                              ? 'bg-blue-50/90 border-l-4 border-l-blue-600 text-blue-950 font-semibold'
-                              : 'hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
+
+                    {/* Lista de Campos Desplegables / Scroll */}
+                    <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs overscroll-contain">
+                      {atributosDisponiblesFiltrados.length === 0 ? (
+                        <div className="p-6 text-center text-slate-400">
+                          <p className="text-xs font-semibold">No se encontraron campos con &ldquo;{assignSearch}&rdquo;</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAssignModal(false);
+                              setInPlaceForm({
+                                codigo_atributo: '',
+                                nombre_atributo: assignSearch,
+                                tipo_control: 'NUMERICO_MAGNITUD',
+                                id_magnitud: '',
+                                unidad_defecto_codigo: '',
+                                opciones_csv: '',
+                                grupo_visual: assignForm.grupo_visual || 'Especificaciones Técnicas',
+                                orden_visual: '20',
+                                obligatorio: false,
+                                es_kpi: false,
+                                es_filtrable: true,
+                                visible_en_pdf: true,
+                              });
+                              setShowInPlaceModal(true);
+                            }}
+                            className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Crear &ldquo;{assignSearch || 'nuevo campo'}&rdquo; desde cero aquí
+                          </button>
+                        </div>
+                      ) : (
+                        atributosDisponiblesFiltrados.map((a) => {
+                          const isSelected = String(assignForm.id_atributo) === String(a.id_atributo);
+                          const info = getTipoControlHumano(a.tipo_control, Boolean(a.id_magnitud));
+                          const opts = Array.isArray(a.opciones_json) ? a.opciones_json : [];
+                          return (
                             <div
-                              className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                                isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
+                              key={a.id_atributo}
+                              onClick={() => {
+                                setAssignForm({ ...assignForm, id_atributo: String(a.id_atributo) });
+                                setAssignSelectorOpen(false);
+                              }}
+                              className={`p-3 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-50/90 border-l-4 border-l-blue-600 text-blue-950 font-semibold'
+                                  : 'hover:bg-slate-50 text-slate-700'
                               }`}
                             >
-                              {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold truncate leading-snug">{a.nombre_atributo}</p>
-                              <p className="text-[10px] font-mono text-slate-400 truncate">{a.codigo_atributo}</p>
-                            </div>
-                          </div>
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div
+                                  className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                                    isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold truncate leading-snug">{a.nombre_atributo}</p>
+                                  <p className="text-[10px] font-mono text-slate-400 truncate">{a.codigo_atributo}</p>
+                                </div>
+                              </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${info.badgeClass}`}
-                            >
-                              <span>{info.iconSymbol}</span>
-                              <span>{info.shortLabel}</span>
-                            </span>
-                            {a.magnitud && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                {a.magnitud.nombre_magnitud}{a.unidad_defecto_codigo ? ` (${a.unidad_defecto_codigo})` : ''}
-                              </span>
-                            )}
-                            {opts.length > 0 && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                                {opts.length} opciones
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Banner de Confirmación del Campo Seleccionado */}
-                {selectedAtributoParaAsignar && (
-                  <div className="p-2.5 rounded-xl bg-blue-50/80 border border-blue-200 flex items-center justify-between text-xs text-blue-950 shadow-2xs">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
-                      <span>
-                        Seleccionado: <strong className="font-bold">{selectedAtributoParaAsignar.nombre_atributo}</strong>
-                      </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${info.badgeClass}`}
+                                >
+                                  <span>{info.iconSymbol}</span>
+                                  <span>{info.shortLabel}</span>
+                                </span>
+                                {a.magnitud && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                    {a.magnitud.nombre_magnitud}{a.unidad_defecto_codigo ? ` (${a.unidad_defecto_codigo})` : ''}
+                                  </span>
+                                )}
+                                {opts.length > 0 && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                    {opts.length} opciones
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
-                    <span className="text-[11px] font-mono text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-md font-bold">
-                      {selectedAtributoParaAsignar.codigo_atributo}
-                    </span>
-                  </div>
+                  </>
                 )}
               </div>
 
