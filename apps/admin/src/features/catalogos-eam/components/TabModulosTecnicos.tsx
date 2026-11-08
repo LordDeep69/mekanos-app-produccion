@@ -42,6 +42,25 @@ import {
   useUpdateModuloEam,
 } from '../index';
 
+const SECCIONES_PRESET_INGENIERIA = [
+  {
+    name: 'Especificaciones Técnicas',
+    desc: 'Recomendada · Datos clave y placa técnica del equipo',
+  },
+  {
+    name: 'Desempeño y Capacidad',
+    desc: 'Potencia, caudales, presiones y rendimiento',
+  },
+  {
+    name: 'Identificación',
+    desc: 'Marca, modelo, serie y fabricante',
+  },
+  {
+    name: 'Control y Seguridad',
+    desc: 'Protecciones, presostatos y sensores',
+  },
+];
+
 export function TabModulosTecnicos() {
   const { data: modulos = [], isLoading } = useModulosEam();
   const [selectedModuloCode, setSelectedModuloCode] = useState<string>('');
@@ -258,6 +277,38 @@ export function TabModulosTecnicos() {
     for (const def of defaults) {
       if (!list.includes(def)) list.push(def);
     }
+    return list;
+  }, [gruposVisualesMap]);
+
+  const seccionesDisponibles = useMemo(() => {
+    const mapItems = new Map<string, ModuloAtributoItem[]>();
+    for (const [secName, secItems] of gruposVisualesMap) {
+      mapItems.set(secName, secItems);
+    }
+
+    // 1. Las 4 secciones estándar de ingeniería (siempre presentes para elegir)
+    const list = SECCIONES_PRESET_INGENIERIA.map((preset) => {
+      const items = mapItems.get(preset.name);
+      return {
+        name: preset.name,
+        desc: items && items.length > 0
+          ? `${items.length} ${items.length === 1 ? 'campo' : 'campos'} · Se ubicará al final`
+          : preset.desc,
+        count: items?.length || 0,
+      };
+    });
+
+    // 2. Cualquier otra sección personalizada creada por el usuario en este módulo
+    for (const [secName, secItems] of gruposVisualesMap) {
+      if (!SECCIONES_PRESET_INGENIERIA.some((p) => p.name === secName)) {
+        list.push({
+          name: secName,
+          desc: `${secItems.length} ${secItems.length === 1 ? 'campo' : 'campos'} · Sección personalizada`,
+          count: secItems.length,
+        });
+      }
+    }
+
     return list;
   }, [gruposVisualesMap]);
 
@@ -1493,105 +1544,40 @@ export function TabModulosTecnicos() {
 
                 {/* Lista de píldoras / tarjetas interactivas */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {gruposVisualesMap.length > 0 ? (
-                    // CASO A: La parte ya tiene secciones creadas en BD
-                    gruposVisualesMap.map(([secName, secItems]) => {
-                      const isActive =
-                        assignSectionMode === 'existing' && assignForm.grupo_visual === secName;
-                      return (
-                        <button
-                          key={secName}
-                          type="button"
-                          onClick={() => handleSelectAssignSection(secName)}
-                          className={`p-2.5 rounded-xl border text-left transition-all ${
-                            isActive
-                              ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
-                              : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/70 hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                                isActive
-                                  ? 'border-blue-600 bg-blue-600 text-white'
-                                  : 'border-slate-300 bg-white'
-                              }`}
-                            >
-                              {isActive && <Check className="h-3 w-3 stroke-[3]" />}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-xs font-bold text-slate-800 block truncate">
-                                {secName}
-                              </span>
-                              <span className="text-[10px] text-slate-500">
-                                {secItems.length} campos · Se ubicará al final
-                              </span>
-                            </div>
+                  {seccionesDisponibles.map((sec) => {
+                    const isActive =
+                      assignSectionMode === 'existing' && assignForm.grupo_visual === sec.name;
+                    return (
+                      <button
+                        key={sec.name}
+                        type="button"
+                        onClick={() => handleSelectAssignSection(sec.name)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          isActive
+                            ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
+                            : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/70 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                              isActive
+                                ? 'border-blue-600 bg-blue-600 text-white'
+                                : 'border-slate-300 bg-white'
+                            }`}
+                          >
+                            {isActive && <Check className="h-3 w-3 stroke-[3]" />}
                           </div>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    // CASO B: La parte es nueva (0 campos) — Píldoras de ingeniería estándar (CERO TEXTO LIBRE)
-                    [
-                      {
-                        name: 'Especificaciones Técnicas',
-                        desc: 'Recomendada · Datos clave y placa técnica del equipo',
-                      },
-                      {
-                        name: 'Desempeño y Capacidad',
-                        desc: 'Potencia, caudales, presiones y rendimiento',
-                      },
-                      {
-                        name: 'Identificación',
-                        desc: 'Marca, modelo, serie y fabricante',
-                      },
-                      {
-                        name: 'Control y Seguridad',
-                        desc: 'Protecciones, presostatos y sensores',
-                      },
-                    ].map((preset) => {
-                      const isActive =
-                        assignSectionMode === 'existing' && assignForm.grupo_visual === preset.name;
-                      return (
-                        <button
-                          key={preset.name}
-                          type="button"
-                          onClick={() => {
-                            setAssignSectionMode('existing');
-                            setAssignForm((prev) => ({
-                              ...prev,
-                              grupo_visual: preset.name,
-                              orden_visual: '10',
-                            }));
-                          }}
-                          className={`p-2.5 rounded-xl border text-left transition-all ${
-                            isActive
-                              ? 'bg-blue-50/90 border-blue-500 shadow-2xs ring-2 ring-blue-500/20'
-                              : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/70 hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                                isActive
-                                  ? 'border-blue-600 bg-blue-600 text-white'
-                                  : 'border-slate-300 bg-white'
-                              }`}
-                            >
-                              {isActive && <Check className="h-3 w-3 stroke-[3]" />}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-xs font-bold text-slate-800 block truncate">
-                                {preset.name}
-                              </span>
-                              <span className="text-[10px] text-slate-500">{preset.desc}</span>
-                            </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-800 block truncate">
+                              {sec.name}
+                            </span>
+                            <span className="text-[10px] text-slate-500">{sec.desc}</span>
                           </div>
-                        </button>
-                      );
-                    })
-                  )}
+                        </div>
+                      </button>
+                    );
+                  })}
 
                   {/* Botón "+ Nueva sub-sección" */}
                   <button
