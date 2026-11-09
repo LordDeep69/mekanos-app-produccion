@@ -2198,7 +2198,7 @@ export function TabArquetiposEquipo() {
                         onChange={(e) => {
                           const nombre = e.target.value;
                           const auto = isAutoCodigoSrv
-                            ? generarCodigoTipoServicio(nombre, newSrvForm.categoria, codigosServiciosExistentes)
+                            ? generarCodigoTipoServicio(nombre, newSrvForm.categoria, codigosServiciosExistentes, selectedArquetipo?.codigo_tipo)
                             : newSrvForm.codigo_tipo;
                           setNewSrvForm({
                             ...newSrvForm,
@@ -2226,6 +2226,7 @@ export function TabArquetiposEquipo() {
                                   newSrvForm.nombre_tipo,
                                   newSrvForm.categoria,
                                   codigosServiciosExistentes,
+                                  selectedArquetipo?.codigo_tipo,
                                 );
                                 setNewSrvForm((prev) => ({ ...prev, codigo_tipo: auto }));
                               }
@@ -2272,7 +2273,7 @@ export function TabArquetiposEquipo() {
                           value={newSrvForm.categoria}
                           onChange={(cat) => {
                             const auto = isAutoCodigoSrv
-                              ? generarCodigoTipoServicio(newSrvForm.nombre_tipo, cat, codigosServiciosExistentes)
+                              ? generarCodigoTipoServicio(newSrvForm.nombre_tipo, cat, codigosServiciosExistentes, selectedArquetipo?.codigo_tipo)
                               : newSrvForm.codigo_tipo;
                             setNewSrvForm({
                               ...newSrvForm,

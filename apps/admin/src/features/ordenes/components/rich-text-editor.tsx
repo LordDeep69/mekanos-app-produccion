@@ -94,10 +94,9 @@ export function isHtml(text: string): boolean {
  * Solo: Negrita, Cursiva, Subrayado, H2, H3, Listas, Separador, Undo/Redo.
  */
 export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
-    if (!editor) return null;
-
     // Suscribir a transacciones y cambios de selección del editor
     // para que todos los botones (activos, deshacer, rehacer) se actualicen en tiempo real.
+    // ⚠️ ZERO-TRUST RULES OF HOOKS: Todos los hooks deben invocarse antes de cualquier retorno temprano.
     const [, setTick] = useState(0);
 
     useEffect(() => {
@@ -112,6 +111,8 @@ export function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor>
             editor.off('selectionUpdate', handleUpdate);
         };
     }, [editor]);
+
+    if (!editor) return null;
 
     const canUndo = Boolean(editor.can().undo());
     const canRedo = Boolean(editor.can().redo());

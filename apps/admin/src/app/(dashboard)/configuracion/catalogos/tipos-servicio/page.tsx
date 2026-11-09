@@ -18,10 +18,17 @@ import {
     X,
     Lock,
     Unlock,
-    CheckCircle2
+    CheckCircle2,
+    Layers,
+    Globe
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { generarCodigoTipoServicio, verificarCodigoDuplicado } from '@/features/catalogos-eam';
+import {
+    generarCodigoTipoServicio,
+    verificarCodigoDuplicado,
+    useArquetiposEam,
+    EamSelect
+} from '@/features/catalogos-eam';
 import {
     CATEGORIAS_SERVICIO,
     useCreateTipoServicio,
@@ -50,11 +57,13 @@ function getCategoriaLabel(cat: string) {
 export default function TiposServicioPage() {
     const [busqueda, setBusqueda] = useState('');
     const [categoriaFiltro, setCategoriaFiltro] = useState('');
+    const [tipoEquipoFiltro, setTipoEquipoFiltro] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingTipo, setEditingTipo] = useState<any>(null);
     const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
 
     const { data: response, isLoading, isError, refetch } = useTiposServicio({ activo: true });
+    const { data: arquetipos = [] } = useArquetiposEam();
     const crearTipo = useCreateTipoServicio();
     const actualizarTipo = useUpdateTipoServicio();
     const eliminarTipo = useDeleteTipoServicio();
@@ -78,7 +87,12 @@ export default function TiposServicioPage() {
         const term = busqueda.toLowerCase();
         const matchesBusqueda = nombre.toLowerCase().includes(term) || codigo.toLowerCase().includes(term);
         const matchesCategoria = !categoriaFiltro || t.categoria === categoriaFiltro;
-        return matchesBusqueda && matchesCategoria;
+        const matchesTipoEquipo = !tipoEquipoFiltro
+            ? true
+            : tipoEquipoFiltro === 'universal'
+            ? !t.id_tipo_equipo
+            : String(t.id_tipo_equipo) === tipoEquipoFiltro;
+        return matchesBusqueda && matchesCategoria && matchesTipoEquipo;
     });
 
     return (
@@ -103,9 +117,9 @@ export default function TiposServicioPage() {
                 </button>
             </div>
 
-            {/* Barra de Filtros */}
-            <div className="flex flex-col sm:flex-row gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="relative flex-1">
+            {/* Barra de Filtros Prémium */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm items-center">
+                <div className="relative md:col-span-5">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                         type="text"
@@ -115,16 +129,38 @@ export default function TiposServicioPage() {
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                 </div>
-                <select
-                    value={categoriaFiltro}
-                    onChange={(e) => setCategoriaFiltro(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                >
-                    <option value="">Todas las categorías</option>
-                    {CATEGORIAS_SERVICIO.map(cat => (
-                        <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                </select>
+                <div className="md:col-span-4">
+                    <EamSelect
+                        value={tipoEquipoFiltro}
+                        onChange={setTipoEquipoFiltro}
+                        options={[
+                            { value: '', label: 'Todos los Tipos de Equipo' },
+                            { value: 'universal', label: '🌐 Solo Universales (Cualquier Equipo)', badge: 'GLOBAL' },
+                            ...arquetipos.map((a: any) => ({
+                                value: String(a.id_tipo_equipo),
+                                label: `${a.nombre_tipo} (${a.codigo_tipo})`,
+                                badge: a.codigo_tipo,
+                            }))
+                        ]}
+                        placeholder="Filtrar por arquetipo..."
+                        searchable={arquetipos.length > 5}
+                    />
+                </div>
+                <div className="md:col-span-3">
+                    <EamSelect
+                        value={categoriaFiltro}
+                        onChange={setCategoriaFiltro}
+                        options={[
+                            { value: '', label: 'Todas las categorías' },
+                            ...CATEGORIAS_SERVICIO.map(cat => ({
+                                value: cat.value,
+                                label: cat.label,
+                                badge: cat.value,
+                            }))
+                        ]}
+                        placeholder="Filtrar por categoría..."
+                    />
+                </div>
             </div>
 
             {/* Tabla de Resultados */}
@@ -154,6 +190,7 @@ export default function TiposServicioPage() {
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100">
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Servicio</th>
+                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Aplica a</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoría</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Checklist</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Duración Est.</th>
@@ -170,7 +207,7 @@ export default function TiposServicioPage() {
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div
-                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm"
+                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm shrink-0"
                                                     style={{ backgroundColor: tipo.color_hex || '#3b82f6' }}
                                                 >
                                                     <Wrench className="h-5 w-5" />
@@ -191,6 +228,22 @@ export default function TiposServicioPage() {
                                                     <p className="text-xs font-mono text-gray-400">{tipo.codigo_tipo}</p>
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {tipo.tipos_equipo ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs">
+                                                    <Layers className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                                                    <span>{tipo.tipos_equipo.nombre_tipo}</span>
+                                                    <span className="px-1.5 py-0.2 rounded text-[10px] bg-blue-200/60 text-blue-800 font-mono font-bold">
+                                                        {tipo.tipos_equipo.codigo_tipo}
+                                                    </span>
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 text-slate-500 border border-slate-200/80">
+                                                    <Globe className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                    <span>Universal</span>
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={cn(
@@ -252,11 +305,13 @@ export default function TiposServicioPage() {
                     onClose={() => setIsModalOpen(false)}
                     tipo={editingTipo}
                     tipos={tipos}
+                    arquetipos={arquetipos}
                     onSubmit={async (formData: any) => {
                         const payload = {
                             nombreTipo: formData.nombre_tipo,
                             codigoTipo: formData.codigo_tipo,
                             categoria: formData.categoria,
+                            tipoEquipoId: formData.id_tipo_equipo ? Number(formData.id_tipo_equipo) : undefined,
                             descripcion: formData.descripcion || undefined,
                             tieneChecklist: Boolean(formData.tiene_checklist),
                             duracionEstimadaHoras: formData.duracion_estimada_horas,
@@ -371,14 +426,23 @@ function PlantillaObservacionEditor({
 
             {/* Editor TipTap con estilo y toolbar idéntico a Observaciones de Cierre */}
             <div className="obs-editor border-2 border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 bg-white">
-                <EditorToolbar editor={editor} />
-                <EditorContent editor={editor} />
+                {editor ? (
+                    <>
+                        <EditorToolbar editor={editor} />
+                        <EditorContent editor={editor} />
+                    </>
+                ) : (
+                    <div className="min-h-[220px] flex items-center justify-center text-gray-400 text-xs gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        <span>Cargando editor de plantilla...</span>
+                    </div>
+                )}
             </div>
         </div>
     );
 }
 
-function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoading }: any) {
+function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], arquetipos = [], onSubmit, isLoading }: any) {
     const [activeTab, setActiveTab] = useState<'general' | 'plantilla'>('general');
 
     const codigosExistentes = useMemo(() => {
@@ -395,6 +459,7 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
     const [formData, setFormData] = useState({
         nombre_tipo: tipo?.nombre_tipo || '',
         codigo_tipo: tipo?.codigo_tipo || '',
+        id_tipo_equipo: tipo?.id_tipo_equipo ? String(tipo.id_tipo_equipo) : '',
         categoria: tipo?.categoria || 'PREVENTIVO',
         descripcion: tipo?.descripcion || '',
         tiene_checklist: tipo?.tiene_checklist ?? true,
@@ -402,6 +467,11 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
         color_hex: tipo?.color_hex || '#3b82f6',
         plantilla_observacion: tipo?.plantilla_observacion || '',
     });
+
+    const selectedArquetipo = useMemo(() => {
+        if (!formData.id_tipo_equipo) return null;
+        return arquetipos.find((a: any) => String(a.id_tipo_equipo) === String(formData.id_tipo_equipo)) || null;
+    }, [arquetipos, formData.id_tipo_equipo]);
 
     const isCodigoDuplicado = useMemo(() => {
         return verificarCodigoDuplicado(
@@ -411,35 +481,51 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
         );
     }, [formData.codigo_tipo, codigosExistentes, tipo]);
 
+    const handleArquetipoChange = (newIdStr: string) => {
+        const arq = arquetipos.find((a: any) => String(a.id_tipo_equipo) === newIdStr);
+        const auto = (isAutoCodigo && !tipo)
+            ? generarCodigoTipoServicio(formData.nombre_tipo, formData.categoria, codigosExistentes, arq?.codigo_tipo)
+            : formData.codigo_tipo;
+        setFormData(prev => ({
+            ...prev,
+            id_tipo_equipo: newIdStr,
+            codigo_tipo: auto,
+        }));
+    };
+
     const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newNombre = e.target.value;
         const auto = (isAutoCodigo && !tipo)
-            ? generarCodigoTipoServicio(newNombre, formData.categoria, codigosExistentes)
+            ? generarCodigoTipoServicio(newNombre, formData.categoria, codigosExistentes, selectedArquetipo?.codigo_tipo)
             : formData.codigo_tipo;
-        setFormData({
-            ...formData,
+        setFormData(prev => ({
+            ...prev,
             nombre_tipo: newNombre,
             codigo_tipo: auto,
-        });
+        }));
     };
 
-    const handleCategoriaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newCat = e.target.value;
+    const handleCategoriaChange = (newCat: string) => {
         const auto = (isAutoCodigo && !tipo)
-            ? generarCodigoTipoServicio(formData.nombre_tipo, newCat, codigosExistentes)
+            ? generarCodigoTipoServicio(formData.nombre_tipo, newCat, codigosExistentes, selectedArquetipo?.codigo_tipo)
             : formData.codigo_tipo;
-        setFormData({
-            ...formData,
-            categoria: newCat,
+        setFormData(prev => ({
+            ...prev,
+            categoria: newCat as any,
             codigo_tipo: auto,
-        });
+        }));
     };
 
     const handleToggleAutoCodigo = () => {
         const nuevoModo = !isAutoCodigo;
         setIsAutoCodigo(nuevoModo);
         if (nuevoModo) {
-            const auto = generarCodigoTipoServicio(formData.nombre_tipo, formData.categoria, codigosExistentes);
+            const auto = generarCodigoTipoServicio(
+                formData.nombre_tipo,
+                formData.categoria,
+                codigosExistentes,
+                selectedArquetipo?.codigo_tipo
+            );
             setFormData((prev) => ({ ...prev, codigo_tipo: auto }));
         }
     };
@@ -456,11 +542,17 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
             }
         }
 
-        const finalCode = formData.codigo_tipo.trim() || generarCodigoTipoServicio(formData.nombre_tipo, formData.categoria, codigosExistentes);
+        const finalCode = formData.codigo_tipo.trim() || generarCodigoTipoServicio(
+            formData.nombre_tipo,
+            formData.categoria,
+            codigosExistentes,
+            selectedArquetipo?.codigo_tipo
+        );
 
         onSubmit({
             ...formData,
             codigo_tipo: finalCode.toUpperCase().trim(),
+            id_tipo_equipo: formData.id_tipo_equipo ? Number(formData.id_tipo_equipo) : undefined,
             duracion_estimada_horas: parsedDuracion
         });
     };
@@ -524,6 +616,50 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
                 <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
                     {/* Tab 1: Datos Generales */}
                     <div className={cn('space-y-4', activeTab === 'general' ? 'block' : 'hidden')}>
+                        {/* Selector de Arquetipo de Equipo */}
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                                    <Layers className="h-4 w-4 text-blue-600" />
+                                    ¿A qué Tipo de Activo / Equipo aplica este servicio?
+                                </label>
+                                {selectedArquetipo && (
+                                    <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                                        Arquetipo: {selectedArquetipo.codigo_tipo}
+                                    </span>
+                                )}
+                            </div>
+                            <EamSelect
+                                value={formData.id_tipo_equipo}
+                                onChange={handleArquetipoChange}
+                                options={[
+                                    {
+                                        value: '',
+                                        label: '🌐 Universal (Aplica a cualquier tipo de equipo)',
+                                        badge: 'GLOBAL',
+                                        description: 'Protocolo transversal utilizable en cualquier activo sin restricción de arquetipo.',
+                                    },
+                                    ...arquetipos.map((arq: any) => ({
+                                        value: String(arq.id_tipo_equipo),
+                                        label: `${arq.nombre_tipo} (${arq.codigo_tipo})`,
+                                        badge: arq.codigo_tipo,
+                                        description: arq.descripcion || `Especializado para ${arq.nombre_tipo}`,
+                                    }))
+                                ]}
+                                placeholder="Selecciona el tipo de equipo..."
+                                searchable={arquetipos.length > 5}
+                            />
+                            <p className="text-[11px] text-gray-500 mt-1">
+                                {selectedArquetipo ? (
+                                    <span className="text-blue-600 font-medium">
+                                        ⚡ Vinculado al arquetipo <strong>{selectedArquetipo.nombre_tipo}</strong>. Se genera código de referencia industrial <strong>{selectedArquetipo.codigo_tipo}_...</strong>
+                                    </span>
+                                ) : (
+                                    'Define si este servicio es específico para un activo (ej: Ascensores) o aplicable a cualquier equipo.'
+                                )}
+                            </p>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2 sm:col-span-1">
                                 <label className="block text-sm font-bold text-gray-700 mb-1.5">Nombre del Servicio *</label>
@@ -533,7 +669,7 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
                                     value={formData.nombre_tipo}
                                     onChange={handleNombreChange}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium transition-all"
-                                    placeholder="Ej: Preventivo Tipo A"
+                                    placeholder="Ej: Mantenimiento Preventivo Tipo A - Ascensor"
                                 />
                             </div>
                             <div className="col-span-2 sm:col-span-1">
@@ -560,7 +696,7 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
                                             ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
                                             : 'border-gray-300'
                                     }`}
-                                    placeholder="PREV_A"
+                                    placeholder="ELEV_PREV_A"
                                     disabled={Boolean(tipo) || isAutoCodigo}
                                 />
                                 {isCodigoDuplicado ? (
@@ -578,16 +714,16 @@ function TipoServicioModal({ isOpen, onClose, tipo, tipos = [], onSubmit, isLoad
 
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1.5">Categoría de Negocio *</label>
-                            <select
-                                required
+                            <EamSelect
                                 value={formData.categoria}
                                 onChange={handleCategoriaChange}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
-                            >
-                                {CATEGORIAS_SERVICIO.map(cat => (
-                                    <option key={cat.value} value={cat.value}>{cat.label}</option>
-                                ))}
-                            </select>
+                                options={CATEGORIAS_SERVICIO.map(cat => ({
+                                    value: cat.value,
+                                    label: cat.label,
+                                    badge: cat.value,
+                                }))}
+                                placeholder="Selecciona la categoría..."
+                            />
                         </div>
 
                         <div>
