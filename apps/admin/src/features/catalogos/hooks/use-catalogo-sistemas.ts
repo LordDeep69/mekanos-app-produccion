@@ -13,9 +13,11 @@ import {
     getCatalogoSistemas,
     getCatalogoSistemasActivos,
     getCatalogoSistemasConUso,
+    reordenarCatalogoSistemas,
     updateCatalogoSistema,
     type CatalogoSistemasQueryParams,
     type CreateCatalogoSistemaDto,
+    type ReordenarSistemaItem,
     type UpdateCatalogoSistemaDto
 } from '../api/catalogo-sistemas.service';
 
@@ -128,5 +130,26 @@ export function useCatalogoSistemasConUso(params?: CatalogoSistemasQueryParams) 
         queryKey: [...CATALOGO_SISTEMAS_KEY, 'con-uso', params],
         queryFn: () => getCatalogoSistemasConUso(params),
         ...CacheStrategy.DYNAMIC,
+    });
+}
+
+/**
+ * Hook para reordenar secuencialmente subsistemas (Drag & Drop)
+ */
+export function useReordenarCatalogoSistemas() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (items: ReordenarSistemaItem[]) => reordenarCatalogoSistemas(items),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: CATALOGO_SISTEMAS_KEY });
+            toast.success('Secuencia de inspección actualizada');
+        },
+        onError: (error: unknown) => {
+            const err = error as { response?: { data?: { message?: string | string[] } } };
+            const message = err.response?.data?.message;
+            const errorText = Array.isArray(message) ? message.join(', ') : message;
+            toast.error(errorText || 'Error al reordenar sistemas');
+        },
     });
 }

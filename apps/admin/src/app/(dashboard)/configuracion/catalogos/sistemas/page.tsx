@@ -4,6 +4,7 @@ import {
     useCatalogoSistemasConUso,
     useCreateCatalogoSistema,
     useDeleteCatalogoSistema,
+    useReordenarCatalogoSistemas,
     useUpdateCatalogoSistema,
     type NivelUso
 } from '@/features/catalogos';
@@ -14,6 +15,7 @@ import {
     Check,
     CheckCircle2,
     Edit,
+    GripVertical,
     Info,
     Layers,
     ListOrdered,
@@ -54,6 +56,19 @@ export default function SistemasPage() {
     const crearSistema = useCreateCatalogoSistema();
     const actualizarSistema = useUpdateCatalogoSistema();
     const eliminarSistema = useDeleteCatalogoSistema();
+    const reordenarMutation = useReordenarCatalogoSistemas();
+
+    // Estados para Drag & Drop interactivo
+    const [draggedId, setDraggedId] = useState<number | null>(null);
+    const [dragOverId, setDragOverId] = useState<number | null>(null);
+    const [ordenLocal, setOrdenLocal] = useState<any[] | null>(null);
+
+    const isReorderable = filtroTipo !== 'TODOS' && filtroTipo !== 'UNIVERSAL' && !busqueda.trim();
+
+    // Resetear orden local optimista cuando cambie la pestaña o la búsqueda
+    useEffect(() => {
+        setOrdenLocal(null);
+    }, [filtroTipo, busqueda]);
 
     const handleEdit = (sistema: any) => {
         setEditingSistema(sistema);
@@ -109,6 +124,61 @@ export default function SistemasPage() {
         }).sort((a: any, b: any) => (a.orden_visualizacion || 0) - (b.orden_visualizacion || 0));
     }, [sistemas, busqueda, filtroTipo]);
 
+    // Lista mostrada (apoya actualización optimista inmediata durante Drag & Drop)
+    const displayedSistemas = useMemo(() => {
+        if (ordenLocal && isReorderable) return ordenLocal;
+        return filteredSistemas;
+    }, [ordenLocal, isReorderable, filteredSistemas]);
+
+    const tabActualLabel = useMemo(() => {
+        const found = tabsArquetipos.find((t) => t.codigo === filtroTipo);
+        return found ? found.label : 'Equipo Seleccionado';
+    }, [tabsArquetipos, filtroTipo]);
+
+    const handleDrop = async (targetId: number) => {
+        if (draggedId === null || draggedId === targetId) {
+            setDraggedId(null);
+            setDragOverId(null);
+            return;
+        }
+
+        const currentItems = [...displayedSistemas];
+        const sourceIdx = currentItems.findIndex((s: any) => s.id_sistema === draggedId);
+        const targetIdx = currentItems.findIndex((s: any) => s.id_sistema === targetId);
+
+        if (sourceIdx < 0 || targetIdx < 0) {
+            setDraggedId(null);
+            setDragOverId(null);
+            return;
+        }
+
+        // Mover elemento en el array
+        const [moved] = currentItems.splice(sourceIdx, 1);
+        currentItems.splice(targetIdx, 0, moved);
+
+        // Reasignar orden_visualizacion consecutivo (1, 2, 3...)
+        const reorderedWithNumbers = currentItems.map((item: any, idx: number) => ({
+            ...item,
+            orden_visualizacion: idx + 1,
+        }));
+
+        setOrdenLocal(reorderedWithNumbers);
+        setDraggedId(null);
+        setDragOverId(null);
+
+        // Persistir en backend
+        const payload = reorderedWithNumbers.map((item: any, idx: number) => ({
+            idSistema: item.id_sistema,
+            ordenVisualizacion: idx + 1,
+        }));
+
+        try {
+            await reordenarMutation.mutateAsync(payload);
+        } catch {
+            setOrdenLocal(null);
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -159,18 +229,52 @@ export default function SistemasPage() {
                 })}
             </div>
 
-            {/* Búsqueda */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar subsistema por nombre o código..."
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
+            {/* Búsqueda y Barra Informativa de Reordenamiento */}
+            <div className="space-y-3">
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar subsistema por nombre o código..."
+                            value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        />
+                    </div>
                 </div>
+
+                {/* Banner contextual de Drag & Drop */}
+                {isReorderable ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-gradient-to-r from-blue-50 via-indigo-50/40 to-blue-50 border border-blue-200 rounded-xl text-xs text-blue-950 shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                                <GripVertical className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-blue-900 flex items-center gap-1.5">
+                                    Modo Drag & Drop Activo: Secuencia de {tabActualLabel}
+                                </p>
+                                <p className="text-[11px] text-blue-700/90 mt-0.5">
+                                    Arrastra las filas desde el tirador <strong>(⋮⋮)</strong> para redefinir la ruta de inspección en campo. La numeración se auto-actualiza y persiste al instante.
+                                </p>
+                            </div>
+                        </div>
+                        {reordenarMutation.isPending && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-700 font-bold shadow-xs shrink-0 self-start sm:self-auto">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                                <span>Guardando orden...</span>
+                            </div>
+                        )}
+                    </div>
+                ) : filtroTipo === 'TODOS' ? (
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-600">
+                        <Info className="h-4 w-4 text-gray-400 shrink-0" />
+                        <span>
+                            💡 Para activar el reordenamiento por arrastrar y soltar (Drag & Drop), selecciona la pestaña de un equipo específico (ej: <strong>Ascensor de Pasajeros</strong> o <strong>Compresor</strong>).
+                        </span>
+                    </div>
+                ) : null}
             </div>
 
             {/* Grid de Sistemas */}
@@ -188,7 +292,7 @@ export default function SistemasPage() {
                             Reintentar
                         </button>
                     </div>
-                ) : filteredSistemas.length === 0 ? (
+                ) : displayedSistemas.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                         <Layers className="h-16 w-16 mb-4 opacity-20" />
                         <p className="text-lg font-medium">No se encontraron sistemas para esta vista</p>
@@ -199,6 +303,11 @@ export default function SistemasPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100">
+                                    {isReorderable && (
+                                        <th className="px-3 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider w-10 text-center" title="Arrastrar y soltar">
+                                            <GripVertical className="h-4 w-4 mx-auto text-gray-400" />
+                                        </th>
+                                    )}
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider w-16 text-center">Orden</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Sistema</th>
                                     <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Actividades</th>
@@ -207,92 +316,143 @@ export default function SistemasPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredSistemas.map((sistema: any, idx: number) => (
-                                    <tr key={sistema.id_sistema ?? `sistema-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="text-sm font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md font-mono">
-                                                #{sistema.orden_visualizacion}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm shrink-0"
-                                                    style={{ backgroundColor: sistema.color_hex || '#3b82f6' }}
-                                                >
-                                                    <Layers className="h-5 w-5" />
+                                {displayedSistemas.map((sistema: any, idx: number) => {
+                                    const isBeingDragged = draggedId === sistema.id_sistema;
+                                    const isDragOver = dragOverId === sistema.id_sistema && !isBeingDragged;
+
+                                    return (
+                                        <tr
+                                            key={sistema.id_sistema ?? `sistema-${idx}`}
+                                            draggable={isReorderable}
+                                            onDragStart={(e) => {
+                                                if (!isReorderable) return;
+                                                e.dataTransfer.effectAllowed = 'move';
+                                                setDraggedId(sistema.id_sistema);
+                                            }}
+                                            onDragOver={(e) => {
+                                                if (!isReorderable) return;
+                                                e.preventDefault();
+                                                e.dataTransfer.dropEffect = 'move';
+                                                if (dragOverId !== sistema.id_sistema) {
+                                                    setDragOverId(sistema.id_sistema);
+                                                }
+                                            }}
+                                            onDragLeave={() => {
+                                                if (dragOverId === sistema.id_sistema) {
+                                                    setDragOverId(null);
+                                                }
+                                            }}
+                                            onDrop={(e) => {
+                                                if (!isReorderable) return;
+                                                e.preventDefault();
+                                                handleDrop(sistema.id_sistema);
+                                            }}
+                                            onDragEnd={() => {
+                                                setDraggedId(null);
+                                                setDragOverId(null);
+                                            }}
+                                            className={cn(
+                                                "transition-all group",
+                                                isReorderable ? "cursor-grab active:cursor-grabbing select-none" : "",
+                                                isBeingDragged ? "opacity-25 bg-blue-100/60 scale-[0.99]" : "hover:bg-blue-50/30",
+                                                isDragOver ? "border-t-2 border-blue-600 bg-blue-50/40" : ""
+                                            )}
+                                        >
+                                            {isReorderable && (
+                                                <td className="px-3 py-4 text-center">
+                                                    <div className="p-1 rounded text-gray-300 group-hover:text-blue-600 transition-colors inline-flex items-center justify-center">
+                                                        <GripVertical className="h-4 w-4" />
+                                                    </div>
+                                                </td>
+                                            )}
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={cn(
+                                                    "text-sm font-bold px-2 py-1 rounded-md font-mono transition-colors",
+                                                    isDragOver ? "bg-blue-600 text-white shadow-xs" : "text-gray-600 bg-gray-100"
+                                                )}>
+                                                    #{sistema.orden_visualizacion}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm shrink-0"
+                                                        style={{ backgroundColor: sistema.color_hex || '#3b82f6' }}
+                                                    >
+                                                        <Layers className="h-5 w-5" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
+                                                            {sistema.nombre_sistema}
+                                                        </p>
+                                                        <p className="text-xs font-mono text-gray-400">{sistema.codigo_sistema}</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
-                                                        {sistema.nombre_sistema}
-                                                    </p>
-                                                    <p className="text-xs font-mono text-gray-400">{sistema.codigo_sistema}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="flex flex-col items-center gap-1">
-                                                <div className="flex items-center gap-1.5">
-                                                    <Activity className="h-4 w-4 text-gray-400" />
-                                                    <span className="text-lg font-bold text-gray-800">
-                                                        {(sistema as any).total_actividades ?? 0}
-                                                    </span>
-                                                </div>
-                                                {sistema.nivel_uso && (
-                                                    (() => {
-                                                        const nivel = sistema.nivel_uso as NivelUso;
-                                                        const config = NIVEL_USO_CONFIG[nivel];
-                                                        return (
-                                                            <span className={cn(
-                                                                "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                                                                config?.bgColor || 'bg-gray-100',
-                                                                config?.color || 'text-gray-500'
-                                                            )}>
-                                                                {config?.label || 'N/A'}
-                                                            </span>
-                                                        );
-                                                    })()
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-wrap gap-1 items-center">
-                                                {Array.isArray(sistema.aplica_a) && sistema.aplica_a.length > 0 ? (
-                                                    sistema.aplica_a.map((codigo: string) => (
-                                                        <span
-                                                            key={codigo}
-                                                            className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider font-mono"
-                                                        >
-                                                            {codigo}
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Activity className="h-4 w-4 text-gray-400" />
+                                                        <span className="text-lg font-bold text-gray-800">
+                                                            {(sistema as any).total_actividades ?? 0}
                                                         </span>
-                                                    ))
-                                                ) : sistema.aplica_a && typeof sistema.aplica_a === 'string' ? (
-                                                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider font-mono">
-                                                        {sistema.aplica_a}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-xs text-gray-400 italic">Todos los equipos</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleEdit(sistema)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(sistema.id_sistema)}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                                    </div>
+                                                    {sistema.nivel_uso && (
+                                                        (() => {
+                                                            const nivel = sistema.nivel_uso as NivelUso;
+                                                            const config = NIVEL_USO_CONFIG[nivel];
+                                                            return (
+                                                                <span className={cn(
+                                                                    "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                                                                    config?.bgColor || 'bg-gray-100',
+                                                                    config?.color || 'text-gray-500'
+                                                                )}>
+                                                                    {config?.label || 'N/A'}
+                                                                </span>
+                                                            );
+                                                        })()
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-wrap gap-1 items-center">
+                                                    {Array.isArray(sistema.aplica_a) && sistema.aplica_a.length > 0 ? (
+                                                        sistema.aplica_a.map((codigo: string) => (
+                                                            <span
+                                                                key={codigo}
+                                                                className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider font-mono"
+                                                            >
+                                                                {codigo}
+                                                            </span>
+                                                        ))
+                                                    ) : sistema.aplica_a && typeof sistema.aplica_a === 'string' ? (
+                                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold uppercase tracking-wider font-mono">
+                                                            {sistema.aplica_a}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">Todos los equipos</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleEdit(sistema)}
+                                                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(sistema.id_sistema)}
+                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

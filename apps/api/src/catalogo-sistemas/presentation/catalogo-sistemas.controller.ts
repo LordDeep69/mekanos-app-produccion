@@ -20,11 +20,13 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ActualizarCatalogoSistemasDto } from '../application/dto/actualizar-catalogo-sistemas.dto';
 import { CatalogoSistemasResponseDto } from '../application/dto/catalogo-sistemas-response.dto';
 import { CrearCatalogoSistemasDto } from '../application/dto/crear-catalogo-sistemas.dto';
+import { ReordenarCatalogoSistemasDto } from '../application/dto/reordenar-catalogo-sistemas.dto';
 
 // Commands
 import { ActualizarCatalogoSistemasCommand } from '../application/commands/actualizar-catalogo-sistemas.command';
 import { CrearCatalogoSistemasCommand } from '../application/commands/crear-catalogo-sistemas.command';
 import { EliminarCatalogoSistemasCommand } from '../application/commands/eliminar-catalogo-sistemas.command';
+import { ReordenarCatalogoSistemasCommand } from '../application/commands/reordenar-catalogo-sistemas.command';
 
 // Queries
 import { ListarCatalogoSistemasQuery } from '../application/handlers/listar-catalogo-sistemas.handler';
@@ -146,6 +148,20 @@ export class CatalogoSistemasController {
       dto.observaciones,
       dto.intercalar,
     );
+    return this.commandBus.execute(command);
+  }
+
+  /**
+   * PUT /catalogo-sistemas/reordenar
+   * Reordenar secuencialmente sistemas del catálogo
+   */
+  @Put('reordenar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reordenar secuencialmente sistemas del catálogo de forma atómica' })
+  @ApiResponse({ status: 200, description: 'Sistemas reordenados exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  async reordenarSistemas(@Body() dto: ReordenarCatalogoSistemasDto): Promise<{ success: boolean; reordenados: number }> {
+    const command = new ReordenarCatalogoSistemasCommand(dto.items);
     return this.commandBus.execute(command);
   }
 

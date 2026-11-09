@@ -164,6 +164,24 @@ export async function deleteCatalogoSistema(id: number): Promise<{ data: Catalog
     return { data: transformToSnakeCase(response.data) };
 }
 
+export interface ReordenarSistemaItem {
+    idSistema: number;
+    ordenVisualizacion: number;
+}
+
+/**
+ * Reordenar secuencialmente sistemas del catálogo
+ */
+export async function reordenarCatalogoSistemas(
+    items: ReordenarSistemaItem[]
+): Promise<{ success: boolean; reordenados: number }> {
+    const response = await apiClient.put<{ success: boolean; reordenados: number }>(
+        `${BASE}/reordenar`,
+        { items }
+    );
+    return response.data;
+}
+
 // ============================================
 // NUEVO: Sistemas con Indicadores de Uso
 // ============================================

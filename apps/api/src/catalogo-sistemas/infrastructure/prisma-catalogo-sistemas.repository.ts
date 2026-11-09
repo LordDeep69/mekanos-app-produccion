@@ -90,4 +90,18 @@ export class PrismaCatalogoSistemasRepository implements ICatalogoSistemasReposi
       data: { activo: false },
     });
   }
+
+  /**
+   * Reordenamiento atómico por transacción
+   */
+  async reordenar(items: Array<{ idSistema: number; ordenVisualizacion: number }>): Promise<void> {
+    await this.prisma.$transaction(
+      items.map(item =>
+        this.prisma.catalogo_sistemas.update({
+          where: { id_sistema: item.idSistema },
+          data: { orden_visualizacion: item.ordenVisualizacion },
+        })
+      )
+    );
+  }
 }

@@ -12,4 +12,5 @@ export interface ICatalogoSistemasRepository {
   create(data: any): Promise<catalogo_sistemas>;
   update(id: number, data: any): Promise<catalogo_sistemas>;
   softDelete(id: number): Promise<catalogo_sistemas>;
+  reordenar(items: Array<{ idSistema: number; ordenVisualizacion: number }>): Promise<void>;
 }
