@@ -202,50 +202,77 @@ export default function SistemasPage() {
                 </button>
             </div>
 
-            {/* Pestañas de Filtro por Arquetipo */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-b border-gray-200">
-                {tabsArquetipos.map((tab) => {
-                    const isSelected = filtroTipo === tab.codigo;
-                    return (
-                        <button
-                            key={tab.codigo}
-                            type="button"
-                            onClick={() => setFiltroTipo(tab.codigo)}
-                            className={cn(
-                                "flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-t-xl transition-all cursor-pointer border-b-2 whitespace-nowrap",
-                                isSelected
-                                    ? "border-blue-600 text-blue-600 bg-blue-50/60"
-                                    : "border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50"
-                            )}
-                        >
-                            <span>{tab.label}</span>
-                            <span className={cn(
-                                "px-1.5 py-0.5 rounded-full text-[10px] font-mono",
-                                isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"
-                            )}>
-                                {tab.count}
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Búsqueda y Barra Informativa de Reordenamiento */}
-            <div className="space-y-3">
-                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            {/* Barra de Filtros y Control Prémium (Sin scroll horizontal infinito) */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
+                {/* Fila 1: Buscador integrado + Selector de Arquetipo EamSelect */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    <div className="relative md:col-span-7">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <input
                             type="text"
-                            placeholder="Buscar subsistema por nombre o código..."
+                            placeholder="Buscar subsistema por nombre o código (ej: motor, cabina, bomba)..."
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            className="w-full pl-10 pr-9 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm placeholder:text-slate-400 outline-none transition-all font-medium"
+                        />
+                        {busqueda && (
+                            <button
+                                type="button"
+                                onClick={() => setBusqueda('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                title="Limpiar búsqueda"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="md:col-span-5">
+                        <EamSelect
+                            value={filtroTipo}
+                            onChange={(val) => setFiltroTipo(val)}
+                            options={selectArquetiposOptions}
+                            placeholder="Filtrar por arquetipo de equipo..."
+                            searchable
                         />
                     </div>
                 </div>
 
-                {/* Banner contextual de Drag & Drop */}
+                {/* Fila 2: Chips Rápidos Responsivos con flex-wrap */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                        Acceso Rápido:
+                    </span>
+                    {tabsArquetipos.map((tab) => {
+                        const isSelected = filtroTipo === tab.codigo;
+                        const labelCorto = tab.label.includes('/') ? tab.label.split('/')[0].trim() : tab.label;
+                        return (
+                            <button
+                                key={tab.codigo}
+                                type="button"
+                                onClick={() => setFiltroTipo(tab.codigo)}
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs",
+                                    isSelected
+                                        ? "bg-blue-600 text-white border-blue-600 shadow-blue-200"
+                                        : "bg-slate-50 text-slate-600 border-slate-200/90 hover:bg-slate-100 hover:text-slate-900 hover:border-slate-300"
+                                )}
+                            >
+                                <span>{labelCorto}</span>
+                                <span className={cn(
+                                    "px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold",
+                                    isSelected ? "bg-white/25 text-white" : "bg-slate-200/80 text-slate-700"
+                                )}>
+                                    {tab.count}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Banner contextual de Drag & Drop */}
+            <div className="space-y-3">
                 {isReorderable ? (
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-gradient-to-r from-blue-50 via-indigo-50/40 to-blue-50 border border-blue-200 rounded-xl text-xs text-blue-950 shadow-xs">
                         <div className="flex items-center gap-2.5">

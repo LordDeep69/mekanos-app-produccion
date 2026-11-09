@@ -141,6 +141,28 @@ export function TabModelosOemBom() {
   }, [todosModulos]);
 
   const [selectedModeloId, setSelectedModeloId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const modelosFiltrados = useMemo(() => {
+    if (!searchQuery.trim()) return modelos;
+    const q = searchQuery.toLowerCase().trim();
+    return modelos.filter((m) => {
+      const matchMarca = (m.marca || '').toLowerCase().includes(q);
+      const matchModelo = (m.modelo || '').toLowerCase().includes(q);
+      const matchComercial = (m.nombre_comercial || '').toLowerCase().includes(q);
+      const matchCodigo = (m.codigo_modelo || '').toLowerCase().includes(q);
+      const matchTipo = (m.tipo_equipo?.nombre_tipo || '').toLowerCase().includes(q);
+      return matchMarca || matchModelo || matchComercial || matchCodigo || matchTipo;
+    });
+  }, [modelos, searchQuery]);
+
+  const selectedModelo = useMemo(() => {
+    return modelos.find((m) => m.id_modelo_equipo === selectedModeloId) || null;
+  }, [modelos, selectedModeloId]);
+
+  const otrosModelos = useMemo(() => {
+    return modelosFiltrados.filter((m) => m.id_modelo_equipo !== selectedModeloId);
+  }, [modelosFiltrados, selectedModeloId]);
 
   useEffect(() => {
     if (!selectedModeloId && modelos.length > 0) {
