@@ -20,17 +20,7 @@ export class ActualizarCatalogoSistemasHandler implements ICommandHandler<Actual
       throw new NotFoundException(`Sistema con ID ${command.idSistema} no encontrado`);
     }
 
-    // 2. Si actualiza orden, verificar que no esté ocupado por otro registro
-    if (command.ordenVisualizacion !== undefined && command.ordenVisualizacion !== existe.orden_visualizacion) {
-      const existeOrden = await this.repository.findByOrden(command.ordenVisualizacion);
-      if (existeOrden && existeOrden.id_sistema !== command.idSistema) {
-        throw new ConflictException(
-          `Ya existe otro sistema con orden de visualización ${command.ordenVisualizacion}`,
-        );
-      }
-    }
-
-    // 3. Preparar datos para actualización
+    // 2. Preparar datos para actualización
     const updateData = this.mapper.toSnakeCaseUpdate({
       nombreSistema: command.nombreSistema,
       descripcion: command.descripcion,

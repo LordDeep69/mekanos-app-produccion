@@ -23,28 +23,21 @@ export class CrearCatalogoSistemasHandler implements ICommandHandler<CrearCatalo
       throw new ConflictException(`Ya existe un sistema con código '${codigoNormalizado}'`);
     }
 
-    // 3. Verificar que el orden de visualización no esté ocupado
-    if (command.ordenVisualizacion) {
-      const existeOrden = await this.repository.findByOrden(command.ordenVisualizacion);
-      if (existeOrden) {
-        throw new ConflictException(
-          `Ya existe un sistema con orden de visualización ${command.ordenVisualizacion}`,
-        );
-      }
+    // 3. Determinar orden de visualización inteligente (si no viene o es <= 0, asignar max + 1)
+    let ordenFinal = command.ordenVisualizacion ? Number(command.ordenVisualizacion) : 0;
+    if (ordenFinal <= 0) {
+      const todos = await this.repository.findActivos();
+      const maxOrden = todos.reduce((max, s) => Math.max(max, s.orden_visualizacion || 0), 0);
+      ordenFinal = maxOrden + 1;
     }
 
-    // 4. Validar que orden sea positivo
-    if (command.ordenVisualizacion && command.ordenVisualizacion <= 0) {
-      throw new BadRequestException('El orden de visualización debe ser mayor a 0');
-    }
-
-    // 5. Preparar datos para creación
+    // 4. Preparar datos para creación
     const createData = this.mapper.toSnakeCaseCreate({
       codigoSistema: codigoNormalizado,
       nombreSistema: command.nombreSistema,
       descripcion: command.descripcion,
       aplicaA: command.aplicaA,
-      ordenVisualizacion: command.ordenVisualizacion!,
+      ordenVisualizacion: ordenFinal,
       icono: command.icono,
       colorHex: command.colorHex,
       activo: command.activo ?? true,

@@ -24,7 +24,8 @@ import {
     X,
     Lock,
     Unlock,
-    CheckCircle2
+    CheckCircle2,
+    Info
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
@@ -271,16 +272,32 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
         );
     }, [sistemas, sistema]);
 
+    const siguienteOrdenSugerido = useMemo(() => {
+        if (!sistemas || sistemas.length === 0) return 1;
+        const maxOrden = Math.max(0, ...sistemas.map((s: any) => Number(s.orden_visualizacion) || 0));
+        return maxOrden + 1;
+    }, [sistemas]);
+
     const [isAutoCodigo, setIsAutoCodigo] = useState(!sistema);
 
     const [formData, setFormData] = useState({
         nombre_sistema: sistema?.nombre_sistema || '',
         codigo_sistema: sistema?.codigo_sistema || '',
         descripcion: sistema?.descripcion || '',
-        orden_visualizacion: sistema?.orden_visualizacion || 1,
+        orden_visualizacion: sistema?.orden_visualizacion ?? siguienteOrdenSugerido,
         color_hex: sistema?.color_hex || '#3b82f6',
         aplica_a: sistema?.aplica_a || [],
     });
+
+    const sistemaEnMismoOrden = useMemo(() => {
+        const ordenNum = Number(formData.orden_visualizacion);
+        if (!ordenNum || ordenNum <= 0) return null;
+        return (sistemas || []).find(
+            (s: any) =>
+                Number(s.orden_visualizacion) === ordenNum &&
+                (!sistema || s.id_sistema !== sistema.id_sistema),
+        );
+    }, [formData.orden_visualizacion, sistemas, sistema]);
 
     const isCodigoDuplicado = useMemo(() => {
         return verificarCodigoDuplicado(
@@ -418,17 +435,48 @@ function SistemaModal({ isOpen, onClose, sistema, sistemas = [], arquetipos = []
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
-                                <LayoutList className="h-4 w-4" />
-                                Orden Visual
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                                <span className="flex items-center gap-1.5">
+                                    <LayoutList className="h-4 w-4 text-blue-600" />
+                                    Orden Visual
+                                </span>
+                                <span className="text-[11px] text-gray-400 font-normal">Prioridad en checklist</span>
                             </label>
                             <input
                                 type="number"
                                 min="1"
                                 value={formData.orden_visualizacion}
                                 onChange={(e) => setFormData({ ...formData, orden_visualizacion: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono font-bold"
+                                placeholder="Ej: 1"
                             />
+                            {/* Feedback reactivo en tiempo real */}
+                            {!formData.orden_visualizacion || Number(formData.orden_visualizacion) <= 0 ? (
+                                <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1">
+                                    ✕ El orden debe ser un número mayor a 0.
+                                </p>
+                            ) : sistemaEnMismoOrden ? (
+                                <div className="mt-1.5 p-2 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-900 flex items-start justify-between gap-1.5">
+                                    <div className="flex items-start gap-1">
+                                        <Info className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                        <span className="leading-tight">
+                                            Posición {formData.orden_visualizacion}° ocupada por <strong>&quot;{sistemaEnMismoOrden.nombre_sistema}&quot;</strong>.
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData((prev) => ({ ...prev, orden_visualizacion: siguienteOrdenSugerido }))}
+                                        className="text-[10px] font-bold text-blue-700 hover:text-blue-900 underline whitespace-nowrap cursor-pointer shrink-0 ml-1"
+                                    >
+                                        Usar libre ({siguienteOrdenSugerido}°)
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-emerald-600 font-medium mt-1.5 flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                    <span>Posición disponible ({formData.orden_visualizacion}°)</span>
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
