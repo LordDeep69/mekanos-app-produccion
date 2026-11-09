@@ -28,6 +28,8 @@ export interface EamSelectProps {
   title?: string;
   minDropdownWidth?: number;
   dropdownWidth?: number | string;
+  usePortal?: boolean;
+  align?: 'left' | 'right';
 }
 
 /**
@@ -76,6 +78,8 @@ export function EamSelect({
   title,
   minDropdownWidth = 320,
   dropdownWidth,
+  usePortal = false,
+  align = 'left',
 }: EamSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -160,8 +164,10 @@ export function EamSelect({
     if (disabled) return;
     if (!isOpen) {
       setSearchTerm('');
-      const nextCoords = calculatePosition();
-      if (nextCoords) setCoords(nextCoords);
+      if (usePortal) {
+        const nextCoords = calculatePosition();
+        if (nextCoords) setCoords(nextCoords);
+      }
       setIsOpen(true);
     } else {
       setIsOpen(false);
@@ -234,13 +240,27 @@ export function EamSelect({
     };
 
     const handleScroll = (e: Event) => {
+      // En modo absolute (usePortal=false), CSS mantiene el anclaje nativo perfecto sin desfase
+      if (!usePortal) return;
       // Si el scroll ocurre dentro de la lista de opciones del popover, permitirlo
       if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
         return;
       }
-      // Si el usuario hace scroll en la página o en cualquier contenedor externo, cerrar limpiamente para evitar desfase visual
-      setIsOpen(false);
-      setCoords(null);
+      // Si el trigger ya no está visible en el viewport, cerrar limpiamente
+      if (!triggerRef.current) {
+        setIsOpen(false);
+        setCoords(null);
+        return;
+      }
+      const rect = triggerRef.current.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        setIsOpen(false);
+        setCoords(null);
+        return;
+      }
+      // Si sigue en pantalla, recalcular posición en vivo para mantenerlo pegado al botón
+      const nextCoords = calculatePosition();
+      if (nextCoords) setCoords(nextCoords);
     };
 
     const handleResize = () => {
@@ -273,6 +293,113 @@ export function EamSelect({
   const triggerClasses = isDark
     ? `bg-slate-900 hover:bg-slate-800 text-white border-slate-700 hover:border-slate-500 focus:ring-blue-500`
     : `bg-slate-50/70 hover:bg-white text-slate-900 border-slate-300 hover:border-blue-400 focus:ring-blue-500`;
+
+  const renderDropdownContent = () => (
+    <>
+      {/* Buscador integrado si hay muchas opciones */}
+      {shouldShowSearch && (
+        <div
+          className={`p-2 border-b flex items-center gap-2 ${
+            isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-100 bg-slate-50/70'
+          }`}
+        >
+          <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar opción..."
+            className={`w-full bg-transparent text-xs font-semibold focus:outline-none placeholder:text-slate-400 ${
+              isDark ? 'text-white' : 'text-slate-800'
+            }`}
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="p-0.5 rounded text-slate-400 hover:text-slate-600"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Lista de Opciones */}
+      <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+        {filteredOptions.length === 0 ? (
+          <div className="py-4 px-3 text-center text-xs text-slate-400 font-medium">
+            No se encontraron opciones
+          </div>
+        ) : (
+          filteredOptions.map((op, idx) => {
+            const isSelected =
+              selectedOption &&
+              String(selectedOption.value).toLowerCase() === String(op.value).toLowerCase();
+            const isHighlighted = idx === highlightedIndex;
+
+            return (
+              <button
+                key={op.key || `opt-${idx}`}
+                type="button"
+                onClick={() => handleSelect(op.value)}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold transition-all duration-100 flex items-center justify-between gap-3 cursor-pointer ${
+                  isSelected
+                    ? isDark
+                      ? 'bg-blue-600/30 text-blue-300 font-bold border border-blue-500/40 shadow-xs'
+                      : 'bg-blue-50/90 text-blue-800 font-bold border border-blue-200/80 shadow-xs'
+                    : isHighlighted
+                    ? isDark
+                      ? 'bg-slate-800 text-white'
+                      : 'bg-slate-100/90 text-slate-900'
+                    : isDark
+                    ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  {op.icon && <span className="shrink-0 text-slate-500">{op.icon}</span>}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold leading-snug whitespace-normal break-words">
+                      {op.label}
+                    </div>
+                    {op.description && (
+                      <div className="text-[10px] text-slate-400 font-normal leading-tight mt-0.5 whitespace-normal break-words">
+                        {op.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {op.badge && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        isDark
+                          ? 'bg-slate-800 text-slate-300'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {op.badge}
+                    </span>
+                  )}
+                  {isSelected && (
+                    <Check
+                      className={`h-4 w-4 shrink-0 ${
+                        isDark ? 'text-blue-400' : 'text-blue-600'
+                      }`}
+                    />
+                  )}
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div className={`relative inline-block w-full ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
@@ -320,8 +447,30 @@ export function EamSelect({
         </div>
       </button>
 
-      {/* Popover flotante vía Portal */}
-      {mounted &&
+      {/* MODO 1: Inline Absolute (usePortal === false) -> Fijado 100% al contenedor padre sin lag */}
+      {!usePortal && isOpen && (
+        <div
+          ref={popoverRef}
+          style={{
+            minWidth: minDropdownWidth || 320,
+            width: dropdownWidth || undefined,
+            maxWidth: 'calc(100vw - 24px)',
+          }}
+          className={`absolute z-50 mt-1.5 top-full rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
+            align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'
+          } ${
+            isDark
+              ? 'bg-slate-900/95 border-slate-700 text-white divide-slate-800'
+              : 'bg-white/95 border-slate-200/90 text-slate-900 divide-slate-100'
+          }`}
+        >
+          {renderDropdownContent()}
+        </div>
+      )}
+
+      {/* MODO 2: Portal Flotante (usePortal === true) -> Para contenedores con overflow-hidden */}
+      {usePortal &&
+        mounted &&
         isOpen &&
         coords &&
         createPortal(
@@ -337,119 +486,18 @@ export function EamSelect({
               zIndex: 99999,
               transformOrigin: coords.openUpward ? 'bottom right' : 'top right',
             }}
-              className={`rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
-                coords.openUpward ? 'origin-bottom' : 'origin-top'
-              } ${
-                isDark
-                  ? 'bg-slate-900/95 border-slate-700 text-white divide-slate-800'
-                  : 'bg-white/95 border-slate-200/90 text-slate-900 divide-slate-100'
-              }`}
-            >
-              {/* Buscador integrado si hay muchas opciones */}
-              {shouldShowSearch && (
-                <div
-                  className={`p-2 border-b flex items-center gap-2 ${
-                    isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-100 bg-slate-50/70'
-                  }`}
-                >
-                  <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Buscar opción..."
-                    className={`w-full bg-transparent text-xs font-semibold focus:outline-none placeholder:text-slate-400 ${
-                      isDark ? 'text-white' : 'text-slate-800'
-                    }`}
-                  />
-                  {searchTerm && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchTerm('')}
-                      className="p-0.5 rounded text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Lista de Opciones */}
-              <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
-                {filteredOptions.length === 0 ? (
-                  <div className="py-4 px-3 text-center text-xs text-slate-400 font-medium">
-                    No se encontraron opciones
-                  </div>
-                ) : (
-                  filteredOptions.map((op, idx) => {
-                    const isSelected =
-                      selectedOption &&
-                      String(selectedOption.value).toLowerCase() === String(op.value).toLowerCase();
-                    const isHighlighted = idx === highlightedIndex;
-
-                    return (
-                      <button
-                        key={op.key || `opt-${idx}`}
-                        type="button"
-                        onClick={() => handleSelect(op.value)}
-                        onMouseEnter={() => setHighlightedIndex(idx)}
-                        className={`w-full px-3 py-2 rounded-xl text-left text-xs font-semibold transition-all duration-100 flex items-center justify-between gap-3 cursor-pointer ${
-                          isSelected
-                            ? isDark
-                              ? 'bg-blue-600/30 text-blue-300 font-bold border border-blue-500/40 shadow-xs'
-                              : 'bg-blue-50/90 text-blue-800 font-bold border border-blue-200/80 shadow-xs'
-                            : isHighlighted
-                            ? isDark
-                              ? 'bg-slate-800 text-white'
-                              : 'bg-slate-100/90 text-slate-900'
-                            : isDark
-                            ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                            : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          {op.icon && <span className="shrink-0 text-slate-500">{op.icon}</span>}
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-bold leading-snug whitespace-normal break-words">
-                              {op.label}
-                            </div>
-                            {op.description && (
-                              <div className="text-[10px] text-slate-400 font-normal leading-tight mt-0.5 whitespace-normal break-words">
-                                {op.description}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {op.badge && (
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                isDark
-                                  ? 'bg-slate-800 text-slate-300'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {op.badge}
-                            </span>
-                          )}
-                          {isSelected && (
-                            <Check
-                              className={`h-4 w-4 shrink-0 ${
-                                isDark ? 'text-blue-400' : 'text-blue-600'
-                              }`}
-                            />
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>,
-            document.body,
-          )}
+            className={`rounded-2xl border shadow-2xl backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${
+              coords.openUpward ? 'origin-bottom' : 'origin-top'
+            } ${
+              isDark
+                ? 'bg-slate-900/95 border-slate-700 text-white divide-slate-800'
+                : 'bg-white/95 border-slate-200/90 text-slate-900 divide-slate-100'
+            }`}
+          >
+            {renderDropdownContent()}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -467,6 +515,7 @@ export interface EamUomSelectProps {
   onChange: (codigo: string) => void;
   disabled?: boolean;
   className?: string;
+  usePortal?: boolean;
 }
 
 /**
@@ -482,6 +531,7 @@ export function EamUomSelect({
   onChange,
   disabled = false,
   className = '',
+  usePortal = false,
 }: EamUomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -520,8 +570,10 @@ export function EamUomSelect({
   const handleToggle = () => {
     if (disabled) return;
     if (!isOpen) {
-      const nextCoords = calculatePosition();
-      if (nextCoords) setCoords(nextCoords);
+      if (usePortal) {
+        const nextCoords = calculatePosition();
+        if (nextCoords) setCoords(nextCoords);
+      }
       setIsOpen(true);
     } else {
       setIsOpen(false);
@@ -554,13 +606,27 @@ export function EamUomSelect({
     };
 
     const handleScroll = (e: Event) => {
+      // En modo absolute (usePortal=false), CSS mantiene el anclaje nativo perfecto sin desfase
+      if (!usePortal) return;
       // Si el scroll ocurre dentro de la lista de opciones del popover, permitirlo
       if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
         return;
       }
-      // Si el usuario hace scroll en la página o en cualquier contenedor externo, cerrar limpiamente para evitar desfase visual
-      setIsOpen(false);
-      setCoords(null);
+      // Si el trigger ya no está visible en el viewport, cerrar limpiamente
+      if (!triggerRef.current) {
+        setIsOpen(false);
+        setCoords(null);
+        return;
+      }
+      const rect = triggerRef.current.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        setIsOpen(false);
+        setCoords(null);
+        return;
+      }
+      // Si sigue en pantalla, recalcular posición en vivo para mantenerlo pegado al botón
+      const nextCoords = calculatePosition();
+      if (nextCoords) setCoords(nextCoords);
     };
 
     const handleResize = () => {
@@ -603,6 +669,62 @@ export function EamUomSelect({
 
   const activeLabel = currentUnit?.simbolo || currentUnit?.codigo || value;
 
+  const renderUomDropdownContent = () => (
+    <>
+      {/* Header del selector de unidades */}
+      <div className="px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 flex items-center gap-2">
+        <Scale className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700">
+            Unidad de Medida
+          </div>
+          <div className="text-[10px] text-blue-700 font-semibold">
+            Conversión en vivo
+          </div>
+        </div>
+      </div>
+
+      {/* Lista de unidades compatibles */}
+      <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+        {units.map((u) => {
+          const isSelected =
+            u.codigo.toUpperCase() === (currentUnit?.codigo || value).toUpperCase();
+
+          return (
+            <button
+              key={u.codigo}
+              type="button"
+              onClick={() => {
+                onChange(u.codigo);
+                setIsOpen(false);
+                setCoords(null);
+                triggerRef.current?.focus();
+              }}
+              className={`w-full px-2.5 py-1.5 rounded-xl text-left text-xs font-semibold transition-all duration-100 flex items-center justify-between gap-2 cursor-pointer ${
+                isSelected
+                  ? 'bg-blue-50/90 text-blue-900 font-bold border border-blue-200/80 shadow-xs'
+                  : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono font-extrabold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded text-[11px] min-w-[28px] text-center shrink-0">
+                  {u.simbolo || u.codigo}
+                </span>
+                <span className="text-slate-700 text-xs truncate">
+                  {u.nombre || u.codigo}
+                </span>
+              </div>
+
+              {isSelected && (
+                <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+
   return (
     <div className="relative inline-flex h-full shrink-0">
       <button
@@ -623,8 +745,20 @@ export function EamUomSelect({
         />
       </button>
 
-      {/* Popover flotante vía Portal */}
-      {mounted &&
+      {/* MODO 1: Inline Absolute (usePortal === false) */}
+      {!usePortal && isOpen && (
+        <div
+          ref={popoverRef}
+          style={{ width: 220 }}
+          className="absolute z-50 mt-1.5 top-full right-0 rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right"
+        >
+          {renderUomDropdownContent()}
+        </div>
+      )}
+
+      {/* MODO 2: Portal Flotante (usePortal === true) */}
+      {usePortal &&
+        mounted &&
         isOpen &&
         coords &&
         createPortal(
@@ -643,57 +777,7 @@ export function EamUomSelect({
               coords.openUpward ? 'origin-bottom' : 'origin-top'
             }`}
           >
-            {/* Header del selector de unidades */}
-            <div className="px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 flex items-center gap-2">
-              <Scale className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-              <div>
-                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700">
-                  Unidad de Medida
-                </div>
-                <div className="text-[10px] text-blue-700 font-semibold">
-                  Conversión en vivo
-                </div>
-              </div>
-            </div>
-
-            {/* Lista de unidades compatibles */}
-            <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
-              {units.map((u) => {
-                const isSelected =
-                  u.codigo.toUpperCase() === (currentUnit?.codigo || value).toUpperCase();
-
-                return (
-                  <button
-                    key={u.codigo}
-                    type="button"
-                    onClick={() => {
-                      onChange(u.codigo);
-                      setIsOpen(false);
-                      setCoords(null);
-                      triggerRef.current?.focus();
-                    }}
-                    className={`w-full px-2.5 py-1.5 rounded-xl text-left text-xs font-semibold transition-all duration-100 flex items-center justify-between gap-2 cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-50/90 text-blue-900 font-bold border border-blue-200/80 shadow-xs'
-                        : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono font-extrabold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded text-[11px] min-w-[28px] text-center shrink-0">
-                        {u.simbolo || u.codigo}
-                      </span>
-                      <span className="text-slate-700 text-xs truncate">
-                        {u.nombre || u.codigo}
-                      </span>
-                    </div>
-
-                    {isSelected && (
-                      <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {renderUomDropdownContent()}
           </div>,
           document.body,
         )}

@@ -1125,7 +1125,7 @@ export function TabArquetiposEquipo() {
         </div>
 
         {/* Barra de Herramientas Prémium: Buscador en vivo + Filtro por Disciplina + Selector de Vista */}
-        <div className="pt-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border-t border-slate-100">
+        <div className="pt-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border-t border-slate-100 relative z-30">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-3xl">
             {/* Buscador predictivo prémium con altura h-10 uniforme */}
             <div className="relative flex-1 min-w-[260px]">
@@ -1149,12 +1149,14 @@ export function TabArquetiposEquipo() {
               )}
             </div>
 
-            {/* Filtro por Categoría / Disciplina con ancho holgado y sin truncar opciones */}
+            {/* Filtro por Categoría / Disciplina con ancho holgado, anclaje indestructible (usePortal=false) y sin truncar opciones */}
             {categoriasPresentes.length > 0 && (
               <div className="shrink-0 w-full sm:w-72 md:w-80">
                 <EamSelect
                   value={arqCategoriaFilter}
                   onChange={(val) => setArqCategoriaFilter(val)}
+                  usePortal={false}
+                  align="right"
                   minDropdownWidth={360}
                   options={[
                     { value: 'TODAS', label: `Todas las disciplinas (${arquetipos.length})` },
