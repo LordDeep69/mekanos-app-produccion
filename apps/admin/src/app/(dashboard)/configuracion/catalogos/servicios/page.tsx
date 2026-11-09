@@ -25,15 +25,27 @@ import {
     X,
     Lock,
     Unlock,
-    CheckCircle2
+    CheckCircle2,
+    Layers,
+    FileText,
+    Sparkles
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { calculateSmartMatchScore } from '@/lib/search-utils';
-import { generarCodigoServicioComercial, verificarCodigoDuplicado } from '@/features/catalogos-eam';
+import { generarCodigoServicioComercial, verificarCodigoDuplicado, EamSelect } from '@/features/catalogos-eam';
+
+const CATEGORIAS_COMERCIALES = [
+    { value: 'CORRECTIVO', label: 'Correctivo (Específico)', badge: 'Correctivo', description: 'Reparaciones, cambios de componentes y solución de averías' },
+    { value: 'PREVENTIVO', label: 'Preventivo', badge: 'Preventivo', description: 'Mantenimientos periódicos, inspecciones programadas y rutinas' },
+    { value: 'EMERGENCIA', label: 'Emergencia / Urgente', badge: 'Emergencia', description: 'Atención 24/7 y contingencias críticas de clientes' },
+    { value: 'ESPECIALIZADO', label: 'Especializado', badge: 'Especializado', description: 'Pruebas de carga, análisis termográfico o ingeniería técnica' },
+    { value: 'OTRO', label: 'Otro / General', badge: 'General', description: 'Servicios comerciales complementarios o no catalogados' },
+];
 
 export default function CatalogoServiciosComercialesPage() {
     const [busqueda, setBusqueda] = useState('');
     const [filtroTipoServicio, setFiltroTipoServicio] = useState<string>('');
+    const [filtroCategoria, setFiltroCategoria] = useState<string>('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingServicio, setEditingServicio] = useState<any>(null);
 
@@ -56,9 +68,7 @@ export default function CatalogoServiciosComercialesPage() {
     const actualizarServicio = useActualizarServicioComercial();
     const eliminarServicio = useEliminarServicioComercial();
 
-    // Al abrir el modal refrescamos los tipos de servicio: así el selector de
-    // "Vincular a Tipo de Servicio" nunca queda vacío por una consulta fallida
-    // o por datos cacheados de una sesión anterior.
+    // Refrescar tipos de servicio al abrir modal
     useEffect(() => {
         if (isModalOpen) {
             refetchTipos();
@@ -77,13 +87,51 @@ export default function CatalogoServiciosComercialesPage() {
         }
     };
 
-    // Filtrado inteligente: insensible a tildes/mayúsculas, orden de palabras y combinaciones
+    // Métricas KPI
+    const metricas = useMemo(() => {
+        const total = servicios?.length || 0;
+        const conPrecio = servicios?.filter((s) => s.precio_base && Number(s.precio_base) > 0).length || 0;
+        const conCertificacion = servicios?.filter((s) => s.requiere_certificacion).length || 0;
+        const conTipoVinculado = servicios?.filter((s) => s.id_tipo_servicio != null).length || 0;
+        return { total, conPrecio, conCertificacion, conTipoVinculado };
+    }, [servicios]);
+
+    // Opciones para filtros
+    const tiposServicioFilterOptions = useMemo(() => {
+        return [
+            { value: '', label: 'Todos los tipos de servicio' },
+            ...(tiposServicio || []).map((t: any) => ({
+                value: String(t.id_tipo_servicio),
+                label: t.nombre_tipo,
+                badge: t.codigo_tipo || undefined,
+            })),
+        ];
+    }, [tiposServicio]);
+
+    const categoriasFilterOptions = useMemo(() => {
+        return [
+            { value: '', label: 'Todas las categorías' },
+            ...CATEGORIAS_COMERCIALES.map((c) => ({
+                value: c.value,
+                label: c.label,
+                badge: c.badge,
+            })),
+        ];
+    }, []);
+
+    // Filtrado inteligente: categoría, tipo de servicio y texto
     const filteredServicios = useMemo(() => {
         if (!servicios) return [];
-        const query = busqueda.trim();
-        if (!query) return servicios;
+        let list = servicios;
 
-        const scored = servicios
+        if (filtroCategoria) {
+            list = list.filter((s) => (s.categoria || '').toUpperCase() === filtroCategoria.toUpperCase());
+        }
+
+        const query = busqueda.trim();
+        if (!query) return list;
+
+        const scored = list
             .map((s) => ({
                 servicio: s,
                 score: calculateSmartMatchScore(query, {
@@ -96,7 +144,7 @@ export default function CatalogoServiciosComercialesPage() {
 
         scored.sort((a, b) => b.score - a.score);
         return scored.map((item) => item.servicio);
-    }, [servicios, busqueda]);
+    }, [servicios, busqueda, filtroCategoria]);
 
     return (
         <div className="space-y-6">
@@ -108,139 +156,274 @@ export default function CatalogoServiciosComercialesPage() {
                         Catálogo Comercial de Servicios
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        Define los precios base y certificaciones de los servicios facturables
+                        Define los precios base, tarifas técnicas y certificaciones de los servicios facturables
                     </p>
                 </div>
                 <button
                     onClick={() => { setEditingServicio(null); setIsModalOpen(true); }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all shadow-sm hover:shadow cursor-pointer"
                 >
                     <Plus className="h-4 w-4" />
-                    Nuevo Servicio
+                    Nuevo Servicio Comercial
                 </button>
             </div>
 
-            {/* Filtros */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar por nombre o código..."
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
+            {/* KPIs Métricas Rápidas */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0">
+                        <Tag className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <p className="text-xl font-extrabold text-slate-900 leading-tight">{metricas.total}</p>
+                        <p className="text-xs text-slate-500 font-medium">Servicios Totales</p>
+                    </div>
                 </div>
-                <select
-                    value={filtroTipoServicio}
-                    onChange={(e) => setFiltroTipoServicio(e.target.value)}
-                    disabled={loadingTipos}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                >
-                    <option value="">
-                        {loadingTipos
-                            ? 'Cargando tipos de servicio...'
-                            : errorTipos
-                                ? 'No se pudieron cargar los tipos'
-                                : 'Todos los tipos de servicio'}
-                    </option>
-                    {tiposServicio?.map((t: any) => (
-                        <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>{t.nombre_tipo}</option>
-                    ))}
-                </select>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                        <DollarSign className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <p className="text-xl font-extrabold text-slate-900 leading-tight">{metricas.conPrecio}</p>
+                        <p className="text-xs text-slate-500 font-medium">Con Tarifa Base</p>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold shrink-0">
+                        <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <p className="text-xl font-extrabold text-slate-900 leading-tight">{metricas.conCertificacion}</p>
+                        <p className="text-xs text-slate-500 font-medium">Con Certificación</p>
+                    </div>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+                        <Wrench className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <p className="text-xl font-extrabold text-slate-900 leading-tight">{metricas.conTipoVinculado}</p>
+                        <p className="text-xs text-slate-500 font-medium">Vinculados Técnicos</p>
+                    </div>
+                </div>
             </div>
 
-            {/* Tabla */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            {/* Barra de Filtros Prémium */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    {/* Buscador inteligente */}
+                    <div className="relative md:col-span-5">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por nombre, código o alcance comercial..."
+                            value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)}
+                            className="w-full pl-10 pr-9 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm placeholder:text-slate-400 outline-none transition-all font-medium"
+                        />
+                        {busqueda && (
+                            <button
+                                type="button"
+                                onClick={() => setBusqueda('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                                title="Limpiar búsqueda"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Filtro por Categoría */}
+                    <div className="md:col-span-3">
+                        <EamSelect
+                            value={filtroCategoria}
+                            onChange={(val) => setFiltroCategoria(val)}
+                            options={categoriasFilterOptions}
+                            placeholder="Todas las categorías..."
+                        />
+                    </div>
+
+                    {/* Filtro por Tipo de Servicio Vinculado */}
+                    <div className="md:col-span-4">
+                        <EamSelect
+                            value={filtroTipoServicio}
+                            onChange={(val) => setFiltroTipoServicio(val)}
+                            options={tiposServicioFilterOptions}
+                            placeholder="Todos los tipos de servicio..."
+                            searchable
+                            disabled={loadingTipos}
+                        />
+                    </div>
+                </div>
+
+                {/* Chips de Categoría de Acceso Rápido */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                        Categoría:
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setFiltroCategoria('')}
+                        className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs",
+                            !filtroCategoria
+                                ? "bg-blue-600 text-white border-blue-600 shadow-blue-200"
+                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+                        )}
+                    >
+                        <span>Todas</span>
+                        <span className={cn(
+                            "px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold",
+                            !filtroCategoria ? "bg-white/25 text-white" : "bg-slate-200 text-slate-700"
+                        )}>
+                            {servicios?.length || 0}
+                        </span>
+                    </button>
+                    {CATEGORIAS_COMERCIALES.map((cat) => {
+                        const isSelected = filtroCategoria === cat.value;
+                        const count = (servicios || []).filter((s) => (s.categoria || '').toUpperCase() === cat.value.toUpperCase()).length;
+                        return (
+                            <button
+                                key={cat.value}
+                                type="button"
+                                onClick={() => setFiltroCategoria(cat.value)}
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs",
+                                    isSelected
+                                        ? "bg-blue-600 text-white border-blue-600 shadow-blue-200"
+                                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+                                )}
+                            >
+                                <span>{cat.badge}</span>
+                                <span className={cn(
+                                    "px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold",
+                                    isSelected ? "bg-white/25 text-white" : "bg-slate-200 text-slate-700"
+                                )}>
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Tabla de Servicios */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-20">
-                        <Loader2 className="h-10 w-10 animate-spin text-blue-500 mb-4" />
-                        <p className="text-gray-500">Cargando catálogo comercial...</p>
+                        <Loader2 className="h-10 w-10 animate-spin text-blue-500 mb-3" />
+                        <p className="text-slate-500 text-sm font-medium">Cargando catálogo comercial...</p>
                     </div>
                 ) : isError ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-red-500">
-                        <AlertCircle className="h-12 w-12 mb-4" />
-                        <p className="font-bold text-lg">Error al cargar datos</p>
-                        <button onClick={() => refetch()} className="mt-4 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
-                            Reintentar
+                    <div className="flex flex-col items-center justify-center py-20 text-rose-500">
+                        <AlertCircle className="h-12 w-12 mb-3" />
+                        <p className="font-bold text-base">Error al cargar servicios comerciales</p>
+                        <button
+                            onClick={() => refetch()}
+                            className="mt-4 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 font-bold text-xs transition-colors cursor-pointer"
+                        >
+                            Reintentar carga
                         </button>
                     </div>
                 ) : filteredServicios.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                        <Tag className="h-16 w-16 mb-4 opacity-20" />
-                        <p className="text-lg font-medium">No se encontraron servicios comerciales</p>
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                        <Tag className="h-14 w-14 mb-3 opacity-20" />
+                        <p className="text-base font-bold text-slate-600">No se encontraron servicios comerciales</p>
+                        <p className="text-xs text-slate-400 mt-1">Prueba ajustando los filtros de búsqueda o categoría.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Servicio</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoría / Tipo</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Precio Base</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Requisitos</th>
-                                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
+                                <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+                                    <th className="px-6 py-3.5">Servicio Comercial</th>
+                                    <th className="px-6 py-3.5">Categoría / Tipo Técnico</th>
+                                    <th className="px-6 py-3.5">Tarifa Base ($)</th>
+                                    <th className="px-6 py-3.5">Requisitos y Tiempos</th>
+                                    <th className="px-6 py-3.5 text-right">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-slate-100 text-sm">
                                 {filteredServicios.map((servicio, idx) => (
-                                    <tr key={servicio.id_servicio ?? `servicio-${idx}`} className="hover:bg-blue-50/30 transition-colors group">
+                                    <tr key={servicio.id_servicio ?? `servicio-${idx}`} className="hover:bg-blue-50/40 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div>
-                                                <p className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
+                                                <p className="font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                                                     {servicio.nombre_servicio}
                                                 </p>
-                                                <p className="text-xs font-mono text-gray-400">{servicio.codigo_servicio}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                                        {servicio.codigo_servicio}
+                                                    </span>
+                                                    {servicio.descripcion && (
+                                                        <span className="text-xs text-slate-400 truncate max-w-[280px]" title={servicio.descripcion}>
+                                                            {servicio.descripcion}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex flex-col gap-1">
+                                            <div className="flex flex-col gap-1 items-start">
                                                 <span className={cn(
-                                                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider self-start",
+                                                    "px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider",
                                                     getCategoriaServicioColor(servicio.categoria)
                                                 )}>
                                                     {getCategoriaServicioLabel(servicio.categoria)}
                                                 </span>
-                                                <span className="text-xs text-gray-500 font-medium">
-                                                    {servicio.tipos_servicio?.nombre_tipo || 'Sin tipo vinculado'}
+                                                <span className="text-xs text-slate-600 font-medium flex items-center gap-1">
+                                                    <Layers className="h-3 w-3 text-slate-400" />
+                                                    {servicio.tipos_servicio?.nombre_tipo || 'Universal (Sin vincular)'}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
-                                                <DollarSign className="h-4 w-4 text-green-600" />
-                                                {servicio.precio_base ? servicio.precio_base.toLocaleString('es-CO') : 'Por definir'}
+                                            <div className="flex items-center gap-1.5 text-sm font-extrabold text-slate-900">
+                                                <DollarSign className="h-4 w-4 text-emerald-600 shrink-0" />
+                                                <span>
+                                                    {servicio.precio_base != null && Number(servicio.precio_base) > 0
+                                                        ? `$ ${Number(servicio.precio_base).toLocaleString('es-CO')}`
+                                                        : 'Por cotizar'}
+                                                </span>
                                             </div>
-                                            {servicio.incluye_repuestos && (
-                                                <span className="text-[10px] text-blue-600 font-bold">+ REPUESTOS</span>
+                                            {servicio.incluye_repuestos ? (
+                                                <span className="inline-block mt-0.5 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                                    + Repuestos Incluidos
+                                                </span>
+                                            ) : (
+                                                <span className="inline-block mt-0.5 text-[10px] font-medium text-slate-400">
+                                                    Solo mano de obra
+                                                </span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex flex-wrap gap-2">
-                                                {servicio.requiere_certificacion && (
-                                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 rounded border border-red-100 text-[10px] font-bold">
-                                                        <ShieldCheck className="h-3 w-3" /> CERTIFICACIÓN
+                                            <div className="flex flex-wrap gap-1.5 items-center">
+                                                {servicio.duracion_estimada_horas ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border border-slate-200 text-[11px] font-bold font-mono">
+                                                        <Clock className="h-3 w-3 text-slate-500" /> {servicio.duracion_estimada_horas}h
                                                     </span>
-                                                )}
-                                                {servicio.duracion_estimada_horas && (
-                                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-gray-50 text-gray-600 rounded border border-gray-200 text-[10px] font-bold">
-                                                        <Clock className="h-3 w-3" /> {servicio.duracion_estimada_horas}h
+                                                ) : null}
+                                                {servicio.requiere_certificacion ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-[10px] font-bold">
+                                                        <ShieldCheck className="h-3 w-3 text-rose-600" />
+                                                        {servicio.tipo_certificacion_requerida || 'Certificación'}
                                                     </span>
-                                                )}
+                                                ) : null}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
+                                            <div className="flex items-center justify-end gap-1.5">
                                                 <button
                                                     onClick={() => handleEdit(servicio)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all cursor-pointer"
+                                                    title="Editar servicio"
                                                 >
                                                     <Edit className="h-4 w-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(servicio.id_servicio)}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                                                    title="Desactivar servicio"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>
@@ -254,7 +437,7 @@ export default function CatalogoServiciosComercialesPage() {
                 )}
             </div>
 
-            {/* Modal */}
+            {/* Modal de Servicio Comercial */}
             {isModalOpen && (
                 <ServicioComercialModal
                     isOpen={isModalOpen}
@@ -280,85 +463,35 @@ export default function CatalogoServiciosComercialesPage() {
     );
 }
 
-function sugerirCodigoServicio(nombre: string, categoria?: string): string {
-    const cleanNombre = (nombre || '')
-        .toUpperCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '');
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL PRÉMIUM DE CREACIÓN / EDICIÓN DE SERVICIO COMERCIAL
+// ═══════════════════════════════════════════════════════════════════════════════
 
-    const actionMap: [RegExp, string][] = [
-        [/REEMPLAZ|CAMBI|SUSTITU/i, 'CAMB'],
-        [/REPARAC|REPARAR|ARREGL/i, 'REP'],
-        [/REVISI|INSPECC|EVALUA/i, 'REV'],
-        [/SUMINISTR|ENTREGA|DOTAC/i, 'SUM'],
-        [/INSTALAC|MONTAJE/i, 'INST'],
-        [/CALIBRAC|AJUSTE|SINCRONIZ/i, 'CALIB'],
-        [/LIMPIEZA|LAVAD|DESENGRAS/i, 'LIMP'],
-        [/DIAGNOST|ESCANEO|ANALIS/i, 'DIAG'],
-        [/MANTENIMIENTO|RUTINA/i, 'MNT'],
-        [/PRUEBA|TESTEO|MEDIC/i, 'PRB'],
-        [/REBOBINAD|EMBOBINAD/i, 'REBOB'],
-        [/PROGRAMAC|CONFIGURAC/i, 'PROG'],
-    ];
-
-    const nounMap: [RegExp, string][] = [
-        [/MODULO|CONTROLADOR|CONTROL|DEEP\s*SEA|COMAP/i, 'MOD-CTRL'],
-        [/FILTRO.*AIRE/i, 'FILT-AIRE'],
-        [/FILTRO.*ACEITE/i, 'FILT-ACTE'],
-        [/FILTRO.*COMBUSTIBLE|FILTRO.*ACPM|FILTRO.*DIESEL/i, 'FILT-COMB'],
-        [/FILTRO.*RACOR|TRAMPA.*AGUA/i, 'FILT-RACOR'],
-        [/FILTRO/i, 'FILTRO'],
-        [/ACEITE|LUBRICANTE/i, 'LUB-ACTE'],
-        [/REFRIGERANTE|ANTICONGELANTE/i, 'REFRIG'],
-        [/INYECTOR/i, 'INYECT'],
-        [/BOMBA.*INYEC/i, 'BOM-INY'],
-        [/BOMBA.*AGUA/i, 'BOM-AGUA'],
-        [/BOMBA/i, 'BOMBA'],
-        [/SENSOR.*PRES/i, 'SENS-PRES'],
-        [/SENSOR.*TEMP/i, 'SENS-TEMP'],
-        [/SENSOR/i, 'SENSOR'],
-        [/ALTERNADOR/i, 'ALT'],
-        [/MOTOR.*ARRANQUE|STARTER/i, 'ARRANQ'],
-        [/BATERIA/i, 'BAT'],
-        [/CARGADOR.*BATER/i, 'CARG-BAT'],
-        [/CORREA/i, 'CORREA'],
-        [/RADIADOR/i, 'RADIAD'],
-        [/TRANSFERENCIA|ATS/i, 'ATS'],
-        [/PLANTA|GENERADOR/i, 'GEN'],
-        [/TANQUE|COMBUSTIBLE/i, 'COMB'],
-    ];
-
-    const prefix = categoria === 'CORRECTIVO' ? 'CORR' : categoria === 'PREVENTIVO' ? 'PREV' : 'SRV';
-
-    let action = '';
-    for (const [regex, code] of actionMap) {
-        if (regex.test(cleanNombre)) {
-            action = code;
-            break;
-        }
-    }
-
-    let noun = '';
-    for (const [regex, code] of nounMap) {
-        if (regex.test(cleanNombre)) {
-            noun = code;
-            break;
-        }
-    }
-
-    if (!action && !noun) {
-        const words = cleanNombre
-            .replace(/[^A-Z0-9\s]/g, '')
-            .split(/\s+/)
-            .filter((w) => !['DE', 'DEL', 'LA', 'EL', 'Y', 'EN', 'PARA', 'CON', 'A', 'LOS', 'LAS', 'UN', 'UNA', 'AL'].includes(w));
-        action = words.slice(0, 3).map((w) => w.substring(0, 4)).join('-');
-    }
-
-    const baseParts = [prefix, action, noun].filter(Boolean);
-    return baseParts.join('-');
+interface ServicioComercialModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    servicio?: any;
+    servicios: any[];
+    tiposServicio: any[];
+    tiposServicioLoading: boolean;
+    tiposServicioError: boolean;
+    onReintentarTipos?: () => void;
+    onSubmit: (formData: any) => Promise<void>;
+    isLoading: boolean;
 }
 
-function ServicioComercialModal({ isOpen, onClose, servicio, servicios = [], tiposServicio, tiposServicioLoading, tiposServicioError, onReintentarTipos, onSubmit, isLoading }: any) {
+function ServicioComercialModal({
+    isOpen,
+    onClose,
+    servicio,
+    servicios = [],
+    tiposServicio = [],
+    tiposServicioLoading,
+    tiposServicioError,
+    onReintentarTipos,
+    onSubmit,
+    isLoading
+}: ServicioComercialModalProps) {
     const codigosExistentes = useMemo(() => {
         return new Set<string>(
             (servicios || [])
@@ -374,13 +507,13 @@ function ServicioComercialModal({ isOpen, onClose, servicio, servicios = [], tip
         nombre_servicio: servicio?.nombre_servicio || '',
         codigo_servicio: servicio?.codigo_servicio || '',
         categoria: servicio?.categoria || 'CORRECTIVO',
-        id_tipo_servicio: servicio?.id_tipo_servicio || '',
+        id_tipo_servicio: servicio?.id_tipo_servicio ? String(servicio.id_tipo_servicio) : '',
         descripcion: servicio?.descripcion || '',
         precio_base: servicio?.precio_base != null ? servicio.precio_base : '',
-        duracion_estimada_horas: servicio?.duracion_estimada_horas || '',
-        requiere_certificacion: servicio?.requiere_certificacion ?? false,
+        duracion_estimada_horas: servicio?.duracion_estimada_horas != null ? servicio.duracion_estimada_horas : '',
+        requiere_certificacion: Boolean(servicio?.requiere_certificacion),
         tipo_certificacion_requerida: servicio?.tipo_certificacion_requerida || '',
-        incluye_repuestos: servicio?.incluye_repuestos ?? false,
+        incluye_repuestos: Boolean(servicio?.incluye_repuestos),
     });
 
     const isCodigoDuplicado = useMemo(() => {
@@ -403,16 +536,15 @@ function ServicioComercialModal({ isOpen, onClose, servicio, servicios = [], tip
         });
     };
 
-    const handleCategoriaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newCat = e.target.value;
+    const handleCategoriaSelect = (newCat: string) => {
         const newCode = (isAutoCodigo && !servicio)
             ? generarCodigoServicioComercial(formData.nombre_servicio, newCat, codigosExistentes)
             : formData.codigo_servicio;
-        setFormData({
-            ...formData,
+        setFormData((prev) => ({
+            ...prev,
             categoria: newCat,
             codigo_servicio: newCode,
-        });
+        }));
     };
 
     const handleToggleAutoCodigo = () => {
@@ -424,6 +556,24 @@ function ServicioComercialModal({ isOpen, onClose, servicio, servicios = [], tip
         }
     };
 
+    // Opciones para el selector de Tipos de Servicio en modal
+    const tiposServicioModalOptions = useMemo(() => {
+        return [
+            {
+                value: '',
+                label: 'No vincular (General / Multi-tipo)',
+                badge: 'Universal',
+                description: 'El servicio comercial aplica a cualquier tipo de equipo',
+            },
+            ...(tiposServicio || []).map((t: any) => ({
+                value: String(t.id_tipo_servicio),
+                label: t.nombre_tipo,
+                badge: t.codigo_tipo || undefined,
+                description: t.categoria ? `Categoría Técnica: ${t.categoria}` : undefined,
+            })),
+        ];
+    }, [tiposServicio]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (isCodigoDuplicado) return;
@@ -433,40 +583,59 @@ function ServicioComercialModal({ isOpen, onClose, servicio, servicios = [], tip
             codigo_servicio: finalCode.toUpperCase().trim(),
             id_tipo_servicio: formData.id_tipo_servicio ? Number(formData.id_tipo_servicio) : null,
             precio_base: (formData.precio_base !== '' && formData.precio_base != null) ? Number(formData.precio_base) : null,
-            duracion_estimada_horas: formData.duracion_estimada_horas ? Number(formData.duracion_estimada_horas) : null,
+            duracion_estimada_horas: (formData.duracion_estimada_horas !== '' && formData.duracion_estimada_horas != null) ? Number(formData.duracion_estimada_horas) : null,
         };
         onSubmit(data);
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                        {servicio ? <Edit className="h-5 w-5 text-blue-600" /> : <Plus className="h-5 w-5 text-blue-600" />}
-                        {servicio ? 'Editar Servicio Comercial' : 'Nuevo Servicio Comercial'}
-                    </h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                        <X className="h-5 w-5 text-gray-500" />
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+                {/* Header Modal con Gradiente */}
+                <div className="p-5 px-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-50 to-blue-50/40">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                            {servicio ? <Edit className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">
+                                {servicio ? 'Editar Servicio Comercial' : 'Nuevo Servicio Comercial'}
+                            </h2>
+                            <p className="text-xs text-gray-500">
+                                Define tarifas base, alcance técnico y certificaciones del servicio
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400 hover:text-gray-700 cursor-pointer"
+                    >
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+                {/* Formulario con Scroll Cómodo */}
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto max-h-[calc(92vh-140px)]">
+                    {/* PASO 1: Identificación Comercial */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Nombre del Servicio *</label>
+                            <label className="block text-xs font-extrabold uppercase tracking-wider text-gray-700 mb-1.5">
+                                Nombre del Servicio *
+                            </label>
                             <input
                                 required
                                 type="text"
                                 value={formData.nombre_servicio}
                                 onChange={handleNombreChange}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
                                 placeholder="Ej: Cambio de Filtro de Aire"
                             />
                         </div>
                         <div className="col-span-2 sm:col-span-1">
                             <div className="flex items-center justify-between mb-1.5">
-                                <label className="block text-sm font-bold text-gray-700">Código Comercial *</label>
+                                <label className="text-xs font-extrabold uppercase tracking-wider text-gray-700">
+                                    Código Comercial *
+                                </label>
                                 {!servicio && (
                                     <button
                                         type="button"
@@ -478,195 +647,225 @@ function ServicioComercialModal({ isOpen, onClose, servicio, servicios = [], tip
                                     </button>
                                 )}
                             </div>
-                            <input
-                                type="text"
-                                required
-                                value={formData.codigo_servicio}
-                                onChange={(e) => {
-                                    setFormData({ ...formData, codigo_servicio: e.target.value.toUpperCase().trim() });
-                                }}
-                                className={`w-full px-4 py-2 border rounded-xl outline-none text-sm font-mono uppercase transition-colors disabled:bg-slate-100 disabled:text-slate-600 ${
-                                    isCodigoDuplicado
-                                        ? 'border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500'
-                                        : 'border-gray-300 bg-slate-50 focus:bg-white'
-                                }`}
-                                placeholder="Auto-generado (ej: CORR-CAMB-FILT-AIRE)"
-                                disabled={Boolean(servicio) || isAutoCodigo}
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    required
+                                    value={formData.codigo_servicio}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, codigo_servicio: e.target.value.toUpperCase().trim() });
+                                    }}
+                                    className={cn(
+                                        "w-full pl-3.5 pr-14 py-2.5 border rounded-xl outline-none text-xs font-mono font-bold tracking-tight uppercase transition-colors",
+                                        isAutoCodigo
+                                            ? "bg-emerald-50/50 border-emerald-300 text-emerald-950"
+                                            : "bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500",
+                                        isCodigoDuplicado ? "border-rose-400 bg-rose-50/20 text-rose-900 focus:ring-rose-500" : ""
+                                    )}
+                                    placeholder="CORR-CAMB-FILT-AIRE"
+                                    disabled={Boolean(servicio) || isAutoCodigo}
+                                />
+                                {isAutoCodigo && !servicio && (
+                                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        ✓ Auto
+                                    </span>
+                                )}
+                            </div>
                             {isCodigoDuplicado ? (
                                 <p className="text-[11px] text-rose-600 font-bold mt-1 flex items-center gap-1">
-                                    ✕ Este código ya está en uso. Modifícalo para que sea único.
+                                    ✕ Código en uso. Modifícalo para que sea único.
                                 </p>
                             ) : formData.codigo_servicio && !servicio ? (
                                 <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
                                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                                     <span>Código único garantizado disponible</span>
                                 </p>
-                            ) : (
-                                <p className="text-[10px] text-gray-400 mt-1">
-                                    {servicio ? 'El código comercial es inmutable.' : 'Se genera automáticamente garantizando unicidad.'}
-                                </p>
-                            )}
+                            ) : null}
                         </div>
                     </div>
 
+                    {/* PASO 2: Selectores Prémium con EamSelect */}
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Categoría *</label>
-                            <select
-                                required
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="block text-xs font-extrabold uppercase tracking-wider text-gray-700 mb-1.5">
+                                Categoría Comercial *
+                            </label>
+                            <EamSelect
                                 value={formData.categoria}
-                                onChange={handleCategoriaChange}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
-                            >
-                                <option value="CORRECTIVO">Correctivo (Específico)</option>
-                                <option value="PREVENTIVO">Preventivo</option>
-                                <option value="EMERGENCIA">Emergencia</option>
-                                <option value="ESPECIALIZADO">Especializado</option>
-                                <option value="OTRO">Otro</option>
-                            </select>
+                                onChange={handleCategoriaSelect}
+                                options={CATEGORIAS_COMERCIALES}
+                                placeholder="Seleccionar categoría..."
+                            />
                         </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Vincular a Tipo de Servicio (Opcional)</label>
-                            <select
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="block text-xs font-extrabold uppercase tracking-wider text-gray-700 mb-1.5">
+                                Vincular a Tipo de Servicio (Opcional)
+                            </label>
+                            <EamSelect
                                 value={formData.id_tipo_servicio}
-                                onChange={(e) => setFormData({ ...formData, id_tipo_servicio: e.target.value })}
+                                onChange={(val) => setFormData((prev) => ({ ...prev, id_tipo_servicio: val }))}
+                                options={tiposServicioModalOptions}
+                                placeholder="Seleccionar tipo de servicio o Universal..."
+                                searchable
                                 disabled={tiposServicioLoading}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                            >
-                                <option value="">No vincular (General / Multi-tipo)</option>
-                                {tiposServicio?.map((t: any) => (
-                                    <option key={t.id_tipo_servicio} value={t.id_tipo_servicio}>{t.nombre_tipo}</option>
-                                ))}
-                            </select>
+                            />
                             {tiposServicioLoading ? (
                                 <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1">
                                     <Loader2 className="h-3 w-3 animate-spin" /> Cargando tipos de servicio...
                                 </p>
                             ) : tiposServicioError ? (
                                 <p className="text-[10px] text-red-600 mt-1">
-                                    No se pudieron cargar los tipos de servicio.{' '}
+                                    No se pudieron cargar los tipos.{' '}
                                     <button
                                         type="button"
                                         onClick={() => onReintentarTipos?.()}
-                                        className="font-bold underline hover:text-red-800"
+                                        className="font-bold underline hover:text-red-800 cursor-pointer"
                                     >
                                         Reintentar
                                     </button>
                                 </p>
                             ) : tiposServicio && tiposServicio.length > 0 ? (
-                                <p className="text-[10px] text-gray-400 mt-1">
-                                    {tiposServicio.length} tipo{tiposServicio.length === 1 ? '' : 's'} de servicio activo{tiposServicio.length === 1 ? '' : 's'} disponible{tiposServicio.length === 1 ? '' : 's'}.
+                                <p className="text-[10px] text-gray-400 mt-1 font-medium">
+                                    {tiposServicio.length} tipo{tiposServicio.length === 1 ? '' : 's'} técnico{tiposServicio.length === 1 ? '' : 's'} activo{tiposServicio.length === 1 ? '' : 's'} disponible{tiposServicio.length === 1 ? '' : 's'}.
                                 </p>
-                            ) : (
-                                <p className="text-[10px] text-amber-600 mt-1">
-                                    No hay tipos de servicio activos.{' '}
-                                    <a href="/configuracion/catalogos/tipos-servicio" className="font-bold underline hover:text-amber-800">
-                                        Crear uno
-                                    </a>
-                                </p>
-                            )}
+                            ) : null}
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-200">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                                <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" /> Precio Base ($)</span>
-                                <span className="text-[10px] font-normal text-gray-400 normal-case">(Opcional)</span>
+                    {/* PASO 3: Parámetros Económicos y Operativos */}
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-200">
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                    <DollarSign className="h-3.5 w-3.5 text-emerald-600" /> Precio Base ($)
+                                </span>
+                                <span className="text-[10px] font-normal text-slate-400 normal-case">(Opcional)</span>
                             </label>
-                            <input
-                                type="number"
-                                value={formData.precio_base}
-                                onChange={(e) => setFormData({ ...formData, precio_base: e.target.value })}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold bg-white"
-                                placeholder="Opcional / Por cotizar"
-                            />
+                            <div className="relative">
+                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">$</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="1000"
+                                    value={formData.precio_base}
+                                    onChange={(e) => setFormData({ ...formData, precio_base: e.target.value })}
+                                    className="w-full pl-8 pr-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-bold bg-white transition-all font-mono"
+                                    placeholder="Ej: 150000"
+                                />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1">Tarifa sugerida en cotizaciones y órdenes de servicio.</p>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                <Clock className="h-3 w-3" /> Duración Est. (h)
+                        <div className="col-span-2 sm:col-span-1">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5 text-blue-600" /> Duración Est. (h)
                             </label>
                             <input
                                 type="number"
                                 step="0.5"
+                                min="0.5"
                                 value={formData.duracion_estimada_horas}
                                 onChange={(e) => setFormData({ ...formData, duracion_estimada_horas: e.target.value })}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-bold bg-white transition-all font-mono"
                                 placeholder="Ej: 2.0"
                             />
+                            <p className="text-[10px] text-slate-400 mt-1">Tiempo de mano de obra estimado en campo.</p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200">
-                                <input
-                                    type="checkbox"
-                                    id="incluye_repuestos"
-                                    checked={formData.incluye_repuestos}
-                                    onChange={(e) => setFormData({ ...formData, incluye_repuestos: e.target.checked })}
-                                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <label htmlFor="incluye_repuestos" className="text-sm font-medium text-gray-700 cursor-pointer">
-                                    Precio incluye repuestos
-                                </label>
+                    {/* PASO 4: Tarjetas Interactivas de Condiciones */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div
+                            onClick={() => setFormData(prev => ({ ...prev, incluye_repuestos: !prev.incluye_repuestos }))}
+                            className={cn(
+                                "flex items-start gap-3 p-3.5 rounded-xl border transition-all cursor-pointer",
+                                formData.incluye_repuestos
+                                    ? "bg-blue-50/80 border-blue-300 text-blue-950 shadow-xs"
+                                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                            )}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={formData.incluye_repuestos}
+                                onChange={(e) => setFormData({ ...formData, incluye_repuestos: e.target.checked })}
+                                className="w-4 h-4 rounded text-blue-600 mt-0.5 cursor-pointer"
+                            />
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold">Precio incluye repuestos</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">El valor cotizado ya contempla insumos y materiales.</p>
                             </div>
-                            <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200">
-                                <input
-                                    type="checkbox"
-                                    id="requiere_certificacion"
-                                    checked={formData.requiere_certificacion}
-                                    onChange={(e) => setFormData({ ...formData, requiere_certificacion: e.target.checked })}
-                                    className="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                                />
-                                <label htmlFor="requiere_certificacion" className="text-sm font-medium text-gray-700 cursor-pointer flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4 text-red-600" />
+                        </div>
+
+                        <div
+                            onClick={() => setFormData(prev => ({ ...prev, requiere_certificacion: !prev.requiere_certificacion }))}
+                            className={cn(
+                                "flex items-start gap-3 p-3.5 rounded-xl border transition-all cursor-pointer",
+                                formData.requiere_certificacion
+                                    ? "bg-rose-50/80 border-rose-300 text-rose-950 shadow-xs"
+                                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                            )}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={formData.requiere_certificacion}
+                                onChange={(e) => setFormData({ ...formData, requiere_certificacion: e.target.checked })}
+                                className="w-4 h-4 rounded text-rose-600 mt-0.5 cursor-pointer"
+                            />
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold flex items-center gap-1.5">
+                                    <ShieldCheck className="h-3.5 w-3.5 text-rose-600" />
                                     Requiere Certificación Especial
-                                </label>
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">Exige técnico certificado (Alturas, RETIE, etc.).</p>
                             </div>
                         </div>
-
-                        {formData.requiere_certificacion && (
-                            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
-                                <label className="block text-xs font-bold text-red-700 uppercase mb-1.5">Tipo de Certificación</label>
-                                <input
-                                    type="text"
-                                    value={formData.tipo_certificacion_requerida}
-                                    onChange={(e) => setFormData({ ...formData, tipo_certificacion_requerida: e.target.value })}
-                                    className="w-full px-3 py-1.5 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
-                                    placeholder="Ej: Trabajo en Alturas"
-                                />
-                            </div>
-                        )}
                     </div>
 
+                    {/* Detalle de Certificación si aplica */}
+                    {formData.requiere_certificacion && (
+                        <div className="p-3.5 bg-rose-50/90 rounded-xl border border-rose-200 animate-in fade-in">
+                            <label className="block text-xs font-bold text-rose-900 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                <ShieldCheck className="h-4 w-4 text-rose-600" />
+                                Tipo de Certificación Requerida *
+                            </label>
+                            <input
+                                type="text"
+                                required={formData.requiere_certificacion}
+                                value={formData.tipo_certificacion_requerida}
+                                onChange={(e) => setFormData({ ...formData, tipo_certificacion_requerida: e.target.value })}
+                                className="w-full px-3.5 py-2 border border-rose-300 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none text-xs font-medium bg-white"
+                                placeholder="Ej: Trabajo Seguro en Alturas / Tarjeta Profesional CONTE"
+                            />
+                        </div>
+                    )}
+
+                    {/* Alcance Comercial */}
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Descripción / Alcance Comercial</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Descripción / Alcance Comercial</label>
                         <textarea
                             rows={3}
                             value={formData.descripcion}
                             onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
-                            placeholder="Qué incluye este servicio para el cliente..."
+                            className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none"
+                            placeholder="Detalla qué incluye y qué excluye este servicio comercial para el cliente..."
                         />
                     </div>
                 </form>
 
-                <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+                {/* Footer Modal */}
+                <div className="p-4 px-6 border-t border-gray-100 bg-gray-50 flex gap-3">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-bold transition-all"
+                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-white font-bold transition-all text-sm cursor-pointer"
                     >
                         Cancelar
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={isLoading || isCodigoDuplicado || !formData.nombre_servicio.trim() || !formData.codigo_servicio.trim()}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm cursor-pointer"
                     >
-                        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                         {servicio ? 'Guardar Cambios' : 'Crear Servicio'}
                     </button>
                 </div>
