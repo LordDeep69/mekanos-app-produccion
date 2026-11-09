@@ -289,6 +289,7 @@ export interface TipoServicioEam {
   id_tipo_equipo?: number | null;
   descripcion?: string | null;
   duracion_estimada_horas?: number | null;
+  tiene_checklist?: boolean | null;
   color_hex?: string | null;
 }
 

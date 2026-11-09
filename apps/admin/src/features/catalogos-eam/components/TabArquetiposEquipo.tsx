@@ -700,6 +700,7 @@ export function TabArquetiposEquipo() {
   };
 
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [isCambiarSrvPlan, setIsCambiarSrvPlan] = useState(false);
   const [planForm, setPlanForm] = useState({
     id_tipo_servicio: '',
     nombre_plan: '',
@@ -803,6 +804,11 @@ export function TabArquetiposEquipo() {
   }, [todosLosServicios, planCatFilter, planSearch]);
 
   const tiposServicioPreventivos = todosLosServicios;
+
+  const servicioPlanSeleccionado = useMemo(() => {
+    if (!planForm.id_tipo_servicio) return null;
+    return todosLosServicios.find((s) => String(s.id_tipo_servicio) === planForm.id_tipo_servicio) || null;
+  }, [todosLosServicios, planForm.id_tipo_servicio]);
 
   const handleSaveNewArq = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -964,6 +970,7 @@ export function TabArquetiposEquipo() {
         frecuencia_uso: isInsp ? '100' : '250',
       });
       setShowCreateSrvInline(false);
+      setIsCambiarSrvPlan(false);
       setNewSrvForm({
         codigo_tipo: '',
         nombre_tipo: '',
@@ -1346,6 +1353,7 @@ export function TabArquetiposEquipo() {
                   setPlanSearch('');
                   setPlanCatFilter('TODOS');
                   setShowCreateSrvInline(false);
+      setIsCambiarSrvPlan(false);
                   setShowPlanModal(true);
                 }}
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
@@ -2311,127 +2319,214 @@ export function TabArquetiposEquipo() {
                   </div>
                 )}
 
-                {/* BUSCADOR Y PÍLDORAS DE CATEGORÍA */}
-                <div className="space-y-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Buscar por nombre, código (ej: Inspección, HVAC, Preventivo, Bomba)..."
-                      value={planSearch}
-                      onChange={(e) => setPlanSearch(e.target.value)}
-                      className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:border-blue-500 transition-colors"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {[
-                      { key: 'TODOS', label: `Todos (${todosLosServicios.length})` },
-                      { key: 'INSPECCION', label: 'Inspección' },
-                      { key: 'PREVENTIVO', label: 'Preventivo' },
-                      { key: 'CORRECTIVO', label: 'Correctivo' },
-                      { key: 'DIAGNOSTICO', label: 'Diagnóstico' },
-                    ].map((cat) => (
-                      <button
-                        key={cat.key}
-                        type="button"
-                        onClick={() => setPlanCatFilter(cat.key)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
-                          planCatFilter === cat.key
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {cat.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* LISTA DE SERVICIOS SELECCIONABLES */}
-                <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white shadow-inner">
-                  {serviciosFiltrados.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-400">
-                      No se encontraron servicios que coincidan con la búsqueda.
-                    </div>
-                  ) : (
-                    serviciosFiltrados.map((s) => {
-                      const isSelected = String(s.id_tipo_servicio) === planForm.id_tipo_servicio;
-                      const esEspecifico =
-                        selectedArquetipo.id_tipo_equipo &&
-                        s.id_tipo_equipo === selectedArquetipo.id_tipo_equipo;
-                      const badgeCat = getCategoriaBadge(s.categoria);
-                      return (
-                        <div
-                          key={s.id_tipo_servicio}
-                          onClick={() => {
-                            const isInsp =
-                              s.codigo_tipo === 'INSPECCION' ||
-                              s.nombre_tipo?.toLowerCase().includes('inspecci');
-                            setPlanForm({
-                              ...planForm,
-                              id_tipo_servicio: String(s.id_tipo_servicio),
-                              nombre_plan: construirNombrePlan(s),
-                              frecuencia_dias: isInsp ? '30' : '90',
-                              frecuencia_uso: isInsp ? '100' : '250',
-                            });
-                          }}
-                          className={`p-3 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
-                            isSelected
-                              ? 'bg-emerald-50/70 border-l-4 border-l-emerald-600'
-                              : 'hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="space-y-0.5 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span
-                                className={`text-xs font-bold ${
-                                  isSelected ? 'text-emerald-950 font-black' : 'text-slate-800'
-                                }`}
-                              >
-                                {s.nombre_tipo}
+                {/* VISTA DEL SERVICIO: SI YA ESTÁ SELECCIONADO, SE MUESTRA SOLO EL SELECCIONADO (SENIOR PREMIUM) */}
+                {servicioPlanSeleccionado && !isCambiarSrvPlan ? (
+                  <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50/70 via-white to-slate-50 p-4 shadow-sm animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-200">
+                          <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-black text-slate-900">
+                              {servicioPlanSeleccionado.nombre_tipo}
+                            </h4>
+                            <span className="font-mono text-xs font-bold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs">
+                              {servicioPlanSeleccionado.codigo_tipo}
+                            </span>
+                            {selectedArquetipo.id_tipo_equipo &&
+                            servicioPlanSeleccionado.id_tipo_equipo === selectedArquetipo.id_tipo_equipo ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs">
+                                ★ Específico de este equipo
                               </span>
-                              <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                {s.codigo_tipo}
+                            ) : servicioPlanSeleccionado.id_tipo_equipo == null ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                Universal
                               </span>
-                              {esEspecifico && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
-                                  ★ Específico de este equipo
-                                </span>
-                              )}
-                              {s.id_tipo_equipo == null && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
-                                  Universal
-                                </span>
-                              )}
-                            </div>
-                            {s.descripcion && (
-                              <p className="text-[11px] text-slate-500 truncate max-w-md">
-                                {s.descripcion}
-                              </p>
+                            ) : null}
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getCategoriaBadge(servicioPlanSeleccionado.categoria).bg}`}
+                            >
+                              {getCategoriaBadge(servicioPlanSeleccionado.categoria).label}
+                            </span>
+                          </div>
+
+                          {servicioPlanSeleccionado.descripcion && (
+                            <p className="text-xs text-slate-600 line-clamp-2">
+                              {servicioPlanSeleccionado.descripcion}
+                            </p>
+                          )}
+
+                          <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-500">
+                            {servicioPlanSeleccionado.tiene_checklist && (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                                <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                Checklist técnico activo
+                              </span>
+                            )}
+                            {servicioPlanSeleccionado.duracion_estimada_horas && (
+                              <span className="inline-flex items-center gap-1 text-slate-500">
+                                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                                Est: {servicioPlanSeleccionado.duracion_estimada_horas}h
+                              </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeCat.bg}`}
-                            >
-                              {badgeCat.label}
-                            </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsCambiarSrvPlan(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 hover:border-emerald-600 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-xs font-bold transition-all shadow-2xs hover:shadow-sm shrink-0 cursor-pointer"
+                        title="Elegir otro protocolo del catálogo"
+                      >
+                        <RotateCw className="h-3.5 w-3.5 text-slate-500" />
+                        <span>Cambiar Servicio</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {isCambiarSrvPlan && servicioPlanSeleccionado && (
+                      <div className="flex items-center justify-between pb-1">
+                        <span className="text-xs font-bold text-slate-700">
+                          Selecciona otro servicio del catálogo:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsCambiarSrvPlan(false)}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                        >
+                          Mantener actual
+                        </button>
+                      </div>
+                    )}
+
+                    {/* BUSCADOR Y PÍLDORAS DE CATEGORÍA */}
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por nombre, código (ej: Inspección, HVAC, Preventivo, Bomba)..."
+                          value={planSearch}
+                          onChange={(e) => setPlanSearch(e.target.value)}
+                          className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[
+                          { key: 'TODOS', label: `Todos (${todosLosServicios.length})` },
+                          { key: 'INSPECCION', label: 'Inspección' },
+                          { key: 'PREVENTIVO', label: 'Preventivo' },
+                          { key: 'CORRECTIVO', label: 'Correctivo' },
+                          { key: 'DIAGNOSTICO', label: 'Diagnóstico' },
+                        ].map((cat) => (
+                          <button
+                            key={cat.key}
+                            type="button"
+                            onClick={() => setPlanCatFilter(cat.key)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                              planCatFilter === cat.key
+                                ? 'bg-slate-900 text-white border-slate-900'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* LISTA DE SERVICIOS SELECCIONABLES */}
+                    <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white shadow-inner">
+                      {serviciosFiltrados.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400">
+                          No se encontraron servicios que coincidan con la búsqueda.
+                        </div>
+                      ) : (
+                        serviciosFiltrados.map((s) => {
+                          const isSelected = String(s.id_tipo_servicio) === planForm.id_tipo_servicio;
+                          const esEspecifico =
+                            selectedArquetipo.id_tipo_equipo &&
+                            s.id_tipo_equipo === selectedArquetipo.id_tipo_equipo;
+                          const badgeCat = getCategoriaBadge(s.categoria);
+                          return (
                             <div
-                              className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                              key={s.id_tipo_servicio}
+                              onClick={() => {
+                                const isInsp =
+                                  s.codigo_tipo === 'INSPECCION' ||
+                                  s.nombre_tipo?.toLowerCase().includes('inspecci');
+                                setPlanForm({
+                                  ...planForm,
+                                  id_tipo_servicio: String(s.id_tipo_servicio),
+                                  nombre_plan: construirNombrePlan(s),
+                                  frecuencia_dias: isInsp ? '30' : '90',
+                                  frecuencia_uso: isInsp ? '100' : '250',
+                                });
+                                setIsCambiarSrvPlan(false);
+                              }}
+                              className={`p-3 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
                                 isSelected
-                                  ? 'border-emerald-600 bg-emerald-600 text-white'
-                                  : 'border-slate-300'
+                                  ? 'bg-emerald-50/70 border-l-4 border-l-emerald-600'
+                                  : 'hover:bg-slate-50'
                               }`}
                             >
-                              {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span
+                                    className={`text-xs font-bold ${
+                                      isSelected ? 'text-emerald-950 font-black' : 'text-slate-800'
+                                    }`}
+                                  >
+                                    {s.nombre_tipo}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                    {s.codigo_tipo}
+                                  </span>
+                                  {esEspecifico && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                                      ★ Específico de este equipo
+                                    </span>
+                                  )}
+                                  {s.id_tipo_equipo == null && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                                      Universal
+                                    </span>
+                                  )}
+                                </div>
+                                {s.descripcion && (
+                                  <p className="text-[11px] text-slate-500 truncate max-w-md">
+                                    {s.descripcion}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeCat.bg}`}
+                                >
+                                  {badgeCat.label}
+                                </span>
+                                <div
+                                  className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                    isSelected
+                                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                                      : 'border-slate-300'
+                                  }`}
+                                >
+                                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 2. NOMBRE DEL PLAN */}
@@ -2532,10 +2627,10 @@ export function TabArquetiposEquipo() {
                   options={[
                     {
                       value: 'LO_QUE_OCURRA_PRIMERO',
-                      label: '⚡ Lo que ocurra primero (Días o Horas de horómetro) - Recomendado',
+                      label: `⚡ Lo que ocurra primero (Días o ${selectedArquetipo.etiqueta_contador || 'Horas de uso'}) - Recomendado`,
                     },
                     { value: 'DIAS', label: '📅 Solo por Calendario (Días transcurridos)' },
-                    { value: 'HORAS', label: '⏱️ Solo por Uso (Horas registradas en Horómetro)' },
+                    { value: 'HORAS', label: `⏱️ Solo por Uso (${selectedArquetipo.etiqueta_contador || 'Horas registradas'})` },
                   ]}
                   placeholder="Seleccionar regla..."
                 />
